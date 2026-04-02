@@ -1,0 +1,22 @@
+{
+  "name": "Celsius Coffee",
+  "short_name": "Celsius",
+  "description": "Celsius Coffee Loyalty & Rewards",
+  "start_url": "/portal",
+  "display": "standalone",
+  "background_color": "#171717",
+  "theme_color": "#171717",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/images/celsius-logo-sm.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/images/celsius-logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

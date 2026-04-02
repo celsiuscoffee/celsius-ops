@@ -1,13 +1,14 @@
 {
-  "name": "celsius-inventory",
+  "name": "celsius-ops",
   "private": true,
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "dev:mobile": "cd apps/mobile && npx expo start",
-    "dev:api": "cd packages/api && npm run dev",
+    "dev:inventory": "cd apps/inventory && npm run dev",
+    "dev:loyalty": "cd apps/loyalty && npm run dev",
+    "dev:pickup": "cd apps/pickup && npm run dev",
     "db:generate": "cd packages/db && npx prisma generate",
     "db:push": "cd packages/db && npx prisma db push",
     "db:studio": "cd packages/db && npx prisma studio",

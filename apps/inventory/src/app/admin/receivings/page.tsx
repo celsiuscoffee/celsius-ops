@@ -1,0 +1,502 @@
+"use client";
+
+import { useState, useEffect, Fragment } from "react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Search,
+  ChevronDown,
+  Loader2,
+  Package,
+  CheckCircle2,
+  AlertTriangle,
+  Camera,
+  ClipboardCheck,
+  Plus,
+} from "lucide-react";
+
+type ReceivingItem = {
+  id: string;
+  product: string;
+  sku: string;
+  package: string;
+  orderedQty: number | null;
+  receivedQty: number;
+  expiryDate: string | null;
+  discrepancyReason: string | null;
+};
+
+type Receiving = {
+  id: string;
+  orderId: string | null;
+  orderNumber: string;
+  branch: string;
+  supplier: string;
+  receivedBy: string;
+  receivedAt: string;
+  status: string;
+  notes: string | null;
+  photoCount: number;
+  items: ReceivingItem[];
+};
+
+// For PO selection in the receive dialog
+type POItem = {
+  id: string;
+  product: string;
+  sku: string;
+  package: string;
+  quantity: number;
+  productId: string;
+  productPackageId: string | null;
+};
+
+type PendingOrder = {
+  id: string;
+  orderNumber: string;
+  branch: string;
+  branchId: string;
+  supplier: string;
+  supplierId: string;
+  items: POItem[];
+};
+
+type ReceiveLineItem = {
+  productId: string;
+  productPackageId: string | null;
+  product: string;
+  sku: string;
+  orderedQty: number;
+  receivedQty: number;
+  discrepancyReason: string;
+};
+
+export default function ReceivingsPage() {
+  const [receivings, setReceivings] = useState<Receiving[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Receive dialog state
+  const [showReceive, setShowReceive] = useState(false);
+  const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
+  const [selectedOrderId, setSelectedOrderId] = useState("");
+  const [receiveItems, setReceiveItems] = useState<ReceiveLineItem[]>([]);
+  const [receiveNotes, setReceiveNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const loadReceivings = () => {
+    fetch("/api/receivings")
+      .then((res) => res.json())
+      .then((data) => { setReceivings(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => { loadReceivings(); }, []);
+
+  const openReceiveDialog = () => {
+    // Fetch orders that are awaiting delivery or sent
+    fetch("/api/orders")
+      .then((r) => r.json())
+      .then((orders) => {
+        const pending: PendingOrder[] = orders
+          .filter((o: { status: string }) =>
+            ["SENT", "AWAITING_DELIVERY", "APPROVED", "PARTIALLY_RECEIVED"].includes(o.status),
+          )
+          .map((o: { id: string; orderNumber: string; branch: string; branchCode: string; supplier: string; supplierPhone: string; items: { id: string; product: string; sku: string; package: string; quantity: number }[] }) => ({
+            id: o.id,
+            orderNumber: o.orderNumber,
+            branch: o.branch,
+            branchId: "", // We'll need this from the full order
+            supplier: o.supplier,
+            supplierId: "",
+            items: o.items.map((i) => ({
+              ...i,
+              productId: "",
+              productPackageId: null,
+            })),
+          }));
+        setPendingOrders(pending);
+        setSelectedOrderId("");
+        setReceiveItems([]);
+        setReceiveNotes("");
+        setShowReceive(true);
+      });
+  };
+
+  const selectOrder = (orderId: string) => {
+    setSelectedOrderId(orderId);
+    const order = pendingOrders.find((o) => o.id === orderId);
+    if (order) {
+      setReceiveItems(
+        order.items.map((i) => ({
+          productId: i.productId,
+          productPackageId: i.productPackageId,
+          product: i.product,
+          sku: i.sku,
+          orderedQty: i.quantity,
+          receivedQty: i.quantity, // Default to full quantity
+          discrepancyReason: "",
+        })),
+      );
+    }
+  };
+
+  const updateReceivedQty = (idx: number, qty: number) => {
+    setReceiveItems(receiveItems.map((item, i) =>
+      i === idx ? { ...item, receivedQty: Math.max(0, qty) } : item,
+    ));
+  };
+
+  const updateDiscrepancy = (idx: number, reason: string) => {
+    setReceiveItems(receiveItems.map((item, i) =>
+      i === idx ? { ...item, discrepancyReason: reason } : item,
+    ));
+  };
+
+  const submitReceiving = async () => {
+    if (!selectedOrderId || receiveItems.length === 0) return;
+    setSaving(true);
+    try {
+      // We need branchId and supplierId - fetch the full order
+      const orderRes = await fetch("/api/orders");
+      const allOrders = await orderRes.json();
+      const fullOrder = allOrders.find((o: { id: string }) => o.id === selectedOrderId);
+      if (!fullOrder) return;
+
+      // We need the actual IDs - fetch from the order API with IDs
+      const orderDetailRes = await fetch(`/api/orders/${selectedOrderId}`);
+      let branchId = "";
+      let supplierId = "";
+
+      if (orderDetailRes.ok) {
+        const detail = await orderDetailRes.json();
+        branchId = detail.branchId;
+        supplierId = detail.supplierId;
+      }
+
+      // Fallback: look up branch and supplier by name
+      if (!branchId || !supplierId) {
+        const [branchesRes, suppliersRes] = await Promise.all([
+          fetch("/api/branches"),
+          fetch("/api/suppliers/products"),
+        ]);
+        const branches = await branchesRes.json();
+        const suppliers = await suppliersRes.json();
+        const branch = branches.find((b: { name: string }) => b.name === fullOrder.branch);
+        const supplier = suppliers.find((s: { name: string }) => s.name === fullOrder.supplier);
+        branchId = branch?.id ?? "";
+        supplierId = supplier?.id ?? "";
+      }
+
+      await fetch("/api/receivings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: selectedOrderId,
+          branchId,
+          supplierId,
+          notes: receiveNotes || null,
+          items: receiveItems.map((i) => ({
+            productId: i.productId,
+            productPackageId: i.productPackageId,
+            orderedQty: i.orderedQty,
+            receivedQty: i.receivedQty,
+            discrepancyReason: i.receivedQty < i.orderedQty ? (i.discrepancyReason || "short") : null,
+          })),
+        }),
+      });
+      setShowReceive(false);
+      loadReceivings();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filtered = receivings.filter((r) =>
+    r.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
+    r.supplier.toLowerCase().includes(search.toLowerCase()) ||
+    r.branch.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">Receivings</h2>
+          <p className="mt-0.5 text-sm text-gray-500">{receivings.length} delivery records</p>
+        </div>
+        <Button className="bg-terracotta hover:bg-terracotta-dark" onClick={openReceiveDialog}>
+          <ClipboardCheck className="mr-1.5 h-4 w-4" />Record Delivery
+        </Button>
+      </div>
+
+      {/* Summary */}
+      <div className="mt-4 grid grid-cols-3 gap-4">
+        <Card className="px-4 py-3">
+          <p className="text-xs text-gray-500">Total Receivings</p>
+          <p className="text-xl font-bold text-gray-900">{receivings.length}</p>
+        </Card>
+        <Card className="px-4 py-3">
+          <p className="text-xs text-gray-500">Complete</p>
+          <p className="text-xl font-bold text-green-600">{receivings.filter((r) => r.status === "COMPLETE").length}</p>
+        </Card>
+        <Card className="px-4 py-3">
+          <p className="text-xs text-gray-500">Partial / Disputed</p>
+          <p className="text-xl font-bold text-amber-600">{receivings.filter((r) => r.status !== "COMPLETE").length}</p>
+        </Card>
+      </div>
+
+      {/* Search */}
+      <div className="mt-4 relative max-w-md">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <Input placeholder="Search by PO#, supplier, or branch..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      </div>
+
+      {/* Table */}
+      <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50/50">
+              <th className="w-8 px-3 py-3"></th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">PO Reference</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Branch</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Supplier</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Items</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Photos</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Received By</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={9} className="px-4 py-12 text-center">
+                  <Package className="mx-auto h-8 w-8 text-gray-300" />
+                  <p className="mt-2 text-sm text-gray-500">
+                    {receivings.length === 0
+                      ? "No receivings yet. Click 'Record Delivery' to log a delivery."
+                      : "No receivings match your search."}
+                  </p>
+                </td>
+              </tr>
+            )}
+            {filtered.map((rec) => (
+              <Fragment key={rec.id}>
+                <tr
+                  className="border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer"
+                  onClick={() => setExpandedId(expandedId === rec.id ? null : rec.id)}
+                >
+                  <td className="px-3 py-3">
+                    <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${expandedId === rec.id ? "rotate-180" : ""}`} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-terracotta">{rec.orderNumber}</code>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{rec.branch}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{rec.supplier}</td>
+                  <td className="px-4 py-3">
+                    <Badge className={`text-[10px] ${rec.status === "COMPLETE" ? "bg-green-500" : rec.status === "PARTIAL" ? "bg-amber-500" : "bg-red-500"}`}>
+                      {rec.status}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-600">{rec.items.length} items</td>
+                  <td className="px-4 py-3">
+                    {rec.photoCount > 0 ? (
+                      <span className="flex items-center gap-1 text-xs text-gray-500"><Camera className="h-3 w-3" />{rec.photoCount}</span>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-600">{rec.receivedBy}</td>
+                  <td className="px-4 py-3 text-xs text-gray-400">
+                    {new Date(rec.receivedAt).toLocaleDateString("en-MY")}
+                  </td>
+                </tr>
+                {expandedId === rec.id && (
+                  <tr>
+                    <td colSpan={9} className="bg-gray-50 px-8 py-3">
+                      <p className="mb-2 text-xs font-semibold text-gray-500 uppercase">Received Items</p>
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-gray-400">
+                            <th className="pb-1 text-left font-medium">Product</th>
+                            <th className="pb-1 text-left font-medium">SKU</th>
+                            <th className="pb-1 text-right font-medium">Ordered</th>
+                            <th className="pb-1 text-right font-medium">Received</th>
+                            <th className="pb-1 text-left font-medium">Status</th>
+                            <th className="pb-1 text-left font-medium">Expiry</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rec.items.map((item) => {
+                            const match = item.orderedQty === null || item.receivedQty === item.orderedQty;
+                            const short = item.orderedQty !== null && item.receivedQty < item.orderedQty;
+                            return (
+                              <tr key={item.id} className="border-t border-gray-200/50">
+                                <td className="py-1.5 text-gray-700">{item.product}</td>
+                                <td className="py-1.5"><code className="text-gray-500">{item.sku}</code></td>
+                                <td className="py-1.5 text-right text-gray-500">{item.orderedQty ?? "—"}</td>
+                                <td className="py-1.5 text-right text-gray-700 font-medium">{item.receivedQty}</td>
+                                <td className="py-1.5">
+                                  {match ? (
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                  ) : short ? (
+                                    <span className="flex items-center gap-1 text-red-500">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      Short{item.discrepancyReason ? ` (${item.discrepancyReason})` : ""}
+                                    </span>
+                                  ) : null}
+                                </td>
+                                <td className="py-1.5 text-gray-500">{item.expiryDate ?? "—"}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      {rec.notes && <p className="mt-2 text-xs text-gray-500">Notes: {rec.notes}</p>}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Record Delivery Dialog */}
+      <Dialog open={showReceive} onOpenChange={setShowReceive}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Record Delivery</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Select Purchase Order</label>
+              <select
+                value={selectedOrderId}
+                onChange={(e) => selectOrder(e.target.value)}
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+              >
+                <option value="">Select a PO...</option>
+                {pendingOrders.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.orderNumber} — {o.supplier} ({o.branch})
+                  </option>
+                ))}
+              </select>
+              {pendingOrders.length === 0 && (
+                <p className="mt-1 text-xs text-gray-400">No pending orders to receive. Create and send an order first.</p>
+              )}
+            </div>
+
+            {/* Receive items */}
+            {receiveItems.length > 0 && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Enter Received Quantities</label>
+                <div className="rounded-md border border-gray-200">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-gray-50 text-gray-500">
+                        <th className="px-3 py-2 text-left font-medium">Product</th>
+                        <th className="px-3 py-2 text-right font-medium">Ordered</th>
+                        <th className="px-3 py-2 text-center font-medium w-24">Received</th>
+                        <th className="px-3 py-2 text-left font-medium">Status</th>
+                        <th className="px-3 py-2 text-left font-medium">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {receiveItems.map((item, idx) => {
+                        const isShort = item.receivedQty < item.orderedQty;
+                        return (
+                          <tr key={idx} className="border-b border-gray-50">
+                            <td className="px-3 py-2">
+                              <div className="font-medium text-gray-700">{item.product}</div>
+                              <code className="text-gray-400">{item.sku}</code>
+                            </td>
+                            <td className="px-3 py-2 text-right text-gray-600">{item.orderedQty}</td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                value={item.receivedQty}
+                                onChange={(e) => updateReceivedQty(idx, parseInt(e.target.value) || 0)}
+                                className={`w-16 rounded border px-2 py-1 text-center ${isShort ? "border-red-300 bg-red-50" : "border-gray-200"}`}
+                                min={0}
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              {item.receivedQty === item.orderedQty ? (
+                                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                              ) : isShort ? (
+                                <span className="flex items-center gap-1 text-red-500">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Short {item.orderedQty - item.receivedQty}
+                                </span>
+                              ) : (
+                                <span className="text-blue-500 text-xs">Over +{item.receivedQty - item.orderedQty}</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {isShort && (
+                                <select
+                                  value={item.discrepancyReason}
+                                  onChange={(e) => updateDiscrepancy(idx, e.target.value)}
+                                  className="rounded border border-gray-200 px-2 py-1 text-xs"
+                                >
+                                  <option value="">Reason...</option>
+                                  <option value="short">Short delivery</option>
+                                  <option value="damaged">Damaged</option>
+                                  <option value="wrong_item">Wrong item</option>
+                                  <option value="expired">Expired</option>
+                                </select>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
+              <Input placeholder="Any delivery notes..." value={receiveNotes} onChange={(e) => setReceiveNotes(e.target.value)} />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              onClick={submitReceiving}
+              disabled={saving || !selectedOrderId || receiveItems.length === 0}
+              className="bg-terracotta hover:bg-terracotta-dark disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ClipboardCheck className="mr-1.5 h-4 w-4" />}
+              Confirm Delivery
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
