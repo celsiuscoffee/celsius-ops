@@ -1,0 +1,575 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── BRANCHES ───────────────────────────────────────────────
+
+model Branch {
+  id        String       @id @default(uuid())
+  code      String       @unique // e.g. "CC001", "CF Nilai"
+  name      String // e.g. "Celsius Coffee IOI Conezion"
+  type      BranchType   @default(OUTLET)
+  address   String
+  city      String
+  state     String
+  phone     String?
+  status    BranchStatus @default(ACTIVE)
+  storehubId String?     @unique // StoreHub outlet ID for sync
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  users             User[]
+  branchProducts    BranchProduct[]
+  orders            Order[]
+  invoices          Invoice[]
+  stockCounts       StockCount[]
+  stockBalances     StockBalance[]
+  stockAdjustments  StockAdjustment[]
+  receivings        Receiving[]
+  parLevels         ParLevel[]
+  transfersFrom     StockTransfer[] @relation("TransferFrom")
+  transfersTo       StockTransfer[] @relation("TransferTo")
+  storehubSyncs     StorehubSync[]
+}
+
+enum BranchType {
+  OUTLET
+  CENTRAL_KITCHEN
+}
+
+enum BranchStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// ─── USERS ──────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?  @unique
+  phone     String   @unique // Malaysian phone, used for OTP login
+  role      UserRole
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ordersCreated    Order[]           @relation("OrderCreatedBy")
+  ordersApproved   Order[]           @relation("OrderApprovedBy")
+  stockCounts      StockCount[]
+  stockAdjustments StockAdjustment[]
+  receivings       Receiving[]
+  transfers        StockTransfer[]
+}
+
+enum UserRole {
+  ADMIN
+  BRANCH_MANAGER
+  STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  DEACTIVATED
+}
+
+// ─── CATEGORIES ─────────────────────────────────────────────
+// Categories for INVENTORY items (ingredients, packaging, supplies)
+
+model Category {
+  id       String    @id @default(uuid())
+  name     String    @unique // Flavour, Dairy, Packaging, Raw Material, etc.
+  slug     String    @unique
+  products Product[]
+}
+
+// ─── PRODUCTS (Inventory Items) ─────────────────────────────
+// These are RAW INGREDIENTS, PACKAGING, and SUPPLIES — NOT menu items.
+// Menu items come from StoreHub via the Menu model.
+
+model Product {
+  id            String   @id @default(uuid())
+  name          String // e.g. "Monin Caramel Syrup", "Plastic Cup"
+  sku           String   @unique // e.g. FM001, DO001, PP0001
+  categoryId    String
+  category      Category @relation(fields: [categoryId], references: [id])
+  description   String?
+  imageUrl      String?
+  baseUom       String // The smallest unit: ml, g, pcs
+  tags          String[] @default([])
+  storageArea   String? // Fridge, Dry Store, Counter
+  shelfLifeDays Int? // For perishables
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  packages          ProductPackage[]
+  branchProducts    BranchProduct[]
+  supplierProducts  SupplierProduct[]
+  orderItems        OrderItem[]
+  stockCountItems   StockCountItem[]
+  stockBalances     StockBalance[]
+  stockAdjustments  StockAdjustment[]
+  receivingItems    ReceivingItem[]
+  parLevels         ParLevel[]
+  menuIngredients   MenuIngredient[]
+  transferItems     StockTransferItem[]
+}
+
+// ─── PRODUCT PACKAGES (Multi-UOM) ───────────────────────────
+// Each product can be counted/ordered in multiple packaging sizes.
+// e.g., Oatmilk: base=ml, packages=[Bottle(1000ml), Carton(6000ml)]
+
+model ProductPackage {
+  id               String  @id @default(uuid())
+  productId        String
+  product          Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  packageName      String // e.g. "Bottle", "Carton", "Pack"
+  packageLabel     String // e.g. "Bottle (1000ml)", "Carton (6 x 1000ml)"
+  conversionFactor Decimal // How many base units in 1 package. e.g. 1000 (1 Bottle = 1000 ml)
+  isDefault        Boolean @default(false) // Default package for ordering
+
+  supplierProducts SupplierProduct[]
+  orderItems       OrderItem[]
+  stockCountItems  StockCountItem[]
+  receivingItems   ReceivingItem[]
+  transferItems    StockTransferItem[]
+
+  @@unique([productId, packageName])
+}
+
+// ─── SUPPLIERS ──────────────────────────────────────────────
+
+model Supplier {
+  id           String         @id @default(uuid())
+  name         String
+  logoUrl      String?
+  location     String?
+  supplierCode String?        @unique
+  phone        String? // WhatsApp number for ordering
+  email        String?
+  status       SupplierStatus @default(ACTIVE)
+  tags         String[]       @default([])
+  leadTimeDays Int            @default(1)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  supplierProducts SupplierProduct[]
+  priceHistory     PriceHistory[]
+  orders           Order[]
+  invoices         Invoice[]
+  receivings       Receiving[]
+}
+
+enum SupplierStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// ─── SUPPLIER PRODUCTS (Price List) ─────────────────────────
+// Which products a supplier sells, at which packaging, at what price.
+
+model SupplierProduct {
+  id               String          @id @default(uuid())
+  supplierId       String
+  supplier         Supplier        @relation(fields: [supplierId], references: [id])
+  productId        String
+  product          Product         @relation(fields: [productId], references: [id])
+  productPackageId String?
+  productPackage   ProductPackage? @relation(fields: [productPackageId], references: [id])
+  price            Decimal // Current price in MYR
+  moq              Decimal? // Minimum order quantity
+  isActive         Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([supplierId, productId, productPackageId])
+}
+
+// ─── PRICE HISTORY ──────────────────────────────────────────
+// Track every price change for supplier scorecard + trend analysis.
+
+model PriceHistory {
+  id               String   @id @default(uuid())
+  supplierId       String
+  supplier         Supplier @relation(fields: [supplierId], references: [id])
+  productId        String
+  productPackageId String?
+  oldPrice         Decimal
+  newPrice         Decimal
+  changePercent    Decimal // (new - old) / old * 100
+  changedAt        DateTime @default(now())
+
+  @@index([supplierId, changedAt])
+}
+
+// ─── BRANCH PRODUCTS ────────────────────────────────────────
+// Which products are tracked at which branch, and at what count frequency.
+
+model BranchProduct {
+  id             String         @id @default(uuid())
+  branchId       String
+  branch         Branch         @relation(fields: [branchId], references: [id])
+  productId      String
+  product        Product        @relation(fields: [productId], references: [id])
+  isActive       Boolean        @default(true)
+  countFrequency CountFrequency @default(MONTHLY)
+
+  @@unique([branchId, productId])
+}
+
+enum CountFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+// ─── ORDERS (Purchase Orders) ───────────────────────────────
+
+model Order {
+  id           String      @id @default(uuid())
+  orderNumber  String      @unique // e.g. CC-IOI-0042
+  branchId     String
+  branch       Branch      @relation(fields: [branchId], references: [id])
+  supplierId   String
+  supplier     Supplier    @relation(fields: [supplierId], references: [id])
+  status       OrderStatus @default(DRAFT)
+  totalAmount  Decimal     @default(0)
+  notes        String?
+  deliveryDate DateTime? // Expected delivery
+  createdById  String
+  createdBy    User        @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  approvedById String?
+  approvedBy   User?       @relation("OrderApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  sentAt       DateTime? // When sent via WhatsApp
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  items      OrderItem[]
+  receivings Receiving[]
+  invoices   Invoice[]
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  AWAITING_DELIVERY
+  PARTIALLY_RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+model OrderItem {
+  id               String          @id @default(uuid())
+  orderId          String
+  order            Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product         @relation(fields: [productId], references: [id])
+  productPackageId String?
+  productPackage   ProductPackage? @relation(fields: [productPackageId], references: [id])
+  quantity         Decimal
+  unitPrice        Decimal
+  totalPrice       Decimal
+  notes            String?
+
+  @@unique([orderId, productId, productPackageId])
+}
+
+// ─── INVOICES ───────────────────────────────────────────────
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique // e.g. INV-001
+  orderId       String?
+  order         Order?        @relation(fields: [orderId], references: [id])
+  branchId      String
+  branch        Branch        @relation(fields: [branchId], references: [id])
+  supplierId    String
+  supplier      Supplier      @relation(fields: [supplierId], references: [id])
+  amount        Decimal
+  status        InvoiceStatus @default(DRAFT)
+  issueDate     DateTime      @default(now())
+  dueDate       DateTime?
+  photos        String[]      @default([]) // Invoice photo URLs
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  OVERDUE
+}
+
+// ─── RECEIVING (Goods Received) ─────────────────────────────
+
+model Receiving {
+  id            String          @id @default(uuid())
+  orderId       String? // Nullable for ad-hoc deliveries
+  order         Order?          @relation(fields: [orderId], references: [id])
+  branchId      String
+  branch        Branch          @relation(fields: [branchId], references: [id])
+  supplierId    String
+  supplier      Supplier        @relation(fields: [supplierId], references: [id])
+  receivedById  String
+  receivedBy    User            @relation(fields: [receivedById], references: [id])
+  receivedAt    DateTime        @default(now())
+  status        ReceivingStatus @default(COMPLETE)
+  invoicePhotos String[]        @default([])
+  notes         String?
+  createdAt     DateTime        @default(now())
+
+  items ReceivingItem[]
+}
+
+enum ReceivingStatus {
+  COMPLETE
+  PARTIAL
+  DISPUTED
+}
+
+model ReceivingItem {
+  id                String          @id @default(uuid())
+  receivingId       String
+  receiving         Receiving       @relation(fields: [receivingId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product         @relation(fields: [productId], references: [id])
+  productPackageId  String?
+  productPackage    ProductPackage? @relation(fields: [productPackageId], references: [id])
+  orderedQty        Decimal? // From PO (null if ad-hoc)
+  receivedQty       Decimal
+  expiryDate        DateTime? // For perishables
+  discrepancyReason String? // short, damaged, wrong_item
+}
+
+// ─── STOCK COUNTS ───────────────────────────────────────────
+
+model StockCount {
+  id          String           @id @default(uuid())
+  branchId    String
+  branch      Branch           @relation(fields: [branchId], references: [id])
+  frequency   CountFrequency
+  countedById String
+  countedBy   User             @relation(fields: [countedById], references: [id])
+  countDate   DateTime         @default(now())
+  status      StockCountStatus @default(DRAFT)
+  notes       String?
+  createdAt   DateTime         @default(now())
+  submittedAt DateTime?
+  reviewedAt  DateTime?
+
+  items StockCountItem[]
+}
+
+enum StockCountStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+}
+
+model StockCountItem {
+  id               String     @id @default(uuid())
+  stockCountId     String
+  stockCount       StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product    @relation(fields: [productId], references: [id])
+  productPackageId String?
+  productPackage   ProductPackage? @relation(fields: [productPackageId], references: [id])
+  expectedQty      Decimal? // System-calculated
+  countedQty       Decimal? // Null = confirmed as correct
+  isConfirmed      Boolean    @default(false)
+  varianceReason   String?
+
+  @@unique([stockCountId, productId, productPackageId])
+}
+
+// ─── STOCK BALANCES ─────────────────────────────────────────
+// Always stored in BASE UOM. Convert to package UOM for display.
+// e.g., Oatmilk balance = 3000 (ml), display as 3 bottles.
+
+model StockBalance {
+  id          String   @id @default(uuid())
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  quantity    Decimal  @default(0) // Always in base UOM
+  lastUpdated DateTime @default(now())
+
+  @@unique([branchId, productId])
+}
+
+// ─── STOCK ADJUSTMENTS ──────────────────────────────────────
+
+model StockAdjustment {
+  id             String         @id @default(uuid())
+  branchId       String
+  branch         Branch         @relation(fields: [branchId], references: [id])
+  productId      String
+  product        Product        @relation(fields: [productId], references: [id])
+  adjustmentType AdjustmentType
+  quantity       Decimal // In base UOM. Negative = reduction
+  costAmount     Decimal? // RM value (auto-calculated from unit cost)
+  reason         String?
+  photoUrl       String? // Optional evidence photo
+  adjustedById   String
+  adjustedBy     User           @relation(fields: [adjustedById], references: [id])
+  stockCountId   String? // If triggered by stock check
+  createdAt      DateTime       @default(now())
+}
+
+enum AdjustmentType {
+  WASTAGE
+  BREAKAGE
+  EXPIRED
+  THEFT
+  CORRECTION
+  SPILLAGE
+  USED_NOT_RECORDED
+}
+
+// ─── STOCK TRANSFERS ────────────────────────────────────────
+
+model StockTransfer {
+  id              String         @id @default(uuid())
+  fromBranchId    String
+  fromBranch      Branch         @relation("TransferFrom", fields: [fromBranchId], references: [id])
+  toBranchId      String
+  toBranch        Branch         @relation("TransferTo", fields: [toBranchId], references: [id])
+  status          TransferStatus @default(PENDING)
+  transferredById String
+  transferredBy   User           @relation(fields: [transferredById], references: [id])
+  notes           String?
+  createdAt       DateTime       @default(now())
+  completedAt     DateTime?
+
+  items StockTransferItem[]
+}
+
+enum TransferStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model StockTransferItem {
+  id               String          @id @default(uuid())
+  transferId       String
+  transfer         StockTransfer   @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product         @relation(fields: [productId], references: [id])
+  productPackageId String?
+  productPackage   ProductPackage? @relation(fields: [productPackageId], references: [id])
+  quantity         Decimal // In base UOM
+}
+
+// ─── PAR LEVELS ─────────────────────────────────────────────
+// Per product per branch. All quantities in base UOM.
+
+model ParLevel {
+  id             String   @id @default(uuid())
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+  branchId       String
+  branch         Branch   @relation(fields: [branchId], references: [id])
+  parLevel       Decimal // Target stock level (base UOM)
+  reorderPoint   Decimal // Trigger reorder when stock falls below this
+  maxLevel       Decimal? // Overstock warning threshold
+  avgDailyUsage  Decimal? // Auto-calculated from StoreHub sales
+  lastCalculated DateTime?
+
+  @@unique([productId, branchId])
+}
+
+// ─── MENUS (from StoreHub) ──────────────────────────────────
+// Menu items are SYNCED from StoreHub POS. Not manually created.
+// We only add recipe/ingredient mapping on top.
+
+model Menu {
+  id           String   @id @default(uuid())
+  name         String // e.g. "Iced Latte"
+  category     String? // e.g. "Coffee", "Non-Coffee", "Food"
+  sellingPrice Decimal?
+  storehubId   String   @unique // StoreHub product ID — required, always synced
+  isActive     Boolean  @default(true)
+  lastSyncedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ingredients MenuIngredient[]
+  salesData   SalesTransaction[]
+}
+
+model MenuIngredient {
+  id           String  @id @default(uuid())
+  menuId       String
+  menu         Menu    @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product @relation(fields: [productId], references: [id])
+  quantityUsed Decimal // Amount per 1 menu item sold (in base UOM of the product)
+  uom          String // Display UOM (ml, g, pcs) — should match product.baseUom
+
+  @@unique([menuId, productId])
+}
+
+// ─── SALES TRANSACTIONS (from StoreHub) ─────────────────────
+// Pulled from StoreHub. Gross sales only, discounts excluded.
+// Used for COGS calculation and stock deduction.
+
+model SalesTransaction {
+  id           String   @id @default(uuid())
+  storehubTxId String   @unique // StoreHub transaction ID
+  branchId     String
+  menuId       String?
+  menu         Menu?    @relation(fields: [menuId], references: [id])
+  menuName     String // Denormalized for when menu is deleted
+  quantity     Int
+  grossAmount  Decimal // Gross sales, discounts excluded
+  transactedAt DateTime
+  syncedAt     DateTime @default(now())
+
+  @@index([branchId, transactedAt])
+  @@index([menuId])
+}
+
+// ─── STOREHUB SYNC STATUS ───────────────────────────────────
+// Track sync state per branch per data type.
+
+model StorehubSync {
+  id          String       @id @default(uuid())
+  branchId    String
+  branch      Branch       @relation(fields: [branchId], references: [id])
+  syncType    SyncType
+  status      SyncStatus   @default(SUCCESS)
+  lastSyncAt  DateTime     @default(now())
+  recordCount Int          @default(0) // How many records synced
+  errorMessage String?
+  createdAt   DateTime     @default(now())
+
+  @@index([branchId, syncType, lastSyncAt])
+}
+
+enum SyncType {
+  PRODUCTS
+  SALES
+  EMPLOYEES
+}
+
+enum SyncStatus {
+  SUCCESS
+  FAILED
+  IN_PROGRESS
+}
