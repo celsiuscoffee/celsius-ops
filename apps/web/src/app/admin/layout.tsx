@@ -19,6 +19,7 @@ import {
   FileBarChart,
   ArrowRightLeft,
   Plug,
+  ShoppingCart,
 } from "lucide-react";
 
 const sidebarSections = [
@@ -38,8 +39,10 @@ const sidebarSections = [
     ],
   },
   {
-    label: "Finance",
+    label: "Ordering",
     items: [
+      { href: "/admin/orders", label: "Purchase Orders", icon: ShoppingCart },
+      { href: "/admin/receivings", label: "Receivings", icon: ArrowRightLeft },
       { href: "/admin/invoices", label: "Invoices", icon: FileText },
     ],
   },
