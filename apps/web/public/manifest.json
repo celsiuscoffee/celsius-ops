@@ -1,0 +1,22 @@
+{
+  "name": "Celsius Inventory",
+  "short_name": "Celsius",
+  "description": "Smart inventory management for Celsius Coffee",
+  "start_url": "/home",
+  "display": "standalone",
+  "background_color": "#B85C38",
+  "theme_color": "#B85C38",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/images/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

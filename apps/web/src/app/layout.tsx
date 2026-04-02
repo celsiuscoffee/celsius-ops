@@ -11,10 +11,15 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: "Celsius Inventory",
   description: "Smart inventory management for Celsius Coffee",
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "Celsius Inventory",
+  },
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
   },
 };
 
@@ -23,7 +28,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#160800",
+  themeColor: "#B85C38",
 };
 
 export default function RootLayout({
