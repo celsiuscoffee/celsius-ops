@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -10,25 +10,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Search, Pencil, Trash2, Package, ChevronDown } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Package, ChevronDown, Loader2 } from "lucide-react";
 
-// Mock products from FMH data
-const PRODUCTS = [
-  { id: "1", name: "Monin Caramel Syrup", sku: "FM001", category: "Flavour", baseUom: "Milliliter", storageArea: "Dry Store", shelfLife: null, packages: [{ name: "ML", uom: "Milliliter", conversion: 1 }, { name: "Bottle", uom: "1000 ML", conversion: 1000 }, { name: "Carton", uom: "4000 ML", conversion: 4000 }], suppliers: ["Dankoff"] },
-  { id: "2", name: "Fresh Milk", sku: "DFM001", category: "Dairy", baseUom: "Liter", storageArea: "Fridge", shelfLife: 3, packages: [{ name: "L", uom: "Liter", conversion: 1 }], suppliers: ["Sri Ternak"] },
-  { id: "3", name: "Oatmilk (Oatside)", sku: "DO001", category: "Dairy", baseUom: "Milliliter", storageArea: "Fridge", shelfLife: 14, packages: [{ name: "ML", uom: "Milliliter", conversion: 1 }, { name: "Bottle", uom: "1000 ML", conversion: 1000 }, { name: "Carton", uom: "6000 ML", conversion: 6000 }], suppliers: ["Dankoff"] },
-  { id: "4", name: "DVG Blue Ocean Syrup", sku: "FD003", category: "Flavour", baseUom: "Milliliter", storageArea: "Dry Store", shelfLife: null, packages: [{ name: "ML", uom: "Milliliter", conversion: 1 }, { name: "Bottle", uom: "750 ML", conversion: 750 }], suppliers: ["Dankoff"] },
-  { id: "5", name: "Sugar Packet", sku: "S0001", category: "Sweetener", baseUom: "Pcs", storageArea: "Dry Store", shelfLife: null, packages: [{ name: "Pcs", uom: "Piece", conversion: 1 }], suppliers: ["Sri Ternak"] },
-  { id: "6", name: "Hot Lid (9oz)", sku: "PL001", category: "Packaging", baseUom: "Piece", storageArea: "Counter", shelfLife: null, packages: [{ name: "Pcs", uom: "Piece", conversion: 1 }, { name: "Pack", uom: "50 Pcs", conversion: 50 }], suppliers: ["Unique Paper Sdn Bhd"] },
-  { id: "7", name: "Plastic Cup", sku: "PC003", category: "Packaging", baseUom: "Piece", storageArea: "Counter", shelfLife: null, packages: [{ name: "Pcs", uom: "Piece", conversion: 1 }, { name: "Pack", uom: "50 Pcs", conversion: 50 }], suppliers: ["Unique Paper Sdn Bhd"] },
-  { id: "8", name: "Smoked Duck", sku: "M0006", category: "Meat", baseUom: "Gram", storageArea: "Fridge", shelfLife: 5, packages: [{ name: "G", uom: "Gram", conversion: 1 }, { name: "Kg", uom: "1000 G", conversion: 1000 }], suppliers: ["365EAT FOOD"] },
-  { id: "9", name: "Anchor Salt Butter", sku: "RMA01", category: "Dairy", baseUom: "Gram", storageArea: "Fridge", shelfLife: 30, packages: [{ name: "Pcs", uom: "250 G", conversion: 250 }], suppliers: ["BGS Trading"] },
-  { id: "10", name: "Condensed Milk", sku: "D0003", category: "Dairy", baseUom: "Gram", storageArea: "Dry Store", shelfLife: null, packages: [{ name: "Tin", uom: "392 G", conversion: 392 }, { name: "Carton", uom: "9408 G", conversion: 9408 }], suppliers: ["Sri Ternak"] },
-  { id: "11", name: "Beras", sku: "RMM01", category: "Raw Material", baseUom: "Gram", storageArea: "Dry Store", shelfLife: null, packages: [{ name: "Bag", uom: "5000 G", conversion: 5000 }], suppliers: ["Sri Ternak"] },
-  { id: "12", name: "Air Fryer Paper", sku: "PAP001", category: "Packaging", baseUom: "Piece", storageArea: "Dry Store", shelfLife: null, packages: [{ name: "Pack", uom: "Kitchen Supplies", conversion: 1 }], suppliers: ["Unique Paper Sdn Bhd"] },
-];
-
-const CATEGORIES = ["All", "Flavour", "Dairy", "Packaging", "Meat", "Raw Material", "Sweetener", "Fresh Fruit", "Fresh Vegetable", "Cleaning", "Cookies", "Sauce", "Spread"];
+type Product = {
+  id: string;
+  name: string;
+  sku: string;
+  category: string;
+  baseUom: string;
+  storageArea: string;
+  shelfLife: number | null;
+  packages: { name: string; uom: string; conversion: number }[];
+  suppliers: string[];
+};
 
 type ProductForm = {
   name: string;
@@ -43,6 +37,8 @@ type ProductForm = {
 const emptyForm: ProductForm = { name: "", sku: "", category: "", baseUom: "", storageArea: "", shelfLife: "", description: "" };
 
 export default function ProductsPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -50,7 +46,19 @@ export default function ProductsPage() {
   const [form, setForm] = useState<ProductForm>(emptyForm);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const filtered = PRODUCTS.filter((p) => {
+  useEffect(() => {
+    fetch("/api/products")
+      .then((res) => res.json())
+      .then((data) => {
+        setProducts(data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const categories = ["All", ...new Set(products.map((p) => p.category).filter(Boolean))].sort();
+
+  const filtered = products.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
     const matchCategory = categoryFilter === "All" || p.category === categoryFilter;
     return matchSearch && matchCategory;
@@ -62,7 +70,7 @@ export default function ProductsPage() {
     setDialogOpen(true);
   };
 
-  const openEdit = (product: (typeof PRODUCTS)[0]) => {
+  const openEdit = (product: Product) => {
     setForm({
       name: product.name,
       sku: product.sku,
@@ -86,7 +94,7 @@ export default function ProductsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Products</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{PRODUCTS.length} products across {new Set(PRODUCTS.map((p) => p.category)).size} categories</p>
+          <p className="mt-0.5 text-sm text-gray-500">{products.length} products across {new Set(products.map((p) => p.category)).size} categories</p>
         </div>
         <Button onClick={openAdd} className="bg-terracotta hover:bg-terracotta-dark">
           <Plus className="mr-1.5 h-4 w-4" />
@@ -106,7 +114,7 @@ export default function ProductsPage() {
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {CATEGORIES.slice(0, 8).map((cat) => (
+          {categories.slice(0, 12).map((cat) => (
             <button
               key={cat}
               onClick={() => setCategoryFilter(cat)}
@@ -138,7 +146,15 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((product) => (
+            {loading && (
+              <tr>
+                <td colSpan={8} className="px-4 py-12 text-center">
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-terracotta" />
+                  <p className="mt-2 text-sm text-gray-500">Loading products...</p>
+                </td>
+              </tr>
+            )}
+            {!loading && filtered.map((product) => (
               <tr
                 key={product.id}
                 className="border-b border-gray-50 transition-colors hover:bg-gray-50/50"
@@ -248,7 +264,7 @@ export default function ProductsPage() {
                   onChange={(e) => updateField("category", e.target.value)}
                 >
                   <option value="">Select...</option>
-                  {CATEGORIES.filter((c) => c !== "All").map((cat) => (
+                  {categories.filter((c) => c !== "All").map((cat) => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
