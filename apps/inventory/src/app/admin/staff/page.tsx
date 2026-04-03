@@ -475,7 +475,21 @@ export default function StaffPage() {
           )}
 
           {saveError && <p className="text-xs text-red-500 px-1">{saveError}</p>}
-          <DialogFooter>
+          <DialogFooter className="flex !justify-between">
+            {editingId && editingStaff ? (
+              <Button
+                variant="outline"
+                className="text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600"
+                onClick={async () => {
+                  if (!confirm(`Deactivate ${editingStaff.name}? They will lose access.`)) return;
+                  await fetch(`/api/staff/${editingId}`, { method: "DELETE" });
+                  setDialogOpen(false);
+                  loadStaff();
+                }}
+              >
+                <X className="mr-1 h-3.5 w-3.5" />Deactivate
+              </Button>
+            ) : <div />}
             <Button onClick={handleSubmit} disabled={saving || !form.name || !form.phone} className="bg-terracotta hover:bg-terracotta-dark disabled:opacity-50">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
               {editingId ? "Save Changes" : "Add Staff"}
