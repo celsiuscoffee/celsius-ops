@@ -73,32 +73,33 @@ export async function POST(req: NextRequest) {
     usageByProduct[ingredient.productId].dailyUsage += dailyUsageFromMenu;
   }
 
-  // Upsert par levels
-  let updated = 0;
-  for (const [productId, data] of Object.entries(usageByProduct)) {
-    const parLevel = Math.ceil(data.dailyUsage * PAR_DAYS);
-    const reorderPoint = Math.ceil(data.dailyUsage * REORDER_DAYS);
-    if (parLevel === 0) continue;
-
-    await prisma.parLevel.upsert({
-      where: { productId_branchId: { productId, branchId } },
-      create: {
-        productId,
-        branchId,
-        parLevel,
-        reorderPoint,
-        avgDailyUsage: Math.round(data.dailyUsage * 100) / 100,
-        lastCalculated: new Date(),
-      },
-      update: {
-        parLevel,
-        reorderPoint,
-        avgDailyUsage: Math.round(data.dailyUsage * 100) / 100,
-        lastCalculated: new Date(),
-      },
-    });
-    updated++;
-  }
+  // Upsert par levels (batched in parallel)
+  const upserts = Object.entries(usageByProduct)
+    .map(([productId, data]) => {
+      const parLevel = Math.ceil(data.dailyUsage * PAR_DAYS);
+      const reorderPoint = Math.ceil(data.dailyUsage * REORDER_DAYS);
+      if (parLevel === 0) return null;
+      return prisma.parLevel.upsert({
+        where: { productId_branchId: { productId, branchId } },
+        create: {
+          productId,
+          branchId,
+          parLevel,
+          reorderPoint,
+          avgDailyUsage: Math.round(data.dailyUsage * 100) / 100,
+          lastCalculated: new Date(),
+        },
+        update: {
+          parLevel,
+          reorderPoint,
+          avgDailyUsage: Math.round(data.dailyUsage * 100) / 100,
+          lastCalculated: new Date(),
+        },
+      });
+    })
+    .filter(Boolean);
+  await Promise.all(upserts);
+  const updated = upserts.length;
 
   return NextResponse.json({
     success: true,

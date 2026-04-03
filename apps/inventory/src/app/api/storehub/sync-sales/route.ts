@@ -80,14 +80,16 @@ export async function POST(req: NextRequest) {
   let skipped = 0;
   const unmatched: string[] = [];
 
+  // Build batch of upsert operations
+  type UpsertOp = { txId: string; menuId: string; menuName: string; quantity: number; total: number; transactedAt: Date };
+  const ops: UpsertOp[] = [];
+
   for (const txn of transactions) {
-    for (const item of txn.items) {
-      // Transaction items have productId but no name — look up from catalog
+    for (let itemIndex = 0; itemIndex < txn.items.length; itemIndex++) {
+      const item = txn.items[itemIndex];
       const itemName = shProductNames.get(item.productId || "") || "Unknown";
-      const itemIndex = txn.items.indexOf(item);
       const txId = `${txn.refId}-${itemIndex}`;
 
-      // Match to our Menu by storehubId (productId from StoreHub)
       const menu = item.productId ? menuByStorehubId.get(item.productId) : null;
 
       if (!menu) {
@@ -98,34 +100,43 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Use transactionTime from StoreHub
       const transactedAt = txn.transactionTime || txn.completedAt || txn.createdAt;
       if (!transactedAt) {
         skipped++;
         continue;
       }
 
-      try {
-        await prisma.salesTransaction.upsert({
-          where: { storehubTxId: txId },
+      ops.push({ txId, menuId: menu.id, menuName: menu.name, quantity: item.quantity, total: item.total, transactedAt: new Date(transactedAt) });
+    }
+  }
+
+  // Execute upserts in parallel chunks of 50
+  const CHUNK_SIZE = 50;
+  for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+    const chunk = ops.slice(i, i + CHUNK_SIZE);
+    const results = await Promise.allSettled(
+      chunk.map((op) =>
+        prisma.salesTransaction.upsert({
+          where: { storehubTxId: op.txId },
           create: {
-            storehubTxId: txId,
+            storehubTxId: op.txId,
             branchId,
-            menuId: menu.id,
-            menuName: menu.name,
-            quantity: item.quantity,
-            grossAmount: item.total,
-            transactedAt: new Date(transactedAt),
+            menuId: op.menuId,
+            menuName: op.menuName,
+            quantity: op.quantity,
+            grossAmount: op.total,
+            transactedAt: op.transactedAt,
           },
           update: {
-            quantity: item.quantity,
-            grossAmount: item.total,
+            quantity: op.quantity,
+            grossAmount: op.total,
           },
-        });
-        created++;
-      } catch {
-        skipped++;
-      }
+        }),
+      ),
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled") created++;
+      else skipped++;
     }
   }
 

@@ -76,10 +76,12 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Subtract from source branch immediately when transfer is created
-  for (const item of items) {
-    await adjustStockBalance(fromBranchId, item.productId, -item.quantity);
-  }
+  // Subtract from source branch immediately when transfer is created (parallel)
+  await Promise.all(
+    items.map((item: { productId: string; quantity: number }) =>
+      adjustStockBalance(fromBranchId, item.productId, -item.quantity),
+    ),
+  );
 
   return NextResponse.json(transfer, { status: 201 });
 }

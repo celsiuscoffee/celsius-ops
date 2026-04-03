@@ -74,12 +74,14 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Update stock balances from counted quantities
-  for (const item of items) {
-    if (item.countedQty !== null && item.countedQty !== undefined) {
-      await setStockBalance(branchId, item.productId, item.countedQty);
-    }
-  }
+  // Update stock balances from counted quantities (parallel)
+  await Promise.all(
+    items
+      .filter((item: { countedQty?: number }) => item.countedQty !== null && item.countedQty !== undefined)
+      .map((item: { productId: string; countedQty: number }) =>
+        setStockBalance(branchId, item.productId, item.countedQty),
+      ),
+  );
 
   return NextResponse.json(stockCount, { status: 201 });
 }

@@ -5,12 +5,19 @@ export async function GET() {
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+
   const [
     recentOrders,
     recentReceivings,
-    recentWastage,
+    wasteAgg,
     pendingOrders,
     sentOrders,
+    todayCheck,
+    lastCheck,
+    weeklyOrderAgg,
+    weeklyOrderCount,
   ] = await Promise.all([
     // Recent orders (last 5)
     prisma.order.findMany({
@@ -22,12 +29,10 @@ export async function GET() {
     prisma.receiving.count({
       where: { receivedAt: { gte: weekAgo } },
     }),
-    // Wastage this week
-    prisma.stockAdjustment.findMany({
-      where: {
-        adjustmentType: "WASTAGE",
-        createdAt: { gte: weekAgo },
-      },
+    // Wastage cost total this week (aggregated in DB)
+    prisma.stockAdjustment.aggregate({
+      where: { adjustmentType: "WASTAGE", createdAt: { gte: weekAgo } },
+      _sum: { costAmount: true },
     }),
     // Pending approval orders
     prisma.order.count({
@@ -36,35 +41,30 @@ export async function GET() {
     // Sent orders (awaiting delivery)
     prisma.order.findMany({
       where: { status: { in: ["SENT", "APPROVED", "AWAITING_DELIVERY"] } },
-      include: { supplier: true },
+      select: { supplier: { select: { name: true } } },
+    }),
+    // Today's stock check
+    prisma.stockCount.findFirst({
+      where: { createdAt: { gte: todayStart } },
+      orderBy: { createdAt: "desc" },
+    }),
+    // Last stock check ever
+    prisma.stockCount.findFirst({
+      orderBy: { createdAt: "desc" },
+    }),
+    // Weekly spending (aggregated in DB)
+    prisma.order.aggregate({
+      where: { createdAt: { gte: weekAgo } },
+      _sum: { totalAmount: true },
+    }),
+    // Weekly order count
+    prisma.order.count({
+      where: { createdAt: { gte: weekAgo } },
     }),
   ]);
 
-  // Today's stock check status
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayCheck = await prisma.stockCount.findFirst({
-    where: { createdAt: { gte: todayStart } },
-    orderBy: { createdAt: "desc" },
-  });
-  const lastCheck = await prisma.stockCount.findFirst({
-    orderBy: { createdAt: "desc" },
-  });
-
-  // Weekly spending
-  const weeklyOrders = await prisma.order.findMany({
-    where: { createdAt: { gte: weekAgo } },
-  });
-  const weeklySpending = weeklyOrders.reduce(
-    (sum, o) => sum + Number(o.totalAmount),
-    0,
-  );
-
-  // Wastage total this week
-  const wasteTotal = recentWastage.reduce(
-    (sum, w) => sum + Number(w.costAmount ?? 0),
-    0,
-  );
+  const weeklySpending = Number(weeklyOrderAgg._sum.totalAmount ?? 0);
+  const wasteTotal = Number(wasteAgg._sum.costAmount ?? 0);
 
   return NextResponse.json({
     stockCheckDone: !!todayCheck,
@@ -74,7 +74,7 @@ export async function GET() {
     deliverySuppliers: sentOrders.map((o) => o.supplier.name),
     weeklySpending,
     wasteTotal,
-    ordersPlaced: weeklyOrders.length,
+    ordersPlaced: weeklyOrderCount,
     receivingsThisWeek: recentReceivings,
     recentOrders: recentOrders.map((o) => ({
       id: o.id,

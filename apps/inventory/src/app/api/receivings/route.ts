@@ -95,10 +95,12 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Update stock balances
-  for (const item of items) {
-    await adjustStockBalance(branchId, item.productId, item.receivedQty);
-  }
+  // Update stock balances (parallel)
+  await Promise.all(
+    items.map((item: { productId: string; receivedQty: number }) =>
+      adjustStockBalance(branchId, item.productId, item.receivedQty),
+    ),
+  );
 
   // Update order status if linked
   if (orderId) {
