@@ -42,6 +42,7 @@ export default function StaffPage() {
   const [form, setForm] = useState<StaffForm>(emptyForm);
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState<"details" | "access" | "security">("details");
 
@@ -69,6 +70,7 @@ export default function StaffPage() {
     setEditingStaff(null);
     setActiveTab("details");
     setShowPassword(false);
+    setSaveError("");
     setDialogOpen(true);
   };
 
@@ -88,6 +90,7 @@ export default function StaffPage() {
     setEditingStaff(s);
     setActiveTab("details");
     setShowPassword(false);
+    setSaveError("");
     setDialogOpen(true);
   };
 
@@ -103,6 +106,7 @@ export default function StaffPage() {
   const handleSubmit = async () => {
     if (!form.name || !form.phone) return;
     setSaving(true);
+    setSaveError("");
     try {
       const payload: Record<string, unknown> = {
         name: form.name,
@@ -125,13 +129,20 @@ export default function StaffPage() {
       }
 
       const url = editingId ? `/api/staff/${editingId}` : "/api/staff";
-      await fetch(url, {
+      const res = await fetch(url, {
         method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSaveError(data.error || `Failed to save (${res.status})`);
+        return;
+      }
       setDialogOpen(false);
       loadStaff();
+    } catch {
+      setSaveError("Network error — please try again");
     } finally {
       setSaving(false);
     }
@@ -463,6 +474,7 @@ export default function StaffPage() {
             </div>
           )}
 
+          {saveError && <p className="text-xs text-red-500 px-1">{saveError}</p>}
           <DialogFooter>
             <Button onClick={handleSubmit} disabled={saving || !form.name || !form.phone} className="bg-terracotta hover:bg-terracotta-dark disabled:opacity-50">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}

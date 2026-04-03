@@ -36,12 +36,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data.pin = body.pin || null;
   }
 
-  const user = await prisma.user.update({
-    where: { id },
-    data: data as never,
-  });
-
-  return NextResponse.json({ ok: true, id: user.id });
+  try {
+    const user = await prisma.user.update({
+      where: { id },
+      data: data as never,
+    });
+    return NextResponse.json({ ok: true, id: user.id });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("Unique constraint")) {
+      if (message.includes("phone")) return NextResponse.json({ error: "Phone number already in use" }, { status: 409 });
+      if (message.includes("username")) return NextResponse.json({ error: "Username already taken" }, { status: 409 });
+      if (message.includes("email")) return NextResponse.json({ error: "Email already in use" }, { status: 409 });
+      return NextResponse.json({ error: "Duplicate value" }, { status: 409 });
+    }
+    return NextResponse.json({ error: "Failed to update staff" }, { status: 500 });
+  }
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
