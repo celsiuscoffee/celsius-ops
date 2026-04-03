@@ -139,6 +139,7 @@ export default function CreateOrderPage() {
   // Order
   const [cart, setCart] = useState<CartItem[]>([]);
   const [productSearch, setProductSearch] = useState("");
+  const [supplierFilter, setSupplierFilter] = useState("");
   const [orderNotes, setOrderNotes] = useState("");
   const [createTab, setCreateTab] = useState<"suggested" | "all" | "reorder">("suggested");
   const [saving, setSaving] = useState(false);
@@ -210,18 +211,22 @@ export default function CreateOrderPage() {
       }
       return { ...item, supplier: supplierMatch, supplierProduct: productMatch };
     })
+    .filter((item) => !supplierFilter || item.supplier?.id === supplierFilter)
     .sort((a, b) => (a.daysLeft ?? 0) - (b.daysLeft ?? 0));
 
   // All products grouped by supplier
-  const supplierProducts = productSearch.trim().length >= 2
+  const supplierProducts = (productSearch.trim().length >= 2 || supplierFilter)
     ? suppliers
         .filter((s) => s.products.length > 0)
+        .filter((s) => !supplierFilter || s.id === supplierFilter)
         .map((s) => ({
           ...s,
-          products: s.products.filter((p) =>
-            p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-            p.sku.toLowerCase().includes(productSearch.toLowerCase())
-          ),
+          products: productSearch.trim().length >= 2
+            ? s.products.filter((p) =>
+                p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                p.sku.toLowerCase().includes(productSearch.toLowerCase())
+              )
+            : s.products,
         }))
         .filter((s) => s.products.length > 0)
     : [];
@@ -444,7 +449,7 @@ export default function CreateOrderPage() {
         <div className="col-span-8">
           {/* Branch + controls */}
           <Card className="mb-4 p-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Branch</label>
                 <select
@@ -456,8 +461,15 @@ export default function CreateOrderPage() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
-                <Input placeholder="Optional notes..." value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} />
+                <label className="mb-1 block text-xs font-medium text-gray-600">Supplier</label>
+                <select
+                  value={supplierFilter}
+                  onChange={(e) => setSupplierFilter(e.target.value)}
+                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                >
+                  <option value="">All Suppliers</option>
+                  {suppliers.filter((s) => s.products.length > 0).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Search Products</label>
@@ -465,6 +477,10 @@ export default function CreateOrderPage() {
                   <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <Input placeholder="Search by name or SKU..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="pl-9" />
                 </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
+                <Input placeholder="Optional notes..." value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} />
               </div>
             </div>
           </Card>
@@ -588,14 +604,14 @@ export default function CreateOrderPage() {
                 <Card className="py-12 text-center">
                   <Search className="mx-auto h-8 w-8 text-gray-300" />
                   <p className="mt-2 text-sm text-gray-400">
-                    {productSearch && productSearch.trim().length >= 2
-                      ? "No products match your search"
-                      : "Type at least 2 characters to search products"}
+                    {(productSearch && productSearch.trim().length >= 2) || supplierFilter
+                      ? "No products match your filter"
+                      : "Select a supplier or type at least 2 characters to search"}
                   </p>
                   <p className="mt-1 text-xs text-gray-300">
-                    {!productSearch || productSearch.trim().length < 2
+                    {!supplierFilter && (!productSearch || productSearch.trim().length < 2)
                       ? `${suppliers.reduce((acc, s) => acc + s.products.length, 0)} products from ${suppliers.length} suppliers available`
-                      : "Try a different keyword or SKU"}
+                      : "Try a different supplier or keyword"}
                   </p>
                 </Card>
               ) : (
