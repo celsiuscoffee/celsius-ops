@@ -338,7 +338,7 @@ export default function ReceivingsPage() {
       </div>
 
       {/* Receivings Table */}
-      <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="mt-4 rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">

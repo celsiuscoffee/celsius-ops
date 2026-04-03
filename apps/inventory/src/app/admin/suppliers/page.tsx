@@ -374,7 +374,7 @@ export default function SuppliersPage() {
                 </Button>
               </div>
 
-              <div className="overflow-hidden rounded-lg border border-gray-200">
+              <div className="rounded-lg border border-gray-200">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-gray-50">

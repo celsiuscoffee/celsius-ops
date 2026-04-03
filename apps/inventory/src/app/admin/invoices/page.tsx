@@ -128,7 +128,7 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="mt-4 rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-sm">
           <thead><tr className="border-b bg-gray-50/50">
             <th className="px-4 py-3 text-left font-medium text-gray-500">Invoice ID</th>
