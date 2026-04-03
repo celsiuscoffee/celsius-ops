@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Pencil, ChevronDown, Coffee, Search, Loader2, Trash2, X, Check } from "lucide-react";
+import { Pencil, ChevronDown, Coffee, Search, Loader2, Trash2, X, Check, RefreshCw } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 type Ingredient = { product: string; productId: string; sku: string; qty: number; uom: string; cost: number };
@@ -48,6 +48,8 @@ export default function MenusPage() {
   const [editIngredients, setEditIngredients] = useState<EditIngredient[]>([]);
   const [saving, setSaving] = useState(false);
   const [addSearch, setAddSearch] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ created: number; updated: number } | null>(null);
 
   const categories = ["All", ...new Set(menus.map((m) => m.category).filter(Boolean))];
 
@@ -163,7 +165,35 @@ export default function MenusPage() {
           <h2 className="text-xl font-semibold text-gray-900">Menu & Recipes (BOM)</h2>
           <p className="mt-0.5 text-sm text-gray-500">{menus.length} menu items with ingredient costing</p>
         </div>
+        <Button
+          onClick={async () => {
+            setSyncing(true);
+            setSyncResult(null);
+            try {
+              const res = await fetch("/api/storehub/sync-products", { method: "POST" });
+              const data = await res.json();
+              if (res.ok) {
+                setSyncResult({ created: data.created, updated: data.updated });
+                loadMenus();
+              }
+            } finally {
+              setSyncing(false);
+            }
+          }}
+          disabled={syncing}
+          variant="outline"
+          className="gap-1.5"
+        >
+          <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+          {syncing ? "Syncing..." : "Sync from StoreHub"}
+        </Button>
       </div>
+      {syncResult && (
+        <div className="mt-2 flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
+          <Check className="h-3.5 w-3.5" />
+          Synced — {syncResult.created} new, {syncResult.updated} updated
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-md">
