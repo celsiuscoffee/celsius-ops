@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders, requireRole, AuthError } from "@/lib/auth";
+import { hashPassword } from "@/lib/password";
 
 export async function GET(req: NextRequest) {
   const caller = getUserFromHeaders(req.headers);
@@ -16,6 +17,17 @@ export async function GET(req: NextRequest) {
     orderBy: { name: "asc" },
   });
 
+  // Resolve branch names for branchIds
+  const allBranchIds = [...new Set(users.flatMap((u) => u.branchIds).filter(Boolean))];
+  const branchMap = new Map<string, string>();
+  if (allBranchIds.length > 0) {
+    const branches = await prisma.branch.findMany({
+      where: { id: { in: allBranchIds } },
+      select: { id: true, name: true },
+    });
+    branches.forEach((b) => branchMap.set(b.id, b.name));
+  }
+
   const mapped = users.map((u) => ({
     id: u.id,
     name: u.name,
@@ -23,8 +35,13 @@ export async function GET(req: NextRequest) {
     branch: u.branch?.name ?? "",
     branchId: u.branchId,
     branchCode: u.branch?.code ?? "",
+    branchIds: u.branchIds,
+    branchNames: u.branchIds.map((id) => branchMap.get(id) ?? id),
     phone: u.phone ?? "",
     email: u.email,
+    username: u.username,
+    hasPassword: !!u.password,
+    hasPin: !!u.pin,
     status: u.status,
     addedDate: u.createdAt.toISOString().split("T")[0],
   }));
@@ -41,17 +58,25 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, phone, email, role, branchId } = body;
+  const { name, phone, email, role, branchId, branchIds, username, password, pin } = body;
 
-  const user = await prisma.user.create({
-    data: {
-      name,
-      phone,
-      email: email || null,
-      role: role || "STAFF",
-      branchId: branchId || null,
-    },
-  });
+  const data: Record<string, unknown> = {
+    name,
+    phone,
+    email: email || null,
+    role: role || "STAFF",
+    branchId: branchId || null,
+    branchIds: branchIds || [],
+    username: username || null,
+  };
 
+  if (password && password.length >= 6) {
+    data.password = hashPassword(password);
+  }
+  if (pin) {
+    data.pin = pin;
+  }
+
+  const user = await prisma.user.create({ data: data as never });
   return NextResponse.json(user, { status: 201 });
 }
