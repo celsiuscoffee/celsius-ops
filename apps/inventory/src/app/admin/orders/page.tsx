@@ -23,6 +23,7 @@ import {
   Send,
   Ban,
   ThumbsUp,
+  Trash2,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -105,6 +106,22 @@ export default function OrdersPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   // ── Status update ───────────────────────────────────────────────────────
+
+  const deleteOrder = async (orderId: string) => {
+    if (!confirm("Delete this order permanently?")) return;
+    setUpdatingId(orderId);
+    try {
+      const res = await fetch(`/api/orders/${orderId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Failed to delete order");
+        return;
+      }
+      loadOrders();
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   const updateStatus = async (orderId: string, newStatus: string) => {
     setUpdatingId(orderId);
@@ -274,6 +291,11 @@ export default function OrdersPage() {
                             {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : a.label}
                           </button>
                         ))}
+                        {["DRAFT", "CANCELLED"].includes(order.status) && (
+                          <button onClick={() => deleteOrder(order.id)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50" title="Delete">
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
