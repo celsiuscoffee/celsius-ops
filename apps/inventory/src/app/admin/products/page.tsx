@@ -337,16 +337,23 @@ export default function ProductsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium text-gray-700">Storage Area</label>
-                <select
-                  className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-                  value={form.storageArea}
-                  onChange={(e) => updateField("storageArea", e.target.value)}
-                >
-                  <option value="">Select...</option>
-                  <option value="FRIDGE">Fridge</option>
-                  <option value="DRY_STORE">Dry Store</option>
-                  <option value="COUNTER">Counter</option>
-                </select>
+                <div className="relative mt-1">
+                  <input
+                    list="storage-area-options"
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                    placeholder="Type or select..."
+                    value={form.storageArea}
+                    onChange={(e) => updateField("storageArea", e.target.value)}
+                  />
+                  <datalist id="storage-area-options">
+                    {[...new Set([
+                      "FRIDGE", "FREEZER", "DRY_STORE", "COUNTER", "BAR",
+                      ...products.map((p) => p.storageArea).filter(Boolean),
+                    ])].sort().map((area) => (
+                      <option key={area} value={area}>{area.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}</option>
+                    ))}
+                  </datalist>
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">Shelf Life (days)</label>
