@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Pencil, ChevronDown, Coffee, Upload, Search, Loader2 } from "lucide-react";
+import { Pencil, ChevronDown, Coffee, Search, Loader2, Trash2, X, Check } from "lucide-react";
+
+type Ingredient = { product: string; productId: string; sku: string; qty: number; uom: string; cost: number };
 
 type MenuItem = {
   id: string;
@@ -16,7 +17,22 @@ type MenuItem = {
   cogs: number;
   cogsPercent: number;
   ingredientCount: number;
-  ingredients: { product: string; sku: string; qty: number; uom: string; cost: number }[];
+  ingredients: Ingredient[];
+};
+
+type ProductOption = {
+  id: string;
+  name: string;
+  sku: string;
+  baseUom: string;
+};
+
+type EditIngredient = {
+  productId: string;
+  productName: string;
+  sku: string;
+  quantityUsed: number;
+  uom: string;
 };
 
 export default function MenusPage() {
@@ -25,13 +41,32 @@ export default function MenusPage() {
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("All");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
 
-  useEffect(() => {
+  // Editing state
+  const [editingMenuId, setEditingMenuId] = useState<string | null>(null);
+  const [editIngredients, setEditIngredients] = useState<EditIngredient[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  // Product search for adding ingredients
+  const [products, setProducts] = useState<ProductOption[]>([]);
+  const [addSearch, setAddSearch] = useState("");
+
+  const loadMenus = () => {
     fetch("/api/menus")
       .then((res) => res.json())
       .then((data) => { setMenus(data); setLoading(false); })
       .catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadMenus();
+    // Load products for ingredient picker
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((data) => setProducts(data.map((p: { id: string; name: string; sku: string; baseUom: string }) => ({
+        id: p.id, name: p.name, sku: p.sku, baseUom: p.baseUom,
+      }))))
+      .catch(() => {});
   }, []);
 
   const categories = ["All", ...new Set(menus.map((m) => m.category).filter(Boolean))];
@@ -41,6 +76,97 @@ export default function MenusPage() {
     const matchCat = catFilter === "All" || m.category === catFilter;
     return matchSearch && matchCat;
   });
+
+  // ── Edit helpers ────────────────────────────────────────────────────────
+
+  const startEditing = (menu: MenuItem) => {
+    setEditingMenuId(menu.id);
+    setExpandedId(menu.id);
+    setEditIngredients(
+      menu.ingredients.map((ing) => ({
+        productId: ing.productId,
+        productName: ing.product,
+        sku: ing.sku,
+        quantityUsed: ing.qty,
+        uom: ing.uom,
+      }))
+    );
+    setAddSearch("");
+  };
+
+  const cancelEditing = () => {
+    setEditingMenuId(null);
+    setEditIngredients([]);
+    setAddSearch("");
+  };
+
+  const updateIngredientQty = (productId: string, value: string) => {
+    const num = parseFloat(value);
+    if (isNaN(num)) return;
+    setEditIngredients((prev) =>
+      prev.map((ing) =>
+        ing.productId === productId ? { ...ing, quantityUsed: num } : ing
+      )
+    );
+  };
+
+  const updateIngredientUom = (productId: string, uom: string) => {
+    setEditIngredients((prev) =>
+      prev.map((ing) =>
+        ing.productId === productId ? { ...ing, uom } : ing
+      )
+    );
+  };
+
+  const removeIngredient = (productId: string) => {
+    setEditIngredients((prev) => prev.filter((ing) => ing.productId !== productId));
+  };
+
+  const addIngredient = (product: ProductOption) => {
+    if (editIngredients.some((ing) => ing.productId === product.id)) return;
+    setEditIngredients((prev) => [
+      ...prev,
+      { productId: product.id, productName: product.name, sku: product.sku, quantityUsed: 0, uom: product.baseUom },
+    ]);
+    setAddSearch("");
+  };
+
+  const saveIngredients = async () => {
+    if (!editingMenuId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/menus/${editingMenuId}/ingredients`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ingredients: editIngredients.map((ing) => ({
+            productId: ing.productId,
+            quantityUsed: ing.quantityUsed,
+            uom: ing.uom,
+          })),
+        }),
+      });
+      if (res.ok) {
+        cancelEditing();
+        loadMenus();
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Product search results for adding
+  const addSearchResults = addSearch.trim().length >= 2
+    ? products
+        .filter((p) =>
+          !editIngredients.some((ing) => ing.productId === p.id) &&
+          (p.name.toLowerCase().includes(addSearch.toLowerCase()) ||
+           p.sku.toLowerCase().includes(addSearch.toLowerCase()))
+        )
+        .slice(0, 8)
+    : [];
+
+  // ── Render ──────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -56,10 +182,6 @@ export default function MenusPage() {
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Menu & Recipes (BOM)</h2>
           <p className="mt-0.5 text-sm text-gray-500">{menus.length} menu items with ingredient costing</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline"><Upload className="mr-1.5 h-4 w-4" />Import CSV</Button>
-          <Button onClick={() => setDialogOpen(true)} className="bg-terracotta hover:bg-terracotta-dark"><Plus className="mr-1.5 h-4 w-4" />Add Menu</Button>
         </div>
       </div>
 
@@ -89,67 +211,169 @@ export default function MenusPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((menu) => (
-              <Fragment key={menu.id}>
-                <tr className="border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer" onClick={() => setExpandedId(expandedId === menu.id ? null : menu.id)}>
-                  <td className="px-3 py-3">
-                    <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${expandedId === menu.id ? "rotate-180" : ""}`} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <Coffee className="h-4 w-4 text-gray-400" />
-                      <p className="font-medium text-gray-900">{menu.name}</p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3"><Badge variant="outline" className="text-[10px]">{menu.category}</Badge></td>
-                  <td className="px-4 py-3 text-right font-medium text-gray-900">RM {menu.sellingPrice.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{menu.ingredientCount} items</td>
-                  <td className="px-4 py-3 text-right">
-                    <button className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100"><Pencil className="h-3.5 w-3.5" /></button>
-                  </td>
-                </tr>
-                {expandedId === menu.id && (
-                  <tr>
-                    <td colSpan={6} className="bg-gray-50 px-8 py-3">
-                      <p className="mb-2 text-xs font-semibold text-gray-500 uppercase">Recipe / Bill of Materials</p>
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="text-gray-400">
-                            <th className="pb-1 text-left font-medium">Ingredient</th>
-                            <th className="pb-1 text-left font-medium">SKU</th>
-                            <th className="pb-1 text-right font-medium">Qty</th>
-                            <th className="pb-1 text-left font-medium">UOM</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {menu.ingredients.map((ing, i) => (
-                            <tr key={i} className="border-t border-gray-200/50">
-                              <td className="py-1.5 text-gray-700">{ing.product}</td>
-                              <td className="py-1.5"><code className="text-gray-500">{ing.sku}</code></td>
-                              <td className="py-1.5 text-right text-gray-700">{ing.qty}</td>
-                              <td className="py-1.5 text-gray-500">{ing.uom}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+            {filtered.map((menu) => {
+              const isEditing = editingMenuId === menu.id;
+              return (
+                <Fragment key={menu.id}>
+                  <tr className="border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer" onClick={() => { if (!isEditing) setExpandedId(expandedId === menu.id ? null : menu.id); }}>
+                    <td className="px-3 py-3">
+                      <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${expandedId === menu.id ? "rotate-180" : ""}`} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Coffee className="h-4 w-4 text-gray-400" />
+                        <p className="font-medium text-gray-900">{menu.name}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3"><Badge variant="outline" className="text-[10px]">{menu.category}</Badge></td>
+                    <td className="px-4 py-3 text-right font-medium text-gray-900">RM {menu.sellingPrice.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{menu.ingredientCount} items</td>
+                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      {isEditing ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-gray-500" onClick={cancelEditing} disabled={saving}>
+                            <X className="mr-1 h-3 w-3" />Cancel
+                          </Button>
+                          <Button size="sm" className="h-7 bg-green-600 hover:bg-green-700 text-xs" onClick={saveIngredients} disabled={saving}>
+                            {saving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
+                            Save
+                          </Button>
+                        </div>
+                      ) : (
+                        <button
+                          className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-terracotta"
+                          onClick={() => startEditing(menu)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
-                )}
-              </Fragment>
-            ))}
+                  {expandedId === menu.id && (
+                    <tr>
+                      <td colSpan={6} className="bg-gray-50 px-8 py-3">
+                        <p className="mb-2 text-xs font-semibold text-gray-500 uppercase">Recipe / Bill of Materials</p>
+
+                        {isEditing ? (
+                          /* ── Editing mode ── */
+                          <div>
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-gray-400">
+                                  <th className="pb-1 text-left font-medium">Ingredient</th>
+                                  <th className="pb-1 text-left font-medium">SKU</th>
+                                  <th className="pb-1 w-28 text-right font-medium">Qty per serving</th>
+                                  <th className="pb-1 w-20 text-left font-medium">UOM</th>
+                                  <th className="pb-1 w-8"></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {editIngredients.map((ing) => (
+                                  <tr key={ing.productId} className="border-t border-gray-200/50">
+                                    <td className="py-1.5 text-gray-700">{ing.productName}</td>
+                                    <td className="py-1.5"><code className="text-gray-500">{ing.sku}</code></td>
+                                    <td className="py-1.5 text-right">
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        value={ing.quantityUsed}
+                                        onChange={(e) => updateIngredientQty(ing.productId, e.target.value)}
+                                        className="w-24 rounded border border-gray-200 px-2 py-1 text-right text-xs"
+                                      />
+                                    </td>
+                                    <td className="py-1.5">
+                                      <input
+                                        type="text"
+                                        value={ing.uom}
+                                        onChange={(e) => updateIngredientUom(ing.productId, e.target.value)}
+                                        className="w-16 rounded border border-gray-200 px-2 py-1 text-xs"
+                                      />
+                                    </td>
+                                    <td className="py-1.5 text-center">
+                                      <button onClick={() => removeIngredient(ing.productId)} className="text-red-400 hover:text-red-600">
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                                {editIngredients.length === 0 && (
+                                  <tr>
+                                    <td colSpan={5} className="py-4 text-center text-gray-400">
+                                      No ingredients yet. Search below to add products.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+
+                            {/* Add ingredient search */}
+                            <div className="mt-3 relative">
+                              <div className="relative">
+                                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                                <input
+                                  type="text"
+                                  placeholder="Search product to add..."
+                                  value={addSearch}
+                                  onChange={(e) => setAddSearch(e.target.value)}
+                                  className="w-full rounded border border-dashed border-gray-300 py-1.5 pl-7 pr-3 text-xs text-gray-700 placeholder:text-gray-400 focus:border-terracotta focus:outline-none"
+                                />
+                              </div>
+                              {addSearchResults.length > 0 && (
+                                <div className="absolute z-10 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg">
+                                  {addSearchResults.map((product) => (
+                                    <button
+                                      key={product.id}
+                                      onClick={() => addIngredient(product)}
+                                      className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-gray-50"
+                                    >
+                                      <span className="font-medium text-gray-700">{product.name}</span>
+                                      <span className="text-gray-400">{product.sku} &middot; {product.baseUom}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          /* ── Read-only mode ── */
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-gray-400">
+                                <th className="pb-1 text-left font-medium">Ingredient</th>
+                                <th className="pb-1 text-left font-medium">SKU</th>
+                                <th className="pb-1 text-right font-medium">Qty</th>
+                                <th className="pb-1 text-left font-medium">UOM</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {menu.ingredients.map((ing, i) => (
+                                <tr key={i} className="border-t border-gray-200/50">
+                                  <td className="py-1.5 text-gray-700">{ing.product}</td>
+                                  <td className="py-1.5"><code className="text-gray-500">{ing.sku}</code></td>
+                                  <td className="py-1.5 text-right text-gray-700">{ing.qty}</td>
+                                  <td className="py-1.5 text-gray-500">{ing.uom}</td>
+                                </tr>
+                              ))}
+                              {menu.ingredients.length === 0 && (
+                                <tr>
+                                  <td colSpan={4} className="py-4 text-center text-gray-400">
+                                    No ingredients mapped. Click the pencil icon to add.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
-
-      {/* Add/Edit Dialog — coming soon */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Add Menu Item</DialogTitle></DialogHeader>
-          <div className="py-8 text-center text-sm text-gray-400">
-            Menu item editor coming soon. Use CSV import for now.
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Summary */}
       <div className="mt-4 grid grid-cols-3 gap-4">

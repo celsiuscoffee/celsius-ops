@@ -15,6 +15,7 @@ export async function GET() {
 
   const mapped = menus.map((m) => {
     const ingredients = m.ingredients.map((ing) => ({
+      productId: ing.productId,
       product: ing.product.name,
       sku: ing.product.sku,
       qty: Number(ing.quantityUsed),
