@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Pencil, Building2, Loader2 } from "lucide-react";
+import { Plus, Pencil, Building2, Loader2, Trash2, Power } from "lucide-react";
 
 type Branch = {
   id: string; code: string; name: string; type: string; status: string;
@@ -57,6 +57,28 @@ export default function BranchesPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const toggleStatus = async (branch: Branch) => {
+    const newStatus = branch.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    if (newStatus === "INACTIVE" && !confirm(`Deactivate ${branch.name}?`)) return;
+    const res = await fetch(`/api/branches/${branch.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    if (res.ok) loadBranches();
+  };
+
+  const deleteBranch = async (branch: Branch) => {
+    if (!confirm(`Delete "${branch.name}" permanently? This cannot be undone.`)) return;
+    const res = await fetch(`/api/branches/${branch.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Failed to delete branch");
+      return;
+    }
+    loadBranches();
   };
 
   const filtered = branches.filter((b) => filter === "all" || b.type === filter);
@@ -134,9 +156,19 @@ export default function BranchesPage() {
                 <td className="px-4 py-3 text-gray-600">{branch.staffCount}</td>
                 <td className="px-4 py-3 text-gray-600">{branch.productCount}</td>
                 <td className="px-4 py-3 text-right">
-                  <button onClick={() => openEdit(branch)} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex items-center justify-end gap-1">
+                    <button onClick={() => openEdit(branch)} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Edit">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => toggleStatus(branch)} className={`rounded-md p-1.5 hover:bg-gray-100 ${branch.status === "ACTIVE" ? "text-gray-400 hover:text-amber-600" : "text-green-500 hover:text-green-700"}`} title={branch.status === "ACTIVE" ? "Deactivate" : "Activate"}>
+                      <Power className="h-3.5 w-3.5" />
+                    </button>
+                    {branch.staffCount === 0 && (
+                      <button onClick={() => deleteBranch(branch)} className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600" title="Delete">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

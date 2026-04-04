@@ -167,7 +167,13 @@ export default function SuppliersPage() {
   };
 
   const addProduct = async () => {
-    if (!selectedSupplier || !newProductId || !newPrice) return;
+    // Auto-match if user typed a product name without selecting from dropdown
+    let resolvedId = newProductId;
+    if (!resolvedId && productSearch.trim()) {
+      const match = availableProducts.find((p) => p.name.toLowerCase() === productSearch.trim().toLowerCase());
+      if (match) resolvedId = match.id;
+    }
+    if (!selectedSupplier || !resolvedId || !newPrice) return;
     const price = parseFloat(newPrice);
     if (isNaN(price) || price < 0) return;
     setSavingPrice(true);
@@ -175,7 +181,7 @@ export default function SuppliersPage() {
       const res = await fetch(`/api/suppliers/${selectedSupplier.id}/products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId: newProductId, price }),
+        body: JSON.stringify({ productId: resolvedId, price }),
       });
       if (res.ok) {
         const newSp = await res.json();
@@ -360,7 +366,7 @@ export default function SuppliersPage() {
 
       {/* Price List Dialog */}
       <Dialog open={priceDialogOpen} onOpenChange={setPriceDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{selectedSupplier?.name} — Price List</DialogTitle>
           </DialogHeader>
@@ -452,7 +458,7 @@ export default function SuppliersPage() {
                               autoFocus
                             />
                             {productSearch.length >= 2 && !newProductId && availableProducts.length > 0 && (
-                              <div className="absolute z-10 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                              <div className="absolute z-10 bottom-full mb-1 max-h-40 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
                                 {availableProducts.slice(0, 8).map((p) => (
                                   <button
                                     key={p.id}
@@ -475,13 +481,13 @@ export default function SuppliersPage() {
                             placeholder="0.00"
                             value={newPrice}
                             onChange={(e) => setNewPrice(e.target.value)}
-                            className="w-20 rounded border border-gray-300 px-2 py-1.5 text-right text-sm"
-                            onKeyDown={(e) => { if (e.key === "Enter" && newProductId) addProduct(); }}
+                            className="w-28 rounded border border-gray-300 px-3 py-1.5 text-right text-sm"
+                            onKeyDown={(e) => { if (e.key === "Enter") addProduct(); }}
                           />
                         </td>
                         <td className="px-3 py-2 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <button onClick={addProduct} disabled={!newProductId || !newPrice || savingPrice} className="text-green-600 hover:text-green-700 disabled:text-gray-300">
+                            <button onClick={addProduct} disabled={(!newProductId && !availableProducts.some((p) => p.name.toLowerCase() === productSearch.trim().toLowerCase())) || !newPrice || savingPrice} className="text-green-600 hover:text-green-700 disabled:text-gray-300">
                               {savingPrice ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                             </button>
                             <button onClick={() => { setAddingProduct(false); setProductSearch(""); setNewProductId(""); setNewPrice(""); }} className="text-gray-400 hover:text-gray-600">
