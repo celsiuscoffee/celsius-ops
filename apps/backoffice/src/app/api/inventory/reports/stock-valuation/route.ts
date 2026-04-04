@@ -9,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET(req: NextRequest) {
   const outletId = new URL(req.url).searchParams.get("outletId");
 
-  const [balances, supplierProducts, lastCounts, branches] = await Promise.all([
+  const [balances, supplierProducts, lastCounts, outlets] = await Promise.all([
     // Stock balances (system expected qty)
     prisma.stockBalance.findMany({
       where: outletId ? { outletId } : undefined,
