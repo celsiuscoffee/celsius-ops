@@ -37,7 +37,7 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Login failed"); return; }
-      window.location.href = data.role === "ADMIN" ? "/admin" : "/home";
+      window.location.href = "/dashboard";
     } catch { setError("Connection error. Please try again."); }
     finally { setLoading(false); }
   };
@@ -82,7 +82,7 @@ export default function LoginPage() {
         pinRefs.current[0]?.focus();
         return;
       }
-      window.location.href = "/home";
+      window.location.href = "/dashboard";
     } catch { setError("Connection error. Please try again."); }
     finally { setLoading(false); }
   };
