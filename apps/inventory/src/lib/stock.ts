@@ -1,24 +1,24 @@
 import { prisma } from "./prisma";
 
 /**
- * Update stock balance for a product at a branch.
+ * Update stock balance for a product at an outlet.
  * Uses upsert to create if not exists.
  *
- * @param branchId - Branch ID
+ * @param outletId - Outlet ID
  * @param productId - Product ID
  * @param delta - Positive to add stock, negative to subtract
  */
 export async function adjustStockBalance(
-  branchId: string,
+  outletId: string,
   productId: string,
   delta: number,
 ) {
   await prisma.stockBalance.upsert({
     where: {
-      branchId_productId: { branchId, productId },
+      outletId_productId: { outletId, productId },
     },
     create: {
-      branchId,
+      outletId,
       productId,
       quantity: Math.max(0, delta),
       lastUpdated: new Date(),
@@ -32,7 +32,7 @@ export async function adjustStockBalance(
   // Clamp to zero (stock can't go negative)
   await prisma.stockBalance.updateMany({
     where: {
-      branchId,
+      outletId,
       productId,
       quantity: { lt: 0 },
     },
@@ -44,16 +44,16 @@ export async function adjustStockBalance(
  * Set stock balance to an absolute value (used by stock counts).
  */
 export async function setStockBalance(
-  branchId: string,
+  outletId: string,
   productId: string,
   quantity: number,
 ) {
   await prisma.stockBalance.upsert({
     where: {
-      branchId_productId: { branchId, productId },
+      outletId_productId: { outletId, productId },
     },
     create: {
-      branchId,
+      outletId,
       productId,
       quantity: Math.max(0, quantity),
       lastUpdated: new Date(),

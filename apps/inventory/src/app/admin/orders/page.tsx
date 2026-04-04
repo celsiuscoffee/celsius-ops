@@ -43,8 +43,8 @@ type OrderItem = {
 type Order = {
   id: string;
   orderNumber: string;
-  branch: string;
-  branchCode: string;
+  outlet: string;
+  outletCode: string;
   supplierId: string;
   supplier: string;
   supplierPhone: string;
@@ -140,7 +140,7 @@ export default function OrdersPage() {
 
   const buildWhatsAppUrl = (order: Order) => {
     const items = order.items.map((i) => `• ${i.product} (${i.uom || i.package}) × ${i.quantity}`).join("\n");
-    const msg = `Hi, this is Celsius Coffee.\n\nPO: ${order.orderNumber}\nBranch: ${order.branch}\n${order.deliveryDate ? `Delivery: ${order.deliveryDate}\n` : ""}\nOrder:\n${items}\n\nTotal: RM ${order.totalAmount.toFixed(2)}\n\n${order.notes ? `Notes: ${order.notes}\n\n` : ""}Thank you!`;
+    const msg = `Hi, this is Celsius Coffee.\n\nPO: ${order.orderNumber}\nOutlet: ${order.outlet}\n${order.deliveryDate ? `Delivery: ${order.deliveryDate}\n` : ""}\nOrder:\n${items}\n\nTotal: RM ${order.totalAmount.toFixed(2)}\n\n${order.notes ? `Notes: ${order.notes}\n\n` : ""}Thank you!`;
     const phone = order.supplierPhone.replace(/[^0-9]/g, "");
     return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
   };
@@ -152,7 +152,7 @@ export default function OrdersPage() {
     const matchSearch =
       o.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
       o.supplier.toLowerCase().includes(search.toLowerCase()) ||
-      o.branch.toLowerCase().includes(search.toLowerCase());
+      o.outlet.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "All" || o.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -210,7 +210,7 @@ export default function OrdersPage() {
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input placeholder="Search by PO#, supplier, or branch..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Search by PO#, supplier, or outlet..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex flex-wrap gap-1.5">
           {statuses.map((s) => {
@@ -235,7 +235,7 @@ export default function OrdersPage() {
             <tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="w-8 px-3 py-3"></th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">PO Number</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Branch</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Supplier</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
               <th className="px-4 py-3 text-right font-medium text-gray-500">Amount</th>
@@ -267,7 +267,7 @@ export default function OrdersPage() {
                     <td className="px-4 py-3">
                       <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-terracotta">{order.orderNumber}</code>
                     </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{order.branch}</td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">{order.outlet}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-gray-900">{order.supplier}</span>

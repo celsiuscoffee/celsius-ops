@@ -63,7 +63,7 @@ export default function HomePage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [userName, setUserName] = useState("");
   const [userRole, setUserRole] = useState("");
-  const [branchName, setBranchName] = useState("");
+  const [outletName, setOutletName] = useState("");
   const [stockLevels, setStockLevels] = useState<StockLevelsData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -76,11 +76,11 @@ export default function HomePage() {
         setData(dashboard);
         if (user.name) setUserName(user.name);
         if (user.role) setUserRole(user.role);
-        if (user.branchName) setBranchName(user.branchName);
+        if (user.outletName) setOutletName(user.outletName);
 
-        // Fetch stock levels once we have the branchId
-        if (user.branchId) {
-          fetch(`/api/stock-levels?branchId=${user.branchId}`)
+        // Fetch stock levels once we have the outletId
+        if (user.outletId) {
+          fetch(`/api/stock-levels?outletId=${user.outletId}`)
             .then((r) => (r.ok ? r.json() : null))
             .then((sl) => {
               if (sl) setStockLevels(sl);
@@ -133,7 +133,7 @@ export default function HomePage() {
     return d.toLocaleDateString("en-MY", { day: "numeric", month: "short" });
   };
 
-  const isManager = userRole === "ADMIN" || userRole === "BRANCH_MANAGER";
+  const isManager = userRole === "ADMIN" || userRole === "MANAGER";
 
   return (
     <div className="px-4 py-4">
@@ -153,7 +153,7 @@ export default function HomePage() {
                 {greeting}, {userName || "there"}
               </h1>
               <p className="text-sm text-gray-500">
-                {branchName && <>{branchName} &middot; </>}{dateStr}
+                {outletName && <>{outletName} &middot; </>}{dateStr}
               </p>
             </div>
           </div>
@@ -440,12 +440,12 @@ export default function HomePage() {
         <div className="grid grid-cols-4 gap-2 pb-4">
           {[
             { href: "/check", icon: ClipboardCheck, label: "Check" },
-            { href: "/order", icon: ShoppingCart, label: "Order", minRole: "BRANCH_MANAGER" },
+            { href: "/order", icon: ShoppingCart, label: "Order", minRole: "MANAGER" },
             { href: "/receive", icon: Package, label: "Receive" },
-            { href: "/wastage", icon: Trash2, label: "Wastage", minRole: "BRANCH_MANAGER" },
+            { href: "/wastage", icon: Trash2, label: "Wastage", minRole: "MANAGER" },
           ].filter((a) => {
             if (!("minRole" in a) || !a.minRole) return true;
-            const levels: Record<string, number> = { STAFF: 1, BRANCH_MANAGER: 2, ADMIN: 3 };
+            const levels: Record<string, number> = { STAFF: 1, MANAGER: 2, ADMIN: 3 };
             return (levels[userRole] || 1) >= (levels[a.minRole] || 1);
           }).map((action) => {
             const Icon = action.icon;

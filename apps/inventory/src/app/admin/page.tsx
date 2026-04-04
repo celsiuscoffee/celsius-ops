@@ -12,14 +12,14 @@ type ExpectedVsReal = {
   itemsWithVariance: number;
   totalItems: number;
   countDate: string;
-  branch: string;
+  outlet: string;
 };
 
 type Stats = {
   products: number;
   suppliers: number;
   categories: number;
-  branches: number;
+  outlets: number;
   staff: number;
   menus: number;
   invoices: { total: number; pendingAmount: number; overdueAmount: number };

@@ -20,7 +20,7 @@ type Product = {
   baseUom: string;
 };
 
-type Branch = {
+type Outlet = {
   id: string;
   name: string;
 };
@@ -28,7 +28,7 @@ type Branch = {
 type ParLevel = {
   id: string;
   productId: string;
-  branchId: string;
+  outletId: string;
   parLevel: number;
   reorderPoint: number;
   avgDailyUsage: number;
@@ -54,10 +54,10 @@ const emptyQuickSet: QuickSetForm = { parLevel: "", reorderPoint: "", avgDailyUs
 
 export default function ParLevelsPage() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [parLevels, setParLevels] = useState<ParLevel[]>([]);
   const [stockLevels, setStockLevels] = useState<StockLevel[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const [selectedOutletId, setSelectedOutletId] = useState("");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
@@ -69,41 +69,41 @@ export default function ParLevelsPage() {
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [bulkMultiplier, setBulkMultiplier] = useState("2");
 
-  // Load branches and products on mount
+  // Load outlets and products on mount
   useEffect(() => {
     Promise.all([
       fetch("/api/products").then((r) => r.json()),
-      fetch("/api/branches").then((r) => r.json()),
-    ]).then(([productsData, branchesData]) => {
+      fetch("/api/outlets").then((r) => r.json()),
+    ]).then(([productsData, outletsData]) => {
       setProducts(productsData);
-      setBranches(branchesData);
-      if (branchesData.length > 0) {
-        setSelectedBranchId(branchesData[0].id);
+      setOutlets(outletsData);
+      if (outletsData.length > 0) {
+        setSelectedOutletId(outletsData[0].id);
       }
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
 
-  const loadBranchData = useCallback((branchId: string) => {
-    if (!branchId) return;
+  const loadOutletData = useCallback((outletId: string) => {
+    if (!outletId) return;
     Promise.all([
       fetch("/api/par-levels").then((r) => r.json()),
-      fetch(`/api/stock-levels?branchId=${branchId}`).then((r) => r.json()),
+      fetch(`/api/stock-levels?outletId=${outletId}`).then((r) => r.json()),
     ]).then(([parData, stockData]) => {
       setParLevels(parData);
       setStockLevels(stockData.items || []);
     });
   }, []);
 
-  // Load par levels and stock when branch changes
+  // Load par levels and stock when outlet changes
   useEffect(() => {
-    if (selectedBranchId) {
-      loadBranchData(selectedBranchId);
+    if (selectedOutletId) {
+      loadOutletData(selectedOutletId);
     }
-  }, [selectedBranchId, loadBranchData]);
+  }, [selectedOutletId, loadOutletData]);
 
   const getParLevel = (productId: string): ParLevel | undefined =>
-    parLevels.find((p) => p.productId === productId && p.branchId === selectedBranchId);
+    parLevels.find((p) => p.productId === productId && p.outletId === selectedOutletId);
 
   const getStock = (productId: string): number | null => {
     const sl = stockLevels.find((s) => s.productId === productId);
@@ -145,7 +145,7 @@ export default function ParLevelsPage() {
     const existing = getParLevel(productId);
     const body = {
       productId,
-      branchId: selectedBranchId,
+      outletId: selectedOutletId,
       parLevel: values.parLevel ?? existing?.parLevel ?? 0,
       reorderPoint: values.reorderPoint ?? existing?.reorderPoint ?? 0,
       avgDailyUsage: values.avgDailyUsage ?? existing?.avgDailyUsage ?? 0,
@@ -156,7 +156,7 @@ export default function ParLevelsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      loadBranchData(selectedBranchId);
+      loadOutletData(selectedOutletId);
     } finally {
       setSaving(false);
     }
@@ -212,7 +212,7 @@ export default function ParLevelsPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               productId: p.id,
-              branchId: selectedBranchId,
+              outletId: selectedOutletId,
               parLevel: Math.round(baseUsage * multiplier),
               reorderPoint: Math.round(baseUsage * (multiplier / 2)),
               avgDailyUsage: baseUsage,
@@ -220,7 +220,7 @@ export default function ParLevelsPage() {
           });
         })
       );
-      loadBranchData(selectedBranchId);
+      loadOutletData(selectedOutletId);
       setBulkDialogOpen(false);
     } finally {
       setSaving(false);
@@ -249,7 +249,7 @@ export default function ParLevelsPage() {
             Manage reorder points and target stock levels per product
           </p>
         </div>
-        {productsWithoutParCount > 0 && selectedBranchId && (
+        {productsWithoutParCount > 0 && selectedOutletId && (
           <Button
             onClick={() => setBulkDialogOpen(true)}
             className="bg-terracotta hover:bg-terracotta-dark"
@@ -260,16 +260,16 @@ export default function ParLevelsPage() {
         )}
       </div>
 
-      {/* Branch Selector */}
+      {/* Outlet Selector */}
       <div className="mt-4">
-        <label className="text-sm font-medium text-gray-700">Branch</label>
+        <label className="text-sm font-medium text-gray-700">Outlet</label>
         <select
           className="mt-1 w-full max-w-xs rounded-md border border-gray-200 px-3 py-2 text-sm"
-          value={selectedBranchId}
-          onChange={(e) => setSelectedBranchId(e.target.value)}
+          value={selectedOutletId}
+          onChange={(e) => setSelectedOutletId(e.target.value)}
         >
-          {branches.length === 0 && <option value="">No branches</option>}
-          {branches.map((b) => (
+          {outlets.length === 0 && <option value="">No outlets</option>}
+          {outlets.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
             </option>

@@ -10,7 +10,7 @@ type Invoice = {
   id: string;
   invoiceNumber: string;
   poNumber: string;
-  branch: string;
+  outlet: string;
   supplier: string;
   amount: number;
   status: string;
@@ -134,7 +134,7 @@ export default function InvoicesPage() {
             <th className="px-4 py-3 text-left font-medium text-gray-500">Invoice ID</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">PO Ref</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">Supplier</th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">Branch</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">Issue Date</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">Due Date</th>
@@ -162,7 +162,7 @@ export default function InvoicesPage() {
                   <td className="px-4 py-3 font-medium text-gray-900">{inv.invoiceNumber}</td>
                   <td className="px-4 py-3"><code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{inv.poNumber}</code></td>
                   <td className="px-4 py-3 text-gray-600">{inv.supplier}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{inv.branch}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{inv.outlet}</td>
                   <td className="px-4 py-3">
                     <Badge className={`text-[10px] ${statusColor(inv.status)}`}>{inv.status.toLowerCase()}</Badge>
                   </td>

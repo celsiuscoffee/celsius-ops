@@ -6,41 +6,41 @@ import { hashPassword } from "@/lib/password";
 export async function GET(req: NextRequest) {
   const caller = getUserFromHeaders(req.headers);
 
-  // Branch managers can only see users in their branch
-  const where = caller?.role === "BRANCH_MANAGER" && caller.branchId
-    ? { branchId: caller.branchId }
+  // Managers can only see users in their outlet
+  const where = caller?.role === "MANAGER" && caller.outletId
+    ? { outletId: caller.outletId }
     : {};
 
   const users = await prisma.user.findMany({
     where,
-    include: { branch: true },
+    include: { outlet: true },
     orderBy: { name: "asc" },
   });
 
-  // Resolve branch names for branchIds
-  const allBranchIds = [...new Set(users.flatMap((u) => u.branchIds).filter(Boolean))];
-  const branchMap = new Map<string, string>();
-  if (allBranchIds.length > 0) {
-    const branches = await prisma.branch.findMany({
-      where: { id: { in: allBranchIds } },
+  // Resolve outlet names for outletIds
+  const allOutletIds = [...new Set(users.flatMap((u) => u.outletIds).filter(Boolean))];
+  const outletMap = new Map<string, string>();
+  if (allOutletIds.length > 0) {
+    const outlets = await prisma.outlet.findMany({
+      where: { id: { in: allOutletIds } },
       select: { id: true, name: true },
     });
-    branches.forEach((b) => branchMap.set(b.id, b.name));
+    outlets.forEach((b) => outletMap.set(b.id, b.name));
   }
 
   const mapped = users.map((u) => ({
     id: u.id,
     name: u.name,
     role: u.role,
-    branch: u.branch?.name ?? "",
-    branchId: u.branchId,
-    branchCode: u.branch?.code ?? "",
-    branchIds: u.branchIds,
-    branchNames: u.branchIds.map((id) => branchMap.get(id) ?? id),
+    outlet: u.outlet?.name ?? "",
+    outletId: u.outletId,
+    outletCode: u.outlet?.code ?? "",
+    outletIds: u.outletIds,
+    outletNames: u.outletIds.map((id) => outletMap.get(id) ?? id),
     phone: u.phone ?? "",
     email: u.email,
     username: u.username,
-    hasPassword: !!u.password,
+    hasPassword: !!u.passwordHash,
     hasPin: !!u.pin,
     status: u.status,
     addedDate: u.createdAt.toISOString().split("T")[0],
@@ -58,20 +58,20 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, phone, email, role, branchId, branchIds, username, password, pin } = body;
+  const { name, phone, email, role, outletId, outletIds, username, password, pin } = body;
 
   const data: Record<string, unknown> = {
     name,
     phone,
     email: email || null,
     role: role || "STAFF",
-    branchId: branchId || null,
-    branchIds: branchIds || [],
+    outletId: outletId || null,
+    outletIds: outletIds || [],
     username: username || null,
   };
 
   if (password && password.length >= 6) {
-    data.password = hashPassword(password);
+    data.passwordHash = hashPassword(password);
   }
   if (pin) {
     data.pin = pin;

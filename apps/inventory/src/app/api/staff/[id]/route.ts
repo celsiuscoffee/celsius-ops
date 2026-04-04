@@ -21,14 +21,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.phone !== undefined) data.phone = body.phone;
   if (body.email !== undefined) data.email = body.email || null;
   if (body.role !== undefined) data.role = body.role;
-  if (body.branchId !== undefined) data.branchId = body.branchId || null;
-  if (body.branchIds !== undefined) data.branchIds = body.branchIds;
+  if (body.outletId !== undefined) data.outletId = body.outletId || null;
+  if (body.outletIds !== undefined) data.outletIds = body.outletIds;
   if (body.username !== undefined) data.username = body.username || null;
   if (body.status !== undefined) data.status = body.status;
 
   // Password — hash before saving
   if (body.password && body.password.length >= 6) {
-    data.password = hashPassword(body.password);
+    data.passwordHash = hashPassword(body.password);
   }
 
   // PIN — store as-is (4 digits)

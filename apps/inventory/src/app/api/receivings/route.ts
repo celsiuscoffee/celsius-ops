@@ -13,7 +13,7 @@ export async function GET() {
       invoicePhotos: true,
       receivedAt: true,
       order: { select: { orderNumber: true } },
-      branch: { select: { name: true } },
+      outlet: { select: { name: true } },
       supplier: { select: { name: true } },
       receivedBy: { select: { name: true } },
       items: {
@@ -35,7 +35,7 @@ export async function GET() {
     id: r.id,
     orderId: r.orderId,
     orderNumber: r.order?.orderNumber ?? "Ad-hoc",
-    branch: r.branch.name,
+    outlet: r.outlet.name,
     supplier: r.supplier.name,
     receivedBy: r.receivedBy.name,
     receivedAt: r.receivedAt.toISOString(),
@@ -59,7 +59,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { orderId, branchId, supplierId, items, notes, status, invoicePhotos } = body;
+  const { orderId, outletId, supplierId, items, notes, status, invoicePhotos } = body;
 
   const caller = getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
   const receiving = await prisma.receiving.create({
     data: {
       orderId: orderId || null,
-      branchId,
+      outletId,
       supplierId,
       receivedById: caller.id,
       status: receivingStatus,
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
   // Update stock balances (parallel)
   await Promise.all(
     items.map((item: { productId: string; receivedQty: number }) =>
-      adjustStockBalance(branchId, item.productId, item.receivedQty),
+      adjustStockBalance(outletId, item.productId, item.receivedQty),
     ),
   );
 
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
       data: {
         invoiceNumber,
         orderId: orderId || null,
-        branchId,
+        outletId,
         supplierId,
         amount: totalAmount,
         status: "PENDING",

@@ -10,12 +10,12 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.id },
-    select: { password: true, username: true },
+    select: { passwordHash: true, username: true },
   });
 
   return NextResponse.json({
     ...session,
-    hasPassword: !!user?.password,
+    hasPassword: !!user?.passwordHash,
     username: user?.username ?? null,
   });
 }

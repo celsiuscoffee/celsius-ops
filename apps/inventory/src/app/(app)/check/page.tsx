@@ -56,7 +56,7 @@ interface UserSession {
   id: string;
   name: string;
   role: string;
-  branchId: string | null;
+  outletId: string | null;
 }
 
 type CheckStatus = "pending" | "confirmed" | "adjusted";
@@ -248,8 +248,8 @@ export default function StockCheckPage() {
   };
 
   const handleSubmit = async () => {
-    if (!user?.branchId) {
-      setError("No branch assigned to your account. Cannot submit stock check.");
+    if (!user?.outletId) {
+      setError("No outlet assigned to your account. Cannot submit stock check.");
       return;
     }
     setSubmitting(true);
@@ -276,7 +276,7 @@ export default function StockCheckPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          branchId: user.branchId,
+          outletId: user.outletId,
           countedById: user.id,
           frequency: frequency.toUpperCase(),
           notes: null,

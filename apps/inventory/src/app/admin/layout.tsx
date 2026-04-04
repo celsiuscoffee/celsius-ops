@@ -59,7 +59,7 @@ const sidebarSections: NavSection[] = [
   {
     label: "Operations",
     items: [
-      { href: "/admin/branches", label: "Branches", icon: Building2, adminOnly: true },
+      { href: "/admin/outlets", label: "Outlets", icon: Building2, adminOnly: true },
       { href: "/admin/staff", label: "Staff", icon: Users, adminOnly: true },
       { href: "/admin/rules", label: "Approval Rules", icon: ShieldCheck, adminOnly: true },
       { href: "/admin/par-levels", label: "Par Levels", icon: TrendingDown, adminOnly: true },
@@ -183,7 +183,7 @@ export default function AdminLayout({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-white/80 truncate">{userName}</p>
-                <p className="text-[10px] text-white/40">{userRole === "ADMIN" ? "Admin" : userRole === "BRANCH_MANAGER" ? "Manager" : "Staff"}</p>
+                <p className="text-[10px] text-white/40">{userRole === "ADMIN" ? "Admin" : userRole === "MANAGER" ? "Manager" : "Staff"}</p>
               </div>
               <button
                 onClick={handleLogout}

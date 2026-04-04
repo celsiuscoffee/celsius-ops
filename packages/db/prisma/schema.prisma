@@ -8,24 +8,63 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ─── BRANCHES ───────────────────────────────────────────────
+// ─── OUTLETS ────────────────────────────────────────────────
 
-model Branch {
+model Outlet {
   id        String       @id @default(uuid())
   code      String       @unique // e.g. "CC001", "CF Nilai"
   name      String // e.g. "Celsius Coffee IOI Conezion"
-  type      BranchType   @default(OUTLET)
+  type      OutletType   @default(OUTLET)
   address   String
   city      String
   state     String
   phone     String?
-  status    BranchStatus @default(ACTIVE)
+  status    OutletStatus @default(ACTIVE)
   storehubId String?     @unique // StoreHub outlet ID for sync
+
+  // Location
+  lat       Decimal?
+  lng       Decimal?
+
+  // Operating hours
+  openTime  String?  @default("08:00")
+  closeTime String?  @default("22:00")
+  daysOpen  Int[]    @default([1, 2, 3, 4, 5, 6, 7])
+
+  // Pickup config
+  isOpen        Boolean @default(false)
+  isBusy        Boolean @default(false)
+  pickupTimeMins Int    @default(15)
+
+  // Loyalty link
+  loyaltyOutletId String?
+
+  // Staff
+  staffPin  String?
+
+  // Stripe
+  stripeAccountId  String?
+  stripeOnboarded  Boolean @default(false)
+  stripeEnabled    Boolean @default(false)
+
+  // Revenue Monster
+  rmMerchantId    String?
+  rmClientId      String?
+  rmClientSecret  String?
+  rmPrivateKey    String?
+  rmIsProduction  Boolean @default(false)
+  rmEnabled       Boolean @default(false)
+
+  // Bukku (accounting)
+  bukkuToken      String?
+  bukkuSubdomain  String?
+  bukkuEnabled    Boolean @default(false)
+
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
   users             User[]
-  branchProducts    BranchProduct[]
+  outletProducts    OutletProduct[]
   orders            Order[]
   invoices          Invoice[]
   stockCounts       StockCount[]
@@ -38,12 +77,12 @@ model Branch {
   storehubSyncs     StorehubSync[]
 }
 
-enum BranchType {
+enum OutletType {
   OUTLET
   CENTRAL_KITCHEN
 }
 
-enum BranchStatus {
+enum OutletStatus {
   ACTIVE
   INACTIVE
 }
@@ -51,16 +90,27 @@ enum BranchStatus {
 // ─── USERS ──────────────────────────────────────────────────
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String?  @unique
-  phone     String   @unique // Malaysian phone, used for OTP login
-  role      UserRole
-  branchId  String?
-  branch    Branch?  @relation(fields: [branchId], references: [id])
-  status    UserStatus @default(ACTIVE)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String     @id @default(uuid())
+  name         String
+  email        String?    @unique
+  phone        String     @unique // Malaysian phone, used for OTP login
+  role         UserRole
+  outletId     String?
+  outlet       Outlet?    @relation(fields: [outletId], references: [id])
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Auth
+  username     String?    @unique
+  passwordHash String?
+  pin          String?
+
+  // Access control
+  outletIds    String[]   @default([])
+  appAccess    String[]   @default([]) // e.g. ["backoffice", "inventory", "loyalty", "pickup"]
+  moduleAccess Json       @default("{}") // e.g. {"inventory": ["stock_count", "receiving"]}
+  lastLoginAt  DateTime?
 
   ordersCreated    Order[]           @relation("OrderCreatedBy")
   ordersApproved   Order[]           @relation("OrderApprovedBy")
@@ -71,8 +121,9 @@ model User {
 }
 
 enum UserRole {
+  OWNER
   ADMIN
-  BRANCH_MANAGER
+  MANAGER
   STAFF
 }
 
@@ -82,37 +133,34 @@ enum UserStatus {
 }
 
 // ─── CATEGORIES ─────────────────────────────────────────────
-// Categories for INVENTORY items (ingredients, packaging, supplies)
 
 model Category {
   id       String    @id @default(uuid())
-  name     String    @unique // Flavour, Dairy, Packaging, Raw Material, etc.
+  name     String    @unique
   slug     String    @unique
   products Product[]
 }
 
 // ─── PRODUCTS (Inventory Items) ─────────────────────────────
-// These are RAW INGREDIENTS, PACKAGING, and SUPPLIES — NOT menu items.
-// Menu items come from StoreHub via the Menu model.
 
 model Product {
   id            String   @id @default(uuid())
-  name          String // e.g. "Monin Caramel Syrup", "Plastic Cup"
-  sku           String   @unique // e.g. FM001, DO001, PP0001
+  name          String
+  sku           String   @unique
   categoryId    String
   category      Category @relation(fields: [categoryId], references: [id])
   description   String?
   imageUrl      String?
-  baseUom       String // The smallest unit: ml, g, pcs
+  baseUom       String
   tags          String[] @default([])
-  storageArea   String? // Fridge, Dry Store, Counter
-  shelfLifeDays Int? // For perishables
+  storageArea   String?
+  shelfLifeDays Int?
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   packages          ProductPackage[]
-  branchProducts    BranchProduct[]
+  outletProducts    OutletProduct[]
   supplierProducts  SupplierProduct[]
   orderItems        OrderItem[]
   stockCountItems   StockCountItem[]
@@ -124,18 +172,14 @@ model Product {
   transferItems     StockTransferItem[]
 }
 
-// ─── PRODUCT PACKAGES (Multi-UOM) ───────────────────────────
-// Each product can be counted/ordered in multiple packaging sizes.
-// e.g., Oatmilk: base=ml, packages=[Bottle(1000ml), Carton(6000ml)]
-
 model ProductPackage {
   id               String  @id @default(uuid())
   productId        String
   product          Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  packageName      String // e.g. "Bottle", "Carton", "Pack"
-  packageLabel     String // e.g. "Bottle (1000ml)", "Carton (6 x 1000ml)"
-  conversionFactor Decimal // How many base units in 1 package. e.g. 1000 (1 Bottle = 1000 ml)
-  isDefault        Boolean @default(false) // Default package for ordering
+  packageName      String
+  packageLabel     String
+  conversionFactor Decimal
+  isDefault        Boolean @default(false)
 
   supplierProducts SupplierProduct[]
   orderItems       OrderItem[]
@@ -146,7 +190,7 @@ model ProductPackage {
   @@unique([productId, packageName])
 }
 
-// ─── SUPPLIERS ──────────────────────────────────────────────
+// ─── SUPPLIERS ───────────────────────────────────���──────────
 
 model Supplier {
   id           String         @id @default(uuid())
@@ -154,7 +198,7 @@ model Supplier {
   logoUrl      String?
   location     String?
   supplierCode String?        @unique
-  phone        String? // WhatsApp number for ordering
+  phone        String?
   email        String?
   status       SupplierStatus @default(ACTIVE)
   tags         String[]       @default([])
@@ -174,9 +218,6 @@ enum SupplierStatus {
   INACTIVE
 }
 
-// ─── SUPPLIER PRODUCTS (Price List) ─────────────────────────
-// Which products a supplier sells, at which packaging, at what price.
-
 model SupplierProduct {
   id               String          @id @default(uuid())
   supplierId       String
@@ -185,17 +226,14 @@ model SupplierProduct {
   product          Product         @relation(fields: [productId], references: [id])
   productPackageId String?
   productPackage   ProductPackage? @relation(fields: [productPackageId], references: [id])
-  price            Decimal // Current price in MYR
-  moq              Decimal? // Minimum order quantity
+  price            Decimal
+  moq              Decimal?
   isActive         Boolean         @default(true)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
   @@unique([supplierId, productId, productPackageId])
 }
-
-// ─── PRICE HISTORY ──────────────────────────────────────────
-// Track every price change for supplier scorecard + trend analysis.
 
 model PriceHistory {
   id               String   @id @default(uuid())
@@ -205,25 +243,24 @@ model PriceHistory {
   productPackageId String?
   oldPrice         Decimal
   newPrice         Decimal
-  changePercent    Decimal // (new - old) / old * 100
+  changePercent    Decimal
   changedAt        DateTime @default(now())
 
   @@index([supplierId, changedAt])
 }
 
-// ─── BRANCH PRODUCTS ────────────────────────────────────────
-// Which products are tracked at which branch, and at what count frequency.
+// ─── OUTLET PRODUCTS ──���─────────────────────────────────────
 
-model BranchProduct {
+model OutletProduct {
   id             String         @id @default(uuid())
-  branchId       String
-  branch         Branch         @relation(fields: [branchId], references: [id])
+  outletId       String
+  outlet         Outlet         @relation(fields: [outletId], references: [id])
   productId      String
   product        Product        @relation(fields: [productId], references: [id])
   isActive       Boolean        @default(true)
   countFrequency CountFrequency @default(MONTHLY)
 
-  @@unique([branchId, productId])
+  @@unique([outletId, productId])
 }
 
 enum CountFrequency {
@@ -236,21 +273,21 @@ enum CountFrequency {
 
 model Order {
   id           String      @id @default(uuid())
-  orderNumber  String      @unique // e.g. CC-IOI-0042
-  branchId     String
-  branch       Branch      @relation(fields: [branchId], references: [id])
+  orderNumber  String      @unique
+  outletId     String
+  outlet       Outlet      @relation(fields: [outletId], references: [id])
   supplierId   String
   supplier     Supplier    @relation(fields: [supplierId], references: [id])
   status       OrderStatus @default(DRAFT)
   totalAmount  Decimal     @default(0)
   notes        String?
-  deliveryDate DateTime? // Expected delivery
+  deliveryDate DateTime?
   createdById  String
   createdBy    User        @relation("OrderCreatedBy", fields: [createdById], references: [id])
   approvedById String?
   approvedBy   User?       @relation("OrderApprovedBy", fields: [approvedById], references: [id])
   approvedAt   DateTime?
-  sentAt       DateTime? // When sent via WhatsApp
+  sentAt       DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -290,18 +327,18 @@ model OrderItem {
 
 model Invoice {
   id            String        @id @default(uuid())
-  invoiceNumber String        @unique // e.g. INV-001
+  invoiceNumber String        @unique
   orderId       String?
   order         Order?        @relation(fields: [orderId], references: [id])
-  branchId      String
-  branch        Branch        @relation(fields: [branchId], references: [id])
+  outletId      String
+  outlet        Outlet        @relation(fields: [outletId], references: [id])
   supplierId    String
   supplier      Supplier      @relation(fields: [supplierId], references: [id])
   amount        Decimal
   status        InvoiceStatus @default(DRAFT)
   issueDate     DateTime      @default(now())
   dueDate       DateTime?
-  photos        String[]      @default([]) // Invoice photo URLs
+  photos        String[]      @default([])
   notes         String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -318,10 +355,10 @@ enum InvoiceStatus {
 
 model Receiving {
   id            String          @id @default(uuid())
-  orderId       String? // Nullable for ad-hoc deliveries
+  orderId       String?
   order         Order?          @relation(fields: [orderId], references: [id])
-  branchId      String
-  branch        Branch          @relation(fields: [branchId], references: [id])
+  outletId      String
+  outlet        Outlet          @relation(fields: [outletId], references: [id])
   supplierId    String
   supplier      Supplier        @relation(fields: [supplierId], references: [id])
   receivedById  String
@@ -349,18 +386,18 @@ model ReceivingItem {
   product           Product         @relation(fields: [productId], references: [id])
   productPackageId  String?
   productPackage    ProductPackage? @relation(fields: [productPackageId], references: [id])
-  orderedQty        Decimal? // From PO (null if ad-hoc)
+  orderedQty        Decimal?
   receivedQty       Decimal
-  expiryDate        DateTime? // For perishables
-  discrepancyReason String? // short, damaged, wrong_item
+  expiryDate        DateTime?
+  discrepancyReason String?
 }
 
 // ─── STOCK COUNTS ───────────────────────────────────────────
 
 model StockCount {
   id          String           @id @default(uuid())
-  branchId    String
-  branch      Branch           @relation(fields: [branchId], references: [id])
+  outletId    String
+  outlet      Outlet           @relation(fields: [outletId], references: [id])
   frequency   CountFrequency
   countedById String
   countedBy   User             @relation(fields: [countedById], references: [id])
@@ -388,8 +425,8 @@ model StockCountItem {
   product          Product    @relation(fields: [productId], references: [id])
   productPackageId String?
   productPackage   ProductPackage? @relation(fields: [productPackageId], references: [id])
-  expectedQty      Decimal? // System-calculated
-  countedQty       Decimal? // Null = confirmed as correct
+  expectedQty      Decimal?
+  countedQty       Decimal?
   isConfirmed      Boolean    @default(false)
   varianceReason   String?
 
@@ -397,37 +434,35 @@ model StockCountItem {
 }
 
 // ─── STOCK BALANCES ─────────────────────────────────────────
-// Always stored in BASE UOM. Convert to package UOM for display.
-// e.g., Oatmilk balance = 3000 (ml), display as 3 bottles.
 
 model StockBalance {
   id          String   @id @default(uuid())
-  branchId    String
-  branch      Branch   @relation(fields: [branchId], references: [id])
+  outletId    String
+  outlet      Outlet   @relation(fields: [outletId], references: [id])
   productId   String
   product     Product  @relation(fields: [productId], references: [id])
-  quantity    Decimal  @default(0) // Always in base UOM
+  quantity    Decimal  @default(0)
   lastUpdated DateTime @default(now())
 
-  @@unique([branchId, productId])
+  @@unique([outletId, productId])
 }
 
 // ─── STOCK ADJUSTMENTS ──────────────────────────────────────
 
 model StockAdjustment {
   id             String         @id @default(uuid())
-  branchId       String
-  branch         Branch         @relation(fields: [branchId], references: [id])
+  outletId       String
+  outlet         Outlet         @relation(fields: [outletId], references: [id])
   productId      String
   product        Product        @relation(fields: [productId], references: [id])
   adjustmentType AdjustmentType
-  quantity       Decimal // In base UOM. Negative = reduction
-  costAmount     Decimal? // RM value (auto-calculated from unit cost)
+  quantity       Decimal
+  costAmount     Decimal?
   reason         String?
-  photoUrl       String? // Optional evidence photo
+  photoUrl       String?
   adjustedById   String
   adjustedBy     User           @relation(fields: [adjustedById], references: [id])
-  stockCountId   String? // If triggered by stock check
+  stockCountId   String?
   createdAt      DateTime       @default(now())
 }
 
@@ -445,10 +480,10 @@ enum AdjustmentType {
 
 model StockTransfer {
   id              String         @id @default(uuid())
-  fromBranchId    String
-  fromBranch      Branch         @relation("TransferFrom", fields: [fromBranchId], references: [id])
-  toBranchId      String
-  toBranch        Branch         @relation("TransferTo", fields: [toBranchId], references: [id])
+  fromOutletId    String
+  fromOutlet      Outlet         @relation("TransferFrom", fields: [fromOutletId], references: [id])
+  toOutletId      String
+  toOutlet        Outlet         @relation("TransferTo", fields: [toOutletId], references: [id])
   status          TransferStatus @default(PENDING)
   transferredById String
   transferredBy   User           @relation(fields: [transferredById], references: [id])
@@ -473,37 +508,34 @@ model StockTransferItem {
   product          Product         @relation(fields: [productId], references: [id])
   productPackageId String?
   productPackage   ProductPackage? @relation(fields: [productPackageId], references: [id])
-  quantity         Decimal // In base UOM
+  quantity         Decimal
 }
 
-// ─── PAR LEVELS ─────────────────────────────────────────────
-// Per product per branch. All quantities in base UOM.
+// ─── PAR LEVELS ──────────────────────────────────��──────────
 
 model ParLevel {
   id             String   @id @default(uuid())
   productId      String
   product        Product  @relation(fields: [productId], references: [id])
-  branchId       String
-  branch         Branch   @relation(fields: [branchId], references: [id])
-  parLevel       Decimal // Target stock level (base UOM)
-  reorderPoint   Decimal // Trigger reorder when stock falls below this
-  maxLevel       Decimal? // Overstock warning threshold
-  avgDailyUsage  Decimal? // Auto-calculated from StoreHub sales
+  outletId       String
+  outlet         Outlet   @relation(fields: [outletId], references: [id])
+  parLevel       Decimal
+  reorderPoint   Decimal
+  maxLevel       Decimal?
+  avgDailyUsage  Decimal?
   lastCalculated DateTime?
 
-  @@unique([productId, branchId])
+  @@unique([productId, outletId])
 }
 
 // ─── MENUS (from StoreHub) ──────────────────────────────────
-// Menu items are SYNCED from StoreHub POS. Not manually created.
-// We only add recipe/ingredient mapping on top.
 
 model Menu {
   id           String   @id @default(uuid())
-  name         String // e.g. "Iced Latte"
-  category     String? // e.g. "Coffee", "Non-Coffee", "Food"
+  name         String
+  category     String?
   sellingPrice Decimal?
-  storehubId   String   @unique // StoreHub product ID — required, always synced
+  storehubId   String   @unique
   isActive     Boolean  @default(true)
   lastSyncedAt DateTime @default(now())
   createdAt    DateTime @default(now())
@@ -519,47 +551,44 @@ model MenuIngredient {
   menu         Menu    @relation(fields: [menuId], references: [id], onDelete: Cascade)
   productId    String
   product      Product @relation(fields: [productId], references: [id])
-  quantityUsed Decimal // Amount per 1 menu item sold (in base UOM of the product)
-  uom          String // Display UOM (ml, g, pcs) — should match product.baseUom
+  quantityUsed Decimal
+  uom          String
 
   @@unique([menuId, productId])
 }
 
-// ─── SALES TRANSACTIONS (from StoreHub) ─────────────────────
-// Pulled from StoreHub. Gross sales only, discounts excluded.
-// Used for COGS calculation and stock deduction.
+// ─── SALES TRANSACTIONS (from StoreHub) ──────────���──────────
 
 model SalesTransaction {
   id           String   @id @default(uuid())
-  storehubTxId String   @unique // StoreHub transaction ID
-  branchId     String
+  storehubTxId String   @unique
+  outletId     String
   menuId       String?
   menu         Menu?    @relation(fields: [menuId], references: [id])
-  menuName     String // Denormalized for when menu is deleted
+  menuName     String
   quantity     Int
-  grossAmount  Decimal // Gross sales, discounts excluded
+  grossAmount  Decimal
   transactedAt DateTime
   syncedAt     DateTime @default(now())
 
-  @@index([branchId, transactedAt])
+  @@index([outletId, transactedAt])
   @@index([menuId])
 }
 
 // ─── STOREHUB SYNC STATUS ───────────────────────────────────
-// Track sync state per branch per data type.
 
 model StorehubSync {
   id          String       @id @default(uuid())
-  branchId    String
-  branch      Branch       @relation(fields: [branchId], references: [id])
+  outletId    String
+  outlet      Outlet       @relation(fields: [outletId], references: [id])
   syncType    SyncType
   status      SyncStatus   @default(SUCCESS)
   lastSyncAt  DateTime     @default(now())
-  recordCount Int          @default(0) // How many records synced
+  recordCount Int          @default(0)
   errorMessage String?
   createdAt   DateTime     @default(now())
 
-  @@index([branchId, syncType, lastSyncAt])
+  @@index([outletId, syncType, lastSyncAt])
 }
 
 enum SyncType {

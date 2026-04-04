@@ -2,24 +2,24 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Returns stock levels with par level comparison for a branch.
- * Query params: ?branchId=xxx
+ * Returns stock levels with par level comparison for an outlet.
+ * Query params: ?outletId=xxx
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const branchId = searchParams.get("branchId");
+  const outletId = searchParams.get("outletId");
 
-  if (!branchId) {
-    return NextResponse.json({ error: "branchId required" }, { status: 400 });
+  if (!outletId) {
+    return NextResponse.json({ error: "outletId required" }, { status: 400 });
   }
 
   const [balances, parLevels, products] = await Promise.all([
     prisma.stockBalance.findMany({
-      where: { branchId },
+      where: { outletId },
       select: { productId: true, quantity: true },
     }),
     prisma.parLevel.findMany({
-      where: { branchId },
+      where: { outletId },
       select: { productId: true, parLevel: true, reorderPoint: true, maxLevel: true, avgDailyUsage: true },
     }),
     prisma.product.findMany({

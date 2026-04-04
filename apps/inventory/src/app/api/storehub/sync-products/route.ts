@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
   // Record sync
   await prisma.storehubSync.create({
     data: {
-      branchId: (await prisma.branch.findFirst({ select: { id: true } }))!.id,
+      outletId: (await prisma.outlet.findFirst({ select: { id: true } }))!.id,
       syncType: "PRODUCTS",
       status: "SUCCESS",
       lastSyncAt: new Date(),

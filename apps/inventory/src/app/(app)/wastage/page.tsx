@@ -35,7 +35,7 @@ type UserSession = {
   id: string;
   name: string;
   role: string;
-  branchId: string | null;
+  outletId: string | null;
 };
 
 export default function WastagePage() {
@@ -53,8 +53,8 @@ export default function WastagePage() {
   const [user, setUser] = useState<UserSession | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchWastage = useCallback(async (branchId?: string | null) => {
-    const url = branchId ? `/api/wastage?branchId=${branchId}` : "/api/wastage";
+  const fetchWastage = useCallback(async (outletId?: string | null) => {
+    const url = outletId ? `/api/wastage?outletId=${outletId}` : "/api/wastage";
     const res = await fetch(url);
     if (res.ok) {
       const data = await res.json();
@@ -81,7 +81,7 @@ export default function WastagePage() {
           setProducts(await productsRes.json());
         }
 
-        await fetchWastage(userData?.branchId);
+        await fetchWastage(userData?.outletId);
       } finally {
         setLoading(false);
       }
@@ -117,7 +117,7 @@ export default function WastagePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          branchId: user.branchId,
+          outletId: user.outletId,
           productId: selectedProductId,
           adjustmentType: "WASTAGE",
           quantity: parseFloat(quantity),
@@ -131,7 +131,7 @@ export default function WastagePage() {
       if (res.ok) {
         setDialogOpen(false);
         resetForm();
-        await fetchWastage(user.branchId);
+        await fetchWastage(user.outletId);
       }
     } finally {
       setSubmitting(false);

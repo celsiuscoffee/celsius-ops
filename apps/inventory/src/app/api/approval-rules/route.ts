@@ -7,20 +7,20 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  // Resolve branch names and approver names
-  const branchIds = [...new Set(rules.flatMap((r) => r.branches))];
+  // Resolve outlet names and approver names
+  const outletIds = [...new Set(rules.flatMap((r) => r.outlets))];
   const approverIds = [...new Set(rules.flatMap((r) => r.approverIds))];
 
-  const [branches, approvers] = await Promise.all([
-    branchIds.length > 0
-      ? prisma.branch.findMany({ where: { id: { in: branchIds } }, select: { id: true, name: true } })
+  const [outlets, approvers] = await Promise.all([
+    outletIds.length > 0
+      ? prisma.outlet.findMany({ where: { id: { in: outletIds } }, select: { id: true, name: true } })
       : [],
     approverIds.length > 0
       ? prisma.user.findMany({ where: { id: { in: approverIds } }, select: { id: true, name: true } })
       : [],
   ]);
 
-  const branchMap = Object.fromEntries(branches.map((b) => [b.id, b.name]));
+  const outletMap = Object.fromEntries(outlets.map((b) => [b.id, b.name]));
   const approverMap = Object.fromEntries(approvers.map((a) => [a.id, a.name]));
 
   const mapped = rules.map((r) => ({
@@ -29,7 +29,7 @@ export async function GET() {
     ruleType: r.ruleType,
     condition: r.condition,
     threshold: r.threshold ? Number(r.threshold) : null,
-    branches: r.branches.map((id) => ({ id, name: branchMap[id] || id })),
+    outlets: r.outlets.map((id) => ({ id, name: outletMap[id] || id })),
     approvers: r.approverIds.map((id) => ({ id, name: approverMap[id] || id })),
     isActive: r.isActive,
     createdAt: r.createdAt.toISOString(),
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, ruleType, condition, threshold, branches, approverIds, isActive } = body;
+  const { name, ruleType, condition, threshold, outlets, approverIds, isActive } = body;
 
   if (!name || !ruleType || !condition) {
     return NextResponse.json({ error: "name, ruleType, and condition are required" }, { status: 400 });
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       ruleType,
       condition,
       threshold: threshold ?? null,
-      branches: branches || [],
+      outlets: outlets || [],
       approverIds: approverIds || [],
       isActive: isActive !== false,
     },

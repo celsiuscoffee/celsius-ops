@@ -41,7 +41,7 @@ type Receiving = {
   id: string;
   orderId: string | null;
   orderNumber: string;
-  branch: string;
+  outlet: string;
   supplier: string;
   receivedBy: string;
   receivedAt: string;
@@ -65,8 +65,8 @@ type POItem = {
 type PendingOrder = {
   id: string;
   orderNumber: string;
-  branch: string;
-  branchId: string;
+  outlet: string;
+  outletId: string;
   supplier: string;
   supplierId: string;
   items: POItem[];
@@ -84,7 +84,7 @@ type ReceiveLineItem = {
 
 export default function ReceivingsPage() {
   const [receivings, setReceivings] = useState<Receiving[]>([]);
-  const [awaitingOrders, setAwaitingOrders] = useState<{ id: string; orderNumber: string; branch: string; supplier: string; status: string; totalAmount: number; items: number; deliveryDate: string | null; createdAt: string }[]>([]);
+  const [awaitingOrders, setAwaitingOrders] = useState<{ id: string; orderNumber: string; outlet: string; supplier: string; status: string; totalAmount: number; items: number; deliveryDate: string | null; createdAt: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -109,10 +109,10 @@ export default function ReceivingsPage() {
         setAwaitingOrders(
           ordersData
             .filter((o: { status: string }) => AWAITING_STATUSES.includes(o.status))
-            .map((o: { id: string; orderNumber: string; branch: string; supplier: string; status: string; totalAmount: number; items: { id: string }[]; deliveryDate: string | null; createdAt: string }) => ({
+            .map((o: { id: string; orderNumber: string; outlet: string; supplier: string; status: string; totalAmount: number; items: { id: string }[]; deliveryDate: string | null; createdAt: string }) => ({
               id: o.id,
               orderNumber: o.orderNumber,
-              branch: o.branch,
+              outlet: o.outlet,
               supplier: o.supplier,
               status: o.status,
               totalAmount: o.totalAmount,
@@ -137,11 +137,11 @@ export default function ReceivingsPage() {
           .filter((o: { status: string }) =>
             ["SENT", "AWAITING_DELIVERY", "APPROVED", "PARTIALLY_RECEIVED"].includes(o.status),
           )
-          .map((o: { id: string; orderNumber: string; branch: string; branchCode: string; supplier: string; supplierPhone: string; items: { id: string; product: string; sku: string; package: string; quantity: number }[] }) => ({
+          .map((o: { id: string; orderNumber: string; outlet: string; outletCode: string; supplier: string; supplierPhone: string; items: { id: string; product: string; sku: string; package: string; quantity: number }[] }) => ({
             id: o.id,
             orderNumber: o.orderNumber,
-            branch: o.branch,
-            branchId: "", // We'll need this from the full order
+            outlet: o.outlet,
+            outletId: "", // We'll need this from the full order
             supplier: o.supplier,
             supplierId: "",
             items: o.items.map((i) => ({
@@ -192,7 +192,7 @@ export default function ReceivingsPage() {
     if (!selectedOrderId || receiveItems.length === 0) return;
     setSaving(true);
     try {
-      // We need branchId and supplierId - fetch the full order
+      // We need outletId and supplierId - fetch the full order
       const orderRes = await fetch("/api/orders");
       const allOrders = await orderRes.json();
       const fullOrder = allOrders.find((o: { id: string }) => o.id === selectedOrderId);
@@ -200,26 +200,26 @@ export default function ReceivingsPage() {
 
       // We need the actual IDs - fetch from the order API with IDs
       const orderDetailRes = await fetch(`/api/orders/${selectedOrderId}`);
-      let branchId = "";
+      let outletId = "";
       let supplierId = "";
 
       if (orderDetailRes.ok) {
         const detail = await orderDetailRes.json();
-        branchId = detail.branchId;
+        outletId = detail.outletId;
         supplierId = detail.supplierId;
       }
 
-      // Fallback: look up branch and supplier by name
-      if (!branchId || !supplierId) {
-        const [branchesRes, suppliersRes] = await Promise.all([
-          fetch("/api/branches"),
+      // Fallback: look up outlet and supplier by name
+      if (!outletId || !supplierId) {
+        const [outletsRes, suppliersRes] = await Promise.all([
+          fetch("/api/outlets"),
           fetch("/api/suppliers/products"),
         ]);
-        const branches = await branchesRes.json();
+        const outletsData = await outletsRes.json();
         const suppliers = await suppliersRes.json();
-        const branch = branches.find((b: { name: string }) => b.name === fullOrder.branch);
+        const outletMatch = outletsData.find((b: { name: string }) => b.name === fullOrder.outlet);
         const supplier = suppliers.find((s: { name: string }) => s.name === fullOrder.supplier);
-        branchId = branch?.id ?? "";
+        outletId = outletMatch?.id ?? "";
         supplierId = supplier?.id ?? "";
       }
 
@@ -228,7 +228,7 @@ export default function ReceivingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderId: selectedOrderId,
-          branchId,
+          outletId,
           supplierId,
           notes: receiveNotes || null,
           items: receiveItems.map((i) => ({
@@ -250,7 +250,7 @@ export default function ReceivingsPage() {
   const filtered = receivings.filter((r) =>
     r.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
     r.supplier.toLowerCase().includes(search.toLowerCase()) ||
-    r.branch.toLowerCase().includes(search.toLowerCase()),
+    r.outlet.toLowerCase().includes(search.toLowerCase()),
   );
 
   if (loading) {
@@ -324,7 +324,7 @@ export default function ReceivingsPage() {
                     )}
                   </div>
                 </div>
-                <p className="mt-1 text-[10px] text-gray-400">{o.branch}</p>
+                <p className="mt-1 text-[10px] text-gray-400">{o.outlet}</p>
               </Card>
             ))}
           </div>
@@ -334,7 +334,7 @@ export default function ReceivingsPage() {
       {/* Search */}
       <div className="mt-4 relative max-w-md">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <Input placeholder="Search by PO#, supplier, or branch..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        <Input placeholder="Search by PO#, supplier, or outlet..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
       </div>
 
       {/* Receivings Table */}
@@ -344,7 +344,7 @@ export default function ReceivingsPage() {
             <tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="w-8 px-3 py-3"></th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">PO Reference</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Branch</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Supplier</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Items</th>
@@ -378,7 +378,7 @@ export default function ReceivingsPage() {
                   <td className="px-4 py-3">
                     <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-terracotta">{rec.orderNumber}</code>
                   </td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{rec.branch}</td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{rec.outlet}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{rec.supplier}</td>
                   <td className="px-4 py-3">
                     <Badge className={`text-[10px] ${rec.status === "COMPLETE" ? "bg-green-500" : rec.status === "PARTIAL" ? "bg-amber-500" : "bg-red-500"}`}>
@@ -467,7 +467,7 @@ export default function ReceivingsPage() {
                 <option value="">Select a PO...</option>
                 {pendingOrders.map((o) => (
                   <option key={o.id} value={o.id}>
-                    {o.orderNumber} — {o.supplier} ({o.branch})
+                    {o.orderNumber} — {o.supplier} ({o.outlet})
                   </option>
                 ))}
               </select>

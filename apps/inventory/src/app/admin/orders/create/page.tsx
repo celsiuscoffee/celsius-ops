@@ -49,7 +49,7 @@ type SupplierOption = {
   products: SupplierProduct[];
 };
 
-type BranchOption = {
+type OutletOption = {
   id: string;
   code: string;
   name: string;
@@ -98,7 +98,7 @@ type OrderItem = {
 type Order = {
   id: string;
   orderNumber: string;
-  branch: string;
+  outlet: string;
   supplier: string;
   supplierPhone: string;
   supplierId: string;
@@ -129,9 +129,9 @@ export default function CreateOrderPage() {
 
   // Data
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
-  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [outlets, setOutlets] = useState<OutletOption[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const [selectedOutletId, setSelectedOutletId] = useState("");
   const [stockLevels, setStockLevels] = useState<StockLevelItem[]>([]);
   const [loadingStock, setLoadingStock] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -157,11 +157,11 @@ export default function CreateOrderPage() {
 
   // ── Data loading ────────────────────────────────────────────────────────
 
-  const loadStockLevels = useCallback(async (branchId: string) => {
-    if (!branchId) { setStockLevels([]); return; }
+  const loadStockLevels = useCallback(async (outletId: string) => {
+    if (!outletId) { setStockLevels([]); return; }
     setLoadingStock(true);
     try {
-      const res = await fetch(`/api/stock-levels?branchId=${branchId}`);
+      const res = await fetch(`/api/stock-levels?outletId=${outletId}`);
       if (res.ok) {
         const data = await res.json();
         setStockLevels(data.items || []);
@@ -173,23 +173,23 @@ export default function CreateOrderPage() {
   useEffect(() => {
     Promise.all([
       fetch("/api/suppliers/products").then((r) => r.json()),
-      fetch("/api/branches").then((r) => r.json()),
+      fetch("/api/outlets").then((r) => r.json()),
       fetch("/api/orders").then((r) => r.json()),
     ]).then(([s, b, o]) => {
       setSuppliers(s);
-      setBranches(b);
+      setOutlets(b);
       setOrders(o);
-      const defaultBranch = b[0]?.id ?? "";
-      setSelectedBranchId(defaultBranch);
-      if (defaultBranch) loadStockLevels(defaultBranch);
+      const defaultOutlet = b[0]?.id ?? "";
+      setSelectedOutletId(defaultOutlet);
+      if (defaultOutlet) loadStockLevels(defaultOutlet);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [loadStockLevels]);
 
-  const handleBranchChange = (branchId: string) => {
-    setSelectedBranchId(branchId);
+  const handleOutletChange = (outletId: string) => {
+    setSelectedOutletId(outletId);
     setCart([]);
-    loadStockLevels(branchId);
+    loadStockLevels(outletId);
   };
 
   // ── Derived data ────────────────────────────────────────────────────────
@@ -231,14 +231,14 @@ export default function CreateOrderPage() {
         .filter((s) => s.products.length > 0)
     : [];
 
-  // Quick reorder: last order per supplier for the selected branch
+  // Quick reorder: last order per supplier for the selected outlet
   const quickReorders = (() => {
-    const branch = branches.find((b) => b.id === selectedBranchId);
-    if (!branch) return [];
-    const branchOrders = orders.filter((o) => o.branch === branch.name);
+    const outlet = outlets.find((b) => b.id === selectedOutletId);
+    if (!outlet) return [];
+    const outletOrders = orders.filter((o) => o.outlet === outlet.name);
     const seen = new Set<string>();
     const result: Order[] = [];
-    for (const order of branchOrders) {
+    for (const order of outletOrders) {
       if (!seen.has(order.supplier) && order.items.length > 0) {
         seen.add(order.supplier);
         result.push(order);
@@ -325,11 +325,11 @@ export default function CreateOrderPage() {
   const sendViaWhatsApp = (supplier: string) => {
     const group = cartBySupplier[supplier];
     if (!group) return;
-    const branch = branches.find((b) => b.id === selectedBranchId);
+    const outlet = outlets.find((b) => b.id === selectedOutletId);
     const deliveryDate = getDeliveryDate(group.supplierId);
     const today = new Date().toLocaleDateString("en-MY", { day: "2-digit", month: "2-digit", year: "numeric" });
     let message = `📋 *Order from Celsius Coffee*\n`;
-    message += `Branch: ${branch?.name || "—"}\nDate: ${today}\n\n`;
+    message += `Outlet: ${outlet?.name || "—"}\nDate: ${today}\n\n`;
     group.items.forEach((item, i) => {
       message += `${i + 1}. ${item.name} — ${item.quantity} ${item.packageLabel}\n`;
     });
@@ -350,7 +350,7 @@ export default function CreateOrderPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          branchId: selectedBranchId,
+          outletId: selectedOutletId,
           supplierId: whatsappDialog.supplierId,
           items: group.items.map((item) => ({
             productId: item.productId,
@@ -398,7 +398,7 @@ export default function CreateOrderPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            branchId: selectedBranchId,
+            outletId: selectedOutletId,
             supplierId: group.supplierId,
             notes: orderNotes || null,
             deliveryDate,
@@ -447,17 +447,17 @@ export default function CreateOrderPage() {
       <div className="grid grid-cols-12 gap-6">
         {/* ── Left: Product selection ── */}
         <div className="col-span-8">
-          {/* Branch + controls */}
+          {/* Outlet + controls */}
           <Card className="mb-4 p-4">
             <div className="grid grid-cols-4 gap-4">
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Branch</label>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Outlet</label>
                 <select
-                  value={selectedBranchId}
-                  onChange={(e) => handleBranchChange(e.target.value)}
+                  value={selectedOutletId}
+                  onChange={(e) => handleOutletChange(e.target.value)}
                   className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
                 >
-                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  {outlets.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
               <div>
@@ -527,7 +527,7 @@ export default function CreateOrderPage() {
               {needsOrdering.length === 0 ? (
                 <Card className="py-12 text-center">
                   <Package className="mx-auto h-8 w-8 text-gray-300" />
-                  <p className="mt-2 text-sm text-gray-400">All stock levels are healthy for this branch</p>
+                  <p className="mt-2 text-sm text-gray-400">All stock levels are healthy for this outlet</p>
                 </Card>
               ) : (
                 needsOrdering.map((item) => {
@@ -665,7 +665,7 @@ export default function CreateOrderPage() {
               {quickReorders.length === 0 ? (
                 <Card className="py-12 text-center">
                   <RotateCcw className="mx-auto h-8 w-8 text-gray-300" />
-                  <p className="mt-2 text-sm text-gray-400">No previous orders for this branch</p>
+                  <p className="mt-2 text-sm text-gray-400">No previous orders for this outlet</p>
                 </Card>
               ) : (
                 quickReorders.map((order) => (

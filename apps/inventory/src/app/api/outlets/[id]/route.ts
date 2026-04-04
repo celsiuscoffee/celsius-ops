@@ -17,27 +17,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (state !== undefined) data.state = state;
   if (status !== undefined) data.status = status;
 
-  const branch = await prisma.branch.update({
+  const outlet = await prisma.outlet.update({
     where: { id },
     data,
   });
 
-  return NextResponse.json(branch);
+  return NextResponse.json(outlet);
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   // Check for linked staff or orders
-  const staffCount = await prisma.user.count({ where: { branchId: id } });
+  const staffCount = await prisma.user.count({ where: { outletId: id } });
   if (staffCount > 0) {
-    return NextResponse.json({ error: "Cannot delete branch with staff assigned. Deactivate instead." }, { status: 400 });
+    return NextResponse.json({ error: "Cannot delete outlet with staff assigned. Deactivate instead." }, { status: 400 });
   }
 
   try {
-    await prisma.branch.delete({ where: { id } });
+    await prisma.outlet.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch {
-    return NextResponse.json({ error: "Cannot delete branch. It may have linked data." }, { status: 400 });
+    return NextResponse.json({ error: "Cannot delete outlet. It may have linked data." }, { status: 400 });
   }
 }

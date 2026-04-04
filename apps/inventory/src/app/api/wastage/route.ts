@@ -4,14 +4,14 @@ import { adjustStockBalance } from "@/lib/stock";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const branchId = searchParams.get("branchId");
+  const outletId = searchParams.get("outletId");
 
-  const where = branchId ? { branchId } : {};
+  const where = outletId ? { outletId } : {};
 
   const adjustments = await prisma.stockAdjustment.findMany({
     where,
     include: {
-      branch: true,
+      outlet: true,
       product: true,
       adjustedBy: true,
     },
@@ -20,8 +20,8 @@ export async function GET(req: NextRequest) {
 
   const mapped = adjustments.map((a) => ({
     id: a.id,
-    branch: a.branch.name,
-    branchCode: a.branch.code,
+    outlet: a.outlet.name,
+    outletCode: a.outlet.code,
     product: a.product.name,
     sku: a.product.sku,
     adjustmentType: a.adjustmentType,
@@ -39,11 +39,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { branchId, productId, adjustmentType, quantity, costAmount, reason, adjustedById } = body;
+  const { outletId, productId, adjustmentType, quantity, costAmount, reason, adjustedById } = body;
 
   const adjustment = await prisma.stockAdjustment.create({
     data: {
-      branchId,
+      outletId,
       productId,
       adjustmentType,
       quantity,
@@ -52,14 +52,14 @@ export async function POST(req: NextRequest) {
       adjustedById,
     },
     include: {
-      branch: true,
+      outlet: true,
       product: true,
       adjustedBy: true,
     },
   });
 
   // Wastage subtracts from stock balance
-  await adjustStockBalance(branchId, productId, -quantity);
+  await adjustStockBalance(outletId, productId, -quantity);
 
   return NextResponse.json(adjustment, { status: 201 });
 }

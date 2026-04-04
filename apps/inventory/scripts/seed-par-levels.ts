@@ -21,27 +21,27 @@ const REORDER_DAYS = 1; // Reorder when 1 day of stock left
 const LOOKBACK_DAYS = 30; // Use last 30 days of sales to calculate avg daily usage
 
 async function main() {
-  const branchId = process.argv[2];
-  if (!branchId) {
-    const branches = await prisma.branch.findMany({
+  const outletId = process.argv[2];
+  if (!outletId) {
+    const outlets = await prisma.outlet.findMany({
       select: { id: true, name: true },
     });
     console.log(
-      "Usage: npx tsx scripts/seed-par-levels.ts <branchId> [lookbackDays]",
+      "Usage: npx tsx scripts/seed-par-levels.ts <outletId> [lookbackDays]",
     );
-    console.log("\nAvailable branches:");
-    branches.forEach((b) => console.log(`  ${b.id} - ${b.name}`));
+    console.log("\nAvailable outlets:");
+    outlets.forEach((b) => console.log(`  ${b.id} - ${b.name}`));
     process.exit(1);
   }
 
   const lookbackDays = Number(process.argv[3]) || LOOKBACK_DAYS;
 
-  const branch = await prisma.branch.findUnique({ where: { id: branchId } });
-  if (!branch) {
-    console.error("Branch not found:", branchId);
+  const outlet = await prisma.outlet.findUnique({ where: { id: outletId } });
+  if (!outlet) {
+    console.error("Outlet not found:", outletId);
     process.exit(1);
   }
-  console.log(`\nCalculating par levels for: ${branch.name}`);
+  console.log(`\nCalculating par levels for: ${outlet.name}`);
   console.log(`Using last ${lookbackDays} days of sales data\n`);
 
   // 1. Check if we have any sales data
@@ -50,16 +50,16 @@ async function main() {
 
   const salesCount = await prisma.salesTransaction.count({
     where: {
-      branchId,
+      outletId,
       transactedAt: { gte: since },
     },
   });
 
   if (salesCount === 0) {
-    console.error("❌ No sales data found for this branch in the last", lookbackDays, "days.");
+    console.error("❌ No sales data found for this outlet in the last", lookbackDays, "days.");
     console.error("   Import sales data from StoreHub first, then re-run this script.");
     console.error("\n   The SalesTransaction table needs records with:");
-    console.error("   - branchId, menuId, quantity, transactedAt");
+    console.error("   - outletId, menuId, quantity, transactedAt");
     process.exit(1);
   }
 
@@ -69,7 +69,7 @@ async function main() {
   const salesByMenu = await prisma.salesTransaction.groupBy({
     by: ["menuId"],
     where: {
-      branchId,
+      outletId,
       transactedAt: { gte: since },
       menuId: { not: null },
     },
@@ -138,11 +138,11 @@ async function main() {
 
     await prisma.parLevel.upsert({
       where: {
-        productId_branchId: { productId, branchId },
+        productId_outletId: { productId, outletId },
       },
       create: {
         productId,
-        branchId,
+        outletId,
         parLevel,
         reorderPoint,
         avgDailyUsage: Math.round(data.dailyUsage * 100) / 100,

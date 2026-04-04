@@ -97,7 +97,7 @@ type SessionUser = {
   id: string;
   name: string;
   role: string;
-  branchId: string | null;
+  outletId: string | null;
 };
 
 type StockLevelItem = {
@@ -175,17 +175,17 @@ export default function OrderPage() {
         const ordData: Order[] = await ordersRes.json();
         setOrders(ordData);
       }
-      let branchId: string | null = null;
+      let outletId: string | null = null;
       if (meRes.ok) {
         const meData: SessionUser = await meRes.json();
         setUser(meData);
-        branchId = meData.branchId;
+        outletId = meData.outletId;
       }
 
       // Fetch stock levels
-      if (branchId) {
+      if (outletId) {
         try {
-          const slRes = await fetch(`/api/stock-levels?branchId=${branchId}`);
+          const slRes = await fetch(`/api/stock-levels?outletId=${outletId}`);
           if (slRes.ok) {
             const slData: StockLevelsData = await slRes.json();
             setStockLevels(slData);
@@ -293,7 +293,7 @@ export default function OrderPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          branchId: user?.branchId,
+          outletId: user?.outletId,
           supplierId: whatsappDialog.supplierId,
           items: group.items.map((item) => ({
             productId: item.productId,

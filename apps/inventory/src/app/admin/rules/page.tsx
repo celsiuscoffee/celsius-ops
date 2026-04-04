@@ -15,7 +15,7 @@ type Rule = {
   ruleType: string;
   condition: string;
   threshold: number | null;
-  branches: IdName[];
+  outlets: IdName[];
   approvers: IdName[];
   isActive: boolean;
 };
@@ -31,7 +31,7 @@ const ruleTypeLabel = (t: string) => RULE_TYPES.find((r) => r.value === t)?.labe
 
 export default function RulesPage() {
   const { data: rules, mutate } = useFetch<Rule[]>("/api/approval-rules");
-  const [branches, setBranches] = useState<IdName[]>([]);
+  const [outlets, setOutlets] = useState<IdName[]>([]);
   const [managers, setManagers] = useState<IdName[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
@@ -43,17 +43,17 @@ export default function RulesPage() {
   const [formType, setFormType] = useState("ORDER_APPROVAL");
   const [formCondition, setFormCondition] = useState("");
   const [formThreshold, setFormThreshold] = useState("");
-  const [formBranches, setFormBranches] = useState<string[]>([]);
+  const [formOutlets, setFormOutlets] = useState<string[]>([]);
   const [formApprovers, setFormApprovers] = useState<string[]>([]);
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/branches").then((r) => r.json()),
+      fetch("/api/outlets").then((r) => r.json()),
       fetch("/api/staff").then((r) => r.json()),
     ]).then(([b, s]) => {
-      setBranches(Array.isArray(b) ? b.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : []);
+      setOutlets(Array.isArray(b) ? b.map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })) : []);
       const mgrs = Array.isArray(s)
-        ? s.filter((x: { role: string }) => x.role === "ADMIN" || x.role === "BRANCH_MANAGER")
+        ? s.filter((x: { role: string }) => x.role === "ADMIN" || x.role === "MANAGER")
             .map((x: { id: string; name: string }) => ({ id: x.id, name: x.name }))
         : [];
       setManagers(mgrs);
@@ -65,7 +65,7 @@ export default function RulesPage() {
     setFormType("ORDER_APPROVAL");
     setFormCondition("");
     setFormThreshold("");
-    setFormBranches([]);
+    setFormOutlets([]);
     setFormApprovers([]);
     setEditingRule(null);
   }, []);
@@ -81,7 +81,7 @@ export default function RulesPage() {
     setFormType(rule.ruleType);
     setFormCondition(rule.condition);
     setFormThreshold(rule.threshold != null ? String(rule.threshold) : "");
-    setFormBranches(rule.branches.map((b) => b.id));
+    setFormOutlets(rule.outlets.map((b) => b.id));
     setFormApprovers(rule.approvers.map((a) => a.id));
     setDialogOpen(true);
   };
@@ -94,7 +94,7 @@ export default function RulesPage() {
       ruleType: formType,
       condition: formCondition.trim(),
       threshold: formThreshold ? Number(formThreshold) : null,
-      branches: formBranches,
+      outlets: formOutlets,
       approverIds: formApprovers,
     };
 
@@ -213,12 +213,12 @@ export default function RulesPage() {
               </div>
               <div className="mt-3 flex flex-wrap gap-4 text-xs">
                 <div>
-                  <span className="text-gray-400">Branches:</span>
+                  <span className="text-gray-400">Outlets:</span>
                   <div className="mt-1 flex flex-wrap gap-1">
-                    {rule.branches.length === 0 ? (
-                      <Badge variant="outline" className="text-[10px]">All branches</Badge>
+                    {rule.outlets.length === 0 ? (
+                      <Badge variant="outline" className="text-[10px]">All outlets</Badge>
                     ) : (
-                      rule.branches.map((b) => (
+                      rule.outlets.map((b) => (
                         <Badge key={b.id} variant="outline" className="text-[10px]">
                           {b.name.replace("Celsius Coffee ", "")}
                         </Badge>
@@ -294,15 +294,15 @@ export default function RulesPage() {
               <p className="mt-0.5 text-[10px] text-gray-400">Numeric value for the condition (optional)</p>
             </div>
             <div>
-              <label className="text-sm font-medium">Branches</label>
+              <label className="text-sm font-medium">Outlets</label>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {branches.map((b) => (
+                {outlets.map((b) => (
                   <button
                     key={b.id}
                     type="button"
-                    onClick={() => setFormBranches(toggleArrayItem(formBranches, b.id))}
+                    onClick={() => setFormOutlets(toggleArrayItem(formOutlets, b.id))}
                     className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                      formBranches.includes(b.id)
+                      formOutlets.includes(b.id)
                         ? "border-terracotta bg-terracotta/10 text-terracotta-dark"
                         : "border-gray-200 text-gray-500 hover:border-gray-300"
                     }`}
@@ -311,7 +311,7 @@ export default function RulesPage() {
                   </button>
                 ))}
               </div>
-              <p className="mt-0.5 text-[10px] text-gray-400">Leave empty to apply to all branches</p>
+              <p className="mt-0.5 text-[10px] text-gray-400">Leave empty to apply to all outlets</p>
             </div>
             <div>
               <label className="text-sm font-medium">Approvers</label>

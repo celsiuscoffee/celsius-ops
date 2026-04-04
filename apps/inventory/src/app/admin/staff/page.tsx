@@ -8,24 +8,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Loader2, Eye, EyeOff, Key, Lock, Hash, Check, X, Search } from "lucide-react";
 
 type Staff = {
-  id: string; name: string; role: string; branch: string; branchId: string | null; branchCode: string;
-  branchIds: string[]; branchNames: string[];
+  id: string; name: string; role: string; outlet: string; outletId: string | null; outletCode: string;
+  outletIds: string[]; outletNames: string[];
   phone: string; email: string; username: string | null;
   hasPassword: boolean; hasPin: boolean;
   status: string; addedDate: string;
 };
 
-type BranchOption = { id: string; name: string };
+type OutletOption = { id: string; name: string };
 
 type StaffForm = {
-  name: string; role: string; branchId: string; branchIds: string[];
+  name: string; role: string; outletId: string; outletIds: string[];
   phone: string; email: string;
   username: string; password: string;
   pin: string;
 };
 
 const emptyForm: StaffForm = {
-  name: "", role: "STAFF", branchId: "", branchIds: [],
+  name: "", role: "STAFF", outletId: "", outletIds: [],
   phone: "", email: "",
   username: "", password: "",
   pin: "",
@@ -40,7 +40,7 @@ export default function StaffPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [form, setForm] = useState<StaffForm>(emptyForm);
-  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [outlets, setOutlets] = useState<OutletOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -55,7 +55,7 @@ export default function StaffPage() {
 
   useEffect(() => {
     loadStaff();
-    fetch("/api/branches").then((r) => r.json()).then(setBranches);
+    fetch("/api/outlets").then((r) => r.json()).then(setOutlets);
   }, []);
 
   const filtered = staff.filter((s) => {
@@ -78,8 +78,8 @@ export default function StaffPage() {
     setForm({
       name: s.name,
       role: s.role,
-      branchId: s.branchId || "",
-      branchIds: s.branchIds || [],
+      outletId: s.outletId || "",
+      outletIds: s.outletIds || [],
       phone: s.phone,
       email: s.email,
       username: s.username || "",
@@ -94,12 +94,12 @@ export default function StaffPage() {
     setDialogOpen(true);
   };
 
-  const toggleBranch = (branchId: string) => {
+  const toggleOutlet = (outletId: string) => {
     setForm((prev) => ({
       ...prev,
-      branchIds: prev.branchIds.includes(branchId)
-        ? prev.branchIds.filter((id) => id !== branchId)
-        : [...prev.branchIds, branchId],
+      outletIds: prev.outletIds.includes(outletId)
+        ? prev.outletIds.filter((id) => id !== outletId)
+        : [...prev.outletIds, outletId],
     }));
   };
 
@@ -113,8 +113,8 @@ export default function StaffPage() {
         phone: form.phone,
         email: form.email || null,
         role: form.role,
-        branchId: form.branchId || null,
-        branchIds: form.branchIds,
+        outletId: form.outletId || null,
+        outletIds: form.outletIds,
         username: form.username || null,
       };
 
@@ -160,17 +160,17 @@ export default function StaffPage() {
 
   const roleLabel = (role: string) => {
     if (role === "ADMIN") return "Admin";
-    if (role === "BRANCH_MANAGER") return "Manager";
+    if (role === "MANAGER") return "Manager";
     return "Staff";
   };
 
   const roleColor = (role: string) => {
     if (role === "ADMIN") return "border-terracotta text-terracotta";
-    if (role === "BRANCH_MANAGER") return "border-blue-500 text-blue-600";
+    if (role === "MANAGER") return "border-blue-500 text-blue-600";
     return "border-gray-300 text-gray-500";
   };
 
-  const isAdminOrManager = form.role === "ADMIN" || form.role === "BRANCH_MANAGER";
+  const isAdminOrManager = form.role === "ADMIN" || form.role === "MANAGER";
 
   if (loading) {
     return (
@@ -185,7 +185,7 @@ export default function StaffPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Staff</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{staff.length} members across {new Set(staff.map((s) => s.branch).filter(Boolean)).size} locations</p>
+          <p className="mt-0.5 text-sm text-gray-500">{staff.length} members across {new Set(staff.map((s) => s.outlet).filter(Boolean)).size} locations</p>
         </div>
         <Button onClick={openAdd} className="bg-terracotta hover:bg-terracotta-dark"><Plus className="mr-1.5 h-4 w-4" />Add User</Button>
       </div>
@@ -234,11 +234,11 @@ export default function StaffPage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
-                    {s.branch && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">{s.branch}</span>}
-                    {s.branchNames.filter((n) => n !== s.branch).map((name) => (
+                    {s.outlet && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">{s.outlet}</span>}
+                    {s.outletNames.filter((n) => n !== s.outlet).map((name) => (
                       <span key={name} className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-600">{name}</span>
                     ))}
-                    {!s.branch && s.branchNames.length === 0 && <span className="text-xs text-gray-400">All outlets</span>}
+                    {!s.outlet && s.outletNames.length === 0 && <span className="text-xs text-gray-400">All outlets</span>}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-500">{s.phone || "—"}</td>
@@ -303,15 +303,15 @@ export default function StaffPage() {
                   <label className="text-sm font-medium">Role</label>
                   <select className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
                     <option value="ADMIN">Company Admin</option>
-                    <option value="BRANCH_MANAGER">Branch Manager</option>
-                    <option value="STAFF">Branch Staff</option>
+                    <option value="MANAGER">Manager</option>
+                    <option value="STAFF">Staff</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Primary Branch</label>
-                  <select className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}>
+                  <label className="text-sm font-medium">Primary Outlet</label>
+                  <select className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" value={form.outletId} onChange={(e) => setForm({ ...form, outletId: e.target.value })}>
                     <option value="">None (Company)</option>
-                    {branches.map((b) => (
+                    {outlets.map((b) => (
                       <option key={b.id} value={b.id}>{b.name}</option>
                     ))}
                   </select>
@@ -327,15 +327,15 @@ export default function StaffPage() {
           {/* Tab: Outlet Access */}
           {activeTab === "access" && (
             <div className="py-2">
-              <p className="text-sm text-gray-500 mb-3">Select which outlets this user can access. Primary branch is always included.</p>
+              <p className="text-sm text-gray-500 mb-3">Select which outlets this user can access. Primary outlet is always included.</p>
               <div className="space-y-1.5">
-                {branches.map((b) => {
-                  const isPrimary = form.branchId === b.id;
-                  const isSelected = isPrimary || form.branchIds.includes(b.id);
+                {outlets.map((b) => {
+                  const isPrimary = form.outletId === b.id;
+                  const isSelected = isPrimary || form.outletIds.includes(b.id);
                   return (
                     <button
                       key={b.id}
-                      onClick={() => { if (!isPrimary) toggleBranch(b.id); }}
+                      onClick={() => { if (!isPrimary) toggleOutlet(b.id); }}
                       className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
                         isSelected
                           ? "border-terracotta/30 bg-terracotta/5"
@@ -353,7 +353,7 @@ export default function StaffPage() {
                   );
                 })}
               </div>
-              {branches.length === 0 && <p className="py-4 text-center text-sm text-gray-400">No branches found</p>}
+              {outlets.length === 0 && <p className="py-4 text-center text-sm text-gray-400">No outlets found</p>}
             </div>
           )}
 

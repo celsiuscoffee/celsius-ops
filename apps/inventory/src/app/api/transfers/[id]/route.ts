@@ -19,10 +19,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     include: { items: true },
   });
 
-  // When transfer is completed, add stock to destination branch
+  // When transfer is completed, add stock to destination outlet
   if (status === "COMPLETED") {
     for (const item of transfer.items) {
-      await adjustStockBalance(transfer.toBranchId, item.productId, Number(item.quantity));
+      await adjustStockBalance(transfer.toOutletId, item.productId, Number(item.quantity));
     }
   }
 

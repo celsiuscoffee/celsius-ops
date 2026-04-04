@@ -7,7 +7,7 @@ import Link from "next/link";
 import { ArrowLeft, Loader2, TrendingDown, TrendingUp, Package, DollarSign, AlertTriangle, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
-type Branch = { id: string; name: string };
+type Outlet = { id: string; name: string };
 
 type ValuationItem = {
   productId: string;
@@ -15,8 +15,8 @@ type ValuationItem = {
   sku: string;
   category: string;
   baseUom: string;
-  branchId: string;
-  branchName: string;
+  outletId: string;
+  outletName: string;
   systemQty: number;
   lastCountedQty: number | null;
   variance: number | null;
@@ -34,7 +34,7 @@ type ValuationData = {
     valueDifference: number;
     itemsWithVariance: number;
   };
-  branches: Branch[];
+  outlets: Outlet[];
   items: ValuationItem[];
 };
 
@@ -43,12 +43,12 @@ function fmt(n: number) {
 }
 
 export default function StockValuationPage() {
-  const [branchId, setBranchId] = useState("");
+  const [outletId, setOutletId] = useState("");
   const [search, setSearch] = useState("");
   const [showVarianceOnly, setShowVarianceOnly] = useState(false);
 
-  const url = branchId
-    ? `/api/reports/stock-valuation?branchId=${branchId}`
+  const url = outletId
+    ? `/api/reports/stock-valuation?outletId=${outletId}`
     : "/api/reports/stock-valuation";
 
   const { data, isLoading } = useFetch<ValuationData>(url);
@@ -122,11 +122,11 @@ export default function StockValuationPage() {
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <select
           className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
-          value={branchId}
-          onChange={(e) => setBranchId(e.target.value)}
+          value={outletId}
+          onChange={(e) => setOutletId(e.target.value)}
         >
-          <option value="">All Branches</option>
-          {(data?.branches ?? []).map((b) => (
+          <option value="">All Outlets</option>
+          {(data?.outlets ?? []).map((b) => (
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
         </select>
@@ -164,7 +164,7 @@ export default function StockValuationPage() {
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="px-4 py-3 text-left font-medium text-gray-500">Product</th>
-                {!branchId && <th className="px-4 py-3 text-left font-medium text-gray-500">Branch</th>}
+                {!outletId && <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>}
                 <th className="px-4 py-3 text-left font-medium text-gray-500">Category</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-500">System Qty</th>
                 <th className="px-4 py-3 text-right font-medium text-gray-500">Counted Qty</th>
@@ -183,12 +183,12 @@ export default function StockValuationPage() {
                 </tr>
               )}
               {filtered.map((item, idx) => (
-                <tr key={`${item.branchId}-${item.productId}`} className={`border-b border-gray-50 ${idx % 2 === 0 ? "" : "bg-gray-50/30"}`}>
+                <tr key={`${item.outletId}-${item.productId}`} className={`border-b border-gray-50 ${idx % 2 === 0 ? "" : "bg-gray-50/30"}`}>
                   <td className="px-4 py-2.5">
                     <p className="font-medium text-gray-900">{item.name}</p>
                     <code className="text-xs text-gray-400">{item.sku}</code>
                   </td>
-                  {!branchId && <td className="px-4 py-2.5 text-gray-600">{item.branchName}</td>}
+                  {!outletId && <td className="px-4 py-2.5 text-gray-600">{item.outletName}</td>}
                   <td className="px-4 py-2.5">
                     <Badge variant="outline" className="text-xs">{item.category}</Badge>
                   </td>

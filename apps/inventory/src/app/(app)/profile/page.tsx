@@ -23,7 +23,7 @@ type User = {
   id: string;
   name: string;
   role: string;
-  branchId: string | null;
+  outletId: string | null;
   hasPassword?: boolean;
   username?: string | null;
 };
@@ -63,18 +63,18 @@ export default function ProfilePage() {
         if (data.id) {
           setUser(data);
           setHasPassword(!!data.hasPassword);
-          fetchStats(data.branchId);
+          fetchStats(data.outletId);
         }
       })
       .catch(() => {});
   }, []);
 
-  const fetchStats = async (branchId: string | null) => {
+  const fetchStats = async (outletId: string | null) => {
     try {
-      const dashUrl = branchId ? `/api/dashboard?branchId=${branchId}` : "/api/dashboard";
+      const dashUrl = outletId ? `/api/dashboard?outletId=${outletId}` : "/api/dashboard";
       const [dashRes, stockRes] = await Promise.all([
         fetch(dashUrl),
-        branchId ? fetch(`/api/stock-levels?branchId=${branchId}`) : Promise.resolve(null),
+        outletId ? fetch(`/api/stock-levels?outletId=${outletId}`) : Promise.resolve(null),
       ]);
       const dash = dashRes.ok ? await dashRes.json() : null;
       const stock = stockRes && stockRes.ok ? await stockRes.json() : null;
@@ -143,7 +143,7 @@ export default function ProfilePage() {
   };
 
   const initial = user?.name?.charAt(0)?.toUpperCase() ?? "?";
-  const roleLabel = user?.role === "ADMIN" ? "Admin" : user?.role === "BRANCH_MANAGER" ? "Branch Manager" : "Staff";
+  const roleLabel = user?.role === "ADMIN" ? "Admin" : user?.role === "MANAGER" ? "Manager" : "Staff";
 
   return (
     <>
@@ -161,7 +161,7 @@ export default function ProfilePage() {
                 <p className="font-semibold text-gray-900">{user?.name ?? "Loading..."}</p>
                 <p className="text-sm text-gray-500">{roleLabel}</p>
               </div>
-              {(user?.role === "ADMIN" || user?.role === "BRANCH_MANAGER") && (
+              {(user?.role === "ADMIN" || user?.role === "MANAGER") && (
                 <a href="/admin" className="flex items-center gap-1 rounded-lg bg-terracotta/10 px-2.5 py-1.5 text-xs font-medium text-terracotta-dark">
                   <Shield className="h-3 w-3" />
                   {user?.role === "ADMIN" ? "Admin" : "Manager"}
@@ -203,7 +203,7 @@ export default function ProfilePage() {
           </div>}
 
           {/* Password */}
-          {(user?.role === "ADMIN" || user?.role === "BRANCH_MANAGER") && (
+          {(user?.role === "ADMIN" || user?.role === "MANAGER") && (
             <div>
               {!showPasswordForm ? (
                 <button
@@ -270,7 +270,7 @@ export default function ProfilePage() {
           )}
 
           {/* Menu */}
-          {(user?.role === "ADMIN" || user?.role === "BRANCH_MANAGER") && (
+          {(user?.role === "ADMIN" || user?.role === "MANAGER") && (
             <div className="space-y-1">
               {MENU_ITEMS.map((item) => {
                 const Icon = item.icon;

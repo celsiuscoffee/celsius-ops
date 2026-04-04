@@ -11,8 +11,8 @@ export type SessionUser = {
   id: string;
   name: string;
   role: string;
-  branchId: string | null;
-  branchName?: string | null;
+  outletId: string | null;
+  outletName?: string | null;
 };
 
 export async function createSession(user: SessionUser) {
@@ -20,8 +20,8 @@ export async function createSession(user: SessionUser) {
     id: user.id,
     name: user.name,
     role: user.role,
-    branchId: user.branchId,
-    branchName: user.branchName ?? null,
+    outletId: user.outletId,
+    outletName: user.outletName ?? null,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("7d")
@@ -75,11 +75,11 @@ export function getUserFromHeaders(headers: Headers): SessionUser | null {
     id,
     name: headers.get("x-user-name") || "",
     role: headers.get("x-user-role") || "STAFF",
-    branchId: headers.get("x-user-branch") || null,
+    outletId: headers.get("x-user-branch") || null,
   };
 }
 
-type Role = "ADMIN" | "BRANCH_MANAGER" | "STAFF";
+type Role = "ADMIN" | "MANAGER" | "STAFF";
 
 // Require specific roles for an API route
 export function requireRole(headers: Headers, ...roles: Role[]): SessionUser {

@@ -14,16 +14,16 @@ export async function POST(req: NextRequest) {
     where: {
       username: username.trim(),
       status: "ACTIVE",
-      role: { in: ["ADMIN", "BRANCH_MANAGER"] },
+      role: { in: ["ADMIN", "MANAGER"] },
     },
-    include: { branch: { select: { name: true } } },
+    include: { outlet: { select: { name: true } } },
   });
 
-  if (!user || !user.password) {
+  if (!user || !user.passwordHash) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
-  if (!verifyPassword(password, user.password)) {
+  if (!verifyPassword(password, user.passwordHash)) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
@@ -31,8 +31,8 @@ export async function POST(req: NextRequest) {
     id: user.id,
     name: user.name,
     role: user.role,
-    branchId: user.branchId,
-    branchName: user.branch?.name ?? null,
+    outletId: user.outletId,
+    outletName: user.outlet?.name ?? null,
   });
 
   return NextResponse.json({

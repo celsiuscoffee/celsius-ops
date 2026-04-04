@@ -11,8 +11,8 @@ import { ArrowRightLeft, Plus, Search, ArrowRight, Loader2, X, Minus } from "luc
 
 type Transfer = {
   id: string;
-  fromBranch: string;
-  toBranch: string;
+  fromOutlet: string;
+  toOutlet: string;
   status: string;
   transferredBy: string;
   notes: string | null;
@@ -20,7 +20,7 @@ type Transfer = {
   items: { id: string; product: string; sku: string; quantity: number }[];
 };
 
-type Branch = {
+type Outlet = {
   id: string;
   name: string;
   code: string;
@@ -37,7 +37,7 @@ type UserSession = {
   id: string;
   name: string;
   role: string;
-  branchId: string | null;
+  outletId: string | null;
 };
 
 type TransferItem = {
@@ -49,20 +49,20 @@ type TransferItem = {
 
 export default function TransferPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [toBranchId, setToBranchId] = useState("");
+  const [toOutletId, setToOutletId] = useState("");
   const [transferNotes, setTransferNotes] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [transferItems, setTransferItems] = useState<TransferItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const [transfers, setTransfers] = useState<Transfer[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [user, setUser] = useState<UserSession | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchTransfers = useCallback(async (branchId?: string | null) => {
-    const url = branchId ? `/api/transfers?branchId=${branchId}` : "/api/transfers";
+  const fetchTransfers = useCallback(async (outletId?: string | null) => {
+    const url = outletId ? `/api/transfers?outletId=${outletId}` : "/api/transfers";
     const res = await fetch(url);
     if (res.ok) {
       setTransfers(await res.json());
@@ -73,9 +73,9 @@ export default function TransferPage() {
     async function load() {
       setLoading(true);
       try {
-        const [userRes, branchesRes, productsRes] = await Promise.all([
+        const [userRes, outletsRes, productsRes] = await Promise.all([
           fetch("/api/auth/me"),
-          fetch("/api/branches"),
+          fetch("/api/outlets"),
           fetch("/api/products"),
         ]);
 
@@ -85,15 +85,15 @@ export default function TransferPage() {
           setUser(userData);
         }
 
-        if (branchesRes.ok) {
-          setBranches(await branchesRes.json());
+        if (outletsRes.ok) {
+          setOutlets(await outletsRes.json());
         }
 
         if (productsRes.ok) {
           setProducts(await productsRes.json());
         }
 
-        await fetchTransfers(userData?.branchId);
+        await fetchTransfers(userData?.outletId);
       } finally {
         setLoading(false);
       }
@@ -131,18 +131,18 @@ export default function TransferPage() {
     setTransferItems((prev) => prev.filter((i) => i.productId !== productId));
   };
 
-  const userBranch = branches.find((b) => b.id === user?.branchId);
-  const otherBranches = branches.filter((b) => b.id !== user?.branchId);
+  const userOutlet = outlets.find((b) => b.id === user?.outletId);
+  const otherOutlets = outlets.filter((b) => b.id !== user?.outletId);
 
   const resetForm = () => {
-    setToBranchId("");
+    setToOutletId("");
     setTransferNotes("");
     setProductSearch("");
     setTransferItems([]);
   };
 
   const handleSubmit = async () => {
-    if (!toBranchId || transferItems.length === 0 || !user) return;
+    if (!toOutletId || transferItems.length === 0 || !user) return;
 
     setSubmitting(true);
     try {
@@ -150,8 +150,8 @@ export default function TransferPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fromBranchId: user.branchId,
-          toBranchId,
+          fromOutletId: user.outletId,
+          toOutletId,
           transferredById: user.id,
           notes: transferNotes || null,
           items: transferItems.map((i) => ({
@@ -164,7 +164,7 @@ export default function TransferPage() {
       if (res.ok) {
         setDialogOpen(false);
         resetForm();
-        await fetchTransfers(user.branchId);
+        await fetchTransfers(user.outletId);
       }
     } finally {
       setSubmitting(false);
@@ -221,9 +221,9 @@ export default function TransferPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2 text-sm">
-                        <span className="font-medium text-gray-900">{t.fromBranch}</span>
+                        <span className="font-medium text-gray-900">{t.fromOutlet}</span>
                         <ArrowRight className="h-3.5 w-3.5 text-gray-400" />
-                        <span className="font-medium text-gray-900">{t.toBranch}</span>
+                        <span className="font-medium text-gray-900">{t.toOutlet}</span>
                       </div>
                       <p className="mt-0.5 text-xs text-gray-500">
                         {t.items.length} item{t.items.length !== 1 ? "s" : ""} &middot; {formatDate(t.createdAt)} &middot; by {t.transferredBy}
@@ -243,20 +243,20 @@ export default function TransferPage() {
           <DialogHeader><DialogTitle>New Stock Transfer</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <label className="text-sm font-medium">From Branch</label>
+              <label className="text-sm font-medium">From Outlet</label>
               <div className="mt-1 w-full rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                {userBranch?.name ?? "Your branch"}
+                {userOutlet?.name ?? "Your outlet"}
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium">To Branch</label>
+              <label className="text-sm font-medium">To Outlet</label>
               <select
                 className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                value={toBranchId}
-                onChange={(e) => setToBranchId(e.target.value)}
+                value={toOutletId}
+                onChange={(e) => setToOutletId(e.target.value)}
               >
                 <option value="">Select destination...</option>
-                {otherBranches.map((b) => (
+                {otherOutlets.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
@@ -339,7 +339,7 @@ export default function TransferPage() {
 
             <Button
               className="w-full bg-terracotta hover:bg-terracotta-dark"
-              disabled={!toBranchId || transferItems.length === 0 || submitting}
+              disabled={!toOutletId || transferItems.length === 0 || submitting}
               onClick={handleSubmit}
             >
               {submitting ? (

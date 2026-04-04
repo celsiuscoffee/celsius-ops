@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     id: user.id,
     name: user.name,
     role: user.role,
-    branchId: user.branchId,
+    outletId: user.outletId,
   });
 
   return NextResponse.json({

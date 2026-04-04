@@ -5,7 +5,7 @@ export async function GET() {
   const invoices = await prisma.invoice.findMany({
     include: {
       order: true,
-      branch: true,
+      outlet: true,
       supplier: true,
     },
     orderBy: { issueDate: "desc" },
@@ -15,7 +15,7 @@ export async function GET() {
     id: inv.id,
     invoiceNumber: inv.invoiceNumber,
     poNumber: inv.order?.orderNumber ?? "—",
-    branch: inv.branch.name,
+    outlet: inv.outlet.name,
     supplier: inv.supplier.name,
     amount: Number(inv.amount),
     status: inv.status,

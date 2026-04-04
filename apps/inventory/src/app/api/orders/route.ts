@@ -14,7 +14,7 @@ export async function GET() {
       sentAt: true,
       approvedAt: true,
       createdAt: true,
-      branch: { select: { name: true, code: true } },
+      outlet: { select: { name: true, code: true } },
       supplier: { select: { id: true, name: true, phone: true } },
       createdBy: { select: { name: true } },
       approvedBy: { select: { name: true } },
@@ -38,8 +38,8 @@ export async function GET() {
   const mapped = orders.map((o) => ({
     id: o.id,
     orderNumber: o.orderNumber,
-    branch: o.branch.name,
-    branchCode: o.branch.code,
+    outlet: o.outlet.name,
+    outletCode: o.outlet.code,
     supplierId: o.supplier.id,
     supplier: o.supplier.name,
     supplierPhone: o.supplier.phone ?? "",
@@ -73,11 +73,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { branchId, supplierId, items, notes, deliveryDate } = body;
+  const { outletId, supplierId, items, notes, deliveryDate } = body;
 
-  const branch = await prisma.branch.findUniqueOrThrow({ where: { id: branchId } });
-  const count = await prisma.order.count({ where: { branchId } });
-  const orderNumber = `CC-${branch.code}-${String(count + 1).padStart(4, "0")}`;
+  const outlet = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId } });
+  const count = await prisma.order.count({ where: { outletId } });
+  const orderNumber = `CC-${outlet.code}-${String(count + 1).padStart(4, "0")}`;
 
   const caller = getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
   const order = await prisma.order.create({
     data: {
       orderNumber,
-      branchId,
+      outletId,
       supplierId,
       status: "DRAFT",
       totalAmount,
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
       orderNumber: true,
       status: true,
       totalAmount: true,
-      branch: { select: { name: true } },
+      outlet: { select: { name: true } },
       supplier: { select: { name: true } },
       items: {
         select: {

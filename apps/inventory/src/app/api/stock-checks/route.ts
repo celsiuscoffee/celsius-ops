@@ -5,7 +5,7 @@ import { setStockBalance } from "@/lib/stock";
 export async function GET() {
   const stockCounts = await prisma.stockCount.findMany({
     include: {
-      branch: true,
+      outlet: true,
       countedBy: true,
       items: {
         include: {
@@ -19,8 +19,8 @@ export async function GET() {
 
   const mapped = stockCounts.map((sc) => ({
     id: sc.id,
-    branch: sc.branch.name,
-    branchCode: sc.branch.code,
+    outlet: sc.outlet.name,
+    outletCode: sc.outlet.code,
     frequency: sc.frequency,
     countedBy: sc.countedBy.name,
     countDate: sc.countDate.toISOString(),
@@ -46,11 +46,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { branchId, countedById, frequency, notes, items } = body;
+  const { outletId, countedById, frequency, notes, items } = body;
 
   const stockCount = await prisma.stockCount.create({
     data: {
-      branchId,
+      outletId,
       countedById,
       frequency,
       status: "SUBMITTED",
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       },
     },
     include: {
-      branch: true,
+      outlet: true,
       countedBy: true,
       items: { include: { product: true, productPackage: true } },
     },
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     items
       .filter((item: { countedQty?: number }) => item.countedQty !== null && item.countedQty !== undefined)
       .map((item: { productId: string; countedQty: number }) =>
-        setStockBalance(branchId, item.productId, item.countedQty),
+        setStockBalance(outletId, item.productId, item.countedQty),
       ),
   );
 

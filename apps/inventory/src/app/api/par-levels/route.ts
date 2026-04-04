@@ -3,15 +3,15 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const branchId = searchParams.get("branchId");
+  const outletId = searchParams.get("outletId");
 
-  const where = branchId ? { branchId } : {};
+  const where = outletId ? { outletId } : {};
 
   const parLevels = await prisma.parLevel.findMany({
     where,
     include: {
       product: true,
-      branch: true,
+      outlet: true,
     },
     orderBy: { product: { name: "asc" } },
   });
@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
       productName: p.product.name,
       productSku: p.product.sku,
       baseUom: p.product.baseUom,
-      branchId: p.branchId,
-      branchName: p.branch.name,
+      outletId: p.outletId,
+      outletName: p.outlet.name,
       parLevel: Number(p.parLevel),
       reorderPoint: Number(p.reorderPoint),
       maxLevel: p.maxLevel ? Number(p.maxLevel) : null,
@@ -35,22 +35,22 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { productId, branchId, parLevel, reorderPoint, maxLevel, avgDailyUsage } = body;
+  const { productId, outletId, parLevel, reorderPoint, maxLevel, avgDailyUsage } = body;
 
-  if (!productId || !branchId || parLevel === undefined || reorderPoint === undefined) {
+  if (!productId || !outletId || parLevel === undefined || reorderPoint === undefined) {
     return NextResponse.json(
-      { error: "productId, branchId, parLevel, and reorderPoint are required" },
+      { error: "productId, outletId, parLevel, and reorderPoint are required" },
       { status: 400 },
     );
   }
 
   const result = await prisma.parLevel.upsert({
     where: {
-      productId_branchId: { productId, branchId },
+      productId_outletId: { productId, outletId },
     },
     create: {
       productId,
-      branchId,
+      outletId,
       parLevel,
       reorderPoint,
       maxLevel: maxLevel ?? null,

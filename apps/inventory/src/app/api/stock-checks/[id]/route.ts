@@ -6,7 +6,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const stockCount = await prisma.stockCount.findUnique({
     where: { id },
     include: {
-      branch: true,
+      outlet: true,
       countedBy: true,
       items: {
         include: {
@@ -20,8 +20,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const mapped = {
     id: stockCount.id,
-    branch: stockCount.branch.name,
-    branchCode: stockCount.branch.code,
+    outlet: stockCount.outlet.name,
+    outletCode: stockCount.outlet.code,
     frequency: stockCount.frequency,
     countedBy: stockCount.countedBy.name,
     countDate: stockCount.countDate.toISOString(),

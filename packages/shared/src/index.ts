@@ -1,10 +1,10 @@
-// Order number format: CC-{BRANCH_CODE}-{SEQUENCE}
-export function generateOrderNumber(branchCode: string, sequence: number): string {
-  return `CC-${branchCode}-${String(sequence).padStart(4, "0")}`;
+// Order number format: CC-{OUTLET_CODE}-{SEQUENCE}
+export function generateOrderNumber(outletCode: string, sequence: number): string {
+  return `CC-${outletCode}-${String(sequence).padStart(4, "0")}`;
 }
 
-// Branch codes derived from outlet names
-export const BRANCH_CODES: Record<string, string> = {
+// Outlet codes derived from outlet names
+export const OUTLET_CODES: Record<string, string> = {
   "Celsius Coffee IOI Conezion": "IOI",
   "Celsius Coffee Nilai": "NLI",
   "Celsius Coffee Shah Alam": "SHA",
@@ -37,16 +37,16 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
 
 // Format WhatsApp order message
 export function formatWhatsAppOrder(params: {
-  branchName: string;
+  outletName: string;
   orderNumber: string;
   date: string;
   items: Array<{ name: string; quantity: number; uom: string }>;
   deliveryDate?: string;
   address?: string;
 }): string {
-  const { branchName, orderNumber, date, items, deliveryDate, address } = params;
+  const { outletName, orderNumber, date, items, deliveryDate, address } = params;
 
-  let message = `📋 *Order from ${branchName}*\n`;
+  let message = `📋 *Order from ${outletName}*\n`;
   message += `Date: ${date}\n`;
   message += `PO #: ${orderNumber}\n\n`;
 

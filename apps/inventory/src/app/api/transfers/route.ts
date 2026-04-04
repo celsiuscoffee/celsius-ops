@@ -4,17 +4,17 @@ import { adjustStockBalance } from "@/lib/stock";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const branchId = searchParams.get("branchId");
+  const outletId = searchParams.get("outletId");
 
-  const where = branchId
-    ? { OR: [{ fromBranchId: branchId }, { toBranchId: branchId }] }
+  const where = outletId
+    ? { OR: [{ fromOutletId: outletId }, { toOutletId: outletId }] }
     : {};
 
   const transfers = await prisma.stockTransfer.findMany({
     where,
     include: {
-      fromBranch: true,
-      toBranch: true,
+      fromOutlet: true,
+      toOutlet: true,
       transferredBy: true,
       items: {
         include: {
@@ -28,10 +28,10 @@ export async function GET(req: NextRequest) {
 
   const mapped = transfers.map((t) => ({
     id: t.id,
-    fromBranch: t.fromBranch.name,
-    fromBranchCode: t.fromBranch.code,
-    toBranch: t.toBranch.name,
-    toBranchCode: t.toBranch.code,
+    fromOutlet: t.fromOutlet.name,
+    fromOutletCode: t.fromOutlet.code,
+    toOutlet: t.toOutlet.name,
+    toOutletCode: t.toOutlet.code,
     status: t.status,
     transferredBy: t.transferredBy.name,
     notes: t.notes,
@@ -51,12 +51,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { fromBranchId, toBranchId, transferredById, notes, items } = body;
+  const { fromOutletId, toOutletId, transferredById, notes, items } = body;
 
   const transfer = await prisma.stockTransfer.create({
     data: {
-      fromBranchId,
-      toBranchId,
+      fromOutletId,
+      toOutletId,
       transferredById,
       status: "PENDING",
       notes: notes || null,
@@ -69,17 +69,17 @@ export async function POST(req: NextRequest) {
       },
     },
     include: {
-      fromBranch: true,
-      toBranch: true,
+      fromOutlet: true,
+      toOutlet: true,
       transferredBy: true,
       items: { include: { product: true, productPackage: true } },
     },
   });
 
-  // Subtract from source branch immediately when transfer is created (parallel)
+  // Subtract from source outlet immediately when transfer is created (parallel)
   await Promise.all(
     items.map((item: { productId: string; quantity: number }) =>
-      adjustStockBalance(fromBranchId, item.productId, -item.quantity),
+      adjustStockBalance(fromOutletId, item.productId, -item.quantity),
     ),
   );
 

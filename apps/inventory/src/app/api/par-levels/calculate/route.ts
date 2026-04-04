@@ -7,10 +7,10 @@ const DEFAULT_LOOKBACK_DAYS = 30;
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { branchId, lookbackDays = DEFAULT_LOOKBACK_DAYS } = body;
+  const { outletId, lookbackDays = DEFAULT_LOOKBACK_DAYS } = body;
 
-  if (!branchId) {
-    return NextResponse.json({ error: "branchId is required" }, { status: 400 });
+  if (!outletId) {
+    return NextResponse.json({ error: "outletId is required" }, { status: 400 });
   }
 
   const since = new Date();
@@ -18,14 +18,14 @@ export async function POST(req: NextRequest) {
 
   // Check for sales data
   const salesCount = await prisma.salesTransaction.count({
-    where: { branchId, transactedAt: { gte: since } },
+    where: { outletId, transactedAt: { gte: since } },
   });
 
   if (salesCount === 0) {
     return NextResponse.json(
       {
         error: "No sales data found",
-        message: `No sales transactions for this branch in the last ${lookbackDays} days. Import sales data from StoreHub first.`,
+        message: `No sales transactions for this outlet in the last ${lookbackDays} days. Import sales data from StoreHub first.`,
       },
       { status: 422 },
     );
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   // Avg daily sales per menu item
   const salesByMenu = await prisma.salesTransaction.groupBy({
     by: ["menuId"],
-    where: { branchId, transactedAt: { gte: since }, menuId: { not: null } },
+    where: { outletId, transactedAt: { gte: since }, menuId: { not: null } },
     _sum: { quantity: true },
   });
 
@@ -80,10 +80,10 @@ export async function POST(req: NextRequest) {
       const reorderPoint = Math.ceil(data.dailyUsage * REORDER_DAYS);
       if (parLevel === 0) return null;
       return prisma.parLevel.upsert({
-        where: { productId_branchId: { productId, branchId } },
+        where: { productId_outletId: { productId, outletId } },
         create: {
           productId,
-          branchId,
+          outletId,
           parLevel,
           reorderPoint,
           avgDailyUsage: Math.round(data.dailyUsage * 100) / 100,

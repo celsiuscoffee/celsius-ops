@@ -9,7 +9,7 @@ const ADMIN_ONLY = [
   "/admin/products",
   "/admin/categories",
   "/admin/suppliers",
-  "/admin/branches",
+  "/admin/outlets",
   "/admin/staff",
   "/admin/rules",
   "/admin/menus",
@@ -18,7 +18,7 @@ const ADMIN_ONLY = [
   "/api/staff",
 ];
 
-// Admin + Branch Manager routes
+// Admin + Manager routes
 const MANAGER_ROUTES = [
   "/admin",
   "/admin/orders",
@@ -75,10 +75,10 @@ export async function proxy(request: NextRequest) {
     if (user.role !== "ADMIN") return deny("Admin access required");
   }
 
-  // Manager routes (admin + branch manager)
+  // Manager routes (admin + manager)
   if (pathname.startsWith("/admin")) {
     if (MANAGER_ROUTES.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
-      if (user.role !== "ADMIN" && user.role !== "BRANCH_MANAGER") {
+      if (user.role !== "ADMIN" && user.role !== "MANAGER") {
         return deny("Manager access required");
       }
     }
@@ -86,7 +86,7 @@ export async function proxy(request: NextRequest) {
 
   // Mobile app routes restricted to manager+
   if (MANAGER_APP_ROUTES.some((p) => pathname.startsWith(p))) {
-    if (user.role !== "ADMIN" && user.role !== "BRANCH_MANAGER") {
+    if (user.role !== "ADMIN" && user.role !== "MANAGER") {
       return deny("Manager access required");
     }
   }
@@ -95,7 +95,7 @@ export async function proxy(request: NextRequest) {
   const res = NextResponse.next();
   res.headers.set("x-user-id", user.id);
   res.headers.set("x-user-role", user.role);
-  res.headers.set("x-user-branch", user.branchId || "");
+  res.headers.set("x-user-outlet", user.outletId || "");
   res.headers.set("x-user-name", user.name);
   return res;
 }

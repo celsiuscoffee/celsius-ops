@@ -5,29 +5,29 @@ import { getTransactions, getProducts } from "@/lib/storehub";
 /**
  * POST /api/storehub/sync-sales
  *
- * Pull sales transactions from StoreHub for a branch and date range,
+ * Pull sales transactions from StoreHub for an outlet and date range,
  * then upsert into SalesTransaction table.
  *
- * Body: { branchId, from?, to?, days? }
+ * Body: { outletId, from?, to?, days? }
  *  - from/to: "YYYY-MM-DD" date range (default: last 30 days)
  *  - days: shortcut — sync last N days (overrides from/to)
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { branchId, days } = body;
+  const { outletId, days } = body;
 
-  if (!branchId) {
-    return NextResponse.json({ error: "branchId is required" }, { status: 400 });
+  if (!outletId) {
+    return NextResponse.json({ error: "outletId is required" }, { status: 400 });
   }
 
-  // Get branch with storehubId
-  const branch = await prisma.branch.findUnique({ where: { id: branchId } });
-  if (!branch) {
-    return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+  // Get outlet with storehubId
+  const outlet = await prisma.outlet.findUnique({ where: { id: outletId } });
+  if (!outlet) {
+    return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
   }
-  if (!branch.storehubId) {
+  if (!outlet.storehubId) {
     return NextResponse.json(
-      { error: `Branch "${branch.name}" has no storehubId configured` },
+      { error: `Outlet "${outlet.name}" has no storehubId configured` },
       { status: 422 },
     );
   }
@@ -60,12 +60,12 @@ export async function POST(req: NextRequest) {
   // Fetch from StoreHub API
   let transactions;
   try {
-    transactions = await getTransactions(branch.storehubId, from, to);
+    transactions = await getTransactions(outlet.storehubId, from, to);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await prisma.storehubSync.create({
       data: {
-        branchId,
+        outletId,
         syncType: "SALES",
         status: "FAILED",
         lastSyncAt: new Date(),
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
           where: { storehubTxId: op.txId },
           create: {
             storehubTxId: op.txId,
-            branchId,
+            outletId,
             menuId: op.menuId,
             menuName: op.menuName,
             quantity: op.quantity,
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
   // Record successful sync
   await prisma.storehubSync.create({
     data: {
-      branchId,
+      outletId,
       syncType: "SALES",
       status: "SUCCESS",
       lastSyncAt: new Date(),
@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    branch: branch.name,
+    outlet: outlet.name,
     dateRange: { from: from.toISOString().split("T")[0], to: to.toISOString().split("T")[0] },
     transactions: transactions.length,
     salesRecords: created,

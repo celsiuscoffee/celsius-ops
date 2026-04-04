@@ -2,19 +2,19 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 /**
- * GET /api/reports/stock-valuation?branchId=xxx
+ * GET /api/reports/stock-valuation?outletId=xxx
  * Returns stock valuation: system qty, last counted qty, variance, and RM value per product.
- * If no branchId, returns all branches aggregated.
+ * If no outletId, returns all outlets aggregated.
  */
 export async function GET(req: NextRequest) {
-  const branchId = new URL(req.url).searchParams.get("branchId");
+  const outletId = new URL(req.url).searchParams.get("outletId");
 
   const [balances, supplierProducts, lastCounts, branches] = await Promise.all([
     // Stock balances (system expected qty)
     prisma.stockBalance.findMany({
-      where: branchId ? { branchId } : undefined,
+      where: outletId ? { outletId } : undefined,
       select: {
-        branchId: true,
+        outletId: true,
         productId: true,
         quantity: true,
         lastUpdated: true,
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
             category: { select: { name: true } },
           },
         },
-        branch: { select: { id: true, name: true } },
+        outlet: { select: { id: true, name: true } },
       },
     }),
 
@@ -41,13 +41,13 @@ export async function GET(req: NextRequest) {
       },
     }),
 
-    // Latest stock count items per branch — get most recent count per branch
+    // Latest stock count items per outlet — get most recent count per outlet
     prisma.stockCount.findMany({
-      where: branchId ? { branchId } : undefined,
+      where: outletId ? { outletId } : undefined,
       orderBy: { countDate: "desc" },
-      take: branchId ? 1 : 20,
+      take: outletId ? 1 : 20,
       select: {
-        branchId: true,
+        outletId: true,
         countDate: true,
         items: {
           select: {
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
     }),
 
     // All branches for filtering
-    prisma.branch.findMany({
+    prisma.outlet.findMany({
       select: { id: true, name: true },
     }),
   ]);
@@ -77,14 +77,14 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Build last-counted map per branch+product (from most recent count only)
+  // Build last-counted map per outlet+product (from most recent count only)
   const countedMap = new Map<string, number>();
-  const seenBranches = new Set<string>();
+  const seenOutlets = new Set<string>();
   for (const count of lastCounts) {
-    if (seenBranches.has(count.branchId)) continue; // only take most recent per branch
-    seenBranches.add(count.branchId);
+    if (seenOutlets.has(count.outletId)) continue; // only take most recent per outlet
+    seenOutlets.add(count.outletId);
     for (const item of count.items) {
-      const key = `${count.branchId}:${item.productId}`;
+      const key = `${count.outletId}:${item.productId}`;
       countedMap.set(key, item.countedQty ? Number(item.countedQty) : 0);
     }
   }
@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
   const items = balances.map((bal) => {
     const systemQty = Number(bal.quantity);
     const costPerUnit = costMap.get(bal.productId) ?? 0;
-    const countedKey = `${bal.branchId}:${bal.productId}`;
+    const countedKey = `${bal.outletId}:${bal.productId}`;
     const lastCountedQty = countedMap.get(countedKey) ?? null;
     const variance = lastCountedQty !== null ? lastCountedQty - systemQty : null;
     const systemValue = systemQty * costPerUnit;
@@ -105,8 +105,8 @@ export async function GET(req: NextRequest) {
       sku: bal.product.sku,
       category: bal.product.category.name,
       baseUom: bal.product.baseUom,
-      branchId: bal.branchId,
-      branchName: bal.branch.name,
+      outletId: bal.outletId,
+      outletName: bal.outlet.name,
       systemQty,
       lastCountedQty,
       variance,
@@ -135,7 +135,7 @@ export async function GET(req: NextRequest) {
       valueDifference: Math.round((totalCountedValue - totalSystemValue) * 100) / 100,
       itemsWithVariance: itemsWithVariance.length,
     },
-    branches,
+    outlets,
     items,
   });
 }

@@ -10,14 +10,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const body = await req.json();
-  const { name, ruleType, condition, threshold, branches, approverIds, isActive } = body;
+  const { name, ruleType, condition, threshold, outlets, approverIds, isActive } = body;
 
   const data: Record<string, unknown> = {};
   if (name !== undefined) data.name = name;
   if (ruleType !== undefined) data.ruleType = ruleType;
   if (condition !== undefined) data.condition = condition;
   if (threshold !== undefined) data.threshold = threshold;
-  if (branches !== undefined) data.branches = branches;
+  if (outlets !== undefined) data.outlets = outlets;
   if (approverIds !== undefined) data.approverIds = approverIds;
   if (isActive !== undefined) data.isActive = isActive;
 

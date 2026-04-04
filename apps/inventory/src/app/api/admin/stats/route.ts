@@ -14,7 +14,7 @@ export async function GET() {
     products,
     suppliers,
     categories,
-    branches,
+    outlets,
     staff,
     menus,
     invoices,
@@ -29,7 +29,7 @@ export async function GET() {
     prisma.product.count({ where: { isActive: true } }),
     prisma.supplier.count({ where: { status: "ACTIVE" } }),
     prisma.category.count(),
-    prisma.branch.count(),
+    prisma.outlet.count(),
     prisma.user.count({ where: { status: "ACTIVE" } }),
     prisma.menu.count({ where: { isActive: true } }),
     prisma.invoice.count(),
@@ -68,8 +68,8 @@ export async function GET() {
       orderBy: { countDate: "desc" },
       select: {
         countDate: true,
-        branchId: true,
-        branch: { select: { name: true } },
+        outletId: true,
+        outlet: { select: { name: true } },
         items: {
           select: { productId: true, expectedQty: true, countedQty: true },
         },
@@ -134,7 +134,7 @@ export async function GET() {
       itemsWithVariance,
       totalItems: latestStockCount.items.length,
       countDate: latestStockCount.countDate.toISOString(),
-      branch: latestStockCount.branch.name,
+      outlet: latestStockCount.outlet.name,
     };
   }
 
@@ -142,7 +142,7 @@ export async function GET() {
     products,
     suppliers,
     categories,
-    branches,
+    outlets,
     staff,
     menus,
     invoices: {

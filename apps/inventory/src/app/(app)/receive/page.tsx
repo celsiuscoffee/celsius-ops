@@ -68,7 +68,7 @@ interface ReceivedQty {
 interface UserSession {
   id: string;
   name: string;
-  branchId: string;
+  outletId: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -210,7 +210,7 @@ export default function ReceivePage() {
 
     const payload = {
       orderId: selectedPO.id,
-      branchId: user.branchId,
+      outletId: user.outletId,
       supplierId: selectedPO.supplierId,
       items: selectedPO.items.map((item) => {
         const receivedQty = parseFloat(receivedQtys[item.id]?.qty || "0") || 0;

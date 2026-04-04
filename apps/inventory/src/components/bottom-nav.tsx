@@ -10,16 +10,16 @@ type Tab = { href: string; label: string; icon: typeof Home; minRole?: string };
 const allTabs: Tab[] = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/check", label: "Check", icon: ClipboardCheck },
-  { href: "/order", label: "Order", icon: ShoppingCart, minRole: "BRANCH_MANAGER" },
+  { href: "/order", label: "Order", icon: ShoppingCart, minRole: "MANAGER" },
   { href: "/receive", label: "Receive", icon: Package },
-  { href: "/transfer", label: "Transfer", icon: ArrowRightLeft, minRole: "BRANCH_MANAGER" },
-  { href: "/wastage", label: "Wastage", icon: Trash2, minRole: "BRANCH_MANAGER" },
+  { href: "/transfer", label: "Transfer", icon: ArrowRightLeft, minRole: "MANAGER" },
+  { href: "/wastage", label: "Wastage", icon: Trash2, minRole: "MANAGER" },
   { href: "/profile", label: "Profile", icon: User },
 ];
 
 const ROLE_LEVEL: Record<string, number> = {
   STAFF: 1,
-  BRANCH_MANAGER: 2,
+  MANAGER: 2,
   ADMIN: 3,
 };
 
