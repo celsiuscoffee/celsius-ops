@@ -603,3 +603,25 @@ enum SyncStatus {
   FAILED
   IN_PROGRESS
 }
+
+// ─── APPROVAL RULES ────────────────────────────────────────
+
+model ApprovalRule {
+  id          String             @id @default(uuid())
+  name        String
+  ruleType    ApprovalRuleType
+  condition   String
+  threshold   Decimal?
+  outlets     String[]           @default([])
+  approverIds String[]           @default([])
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+enum ApprovalRuleType {
+  ORDER_APPROVAL
+  STOCK_ADJUSTMENT
+  STOCK_TRANSFER
+  CREDIT_NOTE
+}
