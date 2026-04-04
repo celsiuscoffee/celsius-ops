@@ -1,1 +1,604 @@
-../../packages/db/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── OUTLETS ────────────────────────────────────────────────
+
+model Outlet {
+  id        String       @id @default(uuid())
+  code      String       @unique // e.g. "CC001", "CF Nilai"
+  name      String // e.g. "Celsius Coffee IOI Conezion"
+  type      OutletType   @default(OUTLET)
+  address   String
+  city      String
+  state     String
+  phone     String?
+  status    OutletStatus @default(ACTIVE)
+  storehubId String?     @unique // StoreHub outlet ID for sync
+
+  // Location
+  lat       Decimal?
+  lng       Decimal?
+
+  // Operating hours
+  openTime  String?  @default("08:00")
+  closeTime String?  @default("22:00")
+  daysOpen  Int[]    @default([1, 2, 3, 4, 5, 6, 7])
+
+  // Pickup config
+  isOpen        Boolean @default(false)
+  isBusy        Boolean @default(false)
+  pickupTimeMins Int    @default(15)
+
+  // Loyalty link
+  loyaltyOutletId String?
+
+  // Staff
+  staffPin  String?
+
+  // Stripe
+  stripeAccountId  String?
+  stripeOnboarded  Boolean @default(false)
+  stripeEnabled    Boolean @default(false)
+
+  // Revenue Monster
+  rmMerchantId    String?
+  rmClientId      String?
+  rmClientSecret  String?
+  rmPrivateKey    String?
+  rmIsProduction  Boolean @default(false)
+  rmEnabled       Boolean @default(false)
+
+  // Bukku (accounting)
+  bukkuToken      String?
+  bukkuSubdomain  String?
+  bukkuEnabled    Boolean @default(false)
+
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  users             User[]
+  outletProducts    OutletProduct[]
+  orders            Order[]
+  invoices          Invoice[]
+  stockCounts       StockCount[]
+  stockBalances     StockBalance[]
+  stockAdjustments  StockAdjustment[]
+  receivings        Receiving[]
+  parLevels         ParLevel[]
+  transfersFrom     StockTransfer[] @relation("TransferFrom")
+  transfersTo       StockTransfer[] @relation("TransferTo")
+  storehubSyncs     StorehubSync[]
+}
+
+enum OutletType {
+  OUTLET
+  CENTRAL_KITCHEN
+}
+
+enum OutletStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// ─── USERS ──────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(uuid())
+  name         String
+  email        String?    @unique
+  phone        String     @unique // Malaysian phone, used for OTP login
+  role         UserRole
+  outletId     String?
+  outlet       Outlet?    @relation(fields: [outletId], references: [id])
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Auth
+  username     String?    @unique
+  passwordHash String?
+  pin          String?
+
+  // Access control
+  outletIds    String[]   @default([])
+  appAccess    String[]   @default([]) // e.g. ["backoffice", "inventory", "loyalty", "pickup"]
+  moduleAccess Json       @default("{}") // e.g. {"inventory": ["stock_count", "receiving"]}
+  lastLoginAt  DateTime?
+
+  ordersCreated    Order[]           @relation("OrderCreatedBy")
+  ordersApproved   Order[]           @relation("OrderApprovedBy")
+  stockCounts      StockCount[]
+  stockAdjustments StockAdjustment[]
+  receivings       Receiving[]
+  transfers        StockTransfer[]
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  DEACTIVATED
+}
+
+// ─── CATEGORIES ─────────────────────────────────────────────
+
+model Category {
+  id       String    @id @default(uuid())
+  name     String    @unique
+  slug     String    @unique
+  products Product[]
+}
+
+// ─── PRODUCTS (Inventory Items) ─────────────────────────────
+
+model Product {
+  id            String   @id @default(uuid())
+  name          String
+  sku           String   @unique
+  categoryId    String
+  category      Category @relation(fields: [categoryId], references: [id])
+  description   String?
+  imageUrl      String?
+  baseUom       String
+  tags          String[] @default([])
+  storageArea   String?
+  shelfLifeDays Int?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  packages          ProductPackage[]
+  outletProducts    OutletProduct[]
+  supplierProducts  SupplierProduct[]
+  orderItems        OrderItem[]
+  stockCountItems   StockCountItem[]
+  stockBalances     StockBalance[]
+  stockAdjustments  StockAdjustment[]
+  receivingItems    ReceivingItem[]
+  parLevels         ParLevel[]
+  menuIngredients   MenuIngredient[]
+  transferItems     StockTransferItem[]
+}
+
+model ProductPackage {
+  id               String  @id @default(uuid())
+  productId        String
+  product          Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  packageName      String
+  packageLabel     String
+  conversionFactor Decimal
+  isDefault        Boolean @default(false)
+
+  supplierProducts SupplierProduct[]
+  orderItems       OrderItem[]
+  stockCountItems  StockCountItem[]
+  receivingItems   ReceivingItem[]
+  transferItems    StockTransferItem[]
+
+  @@unique([productId, packageName])
+}
+
+// ─── SUPPLIERS ───────────────────────────────────���──────────
+
+model Supplier {
+  id           String         @id @default(uuid())
+  name         String
+  logoUrl      String?
+  location     String?
+  supplierCode String?        @unique
+  phone        String?
+  email        String?
+  status       SupplierStatus @default(ACTIVE)
+  tags         String[]       @default([])
+  leadTimeDays Int            @default(1)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  supplierProducts SupplierProduct[]
+  priceHistory     PriceHistory[]
+  orders           Order[]
+  invoices         Invoice[]
+  receivings       Receiving[]
+}
+
+enum SupplierStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model SupplierProduct {
+  id               String          @id @default(uuid())
+  supplierId       String
+  supplier         Supplier        @relation(fields: [supplierId], references: [id])
+  productId        String
+  product          Product         @relation(fields: [productId], references: [id])
+  productPackageId String?
+  productPackage   ProductPackage? @relation(fields: [productPackageId], references: [id])
+  price            Decimal
+  moq              Decimal?
+  isActive         Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([supplierId, productId, productPackageId])
+}
+
+model PriceHistory {
+  id               String   @id @default(uuid())
+  supplierId       String
+  supplier         Supplier @relation(fields: [supplierId], references: [id])
+  productId        String
+  productPackageId String?
+  oldPrice         Decimal
+  newPrice         Decimal
+  changePercent    Decimal
+  changedAt        DateTime @default(now())
+
+  @@index([supplierId, changedAt])
+}
+
+// ─── OUTLET PRODUCTS ──���─────────────────────────────────────
+
+model OutletProduct {
+  id             String         @id @default(uuid())
+  outletId       String
+  outlet         Outlet         @relation(fields: [outletId], references: [id])
+  productId      String
+  product        Product        @relation(fields: [productId], references: [id])
+  isActive       Boolean        @default(true)
+  countFrequency CountFrequency @default(MONTHLY)
+
+  @@unique([outletId, productId])
+}
+
+enum CountFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+// ─── ORDERS (Purchase Orders) ───────────────────────────────
+
+model Order {
+  id           String      @id @default(uuid())
+  orderNumber  String      @unique
+  outletId     String
+  outlet       Outlet      @relation(fields: [outletId], references: [id])
+  supplierId   String
+  supplier     Supplier    @relation(fields: [supplierId], references: [id])
+  status       OrderStatus @default(DRAFT)
+  totalAmount  Decimal     @default(0)
+  notes        String?
+  deliveryDate DateTime?
+  createdById  String
+  createdBy    User        @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  approvedById String?
+  approvedBy   User?       @relation("OrderApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  items      OrderItem[]
+  receivings Receiving[]
+  invoices   Invoice[]
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  AWAITING_DELIVERY
+  PARTIALLY_RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+model OrderItem {
+  id               String          @id @default(uuid())
+  orderId          String
+  order            Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product         @relation(fields: [productId], references: [id])
+  productPackageId String?
+  productPackage   ProductPackage? @relation(fields: [productPackageId], references: [id])
+  quantity         Decimal
+  unitPrice        Decimal
+  totalPrice       Decimal
+  notes            String?
+
+  @@unique([orderId, productId, productPackageId])
+}
+
+// ─── INVOICES ───────────────────────────────────────────────
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  orderId       String?
+  order         Order?        @relation(fields: [orderId], references: [id])
+  outletId      String
+  outlet        Outlet        @relation(fields: [outletId], references: [id])
+  supplierId    String
+  supplier      Supplier      @relation(fields: [supplierId], references: [id])
+  amount        Decimal
+  status        InvoiceStatus @default(DRAFT)
+  issueDate     DateTime      @default(now())
+  dueDate       DateTime?
+  photos        String[]      @default([])
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  OVERDUE
+}
+
+// ─── RECEIVING (Goods Received) ─────────────────────────────
+
+model Receiving {
+  id            String          @id @default(uuid())
+  orderId       String?
+  order         Order?          @relation(fields: [orderId], references: [id])
+  outletId      String
+  outlet        Outlet          @relation(fields: [outletId], references: [id])
+  supplierId    String
+  supplier      Supplier        @relation(fields: [supplierId], references: [id])
+  receivedById  String
+  receivedBy    User            @relation(fields: [receivedById], references: [id])
+  receivedAt    DateTime        @default(now())
+  status        ReceivingStatus @default(COMPLETE)
+  invoicePhotos String[]        @default([])
+  notes         String?
+  createdAt     DateTime        @default(now())
+
+  items ReceivingItem[]
+}
+
+enum ReceivingStatus {
+  COMPLETE
+  PARTIAL
+  DISPUTED
+}
+
+model ReceivingItem {
+  id                String          @id @default(uuid())
+  receivingId       String
+  receiving         Receiving       @relation(fields: [receivingId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product         @relation(fields: [productId], references: [id])
+  productPackageId  String?
+  productPackage    ProductPackage? @relation(fields: [productPackageId], references: [id])
+  orderedQty        Decimal?
+  receivedQty       Decimal
+  expiryDate        DateTime?
+  discrepancyReason String?
+}
+
+// ─── STOCK COUNTS ───────────────────────────────────────────
+
+model StockCount {
+  id          String           @id @default(uuid())
+  outletId    String
+  outlet      Outlet           @relation(fields: [outletId], references: [id])
+  frequency   CountFrequency
+  countedById String
+  countedBy   User             @relation(fields: [countedById], references: [id])
+  countDate   DateTime         @default(now())
+  status      StockCountStatus @default(DRAFT)
+  notes       String?
+  createdAt   DateTime         @default(now())
+  submittedAt DateTime?
+  reviewedAt  DateTime?
+
+  items StockCountItem[]
+}
+
+enum StockCountStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+}
+
+model StockCountItem {
+  id               String     @id @default(uuid())
+  stockCountId     String
+  stockCount       StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product    @relation(fields: [productId], references: [id])
+  productPackageId String?
+  productPackage   ProductPackage? @relation(fields: [productPackageId], references: [id])
+  expectedQty      Decimal?
+  countedQty       Decimal?
+  isConfirmed      Boolean    @default(false)
+  varianceReason   String?
+
+  @@unique([stockCountId, productId, productPackageId])
+}
+
+// ─── STOCK BALANCES ─────────────────────────────────────────
+
+model StockBalance {
+  id          String   @id @default(uuid())
+  outletId    String
+  outlet      Outlet   @relation(fields: [outletId], references: [id])
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  quantity    Decimal  @default(0)
+  lastUpdated DateTime @default(now())
+
+  @@unique([outletId, productId])
+}
+
+// ─── STOCK ADJUSTMENTS ──────────────────────────────────────
+
+model StockAdjustment {
+  id             String         @id @default(uuid())
+  outletId       String
+  outlet         Outlet         @relation(fields: [outletId], references: [id])
+  productId      String
+  product        Product        @relation(fields: [productId], references: [id])
+  adjustmentType AdjustmentType
+  quantity       Decimal
+  costAmount     Decimal?
+  reason         String?
+  photoUrl       String?
+  adjustedById   String
+  adjustedBy     User           @relation(fields: [adjustedById], references: [id])
+  stockCountId   String?
+  createdAt      DateTime       @default(now())
+}
+
+enum AdjustmentType {
+  WASTAGE
+  BREAKAGE
+  EXPIRED
+  THEFT
+  CORRECTION
+  SPILLAGE
+  USED_NOT_RECORDED
+}
+
+// ─── STOCK TRANSFERS ────────────────────────────────────────
+
+model StockTransfer {
+  id              String         @id @default(uuid())
+  fromOutletId    String
+  fromOutlet      Outlet         @relation("TransferFrom", fields: [fromOutletId], references: [id])
+  toOutletId      String
+  toOutlet        Outlet         @relation("TransferTo", fields: [toOutletId], references: [id])
+  status          TransferStatus @default(PENDING)
+  transferredById String
+  transferredBy   User           @relation(fields: [transferredById], references: [id])
+  notes           String?
+  createdAt       DateTime       @default(now())
+  completedAt     DateTime?
+
+  items StockTransferItem[]
+}
+
+enum TransferStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model StockTransferItem {
+  id               String          @id @default(uuid())
+  transferId       String
+  transfer         StockTransfer   @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product         @relation(fields: [productId], references: [id])
+  productPackageId String?
+  productPackage   ProductPackage? @relation(fields: [productPackageId], references: [id])
+  quantity         Decimal
+}
+
+// ─── PAR LEVELS ──────────────────────────────────��──────────
+
+model ParLevel {
+  id             String   @id @default(uuid())
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+  outletId       String
+  outlet         Outlet   @relation(fields: [outletId], references: [id])
+  parLevel       Decimal
+  reorderPoint   Decimal
+  maxLevel       Decimal?
+  avgDailyUsage  Decimal?
+  lastCalculated DateTime?
+
+  @@unique([productId, outletId])
+}
+
+// ─── MENUS (from StoreHub) ──────────────────────────────────
+
+model Menu {
+  id           String   @id @default(uuid())
+  name         String
+  category     String?
+  sellingPrice Decimal?
+  storehubId   String   @unique
+  isActive     Boolean  @default(true)
+  lastSyncedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ingredients MenuIngredient[]
+  salesData   SalesTransaction[]
+}
+
+model MenuIngredient {
+  id           String  @id @default(uuid())
+  menuId       String
+  menu         Menu    @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product @relation(fields: [productId], references: [id])
+  quantityUsed Decimal
+  uom          String
+
+  @@unique([menuId, productId])
+}
+
+// ─── SALES TRANSACTIONS (from StoreHub) ──────────���──────────
+
+model SalesTransaction {
+  id           String   @id @default(uuid())
+  storehubTxId String   @unique
+  outletId     String
+  menuId       String?
+  menu         Menu?    @relation(fields: [menuId], references: [id])
+  menuName     String
+  quantity     Int
+  grossAmount  Decimal
+  transactedAt DateTime
+  syncedAt     DateTime @default(now())
+
+  @@index([outletId, transactedAt])
+  @@index([menuId])
+}
+
+// ─── STOREHUB SYNC STATUS ───────────────────────────────────
+
+model StorehubSync {
+  id          String       @id @default(uuid())
+  outletId    String
+  outlet      Outlet       @relation(fields: [outletId], references: [id])
+  syncType    SyncType
+  status      SyncStatus   @default(SUCCESS)
+  lastSyncAt  DateTime     @default(now())
+  recordCount Int          @default(0)
+  errorMessage String?
+  createdAt   DateTime     @default(now())
+
+  @@index([outletId, syncType, lastSyncAt])
+}
+
+enum SyncType {
+  PRODUCTS
+  SALES
+  EMPLOYEES
+}
+
+enum SyncStatus {
+  SUCCESS
+  FAILED
+  IN_PROGRESS
+}
