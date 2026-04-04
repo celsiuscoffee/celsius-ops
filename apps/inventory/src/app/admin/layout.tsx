@@ -10,13 +10,10 @@ import {
   Tags,
   LayoutDashboard,
   Building2,
-  Settings,
   Users,
   Coffee,
   ShieldCheck,
   FileText,
-  CreditCard,
-  DollarSign,
   FileBarChart,
   ArrowRightLeft,
   Plug,
@@ -26,6 +23,12 @@ import {
   Loader2,
   Menu,
   X,
+  Gift,
+  UserCheck,
+  RotateCcw,
+  Megaphone,
+  MessageSquare,
+  Sparkles,
 } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean };
@@ -39,8 +42,7 @@ const sidebarSections: NavSection[] = [
     ],
   },
   {
-    label: "Master Data",
-    adminOnly: true,
+    label: "Inventory",
     items: [
       { href: "/admin/products", label: "Products", icon: Package },
       { href: "/admin/suppliers", label: "Suppliers", icon: Truck },
@@ -49,7 +51,7 @@ const sidebarSections: NavSection[] = [
     ],
   },
   {
-    label: "Ordering",
+    label: "Procurement",
     items: [
       { href: "/admin/orders", label: "Purchase Orders", icon: ShoppingCart },
       { href: "/admin/receivings", label: "Receivings", icon: ArrowRightLeft },
@@ -57,12 +59,30 @@ const sidebarSections: NavSection[] = [
     ],
   },
   {
-    label: "Operations",
+    label: "Stock",
     items: [
-      { href: "/admin/outlets", label: "Outlets", icon: Building2, adminOnly: true },
-      { href: "/admin/staff", label: "Staff", icon: Users, adminOnly: true },
-      { href: "/admin/rules", label: "Approval Rules", icon: ShieldCheck, adminOnly: true },
       { href: "/admin/par-levels", label: "Par Levels", icon: TrendingDown, adminOnly: true },
+      { href: "/admin/reports/stock-valuation", label: "Stock Valuation", icon: FileBarChart, adminOnly: true },
+    ],
+  },
+  {
+    label: "Loyalty",
+    items: [
+      { href: "/admin/loyalty/members", label: "Members", icon: UserCheck },
+      { href: "/admin/loyalty/rewards", label: "Rewards", icon: Gift },
+      { href: "/admin/loyalty/redemptions", label: "Redemptions", icon: RotateCcw },
+      { href: "/admin/loyalty/campaigns", label: "Campaigns", icon: Megaphone },
+      { href: "/admin/loyalty/engage", label: "Engage", icon: MessageSquare },
+      { href: "/admin/loyalty/insights", label: "AI Insights", icon: Sparkles, adminOnly: true },
+    ],
+  },
+  {
+    label: "Operations",
+    adminOnly: true,
+    items: [
+      { href: "/admin/outlets", label: "Outlets", icon: Building2 },
+      { href: "/admin/staff", label: "Staff & Access", icon: Users },
+      { href: "/admin/rules", label: "Approval Rules", icon: ShieldCheck },
     ],
   },
   {
@@ -70,12 +90,6 @@ const sidebarSections: NavSection[] = [
     adminOnly: true,
     items: [
       { href: "/admin/integrations", label: "StoreHub & Bukku", icon: Plug },
-    ],
-  },
-  {
-    label: "Analytics",
-    items: [
-      { href: "/admin/reports", label: "Reports", icon: FileBarChart },
     ],
   },
 ];
@@ -91,7 +105,7 @@ export default function AdminLayout({
   const [loggingOut, setLoggingOut] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const isAdmin = userRole === "ADMIN";
+  const isAdmin = userRole === "OWNER" || userRole === "ADMIN";
   const roleLoaded = userRole !== null;
 
   useEffect(() => {
@@ -126,7 +140,7 @@ export default function AdminLayout({
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-white/70 hover:text-white">
           {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
-        <h1 className="font-heading text-sm font-bold text-white">Celsius Inventory</h1>
+        <h1 className="font-heading text-sm font-bold text-white">Celsius Ops</h1>
       </div>
 
       {/* Sidebar overlay */}
@@ -146,8 +160,8 @@ export default function AdminLayout({
               className="rounded-md"
             />
             <div>
-              <h1 className="font-heading text-base font-bold text-white">Celsius Inventory</h1>
-              <p className="text-[10px] text-white/50">Admin Panel</p>
+              <h1 className="font-heading text-base font-bold text-white">Celsius Ops</h1>
+              <p className="text-[10px] text-white/50">Backoffice</p>
             </div>
           </div>
         </div>
@@ -183,7 +197,7 @@ export default function AdminLayout({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-white/80 truncate">{userName}</p>
-                <p className="text-[10px] text-white/40">{userRole === "ADMIN" ? "Admin" : userRole === "MANAGER" ? "Manager" : "Staff"}</p>
+                <p className="text-[10px] text-white/40">{userRole === "OWNER" ? "Owner" : userRole === "ADMIN" ? "Admin" : userRole === "MANAGER" ? "Manager" : "Staff"}</p>
               </div>
               <button
                 onClick={handleLogout}

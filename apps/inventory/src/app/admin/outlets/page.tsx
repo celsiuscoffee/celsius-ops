@@ -5,16 +5,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Pencil, Building2, Loader2, Trash2, Power } from "lucide-react";
 
 type Outlet = {
   id: string; code: string; name: string; type: string; status: string;
   address: string; city: string; state: string; phone: string;
   staffCount: number; productCount: number;
+  // New settings
+  lat: number | null; lng: number | null;
+  openTime: string | null; closeTime: string | null;
+  daysOpen: number[] | null;
+  isOpen: boolean; isBusy: boolean; pickupTimeMins: number;
+  stripeEnabled: boolean; rmEnabled: boolean; bukkuEnabled: boolean;
+  bukkuSubdomain: string | null;
+  storehubId: string | null;
 };
 
-type OutletForm = { name: string; code: string; type: string; address: string; city: string; state: string; phone: string };
-const emptyForm: OutletForm = { name: "", code: "", type: "OUTLET", address: "", city: "", state: "", phone: "" };
+type OutletForm = {
+  name: string; code: string; type: string; address: string; city: string; state: string; phone: string;
+  // Settings
+  openTime: string; closeTime: string;
+  pickupTimeMins: number;
+  storehubId: string;
+};
+
+const emptyForm: OutletForm = {
+  name: "", code: "", type: "OUTLET", address: "", city: "", state: "", phone: "",
+  openTime: "", closeTime: "", pickupTimeMins: 15, storehubId: "",
+};
 
 export default function OutletsPage() {
   const [outlets, setOutlets] = useState<Outlet[]>([]);
@@ -24,6 +43,7 @@ export default function OutletsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<OutletForm>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState("details");
 
   const loadOutlets = () => {
     fetch("/api/outlets")
@@ -50,6 +70,10 @@ export default function OutletsPage() {
           address: form.address || "",
           city: form.city || "",
           state: form.state || "",
+          openTime: form.openTime || null,
+          closeTime: form.closeTime || null,
+          pickupTimeMins: form.pickupTimeMins,
+          storehubId: form.storehubId || null,
         }),
       });
       setDialogOpen(false);
@@ -83,10 +107,16 @@ export default function OutletsPage() {
 
   const filtered = outlets.filter((b) => filter === "all" || b.type === filter);
 
-  const openAdd = () => { setForm(emptyForm); setEditingId(null); setDialogOpen(true); };
+  const openAdd = () => { setForm(emptyForm); setEditingId(null); setActiveTab("details"); setDialogOpen(true); };
   const openEdit = (b: Outlet) => {
-    setForm({ name: b.name, code: b.code, type: b.type, address: b.address, city: b.city, state: b.state, phone: b.phone });
+    setForm({
+      name: b.name, code: b.code, type: b.type, address: b.address, city: b.city, state: b.state, phone: b.phone,
+      openTime: b.openTime || "", closeTime: b.closeTime || "",
+      pickupTimeMins: b.pickupTimeMins ?? 15,
+      storehubId: b.storehubId || "",
+    });
     setEditingId(b.id);
+    setActiveTab("details");
     setDialogOpen(true);
   };
 
@@ -126,7 +156,7 @@ export default function OutletsPage() {
               <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet Code</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet Name</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Address</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Settings</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Phone</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Staff</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Products</th>
@@ -151,7 +181,35 @@ export default function OutletsPage() {
                     {outlet.status === "ACTIVE" ? "Active" : "Deactivated"}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-xs text-gray-500 max-w-[200px] truncate">{outlet.address}</td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {/* Open/Closed indicator */}
+                    <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${outlet.isOpen ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                      <span className={`inline-block h-1.5 w-1.5 rounded-full ${outlet.isOpen ? "bg-green-500" : "bg-gray-400"}`} />
+                      {outlet.isOpen ? "Open" : "Closed"}
+                    </span>
+                    {/* Pickup time */}
+                    <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                      {outlet.pickupTimeMins}m
+                    </span>
+                    {/* Operating hours */}
+                    {outlet.openTime && outlet.closeTime && (
+                      <span className="rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
+                        {outlet.openTime}-{outlet.closeTime}
+                      </span>
+                    )}
+                    {/* Integration badges */}
+                    {outlet.storehubId && (
+                      <span className="rounded-full bg-orange-50 px-1.5 py-0.5 text-[10px] font-medium text-orange-700">StoreHub</span>
+                    )}
+                    {outlet.stripeEnabled && (
+                      <span className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">Stripe</span>
+                    )}
+                    {outlet.bukkuEnabled && (
+                      <span className="rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-700">Bukku</span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-xs text-gray-500">{outlet.phone}</td>
                 <td className="px-4 py-3 text-gray-600">{outlet.staffCount}</td>
                 <td className="px-4 py-3 text-gray-600">{outlet.productCount}</td>
@@ -179,31 +237,63 @@ export default function OutletsPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{editingId ? "Edit Outlet" : "Add Outlet"}</DialogTitle></DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-sm font-medium text-gray-700">Outlet Name</label><Input className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-              <div><label className="text-sm font-medium text-gray-700">Outlet Code</label><Input className="mt-1" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Type</label>
-                <select className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                  <option value="OUTLET">Outlet</option>
-                  <option value="CENTRAL_KITCHEN">Central Kitchen</option>
-                </select>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="w-full">
+              <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
+              <TabsTrigger value="settings" className="flex-1">Settings</TabsTrigger>
+            </TabsList>
+            <TabsContent value="details">
+              <div className="grid gap-4 py-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-sm font-medium text-gray-700">Outlet Name</label><Input className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+                  <div><label className="text-sm font-medium text-gray-700">Outlet Code</label><Input className="mt-1" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Type</label>
+                    <select className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                      <option value="OUTLET">Outlet</option>
+                      <option value="CENTRAL_KITCHEN">Central Kitchen</option>
+                    </select>
+                  </div>
+                  <div><label className="text-sm font-medium text-gray-700">Phone</label><Input className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+                </div>
+                <div><label className="text-sm font-medium text-gray-700">Address</label><Input className="mt-1" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-sm font-medium text-gray-700">City</label><Input className="mt-1" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
+                  <div><label className="text-sm font-medium text-gray-700">State</label><Input className="mt-1" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} /></div>
+                </div>
               </div>
-              <div><label className="text-sm font-medium text-gray-700">Phone</label><Input className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-            </div>
-            <div><label className="text-sm font-medium text-gray-700">Address</label><Input className="mt-1" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-sm font-medium text-gray-700">City</label><Input className="mt-1" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
-              <div><label className="text-sm font-medium text-gray-700">State</label><Input className="mt-1" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} /></div>
-            </div>
-            <Button onClick={handleSubmit} disabled={saving || !form.name || !form.code} className="w-full bg-terracotta hover:bg-terracotta-dark disabled:opacity-50">
-              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-              {editingId ? "Save Changes" : "Add Outlet"}
-            </Button>
-          </div>
+            </TabsContent>
+            <TabsContent value="settings">
+              <div className="grid gap-4 py-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Open Time</label>
+                    <Input className="mt-1" type="time" value={form.openTime} onChange={(e) => setForm({ ...form, openTime: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Close Time</label>
+                    <Input className="mt-1" type="time" value={form.closeTime} onChange={(e) => setForm({ ...form, closeTime: e.target.value })} />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Pickup Time (minutes)</label>
+                  <Input className="mt-1" type="number" min={1} value={form.pickupTimeMins} onChange={(e) => setForm({ ...form, pickupTimeMins: parseInt(e.target.value) || 0 })} />
+                  <p className="mt-1 text-xs text-gray-400">Estimated time for order pickup</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">StoreHub ID</label>
+                  <Input className="mt-1" value={form.storehubId} onChange={(e) => setForm({ ...form, storehubId: e.target.value })} placeholder="e.g. sh_abc123" />
+                  <p className="mt-1 text-xs text-gray-400">Links this outlet to StoreHub POS</p>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+          <Button onClick={handleSubmit} disabled={saving || !form.name || !form.code} className="w-full bg-terracotta hover:bg-terracotta-dark disabled:opacity-50">
+            {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+            {editingId ? "Save Changes" : "Add Outlet"}
+          </Button>
         </DialogContent>
       </Dialog>
     </div>

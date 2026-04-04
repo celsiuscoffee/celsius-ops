@@ -4,27 +4,28 @@ import { verifyToken } from "@/lib/auth";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/pin"];
 
-// Admin-only routes (pages + APIs behind them)
+// Owner/Admin-only routes
 const ADMIN_ONLY = [
-  "/admin/products",
-  "/admin/categories",
-  "/admin/suppliers",
   "/admin/outlets",
   "/admin/staff",
   "/admin/rules",
-  "/admin/menus",
   "/admin/integrations",
-  "/admin/par-levels",
   "/api/staff",
 ];
 
-// Admin + Manager routes
+// Admin + Manager routes (includes master data, procurement, loyalty, reports)
 const MANAGER_ROUTES = [
   "/admin",
+  "/admin/products",
+  "/admin/categories",
+  "/admin/suppliers",
+  "/admin/menus",
   "/admin/orders",
   "/admin/receivings",
   "/admin/invoices",
+  "/admin/par-levels",
   "/admin/reports",
+  "/admin/loyalty",
 ];
 
 // Staff cannot access these app pages (manager+ only)
@@ -72,13 +73,13 @@ export async function proxy(request: NextRequest) {
 
   // Admin-only pages
   if (ADMIN_ONLY.some((p) => pathname.startsWith(p))) {
-    if (user.role !== "ADMIN") return deny("Admin access required");
+    if (user.role !== "OWNER" && user.role !== "ADMIN") return deny("Admin access required");
   }
 
   // Manager routes (admin + manager)
   if (pathname.startsWith("/admin")) {
     if (MANAGER_ROUTES.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
-      if (user.role !== "ADMIN" && user.role !== "MANAGER") {
+      if (user.role !== "OWNER" && user.role !== "ADMIN" && user.role !== "MANAGER") {
         return deny("Manager access required");
       }
     }
@@ -86,7 +87,7 @@ export async function proxy(request: NextRequest) {
 
   // Mobile app routes restricted to manager+
   if (MANAGER_APP_ROUTES.some((p) => pathname.startsWith(p))) {
-    if (user.role !== "ADMIN" && user.role !== "MANAGER") {
+    if (user.role !== "OWNER" && user.role !== "ADMIN" && user.role !== "MANAGER") {
       return deny("Manager access required");
     }
   }

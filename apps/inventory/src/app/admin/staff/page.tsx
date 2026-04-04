@@ -13,6 +13,7 @@ type Staff = {
   phone: string; email: string; username: string | null;
   hasPassword: boolean; hasPin: boolean;
   status: string; addedDate: string;
+  appAccess: string[];
 };
 
 type OutletOption = { id: string; name: string };
@@ -22,6 +23,7 @@ type StaffForm = {
   phone: string; email: string;
   username: string; password: string;
   pin: string;
+  appAccess: string[];
 };
 
 const emptyForm: StaffForm = {
@@ -29,6 +31,7 @@ const emptyForm: StaffForm = {
   phone: "", email: "",
   username: "", password: "",
   pin: "",
+  appAccess: [],
 };
 
 export default function StaffPage() {
@@ -85,6 +88,7 @@ export default function StaffPage() {
       username: s.username || "",
       password: "",
       pin: "",
+      appAccess: s.appAccess || [],
     });
     setEditingId(s.id);
     setEditingStaff(s);
@@ -116,6 +120,7 @@ export default function StaffPage() {
         outletId: form.outletId || null,
         outletIds: form.outletIds,
         username: form.username || null,
+        appAccess: isOwnerOrAdmin ? ["backoffice", "inventory", "loyalty", "pickup"] : form.appAccess,
       };
 
       // Only send password if set
@@ -159,18 +164,39 @@ export default function StaffPage() {
   };
 
   const roleLabel = (role: string) => {
+    if (role === "OWNER") return "Owner";
     if (role === "ADMIN") return "Admin";
     if (role === "MANAGER") return "Manager";
     return "Staff";
   };
 
   const roleColor = (role: string) => {
+    if (role === "OWNER") return "border-amber-500 text-amber-600";
     if (role === "ADMIN") return "border-terracotta text-terracotta";
     if (role === "MANAGER") return "border-blue-500 text-blue-600";
     return "border-gray-300 text-gray-500";
   };
 
-  const isAdminOrManager = form.role === "ADMIN" || form.role === "MANAGER";
+  const isAdminOrManager = form.role === "OWNER" || form.role === "ADMIN" || form.role === "MANAGER";
+
+  const availableApps = ["backoffice", "inventory", "loyalty", "pickup"] as const;
+  const appLabel: Record<string, string> = { backoffice: "BO", inventory: "INV", loyalty: "LOY", pickup: "PU" };
+  const appColor: Record<string, string> = {
+    backoffice: "bg-slate-100 text-slate-600",
+    inventory: "bg-emerald-50 text-emerald-600",
+    loyalty: "bg-purple-50 text-purple-600",
+    pickup: "bg-orange-50 text-orange-600",
+  };
+  const isOwnerOrAdmin = form.role === "OWNER" || form.role === "ADMIN";
+
+  const toggleAppAccess = (app: string) => {
+    setForm((prev) => ({
+      ...prev,
+      appAccess: prev.appAccess.includes(app)
+        ? prev.appAccess.filter((a) => a !== app)
+        : [...prev.appAccess, app],
+    }));
+  };
 
   if (loading) {
     return (
@@ -211,6 +237,7 @@ export default function StaffPage() {
               <th className="px-4 py-3 text-left font-medium text-gray-500">User</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Role</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet Access</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Apps</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Phone</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Login</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
@@ -239,6 +266,21 @@ export default function StaffPage() {
                       <span key={name} className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-600">{name}</span>
                     ))}
                     {!s.outlet && s.outletNames.length === 0 && <span className="text-xs text-gray-400">All outlets</span>}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    {(s.role === "OWNER" || s.role === "ADMIN"
+                      ? ["backoffice", "inventory", "loyalty", "pickup"]
+                      : (s.appAccess || [])
+                    ).map((app) => (
+                      <span key={app} className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${appColor[app] || "bg-gray-100 text-gray-500"}`}>
+                        {appLabel[app] || app}
+                      </span>
+                    ))}
+                    {s.role !== "OWNER" && s.role !== "ADMIN" && (!s.appAccess || s.appAccess.length === 0) && (
+                      <span className="text-[10px] text-gray-300">None</span>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-500">{s.phone || "—"}</td>
@@ -286,7 +328,7 @@ export default function StaffPage() {
                 onClick={() => setActiveTab(tab)}
                 className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${activeTab === tab ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
               >
-                {tab === "details" ? "Details" : tab === "access" ? "Outlet Access" : "Login & Security"}
+                {tab === "details" ? "Details" : tab === "access" ? "Access" : "Login & Security"}
               </button>
             ))}
           </div>
@@ -302,6 +344,7 @@ export default function StaffPage() {
                 <div>
                   <label className="text-sm font-medium">Role</label>
                   <select className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+                    <option value="OWNER">Owner</option>
                     <option value="ADMIN">Company Admin</option>
                     <option value="MANAGER">Manager</option>
                     <option value="STAFF">Staff</option>
@@ -324,9 +367,43 @@ export default function StaffPage() {
             </div>
           )}
 
-          {/* Tab: Outlet Access */}
+          {/* Tab: Access */}
           {activeTab === "access" && (
             <div className="py-2">
+              {/* App Access */}
+              <div className="mb-5">
+                <h3 className="text-sm font-semibold text-gray-900 mb-1">App Access</h3>
+                <p className="text-xs text-gray-400 mb-3">
+                  {isOwnerOrAdmin ? "Owner and Admin roles have full access to all apps." : "Select which apps this user can access."}
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {availableApps.map((app) => {
+                    const isSelected = isOwnerOrAdmin || form.appAccess.includes(app);
+                    return (
+                      <button
+                        key={app}
+                        onClick={() => { if (!isOwnerOrAdmin) toggleAppAccess(app); }}
+                        disabled={isOwnerOrAdmin}
+                        className={`flex items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
+                          isSelected
+                            ? "border-terracotta/30 bg-terracotta/5"
+                            : "border-gray-200 hover:bg-gray-50"
+                        } ${isOwnerOrAdmin ? "cursor-default opacity-75" : "cursor-pointer"}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`flex h-5 w-5 items-center justify-center rounded ${isSelected ? "bg-terracotta text-white" : "border border-gray-300"}`}>
+                            {isSelected && <Check className="h-3 w-3" />}
+                          </div>
+                          <span className={`capitalize ${isSelected ? "font-medium text-gray-900" : "text-gray-600"}`}>{app}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Outlet Access */}
+              <h3 className="text-sm font-semibold text-gray-900 mb-1">Outlet Access</h3>
               <p className="text-sm text-gray-500 mb-3">Select which outlets this user can access. Primary outlet is always included.</p>
               <div className="space-y-1.5">
                 {outlets.map((b) => {
