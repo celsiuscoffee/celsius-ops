@@ -783,7 +783,7 @@ export default function CreateOrderPage() {
 
       {/* WhatsApp preview dialog */}
       <Dialog open={whatsappDialog.open} onOpenChange={(open) => setWhatsappDialog((prev) => ({ ...prev, open }))}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Send Order to {whatsappDialog.supplier}</DialogTitle>
           </DialogHeader>

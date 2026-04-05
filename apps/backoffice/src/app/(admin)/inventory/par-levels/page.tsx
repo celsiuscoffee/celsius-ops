@@ -516,7 +516,7 @@ export default function ParLevelsPage() {
 
       {/* Bulk Set Dialog */}
       <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Bulk Set Par Levels</DialogTitle>
           </DialogHeader>

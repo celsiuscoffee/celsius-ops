@@ -106,7 +106,7 @@ export default function CategoriesPage() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Category" : "Add Category"}</DialogTitle>
           </DialogHeader>

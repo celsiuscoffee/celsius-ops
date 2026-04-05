@@ -406,7 +406,7 @@ export default function ProductsPage() {
 
       {/* Bulk action dialog */}
       <Dialog open={bulkAction !== null} onOpenChange={(open) => { if (!open) setBulkAction(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {bulkAction === "category" && "Change Category"}
@@ -469,7 +469,7 @@ export default function ProductsPage() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Product" : "Add Product"}</DialogTitle>
           </DialogHeader>

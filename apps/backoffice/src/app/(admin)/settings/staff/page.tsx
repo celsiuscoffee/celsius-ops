@@ -382,7 +382,7 @@ export default function StaffPage() {
 
       {/* Staff Edit/Add Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingId ? "Edit Staff" : "Add Staff Member"}</DialogTitle></DialogHeader>
 
           {/* Tabs */}

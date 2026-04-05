@@ -235,7 +235,7 @@ export default function OutletsPage() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingId ? "Edit Outlet" : "Add Outlet"}</DialogTitle></DialogHeader>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="w-full">

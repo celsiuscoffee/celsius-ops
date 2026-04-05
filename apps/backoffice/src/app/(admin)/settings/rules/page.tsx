@@ -247,7 +247,7 @@ export default function RulesPage() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingRule ? "Edit Approval Rule" : "Create Approval Rule"}</DialogTitle>
           </DialogHeader>

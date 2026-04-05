@@ -321,7 +321,7 @@ export default function SuppliersPage() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Supplier" : "Add Supplier"}</DialogTitle>
           </DialogHeader>
@@ -366,7 +366,7 @@ export default function SuppliersPage() {
 
       {/* Price List Dialog */}
       <Dialog open={priceDialogOpen} onOpenChange={setPriceDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedSupplier?.name} — Price List</DialogTitle>
           </DialogHeader>

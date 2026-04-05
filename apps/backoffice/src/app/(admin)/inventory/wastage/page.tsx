@@ -205,7 +205,7 @@ export default function WastagePage() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="mx-auto max-w-sm">
+        <DialogContent className="mx-auto max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Record Wastage</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div>
