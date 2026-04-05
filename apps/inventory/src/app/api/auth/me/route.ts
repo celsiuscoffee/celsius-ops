@@ -10,13 +10,23 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.id },
-    select: { password: true, username: true, permissions: true },
+    select: {
+      passwordHash: true,
+      username: true,
+      moduleAccess: true,
+      appAccess: true,
+    },
   });
+
+  // Extract inventory module permissions from moduleAccess JSON
+  const moduleAccess = (user?.moduleAccess as Record<string, string[]>) ?? {};
+  const permissions = moduleAccess["inventory"] ?? [];
 
   return NextResponse.json({
     ...session,
-    permissions: user?.permissions ?? [],
-    hasPassword: !!user?.password,
+    permissions,
+    appAccess: user?.appAccess ?? [],
+    hasPassword: !!user?.passwordHash,
     username: user?.username ?? null,
   });
 }

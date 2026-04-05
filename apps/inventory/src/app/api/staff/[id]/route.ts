@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRole, getUserFromHeaders, AuthError } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
+import { hashPin } from "@celsius/auth";
 import { logActivity } from "@/lib/activity-log";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -26,16 +27,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.outletIds !== undefined) data.outletIds = body.outletIds;
   if (body.username !== undefined) data.username = body.username || null;
   if (body.status !== undefined) data.status = body.status;
-  if (body.permissions !== undefined) data.permissions = body.permissions;
+  // Store module permissions in moduleAccess JSON
+  if (body.permissions !== undefined) {
+    // Read existing moduleAccess, update inventory key
+    const existing = await prisma.user.findUnique({ where: { id }, select: { moduleAccess: true } });
+    const moduleAccess = (existing?.moduleAccess as Record<string, string[]>) ?? {};
+    moduleAccess["inventory"] = body.permissions;
+    data.moduleAccess = moduleAccess;
+  }
 
   // Password — hash before saving
   if (body.password && body.password.length >= 6) {
     data.passwordHash = hashPassword(body.password);
   }
 
-  // PIN — store as-is (4 digits)
+  // PIN — hash with bcrypt before saving
   if (body.pin !== undefined) {
-    data.pin = body.pin || null;
+    data.pin = body.pin ? await hashPin(body.pin) : null;
   }
 
   try {

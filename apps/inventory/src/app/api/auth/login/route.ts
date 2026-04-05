@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     where: {
       username: username.trim(),
       status: "ACTIVE",
-      role: { in: ["ADMIN", "MANAGER"] },
+      role: { in: ["OWNER", "ADMIN", "MANAGER"] },
     },
     include: { outlet: { select: { name: true } } },
   });
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
-  if (!verifyPassword(password, user.passwordHash)) {
+  if (!(await verifyPassword(password, user.passwordHash))) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 

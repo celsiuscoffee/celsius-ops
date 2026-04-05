@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/pin"];
 
@@ -49,7 +49,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = request.cookies.get("celsius-session")?.value;
+  const token = request.cookies.get(COOKIE_NAME)?.value;
 
   if (!token) {
     if (pathname.startsWith("/api/")) {

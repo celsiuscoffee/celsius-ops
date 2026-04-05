@@ -103,7 +103,7 @@ model User {
 
   // Auth
   username     String?    @unique
-  password     String?
+  passwordHash String?
   pin          String?
 
   // Access control

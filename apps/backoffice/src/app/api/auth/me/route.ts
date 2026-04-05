@@ -10,12 +10,17 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.id },
-    select: { password: true, username: true },
+    select: { passwordHash: true, username: true, moduleAccess: true },
   });
+
+  // Extract backoffice-relevant permissions from moduleAccess JSON
+  const moduleAccess = (user?.moduleAccess as Record<string, string[]> | null) ?? {};
+  const backofficePermissions = moduleAccess.backoffice ?? [];
 
   return NextResponse.json({
     ...session,
-    hasPassword: !!user?.password,
+    hasPassword: !!user?.passwordHash,
     username: user?.username ?? null,
+    permissions: backofficePermissions,
   });
 }

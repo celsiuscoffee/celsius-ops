@@ -15,15 +15,16 @@ export async function POST(req: NextRequest) {
 
   const user = await prisma.user.findUnique({
     where: { id: caller.id },
-    select: { password: true },
+    select: { passwordHash: true },
   });
 
   // If user already has a password, verify current password
-  if (user?.password) {
+  if (user?.passwordHash) {
     if (!currentPassword) {
       return NextResponse.json({ error: "Current password is required" }, { status: 400 });
     }
-    if (!verifyPassword(currentPassword, user.password)) {
+    const valid = await verifyPassword(currentPassword, user.passwordHash);
+    if (!valid) {
       return NextResponse.json({ error: "Current password is incorrect" }, { status: 401 });
     }
   }
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
   const hashed = hashPassword(newPassword);
   await prisma.user.update({
     where: { id: caller.id },
-    data: { password: hashed },
+    data: { passwordHash: hashed },
   });
 
   return NextResponse.json({ ok: true });

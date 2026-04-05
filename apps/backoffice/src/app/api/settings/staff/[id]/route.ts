@@ -28,7 +28,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Password — hash before saving
   if (body.password && body.password.length >= 6) {
-    data.password = hashPassword(body.password);
+    data.passwordHash = hashPassword(body.password);
   }
 
   // PIN — store as-is (4 digits)

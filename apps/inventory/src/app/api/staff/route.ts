@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders, requireRole, AuthError } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
+import { hashPin } from "@celsius/auth";
 import { logActivity } from "@/lib/activity-log";
 
 export async function GET(req: NextRequest) {
@@ -41,8 +42,8 @@ export async function GET(req: NextRequest) {
     phone: u.phone ?? "",
     email: u.email,
     username: u.username,
-    permissions: u.permissions,
-    hasPassword: !!u.password,
+    permissions: ((u.moduleAccess as Record<string, string[]>)?.["inventory"]) ?? [],
+    hasPassword: !!u.passwordHash,
     hasPin: !!u.pin,
     status: u.status,
     addedDate: u.createdAt.toISOString().split("T")[0],
@@ -70,14 +71,14 @@ export async function POST(req: NextRequest) {
     outletId: outletId || null,
     outletIds: outletIds || [],
     username: username || null,
-    permissions: permissions || [],
+    moduleAccess: permissions ? { inventory: permissions } : {},
   };
 
   if (password && password.length >= 6) {
     data.passwordHash = hashPassword(password);
   }
   if (pin) {
-    data.pin = pin;
+    data.pin = await hashPin(pin);
   }
 
   const caller = getUserFromHeaders(req.headers);

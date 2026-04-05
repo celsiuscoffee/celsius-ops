@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     if (!currentPassword) {
       return NextResponse.json({ error: "Current password is required" }, { status: 400 });
     }
-    if (!verifyPassword(currentPassword, user.passwordHash)) {
+    if (!(await verifyPassword(currentPassword, user.passwordHash))) {
       return NextResponse.json({ error: "Current password is incorrect" }, { status: 401 });
     }
   }
