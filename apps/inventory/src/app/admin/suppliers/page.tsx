@@ -366,7 +366,7 @@ export default function SuppliersPage() {
 
       {/* Price List Dialog */}
       <Dialog open={priceDialogOpen} onOpenChange={setPriceDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl overflow-visible">
           <DialogHeader>
             <DialogTitle>{selectedSupplier?.name} — Price List</DialogTitle>
           </DialogHeader>
@@ -447,52 +447,58 @@ export default function SuppliersPage() {
                     {/* Add product row */}
                     {addingProduct && (
                       <tr className="border-t border-gray-200 bg-gray-50/50">
-                        <td colSpan={3} className="px-3 py-2">
-                          <div className="relative">
-                            <input
-                              type="text"
-                              placeholder="Search product..."
-                              value={productSearch}
-                              onChange={(e) => { setProductSearch(e.target.value); setNewProductId(""); }}
-                              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-                              autoFocus
-                            />
-                            {productSearch.length >= 2 && !newProductId && availableProducts.length > 0 && (
-                              <div className="absolute z-10 bottom-full mb-1 max-h-40 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
-                                {availableProducts.slice(0, 8).map((p) => (
-                                  <button
-                                    key={p.id}
-                                    onClick={() => { setNewProductId(p.id); setProductSearch(p.name); }}
-                                    className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-gray-50"
-                                  >
-                                    <span className="font-medium">{p.name}</span>
-                                    <span className="text-gray-400">{p.sku}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="0.00"
-                            value={newPrice}
-                            onChange={(e) => setNewPrice(e.target.value)}
-                            className="w-28 rounded border border-gray-300 px-3 py-1.5 text-right text-sm"
-                            onKeyDown={(e) => { if (e.key === "Enter") addProduct(); }}
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button onClick={addProduct} disabled={(!newProductId && !availableProducts.some((p) => p.name.toLowerCase() === productSearch.trim().toLowerCase())) || !newPrice || savingPrice} className="text-green-600 hover:text-green-700 disabled:text-gray-300">
-                              {savingPrice ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                            </button>
-                            <button onClick={() => { setAddingProduct(false); setProductSearch(""); setNewProductId(""); setNewPrice(""); }} className="text-gray-400 hover:text-gray-600">
-                              <X className="h-3 w-3" />
-                            </button>
+                        <td colSpan={5} className="px-3 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="relative flex-1">
+                              <input
+                                type="text"
+                                placeholder="Search product name or SKU..."
+                                value={productSearch}
+                                onChange={(e) => { setProductSearch(e.target.value); setNewProductId(""); }}
+                                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta/30"
+                                autoFocus
+                              />
+                              {productSearch.length >= 2 && !newProductId && availableProducts.length > 0 && (
+                                <div className="absolute z-50 bottom-full mb-1 max-h-48 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                                  {availableProducts.slice(0, 10).map((p) => (
+                                    <button
+                                      key={p.id}
+                                      onClick={() => { setNewProductId(p.id); setProductSearch(p.name); }}
+                                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-terracotta/5"
+                                    >
+                                      <span className="font-medium text-gray-900">{p.name}</span>
+                                      <span className="text-xs text-gray-400">{p.sku} · {p.baseUom}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {newProductId && (
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                  <Check className="h-4 w-4 text-green-500" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-gray-400 whitespace-nowrap">RM</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="0.00"
+                                value={newPrice}
+                                onChange={(e) => setNewPrice(e.target.value)}
+                                className="w-24 rounded-md border border-gray-300 px-3 py-2 text-right text-sm focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta/30"
+                                onKeyDown={(e) => { if (e.key === "Enter") addProduct(); }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={addProduct} disabled={(!newProductId && !availableProducts.some((p) => p.name.toLowerCase() === productSearch.trim().toLowerCase())) || !newPrice || savingPrice} className="rounded-md bg-green-50 p-1.5 text-green-600 hover:bg-green-100 hover:text-green-700 disabled:opacity-30 disabled:hover:bg-green-50">
+                                {savingPrice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                              </button>
+                              <button onClick={() => { setAddingProduct(false); setProductSearch(""); setNewProductId(""); setNewPrice(""); }} className="rounded-md bg-gray-50 p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>

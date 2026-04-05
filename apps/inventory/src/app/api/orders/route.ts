@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
+import { logActivity } from "@/lib/activity-log";
 
 export async function GET() {
   const orders = await prisma.order.findMany({
@@ -125,6 +126,15 @@ export async function POST(req: NextRequest) {
         },
       },
     },
+  });
+
+  await logActivity({
+    userId: caller.id,
+    action: "create",
+    module: "orders",
+    targetId: order.id,
+    targetName: order.orderNumber,
+    details: `Created order for ${order.supplier.name} (${order.items.length} items, RM${Number(order.totalAmount).toFixed(2)})`,
   });
 
   return NextResponse.json(order, { status: 201 });

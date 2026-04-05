@@ -1,7 +1,8 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireRole, AuthError } from "@/lib/auth";
+import { requireRole, getUserFromHeaders, AuthError } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
+import { logActivity } from "@/lib/activity-log";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -25,6 +26,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.outletIds !== undefined) data.outletIds = body.outletIds;
   if (body.username !== undefined) data.username = body.username || null;
   if (body.status !== undefined) data.status = body.status;
+  if (body.permissions !== undefined) data.permissions = body.permissions;
 
   // Password — hash before saving
   if (body.password && body.password.length >= 6) {
@@ -40,7 +42,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const user = await prisma.user.update({
       where: { id },
       data: data as never,
+      select: { id: true, name: true },
     });
+
+    const caller = getUserFromHeaders(req.headers);
+    if (caller) {
+      const changes = Object.keys(data).filter((k) => k !== "password" && k !== "pin").join(", ");
+      await logActivity({
+        userId: caller.id,
+        action: "update",
+        module: "staff",
+        targetId: user.id,
+        targetName: user.name,
+        details: `Updated: ${changes || "credentials"}`,
+      });
+    }
+
     return NextResponse.json({ ok: true, id: user.id });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -54,11 +71,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  await prisma.user.update({
+  const user = await prisma.user.update({
     where: { id },
     data: { status: "DEACTIVATED" },
+    select: { id: true, name: true },
   });
+
+  const caller = getUserFromHeaders(req.headers);
+  if (caller) {
+    await logActivity({
+      userId: caller.id,
+      action: "update",
+      module: "staff",
+      targetId: user.id,
+      targetName: user.name,
+      details: "Deactivated staff member",
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }

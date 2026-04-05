@@ -29,40 +29,45 @@ import {
   Megaphone,
   MessageSquare,
   Sparkles,
+  ScrollText,
 } from "lucide-react";
 
-type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean };
-type NavSection = { label: string; items: NavItem[]; adminOnly?: boolean };
+type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean; module?: string };
+type NavSection = { label: string; items: NavItem[]; adminOnly?: boolean; module?: string };
 
 const sidebarSections: NavSection[] = [
   {
     label: "Overview",
+    module: "dashboard",
     items: [
-      { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/admin", label: "Dashboard", icon: LayoutDashboard, module: "dashboard" },
     ],
   },
   {
     label: "Inventory",
+    adminOnly: true,
+    module: "master_data",
     items: [
-      { href: "/admin/products", label: "Products", icon: Package },
-      { href: "/admin/suppliers", label: "Suppliers", icon: Truck },
-      { href: "/admin/categories", label: "Categories", icon: Tags },
-      { href: "/admin/menus", label: "Menu & BOM", icon: Coffee },
+      { href: "/admin/products", label: "Products", icon: Package, module: "master_data" },
+      { href: "/admin/suppliers", label: "Suppliers", icon: Truck, module: "master_data" },
+      { href: "/admin/categories", label: "Categories", icon: Tags, module: "master_data" },
+      { href: "/admin/menus", label: "Menu & BOM", icon: Coffee, module: "master_data" },
     ],
   },
   {
     label: "Procurement",
+    module: "ordering",
     items: [
-      { href: "/admin/orders", label: "Purchase Orders", icon: ShoppingCart },
-      { href: "/admin/receivings", label: "Receivings", icon: ArrowRightLeft },
-      { href: "/admin/invoices", label: "Invoices", icon: FileText },
+      { href: "/admin/orders", label: "Purchase Orders", icon: ShoppingCart, module: "ordering" },
+      { href: "/admin/receivings", label: "Receivings", icon: ArrowRightLeft, module: "ordering" },
+      { href: "/admin/invoices", label: "Invoices", icon: FileText, module: "ordering" },
     ],
   },
   {
     label: "Stock",
     items: [
-      { href: "/admin/par-levels", label: "Par Levels", icon: TrendingDown, adminOnly: true },
-      { href: "/admin/reports/stock-valuation", label: "Stock Valuation", icon: FileBarChart, adminOnly: true },
+      { href: "/admin/par-levels", label: "Par Levels", icon: TrendingDown, adminOnly: true, module: "par_levels" },
+      { href: "/admin/reports/stock-valuation", label: "Stock Valuation", icon: FileBarChart, adminOnly: true, module: "reports" },
     ],
   },
   {
@@ -80,16 +85,31 @@ const sidebarSections: NavSection[] = [
     label: "Operations",
     adminOnly: true,
     items: [
-      { href: "/admin/outlets", label: "Outlets", icon: Building2 },
-      { href: "/admin/staff", label: "Staff & Access", icon: Users },
-      { href: "/admin/rules", label: "Approval Rules", icon: ShieldCheck },
+      { href: "/admin/outlets", label: "Outlets", icon: Building2, module: "staff" },
+      { href: "/admin/staff", label: "Staff & Access", icon: Users, adminOnly: true, module: "staff" },
+      { href: "/admin/rules", label: "Approval Rules", icon: ShieldCheck, adminOnly: true, module: "approval_rules" },
     ],
   },
   {
     label: "Integrations",
     adminOnly: true,
+    module: "integrations",
     items: [
-      { href: "/admin/integrations", label: "StoreHub & Bukku", icon: Plug },
+      { href: "/admin/integrations", label: "StoreHub & Bukku", icon: Plug, module: "integrations" },
+    ],
+  },
+  {
+    label: "Analytics",
+    module: "reports",
+    items: [
+      { href: "/admin/reports", label: "Reports", icon: FileBarChart, module: "reports" },
+    ],
+  },
+  {
+    label: "System",
+    adminOnly: true,
+    items: [
+      { href: "/admin/system-log", label: "System Log", icon: ScrollText, adminOnly: true },
     ],
   },
 ];
@@ -102,6 +122,7 @@ export default function AdminLayout({
   const pathname = usePathname();
   const [userName, setUserName] = useState("");
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [userPermissions, setUserPermissions] = useState<string[]>([]);
   const [loggingOut, setLoggingOut] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -114,16 +135,23 @@ export default function AdminLayout({
       .then((d) => {
         if (d.name) setUserName(d.name);
         if (d.role) setUserRole(d.role);
+        if (d.permissions) setUserPermissions(d.permissions);
       })
       .catch(() => {});
   }, []);
 
-  // Filter sidebar based on role
+  const hasModule = (mod?: string) => {
+    if (isAdmin) return true;
+    if (!mod) return true;
+    return userPermissions.includes(mod);
+  };
+
+  // Filter sidebar based on role + permissions
   const visibleSections = sidebarSections
-    .filter((s) => !s.adminOnly || isAdmin)
+    .filter((s) => (!s.adminOnly || isAdmin) && hasModule(s.module))
     .map((s) => ({
       ...s,
-      items: s.items.filter((i) => !i.adminOnly || isAdmin),
+      items: s.items.filter((i) => (!i.adminOnly || isAdmin) && hasModule(i.module)),
     }))
     .filter((s) => s.items.length > 0);
 

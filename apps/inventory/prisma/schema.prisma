@@ -98,6 +98,7 @@ model User {
   outletIds    String[]   @default([])
   appAccess    String[]   @default([])
   moduleAccess Json?      @default("{}")
+  permissions  String[]   @default([])
   status       UserStatus @default(ACTIVE)
   lastLoginAt  DateTime?
   createdAt    DateTime   @default(now())
@@ -109,6 +110,7 @@ model User {
   stockAdjustments StockAdjustment[]
   receivings       Receiving[]
   transfers        StockTransfer[]
+  activityLogs     ActivityLog[]
 }
 
 enum UserRole {
@@ -636,4 +638,23 @@ enum ApprovalRuleType {
   STOCK_ADJUSTMENT
   STOCK_TRANSFER
   CREDIT_NOTE
+}
+
+// ─── ACTIVITY LOG ──────────────────────────────────────────
+// Tracks all user actions across the system for audit trail.
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  action     String // e.g. "create_order", "update_stock", "login"
+  module     String // e.g. "orders", "staff", "products"
+  details    String? // JSON string with extra context
+  targetId   String? // ID of the affected record
+  targetName String? // Human-readable name of the affected record
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([module, createdAt])
 }

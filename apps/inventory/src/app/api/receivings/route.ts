@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { adjustStockBalance } from "@/lib/stock";
 import { getUserFromHeaders } from "@/lib/auth";
+import { logActivity } from "@/lib/activity-log";
 
 export async function GET() {
   const receivings = await prisma.receiving.findMany({
@@ -143,6 +144,14 @@ export async function POST(req: NextRequest) {
   } catch {
     // Invoice creation is non-critical — don't fail the receiving
   }
+
+  await logActivity({
+    userId: caller.id,
+    action: "receive",
+    module: "receivings",
+    targetId: receiving.id,
+    details: `Received ${items.length} items${orderId ? ` for order` : " (ad-hoc)"}`,
+  });
 
   return NextResponse.json(receiving, { status: 201 });
 }

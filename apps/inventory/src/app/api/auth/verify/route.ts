@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createSession } from "@/lib/auth";
+import { logActivity } from "@/lib/activity-log";
 
 const MAX_ATTEMPTS = 5;
 
@@ -65,6 +66,13 @@ export async function POST(req: NextRequest) {
     name: user.name,
     role: user.role,
     outletId: user.outletId,
+  });
+
+  await logActivity({
+    userId: user.id,
+    action: "login",
+    module: "auth",
+    details: `Logged in via OTP`,
   });
 
   return NextResponse.json({

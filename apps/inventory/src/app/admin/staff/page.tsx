@@ -5,16 +5,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Loader2, Eye, EyeOff, Key, Lock, Hash, Check, X, Search } from "lucide-react";
+import { Plus, Loader2, Eye, EyeOff, Key, Lock, Hash, Check, X, Search, Shield } from "lucide-react";
 
 type Staff = {
   id: string; name: string; role: string; outlet: string; outletId: string | null; outletCode: string;
   outletIds: string[]; outletNames: string[];
   phone: string; email: string; username: string | null;
+  permissions: string[];
   hasPassword: boolean; hasPin: boolean;
   status: string; addedDate: string;
   appAccess: string[];
 };
+
+const ALL_MODULES = [
+  { key: "dashboard", label: "Dashboard", description: "View dashboard & stock overview" },
+  { key: "master_data", label: "Master Data", description: "Products, suppliers, categories, menus" },
+  { key: "ordering", label: "Ordering", description: "Purchase orders, receivings, invoices" },
+  { key: "staff", label: "Staff", description: "Manage staff members" },
+  { key: "approval_rules", label: "Approval Rules", description: "Set order approval workflows" },
+  { key: "par_levels", label: "Par Levels", description: "Stock par level management" },
+  { key: "reports", label: "Reports", description: "View analytics & reports" },
+  { key: "integrations", label: "Integrations", description: "StoreHub & Bukku connections" },
+];
 
 type OutletOption = { id: string; name: string };
 
@@ -24,6 +36,7 @@ type StaffForm = {
   username: string; password: string;
   pin: string;
   appAccess: string[];
+  permissions: string[];
 };
 
 const emptyForm: StaffForm = {
@@ -32,6 +45,7 @@ const emptyForm: StaffForm = {
   username: "", password: "",
   pin: "",
   appAccess: [],
+  permissions: [],
 };
 
 export default function StaffPage() {
@@ -47,7 +61,7 @@ export default function StaffPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [activeTab, setActiveTab] = useState<"details" | "access" | "security">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "access" | "permissions" | "security">("details");
 
   const loadStaff = () => {
     fetch("/api/staff")
@@ -89,6 +103,7 @@ export default function StaffPage() {
       password: "",
       pin: "",
       appAccess: s.appAccess || [],
+      permissions: s.permissions || [],
     });
     setEditingId(s.id);
     setEditingStaff(s);
@@ -121,6 +136,7 @@ export default function StaffPage() {
         outletIds: form.outletIds,
         username: form.username || null,
         appAccess: isOwnerOrAdmin ? ["backoffice", "inventory", "loyalty", "pickup"] : form.appAccess,
+        permissions: form.permissions,
       };
 
       // Only send password if set
@@ -322,13 +338,13 @@ export default function StaffPage() {
 
           {/* Tabs */}
           <div className="flex gap-1 rounded-lg bg-gray-100 p-0.5">
-            {(["details", "access", "security"] as const).map((tab) => (
+            {(["details", "access", "permissions", "security"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${activeTab === tab ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
               >
-                {tab === "details" ? "Details" : tab === "access" ? "Access" : "Login & Security"}
+                {tab === "details" ? "Details" : tab === "access" ? "Access" : tab === "permissions" ? "Modules" : "Security"}
               </button>
             ))}
           </div>
@@ -431,6 +447,61 @@ export default function StaffPage() {
                 })}
               </div>
               {outlets.length === 0 && <p className="py-4 text-center text-sm text-gray-400">No outlets found</p>}
+            </div>
+          )}
+
+          {/* Tab: Module Permissions */}
+          {activeTab === "permissions" && (
+            <div className="py-2">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm text-gray-500">
+                  {form.role === "ADMIN" ? "Admins have access to all modules by default." : "Select which modules this user can access."}
+                </p>
+                {form.role !== "ADMIN" && (
+                  <button
+                    onClick={() => setForm({ ...form, permissions: form.permissions.length === ALL_MODULES.length ? [] : ALL_MODULES.map((m) => m.key) })}
+                    className="text-[10px] text-terracotta hover:underline"
+                  >
+                    {form.permissions.length === ALL_MODULES.length ? "Deselect All" : "Select All"}
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                {ALL_MODULES.map((mod) => {
+                  const isGranted = form.role === "ADMIN" || form.permissions.includes(mod.key);
+                  const isAdmin = form.role === "ADMIN";
+                  return (
+                    <button
+                      key={mod.key}
+                      onClick={() => {
+                        if (isAdmin) return;
+                        setForm((prev) => ({
+                          ...prev,
+                          permissions: prev.permissions.includes(mod.key)
+                            ? prev.permissions.filter((p) => p !== mod.key)
+                            : [...prev.permissions, mod.key],
+                        }));
+                      }}
+                      className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
+                        isGranted
+                          ? "border-terracotta/30 bg-terracotta/5"
+                          : "border-gray-200 hover:bg-gray-50"
+                      } ${isAdmin ? "cursor-default opacity-70" : "cursor-pointer"}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`flex h-5 w-5 items-center justify-center rounded ${isGranted ? "bg-terracotta text-white" : "border border-gray-300"}`}>
+                          {isGranted && <Check className="h-3 w-3" />}
+                        </div>
+                        <div>
+                          <span className={isGranted ? "font-medium text-gray-900" : "text-gray-600"}>{mod.label}</span>
+                          <p className="text-[10px] text-gray-400">{mod.description}</p>
+                        </div>
+                      </div>
+                      {isAdmin && <span className="text-[10px] text-terracotta font-medium">Admin</span>}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 

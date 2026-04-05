@@ -11,6 +11,8 @@ const ADMIN_ONLY = [
   "/admin/rules",
   "/admin/integrations",
   "/api/staff",
+  "/admin/system-log",
+  "/api/activity-log",
 ];
 
 // Admin + Manager routes (includes master data, procurement, loyalty, reports)

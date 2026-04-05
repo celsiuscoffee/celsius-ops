@@ -1,5 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getUserFromHeaders } from "@/lib/auth";
+import { logActivity } from "@/lib/activity-log";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,6 +21,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json();
   const { status } = body;
+  const caller = getUserFromHeaders(req.headers);
 
   const data: Record<string, unknown> = { status };
 
@@ -37,15 +40,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const order = await prisma.order.update({
     where: { id },
     data,
+    select: { id: true, orderNumber: true, status: true },
   });
+
+  if (caller) {
+    await logActivity({
+      userId: caller.id,
+      action: `update`,
+      module: "orders",
+      targetId: order.id,
+      targetName: order.orderNumber,
+      details: `Status changed to ${status}`,
+    });
+  }
 
   return NextResponse.json(order);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const caller = getUserFromHeaders(req.headers);
 
-  const order = await prisma.order.findUnique({ where: { id }, select: { status: true } });
+  const order = await prisma.order.findUnique({ where: { id }, select: { status: true, orderNumber: true } });
   if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (!["DRAFT", "CANCELLED"].includes(order.status)) {
@@ -54,6 +70,17 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   await prisma.orderItem.deleteMany({ where: { orderId: id } });
   await prisma.order.delete({ where: { id } });
+
+  if (caller) {
+    await logActivity({
+      userId: caller.id,
+      action: "delete",
+      module: "orders",
+      targetId: id,
+      targetName: order.orderNumber,
+      details: `Deleted ${order.status.toLowerCase()} order`,
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

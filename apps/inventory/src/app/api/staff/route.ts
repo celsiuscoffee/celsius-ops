@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders, requireRole, AuthError } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
+import { logActivity } from "@/lib/activity-log";
 
 export async function GET(req: NextRequest) {
   const caller = getUserFromHeaders(req.headers);
@@ -40,7 +41,8 @@ export async function GET(req: NextRequest) {
     phone: u.phone ?? "",
     email: u.email,
     username: u.username,
-    hasPassword: !!u.passwordHash,
+    permissions: u.permissions,
+    hasPassword: !!u.password,
     hasPin: !!u.pin,
     status: u.status,
     addedDate: u.createdAt.toISOString().split("T")[0],
@@ -58,7 +60,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, phone, email, role, outletId, outletIds, username, password, pin } = body;
+  const { name, phone, email, role, outletId, outletIds, username, password, pin, permissions } = body;
 
   const data: Record<string, unknown> = {
     name,
@@ -68,6 +70,7 @@ export async function POST(req: NextRequest) {
     outletId: outletId || null,
     outletIds: outletIds || [],
     username: username || null,
+    permissions: permissions || [],
   };
 
   if (password && password.length >= 6) {
@@ -77,6 +80,19 @@ export async function POST(req: NextRequest) {
     data.pin = pin;
   }
 
+  const caller = getUserFromHeaders(req.headers);
   const user = await prisma.user.create({ data: data as never });
+
+  if (caller) {
+    await logActivity({
+      userId: caller.id,
+      action: "create",
+      module: "staff",
+      targetId: user.id,
+      targetName: name,
+      details: `Added staff member (${role || "STAFF"})`,
+    });
+  }
+
   return NextResponse.json(user, { status: 201 });
 }

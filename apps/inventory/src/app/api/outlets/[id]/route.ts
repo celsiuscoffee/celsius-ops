@@ -1,5 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getUserFromHeaders } from "@/lib/auth";
+import { logActivity } from "@/lib/activity-log";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -22,10 +24,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data,
   });
 
+  const caller = getUserFromHeaders(req.headers);
+  if (caller) {
+    await logActivity({
+      userId: caller.id,
+      action: "update",
+      module: "outlets",
+      targetId: outlet.id,
+      targetName: outlet.name,
+      details: status ? `Status changed to ${status}` : `Updated: ${Object.keys(data).join(", ")}`,
+    });
+  }
+
   return NextResponse.json(outlet);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   // Check for linked staff or orders
@@ -34,8 +48,23 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Cannot delete outlet with staff assigned. Deactivate instead." }, { status: 400 });
   }
 
+  const outlet = await prisma.outlet.findUnique({ where: { id }, select: { name: true } });
+
   try {
     await prisma.outlet.delete({ where: { id } });
+
+    const caller = getUserFromHeaders(req.headers);
+    if (caller) {
+      await logActivity({
+        userId: caller.id,
+        action: "delete",
+        module: "outlets",
+        targetId: id,
+        targetName: outlet?.name || id,
+        details: "Deleted outlet",
+      });
+    }
+
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "Cannot delete outlet. It may have linked data." }, { status: 400 });
