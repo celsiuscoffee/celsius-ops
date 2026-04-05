@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { prisma } from "@/lib/prisma";
 import { requireAuth, hashPin } from "@/lib/auth";
 
 // POST /api/staff/create — create a new staff member (requires admin auth)
@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, email, phone, outlet_id, outlet_ids, role, pin, brand_id } = body;
+    const { name, email, phone, outlet_id, outlet_ids, role, pin } = body;
 
     if (!name || !pin) {
       return NextResponse.json(
@@ -22,31 +22,45 @@ export async function POST(request: NextRequest) {
     const hashedPin = await hashPin(pin);
 
     const resolvedOutletIds = outlet_ids || (outlet_id ? [outlet_id] : []);
-    const id = `staff-${Date.now()}`;
-    const { data, error } = await supabaseAdmin
-      .from("staff_users")
-      .insert({
-        id,
-        brand_id: brand_id || "brand-celsius",
-        outlet_id: resolvedOutletIds[0] || null,
-        outlet_ids: resolvedOutletIds,
+
+    const staff = await prisma.user.create({
+      data: {
         name,
         email: email || null,
-        role: role || "staff",
-        pin_hash: hashedPin,
-        is_active: true,
-      })
-      .select("id, brand_id, outlet_id, outlet_ids, name, email, role, is_active, created_at")
-      .single();
+        phone: phone || null,
+        role: "STAFF",
+        pin: hashedPin,
+        status: "ACTIVE",
+        outletId: resolvedOutletIds[0] || null,
+        outletIds: resolvedOutletIds,
+        appAccess: ["loyalty"],
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        status: true,
+        outletId: true,
+        outletIds: true,
+        createdAt: true,
+      },
+    });
 
-    if (error) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ success: true, staff: data });
+    return NextResponse.json({
+      success: true,
+      staff: {
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        role: staff.role,
+        is_active: staff.status === "ACTIVE",
+        outlet_id: staff.outletId,
+        outlet_ids: staff.outletIds,
+        created_at: staff.createdAt,
+      },
+    });
   } catch {
     return NextResponse.json(
       { success: false, error: "Failed to create staff" },

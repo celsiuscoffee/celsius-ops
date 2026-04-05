@@ -1,11 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'MISSING-JWT-SECRET-DO-NOT-USE'
-);
-
-const COOKIE_NAME = 'celsius-admin-token';
+import { verifyToken, COOKIE_NAME } from '@celsius/auth';
 
 /**
  * Middleware — protects /admin routes and adds security headers.
@@ -32,7 +26,8 @@ export async function middleware(request: NextRequest) {
     }
 
     try {
-      await jwtVerify(token, JWT_SECRET);
+      const user = await verifyToken(token);
+      if (!user) throw new Error('Invalid token');
     } catch {
       // Invalid/expired token — clear cookie and redirect to login
       const loginUrl = new URL('/admin/login', request.url);

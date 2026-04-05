@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 
 /**
  * POST /api/staff/update
  * Update a staff member (name, email, outlet, role, active status)
- * Body: { staff_id, name?, email?, outlet_id?, role?, is_active? }
+ * Body: { staff_id, name?, email?, outlet_id?, outlet_ids?, role?, is_active? }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -23,36 +23,52 @@ export async function POST(request: NextRequest) {
     }
 
     // Only allow specific fields to be updated
-    const allowed: Record<string, unknown> = {};
-    if (updates.name !== undefined) allowed.name = updates.name;
-    if (updates.email !== undefined) allowed.email = updates.email;
-    if (updates.outlet_id !== undefined) allowed.outlet_id = updates.outlet_id;
-    if (updates.outlet_ids !== undefined) allowed.outlet_ids = updates.outlet_ids;
-    if (updates.role !== undefined) allowed.role = updates.role;
-    if (updates.is_active !== undefined) allowed.is_active = updates.is_active;
+    const data: Record<string, unknown> = {};
+    if (updates.name !== undefined) data.name = updates.name;
+    if (updates.email !== undefined) data.email = updates.email;
+    if (updates.phone !== undefined) data.phone = updates.phone;
+    if (updates.outlet_id !== undefined) data.outletId = updates.outlet_id;
+    if (updates.outlet_ids !== undefined) data.outletIds = updates.outlet_ids;
+    if (updates.role !== undefined) data.role = updates.role.toUpperCase();
+    if (updates.is_active !== undefined) data.status = updates.is_active ? "ACTIVE" : "DEACTIVATED";
 
-    if (Object.keys(allowed).length === 0) {
+    if (Object.keys(data).length === 0) {
       return NextResponse.json(
         { success: false, error: "No fields to update" },
         { status: 400 }
       );
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("staff_users")
-      .update(allowed)
-      .eq("id", staff_id)
-      .select()
-      .single();
+    const staff = await prisma.user.update({
+      where: { id: staff_id },
+      data,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        status: true,
+        outletId: true,
+        outletIds: true,
+        createdAt: true,
+      },
+    });
 
-    if (error) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ success: true, staff: data });
+    return NextResponse.json({
+      success: true,
+      staff: {
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        phone: staff.phone,
+        role: staff.role,
+        is_active: staff.status === "ACTIVE",
+        outlet_id: staff.outletId,
+        outlet_ids: staff.outletIds,
+        created_at: staff.createdAt,
+      },
+    });
   } catch (error) {
     console.error("Staff update error:", error);
     return NextResponse.json(

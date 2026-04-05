@@ -1,9 +1,7 @@
 // ==========================================
-// Rate Limiting (Supabase-backed)
-// Works across serverless instances
+// Rate Limiting (in-memory)
+// Simple per-process rate limiter
 // ==========================================
-
-import { supabaseAdmin } from './supabase';
 
 interface RateLimitConfig {
   /** Unique key prefix (e.g., 'otp-send', 'login') */
@@ -14,64 +12,41 @@ interface RateLimitConfig {
   windowSeconds: number;
 }
 
+/** In-memory store: key -> list of timestamps (ms) */
+const attempts = new Map<string, number[]>();
+
 /**
- * Check rate limit using Supabase.
- * Uses the otp_codes table with a special purpose to track attempts,
- * or falls back to a simple time-based check.
- *
- * Returns { allowed: boolean, remaining: number, retryAfter?: number }
+ * Check rate limit using in-memory Map.
+ * Sufficient for single-instance deployments; swap to Redis for multi-instance.
  */
 export async function checkRateLimit(
   identifier: string,
   config: RateLimitConfig
 ): Promise<{ allowed: boolean; remaining: number; retryAfter?: number }> {
-  if (!supabaseAdmin) {
-    console.error('Rate limiter: supabaseAdmin not available');
-    return { allowed: false, remaining: 0, retryAfter: 60 };
-  }
-
   const key = `${config.prefix}:${identifier}`;
-  const windowStart = new Date(Date.now() - config.windowSeconds * 1000).toISOString();
+  const now = Date.now();
+  const windowStart = now - config.windowSeconds * 1000;
 
-  try {
-    // Count recent attempts
-    const { count, error } = await supabaseAdmin
-      .from('rate_limits')
-      .select('*', { count: 'exact', head: true })
-      .eq('key', key)
-      .gte('created_at', windowStart);
+  // Get existing timestamps and prune expired ones
+  const timestamps = (attempts.get(key) || []).filter((t) => t > windowStart);
 
-    if (error) {
-      console.error('Rate limiter DB error:', error.message);
-      // Fail open only for table-not-found (first deploy); fail closed otherwise
-      if (error.message?.includes('does not exist')) {
-        return { allowed: true, remaining: config.maxAttempts };
-      }
-      return { allowed: false, remaining: 0, retryAfter: 60 };
-    }
-
-    const attempts = count || 0;
-    const remaining = Math.max(0, config.maxAttempts - attempts);
-
-    if (attempts >= config.maxAttempts) {
-      return {
-        allowed: false,
-        remaining: 0,
-        retryAfter: config.windowSeconds,
-      };
-    }
-
-    // Record this attempt
-    await supabaseAdmin.from('rate_limits').insert({
-      key,
-      created_at: new Date().toISOString(),
-    });
-
-    return { allowed: true, remaining: remaining - 1 };
-  } catch (err) {
-    console.error('Rate limiter exception:', err);
-    return { allowed: false, remaining: 0, retryAfter: 60 };
+  if (timestamps.length >= config.maxAttempts) {
+    attempts.set(key, timestamps);
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfter: config.windowSeconds,
+    };
   }
+
+  // Record this attempt
+  timestamps.push(now);
+  attempts.set(key, timestamps);
+
+  return {
+    allowed: true,
+    remaining: Math.max(0, config.maxAttempts - timestamps.length),
+  };
 }
 
 // ─── Predefined rate limit configs ────────────────────

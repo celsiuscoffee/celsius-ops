@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomInt } from "crypto";
-import { supabaseAdmin } from "@/lib/supabase";
+import { prisma } from "@/lib/prisma";
 import { requireAuth, hashPin } from "@/lib/auth";
 
 // POST /api/staff/reset-pin — reset a staff member's PIN (requires admin auth)
@@ -24,17 +24,10 @@ export async function POST(request: NextRequest) {
     // Hash PIN before storing
     const hashedPin = await hashPin(pin);
 
-    const { error } = await supabaseAdmin
-      .from("staff_users")
-      .update({ pin_hash: hashedPin })
-      .eq("id", staff_id);
-
-    if (error) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 500 }
-      );
-    }
+    await prisma.user.update({
+      where: { id: staff_id },
+      data: { pin: hashedPin },
+    });
 
     return NextResponse.json({
       success: true,

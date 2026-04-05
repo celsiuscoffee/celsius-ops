@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
-import { verifyPassword, createToken, setAuthCookie } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { verifyPassword, createSession } from "@/lib/auth";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
-// POST - verify email + password, return JWT cookie
+// POST - verify email + password, return session cookie
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
@@ -21,50 +21,49 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch user including password hash
-    const { data, error } = await supabaseAdmin
-      .from("admin_users")
-      .select("id, name, email, role, is_active, outlets, password_hash")
-      .eq("email", email)
-      .eq("is_active", true)
-      .single();
+    // Fetch active admin/manager/owner user
+    const user = await prisma.user.findFirst({
+      where: {
+        email,
+        status: "ACTIVE",
+        role: { in: ["OWNER", "ADMIN", "MANAGER"] },
+      },
+    });
 
-    if (error || !data) {
+    if (!user || !user.passwordHash) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
-    // Verify password (supports both bcrypt and legacy plaintext)
-    const valid = await verifyPassword(password, data.password_hash);
+    // Verify password (supports both scrypt and bcrypt via @celsius/auth)
+    const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
     // Update last login timestamp
-    await supabaseAdmin
-      .from("admin_users")
-      .update({ last_login_at: new Date().toISOString() })
-      .eq("id", data.id);
-
-    // Create JWT token
-    const token = await createToken({
-      id: data.id,
-      email: data.email,
-      name: data.name,
-      role: data.role,
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
     });
 
-    // Set httpOnly cookie and return user data
-    const response = NextResponse.json({
+    // Create session (sets celsius-session httpOnly cookie)
+    await createSession({
+      id: user.id,
+      name: user.name,
+      role: user.role as "OWNER" | "ADMIN" | "MANAGER",
+      outletId: user.outletId || null,
+    });
+
+    // Return user data
+    return NextResponse.json({
       user: {
-        id: data.id,
-        name: data.name,
-        email: data.email,
-        role: data.role,
-        outlets: data.outlets,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        outlets: user.outletIds || [],
       },
     });
-
-    return setAuthCookie(response, token);
   } catch {
     return NextResponse.json({ error: "Login failed" }, { status: 500 });
   }
