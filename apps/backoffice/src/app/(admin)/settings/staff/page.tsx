@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Loader2, Eye, EyeOff, Key, Lock, Hash, Check, X, Search } from "lucide-react";
 
+type ModuleAccess = Record<string, string[]>;
+
 type Staff = {
   id: string; name: string; role: string; outlet: string; outletId: string | null; outletCode: string;
   outletIds: string[]; outletNames: string[];
@@ -14,6 +16,7 @@ type Staff = {
   hasPassword: boolean; hasPin: boolean;
   status: string; addedDate: string;
   appAccess: string[];
+  moduleAccess: ModuleAccess;
 };
 
 type OutletOption = { id: string; name: string };
@@ -24,6 +27,7 @@ type StaffForm = {
   username: string; password: string;
   pin: string;
   appAccess: string[];
+  moduleAccess: ModuleAccess;
 };
 
 const emptyForm: StaffForm = {
@@ -32,6 +36,39 @@ const emptyForm: StaffForm = {
   username: "", password: "",
   pin: "",
   appAccess: [],
+  moduleAccess: {},
+};
+
+// Module definitions per app
+const APP_MODULES: Record<string, { label: string; key: string }[]> = {
+  pickup: [
+    { label: "Orders", key: "orders" },
+    { label: "Menu", key: "menu" },
+    { label: "Analytics", key: "analytics" },
+    { label: "Customers", key: "customers" },
+  ],
+  inventory: [
+    { label: "Products", key: "products" },
+    { label: "Suppliers", key: "suppliers" },
+    { label: "Categories", key: "categories" },
+    { label: "Menu & BOM", key: "menus" },
+    { label: "Purchase Orders", key: "orders" },
+    { label: "Receivings", key: "receivings" },
+    { label: "Invoices", key: "invoices" },
+    { label: "Stock Count", key: "stock-count" },
+    { label: "Wastage", key: "wastage" },
+    { label: "Transfers", key: "transfers" },
+    { label: "Par Levels", key: "par-levels" },
+    { label: "Reports", key: "reports" },
+  ],
+  loyalty: [
+    { label: "Members", key: "members" },
+    { label: "Rewards", key: "rewards" },
+    { label: "Redemptions", key: "redemptions" },
+    { label: "Campaigns", key: "campaigns" },
+    { label: "Engage", key: "engage" },
+    { label: "AI Insights", key: "insights" },
+  ],
 };
 
 export default function StaffPage() {
@@ -89,6 +126,7 @@ export default function StaffPage() {
       password: "",
       pin: "",
       appAccess: s.appAccess || [],
+      moduleAccess: s.moduleAccess || {},
     });
     setEditingId(s.id);
     setEditingStaff(s);
@@ -121,6 +159,7 @@ export default function StaffPage() {
         outletIds: form.outletIds,
         username: form.username || null,
         appAccess: isOwnerOrAdmin ? ["backoffice", "inventory", "loyalty", "pickup"] : form.appAccess,
+        moduleAccess: isOwnerOrAdmin ? {} : form.moduleAccess,
       };
 
       // Only send password if set
@@ -195,6 +234,32 @@ export default function StaffPage() {
       appAccess: prev.appAccess.includes(app)
         ? prev.appAccess.filter((a) => a !== app)
         : [...prev.appAccess, app],
+    }));
+  };
+
+  const toggleModule = (app: string, mod: string) => {
+    setForm((prev) => {
+      const current = prev.moduleAccess[app] || [];
+      const updated = current.includes(mod)
+        ? current.filter((m) => m !== mod)
+        : [...current, mod];
+      return {
+        ...prev,
+        moduleAccess: { ...prev.moduleAccess, [app]: updated },
+      };
+    });
+  };
+
+  const toggleAllModules = (app: string) => {
+    const modules = APP_MODULES[app] || [];
+    const current = form.moduleAccess[app] || [];
+    const allSelected = modules.every((m) => current.includes(m.key));
+    setForm((prev) => ({
+      ...prev,
+      moduleAccess: {
+        ...prev.moduleAccess,
+        [app]: allSelected ? [] : modules.map((m) => m.key),
+      },
     }));
   };
 
@@ -401,6 +466,61 @@ export default function StaffPage() {
                   })}
                 </div>
               </div>
+
+              {/* Module Access — per-app toggles */}
+              {!isOwnerOrAdmin && form.appAccess.length > 0 && (
+                <div className="mb-5">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-1">Module Access</h3>
+                  <p className="text-xs text-gray-400 mb-3">Control which modules this user can see within each app. Empty = full access.</p>
+                  <div className="space-y-4">
+                    {form.appAccess.filter((app) => APP_MODULES[app]).map((app) => {
+                      const modules = APP_MODULES[app];
+                      const selected = form.moduleAccess[app] || [];
+                      const allSelected = modules.every((m) => selected.includes(m.key));
+                      const noneSelected = selected.length === 0;
+                      return (
+                        <div key={app} className="rounded-lg border border-gray-200 p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{app}</span>
+                            <button
+                              type="button"
+                              onClick={() => toggleAllModules(app)}
+                              className="text-[10px] text-terracotta hover:underline"
+                            >
+                              {allSelected ? "Deselect all" : noneSelected ? "Full access (no restriction)" : "Select all"}
+                            </button>
+                          </div>
+                          {noneSelected && (
+                            <p className="text-[10px] text-gray-400 mb-2 italic">No restrictions — full access to all modules</p>
+                          )}
+                          <div className="grid grid-cols-2 gap-1">
+                            {modules.map((mod) => {
+                              const isOn = selected.includes(mod.key);
+                              return (
+                                <button
+                                  key={mod.key}
+                                  type="button"
+                                  onClick={() => toggleModule(app, mod.key)}
+                                  className={`flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors ${
+                                    isOn
+                                      ? "bg-terracotta/5 text-gray-900"
+                                      : "text-gray-400 hover:bg-gray-50"
+                                  }`}
+                                >
+                                  <div className={`flex h-4 w-4 items-center justify-center rounded ${isOn ? "bg-terracotta text-white" : "border border-gray-300"}`}>
+                                    {isOn && <Check className="h-2.5 w-2.5" />}
+                                  </div>
+                                  {mod.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Outlet Access */}
               <h3 className="text-sm font-semibold text-gray-900 mb-1">Outlet Access</h3>
