@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     phone: u.phone ?? "",
     email: u.email,
     username: u.username,
-    hasPassword: !!u.passwordHash,
+    hasPassword: !!u.password,
     hasPin: !!u.pin,
     status: u.status,
     addedDate: u.createdAt.toISOString().split("T")[0],
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
   };
 
   if (password && password.length >= 6) {
-    data.passwordHash = hashPassword(password);
+    data.password = hashPassword(password);
   }
   if (pin) {
     data.pin = pin;

@@ -14,16 +14,16 @@ export async function POST(req: NextRequest) {
     where: {
       username: username.trim(),
       status: "ACTIVE",
-      role: { in: ["ADMIN", "MANAGER"] },
+      role: { in: ["OWNER", "ADMIN", "MANAGER"] },
     },
     include: { outlet: { select: { name: true } } },
   });
 
-  if (!user || !user.passwordHash) {
+  if (!user || !user.password) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
-  if (!verifyPassword(password, user.passwordHash)) {
+  if (!verifyPassword(password, user.password)) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
