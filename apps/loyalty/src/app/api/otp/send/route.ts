@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendOTP } from '@/lib/otp';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { z } from 'zod';
+
+const schema = z.object({
+  phone: z.string().min(1, 'phone required').max(20),
+  purpose: z.enum(['login', 'redeem']).optional(),
+});
 
 export async function POST(request: NextRequest) {
   try {
-    const { phone, purpose } = await request.json();
-
-    if (!phone) {
-      return NextResponse.json({ success: false, error: 'phone required' }, { status: 400 });
+    const parsed = schema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ success: false, error: parsed.error.issues[0]?.message }, { status: 400 });
     }
+    const { phone, purpose } = parsed.data;
 
     // Rate limit by phone number
     const rateCheck = await checkRateLimit(phone, RATE_LIMITS.OTP_SEND);

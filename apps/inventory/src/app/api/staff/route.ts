@@ -4,6 +4,7 @@ import { getUserFromHeaders, requireRole, AuthError } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
 import { hashPin } from "@celsius/auth";
 import { logActivity } from "@/lib/activity-log";
+import { z } from "zod";
 
 export async function GET(req: NextRequest) {
   const caller = getUserFromHeaders(req.headers);
@@ -61,8 +62,26 @@ export async function POST(req: NextRequest) {
     throw e;
   }
 
-  const body = await req.json();
-  const { name, phone, email, role, outletId, outletIds, username, password, pin, permissions, appAccess } = body;
+  const staffSchema = z.object({
+    name: z.string().min(1, "Name is required").max(100),
+    phone: z.string().min(1, "Phone is required").max(20),
+    email: z.string().email().optional().nullable(),
+    role: z.enum(["OWNER", "ADMIN", "MANAGER", "STAFF"]).optional(),
+    outletId: z.string().uuid().optional().nullable(),
+    outletIds: z.array(z.string().uuid()).optional(),
+    username: z.string().max(100).optional().nullable(),
+    password: z.string().min(6).max(200).optional().nullable(),
+    pin: z.string().min(4).max(6).optional().nullable(),
+    permissions: z.array(z.string()).optional(),
+    appAccess: z.array(z.string()).optional(),
+  });
+
+  const parsed = staffSchema.safeParse(await req.json());
+  if (!parsed.success) {
+    const err = parsed.error.issues[0];
+    return NextResponse.json({ error: err?.message || "Validation failed", field: err?.path?.join(".") }, { status: 400 });
+  }
+  const { name, phone, email, role, outletId, outletIds, username, password, pin, permissions, appAccess } = parsed.data;
 
   const data: Record<string, unknown> = {
     name,
