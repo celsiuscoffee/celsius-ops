@@ -21,6 +21,17 @@ export async function GET(req: NextRequest) {
     where.status = status;
   }
 
+  // Auto-mark overdue: PENDING invoices past their due date
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  await prisma.invoice.updateMany({
+    where: {
+      status: "PENDING",
+      dueDate: { lt: now },
+    },
+    data: { status: "OVERDUE" },
+  });
+
   const [invoices, total] = await Promise.all([
     prisma.invoice.findMany({
       where,

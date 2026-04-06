@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { compressImage } from "@/lib/compress-image";
 import {
   Search,
   ChevronDown,
@@ -24,6 +25,9 @@ import {
   Plus,
   Truck,
   Clock,
+  ArrowLeft,
+  Check,
+  X,
 } from "lucide-react";
 
 type ReceivingItem = {
@@ -95,19 +99,23 @@ export default function ReceivingsPage() {
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [receiveItems, setReceiveItems] = useState<ReceiveLineItem[]>([]);
   const [receiveNotes, setReceiveNotes] = useState("");
+  const [receivePhotos, setReceivePhotos] = useState<string[]>([]);
+  const [compressing, setCompressing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const AWAITING_STATUSES = ["SENT", "APPROVED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
+  const AWAITING_STATUSES = ["SENT", "CONFIRMED", "APPROVED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
 
   const loadData = () => {
     Promise.all([
       fetch("/api/receivings").then((r) => r.json()),
-      fetch("/api/orders").then((r) => r.json()),
+      fetch("/api/orders?limit=100").then((r) => r.json()),
     ])
       .then(([recData, ordersData]) => {
         setReceivings(recData);
+        const orderItems = ordersData.items ?? ordersData;
         setAwaitingOrders(
-          ordersData
+          orderItems
             .filter((o: { status: string }) => AWAITING_STATUSES.includes(o.status))
             .map((o: { id: string; orderNumber: string; outlet: string; supplier: string; status: string; totalAmount: number; items: { id: string }[]; deliveryDate: string | null; createdAt: string }) => ({
               id: o.id,
@@ -129,24 +137,22 @@ export default function ReceivingsPage() {
   useEffect(() => { loadData(); }, []);
 
   const openReceiveDialog = () => {
-    // Fetch orders that are awaiting delivery or sent
-    fetch("/api/orders")
+    fetch("/api/orders?limit=100")
       .then((r) => r.json())
-      .then((orders) => {
-        const pending: PendingOrder[] = orders
-          .filter((o: { status: string }) =>
-            ["SENT", "AWAITING_DELIVERY", "APPROVED", "PARTIALLY_RECEIVED"].includes(o.status),
-          )
-          .map((o: { id: string; orderNumber: string; outlet: string; outletCode: string; supplier: string; supplierPhone: string; items: { id: string; product: string; sku: string; package: string; quantity: number }[] }) => ({
+      .then((data) => {
+        const orderItems = data.items ?? data;
+        const pending: PendingOrder[] = orderItems
+          .filter((o: { status: string }) => AWAITING_STATUSES.includes(o.status))
+          .map((o: { id: string; orderNumber: string; outlet: string; outletCode: string; supplier: string; supplierId: string; supplierPhone: string; items: { id: string; productId: string; product: string; sku: string; package: string; quantity: number }[] }) => ({
             id: o.id,
             orderNumber: o.orderNumber,
             outlet: o.outlet,
-            outletId: "", // We'll need this from the full order
+            outletId: "",
             supplier: o.supplier,
-            supplierId: "",
+            supplierId: o.supplierId ?? "",
             items: o.items.map((i) => ({
               ...i,
-              productId: "",
+              productId: i.productId ?? "",
               productPackageId: null,
             })),
           }));
@@ -154,8 +160,22 @@ export default function ReceivingsPage() {
         setSelectedOrderId("");
         setReceiveItems([]);
         setReceiveNotes("");
+        setReceivePhotos([]);
         setShowReceive(true);
       });
+  };
+
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setCompressing(true);
+    try {
+      const compressed = await Promise.all(Array.from(files).map((f) => compressImage(f)));
+      setReceivePhotos((prev) => [...prev, ...compressed]);
+    } finally {
+      setCompressing(false);
+      e.target.value = "";
+    }
   };
 
   const selectOrder = (orderId: string) => {
@@ -231,6 +251,7 @@ export default function ReceivingsPage() {
           outletId,
           supplierId,
           notes: receiveNotes || null,
+          invoicePhotos: receivePhotos.length > 0 ? receivePhotos : undefined,
           items: receiveItems.map((i) => ({
             productId: i.productId,
             productPackageId: i.productPackageId,
@@ -453,55 +474,87 @@ export default function ReceivingsPage() {
       <Dialog open={showReceive} onOpenChange={setShowReceive}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Record Delivery</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedOrderId && (
+                <button onClick={() => { setSelectedOrderId(""); setReceiveItems([]); }} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              )}
+              {selectedOrderId ? `Receiving — ${pendingOrders.find((o) => o.id === selectedOrderId)?.orderNumber}` : "Record Delivery"}
+            </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Select Purchase Order</label>
-              <select
-                value={selectedOrderId}
-                onChange={(e) => selectOrder(e.target.value)}
-                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-              >
-                <option value="">Select a PO...</option>
-                {pendingOrders.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.orderNumber} — {o.supplier} ({o.outlet})
-                  </option>
-                ))}
-              </select>
-              {pendingOrders.length === 0 && (
-                <p className="mt-1 text-xs text-gray-400">No pending orders to receive. Create and send an order first.</p>
+          {/* Step 1: Select PO */}
+          {!selectedOrderId && (
+            <div className="space-y-3">
+              {pendingOrders.length === 0 ? (
+                <div className="py-8 text-center">
+                  <Package className="mx-auto h-8 w-8 text-gray-300" />
+                  <p className="mt-2 text-sm text-gray-500">No pending orders to receive</p>
+                  <p className="text-xs text-gray-400">Create and send an order first</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-500">{pendingOrders.length} orders ready to receive</p>
+                  <div className="space-y-2">
+                    {pendingOrders.map((o) => (
+                      <button
+                        key={o.id}
+                        onClick={() => selectOrder(o.id)}
+                        className="flex w-full items-center justify-between rounded-lg border border-gray-200 px-4 py-3 text-left transition-colors hover:border-terracotta/30 hover:bg-terracotta/5"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{o.supplier}</p>
+                          <p className="text-xs text-gray-500">{o.orderNumber} &middot; {o.items.length} items &middot; {o.outlet}</p>
+                        </div>
+                        <ChevronDown className="h-4 w-4 -rotate-90 text-gray-400" />
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
+          )}
 
-            {/* Receive items */}
-            {receiveItems.length > 0 && (
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Enter Received Quantities</label>
-                <div className="rounded-md border border-gray-200">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b bg-gray-50 text-gray-500">
-                        <th className="px-3 py-2 text-left font-medium">Product</th>
-                        <th className="px-3 py-2 text-right font-medium">Ordered</th>
-                        <th className="px-3 py-2 text-center font-medium w-24">Received</th>
-                        <th className="px-3 py-2 text-left font-medium">Status</th>
-                        <th className="px-3 py-2 text-left font-medium">Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {receiveItems.map((item, idx) => {
-                        const isShort = item.receivedQty < item.orderedQty;
-                        return (
-                          <tr key={idx} className="border-b border-gray-50">
-                            <td className="px-3 py-2">
-                              <div className="font-medium text-gray-700">{item.product}</div>
-                              <code className="text-gray-400">{item.sku}</code>
-                            </td>
-                            <td className="px-3 py-2 text-right text-gray-600">{item.orderedQty}</td>
-                            <td className="px-3 py-2">
+          {/* Step 2: Receive items */}
+          {selectedOrderId && receiveItems.length > 0 && (
+            <div className="space-y-4">
+              {/* Match All button */}
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500">{receiveItems.length} items to check</p>
+                <button
+                  onClick={() => setReceiveItems((prev) => prev.map((item) => ({ ...item, receivedQty: item.orderedQty })))}
+                  className="flex items-center gap-1 rounded-md bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-100"
+                >
+                  <Check className="h-3 w-3" />
+                  Match All
+                </button>
+              </div>
+
+              <div className="rounded-lg border border-gray-200">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-gray-50 text-gray-500">
+                      <th className="px-3 py-2 text-left font-medium">Product</th>
+                      <th className="px-3 py-2 text-right font-medium">Ordered</th>
+                      <th className="px-3 py-2 text-center font-medium w-24">Received</th>
+                      <th className="px-3 py-2 text-left font-medium">Status</th>
+                      <th className="px-3 py-2 text-left font-medium">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receiveItems.map((item, idx) => {
+                      const isShort = item.receivedQty < item.orderedQty;
+                      const isMatch = item.receivedQty === item.orderedQty;
+                      return (
+                        <tr key={idx} className={`border-b border-gray-50 ${isShort ? "bg-red-50/30" : ""}`}>
+                          <td className="px-3 py-2">
+                            <div className="font-medium text-gray-700">{item.product}</div>
+                            <code className="text-gray-400">{item.sku}</code>
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-600">{item.orderedQty}</td>
+                          <td className="px-3 py-2 text-center">
+                            <div className="flex items-center justify-center gap-1">
                               <input
                                 type="number"
                                 value={item.receivedQty}
@@ -509,61 +562,96 @@ export default function ReceivingsPage() {
                                 className={`w-16 rounded border px-2 py-1 text-center ${isShort ? "border-red-300 bg-red-50" : "border-gray-200"}`}
                                 min={0}
                               />
-                            </td>
-                            <td className="px-3 py-2">
-                              {item.receivedQty === item.orderedQty ? (
-                                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                              ) : isShort ? (
-                                <span className="flex items-center gap-1 text-red-500">
-                                  <AlertTriangle className="h-3 w-3" />
-                                  Short {item.orderedQty - item.receivedQty}
-                                </span>
-                              ) : (
-                                <span className="text-blue-500 text-xs">Over +{item.receivedQty - item.orderedQty}</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2">
-                              {isShort && (
-                                <select
-                                  value={item.discrepancyReason}
-                                  onChange={(e) => updateDiscrepancy(idx, e.target.value)}
-                                  className="rounded border border-gray-200 px-2 py-1 text-xs"
+                              {!isMatch && (
+                                <button
+                                  onClick={() => updateReceivedQty(idx, item.orderedQty)}
+                                  className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-green-600"
+                                  title="Match"
                                 >
-                                  <option value="">Reason...</option>
-                                  <option value="short">Short delivery</option>
-                                  <option value="damaged">Damaged</option>
-                                  <option value="wrong_item">Wrong item</option>
-                                  <option value="expired">Expired</option>
-                                </select>
+                                  <Check className="h-3 w-3" />
+                                </button>
                               )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            {isMatch ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            ) : isShort ? (
+                              <span className="flex items-center gap-1 text-red-500">
+                                <AlertTriangle className="h-3 w-3" />
+                                Short {item.orderedQty - item.receivedQty}
+                              </span>
+                            ) : (
+                              <span className="text-blue-500 text-xs">Over +{item.receivedQty - item.orderedQty}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {isShort && (
+                              <select
+                                value={item.discrepancyReason}
+                                onChange={(e) => updateDiscrepancy(idx, e.target.value)}
+                                className="rounded border border-gray-200 px-2 py-1 text-xs"
+                              >
+                                <option value="">Reason...</option>
+                                <option value="short">Short delivery</option>
+                                <option value="damaged">Damaged</option>
+                                <option value="wrong_item">Wrong item</option>
+                                <option value="expired">Expired</option>
+                              </select>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Invoice photos */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Invoice Photo</label>
+                <div className="flex flex-wrap gap-2">
+                  {receivePhotos.map((photo, i) => (
+                    <div key={i} className="relative h-16 w-16 overflow-hidden rounded-lg border">
+                      <img src={photo} alt={`Invoice ${i + 1}`} className="h-full w-full object-cover" />
+                      <button onClick={() => setReceivePhotos((prev) => prev.filter((_, j) => j !== i))} className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-white">
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {compressing ? (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-lg border-2 border-dashed border-terracotta/30 text-terracotta">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                  ) : (
+                    <button onClick={() => fileInputRef.current?.click()} className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-400 hover:border-terracotta hover:text-terracotta">
+                      <Camera className="h-4 w-4" />
+                      <span className="text-[8px]">Upload</span>
+                    </button>
+                  )}
                 </div>
               </div>
-            )}
 
-            <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
-              <Input placeholder="Any delivery notes..." value={receiveNotes} onChange={(e) => setReceiveNotes(e.target.value)} />
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
+                <Input placeholder="Any delivery notes..." value={receiveNotes} onChange={(e) => setReceiveNotes(e.target.value)} />
+              </div>
+
+              <Button
+                onClick={submitReceiving}
+                disabled={saving}
+                className="w-full bg-terracotta hover:bg-terracotta-dark disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ClipboardCheck className="mr-1.5 h-4 w-4" />}
+                Confirm Delivery
+              </Button>
             </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              onClick={submitReceiving}
-              disabled={saving || !selectedOrderId || receiveItems.length === 0}
-              className="bg-terracotta hover:bg-terracotta-dark disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ClipboardCheck className="mr-1.5 h-4 w-4" />}
-              Confirm Delivery
-            </Button>
-          </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
+
+      {/* Hidden file input */}
+      <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoCapture} />
     </div>
   );
 }
