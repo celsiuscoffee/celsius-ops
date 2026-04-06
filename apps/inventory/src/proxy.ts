@@ -100,6 +100,13 @@ export async function proxy(request: NextRequest) {
   res.headers.set("x-user-role", user.role);
   res.headers.set("x-user-outlet", user.outletId || "");
   res.headers.set("x-user-name", user.name);
+
+  // Security headers
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("X-Frame-Options", "DENY");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.headers.set("X-XSS-Protection", "1; mode=block");
+
   return res;
 }
 

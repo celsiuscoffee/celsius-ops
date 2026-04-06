@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME } from "@celsius/auth";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/pin", "/api/auth/logout", "/api/auth/verify-manager"];
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const response = NextResponse.next();
@@ -13,19 +11,14 @@ export async function middleware(request: NextRequest) {
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("X-XSS-Protection", "1; mode=block");
 
-  // Skip public paths and static assets
+  // Skip login page, auth API, and static assets
   if (
-    PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/")) ||
+    pathname === "/login" ||
+    pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/images") ||
     pathname === "/favicon.ico" ||
-    pathname === "/manifest.json"
+    pathname === "/icon.png"
   ) {
-    return response;
-  }
-
-  // Skip API routes (they use requireAuth internally)
-  if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth/")) {
     return response;
   }
 
@@ -47,5 +40,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|images/).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.png).*)"],
 };

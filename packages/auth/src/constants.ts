@@ -4,14 +4,17 @@
 
 export const COOKIE_NAME = "celsius-session";
 
-export const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+export const SESSION_MAX_AGE = 60 * 60 * 12; // 12 hours (one shift + buffer)
 
 export function getJwtSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
-    console.error("[auth] JWT_SECRET is not set! Using fallback (unsafe in production).");
+    throw new Error(
+      "[auth] JWT_SECRET environment variable is not set. " +
+      "Set it in your .env file or Vercel environment variables."
+    );
   }
-  return new TextEncoder().encode(secret || "celsius-inventory-secret-key-2024");
+  return new TextEncoder().encode(secret);
 }
 
 /**
