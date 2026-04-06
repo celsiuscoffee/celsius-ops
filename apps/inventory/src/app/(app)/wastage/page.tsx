@@ -68,7 +68,7 @@ export default function WastagePage() {
       try {
         const [userRes, productsRes] = await Promise.all([
           fetch("/api/auth/me"),
-          fetch("/api/products"),
+          fetch("/api/products/options"),
         ]);
 
         let userData: UserSession | null = null;

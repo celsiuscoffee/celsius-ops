@@ -9,16 +9,38 @@ import { z } from "zod";
 export async function GET(req: NextRequest) {
   const caller = getUserFromHeaders(req.headers);
 
-  // Managers can only see users in their outlet
-  const where = caller?.role === "MANAGER" && caller.outletId
-    ? { outletId: caller.outletId }
-    : {};
+  const url = new URL(req.url);
+  const search = url.searchParams.get("search")?.trim() ?? "";
+  const status = url.searchParams.get("status") ?? "";
+  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
+  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50")));
+  const skip = (page - 1) * limit;
 
-  const users = await prisma.user.findMany({
-    where,
-    include: { outlet: true },
-    orderBy: { name: "asc" },
-  });
+  // Managers can only see users in their outlet
+  const where: Record<string, unknown> = {};
+  if (caller?.role === "MANAGER" && caller.outletId) {
+    where.outletId = caller.outletId;
+  }
+  if (search) {
+    where.OR = [
+      { name: { contains: search, mode: "insensitive" } },
+      { phone: { contains: search } },
+    ];
+  }
+  if (status) {
+    where.status = status;
+  }
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      include: { outlet: true },
+      orderBy: { name: "asc" },
+      skip,
+      take: limit,
+    }),
+    prisma.user.count({ where }),
+  ]);
 
   // Resolve outlet names for outletIds
   const allOutletIds = [...new Set(users.flatMap((u) => u.outletIds).filter(Boolean))];
@@ -51,7 +73,7 @@ export async function GET(req: NextRequest) {
     addedDate: u.createdAt.toISOString().split("T")[0],
   }));
 
-  return NextResponse.json(mapped);
+  return NextResponse.json({ items: mapped, total, page, limit });
 }
 
 export async function POST(req: NextRequest) {

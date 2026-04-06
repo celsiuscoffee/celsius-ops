@@ -3,38 +3,63 @@ import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { logActivity } from "@/lib/activity-log";
 
-export async function GET() {
-  const orders = await prisma.order.findMany({
-    select: {
-      id: true,
-      orderNumber: true,
-      status: true,
-      totalAmount: true,
-      notes: true,
-      deliveryDate: true,
-      sentAt: true,
-      approvedAt: true,
-      createdAt: true,
-      outlet: { select: { name: true, code: true } },
-      supplier: { select: { id: true, name: true, phone: true } },
-      createdBy: { select: { name: true } },
-      approvedBy: { select: { name: true } },
-      items: {
-        select: {
-          id: true,
-          productId: true,
-          quantity: true,
-          unitPrice: true,
-          totalPrice: true,
-          notes: true,
-          product: { select: { name: true, sku: true, shelfLifeDays: true, baseUom: true } },
-          productPackage: { select: { packageLabel: true, packageName: true } },
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
+  const search = url.searchParams.get("search")?.trim() ?? "";
+  const status = url.searchParams.get("status") ?? "";
+  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
+  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50")));
+  const skip = (page - 1) * limit;
+
+  const where: Record<string, unknown> = {};
+  if (search) {
+    where.OR = [
+      { orderNumber: { contains: search, mode: "insensitive" } },
+      { supplier: { name: { contains: search, mode: "insensitive" } } },
+      { outlet: { name: { contains: search, mode: "insensitive" } } },
+    ];
+  }
+  if (status) {
+    where.status = status;
+  }
+
+  const [orders, total] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        totalAmount: true,
+        notes: true,
+        deliveryDate: true,
+        sentAt: true,
+        approvedAt: true,
+        createdAt: true,
+        outlet: { select: { name: true, code: true } },
+        supplier: { select: { id: true, name: true, phone: true } },
+        createdBy: { select: { name: true } },
+        approvedBy: { select: { name: true } },
+        items: {
+          select: {
+            id: true,
+            productId: true,
+            quantity: true,
+            unitPrice: true,
+            totalPrice: true,
+            notes: true,
+            product: { select: { name: true, sku: true, shelfLifeDays: true, baseUom: true } },
+            productPackage: { select: { packageLabel: true, packageName: true } },
+          },
         },
+        _count: { select: { receivings: true } },
       },
-      _count: { select: { receivings: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.order.count({ where }),
+  ]);
 
   const mapped = orders.map((o) => ({
     id: o.id,
@@ -69,7 +94,7 @@ export async function GET() {
     receivingCount: o._count.receivings,
   }));
 
-  return NextResponse.json(mapped);
+  return NextResponse.json({ items: mapped, total, page, limit });
 }
 
 export async function POST(req: NextRequest) {

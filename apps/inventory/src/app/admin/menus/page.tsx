@@ -38,7 +38,7 @@ type EditIngredient = {
 
 export default function MenusPage() {
   const { data: menus = [], isLoading: loading, mutate: loadMenus } = useFetch<MenuItem[]>("/api/menus");
-  const { data: products = [] } = useFetch<ProductOption[]>("/api/products");
+  const { data: products = [] } = useFetch<ProductOption[]>("/api/products/options");
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("All");
   const [expandedId, setExpandedId] = useState<string | null>(null);

@@ -76,7 +76,7 @@ export default function TransferPage() {
         const [userRes, outletsRes, productsRes] = await Promise.all([
           fetch("/api/auth/me"),
           fetch("/api/outlets"),
-          fetch("/api/products"),
+          fetch("/api/products/options"),
         ]);
 
         let userData: UserSession | null = null;

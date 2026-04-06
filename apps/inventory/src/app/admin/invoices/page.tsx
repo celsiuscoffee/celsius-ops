@@ -1,10 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { useFetch } from "@/lib/use-fetch";
+import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+
+type PaginatedResponse<T> = { items: T[]; total: number; page: number; limit: number };
+const PAGE_SIZE = 50;
+
+function useDebounce(value: string, delay: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
 
 type Invoice = {
   id: string;
@@ -22,20 +35,38 @@ type Invoice = {
 };
 
 export default function InvoicesPage() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<string>("all");
+  const [filter, setFilter] = useState<string>("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebounce(search, 300);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const loadInvoices = () => {
-    fetch("/api/invoices")
-      .then((res) => res.json())
-      .then((data) => { setInvoices(data); setLoading(false); })
-      .catch(() => setLoading(false));
-  };
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (filter) params.set("status", filter);
+    params.set("page", String(page));
+    params.set("limit", String(PAGE_SIZE));
+    return `/api/invoices?${params}`;
+  }, [debouncedSearch, filter, page]);
 
-  useEffect(() => { loadInvoices(); }, []);
+  const { data, isLoading: loading, mutate: reloadInvoices } = useFetch<PaginatedResponse<Invoice>>(apiUrl);
+  const invoices = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Reset to page 1 when search/filter changes
+  const prevSearch = useRef(debouncedSearch);
+  const prevFilter = useRef(filter);
+  useEffect(() => {
+    if (prevSearch.current !== debouncedSearch || prevFilter.current !== filter) {
+      setPage(1);
+      prevSearch.current = debouncedSearch;
+      prevFilter.current = filter;
+    }
+  }, [debouncedSearch, filter]);
+
+  const loadInvoices = () => reloadInvoices();
 
   const updateStatus = async (invoiceId: string, newStatus: string) => {
     setUpdatingId(invoiceId);
@@ -51,18 +82,10 @@ export default function InvoicesPage() {
     }
   };
 
-  const filtered = invoices.filter((i) => {
-    const matchFilter = filter === "all" || i.status === filter.toUpperCase();
-    const matchSearch = i.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-      i.supplier.toLowerCase().includes(search.toLowerCase()) ||
-      i.poNumber.toLowerCase().includes(search.toLowerCase());
-    return matchFilter && matchSearch;
-  });
-
-  const totalPending = invoices.filter((i) => i.status === "PENDING").reduce((a, i) => a + i.amount, 0);
-  const totalOverdue = invoices.filter((i) => i.status === "OVERDUE").reduce((a, i) => a + i.amount, 0);
-  const totalPaid = invoices.filter((i) => i.status === "PAID").reduce((a, i) => a + i.amount, 0);
-  const totalAll = invoices.reduce((a, i) => a + i.amount, 0);
+  const totalPending = useMemo(() => invoices.filter((i) => i.status === "PENDING").reduce((a, i) => a + i.amount, 0), [invoices]);
+  const totalOverdue = useMemo(() => invoices.filter((i) => i.status === "OVERDUE").reduce((a, i) => a + i.amount, 0), [invoices]);
+  const totalPaid = useMemo(() => invoices.filter((i) => i.status === "PAID").reduce((a, i) => a + i.amount, 0), [invoices]);
+  const totalAll = useMemo(() => invoices.reduce((a, i) => a + i.amount, 0), [invoices]);
 
   const statusColor = (status: string) => {
     switch (status) {
@@ -91,20 +114,12 @@ export default function InvoicesPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
-      </div>
-    );
-  }
-
   return (
     <div className="p-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Invoices</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{invoices.length} invoices &middot; Track and reconcile supplier invoices</p>
+          <p className="mt-0.5 text-sm text-gray-500">{total} invoices &middot; Track and reconcile supplier invoices</p>
         </div>
       </div>
 
@@ -122,8 +137,8 @@ export default function InvoicesPage() {
           <Input placeholder="Search invoices..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex gap-1.5">
-          {["all", "draft", "pending", "paid", "overdue"].map((s) => (
-            <button key={s} onClick={() => setFilter(s)} className={`rounded-full border px-3 py-1 text-xs capitalize ${filter === s ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500"}`}>{s}</button>
+          {[{ value: "", label: "all" }, { value: "DRAFT", label: "draft" }, { value: "PENDING", label: "pending" }, { value: "PAID", label: "paid" }, { value: "OVERDUE", label: "overdue" }].map((s) => (
+            <button key={s.value} onClick={() => setFilter(s.value)} className={`rounded-full border px-3 py-1 text-xs capitalize ${filter === s.value ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500"}`}>{s.label}</button>
           ))}
         </div>
       </div>
@@ -143,19 +158,26 @@ export default function InvoicesPage() {
             <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
           </tr></thead>
           <tbody>
-            {filtered.length === 0 && (
+            {!loading && invoices.length === 0 && (
               <tr>
                 <td colSpan={10} className="px-4 py-12 text-center">
                   <FileText className="mx-auto h-8 w-8 text-gray-300" />
                   <p className="mt-2 text-sm text-gray-500">
-                    {invoices.length === 0
+                    {total === 0 && !debouncedSearch && !filter
                       ? "No invoices yet. Invoices will be created from receivings."
                       : "No invoices match your filter."}
                   </p>
                 </td>
               </tr>
             )}
-            {filtered.map((inv) => {
+            {loading && invoices.length === 0 && (
+              <tr>
+                <td colSpan={10} className="px-4 py-12 text-center">
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-terracotta" />
+                </td>
+              </tr>
+            )}
+            {invoices.map((inv) => {
               const actions = getActions(inv.status);
               return (
                 <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50/50">
@@ -197,6 +219,24 @@ export default function InvoicesPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-3 flex items-center justify-between text-sm">
+          <p className="text-gray-500">
+            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+          </p>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="rounded-md border px-2 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="px-3 text-gray-700">Page {page} of {totalPages}</span>
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="rounded-md border px-2 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

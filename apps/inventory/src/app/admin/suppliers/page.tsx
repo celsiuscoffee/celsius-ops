@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +25,21 @@ import {
   Loader2,
   Check,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+
+type PaginatedResponse<T> = { items: T[]; total: number; page: number; limit: number };
+const PAGE_SIZE = 50;
+
+function useDebounce(value: string, delay: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
 
 type SupplierProduct = { id: string; productId: string; name: string; sku: string; price: number; uom: string };
 
@@ -56,9 +70,34 @@ type ProductOption = { id: string; name: string; sku: string; baseUom: string };
 const emptyForm: SupplierForm = { name: "", location: "", phone: "", supplierCode: "", leadTimeDays: "1", tags: "" };
 
 export default function SuppliersPage() {
-  const { data: suppliers = [], isLoading: loading, mutate: reloadSuppliers } = useFetch<Supplier[]>("/api/suppliers");
-  const { data: productOptions = [] } = useFetch<ProductOption[]>("/api/products");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebounce(search, 300);
+
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    params.set("page", String(page));
+    params.set("limit", String(PAGE_SIZE));
+    return `/api/suppliers?${params}`;
+  }, [debouncedSearch, page]);
+
+  const { data, isLoading: loading, mutate: reloadSuppliers } = useFetch<PaginatedResponse<Supplier>>(apiUrl);
+  const suppliers = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Use lightweight options endpoint for product dropdown
+  const { data: productOptions = [] } = useFetch<ProductOption[]>("/api/products/options");
+
+  // Reset to page 1 when search changes
+  const prevSearch = useRef(debouncedSearch);
+  useEffect(() => {
+    if (prevSearch.current !== debouncedSearch) {
+      setPage(1);
+      prevSearch.current = debouncedSearch;
+    }
+  }, [debouncedSearch]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SupplierForm>(emptyForm);
@@ -76,13 +115,6 @@ export default function SuppliersPage() {
   const [newPrice, setNewPrice] = useState("");
 
   const loadSuppliers = () => reloadSuppliers();
-
-  const filtered = suppliers.filter(
-    (s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.code.toLowerCase().includes(search.toLowerCase()) ||
-      s.location.toLowerCase().includes(search.toLowerCase())
-  );
 
   const openAdd = () => { setForm(emptyForm); setEditingId(null); setDialogOpen(true); };
 
@@ -225,21 +257,13 @@ export default function SuppliersPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
-      </div>
-    );
-  }
-
   return (
     <div className="p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Suppliers</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{suppliers.length} suppliers with product pricing</p>
+          <p className="mt-0.5 text-sm text-gray-500">{total} suppliers with product pricing</p>
         </div>
         <Button onClick={openAdd} className="bg-terracotta hover:bg-terracotta-dark">
           <Plus className="mr-1.5 h-4 w-4" />
@@ -260,7 +284,7 @@ export default function SuppliersPage() {
 
       {/* Supplier cards */}
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        {filtered.map((supplier) => (
+        {suppliers.map((supplier) => (
           <Card key={supplier.id} className="overflow-hidden">
             <div className="p-4">
               <div className="flex items-start justify-between">
@@ -317,7 +341,30 @@ export default function SuppliersPage() {
             </div>
           </Card>
         ))}
+        {loading && suppliers.length === 0 && (
+          <div className="col-span-2 flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+          </div>
+        )}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-3 flex items-center justify-between text-sm">
+          <p className="text-gray-500">
+            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+          </p>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="rounded-md border px-2 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="px-3 text-gray-700">Page {page} of {totalPages}</span>
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="rounded-md border px-2 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

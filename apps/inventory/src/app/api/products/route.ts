@@ -1,39 +1,63 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
-  const products = await prisma.product.findMany({
-    select: {
-      id: true,
-      name: true,
-      sku: true,
-      categoryId: true,
-      category: { select: { name: true } },
-      baseUom: true,
-      storageArea: true,
-      shelfLifeDays: true,
-      checkFrequency: true,
-      description: true,
-      isActive: true,
-      packages: {
-        select: {
-          id: true,
-          packageName: true,
-          packageLabel: true,
-          conversionFactor: true,
-          isDefault: true,
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
+  const search = url.searchParams.get("search")?.trim() ?? "";
+  const category = url.searchParams.get("category") ?? "";
+  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
+  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50")));
+  const skip = (page - 1) * limit;
+
+  const where: Record<string, unknown> = {};
+  if (search) {
+    where.OR = [
+      { name: { contains: search, mode: "insensitive" } },
+      { sku: { contains: search, mode: "insensitive" } },
+    ];
+  }
+  if (category) {
+    where.categoryId = category;
+  }
+
+  const [products, total] = await Promise.all([
+    prisma.product.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        categoryId: true,
+        category: { select: { name: true } },
+        baseUom: true,
+        storageArea: true,
+        shelfLifeDays: true,
+        checkFrequency: true,
+        description: true,
+        isActive: true,
+        packages: {
+          select: {
+            id: true,
+            packageName: true,
+            packageLabel: true,
+            conversionFactor: true,
+            isDefault: true,
+          },
+        },
+        supplierProducts: {
+          select: {
+            price: true,
+            supplier: { select: { name: true } },
+            productPackage: { select: { packageLabel: true } },
+          },
         },
       },
-      supplierProducts: {
-        select: {
-          price: true,
-          supplier: { select: { name: true } },
-          productPackage: { select: { packageLabel: true } },
-        },
-      },
-    },
-    orderBy: { name: "asc" },
-  });
+      orderBy: { name: "asc" },
+      skip,
+      take: limit,
+    }),
+    prisma.product.count({ where }),
+  ]);
 
   const mapped = products.map((p) => ({
     id: p.id,
@@ -63,7 +87,7 @@ export async function GET() {
     })),
   }));
 
-  return NextResponse.json(mapped);
+  return NextResponse.json({ items: mapped, total, page, limit });
 }
 
 export async function POST(req: NextRequest) {

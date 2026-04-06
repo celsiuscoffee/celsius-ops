@@ -100,7 +100,7 @@ export default function StockCheckPage() {
       setError(null);
       try {
         const [productsRes, userRes] = await Promise.all([
-          fetch("/api/products"),
+          fetch("/api/products/options"),
           fetch("/api/auth/me"),
         ]);
 

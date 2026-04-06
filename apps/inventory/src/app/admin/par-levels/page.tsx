@@ -72,7 +72,7 @@ export default function ParLevelsPage() {
   // Load outlets and products on mount
   useEffect(() => {
     Promise.all([
-      fetch("/api/products").then((r) => r.json()),
+      fetch("/api/products/options").then((r) => r.json()),
       fetch("/api/outlets").then((r) => r.json()),
     ]).then(([productsData, outletsData]) => {
       setProducts(productsData);

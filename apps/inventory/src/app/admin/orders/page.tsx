@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Fragment } from "react";
+import { useState, useEffect, useRef, useMemo, Fragment } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,8 @@ import { Card } from "@/components/ui/card";
 import {
   Search,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ShoppingCart,
   MessageCircle,
   Truck,
@@ -25,6 +27,18 @@ import {
   ThumbsUp,
   Trash2,
 } from "lucide-react";
+
+type PaginatedResponse<T> = { items: T[]; total: number; page: number; limit: number };
+const PAGE_SIZE = 50;
+
+function useDebounce(value: string, delay: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -98,12 +112,37 @@ const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof
 // ── Component ─────────────────────────────────────────────────────────────
 
 export default function OrdersPage() {
-  // Table state
-  const { data: orders = [], isLoading: loading, mutate: loadOrders } = useFetch<Order[]>("/api/orders");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebounce(search, 300);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (statusFilter) params.set("status", statusFilter);
+    params.set("page", String(page));
+    params.set("limit", String(PAGE_SIZE));
+    return `/api/orders?${params}`;
+  }, [debouncedSearch, statusFilter, page]);
+
+  const { data, isLoading: loading, mutate: loadOrders } = useFetch<PaginatedResponse<Order>>(apiUrl);
+  const orders = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Reset to page 1 when search/filter changes
+  const prevSearch = useRef(debouncedSearch);
+  const prevStatus = useRef(statusFilter);
+  useEffect(() => {
+    if (prevSearch.current !== debouncedSearch || prevStatus.current !== statusFilter) {
+      setPage(1);
+      prevSearch.current = debouncedSearch;
+      prevStatus.current = statusFilter;
+    }
+  }, [debouncedSearch, statusFilter]);
 
   // ── Status update ───────────────────────────────────────────────────────
 
@@ -147,27 +186,11 @@ export default function OrdersPage() {
 
   // ── Filters ─────────────────────────────────────────────────────────────
 
-  const statuses = ["All", ...Object.keys(STATUS_CONFIG)];
-  const filtered = orders.filter((o) => {
-    const matchSearch =
-      o.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
-      o.supplier.toLowerCase().includes(search.toLowerCase()) ||
-      o.outlet.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "All" || o.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
-  const totalValue = filtered.reduce((a, o) => a + o.totalAmount, 0);
-  const pendingCount = orders.filter((o) => ["DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT", "AWAITING_DELIVERY"].includes(o.status)).length;
+  const statuses = ["", ...Object.keys(STATUS_CONFIG)];
+  const totalValue = useMemo(() => orders.reduce((a, o) => a + o.totalAmount, 0), [orders]);
+  const pendingCount = useMemo(() => orders.filter((o) => ["DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT", "AWAITING_DELIVERY"].includes(o.status)).length, [orders]);
 
   // ── Render ──────────────────────────────────────────────────────────────
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
-      </div>
-    );
-  }
 
   return (
     <div className="p-6">
@@ -176,7 +199,7 @@ export default function OrdersPage() {
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Purchase Orders</h2>
           <p className="mt-0.5 text-sm text-gray-500">
-            {orders.length} orders &middot; {pendingCount} active
+            {total} orders &middot; {pendingCount} active
           </p>
         </div>
         <Link href="/admin/orders/create">
@@ -190,7 +213,7 @@ export default function OrdersPage() {
       <div className="mt-4 grid grid-cols-4 gap-4">
         <Card className="px-4 py-3">
           <p className="text-xs text-gray-500">Total Orders</p>
-          <p className="text-xl font-bold text-gray-900">{orders.length}</p>
+          <p className="text-xl font-bold text-gray-900">{total}</p>
         </Card>
         <Card className="px-4 py-3">
           <p className="text-xs text-gray-500">Active / In Progress</p>
@@ -217,11 +240,11 @@ export default function OrdersPage() {
             const config = STATUS_CONFIG[s];
             return (
               <button
-                key={s}
+                key={s || "all"}
                 onClick={() => setStatusFilter(s)}
                 className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === s ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
               >
-                {s === "All" ? "All" : config?.label ?? s}
+                {s === "" ? "All" : config?.label ?? s}
               </button>
             );
           })}
@@ -245,17 +268,24 @@ export default function OrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && (
+            {!loading && orders.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-4 py-12 text-center">
                   <ShoppingCart className="mx-auto h-8 w-8 text-gray-300" />
                   <p className="mt-2 text-sm text-gray-500">
-                    {orders.length === 0 ? "No orders yet. Click 'Create Order' to get started." : "No orders match your filter."}
+                    {total === 0 && !debouncedSearch && !statusFilter ? "No orders yet. Click 'Create Order' to get started." : "No orders match your filter."}
                   </p>
                 </td>
               </tr>
             )}
-            {filtered.map((order) => {
+            {loading && (
+              <tr>
+                <td colSpan={9} className="px-4 py-12 text-center">
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-terracotta" />
+                </td>
+              </tr>
+            )}
+            {orders.map((order) => {
               const config = STATUS_CONFIG[order.status] ?? { label: order.status, color: "bg-gray-400", icon: Clock };
               const actions = NEXT_ACTIONS[order.status] ?? [];
               return (
@@ -350,6 +380,23 @@ export default function OrdersPage() {
         </table>
       </div>
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-3 flex items-center justify-between text-sm">
+          <p className="text-gray-500">
+            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+          </p>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="rounded-md border px-2 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="px-3 text-gray-700">Page {page} of {totalPages}</span>
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="rounded-md border px-2 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

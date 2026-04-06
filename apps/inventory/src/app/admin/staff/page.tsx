@@ -1,11 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useFetch } from "@/lib/use-fetch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Loader2, Eye, EyeOff, Key, Lock, Hash, Check, X, Search, Shield } from "lucide-react";
+import { Plus, Loader2, Eye, EyeOff, Key, Lock, Hash, Check, X, Search, Shield, ChevronLeft, ChevronRight } from "lucide-react";
+
+type PaginatedResponse<T> = { items: T[]; total: number; page: number; limit: number };
+const PAGE_SIZE = 50;
+
+function useDebounce(value: string, delay: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
 
 type Staff = {
   id: string; name: string; role: string; outlet: string; outletId: string | null; outletCode: string;
@@ -49,37 +62,50 @@ const emptyForm: StaffForm = {
 };
 
 export default function StaffPage() {
-  const [staff, setStaff] = useState<Staff[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "ACTIVE" | "DEACTIVATED">("all");
+  const [filter, setFilter] = useState<"" | "ACTIVE" | "DEACTIVATED">("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebounce(search, 300);
+
+  // Build paginated URL with server-side search/filter
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (filter) params.set("status", filter);
+    params.set("page", String(page));
+    params.set("limit", String(PAGE_SIZE));
+    return `/api/staff?${params}`;
+  }, [debouncedSearch, filter, page]);
+
+  // Parallel data fetching (was sequential before)
+  const { data, isLoading: loading, mutate: reloadStaff } = useFetch<PaginatedResponse<Staff>>(apiUrl);
+  const { data: outlets = [] } = useFetch<OutletOption[]>("/api/outlets");
+
+  const staff = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Reset to page 1 when search/filter changes
+  const prevSearch = useRef(debouncedSearch);
+  const prevFilter = useRef(filter);
+  useEffect(() => {
+    if (prevSearch.current !== debouncedSearch || prevFilter.current !== filter) {
+      setPage(1);
+      prevSearch.current = debouncedSearch;
+      prevFilter.current = filter;
+    }
+  }, [debouncedSearch, filter]);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [form, setForm] = useState<StaffForm>(emptyForm);
-  const [outlets, setOutlets] = useState<OutletOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState<"details" | "access" | "permissions" | "security">("details");
 
-  const loadStaff = () => {
-    fetch("/api/staff")
-      .then((res) => res.json())
-      .then((data) => { setStaff(data); setLoading(false); })
-      .catch(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    loadStaff();
-    fetch("/api/outlets").then((r) => r.json()).then(setOutlets);
-  }, []);
-
-  const filtered = staff.filter((s) => {
-    const matchFilter = filter === "all" || s.status === filter;
-    const matchSearch = !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.phone.includes(search);
-    return matchFilter && matchSearch;
-  });
+  const loadStaff = () => reloadStaff();
 
   const openAdd = () => {
     setForm(emptyForm);
@@ -214,20 +240,12 @@ export default function StaffPage() {
     }));
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
-      </div>
-    );
-  }
-
   return (
     <div className="p-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Staff</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{staff.length} members across {new Set(staff.map((s) => s.outlet).filter(Boolean)).size} locations</p>
+          <p className="mt-0.5 text-sm text-gray-500">{total} members</p>
         </div>
         <Button onClick={openAdd} className="bg-terracotta hover:bg-terracotta-dark"><Plus className="mr-1.5 h-4 w-4" />Add User</Button>
       </div>
@@ -238,9 +256,9 @@ export default function StaffPage() {
           <Input placeholder="Search by name or phone..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex gap-1.5">
-          {(["all", "ACTIVE", "DEACTIVATED"] as const).map((t) => (
-            <button key={t} onClick={() => setFilter(t)} className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${filter === t ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500"}`}>
-              {t === "all" ? "All" : t.toLowerCase()}
+          {(["", "ACTIVE", "DEACTIVATED"] as const).map((t) => (
+            <button key={t || "all"} onClick={() => setFilter(t)} className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${filter === t ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500"}`}>
+              {t === "" ? "All" : t.toLowerCase()}
             </button>
           ))}
         </div>
@@ -261,7 +279,7 @@ export default function StaffPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((s) => (
+            {staff.map((s) => (
               <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -330,6 +348,24 @@ export default function StaffPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-3 flex items-center justify-between text-sm">
+          <p className="text-gray-500">
+            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+          </p>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="rounded-md border px-2 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="px-3 text-gray-700">Page {page} of {totalPages}</span>
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="rounded-md border px-2 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-30">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Staff Edit/Add Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

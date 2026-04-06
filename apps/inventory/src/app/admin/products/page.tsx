@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Search, Pencil, Trash2, Package, ChevronDown, Loader2, CheckSquare, X } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Package, ChevronDown, Loader2, CheckSquare, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 type Product = {
   id: string;
@@ -28,6 +28,8 @@ type Product = {
   suppliers: { name: string; price: number; uom: string }[];
 };
 
+type PaginatedResponse<T> = { items: T[]; total: number; page: number; limit: number };
+
 type CategoryOption = { id: string; name: string };
 
 type ProductForm = {
@@ -42,14 +44,41 @@ type ProductForm = {
 };
 
 const STORAGE_AREAS = ["FRIDGE", "FREEZER", "DRY_STORE", "COUNTER", "BAR"];
+const PAGE_SIZE = 50;
 
 const emptyForm: ProductForm = { name: "", sku: "", categoryId: "", baseUom: "", storageArea: "", shelfLifeDays: "", checkFrequency: "MONTHLY", description: "" };
 
+function useDebounce(value: string, delay: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
+
 export default function ProductsPage() {
-  const { data: products = [], isLoading: loading, mutate: reloadProducts } = useFetch<Product[]>("/api/products");
-  const { data: categoryOptions = [] } = useFetch<CategoryOption[]>("/api/categories");
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebounce(search, 300);
+
+  // Build URL with query params for server-side search/filter/pagination
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (categoryFilter) params.set("category", categoryFilter);
+    params.set("page", String(page));
+    params.set("limit", String(PAGE_SIZE));
+    return `/api/products?${params}`;
+  }, [debouncedSearch, categoryFilter, page]);
+
+  const { data, isLoading: loading, mutate: reloadProducts } = useFetch<PaginatedResponse<Product>>(apiUrl);
+  const products = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const { data: categoryOptions = [] } = useFetch<CategoryOption[]>("/api/categories");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyForm);
@@ -60,6 +89,17 @@ export default function ProductsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<string | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
+
+  // Reset to page 1 when search/filter changes
+  const prevSearch = useRef(debouncedSearch);
+  const prevCategory = useRef(categoryFilter);
+  useEffect(() => {
+    if (prevSearch.current !== debouncedSearch || prevCategory.current !== categoryFilter) {
+      setPage(1);
+      prevSearch.current = debouncedSearch;
+      prevCategory.current = categoryFilter;
+    }
+  }, [debouncedSearch, categoryFilter]);
 
   const loadProducts = () => reloadProducts();
 
@@ -97,13 +137,8 @@ export default function ProductsPage() {
     loadProducts();
   };
 
-  const categories = ["All", ...new Set(products.map((p) => p.category).filter(Boolean))].sort();
-
-  const filtered = products.filter((p) => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
-    const matchCategory = categoryFilter === "All" || p.category === categoryFilter;
-    return matchSearch && matchCategory;
-  });
+  // Categories come from the categories endpoint; products are already server-filtered
+  const categoryNames = useMemo(() => categoryOptions.map((c) => c.name).sort(), [categoryOptions]);
 
   const openAdd = () => {
     setForm(emptyForm);
@@ -131,8 +166,8 @@ export default function ProductsPage() {
   };
 
   // Bulk selection helpers
-  const filteredIds = filtered.map((p) => p.id);
-  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
+  const pageIds = products.map((p) => p.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -144,16 +179,16 @@ export default function ProductsPage() {
   };
 
   const toggleSelectAll = () => {
-    if (allFilteredSelected) {
+    if (allPageSelected) {
       setSelected((prev) => {
         const next = new Set(prev);
-        filteredIds.forEach((id) => next.delete(id));
+        pageIds.forEach((id) => next.delete(id));
         return next;
       });
     } else {
       setSelected((prev) => {
         const next = new Set(prev);
-        filteredIds.forEach((id) => next.add(id));
+        pageIds.forEach((id) => next.add(id));
         return next;
       });
     }
@@ -207,7 +242,7 @@ export default function ProductsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Products</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{products.length} products across {new Set(products.map((p) => p.category)).size} categories</p>
+          <p className="mt-0.5 text-sm text-gray-500">{total} products across {categoryOptions.length} categories</p>
         </div>
         <Button onClick={openAdd} className="bg-terracotta hover:bg-terracotta-dark">
           <Plus className="mr-1.5 h-4 w-4" />
@@ -227,17 +262,27 @@ export default function ProductsPage() {
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {categories.slice(0, 12).map((cat) => (
+          <button
+            onClick={() => setCategoryFilter("")}
+            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+              !categoryFilter
+                ? "border-terracotta bg-terracotta/5 text-terracotta-dark"
+                : "border-gray-200 text-gray-500 hover:bg-gray-50"
+            }`}
+          >
+            All
+          </button>
+          {categoryOptions.slice(0, 11).map((cat) => (
             <button
-              key={cat}
-              onClick={() => setCategoryFilter(cat)}
+              key={cat.id}
+              onClick={() => setCategoryFilter(cat.id)}
               className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                categoryFilter === cat
+                categoryFilter === cat.id
                   ? "border-terracotta bg-terracotta/5 text-terracotta-dark"
                   : "border-gray-200 text-gray-500 hover:bg-gray-50"
               }`}
             >
-              {cat}
+              {cat.name}
             </button>
           ))}
         </div>
@@ -251,7 +296,7 @@ export default function ProductsPage() {
               <th className="w-10 px-4 py-3">
                 <input
                   type="checkbox"
-                  checked={allFilteredSelected && filteredIds.length > 0}
+                  checked={allPageSelected && pageIds.length > 0}
                   onChange={toggleSelectAll}
                   className="h-4 w-4 rounded border-gray-300 text-terracotta accent-terracotta"
                 />
@@ -276,7 +321,7 @@ export default function ProductsPage() {
                 </td>
               </tr>
             )}
-            {!loading && filtered.map((product) => (
+            {!loading && products.map((product) => (
               <tr
                 key={product.id}
                 className={`border-b border-gray-50 transition-colors ${selected.has(product.id) ? "bg-terracotta/5" : "hover:bg-gray-50/50"}`}
@@ -364,6 +409,32 @@ export default function ProductsPage() {
         </table>
       </div>
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-3 flex items-center justify-between text-sm">
+          <p className="text-gray-500">
+            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-md border px-2 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-30"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="px-3 text-gray-700">Page {page} of {totalPages}</span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded-md border px-2 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-30"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Bulk action bar */}
       {selected.size > 0 && (
         <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-gray-200 bg-white px-5 py-3 shadow-lg">
@@ -439,7 +510,7 @@ export default function ProductsPage() {
                 }}
               >
                 <option value="" disabled>Select storage area...</option>
-                {[...new Set([...STORAGE_AREAS, ...products.map((p) => p.storageArea).filter(Boolean)])].sort().map((area) => (
+                {STORAGE_AREAS.map((area) => (
                   <option key={area} value={area}>{area.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}</option>
                 ))}
               </select>
@@ -534,10 +605,7 @@ export default function ProductsPage() {
                     onChange={(e) => updateField("storageArea", e.target.value)}
                   />
                   <datalist id="storage-area-options">
-                    {[...new Set([
-                      "FRIDGE", "FREEZER", "DRY_STORE", "COUNTER", "BAR",
-                      ...products.map((p) => p.storageArea).filter(Boolean),
-                    ])].sort().map((area) => (
+                    {STORAGE_AREAS.map((area) => (
                       <option key={area} value={area}>{area.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}</option>
                     ))}
                   </datalist>
