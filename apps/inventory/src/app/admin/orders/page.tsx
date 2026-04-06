@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, Fragment } from "react";
+import { useState, useEffect, useRef, useMemo, Fragment, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
 import { Card } from "@/components/ui/card";
+import { compressImage } from "@/lib/compress-image";
 import {
   Search,
   ChevronDown,
@@ -26,6 +27,10 @@ import {
   Ban,
   ThumbsUp,
   Trash2,
+  Camera,
+  Pencil,
+  X,
+  Calendar,
 } from "lucide-react";
 
 type PaginatedResponse<T> = { items: T[]; total: number; page: number; limit: number };
@@ -44,6 +49,7 @@ function useDebounce(value: string, delay: number) {
 
 type OrderItem = {
   id: string;
+  productId: string;
   product: string;
   sku: string;
   uom: string;
@@ -81,7 +87,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof
   DRAFT: { label: "Draft", color: "bg-gray-400", icon: FileText },
   PENDING_APPROVAL: { label: "Pending Approval", color: "bg-amber-500", icon: Clock },
   APPROVED: { label: "Approved", color: "bg-blue-500", icon: CheckCircle2 },
-  SENT: { label: "Sent", color: "bg-green-500", icon: MessageCircle },
+  SENT: { label: "Sent to Supplier", color: "bg-green-500", icon: MessageCircle },
+  CONFIRMED: { label: "Confirmed", color: "bg-indigo-500", icon: CheckCircle2 },
   AWAITING_DELIVERY: { label: "Awaiting Delivery", color: "bg-purple-500", icon: Truck },
   PARTIALLY_RECEIVED: { label: "Partially Received", color: "bg-amber-600", icon: AlertTriangle },
   COMPLETED: { label: "Completed", color: "bg-gray-500", icon: CheckCircle2 },
@@ -100,7 +107,9 @@ const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof
   APPROVED: [
     { status: "SENT", label: "Mark as Sent", icon: Send, color: "bg-green-500 hover:bg-green-600" },
   ],
-  SENT: [
+  // SENT: actions handled inline (edit + confirm) — no quick-action buttons
+  SENT: [],
+  CONFIRMED: [
     { status: "AWAITING_DELIVERY", label: "Awaiting Delivery", icon: Truck, color: "bg-purple-500 hover:bg-purple-600" },
   ],
   AWAITING_DELIVERY: [],
@@ -118,6 +127,110 @@ export default function OrdersPage() {
   const debouncedSearch = useDebounce(search, 300);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // ── SENT order editing state ────────────────────────────────────────────
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [editItems, setEditItems] = useState<{ productId: string; product: string; sku: string; uom: string; quantity: number; unitPrice: number; notes: string | null }[]>([]);
+  const [editDeliveryDate, setEditDeliveryDate] = useState("");
+  const [editInvoiceDueDate, setEditInvoiceDueDate] = useState("");
+  const [editInvoicePhotos, setEditInvoicePhotos] = useState<string[]>([]);
+  const [compressing, setCompressing] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const startEditing = (order: Order) => {
+    setEditingOrderId(order.id);
+    setEditItems(order.items.map((i) => ({
+      productId: i.productId,
+      product: i.product,
+      sku: i.sku,
+      uom: i.uom || i.package,
+      quantity: i.quantity,
+      unitPrice: i.unitPrice,
+      notes: i.notes,
+    })));
+    setEditDeliveryDate(order.deliveryDate ?? "");
+    setEditInvoiceDueDate("");
+    setEditInvoicePhotos([]);
+    setExpandedId(order.id);
+  };
+
+  const cancelEditing = () => {
+    setEditingOrderId(null);
+    setEditItems([]);
+  };
+
+  const handleInvoicePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setCompressing(true);
+    try {
+      const compressed = await Promise.all(Array.from(files).map((f) => compressImage(f)));
+      setEditInvoicePhotos((prev) => [...prev, ...compressed]);
+    } finally {
+      setCompressing(false);
+      e.target.value = "";
+    }
+  };
+
+  const saveOrderEdits = async (orderId: string) => {
+    setSavingEdit(true);
+    try {
+      const payload: Record<string, unknown> = {};
+      if (editItems.length > 0) {
+        payload.items = editItems.map((i) => ({
+          productId: i.productId,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          notes: i.notes,
+        }));
+      }
+      if (editDeliveryDate) payload.deliveryDate = editDeliveryDate;
+      if (editInvoiceDueDate) payload.invoiceDueDate = editInvoiceDueDate;
+      if (editInvoicePhotos.length > 0) payload.invoicePhotos = editInvoicePhotos;
+
+      const res = await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) { alert("Failed to save changes"); return; }
+      setEditingOrderId(null);
+      loadOrders();
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const confirmOrder = async (orderId: string) => {
+    // Save edits first, then confirm
+    setSavingEdit(true);
+    try {
+      const payload: Record<string, unknown> = { status: "AWAITING_DELIVERY" };
+      if (editItems.length > 0) {
+        payload.items = editItems.map((i) => ({
+          productId: i.productId,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          notes: i.notes,
+        }));
+      }
+      if (editDeliveryDate) payload.deliveryDate = editDeliveryDate;
+      if (editInvoiceDueDate) payload.invoiceDueDate = editInvoiceDueDate;
+      if (editInvoicePhotos.length > 0) payload.invoicePhotos = editInvoicePhotos;
+
+      const res = await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) { alert("Failed to confirm order"); return; }
+      setEditingOrderId(null);
+      loadOrders();
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const apiUrl = useMemo(() => {
     const params = new URLSearchParams();
@@ -334,42 +447,190 @@ export default function OrdersPage() {
                       <td colSpan={9} className="bg-gray-50 px-8 py-3">
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-xs font-semibold text-gray-500 uppercase">Order Items</p>
-                          <div className="flex gap-2 text-xs text-gray-400">
+                          <div className="flex items-center gap-2 text-xs text-gray-400">
                             <span>Created by: {order.createdBy}</span>
                             {order.approvedBy && <span>&middot; Approved by: {order.approvedBy}</span>}
                             {order.sentAt && <span>&middot; Sent: {new Date(order.sentAt).toLocaleDateString("en-MY")}</span>}
+                            {order.status === "SENT" && editingOrderId !== order.id && (
+                              <button onClick={() => startEditing(order)} className="ml-2 flex items-center gap-1 rounded-md bg-terracotta/10 px-2 py-1 text-[10px] font-medium text-terracotta hover:bg-terracotta/20">
+                                <Pencil className="h-3 w-3" />Adjust Order
+                              </button>
+                            )}
                           </div>
                         </div>
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="text-gray-400">
-                              <th className="pb-1 text-left font-medium">Product</th>
-                              <th className="pb-1 text-left font-medium">SKU</th>
-                              <th className="pb-1 text-left font-medium">Package</th>
-                              <th className="pb-1 text-right font-medium">Qty</th>
-                              <th className="pb-1 text-right font-medium">Unit Price</th>
-                              <th className="pb-1 text-right font-medium">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {order.items.map((item) => (
-                              <tr key={item.id} className="border-t border-gray-200/50">
-                                <td className="py-1.5 text-gray-700">{item.product}</td>
-                                <td className="py-1.5"><code className="text-gray-500">{item.sku}</code></td>
-                                <td className="py-1.5 text-gray-500">{item.uom || item.package}</td>
-                                <td className="py-1.5 text-right text-gray-700">{item.quantity}</td>
-                                <td className="py-1.5 text-right text-gray-600">RM {item.unitPrice.toFixed(2)}</td>
-                                <td className="py-1.5 text-right text-gray-900 font-medium">RM {item.totalPrice.toFixed(2)}</td>
-                              </tr>
-                            ))}
-                            <tr className="border-t border-gray-300">
-                              <td colSpan={5} className="py-1.5 font-semibold text-gray-700">Total</td>
-                              <td className="py-1.5 text-right font-semibold text-gray-900">RM {order.totalAmount.toFixed(2)}</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                        {order.notes && <p className="mt-2 text-xs text-gray-500">Notes: {order.notes}</p>}
-                        {order.receivingCount > 0 && <p className="mt-2 text-xs text-green-600">{order.receivingCount} receiving record(s) linked</p>}
+
+                        {/* Editable items table for SENT orders */}
+                        {editingOrderId === order.id ? (
+                          <>
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-gray-400">
+                                  <th className="pb-1 text-left font-medium">Product</th>
+                                  <th className="pb-1 text-left font-medium">SKU</th>
+                                  <th className="pb-1 text-left font-medium">Package</th>
+                                  <th className="pb-1 text-right font-medium">Qty</th>
+                                  <th className="pb-1 text-right font-medium">Unit Price</th>
+                                  <th className="pb-1 text-right font-medium">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {editItems.map((item, idx) => (
+                                  <tr key={item.productId} className="border-t border-gray-200/50">
+                                    <td className="py-1.5 text-gray-700">{item.product}</td>
+                                    <td className="py-1.5"><code className="text-gray-500">{item.sku}</code></td>
+                                    <td className="py-1.5 text-gray-500">{item.uom}</td>
+                                    <td className="py-1.5 text-right">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="any"
+                                        value={item.quantity}
+                                        onChange={(e) => {
+                                          const val = parseFloat(e.target.value) || 0;
+                                          setEditItems((prev) => prev.map((it, i) => i === idx ? { ...it, quantity: val } : it));
+                                        }}
+                                        className="w-16 rounded border border-gray-300 px-1.5 py-0.5 text-right text-xs"
+                                      />
+                                    </td>
+                                    <td className="py-1.5 text-right">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={item.unitPrice}
+                                        onChange={(e) => {
+                                          const val = parseFloat(e.target.value) || 0;
+                                          setEditItems((prev) => prev.map((it, i) => i === idx ? { ...it, unitPrice: val } : it));
+                                        }}
+                                        className="w-20 rounded border border-gray-300 px-1.5 py-0.5 text-right text-xs"
+                                      />
+                                    </td>
+                                    <td className="py-1.5 text-right text-gray-900 font-medium">RM {(item.quantity * item.unitPrice).toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                                <tr className="border-t border-gray-300">
+                                  <td colSpan={5} className="py-1.5 font-semibold text-gray-700">Total</td>
+                                  <td className="py-1.5 text-right font-semibold text-gray-900">
+                                    RM {editItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0).toFixed(2)}
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+
+                            {/* Delivery date + Invoice due date */}
+                            <div className="mt-3 flex flex-wrap gap-4">
+                              <div>
+                                <label className="text-[10px] font-medium text-gray-500 uppercase">Delivery Date</label>
+                                <input
+                                  type="date"
+                                  value={editDeliveryDate}
+                                  onChange={(e) => setEditDeliveryDate(e.target.value)}
+                                  className="mt-0.5 block w-40 rounded border border-gray-300 px-2 py-1 text-xs"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-medium text-gray-500 uppercase">Invoice Due Date</label>
+                                <input
+                                  type="date"
+                                  value={editInvoiceDueDate}
+                                  onChange={(e) => setEditInvoiceDueDate(e.target.value)}
+                                  className="mt-0.5 block w-40 rounded border border-gray-300 px-2 py-1 text-xs"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Invoice photo upload */}
+                            <div className="mt-3">
+                              <label className="text-[10px] font-medium text-gray-500 uppercase">Invoice Photo</label>
+                              <div className="mt-1 flex flex-wrap gap-2">
+                                {editInvoicePhotos.map((photo, i) => (
+                                  <div key={i} className="relative h-16 w-16 overflow-hidden rounded-lg border">
+                                    <img src={photo} alt={`Invoice ${i + 1}`} className="h-full w-full object-cover" />
+                                    <button
+                                      onClick={() => setEditInvoicePhotos((prev) => prev.filter((_, j) => j !== i))}
+                                      className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-white"
+                                    >
+                                      <X className="h-2.5 w-2.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                                {compressing ? (
+                                  <div className="flex h-16 w-16 items-center justify-center rounded-lg border-2 border-dashed border-terracotta/30 text-terracotta">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-400 hover:border-terracotta hover:text-terracotta"
+                                  >
+                                    <Camera className="h-4 w-4" />
+                                    <span className="text-[8px]">Upload</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Action buttons */}
+                            <div className="mt-3 flex items-center gap-2">
+                              <button
+                                onClick={() => saveOrderEdits(order.id)}
+                                disabled={savingEdit}
+                                className="rounded-md bg-gray-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-700 disabled:opacity-50"
+                              >
+                                {savingEdit ? <Loader2 className="inline mr-1 h-3 w-3 animate-spin" /> : null}
+                                Save Changes
+                              </button>
+                              <button
+                                onClick={() => confirmOrder(order.id)}
+                                disabled={savingEdit}
+                                className="rounded-md bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+                              >
+                                {savingEdit ? <Loader2 className="inline mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="inline mr-1 h-3 w-3" />}
+                                Confirm Order
+                              </button>
+                              <button
+                                onClick={cancelEditing}
+                                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          /* Read-only items table */
+                          <>
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-gray-400">
+                                  <th className="pb-1 text-left font-medium">Product</th>
+                                  <th className="pb-1 text-left font-medium">SKU</th>
+                                  <th className="pb-1 text-left font-medium">Package</th>
+                                  <th className="pb-1 text-right font-medium">Qty</th>
+                                  <th className="pb-1 text-right font-medium">Unit Price</th>
+                                  <th className="pb-1 text-right font-medium">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {order.items.map((item) => (
+                                  <tr key={item.id} className="border-t border-gray-200/50">
+                                    <td className="py-1.5 text-gray-700">{item.product}</td>
+                                    <td className="py-1.5"><code className="text-gray-500">{item.sku}</code></td>
+                                    <td className="py-1.5 text-gray-500">{item.uom || item.package}</td>
+                                    <td className="py-1.5 text-right text-gray-700">{item.quantity}</td>
+                                    <td className="py-1.5 text-right text-gray-600">RM {item.unitPrice.toFixed(2)}</td>
+                                    <td className="py-1.5 text-right text-gray-900 font-medium">RM {item.totalPrice.toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                                <tr className="border-t border-gray-300">
+                                  <td colSpan={5} className="py-1.5 font-semibold text-gray-700">Total</td>
+                                  <td className="py-1.5 text-right font-semibold text-gray-900">RM {order.totalAmount.toFixed(2)}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                            {order.notes && <p className="mt-2 text-xs text-gray-500">Notes: {order.notes}</p>}
+                            {order.receivingCount > 0 && <p className="mt-2 text-xs text-green-600">{order.receivingCount} receiving record(s) linked</p>}
+                          </>
+                        )}
                       </td>
                     </tr>
                   )}
@@ -397,6 +658,16 @@ export default function OrdersPage() {
           </div>
         </div>
       )}
+
+      {/* Hidden file input for invoice photo upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleInvoicePhoto}
+      />
     </div>
   );
 }

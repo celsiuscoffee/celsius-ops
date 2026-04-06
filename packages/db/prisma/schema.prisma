@@ -302,6 +302,7 @@ model Order {
   approvedBy   User?       @relation("OrderApprovedBy", fields: [approvedById], references: [id])
   approvedAt   DateTime?
   sentAt       DateTime?
+  confirmedAt  DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -315,6 +316,7 @@ enum OrderStatus {
   PENDING_APPROVAL
   APPROVED
   SENT
+  CONFIRMED
   AWAITING_DELIVERY
   PARTIALLY_RECEIVED
   COMPLETED
