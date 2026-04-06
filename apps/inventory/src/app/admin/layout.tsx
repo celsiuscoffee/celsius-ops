@@ -66,6 +66,7 @@ const sidebarSections: NavSection[] = [
   {
     label: "Stock",
     items: [
+      { href: "/admin/transfers", label: "Transfers", icon: ArrowRightLeft },
       { href: "/admin/par-levels", label: "Par Levels", icon: TrendingDown, adminOnly: true, module: "par_levels" },
       { href: "/admin/reports/stock-valuation", label: "Stock Valuation", icon: FileBarChart, adminOnly: true, module: "reports" },
     ],
