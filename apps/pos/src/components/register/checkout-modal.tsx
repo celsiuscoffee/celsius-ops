@@ -3,7 +3,8 @@
 import { useState } from "react";
 import type { CartItem, OrderType } from "@/types/database";
 import { displayRM } from "@/types/database";
-import { QRPaymentModal } from "@/components/pos/qr-payment-modal";
+// QRPaymentModal kept for future standalone QR flow
+// import { QRPaymentModal } from "@/components/pos/qr-payment-modal";
 
 type PaymentMethod = {
   id: string;
@@ -13,13 +14,23 @@ type PaymentMethod = {
 };
 
 const PAYMENT_METHODS: PaymentMethod[] = [
-  { id: "qr_pay", label: "QR Pay (Scan)", icon: "📲", provider: "revenue_monster" },
-  { id: "ghl_terminal", label: "Card (Terminal)", icon: "💳", provider: "ghl" },
-  { id: "tng", label: "Touch 'n Go", icon: "📱", provider: "revenue_monster" },
+  { id: "qr_pay", label: "DuitNow QR", icon: "📲", provider: "revenue_monster" },
+  { id: "ewallet", label: "E-Wallet", icon: "📱", provider: "revenue_monster" },
+  { id: "card_terminal", label: "Card (Terminal)", icon: "💳", provider: "revenue_monster" },
   { id: "grabpay", label: "GrabPay", icon: "🟢", provider: "revenue_monster" },
+  { id: "tng", label: "Touch 'n Go", icon: "📱", provider: "revenue_monster" },
   { id: "fpx", label: "FPX", icon: "🏦", provider: "revenue_monster" },
-  { id: "card", label: "Card (Online)", icon: "💳", provider: "ghl" },
 ];
+
+// Map checkout method IDs to Revenue Monster terminal payment types
+const RM_TYPE_MAP: Record<string, string> = {
+  qr_pay: "RETAIL-QR",
+  ewallet: "E-WALLET",
+  card_terminal: "CARD",
+  grabpay: "E-WALLET",
+  tng: "E-WALLET",
+  fpx: "E-WALLET",
+};
 
 type CheckoutStep = "method" | "processing" | "success" | "failed";
 
@@ -53,33 +64,43 @@ export function CheckoutModal({
   const [orderNumber] = useState(initialOrderNumber);
   const [queueNumber] = useState(initialQueueNumber ?? "");
   const [error, setError] = useState("");
-  const [showQR, setShowQR] = useState(false);
 
   async function handlePay(methodId: string) {
-    // QR Pay — open QR modal instead of processing
-    if (methodId === "qr_pay") {
-      setShowQR(true);
-      return;
-    }
-
     setSelectedMethod(methodId);
     setStep("processing");
     setError("");
 
     try {
-      // Simulate payment processing (replace with GHL/RM SDK)
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
+      const rmType = RM_TYPE_MAP[methodId] || "E-WALLET";
       const methodLabel = PAYMENT_METHODS.find((m) => m.id === methodId)?.label ?? methodId;
+      const orderId = orderNumber || `POS-${Date.now()}`;
+
+      const res = await fetch("/api/payment/terminal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          orderTitle: `Celsius ${orderType === "dine_in" ? "Dine-in" : "Takeaway"}`,
+          amount: total, // already in sen
+          type: rmType,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Payment failed");
+      }
+
       setStep("success");
 
       // Small delay then complete
       setTimeout(() => {
         onComplete(orderNumber, queueNumber, methodLabel);
       }, 100);
-    } catch {
+    } catch (err) {
       setStep("failed");
-      setError("Payment failed. Please try again.");
+      setError(err instanceof Error ? err.message : "Payment failed. Please try again.");
     }
   }
 
@@ -229,22 +250,6 @@ export function CheckoutModal({
         )}
       </div>
 
-      {/* QR Payment Modal */}
-      {showQR && (
-        <QRPaymentModal
-          amount={total}
-          orderNumber={orderNumber}
-          outletName="Celsius Coffee"
-          onSuccess={(method, txnRef) => {
-            setShowQR(false);
-            onComplete(orderNumber, queueNumber, `QR Pay (${method})`);
-          }}
-          onCancel={() => {
-            setShowQR(false);
-            setStep("method");
-          }}
-        />
-      )}
     </div>
   );
 }

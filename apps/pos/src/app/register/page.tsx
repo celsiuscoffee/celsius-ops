@@ -267,14 +267,17 @@ export default function RegisterPage() {
         status: "completed",
       });
 
-      // After payment confirmed → send to kitchen (print dockets)
-      printKitchenDocket58mm(order, pos.outlet?.name ?? "Celsius Coffee");
-      // Print customer receipt
-      printReceipt58mm(order, pos.outlet?.name ?? "Celsius Coffee");
-
       setShowReceipt(order as unknown as Record<string, unknown>);
       setShowCheckout(false);
       clearCart();
+
+      // Defer printing so React can commit state updates first.
+      // window.print() is synchronous and blocks the event loop.
+      const outletName = pos.outlet?.name ?? "Celsius Coffee";
+      setTimeout(() => {
+        try { printKitchenDocket58mm(order, outletName); } catch {}
+        try { printReceipt58mm(order, outletName); } catch {}
+      }, 500);
     } catch (err) {
       console.error("Order creation failed:", err);
       alert("Failed to create order. Please try again.");

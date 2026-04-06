@@ -1,33 +1,24 @@
 import { NextResponse, NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { verifyPin } from "@celsius/auth";
+import { createClient } from "@supabase/supabase-js";
+import bcryptjs from "bcryptjs";
 
-/**
- * Verify a manager/admin PIN for override actions (e.g. discounts).
- * Does NOT create a session — just validates the PIN belongs to a manager+.
- */
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
 export async function POST(req: NextRequest) {
   const { pin } = await req.json();
+  if (!pin || pin.length < 4) return NextResponse.json({ error: "PIN required" }, { status: 400 });
 
-  if (!pin || pin.length < 4) {
-    return NextResponse.json({ error: "PIN required" }, { status: 400 });
-  }
+  const { data: managers } = await supabase
+    .from("staff_users").select("id, name, pin_hash")
+    .in("role", ["manager", "admin"]).eq("is_active", true);
 
-  const candidates = await prisma.user.findMany({
-    where: {
-      pin: { not: null },
-      role: { in: ["MANAGER", "ADMIN", "OWNER"] },
-      status: "ACTIVE",
-    },
-    select: { id: true, pin: true, name: true },
-  });
-
-  for (const user of candidates) {
-    const { match } = await verifyPin(pin, user.pin);
-    if (match) {
+  for (const user of managers ?? []) {
+    if (user.pin_hash && await bcryptjs.compare(pin, user.pin_hash)) {
       return NextResponse.json({ ok: true, name: user.name });
     }
   }
-
   return NextResponse.json({ error: "Invalid manager PIN" }, { status: 401 });
 }

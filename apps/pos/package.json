@@ -4,14 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3003",
-    "postinstall": "prisma generate --schema=../../packages/db/prisma/schema.prisma",
-    "build": "prisma generate --schema=../../packages/db/prisma/schema.prisma && next build",
+    "postinstall": "prisma generate",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
-    "@celsius/auth": "*",
-    "@celsius/db": "*",
     "@prisma/client": "^6.19.3",
     "@sentry/nextjs": "^10.47.0",
     "@supabase/ssr": "^0.6.0",
