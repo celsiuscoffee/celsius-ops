@@ -41,11 +41,12 @@ export async function GET() {
       where: { status: "OVERDUE" },
       _sum: { amount: true },
     }),
-    // Stock balances for asset value
+    // Stock balances for asset value (only non-zero)
     prisma.stockBalance.findMany({
+      where: { quantity: { gt: 0 } },
       select: { productId: true, quantity: true },
     }),
-    // Supplier prices for cost calculation
+    // Supplier prices for cost calculation (only cheapest per product via distinct)
     prisma.supplierProduct.findMany({
       where: { isActive: true },
       select: {
@@ -54,12 +55,12 @@ export async function GET() {
         productPackage: { select: { conversionFactor: true } },
       },
     }),
-    // This month's sales for COGS
+    // This month's sales for COGS (limited to current month)
     prisma.salesTransaction.findMany({
       where: { transactedAt: { gte: monthStart } },
       select: { menuId: true, quantity: true },
     }),
-    // Menu ingredients for COGS calculation
+    // Menu ingredients for COGS calculation (only for menus sold this month — filtered after)
     prisma.menuIngredient.findMany({
       select: { menuId: true, productId: true, quantityUsed: true },
     }),

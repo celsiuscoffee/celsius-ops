@@ -413,7 +413,7 @@ export default function SuppliersPage() {
 
       {/* Price List Dialog */}
       <Dialog open={priceDialogOpen} onOpenChange={setPriceDialogOpen}>
-        <DialogContent className="max-w-3xl overflow-visible">
+        <DialogContent className="max-w-lg sm:max-w-3xl overflow-visible">
           <DialogHeader>
             <DialogTitle>{selectedSupplier?.name} — Price List</DialogTitle>
           </DialogHeader>
@@ -423,18 +423,19 @@ export default function SuppliersPage() {
                 <p className="text-sm text-gray-500">{selectedSupplier.products.length} products</p>
                 <Button size="sm" variant="outline" onClick={() => { setAddingProduct(true); setProductSearch(""); }}>
                   <Plus className="mr-1 h-3 w-3" />
-                  Add Product
+                  <span className="hidden sm:inline">Add Product</span>
+                  <span className="sm:hidden">Add</span>
                 </Button>
               </div>
 
-              <div className="rounded-lg border border-gray-200">
-                <table className="w-full text-sm">
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <table className="w-full min-w-[480px] text-sm">
                   <thead>
                     <tr className="border-b bg-gray-50">
                       <th className="px-3 py-2 text-left font-medium text-gray-500">Product</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-500">SKU</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-500 hidden sm:table-cell">SKU</th>
                       <th className="px-3 py-2 text-left font-medium text-gray-500">Package</th>
-                      <th className="px-3 py-2 text-right font-medium text-gray-500">Price (RM)</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap">Price (RM)</th>
                       <th className="px-3 py-2 w-16"></th>
                     </tr>
                   </thead>
@@ -448,8 +449,11 @@ export default function SuppliersPage() {
                     )}
                     {selectedSupplier.products.map((p) => (
                       <tr key={p.id} className="border-b border-gray-50">
-                        <td className="px-3 py-2 text-gray-900">{p.name}</td>
-                        <td className="px-3 py-2"><code className="rounded bg-gray-100 px-1 text-xs">{p.sku}</code></td>
+                        <td className="px-3 py-2 text-gray-900">
+                          <span className="block truncate max-w-[180px] sm:max-w-none">{p.name}</span>
+                          <span className="block text-xs text-gray-400 sm:hidden">{p.sku}</span>
+                        </td>
+                        <td className="px-3 py-2 hidden sm:table-cell"><code className="rounded bg-gray-100 px-1 text-xs">{p.sku}</code></td>
                         <td className="px-3 py-2 text-gray-600">{p.uom}</td>
                         <td className="px-3 py-2 text-right">
                           {editingPriceId === p.id ? (
@@ -499,7 +503,7 @@ export default function SuppliersPage() {
                             <div className="relative flex-1">
                               <input
                                 type="text"
-                                placeholder="Search product name or SKU..."
+                                placeholder="Search product..."
                                 value={productSearch}
                                 onChange={(e) => { setProductSearch(e.target.value); setNewProductId(""); }}
                                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta/30"

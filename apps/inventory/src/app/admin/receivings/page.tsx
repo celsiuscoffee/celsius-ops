@@ -108,11 +108,11 @@ export default function ReceivingsPage() {
 
   const loadData = () => {
     Promise.all([
-      fetch("/api/receivings").then((r) => r.json()),
+      fetch("/api/receivings?limit=100").then((r) => r.json()),
       fetch("/api/orders?limit=100").then((r) => r.json()),
     ])
       .then(([recData, ordersData]) => {
-        setReceivings(recData);
+        setReceivings(recData.data ?? recData);
         const orderItems = ordersData.items ?? ordersData;
         setAwaitingOrders(
           orderItems

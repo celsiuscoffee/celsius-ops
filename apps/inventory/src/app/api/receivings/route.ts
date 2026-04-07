@@ -4,33 +4,46 @@ import { adjustStockBalance } from "@/lib/stock";
 import { getUserFromHeaders } from "@/lib/auth";
 import { logActivity } from "@/lib/activity-log";
 
-export async function GET() {
-  const receivings = await prisma.receiving.findMany({
-    select: {
-      id: true,
-      orderId: true,
-      status: true,
-      notes: true,
-      invoicePhotos: true,
-      receivedAt: true,
-      order: { select: { orderNumber: true } },
-      outlet: { select: { name: true } },
-      supplier: { select: { name: true } },
-      receivedBy: { select: { name: true } },
-      items: {
-        select: {
-          id: true,
-          orderedQty: true,
-          receivedQty: true,
-          expiryDate: true,
-          discrepancyReason: true,
-          product: { select: { name: true, sku: true } },
-          productPackage: { select: { packageLabel: true } },
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const limit = Math.min(Number(searchParams.get("limit")) || 50, 200);
+  const offset = Number(searchParams.get("offset")) || 0;
+  const outletId = searchParams.get("outletId");
+
+  const where = outletId ? { outletId } : {};
+
+  const [receivings, total] = await Promise.all([
+    prisma.receiving.findMany({
+      where,
+      select: {
+        id: true,
+        orderId: true,
+        status: true,
+        notes: true,
+        invoicePhotos: true,
+        receivedAt: true,
+        order: { select: { orderNumber: true } },
+        outlet: { select: { name: true } },
+        supplier: { select: { name: true } },
+        receivedBy: { select: { name: true } },
+        items: {
+          select: {
+            id: true,
+            orderedQty: true,
+            receivedQty: true,
+            expiryDate: true,
+            discrepancyReason: true,
+            product: { select: { name: true, sku: true } },
+            productPackage: { select: { packageLabel: true } },
+          },
         },
       },
-    },
-    orderBy: { receivedAt: "desc" },
-  });
+      orderBy: { receivedAt: "desc" },
+      take: limit,
+      skip: offset,
+    }),
+    prisma.receiving.count({ where }),
+  ]);
 
   const mapped = receivings.map((r) => ({
     id: r.id,
@@ -55,7 +68,7 @@ export async function GET() {
     })),
   }));
 
-  return NextResponse.json(mapped);
+  return NextResponse.json({ data: mapped, total, limit, offset });
 }
 
 export async function POST(req: NextRequest) {

@@ -123,7 +123,7 @@ export default function ReceivePage() {
     try {
       const [ordersRes, receivingsRes, userRes] = await Promise.all([
         fetch("/api/orders?limit=100"),
-        fetch("/api/receivings"),
+        fetch("/api/receivings?limit=10"),
         fetch("/api/auth/me"),
       ]);
 
@@ -136,7 +136,8 @@ export default function ReceivePage() {
       }
 
       if (receivingsRes.ok) {
-        const allReceivings: ReceivingRecord[] = await receivingsRes.json();
+        const recJson = await receivingsRes.json();
+        const allReceivings: ReceivingRecord[] = recJson.data ?? recJson;
         setRecentReceivings(allReceivings.slice(0, 5));
       }
 
