@@ -458,7 +458,7 @@ export default function PayAndClaimPage() {
 
       {/* ── Create Claim Dialog ── */}
       <Dialog open={createOpen} onOpenChange={(open) => { if (!open) resetCreateDialog(); }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="!max-w-4xl max-h-[90vh] overflow-y-auto p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Receipt className="h-5 w-5" /> New Pay &amp; Claim
