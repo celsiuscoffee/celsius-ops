@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, getAuthUser } from '@/lib/auth';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 // GET /api/members?brand_id=brand-celsius&phone=+60123456789&page=0&limit=50&search=keyword
@@ -180,13 +180,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Rate limit member creation by phone
-    const rateCheck = await checkRateLimit(phone, RATE_LIMITS.MEMBER_CREATE);
-    if (!rateCheck.allowed) {
-      return NextResponse.json(
-        { error: 'Too many requests. Please try again later.' },
-        { status: 429 }
-      );
+    // Rate limit member creation by phone (skip for authenticated staff/admin)
+    const authUser = await getAuthUser(request);
+    if (!authUser) {
+      const rateCheck = await checkRateLimit(phone, RATE_LIMITS.MEMBER_CREATE);
+      if (!rateCheck.allowed) {
+        return NextResponse.json(
+          { error: 'Too many requests. Please try again later.' },
+          { status: 429 }
+        );
+      }
     }
 
     // Check if member with this phone already exists (any format)
@@ -234,8 +237,6 @@ export async function POST(request: NextRequest) {
           email: email || null,
           birthday: birthday || null,
           preferred_outlet_id: outlet_id || null,
-          sms_opt_out: false,
-          consent_at: new Date().toISOString(),
         })
         .select()
         .single();
@@ -331,8 +332,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    console.error('[members POST] Error:', message, err);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: message },
       { status: 500 }
     );
   }

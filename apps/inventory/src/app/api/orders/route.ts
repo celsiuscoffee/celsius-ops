@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
   const count = await prisma.order.count({ where: { outletId } });
   const orderNumber = `CC-${outlet.code}-${String(count + 1).padStart(4, "0")}`;
 
-  const caller = getUserFromHeaders(req.headers);
+  const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const totalAmount = items.reduce(

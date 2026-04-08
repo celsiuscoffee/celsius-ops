@@ -2,38 +2,38 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createSession } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
-import { z } from "zod";
-
-const loginSchema = z.object({
-  username: z.string().min(1).max(100).trim(),
-  password: z.string().min(1).max(200),
-});
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
-  let body;
-  try {
-    body = loginSchema.parse(await req.json());
-  } catch {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const { limited, retryAfterMs } = checkRateLimit(`login:${ip}`, 5, 60_000);
+  if (limited) {
+    return NextResponse.json(
+      { error: "Too many login attempts. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) } }
+    );
+  }
+
+  const { username, password } = await req.json();
+
+  if (!username || !password) {
     return NextResponse.json({ error: "Username and password required" }, { status: 400 });
   }
 
-  const { username, password } = body;
-
   const user = await prisma.user.findFirst({
     where: {
-      username,
+      username: username.trim(),
       status: "ACTIVE",
       role: { in: ["OWNER", "ADMIN", "MANAGER"] },
     },
     include: { outlet: { select: { name: true } } },
   });
 
-  if (!user || !user.passwordHash) {
+  if (!user || !user.password) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
-  const valid = await verifyPassword(password, user.passwordHash);
-  if (!valid) {
+  if (!verifyPassword(password, user.password)) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 

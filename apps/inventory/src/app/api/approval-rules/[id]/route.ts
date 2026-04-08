@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const caller = getUserFromHeaders(req.headers);
-  if (!caller || caller.role !== "ADMIN") {
+  const caller = await getUserFromHeaders(req.headers);
+  if (!caller || (caller.role !== "ADMIN" && caller.role !== "OWNER")) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
   }
 
@@ -26,8 +26,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const caller = getUserFromHeaders(req.headers);
-  if (!caller || caller.role !== "ADMIN") {
+  const caller = await getUserFromHeaders(req.headers);
+  if (!caller || (caller.role !== "ADMIN" && caller.role !== "OWNER")) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
   }
 

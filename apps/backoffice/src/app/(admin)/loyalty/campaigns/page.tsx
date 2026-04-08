@@ -457,7 +457,7 @@ export default function CampaignsPage() {
     if (formMessage.trim()) body.message = formMessage.trim();
 
     try {
-      const url = isEdit ? `/api/campaigns?id=${editingId}` : "/api/campaigns";
+      const url = isEdit ? `/api/loyalty/campaigns?id=${editingId}` : "/api/loyalty/campaigns";
       const method = isEdit ? "PUT" : "POST";
       const res = await fetch(url, {
         method,

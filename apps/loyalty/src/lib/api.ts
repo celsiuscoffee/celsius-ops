@@ -100,6 +100,7 @@ export async function createMember(data: {
     const res = await fetch("/api/members", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ brand_id: "brand-celsius", ...data }),
     });
     if (!res.ok) return null;
@@ -169,6 +170,7 @@ export async function awardPoints(data: {
     const res = await fetch("/api/points/award", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ brand_id: "brand-celsius", ...data }),
     });
     return res.json();

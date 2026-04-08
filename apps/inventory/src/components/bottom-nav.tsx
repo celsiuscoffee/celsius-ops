@@ -21,6 +21,7 @@ const ROLE_LEVEL: Record<string, number> = {
   STAFF: 1,
   MANAGER: 2,
   ADMIN: 3,
+  OWNER: 4,
 };
 
 export function BottomNav() {

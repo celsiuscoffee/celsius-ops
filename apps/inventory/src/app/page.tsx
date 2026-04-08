@@ -4,10 +4,9 @@ import { getSession } from "@/lib/auth";
 export default async function Home() {
   const session = await getSession();
   if (!session) {
-    redirect("/login");
+    redirect("/staff");
   }
-  if (session.role === "ADMIN") {
-    redirect("/admin");
-  }
+  // All admin management is at backoffice.celsiuscoffee.com
+  // OWNER/ADMIN with a session still go to /home (staff-facing inventory app)
   redirect("/home");
 }

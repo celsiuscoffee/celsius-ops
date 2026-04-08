@@ -37,8 +37,8 @@ type QuickStat = {
 };
 
 const MENU_ITEMS = [
-  { label: "Reports", icon: FileBarChart, href: "/admin/reports" },
-  { label: "Settings", icon: Settings, href: "/admin" },
+  { label: "Reports", icon: FileBarChart, href: "https://backoffice.celsiuscoffee.com/inventory/reports" },
+  { label: "Settings", icon: Settings, href: "https://backoffice.celsiuscoffee.com" },
 ];
 
 export default function ProfilePage() {
@@ -139,7 +139,7 @@ export default function ProfilePage() {
   const handleLogout = async () => {
     setLoggingOut(true);
     await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
+    window.location.href = "/staff";
   };
 
   const initial = user?.name?.charAt(0)?.toUpperCase() ?? "?";
@@ -162,7 +162,7 @@ export default function ProfilePage() {
                 <p className="text-sm text-gray-500">{roleLabel}</p>
               </div>
               {(user?.role === "ADMIN" || user?.role === "MANAGER") && (
-                <a href="/admin" className="flex items-center gap-1 rounded-lg bg-terracotta/10 px-2.5 py-1.5 text-xs font-medium text-terracotta-dark">
+                <a href="https://backoffice.celsiuscoffee.com" className="flex items-center gap-1 rounded-lg bg-terracotta/10 px-2.5 py-1.5 text-xs font-medium text-terracotta-dark">
                   <Shield className="h-3 w-3" />
                   {user?.role === "ADMIN" ? "Admin" : "Manager"}
                 </a>

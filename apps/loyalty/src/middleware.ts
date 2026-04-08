@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken, COOKIE_NAME } from '@celsius/auth';
 
 /**
- * Middleware — protects /admin routes and adds security headers.
- * Runs on the edge before page rendering.
+ * Middleware — redirects admin to backoffice, adds security headers.
+ * All admin management is consolidated at backoffice.celsiuscoffee.com.
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -15,27 +14,11 @@ export async function middleware(request: NextRequest) {
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('X-XSS-Protection', '1; mode=block');
 
-  // ─── Protect /admin pages ──────────────────────────
-  if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
-    const token = request.cookies.get(COOKIE_NAME)?.value;
-
-    if (!token) {
-      const loginUrl = new URL('/admin/login', request.url);
-      loginUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(loginUrl);
-    }
-
-    try {
-      const user = await verifyToken(token);
-      if (!user) throw new Error('Invalid token');
-    } catch {
-      // Invalid/expired token — clear cookie and redirect to login
-      const loginUrl = new URL('/admin/login', request.url);
-      loginUrl.searchParams.set('redirect', pathname);
-      const redirectResponse = NextResponse.redirect(loginUrl);
-      redirectResponse.cookies.delete(COOKIE_NAME);
-      return redirectResponse;
-    }
+  // ─── Redirect /admin to backoffice (except read-only pages) ──
+  // Staff directory remains accessible as read-only view
+  const ALLOWED_ADMIN_PATHS = ['/admin/staff'];
+  if (pathname.startsWith('/admin') && !ALLOWED_ADMIN_PATHS.some((p) => pathname.startsWith(p))) {
+    return NextResponse.redirect('https://backoffice.celsiuscoffee.com');
   }
 
   return response;

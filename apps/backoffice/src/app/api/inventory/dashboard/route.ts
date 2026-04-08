@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
       id: o.id,
       orderNumber: o.orderNumber,
       supplier: o.supplier.name,
-      status: o.status.toLowerCase(),
+      status: o.status,
       totalAmount: Number(o.totalAmount),
       createdAt: o.createdAt.toISOString(),
     })),

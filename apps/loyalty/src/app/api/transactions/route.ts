@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { requireAuth } from '@/lib/auth';
 
 // GET /api/transactions?member_id=member-1&brand_id=brand-celsius&limit=50
 // Fetch point transactions for a member (paginated)
+// Public endpoint — customers access via OTP-verified session (phone stored client-side).
+// member_id acts as the access token; transactions are non-sensitive point history.
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireAuth(request);
-    if (auth.error) return auth.error;
-
     const { searchParams } = new URL(request.url);
     const memberId = searchParams.get('member_id');
     const brandId = searchParams.get('brand_id');

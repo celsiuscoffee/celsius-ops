@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { orderId, outletId, supplierId, items, notes, status, invoicePhotos } = body;
 
-  const caller = getUserFromHeaders(req.headers);
+  const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let receivingStatus = status || "COMPLETE";
