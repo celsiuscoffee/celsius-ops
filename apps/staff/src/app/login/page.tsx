@@ -8,11 +8,13 @@ import { Loader2, ArrowLeft } from "lucide-react";
 
 type LoginMode = "choose" | "username" | "pin";
 
+const PIN_LENGTH = 6;
+
 export default function LoginPage() {
   const [mode, setMode] = useState<LoginMode>("choose");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [pin, setPin] = useState(["", "", "", ""]);
+  const [pin, setPin] = useState<string[]>(Array(PIN_LENGTH).fill(""));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -34,18 +36,18 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Login failed"); return; }
-      window.location.href = "/sops";
+      window.location.href = "/checklists";
     } catch { setError("Connection error. Please try again."); }
     finally { setLoading(false); }
   };
 
   const handlePinChange = (index: number, value: string) => {
     if (value.length > 1) {
-      const digits = value.replace(/\D/g, "").slice(0, 4);
+      const digits = value.replace(/\D/g, "").slice(0, PIN_LENGTH);
       const newPin = [...pin];
-      for (let i = 0; i < digits.length && index + i < 4; i++) newPin[index + i] = digits[i];
+      for (let i = 0; i < digits.length && index + i < PIN_LENGTH; i++) newPin[index + i] = digits[i];
       setPin(newPin);
-      pinRefs.current[Math.min(index + digits.length, 3)]?.focus();
+      pinRefs.current[Math.min(index + digits.length, PIN_LENGTH - 1)]?.focus();
       if (newPin.every((d) => d !== "")) submitPin(newPin.join(""));
       return;
     }
@@ -53,8 +55,8 @@ export default function LoginPage() {
     const newPin = [...pin];
     newPin[index] = digit;
     setPin(newPin);
-    if (digit && index < 3) pinRefs.current[index + 1]?.focus();
-    if (digit && index === 3 && newPin.every((d) => d !== "")) submitPin(newPin.join(""));
+    if (digit && index < PIN_LENGTH - 1) pinRefs.current[index + 1]?.focus();
+    if (digit && index === PIN_LENGTH - 1 && newPin.every((d) => d !== "")) submitPin(newPin.join(""));
   };
 
   const handlePinKeyDown = (index: number, e: React.KeyboardEvent) => {
@@ -73,18 +75,18 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Invalid PIN");
-        setPin(["", "", "", ""]);
+        setPin(Array(PIN_LENGTH).fill(""));
         pinRefs.current[0]?.focus();
         return;
       }
-      window.location.href = "/sops";
+      window.location.href = "/checklists";
     } catch { setError("Connection error. Please try again."); }
     finally { setLoading(false); }
   };
 
   const goBack = () => {
     setMode("choose");
-    setPin(["", "", "", ""]);
+    setPin(Array(PIN_LENGTH).fill(""));
     setPassword("");
     setError("");
   };
@@ -92,7 +94,7 @@ export default function LoginPage() {
   const subtitle = {
     choose: "Select your login method",
     username: "Sign in with your credentials",
-    pin: "Enter your 4-digit staff PIN",
+    pin: "Enter your 6-digit staff PIN",
   }[mode];
 
   return (
@@ -111,7 +113,7 @@ export default function LoginPage() {
               Manager / Admin Login
             </Button>
             <Button variant="outline" className="w-full border-white/20 bg-transparent text-white hover:bg-white/10"
-              onClick={() => { setMode("pin"); setPin(["", "", "", ""]); setError(""); }}>
+              onClick={() => { setMode("pin"); setPin(Array(PIN_LENGTH).fill("")); setError(""); }}>
               Staff PIN Login
             </Button>
           </div>
@@ -144,11 +146,11 @@ export default function LoginPage() {
             <button onClick={goBack} className="flex items-center gap-1 text-xs text-white/50 hover:text-white/70">
               <ArrowLeft className="h-3 w-3" />Back
             </button>
-            <div className="flex justify-center gap-3">
+            <div className="flex justify-center gap-2">
               {pin.map((digit, i) => (
-                <input key={i} ref={(el) => { pinRefs.current[i] = el; }} type="password" inputMode="numeric" maxLength={4} value={digit}
+                <input key={i} ref={(el) => { pinRefs.current[i] = el; }} type="password" inputMode="numeric" maxLength={1} value={digit}
                   onChange={(e) => handlePinChange(i, e.target.value)} onKeyDown={(e) => handlePinKeyDown(i, e)}
-                  className="h-14 w-14 rounded-xl border border-white/10 bg-white/5 text-center text-2xl font-bold text-white outline-none focus:border-terracotta focus:ring-1 focus:ring-terracotta" />
+                  className="h-12 w-12 rounded-xl border border-white/10 bg-white/5 text-center text-xl font-bold text-white outline-none focus:border-terracotta focus:ring-1 focus:ring-terracotta" />
               ))}
             </div>
             {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{error}</p>}
