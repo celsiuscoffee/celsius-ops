@@ -209,7 +209,7 @@ export default function AdminDashboard() {
         </p>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-8">
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* KEY METRICS — Collection Rate, New Members, Returning Members, Sales */}

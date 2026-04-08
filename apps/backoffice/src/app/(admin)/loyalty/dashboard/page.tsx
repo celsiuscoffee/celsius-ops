@@ -252,7 +252,7 @@ export default function LoyaltyDashboard() {
 
   return (
     <div className="pb-10 min-h-0 w-full">
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* KEY METRICS — Collection Rate, New Members, Returning Members, Sales */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
