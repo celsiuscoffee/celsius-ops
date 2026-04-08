@@ -251,13 +251,13 @@ export default function LoyaltyDashboard() {
   }
 
   return (
-    <div className="p-6 pb-10 min-h-0 w-full space-y-0">
-      <div className="mb-6">
+    <div className="p-6 pb-10 min-h-0 w-full">
+      <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="mt-1 text-sm text-gray-500">Overview of your loyalty program performance</p>
       </div>
 
-      <div className="space-y-6">
+      <div className="flex flex-col gap-8">
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* KEY METRICS — Collection Rate, New Members, Returning Members, Sales */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
