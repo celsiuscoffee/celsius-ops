@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createSession } from "@/lib/auth";
+import { verifyPin, hashPin } from "@celsius/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
@@ -19,36 +20,50 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "PIN required (minimum 4 digits)" }, { status: 400 });
   }
 
-  // Find active user by PIN with inventory access
+  // Fetch all active users who have a PIN set
   const users = await prisma.user.findMany({
     where: {
-      pin: pin.trim(),
+      pin: { not: null },
       status: "ACTIVE",
     },
     include: { outlet: { select: { name: true } } },
   });
 
-  // Filter for users with inventory in appAccess (OWNER/ADMIN bypass)
-  const user = users.find((u) => {
-    if (u.role === "OWNER" || u.role === "ADMIN") return true;
-    return u.appAccess.includes("inventory");
-  });
+  // Verify PIN against each user's hash (supports bcrypt + legacy plaintext)
+  let matchedUser: (typeof users)[number] | null = null;
+  for (const u of users) {
+    // Filter for users with inventory access (OWNER/ADMIN bypass)
+    if (u.role !== "OWNER" && u.role !== "ADMIN" && !u.appAccess.includes("inventory")) continue;
 
-  if (!user) {
+    const { match, needsRehash } = await verifyPin(pin, u.pin);
+    if (match) {
+      matchedUser = u;
+      // Migrate plaintext PIN to bcrypt hash
+      if (needsRehash) {
+        await prisma.user.update({
+          where: { id: u.id },
+          data: { pin: await hashPin(pin) },
+        });
+      }
+      break;
+    }
+  }
+
+  if (!matchedUser) {
     return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
   }
 
   await createSession({
-    id: user.id,
-    name: user.name,
-    role: user.role,
-    outletId: user.outletId,
-    outletName: user.outlet?.name ?? null,
+    id: matchedUser.id,
+    name: matchedUser.name,
+    role: matchedUser.role,
+    outletId: matchedUser.outletId,
+    outletName: matchedUser.outlet?.name ?? null,
   });
 
   return NextResponse.json({
-    id: user.id,
-    name: user.name,
-    role: user.role,
+    id: matchedUser.id,
+    name: matchedUser.name,
+    role: matchedUser.role,
   });
 }
