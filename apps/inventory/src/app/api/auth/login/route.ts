@@ -29,11 +29,11 @@ export async function POST(req: NextRequest) {
     include: { outlet: { select: { name: true } } },
   });
 
-  if (!user || !user.password) {
+  if (!user || !user.passwordHash) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
-  if (!verifyPassword(password, user.password)) {
+  if (!verifyPassword(password, user.passwordHash)) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 

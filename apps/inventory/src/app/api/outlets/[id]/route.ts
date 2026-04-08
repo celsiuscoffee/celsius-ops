@@ -24,7 +24,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data,
   });
 
-  const caller = getUserFromHeaders(req.headers);
+  const caller = await getUserFromHeaders(req.headers);
   if (caller) {
     await logActivity({
       userId: caller.id,
@@ -53,7 +53,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     await prisma.outlet.delete({ where: { id } });
 
-    const caller = getUserFromHeaders(req.headers);
+    const caller = await getUserFromHeaders(req.headers);
     if (caller) {
       await logActivity({
         userId: caller.id,

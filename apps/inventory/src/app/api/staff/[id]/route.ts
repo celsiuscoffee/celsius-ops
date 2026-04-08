@@ -54,7 +54,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       select: { id: true, name: true },
     });
 
-    const caller = getUserFromHeaders(req.headers);
+    const caller = await getUserFromHeaders(req.headers);
     if (caller) {
       const changes = Object.keys(data).filter((k) => k !== "password" && k !== "pin").join(", ");
       await logActivity({
@@ -88,7 +88,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     select: { id: true, name: true },
   });
 
-  const caller = getUserFromHeaders(req.headers);
+  const caller = await getUserFromHeaders(req.headers);
   if (caller) {
     await logActivity({
       userId: caller.id,

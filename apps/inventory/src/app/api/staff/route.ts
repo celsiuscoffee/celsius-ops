@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
     data.pin = await hashPin(pin);
   }
 
-  const caller = getUserFromHeaders(req.headers);
+  const caller = await getUserFromHeaders(req.headers);
   const user = await prisma.user.create({ data: data as never });
 
   if (caller) {

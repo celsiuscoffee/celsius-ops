@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
-  const caller = getUserFromHeaders(req.headers);
+  const caller = await getUserFromHeaders(req.headers);
   if (!caller || caller.role !== "ADMIN") {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
   }

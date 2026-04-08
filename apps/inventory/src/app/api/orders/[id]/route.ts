@@ -21,7 +21,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json();
   const { status, items, deliveryDate, invoiceDueDate, invoicePhotos } = body;
-  const caller = getUserFromHeaders(req.headers);
+  const caller = await getUserFromHeaders(req.headers);
 
   const existing = await prisma.order.findUnique({ where: { id }, select: { status: true } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -139,7 +139,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const caller = getUserFromHeaders(req.headers);
+  const caller = await getUserFromHeaders(req.headers);
 
   const order = await prisma.order.findUnique({ where: { id }, select: { status: true, orderNumber: true } });
   if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
