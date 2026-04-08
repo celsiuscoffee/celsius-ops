@@ -5,28 +5,15 @@ import Image from "next/image";
 import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
-  const [pinLength, setPinLength] = useState(4);
-  const [pin, setPin] = useState<string[]>([]);
+  const pinLength = 6;
+  const [pin, setPin] = useState<string[]>(Array(6).fill(""));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    fetch("/api/settings/system")
-      .then((r) => r.json())
-      .then((data) => {
-        const len = data.pinLength === 6 ? 6 : 4;
-        setPinLength(len);
-        setPin(Array(len).fill(""));
-      })
-      .catch(() => {
-        setPin(Array(4).fill(""));
-      });
-  }, []);
-
-  useEffect(() => {
     setTimeout(() => pinRefs.current[0]?.focus(), 100);
-  }, [pinLength]);
+  }, []);
 
   const handlePinChange = (index: number, value: string) => {
     if (value.length > 1) {
@@ -70,14 +57,6 @@ export default function LoginPage() {
     } catch { setError("Connection error. Please try again."); }
     finally { setLoading(false); }
   };
-
-  if (pin.length === 0) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-brand-dark px-4">
-        <Loader2 className="h-6 w-6 animate-spin text-white/50" />
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-brand-dark px-4">

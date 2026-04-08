@@ -92,7 +92,7 @@ export default function StaffPage() {
   const [saveError, setSaveError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState<"details" | "access" | "security">("details");
-  const [pinLength, setPinLength] = useState(4);
+  const pinLength = 6;
 
   const loadStaff = () => {
     fetch("/api/settings/staff")
@@ -104,7 +104,6 @@ export default function StaffPage() {
   useEffect(() => {
     loadStaff();
     fetch("/api/settings/outlets").then((r) => r.json()).then(setOutlets);
-    fetch("/api/settings/system").then((r) => r.json()).then((data) => setPinLength(data.pinLength || 4)).catch(() => {});
   }, []);
 
   const filtered = staff.filter((s) => {

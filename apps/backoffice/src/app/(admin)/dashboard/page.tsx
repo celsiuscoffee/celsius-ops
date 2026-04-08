@@ -276,7 +276,7 @@ const KPI_PERIOD_LABELS: Record<KpiPeriod, string> = { daily: "Today", weekly: "
 
 function LoyaltyTab() {
   const { data, isLoading } = useFetch<{ total_members: number; active_members_30d: number; total_points_issued: number; total_redemptions: number; total_revenue_attributed: number }>("/api/loyalty/dashboard/stats?brand_id=brand-celsius");
-  const [kpiPeriod, setKpiPeriod] = useState<KpiPeriod>("monthly");
+  const [kpiPeriod, setKpiPeriod] = useState<KpiPeriod>("daily");
   const [kpiOutlet, setKpiOutlet] = useState<string>("all");
   const [kpi, setKpi] = useState<KpiData | null>(null);
   const [kpiLoading, setKpiLoading] = useState(true);

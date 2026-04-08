@@ -69,7 +69,7 @@ export default function PortalPage() {
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [memberId, setMemberId] = useState("");
   const [outlets, setOutlets] = useState<Outlet[]>([]);
-  const [pinLength, setPinLength] = useState<number | null>(null);
+  const pinLength = 6;
   const welcomeTimerRef = useRef<NodeJS.Timeout | null>(null);
   const brand = { id: "brand-celsius", name: "Celsius Coffee", points_per_rm: 1 };
   const currentOutlet = outlets.find((o) => o.id === outletId) || outlets[0];
@@ -79,7 +79,6 @@ export default function PortalPage() {
       setOutlets(data);
       setOutletId((prev) => prev || (data.length > 0 ? data[0].id : ''));
     });
-    fetch("/api/settings/system").then((r) => r.json()).then((data) => setPinLength(data.pinLength === 6 ? 6 : 4)).catch(() => setPinLength(4));
   }, []);
   const isValidPhone = phone.length >= 10;
 
