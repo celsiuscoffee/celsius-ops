@@ -5,17 +5,14 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 /* eslint-disable @next/next/no-img-element */
 import {
-  BookOpen,
-  FileText,
-  Plus,
-  Tags,
-  LayoutDashboard,
   LogOut,
   Menu,
-  X,
   ClipboardCheck,
   History,
-  CalendarClock,
+  ClipboardList,
+  Trash2,
+  ArrowLeftRight,
+  Package,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -44,19 +41,19 @@ type NavSection = {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    label: "SOPs",
-    items: [
-      { label: "All SOPs", href: "/sops", icon: <FileText className={ICON_SIZE} /> },
-      { label: "Create SOP", href: "/sops/new", icon: <Plus className={ICON_SIZE} /> },
-      { label: "Categories", href: "/categories", icon: <Tags className={ICON_SIZE} /> },
-    ],
-  },
-  {
     label: "Checklists",
     items: [
       { label: "Today", href: "/checklists", icon: <ClipboardCheck className={ICON_SIZE} /> },
-      { label: "Schedules", href: "/schedules", icon: <CalendarClock className={ICON_SIZE} /> },
       { label: "History", href: "/checklists/history", icon: <History className={ICON_SIZE} /> },
+    ],
+  },
+  {
+    label: "Inventory",
+    items: [
+      { label: "Stock Count", href: "/stock-count", icon: <ClipboardList className={ICON_SIZE} /> },
+      { label: "Receiving", href: "/receiving", icon: <Package className={ICON_SIZE} /> },
+      { label: "Wastage", href: "/wastage", icon: <Trash2 className={ICON_SIZE} /> },
+      { label: "Transfers", href: "/transfers", icon: <ArrowLeftRight className={ICON_SIZE} /> },
     ],
   },
 ];
@@ -91,20 +88,6 @@ function SidebarContent({
 
       {/* Nav */}
       <ScrollArea className="flex-1 px-3 py-3">
-        {/* Dashboard */}
-        <Link
-          href="/dashboard"
-          onClick={onNavigate}
-          className={`flex items-center gap-2.5 rounded-md px-3 py-2 mb-2 text-[13px] transition-colors ${
-            pathname === "/dashboard"
-              ? "bg-terracotta/20 text-terracotta-light font-medium"
-              : "text-white/50 hover:bg-white/5 hover:text-white/70"
-          }`}
-        >
-          <LayoutDashboard className={ICON_SIZE} />
-          Dashboard
-        </Link>
-
         {NAV_SECTIONS.map((section) => (
           <div key={section.label} className="mb-3">
             <p className="mb-1.5 mt-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-white/30">
