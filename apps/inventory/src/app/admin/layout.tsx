@@ -159,7 +159,7 @@ export default function AdminLayout({
   const handleLogout = async () => {
     setLoggingOut(true);
     await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/staff";
+    window.location.href = "/login";
   };
 
   return (

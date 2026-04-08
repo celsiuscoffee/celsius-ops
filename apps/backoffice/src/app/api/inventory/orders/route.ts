@@ -30,11 +30,6 @@ export async function GET() {
           productPackage: { select: { packageLabel: true, packageName: true } },
         },
       },
-      invoices: {
-        select: { id: true, invoiceNumber: true, amount: true, status: true, dueDate: true, photos: true },
-        orderBy: { createdAt: "desc" as const },
-        take: 1,
-      },
       _count: { select: { receivings: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -71,16 +66,6 @@ export async function GET() {
       notes: i.notes,
     })),
     receivingCount: o._count.receivings,
-    invoice: o.invoices[0]
-      ? {
-          id: o.invoices[0].id,
-          invoiceNumber: o.invoices[0].invoiceNumber,
-          amount: Number(o.invoices[0].amount),
-          status: o.invoices[0].status,
-          dueDate: o.invoices[0].dueDate?.toISOString().split("T")[0] ?? null,
-          photoCount: o.invoices[0].photos.length,
-        }
-      : null,
   }));
 
   return NextResponse.json(mapped);

@@ -4,31 +4,23 @@ import { requireAuth } from "@/lib/auth";
 
 // GET - fetch notifications, optionally filtered by brand_id
 export async function GET(request: NextRequest) {
-  try {
-    const auth = await requireAuth(request);
-    if (auth.error) return auth.error;
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
 
-    if (!supabaseAdmin) {
-      return NextResponse.json({ error: "Loyalty service not configured" }, { status: 503 });
-    }
+  const brandId = request.nextUrl.searchParams.get("brand_id");
 
-    const brandId = request.nextUrl.searchParams.get("brand_id");
+  let query = supabaseAdmin
+    .from("notifications")
+    .select("*")
+    .order("created_at", { ascending: false });
 
-    let query = supabaseAdmin
-      .from("notifications")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (brandId) {
-      query = query.eq("brand_id", brandId);
-    }
-
-    const { data, error } = await query;
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json(data);
-  } catch {
-    return NextResponse.json({ error: "Failed to fetch notifications" }, { status: 500 });
+  if (brandId) {
+    query = query.eq("brand_id", brandId);
   }
+
+  const { data, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
 }
 
 // POST - create notification
@@ -70,21 +62,13 @@ export async function POST(request: NextRequest) {
 
 // DELETE - delete notification
 export async function DELETE(request: NextRequest) {
-  try {
-    const auth = await requireAuth(request);
-    if (auth.error) return auth.error;
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
 
-    if (!supabaseAdmin) {
-      return NextResponse.json({ error: "Loyalty service not configured" }, { status: 503 });
-    }
+  const id = request.nextUrl.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-    const id = request.nextUrl.searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-
-    const { error } = await supabaseAdmin.from("notifications").delete().eq("id", id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ success: true });
-  } catch {
-    return NextResponse.json({ error: "Failed to delete notification" }, { status: 500 });
-  }
+  const { error } = await supabaseAdmin.from("notifications").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
 }

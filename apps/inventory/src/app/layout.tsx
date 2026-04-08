@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk } from "next/font/google";
-import { ServiceWorkerRegister } from "@/components/sw-register";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -40,7 +39,6 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${spaceGrotesk.variable} h-full`}>
       <body className="h-full bg-brand-offwhite font-sans antialiased">
-        <ServiceWorkerRegister />
         {children}
       </body>
     </html>

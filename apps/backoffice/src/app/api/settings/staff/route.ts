@@ -40,12 +40,10 @@ export async function GET(req: NextRequest) {
     phone: u.phone ?? "",
     email: u.email,
     username: u.username,
-    hasPassword: !!u.password,
+    hasPassword: !!u.passwordHash,
     hasPin: !!u.pin,
     status: u.status,
     addedDate: u.createdAt.toISOString().split("T")[0],
-    appAccess: u.appAccess || [],
-    moduleAccess: u.moduleAccess || {},
   }));
 
   return NextResponse.json(mapped);
@@ -53,14 +51,14 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireRole(req.headers, "ADMIN");
+    await requireRole(req, "ADMIN");
   } catch (e) {
     if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: e.status });
     throw e;
   }
 
   const body = await req.json();
-  const { name, phone, email, role, outletId, outletIds, username, password, pin, appAccess, moduleAccess } = body;
+  const { name, phone, email, role, outletId, outletIds, username, password, pin } = body;
 
   const data: Record<string, unknown> = {
     name,
@@ -70,17 +68,15 @@ export async function POST(req: NextRequest) {
     outletId: outletId || null,
     outletIds: outletIds || [],
     username: username || null,
-    appAccess: appAccess || [],
-    moduleAccess: moduleAccess || {},
   };
 
-  if (password && password.length >= 8) {
-    data.password = hashPassword(password);
+  if (password && password.length >= 6) {
+    data.passwordHash = hashPassword(password);
   }
   if (pin) {
     data.pin = pin;
   }
 
   const user = await prisma.user.create({ data: data as never });
-  return NextResponse.json({ id: user.id, name: user.name, role: user.role }, { status: 201 });
+  return NextResponse.json(user, { status: 201 });
 }

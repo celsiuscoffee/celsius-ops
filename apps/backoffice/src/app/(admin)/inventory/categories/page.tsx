@@ -39,12 +39,11 @@ export default function CategoriesPage() {
     setSaving(true);
     try {
       const url = editingId ? `/api/inventory/categories/${editingId}` : "/api/inventory/categories";
-      const res = await fetch(url, {
+      await fetch(url, {
         method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim() }),
       });
-      if (!res.ok) { alert("Failed to save category. Please try again."); return; }
       setDialogOpen(false);
       loadCategories();
     } finally {
@@ -54,8 +53,7 @@ export default function CategoriesPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this category? Products in this category will need reassignment.")) return;
-    const res = await fetch(`/api/inventory/categories/${id}`, { method: "DELETE" });
-    if (!res.ok) { alert("Failed to delete category. It may have linked products."); return; }
+    await fetch(`/api/inventory/categories/${id}`, { method: "DELETE" });
     loadCategories();
   };
 

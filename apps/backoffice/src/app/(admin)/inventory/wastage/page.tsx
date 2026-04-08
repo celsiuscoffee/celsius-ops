@@ -51,7 +51,6 @@ export default function WastagePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [user, setUser] = useState<UserSession | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const fetchWastage = useCallback(async (outletId?: string | null) => {
     const url = outletId ? `/api/wastage?outletId=${outletId}` : "/api/wastage";
@@ -68,7 +67,7 @@ export default function WastagePage() {
       try {
         const [userRes, productsRes] = await Promise.all([
           fetch("/api/auth/me"),
-          fetch("/api/inventory/products"),
+          fetch("/api/products"),
         ]);
 
         let userData: UserSession | null = null;
@@ -82,9 +81,6 @@ export default function WastagePage() {
         }
 
         await fetchWastage(userData?.outletId);
-        setError(null);
-      } catch {
-        setError("Failed to load wastage data.");
       } finally {
         setLoading(false);
       }
@@ -131,10 +127,11 @@ export default function WastagePage() {
         }),
       });
 
-      if (!res.ok) { alert("Failed to record wastage. Please try again."); return; }
-      setDialogOpen(false);
-      resetForm();
-      await fetchWastage(user.outletId);
+      if (res.ok) {
+        setDialogOpen(false);
+        resetForm();
+        await fetchWastage(user.outletId);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -165,10 +162,6 @@ export default function WastagePage() {
           Record Wastage
         </Button>
       </div>
-
-      {error && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-      )}
 
       <div className="mx-auto max-w-4xl space-y-4">
         {/* Summary */}

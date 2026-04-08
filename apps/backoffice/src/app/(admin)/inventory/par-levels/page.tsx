@@ -73,7 +73,7 @@ export default function ParLevelsPage() {
   useEffect(() => {
     Promise.all([
       fetch("/api/inventory/products").then((r) => r.json()),
-      fetch("/api/settings/outlets?status=ACTIVE").then((r) => r.json()),
+      fetch("/api/settings/outlets").then((r) => r.json()),
     ]).then(([productsData, outletsData]) => {
       setProducts(productsData);
       setOutlets(outletsData);
@@ -306,7 +306,7 @@ export default function ParLevelsPage() {
       </div>
 
       {/* Table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
+      <div className="mt-4 rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">

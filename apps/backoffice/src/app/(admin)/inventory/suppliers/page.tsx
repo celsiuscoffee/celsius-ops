@@ -260,9 +260,6 @@ export default function SuppliersPage() {
 
       {/* Supplier cards */}
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        {filtered.length === 0 && (
-          <p className="col-span-2 py-12 text-center text-sm text-gray-400">No suppliers found</p>
-        )}
         {filtered.map((supplier) => (
           <Card key={supplier.id} className="overflow-hidden">
             <div className="p-4">
@@ -323,7 +320,7 @@ export default function SuppliersPage() {
       </div>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditingId(null); setForm(emptyForm); } }}>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Supplier" : "Add Supplier"}</DialogTitle>

@@ -1,4 +1,4 @@
-import { Users, Gift, Monitor, ArrowRight } from "lucide-react";
+import { Users, Gift, BarChart3, Monitor, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -29,6 +29,12 @@ export default function HomePage() {
             >
               Check My Points
               <ArrowRight className="h-5 w-5" />
+            </Link>
+            <Link
+              href="/admin/dashboard"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-8 py-4 text-lg font-semibold text-white transition hover:bg-white/10"
+            >
+              Admin Dashboard
             </Link>
           </div>
         </div>
@@ -73,7 +79,7 @@ export default function HomePage() {
       <section className="border-t border-neutral-800 bg-neutral-900">
         <div className="mx-auto max-w-5xl px-6 py-16">
           <h2 className="mb-8 text-center text-2xl font-bold">Quick Access</h2>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-3">
             <Link
               href="/rewards"
               className="group flex items-center gap-4 rounded-xl border border-neutral-700 bg-neutral-800 p-6 transition hover:border-[#C2452D]"
@@ -91,7 +97,7 @@ export default function HomePage() {
               </div>
             </Link>
             <Link
-              href="/staff"
+              href="/portal"
               className="group flex items-center gap-4 rounded-xl border border-neutral-700 bg-neutral-800 p-6 transition hover:border-[#C2452D]"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#C2452D]/10">
@@ -103,6 +109,22 @@ export default function HomePage() {
                 </div>
                 <div className="text-sm text-neutral-400">
                   Register & award points
+                </div>
+              </div>
+            </Link>
+            <Link
+              href="/admin/dashboard"
+              className="group flex items-center gap-4 rounded-xl border border-neutral-700 bg-neutral-800 p-6 transition hover:border-[#C2452D]"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#C2452D]/10">
+                <BarChart3 className="h-6 w-6 text-[#C2452D]" />
+              </div>
+              <div>
+                <div className="font-semibold group-hover:text-[#C2452D]">
+                  Admin
+                </div>
+                <div className="text-sm text-neutral-400">
+                  Manage loyalty program
                 </div>
               </div>
             </Link>

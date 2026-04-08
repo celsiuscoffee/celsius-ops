@@ -1,42 +1,44 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { jwtVerify } from "jose";
+import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET!,
-);
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/pin"];
 
-const PUBLIC_PATHS = [
-  "/login",
-  "/staff",
-  "/api/auth/login",
-  "/api/auth/me",
-  "/api/auth/pin",
-  "/api/auth/verify",
-  "/api/auth/logout",
-  "/api/settings/system",
+// Owner/Admin-only routes
+const ADMIN_ONLY = [
+  "/admin/outlets",
+  "/admin/staff",
+  "/admin/rules",
+  "/admin/integrations",
+  "/api/staff",
+  "/admin/system-log",
+  "/api/activity-log",
 ];
 
-function addSecurityHeaders(response: NextResponse) {
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set("X-XSS-Protection", "1; mode=block");
-  return response;
-}
+// Admin + Manager routes (includes master data, procurement, loyalty, reports)
+const MANAGER_ROUTES = [
+  "/admin",
+  "/admin/products",
+  "/admin/categories",
+  "/admin/suppliers",
+  "/admin/menus",
+  "/admin/orders",
+  "/admin/receivings",
+  "/admin/invoices",
+  "/admin/par-levels",
+  "/admin/reports",
+  "/admin/loyalty",
+];
+
+// Staff cannot access these app pages (manager+ only)
+const MANAGER_APP_ROUTES = ["/order", "/transfer", "/wastage"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // ─── Redirect /admin to backoffice ──────────────────
-  // All admin management is consolidated at backoffice.celsiuscoffee.com
-  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
-    return NextResponse.redirect("https://backoffice.celsiuscoffee.com");
-  }
-
   // Allow public paths and static assets
   if (
-    PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/")) ||
+    PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/images") ||
     pathname.startsWith("/fonts") ||
@@ -44,52 +46,68 @@ export async function proxy(request: NextRequest) {
     pathname.endsWith(".ico") ||
     pathname === "/manifest.json"
   ) {
-    return addSecurityHeaders(NextResponse.next());
+    return NextResponse.next();
   }
 
-  const token = request.cookies.get("celsius-session")?.value;
+  const token = request.cookies.get(COOKIE_NAME)?.value;
 
   if (!token) {
     if (pathname.startsWith("/api/")) {
-      return addSecurityHeaders(
-        NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return addSecurityHeaders(NextResponse.redirect(new URL("/staff", request.url)));
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  try {
-    const { payload } = await jwtVerify(token, SECRET);
-    const { id, name, role, outletId } = payload as {
-      id: string;
-      name: string;
-      role: string;
-      outletId: string | null;
-    };
-
-    // Inject user info into request headers
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-user-id", id);
-    requestHeaders.set("x-user-name", name ?? "");
-    requestHeaders.set("x-user-role", role ?? "STAFF");
-    requestHeaders.set("x-user-outlet", outletId ?? "");
-
-    const response = NextResponse.next({
-      request: { headers: requestHeaders },
-    });
-
-    return addSecurityHeaders(response);
-  } catch {
-    // Invalid/expired token
+  const user = await verifyToken(token);
+  if (!user) {
     if (pathname.startsWith("/api/")) {
-      return addSecurityHeaders(
-        NextResponse.json({ error: "Invalid session" }, { status: 401 }),
-      );
+      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
     }
-    const loginUrl = new URL("/staff", request.url);
-    loginUrl.searchParams.set("from", pathname);
-    return addSecurityHeaders(NextResponse.redirect(loginUrl));
+    return NextResponse.redirect(new URL("/login", request.url));
   }
+
+  // Role-based route protection
+  const isApi = pathname.startsWith("/api/");
+  const deny = (msg: string) => {
+    if (isApi) return NextResponse.json({ error: msg }, { status: 403 });
+    return NextResponse.redirect(new URL("/home", request.url));
+  };
+
+  // Admin-only pages
+  if (ADMIN_ONLY.some((p) => pathname.startsWith(p))) {
+    if (user.role !== "OWNER" && user.role !== "ADMIN") return deny("Admin access required");
+  }
+
+  // Manager routes (admin + manager)
+  if (pathname.startsWith("/admin")) {
+    if (MANAGER_ROUTES.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+      if (user.role !== "OWNER" && user.role !== "ADMIN" && user.role !== "MANAGER") {
+        return deny("Manager access required");
+      }
+    }
+  }
+
+  // Mobile app routes restricted to manager+
+  if (MANAGER_APP_ROUTES.some((p) => pathname.startsWith(p))) {
+    if (user.role !== "OWNER" && user.role !== "ADMIN" && user.role !== "MANAGER") {
+      return deny("Manager access required");
+    }
+  }
+
+  // Inject user info into request headers for API routes
+  const res = NextResponse.next();
+  res.headers.set("x-user-id", user.id);
+  res.headers.set("x-user-role", user.role);
+  res.headers.set("x-user-outlet", user.outletId || "");
+  res.headers.set("x-user-name", user.name);
+
+  // Security headers
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("X-Frame-Options", "DENY");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.headers.set("X-XSS-Protection", "1; mode=block");
+
+  return res;
 }
 
 export const config = {

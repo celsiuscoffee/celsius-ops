@@ -116,15 +116,12 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('[campaigns PUT] Supabase error:', error.message, error);
-      return NextResponse.json({ error: error.message || 'Failed to update campaign' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to update campaign' }, { status: 500 });
     }
 
     return NextResponse.json(data);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[campaigns PUT] Error:', message, err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 

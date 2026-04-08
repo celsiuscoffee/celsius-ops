@@ -55,7 +55,6 @@ export async function POST(req: NextRequest) {
   // Find user and create session
   const user = await prisma.user.findFirst({
     where: { phone: normalized, status: "ACTIVE" },
-    include: { outlet: { select: { name: true } } },
   });
 
   if (!user) {
@@ -67,7 +66,6 @@ export async function POST(req: NextRequest) {
     name: user.name,
     role: user.role,
     outletId: user.outletId,
-    outletName: user.outlet?.name,
   });
 
   await logActivity({

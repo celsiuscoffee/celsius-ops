@@ -1,15 +1,8 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { OutletStatus } from "@prisma/client";
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const status = searchParams.get("status") as OutletStatus | null;
-
-  const where = status ? { status } : {};
-
+export async function GET() {
   const outlets = await prisma.outlet.findMany({
-    where,
     include: {
       _count: {
         select: { users: true, outletProducts: true },
@@ -28,16 +21,6 @@ export async function GET(req: NextRequest) {
     city: b.city ?? "",
     state: b.state ?? "",
     phone: b.phone ?? "",
-    lat: b.lat ? Number(b.lat) : null,
-    lng: b.lng ? Number(b.lng) : null,
-    openTime: b.openTime ?? "08:00",
-    closeTime: b.closeTime ?? "22:00",
-    daysOpen: b.daysOpen ?? [1, 2, 3, 4, 5, 6, 7],
-    isOpen: b.isOpen,
-    isBusy: b.isBusy,
-    pickupTimeMins: b.pickupTimeMins,
-    storehubId: b.storehubId ?? "",
-    loyaltyOutletId: b.loyaltyOutletId ?? "",
     staffCount: b._count.users,
     productCount: b._count.outletProducts,
   }));

@@ -133,7 +133,7 @@ export default function HomePage() {
     return d.toLocaleDateString("en-MY", { day: "numeric", month: "short" });
   };
 
-  const isManager = userRole === "ADMIN" || userRole === "MANAGER" || userRole === "OWNER";
+  const isManager = userRole === "ADMIN" || userRole === "MANAGER";
 
   return (
     <div className="px-4 py-4">
@@ -159,7 +159,7 @@ export default function HomePage() {
           </div>
           {isManager && (
             <Link
-              href="https://backoffice.celsiuscoffee.com"
+              href="/admin"
               className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs text-gray-500 hover:bg-gray-50"
             >
               Admin
@@ -229,7 +229,7 @@ export default function HomePage() {
 
             {/* Pending approvals — manager only */}
             {isManager && data.pendingApprovals > 0 && (
-              <Link href="https://backoffice.celsiuscoffee.com/inventory/orders">
+              <Link href="/admin/orders">
                 <Card className="border-amber-200 bg-amber-50 px-4 py-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
@@ -393,7 +393,7 @@ export default function HomePage() {
               <h2 className="text-sm font-semibold text-gray-900">
                 Recent Orders
               </h2>
-              <Link href="https://backoffice.celsiuscoffee.com/inventory/orders" className="text-xs text-terracotta">
+              <Link href="/admin/orders" className="text-xs text-terracotta">
                 View all →
               </Link>
             </div>
@@ -445,7 +445,7 @@ export default function HomePage() {
             { href: "/wastage", icon: Trash2, label: "Wastage", minRole: "MANAGER" },
           ].filter((a) => {
             if (!("minRole" in a) || !a.minRole) return true;
-            const levels: Record<string, number> = { STAFF: 1, MANAGER: 2, ADMIN: 3, OWNER: 4 };
+            const levels: Record<string, number> = { STAFF: 1, MANAGER: 2, ADMIN: 3 };
             return (levels[userRole] || 1) >= (levels[a.minRole] || 1);
           }).map((action) => {
             const Icon = action.icon;

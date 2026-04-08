@@ -39,8 +39,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const caller = await getUserFromHeaders(req.headers);
-  if (!caller || (caller.role !== "ADMIN" && caller.role !== "OWNER")) {
+  const caller = getUserFromHeaders(req.headers);
+  if (!caller || caller.role !== "ADMIN") {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
   }
 

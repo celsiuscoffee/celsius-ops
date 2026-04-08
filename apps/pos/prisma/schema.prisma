@@ -125,15 +125,6 @@ enum UserStatus {
   DEACTIVATED
 }
 
-// ─── SYSTEM SETTINGS ───────────────────────────────────────
-
-model SystemSettings {
-  id        String   @id @default("default")
-  pinLength Int      @default(4)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 // ─── OTP ────────────────────────────────────────────────────
 
 model Otp {

@@ -6,11 +6,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json();
 
   // Only allow safe fields
-  const {
-    name, code, type, phone, address, city, state, status,
-    openTime, closeTime, daysOpen, isOpen, isBusy, pickupTimeMins,
-    storehubId, loyaltyOutletId, lat, lng,
-  } = body;
+  const { name, code, type, phone, address, city, state, status } = body;
   const data: Record<string, unknown> = {};
   if (name !== undefined) data.name = name;
   if (code !== undefined) data.code = code;
@@ -20,16 +16,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (city !== undefined) data.city = city;
   if (state !== undefined) data.state = state;
   if (status !== undefined) data.status = status;
-  if (openTime !== undefined) data.openTime = openTime;
-  if (closeTime !== undefined) data.closeTime = closeTime;
-  if (daysOpen !== undefined) data.daysOpen = daysOpen;
-  if (isOpen !== undefined) data.isOpen = isOpen;
-  if (isBusy !== undefined) data.isBusy = isBusy;
-  if (pickupTimeMins !== undefined) data.pickupTimeMins = pickupTimeMins;
-  if (storehubId !== undefined) data.storehubId = storehubId || null;
-  if (loyaltyOutletId !== undefined) data.loyaltyOutletId = loyaltyOutletId || null;
-  if (lat !== undefined) data.lat = lat;
-  if (lng !== undefined) data.lng = lng;
 
   const outlet = await prisma.outlet.update({
     where: { id },

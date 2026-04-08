@@ -4,26 +4,13 @@ import { setStockBalance } from "@/lib/stock";
 
 export async function GET() {
   const stockCounts = await prisma.stockCount.findMany({
-    select: {
-      id: true,
-      frequency: true,
-      status: true,
-      notes: true,
-      countDate: true,
-      submittedAt: true,
-      reviewedAt: true,
-      createdAt: true,
-      outlet: { select: { name: true, code: true } },
-      countedBy: { select: { name: true } },
+    include: {
+      outlet: true,
+      countedBy: true,
       items: {
-        select: {
-          id: true,
-          expectedQty: true,
-          countedQty: true,
-          isConfirmed: true,
-          varianceReason: true,
-          product: { select: { name: true, sku: true } },
-          productPackage: { select: { packageLabel: true, packageName: true } },
+        include: {
+          product: true,
+          productPackage: true,
         },
       },
     },

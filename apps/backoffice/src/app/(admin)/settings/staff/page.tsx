@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Loader2, Eye, EyeOff, Key, Lock, Hash, Check, X, Search, Trash2, RotateCcw } from "lucide-react";
+import { Plus, Loader2, Eye, EyeOff, Key, Lock, Hash, Check, X, Search } from "lucide-react";
 
 type ModuleAccess = Record<string, string[]>;
 
@@ -69,13 +69,6 @@ const APP_MODULES: Record<string, { label: string; key: string }[]> = {
     { label: "Engage", key: "engage" },
     { label: "AI Insights", key: "insights" },
   ],
-  settings: [
-    { label: "Outlets", key: "outlets" },
-    { label: "Staff & Access", key: "staff" },
-    { label: "Approval Rules", key: "rules" },
-    { label: "Integrations", key: "integrations" },
-    { label: "System", key: "system" },
-  ],
 };
 
 export default function StaffPage() {
@@ -92,7 +85,6 @@ export default function StaffPage() {
   const [saveError, setSaveError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState<"details" | "access" | "security">("details");
-  const [pinLength, setPinLength] = useState(4);
 
   const loadStaff = () => {
     fetch("/api/settings/staff")
@@ -104,7 +96,6 @@ export default function StaffPage() {
   useEffect(() => {
     loadStaff();
     fetch("/api/settings/outlets").then((r) => r.json()).then(setOutlets);
-    fetch("/api/settings/system").then((r) => r.json()).then((data) => setPinLength(data.pinLength || 4)).catch(() => {});
   }, []);
 
   const filtered = staff.filter((s) => {
@@ -176,8 +167,8 @@ export default function StaffPage() {
         payload.password = form.password;
       }
 
-      // Only send PIN if set (must match configured pinLength)
-      if (form.pin && form.pin.length === pinLength) {
+      // Only send PIN if set
+      if (form.pin && form.pin.length === 4) {
         payload.pin = form.pin;
       }
 
@@ -381,39 +372,7 @@ export default function StaffPage() {
                   </button>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openEdit(s)}>Edit</Button>
-                    {s.status === "ACTIVE" ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 w-7 p-0 text-red-400 border-red-200 hover:bg-red-50 hover:text-red-600 hover:border-red-300"
-                        title="Deactivate staff"
-                        onClick={() => {
-                          if (!confirm(`Deactivate ${s.name}? They will lose all access.`)) return;
-                          fetch(`/api/settings/staff/${s.id}`, { method: "DELETE" }).then(() => loadStaff());
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 w-7 p-0 text-green-500 border-green-200 hover:bg-green-50 hover:text-green-600 hover:border-green-300"
-                        title="Reactivate staff"
-                        onClick={() => {
-                          fetch(`/api/settings/staff/${s.id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ status: "ACTIVE" }),
-                          }).then(() => loadStaff());
-                        }}
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openEdit(s)}>Edit</Button>
                 </td>
               </tr>
             ))}
@@ -514,7 +473,7 @@ export default function StaffPage() {
                   <h3 className="text-sm font-semibold text-gray-900 mb-1">Module Access</h3>
                   <p className="text-xs text-gray-400 mb-3">Control which modules this user can see within each app. Empty = full access.</p>
                   <div className="space-y-4">
-                    {[...form.appAccess.filter((app) => APP_MODULES[app]), ...(form.appAccess.includes("backoffice") && APP_MODULES["settings"] ? ["settings"] : [])].map((app) => {
+                    {form.appAccess.filter((app) => APP_MODULES[app]).map((app) => {
                       const modules = APP_MODULES[app];
                       const selected = form.moduleAccess[app] || [];
                       const allSelected = modules.every((m) => selected.includes(m.key));
@@ -660,7 +619,7 @@ export default function StaffPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex gap-1.5">
-                    {Array.from({ length: pinLength }).map((_, i) => (
+                    {[0, 1, 2, 3].map((i) => (
                       <input
                         key={i}
                         type="text"
@@ -671,10 +630,10 @@ export default function StaffPage() {
                           const val = e.target.value.replace(/\D/g, "");
                           const newPin = form.pin.split("");
                           newPin[i] = val;
-                          const joined = newPin.join("").slice(0, pinLength);
+                          const joined = newPin.join("").slice(0, 4);
                           setForm({ ...form, pin: joined });
                           // Auto-advance
-                          if (val && i < pinLength - 1) {
+                          if (val && i < 3) {
                             const next = e.target.parentElement?.children[i + 1] as HTMLInputElement;
                             next?.focus();
                           }
@@ -695,7 +654,7 @@ export default function StaffPage() {
                         <Check className="h-3 w-3" />PIN is set
                       </p>
                     )}
-                    {form.pin && form.pin.length === pinLength && (
+                    {form.pin && form.pin.length === 4 && (
                       <p className="flex items-center gap-1 text-[10px] text-blue-600">
                         <Key className="h-3 w-3" />New PIN will be saved
                       </p>
@@ -707,7 +666,7 @@ export default function StaffPage() {
                     )}
                   </div>
                 </div>
-                <p className="mt-2 text-[10px] text-gray-400">{pinLength}-digit PIN for staff login at inventory &amp; loyalty portal.</p>
+                <p className="mt-2 text-[10px] text-gray-400">4-digit PIN for quick login at the outlet.</p>
               </div>
             </div>
           )}

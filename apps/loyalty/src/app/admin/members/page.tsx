@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { Search, MoreHorizontal, X, Download, Eye, Pencil, Trash2, AlertTriangle, Filter, ChevronDown, ChevronLeft, ChevronRight, Plus, Tag, Save, Bookmark, MessageSquare, Send, Phone, Loader2 } from "lucide-react";
+import { Search, MoreHorizontal, X, Download, Eye, Pencil, Trash2, TrendingUp, Store, AlertTriangle, Filter, ChevronDown, ChevronLeft, ChevronRight, Plus, Tag, Save, Bookmark, MessageSquare, Send, Phone, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchMembers, fetchMembersPage, fetchRewards } from "@/lib/api";
 import type { MemberWithBrand, Reward } from "@/types";
@@ -720,7 +720,84 @@ export default function MembersPage() {
         </p>
       </div>
 
-      {/* Points Claim Rate removed — StoreHub integration not active */}
+      {/* ── Points Claim Rate: Register vs StoreHub Orders ── */}
+      {compareData && (
+        <div className="mb-6 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="h-5 w-5 text-[#C2452D]" />
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
+              Points Claim Rate
+            </h2>
+            <span className="text-xs text-gray-400 dark:text-neutral-500">This month</span>
+          </div>
+
+          {/* Overall summary */}
+          <div className="grid grid-cols-3 gap-4 mb-5">
+            <div className="rounded-lg bg-gray-50 dark:bg-neutral-700/50 p-3">
+              <p className="text-xs text-gray-500 dark:text-neutral-400 mb-1">StoreHub Orders</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white font-sans">
+                {compareData.totals.storehub_orders.toLocaleString()}
+              </p>
+            </div>
+            <div className="rounded-lg bg-gray-50 dark:bg-neutral-700/50 p-3">
+              <p className="text-xs text-gray-500 dark:text-neutral-400 mb-1">Points Claimed</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white font-sans">
+                {compareData.totals.loyalty_claims.toLocaleString()}
+              </p>
+            </div>
+            <div className="rounded-lg bg-gray-50 dark:bg-neutral-700/50 p-3">
+              <p className="text-xs text-gray-500 dark:text-neutral-400 mb-1">Claim Rate</p>
+              <p className={`text-xl font-bold font-sans ${
+                compareData.totals.claim_rate >= 50
+                  ? "text-green-600"
+                  : compareData.totals.claim_rate >= 20
+                    ? "text-orange-500"
+                    : "text-red-500"
+              }`}>
+                {compareData.totals.claim_rate}%
+              </p>
+            </div>
+          </div>
+
+          {/* Per-outlet breakdown */}
+          <div className="space-y-2">
+            {compareData.outlets.map((o) => (
+              <div key={o.outlet_name} className="flex items-center gap-3">
+                <Store className="h-4 w-4 text-gray-400 dark:text-neutral-500 shrink-0" />
+                <span className="text-sm text-gray-700 dark:text-neutral-300 w-32 truncate">{o.outlet_name}</span>
+                {/* Progress bar */}
+                <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-neutral-700 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      o.claim_rate >= 50 ? "bg-green-500" : o.claim_rate >= 20 ? "bg-orange-400" : "bg-red-400"
+                    }`}
+                    style={{ width: `${Math.min(o.claim_rate, 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-sans text-gray-500 dark:text-neutral-400 w-20 text-right">
+                    {o.loyalty_claims.toLocaleString()}/{o.storehub_orders.toLocaleString()}
+                  </span>
+                  <span className={`text-xs font-bold font-sans w-10 text-right ${
+                    o.claim_rate >= 50 ? "text-green-600" : o.claim_rate >= 20 ? "text-orange-500" : "text-red-500"
+                  }`}>
+                    {o.claim_rate}%
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {compareData.totals.claim_rate < 30 && (
+            <div className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
+              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                Low claim rate — many customers are not collecting points. Consider training staff to prompt loyalty sign-ups at checkout.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Segment Tabs */}
       <div className="border-b border-gray-200 dark:border-neutral-700">

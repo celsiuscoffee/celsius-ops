@@ -69,7 +69,7 @@ export default function ProductsPage() {
     try {
       const url = editingId ? `/api/inventory/products/${editingId}` : "/api/inventory/products";
       const method = editingId ? "PATCH" : "POST";
-      const res = await fetch(url, {
+      await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -83,7 +83,6 @@ export default function ProductsPage() {
           checkFrequency: form.checkFrequency,
         }),
       });
-      if (!res.ok) { alert("Failed to save product. Please try again."); return; }
       setDialogOpen(false);
       loadProducts();
     } finally {
@@ -245,7 +244,7 @@ export default function ProductsPage() {
       </div>
 
       {/* Table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
+      <div className="mt-4 rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
@@ -275,11 +274,6 @@ export default function ProductsPage() {
                   <Loader2 className="mx-auto h-6 w-6 animate-spin text-terracotta" />
                   <p className="mt-2 text-sm text-gray-500">Loading products...</p>
                 </td>
-              </tr>
-            )}
-            {!loading && filtered.length === 0 && (
-              <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-sm text-gray-400">No products found</td>
               </tr>
             )}
             {!loading && filtered.map((product) => (
@@ -474,7 +468,7 @@ export default function ProductsPage() {
       </Dialog>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditingId(null); setForm(emptyForm); } }}>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Product" : "Add Product"}</DialogTitle>

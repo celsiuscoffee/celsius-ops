@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   DollarSign,
   Users,
@@ -9,34 +9,29 @@ import {
   TrendingUp,
   Loader2,
   Activity as ActivityIcon,
+  TrendingDown,
+  Award,
+  BarChart3,
   Crown,
-  Store,
-  Target,
-  UserCheck,
-  Repeat,
 } from "lucide-react";
 import { fetchDashboardStats } from "@/lib/api";
 import type { DashboardStats } from "@/types";
 import { cn, formatPoints, formatPhone, getTimeAgo } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
-// Types
+// Phone format — use shared formatPhone from utils
 // ---------------------------------------------------------------------------
 
-type KpiPeriod = "daily" | "weekly" | "monthly";
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-type KpiData = {
-  period: { from: string; to: string; type: string };
-  collection_rate: {
-    pos_orders: number;
-    loyalty_claims: number;
-    rate: number;
-    outlets: { outlet_name: string; pos_orders: number; loyalty_claims: number; claim_rate: number }[];
-  };
-  new_members: number;
-  returning_members: number;
-  returning_sales: number;
-};
+// Eligible = 500+ pts (cheapest reward)
+const REDEEM_THRESHOLD = 500;
+
+// ---------------------------------------------------------------------------
+// Activity type
+// ---------------------------------------------------------------------------
 
 type Activity = {
   id: string;
@@ -45,6 +40,8 @@ type Activity = {
   type: "earn" | "redeem" | "bonus";
   date: string;
 };
+
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Activity color map
@@ -60,12 +57,6 @@ const activityDotColors: Record<string, string> = {
   earn: "bg-green-500",
   redeem: "bg-orange-500",
   bonus: "bg-blue-500",
-};
-
-const PERIOD_LABELS: Record<KpiPeriod, string> = {
-  daily: "Today",
-  weekly: "This Week",
-  monthly: "This Month",
 };
 
 // ---------------------------------------------------------------------------
@@ -133,30 +124,6 @@ export default function AdminDashboard() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [statsError, setStatsError] = useState(false);
 
-  // KPI state
-  const [kpiPeriod, setKpiPeriod] = useState<KpiPeriod>("monthly");
-  const [kpi, setKpi] = useState<KpiData | null>(null);
-  const [kpiLoading, setKpiLoading] = useState(true);
-
-  // Load KPI data when period changes
-  const loadKpi = useCallback(async (period: KpiPeriod) => {
-    setKpiLoading(true);
-    try {
-      const res = await fetch(`/api/dashboard/kpi?brand_id=brand-celsius&period=${period}`, {
-        credentials: "include",
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setKpi(data);
-      }
-    } catch { /* ignore */ }
-    setKpiLoading(false);
-  }, []);
-
-  useEffect(() => {
-    loadKpi(kpiPeriod);
-  }, [kpiPeriod, loadKpi]);
-
   // Load stats (once) — includes activity feed and segment counts
   useEffect(() => {
     async function loadStats() {
@@ -203,169 +170,32 @@ export default function AdminDashboard() {
   return (
     <div className="pb-20 md:pb-0 min-h-0 w-full">
       <div className="space-y-6">
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* KEY METRICS — Collection Rate, New Members, Returning Members, Sales */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-sm p-5">
-          {/* Header + period toggle */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-            <div className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-[#C2452D]" />
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-                Key Metrics
-              </h2>
-              {kpi && (
-                <span className="text-xs text-gray-400 dark:text-neutral-500">
-                  {kpi.period.from === kpi.period.to
-                    ? kpi.period.from
-                    : `${kpi.period.from} — ${kpi.period.to}`}
-                </span>
-              )}
+        {/* KPI Cards Row 1 — Sales, Members, Points, Redemptions */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* 1 — Sales */}
+          <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100">
+                <DollarSign className="h-5 w-5 text-green-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
+                  Sales
+                </p>
+              </div>
             </div>
-            <div className="flex rounded-lg border border-gray-200 dark:border-neutral-600 overflow-hidden">
-              {(["daily", "weekly", "monthly"] as KpiPeriod[]).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setKpiPeriod(p)}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-medium transition-colors capitalize",
-                    kpiPeriod === p
-                      ? "bg-[#C2452D] text-white"
-                      : "bg-white dark:bg-neutral-800 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-700"
-                  )}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
+            <p className="font-sans text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              RM {stats?.total_revenue_attributed?.toLocaleString() || "0"}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-neutral-400">
+              <span className="font-sans font-semibold text-gray-700 dark:text-neutral-200">
+                {(stats?.total_members || 0).toLocaleString()}
+              </span>{" "}
+              total members
+            </p>
           </div>
 
-          {/* KPI Cards */}
-          {kpiLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-[#C2452D]" />
-            </div>
-          ) : kpi ? (
-            <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-                {/* 1 — Collection Rate */}
-                <div className="rounded-lg bg-gray-50 dark:bg-neutral-700/50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Target className="h-4 w-4 text-[#C2452D]" />
-                    <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">Collection Rate</p>
-                  </div>
-                  <p className={`text-2xl font-bold font-sans ${
-                    kpi.collection_rate.rate >= 50
-                      ? "text-green-600"
-                      : kpi.collection_rate.rate >= 20
-                        ? "text-orange-500"
-                        : kpi.collection_rate.pos_orders === 0
-                          ? "text-gray-400"
-                          : "text-red-500"
-                  }`}>
-                    {kpi.collection_rate.pos_orders === 0 ? "—" : `${kpi.collection_rate.rate}%`}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-1">
-                    <span className="font-sans font-semibold text-gray-700 dark:text-neutral-200">
-                      {kpi.collection_rate.loyalty_claims.toLocaleString()}
-                    </span>
-                    {" / "}
-                    <span className="font-sans">
-                      {kpi.collection_rate.pos_orders.toLocaleString()}
-                    </span>
-                    {" orders"}
-                  </p>
-                </div>
-
-                {/* 2 — New Members */}
-                <div className="rounded-lg bg-gray-50 dark:bg-neutral-700/50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <UserCheck className="h-4 w-4 text-blue-500" />
-                    <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">New Members</p>
-                  </div>
-                  <p className="text-2xl font-bold font-sans text-gray-900 dark:text-white">
-                    {kpi.new_members.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-1">
-                    {PERIOD_LABELS[kpiPeriod as KpiPeriod]}
-                  </p>
-                </div>
-
-                {/* 3 — Returning Members */}
-                <div className="rounded-lg bg-gray-50 dark:bg-neutral-700/50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Repeat className="h-4 w-4 text-emerald-500" />
-                    <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">Returning Members</p>
-                  </div>
-                  <p className="text-2xl font-bold font-sans text-gray-900 dark:text-white">
-                    {kpi.returning_members.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-1">
-                    2+ visits
-                  </p>
-                </div>
-
-                {/* 4 — Sales from Returning Members */}
-                <div className="rounded-lg bg-gray-50 dark:bg-neutral-700/50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <DollarSign className="h-4 w-4 text-green-500" />
-                    <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">Returning Sales</p>
-                  </div>
-                  <p className="text-2xl font-bold font-sans text-gray-900 dark:text-white">
-                    RM {kpi.returning_sales.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-1">
-                    from returning members
-                  </p>
-                </div>
-              </div>
-
-              {/* Per-outlet collection rate breakdown */}
-              {kpi.collection_rate.outlets.length > 0 && kpi.collection_rate.pos_orders > 0 && (
-                <div className="border-t border-gray-100 dark:border-neutral-700 pt-4">
-                  <p className="text-xs font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-3">
-                    Collection Rate by Outlet
-                  </p>
-                  <div className="space-y-2">
-                    {kpi.collection_rate.outlets.map((o) => (
-                      <div key={o.outlet_name} className="flex items-center gap-3">
-                        <Store className="h-4 w-4 text-gray-400 dark:text-neutral-500 shrink-0" />
-                        <span className="text-sm text-gray-700 dark:text-neutral-300 w-32 truncate">{o.outlet_name}</span>
-                        <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-neutral-700 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              o.claim_rate >= 50 ? "bg-green-500" : o.claim_rate >= 20 ? "bg-orange-400" : "bg-red-400"
-                            }`}
-                            style={{ width: `${Math.min(o.claim_rate, 100)}%` }}
-                          />
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs font-sans text-gray-500 dark:text-neutral-400 w-20 text-right">
-                            {o.loyalty_claims.toLocaleString()}/{o.pos_orders.toLocaleString()}
-                          </span>
-                          <span className={`text-xs font-bold font-sans w-10 text-right ${
-                            o.claim_rate >= 50 ? "text-green-600" : o.claim_rate >= 20 ? "text-orange-500" : "text-red-500"
-                          }`}>
-                            {o.claim_rate}%
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-gray-400 dark:text-neutral-500 text-center py-4">
-              Failed to load metrics
-            </p>
-          )}
-        </div>
-
-        {/* ─── Overview Stats ─── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Members */}
+          {/* 2 — Members */}
           <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm">
             <div className="flex items-start gap-3 mb-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100">
@@ -373,7 +203,7 @@ export default function AdminDashboard() {
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
-                  Total Members
+                  Members
                 </p>
               </div>
             </div>
@@ -382,13 +212,18 @@ export default function AdminDashboard() {
             </p>
             <p className="text-xs text-gray-500 dark:text-neutral-400">
               <span className="font-sans font-semibold text-gray-700 dark:text-neutral-200">
-                {formatPoints(stats?.active_members_30d ?? 0)}
+                {(stats?.new_members_this_month || 0).toLocaleString()}
               </span>{" "}
-              active (30d)
+              this month{" "}
+              <span className="text-gray-300 dark:text-neutral-600 mx-1">&middot;</span>
+              <span className="font-sans font-semibold text-gray-700 dark:text-neutral-200">
+                {(stats?.new_members_today || 0).toLocaleString()}
+              </span>{" "}
+              today
             </p>
           </div>
 
-          {/* Points Issued */}
+          {/* 3 — Points */}
           <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm">
             <div className="flex items-start gap-3 mb-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100">
@@ -396,22 +231,22 @@ export default function AdminDashboard() {
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
-                  Points Issued
+                  Points
                 </p>
               </div>
             </div>
             <p className="font-sans text-2xl font-bold text-gray-900 dark:text-white mb-2">
-              {formatPoints(stats?.total_points_issued ?? 0)}
+              {stats?.total_points_issued?.toLocaleString() || "0"}
             </p>
             <p className="text-xs text-gray-500 dark:text-neutral-400">
               <span className="font-sans font-semibold text-gray-700 dark:text-neutral-200">
-                {formatPoints(stats?.total_points_redeemed ?? 0)}
+                {stats?.total_points_redeemed?.toLocaleString() || "0"}
               </span>{" "}
               redeemed
             </p>
           </div>
 
-          {/* Redemptions */}
+          {/* 4 — Redemptions */}
           <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm">
             <div className="flex items-start gap-3 mb-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-100">
@@ -433,24 +268,98 @@ export default function AdminDashboard() {
               active campaigns
             </p>
           </div>
+        </div>
 
-          {/* Sales */}
+        {/* KPI Cards Row 2 — Active Members, Floating Points, Avg LTV, Redemption Rate */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* 5 — Active Members (30d) */}
           <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm">
             <div className="flex items-start gap-3 mb-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100">
-                <DollarSign className="h-5 w-5 text-green-600" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                <ActivityIcon className="h-5 w-5 text-emerald-600" />
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
-                  Total Sales
+                  Active (30d)
                 </p>
               </div>
             </div>
             <p className="font-sans text-2xl font-bold text-gray-900 dark:text-white mb-2">
-              RM {stats?.total_revenue_attributed?.toLocaleString() || "0"}
+              {formatPoints(stats?.active_members_30d ?? 0)}
             </p>
             <p className="text-xs text-gray-500 dark:text-neutral-400">
-              attributed to loyalty
+              <span className="font-sans font-semibold text-gray-700 dark:text-neutral-200">
+                {stats?.total_members
+                  ? Math.round(((stats?.active_members_30d ?? 0) / stats.total_members) * 100)
+                  : 0}%
+              </span>{" "}
+              of total members
+            </p>
+          </div>
+
+          {/* 6 — Floating Points */}
+          <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <TrendingDown className="h-5 w-5 text-amber-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
+                  Floating Points
+                </p>
+              </div>
+            </div>
+            <p className="font-sans text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              {formatPoints(stats?.floating_points ?? 0)}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-neutral-400">
+              unredeemed liability
+            </p>
+          </div>
+
+          {/* 7 — Avg Lifetime Value */}
+          <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-100">
+                <BarChart3 className="h-5 w-5 text-cyan-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
+                  Avg Lifetime Value
+                </p>
+              </div>
+            </div>
+            <p className="font-sans text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              RM {(stats?.avg_lifetime_value_members ?? 0).toLocaleString()}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-neutral-400">
+              non-members{" "}
+              <span className="font-sans font-semibold text-gray-700 dark:text-neutral-200">
+                RM {(stats?.avg_lifetime_value_nonmembers ?? 0).toLocaleString()}
+              </span>
+            </p>
+          </div>
+
+          {/* 8 — Redemption Rate */}
+          <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-100">
+                <Award className="h-5 w-5 text-rose-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
+                  Redemption Rate
+                </p>
+              </div>
+            </div>
+            <p className="font-sans text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              {(stats?.reward_redemption_rate ?? 0).toFixed(1)}%
+            </p>
+            <p className="text-xs text-gray-500 dark:text-neutral-400">
+              member txn share{" "}
+              <span className="font-sans font-semibold text-gray-700 dark:text-neutral-200">
+                {(stats?.member_transaction_pct ?? 0).toFixed(1)}%
+              </span>
             </p>
           </div>
         </div>
