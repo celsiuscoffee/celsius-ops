@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   ShoppingBag, Boxes, Gift, SlidersHorizontal, ArrowRight,
   ShoppingCart, ArrowRightLeft, FileText, AlertTriangle, Loader2,
-  Warehouse, Calculator, Scale, Receipt,
+  Warehouse, Calculator, Scale, Receipt, Target, UserCheck, Repeat, DollarSign, Store,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
@@ -261,33 +261,186 @@ function InventoryTab() {
 
 // ── Loyalty Tab ────────────────────────────────────────────────────────────
 
-function LoyaltyTab() {
-  const { data, isLoading } = useFetch<{ totalMembers: number; activeMembers: number; totalPointsIssued: number; totalRedemptions: number; revenueFromLoyalty: number }>("/api/loyalty/dashboard/stats");
+type KpiPeriod = "daily" | "weekly" | "monthly";
+type KpiData = {
+  period: { from: string; to: string; type: string };
+  collection_rate: { pos_orders: number; loyalty_claims: number; rate: number; outlets: { outlet_id: string; outlet_name: string; pos_orders: number; loyalty_claims: number; claim_rate: number }[] };
+  new_members: number;
+  returning_members: number;
+  returning_sales: number;
+  available_outlets: { id: string; name: string }[];
+  _debug?: string[];
+};
 
-  if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-terracotta" /></div>;
-  if (!data) return <div className="flex flex-col items-center py-12"><AlertTriangle className="h-8 w-8 text-amber-500" /><p className="mt-2 text-sm text-gray-500">Failed to load loyalty data</p></div>;
+const KPI_PERIOD_LABELS: Record<KpiPeriod, string> = { daily: "Today", weekly: "This Week", monthly: "This Month" };
+
+function LoyaltyTab() {
+  const { data, isLoading } = useFetch<{ total_members: number; active_members_30d: number; total_points_issued: number; total_redemptions: number; total_revenue_attributed: number }>("/api/loyalty/dashboard/stats?brand_id=brand-celsius");
+  const [kpiPeriod, setKpiPeriod] = useState<KpiPeriod>("monthly");
+  const [kpiOutlet, setKpiOutlet] = useState<string>("all");
+  const [kpi, setKpi] = useState<KpiData | null>(null);
+  const [kpiLoading, setKpiLoading] = useState(true);
+
+  const loadKpi = useCallback(async (period: KpiPeriod, outlet: string) => {
+    setKpiLoading(true);
+    try {
+      let url = `/api/loyalty/dashboard/kpi?brand_id=brand-celsius&period=${period}`;
+      if (outlet !== "all") url += `&outlet_id=${outlet}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (res.ok) setKpi(await res.json());
+    } catch { /* ignore */ }
+    setKpiLoading(false);
+  }, []);
+
+  useEffect(() => { loadKpi(kpiPeriod, kpiOutlet); }, [kpiPeriod, kpiOutlet, loadKpi]);
+
+  if (isLoading && kpiLoading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-terracotta" /></div>;
 
   const fmt = (v: number) => v.toLocaleString("en-MY");
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <Link href="/loyalty/members" className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-md">
-        <p className="text-xs text-gray-500">Total Members</p>
-        <p className="text-2xl font-bold text-gray-900">{fmt(data.totalMembers || 0)}</p>
-        <p className="mt-1 text-[10px] text-gray-400">{fmt(data.activeMembers || 0)} active</p>
-      </Link>
-      <Link href="/loyalty/rewards" className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-md">
-        <p className="text-xs text-gray-500">Points Issued</p>
-        <p className="text-2xl font-bold text-gray-900">{fmt(data.totalPointsIssued || 0)}</p>
-      </Link>
-      <Link href="/loyalty/redemptions" className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-md">
-        <p className="text-xs text-gray-500">Redemptions</p>
-        <p className="text-2xl font-bold text-gray-900">{fmt(data.totalRedemptions || 0)}</p>
-      </Link>
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <p className="text-xs text-gray-500">Revenue from Loyalty</p>
-        <p className="text-2xl font-bold text-gray-900">RM {(data.revenueFromLoyalty || 0).toLocaleString("en-MY", { minimumFractionDigits: 2 })}</p>
+    <div className="space-y-4">
+      {/* Key Metrics with period toggle */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <Target className="h-5 w-5 text-terracotta" />
+            <h2 className="text-sm font-semibold text-gray-900">Key Metrics</h2>
+            {kpi && (
+              <span className="text-xs text-gray-400">
+                {kpi.period.from === kpi.period.to ? kpi.period.from : `${kpi.period.from} — ${kpi.period.to}`}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {kpi?.available_outlets && kpi.available_outlets.length > 1 && (
+              <select
+                value={kpiOutlet}
+                onChange={(e) => setKpiOutlet(e.target.value)}
+                className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-terracotta"
+              >
+                <option value="all">All Outlets</option>
+                {kpi.available_outlets.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            )}
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+              {(["daily", "weekly", "monthly"] as KpiPeriod[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setKpiPeriod(p)}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors capitalize ${
+                    kpiPeriod === p ? "bg-terracotta text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {kpiLoading ? (
+          <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-terracotta" /></div>
+        ) : kpi ? (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              {/* Collection Rate */}
+              <div className="rounded-lg bg-gray-50 p-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Target className="h-4 w-4 text-terracotta" />
+                  <p className="text-xs font-medium text-gray-500">Collection Rate</p>
+                </div>
+                <p className={`text-2xl font-bold font-sans ${
+                  kpi.collection_rate.rate >= 50 ? "text-green-600" : kpi.collection_rate.rate >= 20 ? "text-orange-500" : kpi.collection_rate.pos_orders === 0 ? "text-gray-400" : "text-red-500"
+                }`}>
+                  {kpi.collection_rate.pos_orders === 0 ? "—" : `${kpi.collection_rate.rate}%`}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  <span className="font-semibold text-gray-700">{kpi.collection_rate.loyalty_claims.toLocaleString()}</span>
+                  {" / "}{kpi.collection_rate.pos_orders.toLocaleString()} orders
+                </p>
+              </div>
+
+              {/* New Members */}
+              <div className="rounded-lg bg-gray-50 p-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <UserCheck className="h-4 w-4 text-blue-500" />
+                  <p className="text-xs font-medium text-gray-500">New Members</p>
+                </div>
+                <p className="text-2xl font-bold font-sans text-gray-900">{kpi.new_members.toLocaleString()}</p>
+                <p className="text-xs text-gray-500 mt-1">{KPI_PERIOD_LABELS[kpiPeriod]}</p>
+              </div>
+
+              {/* Returning Members */}
+              <div className="rounded-lg bg-gray-50 p-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Repeat className="h-4 w-4 text-emerald-500" />
+                  <p className="text-xs font-medium text-gray-500">Returning Members</p>
+                </div>
+                <p className="text-2xl font-bold font-sans text-gray-900">{kpi.returning_members.toLocaleString()}</p>
+                <p className="text-xs text-gray-500 mt-1">2+ visits</p>
+              </div>
+
+              {/* Returning Sales */}
+              <div className="rounded-lg bg-gray-50 p-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <DollarSign className="h-4 w-4 text-green-500" />
+                  <p className="text-xs font-medium text-gray-500">Returning Sales</p>
+                </div>
+                <p className="text-2xl font-bold font-sans text-gray-900">RM {kpi.returning_sales.toLocaleString()}</p>
+                <p className="text-xs text-gray-500 mt-1">from returning members</p>
+              </div>
+            </div>
+
+            {/* Per-outlet breakdown */}
+            {kpi.collection_rate.outlets.length > 0 && kpi.collection_rate.pos_orders > 0 && (
+              <div className="border-t border-gray-100 pt-3">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Collection Rate by Outlet</p>
+                <div className="space-y-2">
+                  {kpi.collection_rate.outlets.map((o) => (
+                    <div key={o.outlet_name} className="flex items-center gap-3">
+                      <Store className="h-4 w-4 text-gray-400 shrink-0" />
+                      <span className="text-sm text-gray-700 w-32 truncate">{o.outlet_name}</span>
+                      <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${o.claim_rate >= 50 ? "bg-green-500" : o.claim_rate >= 20 ? "bg-orange-400" : "bg-red-400"}`} style={{ width: `${Math.min(o.claim_rate, 100)}%` }} />
+                      </div>
+                      <span className="text-xs font-sans text-gray-500 w-20 text-right shrink-0">{o.loyalty_claims}/{o.pos_orders}</span>
+                      <span className={`text-xs font-bold font-sans w-10 text-right shrink-0 ${o.claim_rate >= 50 ? "text-green-600" : o.claim_rate >= 20 ? "text-orange-500" : "text-red-500"}`}>{o.claim_rate}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-gray-400 text-center py-4">Failed to load metrics</p>
+        )}
       </div>
+
+      {/* Overview stats */}
+      {data && (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <Link href="/loyalty/members" className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-md">
+            <p className="text-xs text-gray-500">Total Members</p>
+            <p className="text-2xl font-bold text-gray-900">{fmt(data.total_members || 0)}</p>
+            <p className="mt-1 text-[10px] text-gray-400">{fmt(data.active_members_30d || 0)} active</p>
+          </Link>
+          <Link href="/loyalty/rewards" className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-md">
+            <p className="text-xs text-gray-500">Points Issued</p>
+            <p className="text-2xl font-bold text-gray-900">{fmt(data.total_points_issued || 0)}</p>
+          </Link>
+          <Link href="/loyalty/redemptions" className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-md">
+            <p className="text-xs text-gray-500">Redemptions</p>
+            <p className="text-2xl font-bold text-gray-900">{fmt(data.total_redemptions || 0)}</p>
+          </Link>
+          <Link href="/loyalty/dashboard" className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-md">
+            <p className="text-xs text-gray-500">Revenue from Loyalty</p>
+            <p className="text-2xl font-bold text-gray-900">RM {(data.total_revenue_attributed || 0).toLocaleString("en-MY", { minimumFractionDigits: 2 })}</p>
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

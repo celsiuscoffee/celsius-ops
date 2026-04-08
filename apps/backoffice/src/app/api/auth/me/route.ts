@@ -10,17 +10,29 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.id },
-    select: { passwordHash: true, username: true, moduleAccess: true },
+    select: { password: true, username: true, appAccess: true, moduleAccess: true },
   });
 
-  // Extract backoffice-relevant permissions from moduleAccess JSON
-  const moduleAccess = (user?.moduleAccess as Record<string, string[]> | null) ?? {};
-  const backofficePermissions = moduleAccess.backoffice ?? [];
+  // Flatten moduleAccess from { settings: ["outlets","staff"] } → ["settings:outlets","settings:staff"]
+  let flatModuleAccess: string[] = [];
+  if (user?.moduleAccess && typeof user.moduleAccess === "object" && !Array.isArray(user.moduleAccess)) {
+    const ma = user.moduleAccess as Record<string, string[]>;
+    for (const [app, modules] of Object.entries(ma)) {
+      if (Array.isArray(modules)) {
+        for (const mod of modules) {
+          flatModuleAccess.push(`${app}:${mod}`);
+        }
+      }
+    }
+  } else if (Array.isArray(user?.moduleAccess)) {
+    flatModuleAccess = user.moduleAccess as unknown as string[];
+  }
 
   return NextResponse.json({
     ...session,
-    hasPassword: !!user?.passwordHash,
+    hasPassword: !!user?.password,
     username: user?.username ?? null,
-    permissions: backofficePermissions,
+    appAccess: user?.appAccess ?? [],
+    moduleAccess: flatModuleAccess,
   });
 }

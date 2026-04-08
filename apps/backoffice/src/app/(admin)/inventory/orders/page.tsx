@@ -1,12 +1,20 @@
 "use client";
 
-import { useState, Fragment } from "react";
+import { useState, Fragment, useRef, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Search,
   ChevronDown,
@@ -24,6 +32,12 @@ import {
   Ban,
   ThumbsUp,
   Trash2,
+  Pencil,
+  Receipt,
+  CalendarDays,
+  Upload,
+  X,
+  ImageIcon,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -38,6 +52,15 @@ type OrderItem = {
   unitPrice: number;
   totalPrice: number;
   notes: string | null;
+};
+
+type OrderInvoice = {
+  id: string;
+  invoiceNumber: string;
+  amount: number;
+  status: string;
+  dueDate: string | null;
+  photoCount: number;
 };
 
 type Order = {
@@ -59,6 +82,7 @@ type Order = {
   createdAt: string;
   items: OrderItem[];
   receivingCount: number;
+  invoice: OrderInvoice | null;
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -86,9 +110,7 @@ const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof
   APPROVED: [
     { status: "SENT", label: "Mark as Sent", icon: Send, color: "bg-green-500 hover:bg-green-600" },
   ],
-  SENT: [
-    { status: "AWAITING_DELIVERY", label: "Awaiting Delivery", icon: Truck, color: "bg-purple-500 hover:bg-purple-600" },
-  ],
+  SENT: [],
   AWAITING_DELIVERY: [],
   PARTIALLY_RECEIVED: [],
   COMPLETED: [],
@@ -104,6 +126,162 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // Edit dialog state
+  type EditItem = OrderItem & { removed?: boolean; qtyStr: string; priceStr: string };
+  const [editOrder, setEditOrder] = useState<Order | null>(null);
+  const [editItems, setEditItems] = useState<EditItem[]>([]);
+  const [editDeliveryDate, setEditDeliveryDate] = useState("");
+  const [editInvoiceNumber, setEditInvoiceNumber] = useState("");
+  const [editInvoiceDueDate, setEditInvoiceDueDate] = useState("");
+  type InvoiceFile = { url: string; type: "image" | "pdf"; name: string };
+  const [editInvoiceFiles, setEditInvoiceFiles] = useState<InvoiceFile[]>([]);
+  const [editSaving, setEditSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const openEditDialog = (order: Order) => {
+    setEditOrder(order);
+    setEditItems(order.items.map((i) => ({ ...i, removed: false, qtyStr: String(i.quantity), priceStr: i.unitPrice.toFixed(2) })));
+    setEditDeliveryDate(order.deliveryDate ?? "");
+    setEditInvoiceNumber(order.invoice?.invoiceNumber ?? "");
+    setEditInvoiceDueDate(order.invoice?.dueDate ?? "");
+    setEditInvoiceFiles([]);
+  };
+
+  const editTotal = editItems
+    .filter((i) => !i.removed)
+    .reduce((sum, i) => sum + (parseFloat(i.qtyStr) || 0) * (parseFloat(i.priceStr) || 0), 0);
+
+  const uploadFile = useCallback(async (file: File) => {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("folder", "invoices");
+      const res = await fetch("/api/inventory/upload", { method: "POST", body: fd });
+      if (res.ok) {
+        const data = await res.json();
+        setEditInvoiceFiles((prev) => [...prev, { url: data.url, type: data.type || "image", name: data.name || file.name }]);
+      }
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/") || f.type === "application/pdf");
+    files.forEach(uploadFile);
+  }, [uploadFile]);
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    files.forEach(uploadFile);
+    e.target.value = "";
+  }, [uploadFile]);
+
+  const openFilePicker = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*,application/pdf";
+    input.multiple = true;
+    input.style.display = "none";
+    document.body.appendChild(input);
+    input.addEventListener("change", () => {
+      const files = Array.from(input.files ?? []);
+      files.forEach(uploadFile);
+      document.body.removeChild(input);
+    });
+    input.click();
+  }, [uploadFile]);
+
+  const saveEdit = async () => {
+    if (!editOrder) return;
+    setEditSaving(true);
+    try {
+      // Build item changes
+      const itemChanges = editItems
+        .filter((i) => {
+          if (i.removed) return true;
+          const origItem = editOrder.items.find((o) => o.id === i.id);
+          if (!origItem) return false;
+          return parseFloat(i.qtyStr) !== origItem.quantity || parseFloat(i.priceStr) !== origItem.unitPrice;
+        })
+        .map((i) => i.removed
+          ? { id: i.id, remove: true }
+          : { id: i.id, quantity: parseFloat(i.qtyStr) || 0, unitPrice: parseFloat(i.priceStr) || 0 }
+        );
+
+      // Update order (items + delivery date)
+      const orderPayload: Record<string, unknown> = {};
+      if (itemChanges.length > 0) orderPayload.items = itemChanges;
+      if (editDeliveryDate !== (editOrder.deliveryDate ?? "")) {
+        orderPayload.deliveryDate = editDeliveryDate || null;
+      }
+      if (Object.keys(orderPayload).length > 0) {
+        await fetch(`/api/inventory/orders/${editOrder.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(orderPayload),
+        });
+      }
+
+      // Update or create invoice
+      const invoiceAmount = editTotal;
+
+      if (editOrder.invoice) {
+        const invoicePayload: Record<string, unknown> = {};
+        if (editInvoiceNumber !== (editOrder.invoice.invoiceNumber ?? "")) {
+          invoicePayload.invoiceNumber = editInvoiceNumber || null;
+        }
+        if (editInvoiceDueDate !== (editOrder.invoice.dueDate ?? "")) {
+          invoicePayload.dueDate = editInvoiceDueDate || null;
+        }
+        if (invoiceAmount !== editOrder.invoice.amount) {
+          invoicePayload.amount = invoiceAmount;
+        }
+        if (editInvoiceFiles.length > 0) {
+          // Fetch existing photos and append new ones
+          const invRes = await fetch(`/api/inventory/invoices/${editOrder.invoice.id}`);
+          const invData = invRes.ok ? await invRes.json() : { photos: [] };
+          invoicePayload.photos = [...(invData.photos || []), ...editInvoiceFiles.map((f) => f.url)];
+        }
+        if (Object.keys(invoicePayload).length > 0) {
+          await fetch(`/api/inventory/invoices/${editOrder.invoice.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(invoicePayload),
+          });
+        }
+      } else if (editInvoiceNumber || editInvoiceDueDate || editInvoiceFiles.length > 0) {
+        const detailRes = await fetch(`/api/inventory/orders/${editOrder.id}`);
+        if (detailRes.ok) {
+          const detail = await detailRes.json();
+          await fetch("/api/inventory/invoices", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orderId: editOrder.id,
+              outletId: detail.outletId,
+              supplierId: detail.supplierId,
+              amount: invoiceAmount,
+              invoiceNumber: editInvoiceNumber || null,
+              dueDate: editInvoiceDueDate || null,
+              photos: editInvoiceFiles.map((f) => f.url),
+            }),
+          });
+        }
+      }
+
+      setEditOrder(null);
+      loadOrders();
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   // ── Status update ───────────────────────────────────────────────────────
 
@@ -187,7 +365,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="mt-4 grid grid-cols-4 gap-4">
+      <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="px-4 py-3">
           <p className="text-xs text-gray-500">Total Orders</p>
           <p className="text-xl font-bold text-gray-900">{orders.length}</p>
@@ -229,7 +407,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Orders table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white">
+      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
@@ -291,6 +469,16 @@ export default function OrdersPage() {
                             {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : a.label}
                           </button>
                         ))}
+                        {order.status === "SENT" && (
+                          <button onClick={() => openEditDialog(order)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-purple-500 hover:bg-purple-600 disabled:opacity-50" title="Confirm Order">
+                            {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm Order"}
+                          </button>
+                        )}
+                        {["DRAFT", "PENDING_APPROVAL", "SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(order.status) && (
+                          <button onClick={() => openEditDialog(order)} className="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50" title="Edit Order">
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
                         {["DRAFT", "CANCELLED"].includes(order.status) && (
                           <button onClick={() => deleteOrder(order.id)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50" title="Delete">
                             <Trash2 className="h-3 w-3" />
@@ -340,6 +528,18 @@ export default function OrdersPage() {
                         </table>
                         {order.notes && <p className="mt-2 text-xs text-gray-500">Notes: {order.notes}</p>}
                         {order.receivingCount > 0 && <p className="mt-2 text-xs text-green-600">{order.receivingCount} receiving record(s) linked</p>}
+                        {order.invoice && (
+                          <div className="mt-2 flex items-center gap-3 rounded-md bg-white px-3 py-2 border border-gray-200">
+                            <Receipt className="h-4 w-4 text-gray-400" />
+                            <div className="flex-1 flex items-center gap-4 text-xs">
+                              <span className="font-medium text-gray-700">{order.invoice.invoiceNumber}</span>
+                              <span className="text-gray-500">RM {order.invoice.amount.toFixed(2)}</span>
+                              <Badge className={`text-[9px] ${order.invoice.status === "PAID" ? "bg-green-500" : order.invoice.status === "OVERDUE" ? "bg-blue-500" : "bg-terracotta"}`}>{{ PENDING: "Payment", OVERDUE: "Initiated", PAID: "Paid" }[order.invoice.status] || order.invoice.status}</Badge>
+                              {order.invoice.dueDate && <span className="text-gray-400">Due: {order.invoice.dueDate}</span>}
+                              {order.invoice.photoCount > 0 && <span className="text-gray-400">{order.invoice.photoCount} photo(s)</span>}
+                            </div>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )}
@@ -349,6 +549,241 @@ export default function OrdersPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Edit Order Dialog */}
+      <Dialog open={!!editOrder} onOpenChange={(open) => !open && setEditOrder(null)}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-4 w-4" />
+              Edit {editOrder?.orderNumber}
+            </DialogTitle>
+          </DialogHeader>
+
+          {editOrder && (
+            <div className="space-y-4">
+              {/* Supplier & Outlet info */}
+              <div className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                {editOrder.supplier} → {editOrder.outlet}
+              </div>
+
+              {/* Editable Items */}
+              <div>
+                <p className="mb-2 text-xs font-semibold text-gray-700 uppercase">Order Items</p>
+                <div className="rounded-lg border overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-50 border-b">
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">Product</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">Package</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-500 w-20">Qty</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-500 w-24">Unit Price</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-500 w-24">Total</th>
+                        <th className="px-3 py-2 w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {editItems.map((item, idx) => {
+                        if (item.removed) return (
+                          <tr key={item.id} className="border-b border-gray-50 bg-red-50/50">
+                            <td className="px-3 py-2 text-gray-400 line-through" colSpan={5}>{item.product}</td>
+                            <td className="px-3 py-2 text-center">
+                              <button onClick={() => setEditItems((prev) => prev.map((p, i) => i === idx ? { ...p, removed: false } : p))} className="text-blue-500 hover:text-blue-700" title="Undo">
+                                <Plus className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                        const lineTotal = (parseFloat(item.qtyStr) || 0) * (parseFloat(item.priceStr) || 0);
+                        return (
+                          <tr key={item.id} className="border-b border-gray-50">
+                            <td className="px-3 py-2">
+                              <p className="font-medium text-gray-900">{item.product}</p>
+                              <p className="text-[10px] text-gray-400">{item.sku}</p>
+                            </td>
+                            <td className="px-3 py-2 text-gray-500">{item.uom || item.package}</td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                className="w-full rounded border border-gray-200 px-2 py-1 text-right text-xs focus:border-terracotta focus:outline-none"
+                                value={item.qtyStr}
+                                onChange={(e) => setEditItems((prev) => prev.map((p, i) => i === idx ? { ...p, qtyStr: e.target.value } : p))}
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                className="w-full rounded border border-gray-200 px-2 py-1 text-right text-xs focus:border-terracotta focus:outline-none"
+                                value={item.priceStr}
+                                onChange={(e) => setEditItems((prev) => prev.map((p, i) => i === idx ? { ...p, priceStr: e.target.value } : p))}
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium text-gray-900">RM {lineTotal.toFixed(2)}</td>
+                            <td className="px-3 py-2 text-center">
+                              <button onClick={() => setEditItems((prev) => prev.map((p, i) => i === idx ? { ...p, removed: true } : p))} className="text-red-400 hover:text-red-600" title="Remove">
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="border-t-2 border-gray-200 bg-gray-50">
+                        <td colSpan={4} className="px-3 py-2 text-right font-semibold text-gray-700">Total</td>
+                        <td className="px-3 py-2 text-right font-bold text-gray-900">RM {editTotal.toFixed(2)}</td>
+                        <td></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Delivery Date */}
+              <div>
+                <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                  <Truck className="h-3.5 w-3.5" /> Delivery Date
+                  {editOrder.status === "SENT" && <span className="text-red-500">*</span>}
+                </label>
+                <Input
+                  type="date"
+                  value={editDeliveryDate}
+                  onChange={(e) => setEditDeliveryDate(e.target.value)}
+                />
+              </div>
+
+              {/* Invoice section */}
+              <div className="border-t pt-3">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-700">
+                  <Receipt className="h-3.5 w-3.5" />
+                  Invoice
+                  {editOrder.invoice && (
+                    <Badge className="ml-1 text-[9px] bg-gray-400">{editOrder.invoice.invoiceNumber}</Badge>
+                  )}
+                  {!editOrder.invoice && (
+                    <span className="ml-1 text-[10px] font-normal text-gray-400">— will be created when you add a due date or photo</span>
+                  )}
+                </p>
+
+                {/* Invoice Number */}
+                <div className="mb-2">
+                  <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                    <FileText className="h-3.5 w-3.5" /> Invoice Number
+                    {editOrder.status === "SENT" && <span className="text-red-500">*</span>}
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. INV-001234"
+                    value={editInvoiceNumber}
+                    onChange={(e) => setEditInvoiceNumber(e.target.value)}
+                  />
+                </div>
+
+                {/* Invoice Due Date */}
+                <div>
+                  <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                    <CalendarDays className="h-3.5 w-3.5" /> Invoice Due Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={editInvoiceDueDate}
+                    onChange={(e) => setEditInvoiceDueDate(e.target.value)}
+                  />
+                </div>
+
+                {/* Invoice Photo Upload — Drag & Drop */}
+                <div className="mt-3">
+                  <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                    <ImageIcon className="h-3.5 w-3.5" /> Invoice Photos
+                    {editOrder.invoice && editOrder.invoice.photoCount > 0 && (
+                      <span className="text-[10px] font-normal text-gray-400">({editOrder.invoice.photoCount} existing)</span>
+                    )}
+                  </label>
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={handleDrop}
+                    onClick={openFilePicker}
+                    className={`mt-1 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 transition-colors ${
+                      dragOver ? "border-terracotta bg-terracotta/5" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+                    ) : (
+                      <Upload className="h-6 w-6 text-gray-300" />
+                    )}
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      {uploading ? "Uploading..." : "Drag & drop invoice files here"}
+                    </p>
+                    <span className="mt-2 rounded-md bg-terracotta/10 px-3 py-1.5 text-xs font-medium text-terracotta">
+                      Browse Files
+                    </span>
+                  </div>
+
+                  {/* File previews */}
+                  {editInvoiceFiles.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {editInvoiceFiles.map((f, i) => (
+                        <div key={i} className="group relative rounded-md border overflow-hidden">
+                          {f.type === "pdf" ? (
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50">
+                              <FileText className="h-4 w-4 text-red-500" />
+                              <span className="text-xs text-gray-700 max-w-[120px] truncate">{f.name}</span>
+                            </div>
+                          ) : (
+                            <div className="h-16 w-16">
+                              <Image src={f.url} alt={`Invoice ${i + 1}`} fill className="object-cover" sizes="64px" />
+                            </div>
+                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setEditInvoiceFiles((prev) => prev.filter((_, j) => j !== i)); }}
+                            className="absolute -right-1 -top-1 rounded-full bg-red-500 p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setEditOrder(null)}>Cancel</Button>
+            <Button onClick={saveEdit} disabled={editSaving || uploading} className="bg-terracotta hover:bg-terracotta-dark">
+              {editSaving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
+              Save Changes
+            </Button>
+            {editOrder?.status === "SENT" && (
+              <Button
+                disabled={editSaving || uploading}
+                className="bg-purple-500 hover:bg-purple-600"
+                onClick={async () => {
+                  // Validate required fields
+                  const missing: string[] = [];
+                  if (!editDeliveryDate) missing.push("Delivery Date");
+                  if (!editInvoiceNumber) missing.push("Invoice Number");
+                  if (missing.length > 0) {
+                    alert(`Please fill in required fields:\n• ${missing.join("\n• ")}`);
+                    return;
+                  }
+                  // Save first, then confirm order
+                  await saveEdit();
+                  await updateStatus(editOrder.id, "AWAITING_DELIVERY");
+                }}
+              >
+                {editSaving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Truck className="mr-1.5 h-4 w-4" />}
+                Confirm Order
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

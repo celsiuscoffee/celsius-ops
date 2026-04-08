@@ -7,7 +7,7 @@ import { logActivity } from "@/lib/activity-log";
 import { z } from "zod";
 
 export async function GET(req: NextRequest) {
-  const caller = getUserFromHeaders(req.headers);
+  const caller = await getUserFromHeaders(req.headers);
 
   const url = new URL(req.url);
   const search = url.searchParams.get("search")?.trim() ?? "";

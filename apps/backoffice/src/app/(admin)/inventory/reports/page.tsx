@@ -5,10 +5,10 @@ import { DollarSign, Package, ShoppingCart, Trash2, Truck, ArrowRight } from "lu
 
 const REPORTS = [
   { name: "Stock Valuation", description: "System qty vs last count with RM values — expected vs real inventory", icon: Package, color: "bg-blue-50 text-blue-600", href: "/inventory/reports/stock-valuation" },
-  { name: "COGS Report", description: "Actual vs expected ingredient usage and cost variance per outlet per period", icon: DollarSign, color: "bg-red-50 text-red-600", href: null },
-  { name: "Purchase Summary", description: "Total spending by supplier, product, and period with trend comparison", icon: ShoppingCart, color: "bg-green-50 text-green-600", href: null },
-  { name: "Wastage Report", description: "Cost of waste by reason (expired, spillage, breakage), outlet, and period", icon: Trash2, color: "bg-terracotta/10 text-terracotta", href: null },
-  { name: "Supplier Scorecard", description: "On-time delivery rate, short deliveries, price changes per supplier", icon: Truck, color: "bg-purple-50 text-purple-600", href: null },
+  { name: "COGS Report", description: "Actual vs expected ingredient usage and cost variance per outlet per period", icon: DollarSign, color: "bg-red-50 text-red-600", href: "/inventory/reports/cogs" },
+  { name: "Purchase Summary", description: "Total spending by supplier, product, and period with trend comparison", icon: ShoppingCart, color: "bg-green-50 text-green-600", href: "/inventory/reports/purchase-summary" },
+  { name: "Wastage Report", description: "Cost of waste by reason (expired, spillage, breakage), outlet, and period", icon: Trash2, color: "bg-terracotta/10 text-terracotta", href: "/inventory/reports/wastage" },
+  { name: "Supplier Scorecard", description: "On-time delivery rate, short deliveries, price changes per supplier", icon: Truck, color: "bg-purple-50 text-purple-600", href: "/inventory/reports/supplier-scorecard" },
 ];
 
 export default function ReportsPage() {

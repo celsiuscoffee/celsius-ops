@@ -173,7 +173,7 @@ export default function CreateOrderPage() {
   useEffect(() => {
     Promise.all([
       fetch("/api/inventory/suppliers/products").then((r) => r.json()),
-      fetch("/api/settings/outlets").then((r) => r.json()),
+      fetch("/api/settings/outlets?status=ACTIVE").then((r) => r.json()),
       fetch("/api/inventory/orders").then((r) => r.json()),
     ]).then(([s, b, o]) => {
       setSuppliers(s);

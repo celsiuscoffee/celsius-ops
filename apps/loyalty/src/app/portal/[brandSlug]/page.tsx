@@ -115,7 +115,7 @@ export default function BrandPortalPage() {
       >
         <div className="mx-auto max-w-md">
           <button
-            onClick={() => router.push("/portal")}
+            onClick={() => router.push("/staff")}
             className="mb-4 flex items-center gap-1 text-sm text-white/70 hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
