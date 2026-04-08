@@ -192,7 +192,7 @@ export default function LoyaltyDashboard() {
   const [statsError, setStatsError] = useState(false);
 
   // KPI state
-  const [kpiPeriod, setKpiPeriod] = useState<KpiPeriod>("monthly");
+  const [kpiPeriod, setKpiPeriod] = useState<KpiPeriod>("daily");
   const [kpiOutlet, setKpiOutlet] = useState<string>("all");
   const [kpi, setKpi] = useState<KpiData | null>(null);
   const [kpiLoading, setKpiLoading] = useState(true);
