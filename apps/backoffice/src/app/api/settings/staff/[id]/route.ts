@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Password — hash before saving
   if (body.password && body.password.length >= 8) {
-    data.password = hashPassword(body.password);
+    data.passwordHash = hashPassword(body.password);
   }
 
   // PIN — store as-is (4 or 6 digits)
@@ -61,7 +61,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const stack = err instanceof Error ? err.stack : '';
     console.error('[staff PATCH] Error updating', id, ':', message, stack);
     const safeData = { ...data };
-    delete safeData.password;
+    delete safeData.passwordHash;
     delete safeData.pin;
     console.error('[staff PATCH] Data was:', JSON.stringify(safeData));
     if (message.includes("Unique constraint")) {
