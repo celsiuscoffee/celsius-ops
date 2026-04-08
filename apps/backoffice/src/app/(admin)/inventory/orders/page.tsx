@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Fragment, useRef, useCallback } from "react";
+import { useState, useEffect, Fragment, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -121,9 +121,15 @@ const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof
 
 export default function OrdersPage() {
   // Table state
-  const { data: orders = [], isLoading: loading, mutate: loadOrders } = useFetch<Order[]>("/api/inventory/orders");
+  const [tab, setTab] = useState("active");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  const url = `/api/inventory/orders?tab=${tab}${debouncedSearch ? `&search=${debouncedSearch}` : ""}`;
+  const { data: orders = [], isLoading: loading, mutate: loadOrders } = useFetch<Order[]>(url);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
@@ -323,18 +329,9 @@ export default function OrdersPage() {
     return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
   };
 
-  // ── Filters ─────────────────────────────────────────────────────────────
+  // ── Computed from API-filtered results ───────────────────────────────────
 
-  const statuses = ["All", ...Object.keys(STATUS_CONFIG)];
-  const filtered = orders.filter((o) => {
-    const matchSearch =
-      o.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
-      o.supplier.toLowerCase().includes(search.toLowerCase()) ||
-      o.outlet.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "All" || o.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
-  const totalValue = filtered.reduce((a, o) => a + o.totalAmount, 0);
+  const totalValue = orders.reduce((a, o) => a + o.totalAmount, 0);
   const pendingCount = orders.filter((o) => ["DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT", "AWAITING_DELIVERY"].includes(o.status)).length;
 
   // ── Render ──────────────────────────────────────────────────────────────
@@ -390,19 +387,16 @@ export default function OrdersPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input placeholder="Search by PO#, supplier, or outlet..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {statuses.map((s) => {
-            const config = STATUS_CONFIG[s];
-            return (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === s ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
-              >
-                {s === "All" ? "All" : config?.label ?? s}
-              </button>
-            );
-          })}
+        <div className="flex gap-1.5">
+          {([["active", "Active"], ["completed", "Completed"], ["all", "All"]] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setTab(value)}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -423,17 +417,17 @@ export default function OrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && (
+            {orders.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-4 py-12 text-center">
                   <ShoppingCart className="mx-auto h-8 w-8 text-gray-300" />
                   <p className="mt-2 text-sm text-gray-500">
-                    {orders.length === 0 ? "No orders yet. Click 'Create Order' to get started." : "No orders match your filter."}
+                    {!debouncedSearch && tab === "all" ? "No orders yet. Click 'Create Order' to get started." : "No orders match your filter."}
                   </p>
                 </td>
               </tr>
             )}
-            {filtered.map((order) => {
+            {orders.map((order) => {
               const config = STATUS_CONFIG[order.status] ?? { label: order.status, color: "bg-gray-400", icon: Clock };
               const actions = NEXT_ACTIONS[order.status] ?? [];
               return (
@@ -768,6 +762,7 @@ export default function OrdersPage() {
                   const missing: string[] = [];
                   if (!editDeliveryDate) missing.push("Delivery Date");
                   if (!editInvoiceNumber) missing.push("Invoice Number");
+                  if (!editInvoiceDueDate) missing.push("Invoice Due Date");
                   if (missing.length > 0) {
                     alert(`Please fill in required fields:\n• ${missing.join("\n• ")}`);
                     return;

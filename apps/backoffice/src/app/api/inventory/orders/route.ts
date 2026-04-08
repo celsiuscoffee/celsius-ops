@@ -2,8 +2,28 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const tab = req.nextUrl.searchParams.get("tab") || "active";
+  const search = req.nextUrl.searchParams.get("search") || "";
+
+  const ACTIVE_STATUSES = ["DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
+  const COMPLETED_STATUSES = ["COMPLETED", "CANCELLED"];
+
+  const where: Record<string, unknown> = {};
+  if (tab === "active") where.status = { in: ACTIVE_STATUSES };
+  else if (tab === "completed") where.status = { in: COMPLETED_STATUSES };
+
+  if (search) {
+    where.OR = [
+      { orderNumber: { contains: search, mode: "insensitive" } },
+      { supplier: { name: { contains: search, mode: "insensitive" } } },
+      { outlet: { name: { contains: search, mode: "insensitive" } } },
+    ];
+  }
+
   const orders = await prisma.order.findMany({
+    where,
+    take: 100,
     select: {
       id: true,
       orderNumber: true,

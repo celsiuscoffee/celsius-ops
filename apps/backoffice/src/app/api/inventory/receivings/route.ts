@@ -3,8 +3,28 @@ import { prisma } from "@/lib/prisma";
 import { adjustStockBalance } from "@/lib/stock";
 import { getUserFromHeaders } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const tab = req.nextUrl.searchParams.get("tab") || "recent";
+  const search = req.nextUrl.searchParams.get("search") || "";
+
+  const where: Record<string, unknown> = {};
+  if (tab === "recent") {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    where.receivedAt = { gte: thirtyDaysAgo };
+  }
+
+  if (search) {
+    where.OR = [
+      { order: { orderNumber: { contains: search, mode: "insensitive" } } },
+      { supplier: { name: { contains: search, mode: "insensitive" } } },
+      { outlet: { name: { contains: search, mode: "insensitive" } } },
+    ];
+  }
+
   const receivings = await prisma.receiving.findMany({
+    where,
+    take: 100,
     select: {
       id: true,
       orderId: true,

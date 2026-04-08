@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { useFetch } from "@/lib/use-fetch";
 import {
   Dialog,
   DialogContent,
@@ -83,11 +84,35 @@ type ReceiveLineItem = {
 };
 
 export default function ReceivingsPage() {
-  const [receivings, setReceivings] = useState<Receiving[]>([]);
-  const [awaitingOrders, setAwaitingOrders] = useState<{ id: string; orderNumber: string; outlet: string; supplier: string; status: string; totalAmount: number; items: number; deliveryDate: string | null; createdAt: string }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("recent");
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Main data via useFetch
+  const receivingsUrl = `/api/inventory/receivings?tab=${tab}`;
+  const { data: receivings = [], isLoading: recLoading, mutate: reloadReceivings } = useFetch<Receiving[]>(receivingsUrl);
+
+  type AwaitingOrder = { id: string; orderNumber: string; outlet: string; supplier: string; status: string; totalAmount: number; items: number; deliveryDate: string | null; createdAt: string };
+  const { data: rawActiveOrders = [], isLoading: ordLoading, mutate: reloadOrders } = useFetch<{ id: string; orderNumber: string; outlet: string; supplier: string; status: string; totalAmount: number; items: { id: string }[]; deliveryDate: string | null; createdAt: string }[]>("/api/inventory/orders?tab=active");
+
+  const loading = recLoading || ordLoading;
+
+  const AWAITING_STATUSES = ["SENT", "APPROVED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
+  const awaitingOrders: AwaitingOrder[] = rawActiveOrders
+    .filter((o) => AWAITING_STATUSES.includes(o.status))
+    .map((o) => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      outlet: o.outlet,
+      supplier: o.supplier,
+      status: o.status,
+      totalAmount: o.totalAmount,
+      items: o.items.length,
+      deliveryDate: o.deliveryDate,
+      createdAt: o.createdAt,
+    }));
+
+  const loadData = () => { reloadReceivings(); reloadOrders(); };
 
   // Receive dialog state
   const [showReceive, setShowReceive] = useState(false);
@@ -97,40 +122,9 @@ export default function ReceivingsPage() {
   const [receiveNotes, setReceiveNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const AWAITING_STATUSES = ["SENT", "APPROVED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
-
-  const loadData = () => {
-    Promise.all([
-      fetch("/api/inventory/receivings").then((r) => r.json()),
-      fetch("/api/inventory/orders").then((r) => r.json()),
-    ])
-      .then(([recData, ordersData]) => {
-        setReceivings(recData);
-        setAwaitingOrders(
-          ordersData
-            .filter((o: { status: string }) => AWAITING_STATUSES.includes(o.status))
-            .map((o: { id: string; orderNumber: string; outlet: string; supplier: string; status: string; totalAmount: number; items: { id: string }[]; deliveryDate: string | null; createdAt: string }) => ({
-              id: o.id,
-              orderNumber: o.orderNumber,
-              outlet: o.outlet,
-              supplier: o.supplier,
-              status: o.status,
-              totalAmount: o.totalAmount,
-              items: o.items.length,
-              deliveryDate: o.deliveryDate,
-              createdAt: o.createdAt,
-            }))
-        );
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  };
-
-  useEffect(() => { loadData(); }, []);
-
   const openReceiveDialog = () => {
     // Fetch orders that are awaiting delivery or sent
-    fetch("/api/inventory/orders")
+    fetch("/api/inventory/orders?tab=active")
       .then((r) => r.json())
       .then((orders) => {
         const pending: PendingOrder[] = orders
@@ -331,10 +325,23 @@ export default function ReceivingsPage() {
         </div>
       )}
 
-      {/* Search */}
-      <div className="mt-4 relative max-w-md">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <Input placeholder="Search by PO#, supplier, or outlet..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      {/* Search & Tabs */}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input placeholder="Search by PO#, supplier, or outlet..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        </div>
+        <div className="flex gap-1.5">
+          {([["recent", "Recent"], ["all", "All"]] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setTab(value)}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Receivings Table */}

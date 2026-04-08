@@ -10,7 +10,6 @@ import {
   Loader2,
   Activity as ActivityIcon,
   Crown,
-  Store,
   Target,
   UserCheck,
   Repeat,
@@ -248,37 +247,8 @@ export default function AdminDashboard() {
             </div>
           ) : kpi ? (
             <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-                {/* 1 — Collection Rate */}
-                <div className="rounded-lg bg-gray-50 dark:bg-neutral-700/50 p-4">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Target className="h-4 w-4 text-[#C2452D]" />
-                    <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">Collection Rate</p>
-                  </div>
-                  <p className={`text-2xl font-bold font-sans ${
-                    kpi.collection_rate.rate >= 50
-                      ? "text-green-600"
-                      : kpi.collection_rate.rate >= 20
-                        ? "text-orange-500"
-                        : kpi.collection_rate.pos_orders === 0
-                          ? "text-gray-400"
-                          : "text-red-500"
-                  }`}>
-                    {kpi.collection_rate.pos_orders === 0 ? "—" : `${kpi.collection_rate.rate}%`}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-1">
-                    <span className="font-sans font-semibold text-gray-700 dark:text-neutral-200">
-                      {kpi.collection_rate.loyalty_claims.toLocaleString()}
-                    </span>
-                    {" / "}
-                    <span className="font-sans">
-                      {kpi.collection_rate.pos_orders.toLocaleString()}
-                    </span>
-                    {" orders"}
-                  </p>
-                </div>
-
-                {/* 2 — New Members */}
+              <div className="grid grid-cols-3 gap-4 mb-5">
+                {/* 1 — New Members */}
                 <div className="rounded-lg bg-gray-50 dark:bg-neutral-700/50 p-4">
                   <div className="flex items-center gap-1.5 mb-2">
                     <UserCheck className="h-4 w-4 text-blue-500" />
@@ -321,40 +291,6 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Per-outlet collection rate breakdown */}
-              {kpi.collection_rate.outlets.length > 0 && kpi.collection_rate.pos_orders > 0 && (
-                <div className="border-t border-gray-100 dark:border-neutral-700 pt-4">
-                  <p className="text-xs font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-3">
-                    Collection Rate by Outlet
-                  </p>
-                  <div className="space-y-2">
-                    {kpi.collection_rate.outlets.map((o) => (
-                      <div key={o.outlet_name} className="flex items-center gap-3">
-                        <Store className="h-4 w-4 text-gray-400 dark:text-neutral-500 shrink-0" />
-                        <span className="text-sm text-gray-700 dark:text-neutral-300 w-32 truncate">{o.outlet_name}</span>
-                        <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-neutral-700 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              o.claim_rate >= 50 ? "bg-green-500" : o.claim_rate >= 20 ? "bg-orange-400" : "bg-red-400"
-                            }`}
-                            style={{ width: `${Math.min(o.claim_rate, 100)}%` }}
-                          />
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs font-sans text-gray-500 dark:text-neutral-400 w-20 text-right">
-                            {o.loyalty_claims.toLocaleString()}/{o.pos_orders.toLocaleString()}
-                          </span>
-                          <span className={`text-xs font-bold font-sans w-10 text-right ${
-                            o.claim_rate >= 50 ? "text-green-600" : o.claim_rate >= 20 ? "text-orange-500" : "text-red-500"
-                          }`}>
-                            {o.claim_rate}%
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </>
           ) : (
             <p className="text-sm text-gray-400 dark:text-neutral-500 text-center py-4">

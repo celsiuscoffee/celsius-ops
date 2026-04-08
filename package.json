@@ -16,7 +16,8 @@
     "db:seed": "cd packages/db && npx tsx seed.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b packages/db packages/auth packages/shared"
+    "typecheck": "tsc -b packages/db packages/auth packages/shared",
+    "typecheck:apps": "npm run typecheck -w apps/backoffice && npm run typecheck -w apps/loyalty && npm run typecheck -w apps/inventory"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",

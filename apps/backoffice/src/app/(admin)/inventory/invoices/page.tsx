@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useFetch } from "@/lib/use-fetch";
 import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 
 type Invoice = {
@@ -22,20 +23,18 @@ type Invoice = {
 };
 
 export default function InvoicesPage() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<string>("all");
+  const [tab, setTab] = useState("unpaid");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const loadInvoices = () => {
-    fetch("/api/inventory/invoices")
-      .then((res) => res.json())
-      .then((data) => { setInvoices(data); setLoading(false); })
-      .catch(() => setLoading(false));
-  };
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  useEffect(() => { loadInvoices(); }, []);
+  const url = `/api/inventory/invoices?tab=${tab}${debouncedSearch ? `&search=${debouncedSearch}` : ""}`;
+  const { data: invoices = [], isLoading: loading, mutate: loadInvoices } = useFetch<Invoice[]>(url);
 
   const updateStatus = async (invoiceId: string, newStatus: string) => {
     setUpdatingId(invoiceId);
@@ -50,14 +49,6 @@ export default function InvoicesPage() {
       setUpdatingId(null);
     }
   };
-
-  const filtered = invoices.filter((i) => {
-    const matchFilter = filter === "all" || i.status === filter.toUpperCase();
-    const matchSearch = i.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-      i.supplier.toLowerCase().includes(search.toLowerCase()) ||
-      i.poNumber.toLowerCase().includes(search.toLowerCase());
-    return matchFilter && matchSearch;
-  });
 
   const totalPending = invoices.filter((i) => i.status === "PENDING").reduce((a, i) => a + i.amount, 0);
   const totalOverdue = invoices.filter((i) => i.status === "OVERDUE").reduce((a, i) => a + i.amount, 0);
@@ -122,8 +113,8 @@ export default function InvoicesPage() {
           <Input placeholder="Search invoices..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex gap-1.5">
-          {["all", "draft", "pending", "paid", "overdue"].map((s) => (
-            <button key={s} onClick={() => setFilter(s)} className={`rounded-full border px-3 py-1 text-xs capitalize ${filter === s ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500"}`}>{s}</button>
+          {([["unpaid", "Unpaid"], ["paid", "Paid"], ["all", "All"]] as const).map(([value, label]) => (
+            <button key={value} onClick={() => setTab(value)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>{label}</button>
           ))}
         </div>
       </div>
@@ -143,19 +134,19 @@ export default function InvoicesPage() {
             <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
           </tr></thead>
           <tbody>
-            {filtered.length === 0 && (
+            {invoices.length === 0 && (
               <tr>
                 <td colSpan={10} className="px-4 py-12 text-center">
                   <FileText className="mx-auto h-8 w-8 text-gray-300" />
                   <p className="mt-2 text-sm text-gray-500">
-                    {invoices.length === 0
+                    {!debouncedSearch && tab === "all"
                       ? "No invoices yet. Invoices will be created from receivings."
                       : "No invoices match your filter."}
                   </p>
                 </td>
               </tr>
             )}
-            {filtered.map((inv) => {
+            {invoices.map((inv) => {
               const actions = getActions(inv.status);
               return (
                 <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50/50">
