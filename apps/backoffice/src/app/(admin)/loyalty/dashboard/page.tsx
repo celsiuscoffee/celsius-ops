@@ -252,13 +252,6 @@ export default function LoyaltyDashboard() {
 
   return (
     <div className="pb-10 min-h-0 w-full">
-      {/* Page header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-500">Overview of your loyalty program performance</p>
-      </div>
-
-      <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 md:p-6">
       <div className="space-y-6">
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* KEY METRICS — Collection Rate, New Members, Returning Members, Sales */}
@@ -615,7 +608,6 @@ export default function LoyaltyDashboard() {
             </div>
           </div>
         )}
-      </div>
       </div>
     </div>
   );
