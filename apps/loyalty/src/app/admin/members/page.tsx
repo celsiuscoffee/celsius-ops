@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { Search, MoreHorizontal, X, Download, Eye, Pencil, Trash2, AlertTriangle, Filter, ChevronDown, ChevronLeft, ChevronRight, Plus, Tag, Save, Bookmark, MessageSquare, Send, Phone, Loader2 } from "lucide-react";
+import { Search, MoreHorizontal, X, Download, Eye, Pencil, Trash2, AlertTriangle, Filter, ChevronDown, ChevronLeft, ChevronRight, Plus, Tag, Save, Bookmark, MessageSquare, Send, Phone, Loader2, Store } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchMembers, fetchMembersPage, fetchRewards } from "@/lib/api";
 import type { MemberWithBrand, Reward } from "@/types";
