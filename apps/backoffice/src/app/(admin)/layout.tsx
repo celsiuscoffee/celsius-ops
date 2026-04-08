@@ -40,9 +40,22 @@ import {
   UserCog,
   ShieldCheck,
   Plug,
+  Wrench,
+  Lock,
+  Eye,
+  EyeOff,
+  Check,
+  Loader2,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useFetch } from "@/lib/use-fetch";
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -54,6 +67,7 @@ type UserProfile = {
   outletId: string | null;
   outletName?: string | null;
   moduleAccess?: string[];
+  hasPassword?: boolean;
 };
 
 type NavItem = {
@@ -133,6 +147,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Loyalty",
     icon: <Gift className={ICON_SIZE} />,
     items: [
+      { label: "Dashboard", href: "/loyalty/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "loyalty:dashboard" },
       { label: "Members", href: "/loyalty/members", icon: <Heart className={ICON_SIZE} />, moduleKey: "loyalty:members" },
       { label: "Rewards", href: "/loyalty/rewards", icon: <Star className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
       { label: "Redemptions", href: "/loyalty/redemptions", icon: <TicketPercent className={ICON_SIZE} />, moduleKey: "loyalty:redemptions" },
@@ -149,6 +164,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Staff & Access", href: "/settings/staff", icon: <UserCog className={ICON_SIZE} />, moduleKey: "settings:staff" },
       { label: "Approval Rules", href: "/settings/rules", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "settings:rules" },
       { label: "Integrations", href: "/settings/integrations", icon: <Plug className={ICON_SIZE} />, moduleKey: "settings:integrations" },
+      { label: "System", href: "/settings/system", icon: <Wrench className={ICON_SIZE} />, moduleKey: "settings:system" },
     ],
   },
 ];
@@ -256,6 +272,129 @@ function NavLink({
   );
 }
 
+// ─── Password Change Dialog ─────────────────────────────────────────────
+
+function PasswordChangeDialog({ hasPassword }: { hasPassword?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+
+  const reset = () => {
+    setCurrentPw("");
+    setNewPw("");
+    setConfirmPw("");
+    setError("");
+    setSuccess(false);
+    setShowCurrent(false);
+    setShowNew(false);
+  };
+
+  const handleSave = async () => {
+    setError("");
+    if (newPw.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (newPw !== confirmPw) { setError("Passwords do not match"); return; }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/auth/set-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: hasPassword ? currentPw : undefined,
+          newPassword: newPw,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Failed to save"); setSaving(false); return; }
+
+      setSuccess(true);
+      setTimeout(() => { setOpen(false); reset(); }, 1500);
+    } catch {
+      setError("Network error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
+      <DialogTrigger
+        className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[11px] text-white/50 hover:bg-white/5 hover:text-white/70 transition-colors cursor-pointer"
+      >
+        <Lock className="h-3 w-3" />
+        {hasPassword ? "Change Password" : "Set Password"}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{hasPassword ? "Change Password" : "Set Password"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          {hasPassword && (
+            <div className="relative">
+              <input
+                type={showCurrent ? "text" : "password"}
+                placeholder="Current password"
+                value={currentPw}
+                onChange={(e) => setCurrentPw(e.target.value)}
+                className="w-full rounded-lg border border-border bg-transparent px-3 py-2 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrent(!showCurrent)}
+                className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+              >
+                {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          )}
+          <div className="relative">
+            <input
+              type={showNew ? "text" : "password"}
+              placeholder="New password"
+              value={newPw}
+              onChange={(e) => setNewPw(e.target.value)}
+              className="w-full rounded-lg border border-border bg-transparent px-3 py-2 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+            />
+            <button
+              type="button"
+              onClick={() => setShowNew(!showNew)}
+              className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+            >
+              {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          <input
+            type={showNew ? "text" : "password"}
+            placeholder="Confirm new password"
+            value={confirmPw}
+            onChange={(e) => setConfirmPw(e.target.value)}
+            className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+          />
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          {success && (
+            <p className="flex items-center gap-1 text-xs text-green-600">
+              <Check className="h-3 w-3" /> Password saved
+            </p>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving || !newPw || !confirmPw}
+            className="flex w-full items-center justify-center rounded-lg bg-terracotta py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50 transition-colors"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Password"}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Sidebar Content ────────────────────────────────────────────────────
 
 function SidebarContent({
@@ -293,10 +432,10 @@ function SidebarContent({
       {/* Home link */}
       <div className="px-3 pt-3 pb-1">
         <Link
-          href="/"
+          href="/dashboard"
           onClick={onNavigate}
           className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-            pathname === "/" ? "bg-white/10 text-white font-medium" : "text-white/50 hover:bg-white/5 hover:text-white/70"
+            pathname === "/dashboard" || pathname === "/" ? "bg-white/10 text-white font-medium" : "text-white/50 hover:bg-white/5 hover:text-white/70"
           }`}
         >
           <LayoutDashboard className="h-4 w-4" />
@@ -305,7 +444,7 @@ function SidebarContent({
       </div>
 
       {/* Nav sections */}
-      <ScrollArea className="flex-1 px-3 py-2">
+      <div className="flex-1 overflow-y-auto px-3 py-2 scrollbar-thin">
         {NAV_SECTIONS.map((section) => (
           <SidebarSection
             key={section.label}
@@ -317,7 +456,7 @@ function SidebarContent({
             onNavigate={onNavigate}
           />
         ))}
-      </ScrollArea>
+      </div>
 
       {/* User footer */}
       {user && (
@@ -339,6 +478,9 @@ function SidebarContent({
             >
               <LogOut className="h-4 w-4" />
             </button>
+          </div>
+          <div className="mt-2">
+            <PasswordChangeDialog hasPassword={user.hasPassword} />
           </div>
         </div>
       )}
@@ -386,13 +528,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const toggleSection = (label: string) => {
     setExpandedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) {
+      if (prev.has(label)) {
+        // Collapse if already open
+        const next = new Set(prev);
         next.delete(label);
-      } else {
-        next.add(label);
+        return next;
       }
-      return next;
+      // Accordion: close others, open this one
+      return new Set([label]);
     });
   };
 
@@ -415,7 +558,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="flex h-screen overflow-hidden bg-brand-offwhite">
       {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 lg:block">
+      <aside className="hidden w-64 shrink-0 lg:block h-full overflow-hidden">
         <SidebarContent
           user={user}
           expandedSections={expandedSections}
