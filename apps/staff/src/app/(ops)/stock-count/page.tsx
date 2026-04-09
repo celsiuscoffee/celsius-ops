@@ -216,6 +216,14 @@ export default function StockCheckPage() {
     setItemStates((prev) => ({ ...prev, [id]: { status: "confirmed" } }));
   };
 
+  const uncheckItem = (id: string) => {
+    setItemStates((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
   const confirmArea = (area: string) => {
     const group = groupedData.find((g) => g.area === area);
     if (!group) return;
@@ -628,7 +636,7 @@ export default function StockCheckPage() {
                             </div>
 
                             {/* Action buttons */}
-                            {!isChecked && (
+                            {!isChecked ? (
                               <div className="flex shrink-0 gap-1">
                                 <button
                                   onClick={() => confirmItem(item.id)}
@@ -643,6 +651,14 @@ export default function StockCheckPage() {
                                   <X className="h-4 w-4" />
                                 </button>
                               </div>
+                            ) : (
+                              <button
+                                onClick={() => uncheckItem(item.id)}
+                                className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-gray-400 hover:bg-gray-100 hover:text-gray-600 active:bg-gray-200"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                Undo
+                              </button>
                             )}
                           </div>
                         </Card>
