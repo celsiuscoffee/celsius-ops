@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
-import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2 } from "lucide-react";
 
 type Invoice = {
   id: string;
@@ -24,20 +24,37 @@ type Invoice = {
   notes: string | null;
 };
 
+type OutletOption = { id: string; name: string };
+type InvoicesResponse = { invoices: Invoice[]; outlets: OutletOption[] };
+
 export default function InvoicesPage() {
   const [tab, setTab] = useState("unpaid");
   const [typeFilter, setTypeFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [outletFilter, setOutletFilter] = useState("");
+  const [dueDateFrom, setDueDateFrom] = useState("");
+  const [dueDateTo, setDueDateTo] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
 
-  const url = `/api/inventory/invoices?tab=${tab}&type=${typeFilter}${debouncedSearch ? `&search=${debouncedSearch}` : ""}`;
-  const { data: invoices = [], isLoading: loading, mutate: loadInvoices } = useFetch<Invoice[]>(url);
+  const params = new URLSearchParams({ tab, type: typeFilter });
+  if (debouncedSearch) params.set("search", debouncedSearch);
+  if (outletFilter) params.set("outlet", outletFilter);
+  if (dueDateFrom) params.set("dueDateFrom", dueDateFrom);
+  if (dueDateTo) params.set("dueDateTo", dueDateTo);
+
+  const url = `/api/inventory/invoices?${params.toString()}`;
+  const { data, isLoading: loading, mutate: loadInvoices } = useFetch<InvoicesResponse>(url);
+  const invoices = data?.invoices ?? [];
+  const outletOptions = data?.outlets ?? [];
+
+  const activeFilterCount = [outletFilter, dueDateFrom, dueDateTo].filter(Boolean).length;
 
   const updateStatus = async (invoiceId: string, newStatus: string) => {
     setUpdatingId(invoiceId);
@@ -110,8 +127,8 @@ export default function InvoicesPage() {
         <div className="rounded-lg border bg-white px-3 py-2.5"><p className="text-xs text-gray-500">Paid</p><p className="text-lg font-bold text-green-600">RM {totalPaid.toFixed(2)}</p></div>
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
-        <div className="relative flex-1 max-w-md">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input placeholder="Search invoices..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
@@ -125,7 +142,71 @@ export default function InvoicesPage() {
             <button key={value} onClick={() => setTypeFilter(value)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${typeFilter === value ? "border-purple-400 bg-purple-50 text-purple-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>{label}</button>
           ))}
         </div>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`relative flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${showFilters || activeFilterCount > 0 ? "border-blue-400 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+        >
+          <Filter className="h-3 w-3" />
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white">{activeFilterCount}</span>
+          )}
+        </button>
+        {activeFilterCount > 0 && (
+          <button
+            onClick={() => { setOutletFilter(""); setDueDateFrom(""); setDueDateTo(""); }}
+            className="flex items-center gap-1 rounded-full border border-gray-200 px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-50"
+          >
+            <X className="h-3 w-3" /> Clear filters
+          </button>
+        )}
       </div>
+
+      {/* Expanded filter panel */}
+      {showFilters && (
+        <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/30 p-3">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="min-w-[180px]">
+              <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                <Building2 className="h-3 w-3" /> Outlet
+              </label>
+              <select
+                value={outletFilter}
+                onChange={(e) => setOutletFilter(e.target.value)}
+                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              >
+                <option value="">All Outlets</option>
+                {outletOptions.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-[150px]">
+              <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                <CalendarDays className="h-3 w-3" /> Due From
+              </label>
+              <input
+                type="date"
+                value={dueDateFrom}
+                onChange={(e) => setDueDateFrom(e.target.value)}
+                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+            <div className="min-w-[150px]">
+              <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
+                <CalendarDays className="h-3 w-3" /> Due To
+              </label>
+              <input
+                type="date"
+                value={dueDateTo}
+                onChange={(e) => setDueDateTo(e.target.value)}
+                min={dueDateFrom || undefined}
+                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 rounded-xl border border-gray-200 bg-white">
         <table className="w-full text-sm">

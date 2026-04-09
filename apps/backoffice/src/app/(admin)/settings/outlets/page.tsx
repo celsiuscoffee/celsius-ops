@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Pencil, Building2, Loader2, Trash2, Power } from "lucide-react";
 
 type Outlet = {
@@ -244,64 +243,73 @@ export default function OutletsPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingId ? "Edit Outlet" : "Add Outlet"}</DialogTitle></DialogHeader>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="w-full">
-              <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
-              <TabsTrigger value="settings" className="flex-1">Settings</TabsTrigger>
-            </TabsList>
-            <TabsContent value="details">
-              <div className="grid gap-4 py-2">
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="text-sm font-medium text-gray-700">Outlet Name</label><Input className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-                  <div><label className="text-sm font-medium text-gray-700">Outlet Code</label><Input className="mt-1" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></div>
+          {/* Tab buttons */}
+          <div className="flex rounded-lg bg-gray-100 p-0.5">
+            {([["details", "Details"], ["settings", "Settings"]] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setActiveTab(value)}
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${activeTab === value ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          {activeTab === "details" && (
+            <div className="grid gap-4 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="text-sm font-medium text-gray-700">Outlet Name</label><Input className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+                <div><label className="text-sm font-medium text-gray-700">Outlet Code</label><Input className="mt-1" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Type</label>
+                  <select className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                    <option value="OUTLET">Outlet</option>
+                    <option value="CENTRAL_KITCHEN">Central Kitchen</option>
+                  </select>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Type</label>
-                    <select className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                      <option value="OUTLET">Outlet</option>
-                      <option value="CENTRAL_KITCHEN">Central Kitchen</option>
-                    </select>
-                  </div>
-                  <div><label className="text-sm font-medium text-gray-700">Phone</label><Input className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+                <div><label className="text-sm font-medium text-gray-700">Phone</label><Input className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+              </div>
+              <div><label className="text-sm font-medium text-gray-700">Address</label><Input className="mt-1" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="text-sm font-medium text-gray-700">City</label><Input className="mt-1" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
+                <div><label className="text-sm font-medium text-gray-700">State</label><Input className="mt-1" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} /></div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "settings" && (
+            <div className="grid gap-4 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Open Time</label>
+                  <Input className="mt-1" type="time" value={form.openTime} onChange={(e) => setForm({ ...form, openTime: e.target.value })} />
                 </div>
-                <div><label className="text-sm font-medium text-gray-700">Address</label><Input className="mt-1" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="text-sm font-medium text-gray-700">City</label><Input className="mt-1" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
-                  <div><label className="text-sm font-medium text-gray-700">State</label><Input className="mt-1" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} /></div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Close Time</label>
+                  <Input className="mt-1" type="time" value={form.closeTime} onChange={(e) => setForm({ ...form, closeTime: e.target.value })} />
                 </div>
               </div>
-            </TabsContent>
-            <TabsContent value="settings">
-              <div className="grid gap-4 py-2">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Open Time</label>
-                    <Input className="mt-1" type="time" value={form.openTime} onChange={(e) => setForm({ ...form, openTime: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Close Time</label>
-                    <Input className="mt-1" type="time" value={form.closeTime} onChange={(e) => setForm({ ...form, closeTime: e.target.value })} />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Pickup Time (minutes)</label>
-                  <Input className="mt-1" type="number" min={1} value={form.pickupTimeMins} onChange={(e) => setForm({ ...form, pickupTimeMins: parseInt(e.target.value) || 0 })} />
-                  <p className="mt-1 text-xs text-gray-400">Estimated time for order pickup</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Pickup Store ID</label>
-                  <Input className="mt-1" value={form.pickupStoreId} onChange={(e) => setForm({ ...form, pickupStoreId: e.target.value })} placeholder="e.g. shah-alam, conezion, tamarind" />
-                  <p className="mt-1 text-xs text-gray-400">Links this outlet to the pickup/order app (Supabase store_id)</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">StoreHub ID</label>
-                  <Input className="mt-1" value={form.storehubId} onChange={(e) => setForm({ ...form, storehubId: e.target.value })} placeholder="e.g. sh_abc123" />
-                  <p className="mt-1 text-xs text-gray-400">Links this outlet to StoreHub POS</p>
-                </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Pickup Time (minutes)</label>
+                <Input className="mt-1" type="number" min={1} value={form.pickupTimeMins} onChange={(e) => setForm({ ...form, pickupTimeMins: parseInt(e.target.value) || 0 })} />
+                <p className="mt-1 text-xs text-gray-400">Estimated time for order pickup</p>
               </div>
-            </TabsContent>
-          </Tabs>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Pickup Store ID</label>
+                <Input className="mt-1" value={form.pickupStoreId} onChange={(e) => setForm({ ...form, pickupStoreId: e.target.value })} placeholder="e.g. shah-alam, conezion, tamarind" />
+                <p className="mt-1 text-xs text-gray-400">Links this outlet to the pickup/order app (Supabase store_id)</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">StoreHub ID</label>
+                <Input className="mt-1" value={form.storehubId} onChange={(e) => setForm({ ...form, storehubId: e.target.value })} placeholder="e.g. sh_abc123" />
+                <p className="mt-1 text-xs text-gray-400">Links this outlet to StoreHub POS</p>
+              </div>
+            </div>
+          )}
           <Button onClick={handleSubmit} disabled={saving || !form.name || !form.code} className="w-full bg-terracotta hover:bg-terracotta-dark disabled:opacity-50">
             {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
             {editingId ? "Save Changes" : "Add Outlet"}

@@ -16,6 +16,18 @@ export async function GET(req: NextRequest) {
   if (type === "supplier") where.paymentType = { not: "STAFF_CLAIM" };
   else if (type === "staff_claim") where.paymentType = "STAFF_CLAIM";
 
+  const outletId = req.nextUrl.searchParams.get("outlet") || "";
+  if (outletId) where.outletId = outletId;
+
+  const dueDateFrom = req.nextUrl.searchParams.get("dueDateFrom") || "";
+  const dueDateTo = req.nextUrl.searchParams.get("dueDateTo") || "";
+  if (dueDateFrom || dueDateTo) {
+    const dueDateFilter: Record<string, Date> = {};
+    if (dueDateFrom) dueDateFilter.gte = new Date(dueDateFrom);
+    if (dueDateTo) dueDateFilter.lte = new Date(dueDateTo + "T23:59:59Z");
+    where.dueDate = dueDateFilter;
+  }
+
   if (search) {
     where.OR = [
       { invoiceNumber: { contains: search, mode: "insensitive" } },
@@ -45,6 +57,13 @@ export async function GET(req: NextRequest) {
     orderBy: { issueDate: "desc" },
   });
 
+  // Fetch distinct outlets for filter dropdown
+  const outlets = await prisma.outlet.findMany({
+    where: { invoices: { some: {} } },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+
   const mapped = invoices.map((inv) => ({
     id: inv.id,
     invoiceNumber: inv.invoiceNumber,
@@ -62,5 +81,5 @@ export async function GET(req: NextRequest) {
     notes: inv.notes,
   }));
 
-  return NextResponse.json(mapped);
+  return NextResponse.json({ invoices: mapped, outlets });
 }
