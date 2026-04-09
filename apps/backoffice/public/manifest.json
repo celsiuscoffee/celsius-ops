@@ -1,0 +1,29 @@
+{
+  "name": "Celsius Backoffice",
+  "short_name": "Backoffice",
+  "description": "Management dashboard for Celsius Coffee",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#160800",
+  "theme_color": "#C2452D",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/images/celsius-logo-sm.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/images/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
