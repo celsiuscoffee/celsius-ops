@@ -33,6 +33,7 @@ model Outlet {
   pickupTimeMins Int?     @default(15)
 
   // Cross-app references
+  pickupStoreId   String?  @unique  // Supabase outlet_settings.store_id (e.g. "shah-alam")
   loyaltyOutletId String?
   staffPin        String?
 

@@ -1,3 +1,23 @@
+// ─── Re-exports from submodules ─────────────────────────
+export { cn } from "./cn";
+export { checkRateLimit, RATE_LIMITS } from "./rate-limit";
+export type { RateLimitConfig } from "./rate-limit";
+export { createSupabaseClient, createSupabaseAdmin } from "./supabase";
+export {
+  formatPoints,
+  formatCurrency,
+  formatPhone,
+  formatPhoneLocal,
+  toStoragePhone,
+  toLocalPhone,
+  generateRedemptionCode,
+  getProgressPercentage,
+  getTimeAgo,
+} from "./format";
+export { sendSMS, getSMSProvider } from "./sms";
+export type { SMSProvider } from "./sms";
+export { generateOTP, sendOTP, verifyOTP } from "./otp";
+
 // Order number format: CC-{OUTLET_CODE}-{SEQUENCE}
 export function generateOrderNumber(outletCode: string, sequence: number): string {
   return `CC-${outletCode}-${String(sequence).padStart(4, "0")}`;

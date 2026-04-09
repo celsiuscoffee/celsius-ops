@@ -1,34 +1,10 @@
 /**
- * Edge-compatible auth helpers — only JWT verification via jose.
- * Used by middleware.ts (Edge Runtime). No Node.js crypto or bcrypt.
+ * Edge-compatible auth helpers — re-exports from @celsius/auth.
+ *
+ * Previously this file contained a standalone edge-safe copy of JWT verification.
+ * Now it re-exports from the shared package. The imports used here (verifyToken,
+ * COOKIE_NAME) only depend on jose, which is fully edge-compatible.
  */
 
-import { jwtVerify } from "jose";
-
-export const COOKIE_NAME = "celsius-session";
-const SESSION_MAX_AGE = 60 * 60 * 12;
-
-export type SessionUser = {
-  id: string;
-  name: string;
-  role: string;
-  outletId: string | null;
-  outletName?: string | null;
-};
-
-function getJwtSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("[auth] JWT_SECRET environment variable is not set.");
-  }
-  return new TextEncoder().encode(secret);
-}
-
-export async function verifyToken(token: string): Promise<SessionUser | null> {
-  try {
-    const { payload } = await jwtVerify(token, getJwtSecret());
-    return payload as unknown as SessionUser;
-  } catch {
-    return null;
-  }
-}
+export { verifyToken, COOKIE_NAME } from "@celsius/auth";
+export type { SessionUser } from "@celsius/auth";

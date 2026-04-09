@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { verifyPin, hashPin } from "@celsius/auth";
 
 const attempts = new Map<string, { count: number; resetAt: number }>();
 
@@ -20,9 +21,10 @@ function checkRateLimit(storeId: string): boolean {
  * POST /api/staff/auth
  * Body: { storeId: string; pin: string }
  *
- * Primary: looks up pin in staff_members where the member is active,
- * belongs to the outlet, and has kds or staff_app access.
- * Fallback: checks outlet_settings.staff_pin for backward compatibility.
+ * Auth cascade:
+ * 1. Prisma User table (backoffice-managed users) — bcrypt PIN
+ * 2. Supabase staff_members table — plaintext PIN (legacy)
+ * 3. outlet_settings.staff_pin — plaintext fallback
  *
  * Returns { ok: true, storeId, staffName, staffId, storeName } on success.
  */
@@ -57,7 +59,48 @@ export async function POST(request: NextRequest) {
 
     const storeName = (outletData.name as string) ?? storeId;
 
-    // ── Primary: look up in staff_members ─────────────────────────────────
+    // ── 1. Prisma User table (backoffice-managed staff) ───────────────────
+    // Dynamic import: Prisma only loads if DATABASE_URL is set (safe for deploys without it)
+    try {
+      const { prisma } = await import("@celsius/db");
+      const prismaUsers = await prisma.user.findMany({
+        where: {
+          status: "ACTIVE",
+          pin: { not: null },
+          outletIds: { has: storeId },
+          appAccess: { hasSome: ["kds", "staff_app", "order"] },
+        },
+        select: { id: true, name: true, pin: true },
+      });
+
+      for (const user of prismaUsers) {
+        const { match, needsRehash } = await verifyPin(pin, user.pin);
+        if (match) {
+          // Progressive rehash: upgrade plaintext PINs to bcrypt
+          if (needsRehash) {
+            const hashed = await hashPin(pin);
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { pin: hashed },
+            });
+          }
+          attempts.delete(storeId);
+          return NextResponse.json({
+            ok:        true,
+            storeId,
+            storeName,
+            staffName: user.name,
+            staffId:   user.id,
+            source:    "backoffice",
+          });
+        }
+      }
+    } catch (prismaErr) {
+      // If Prisma DB is unreachable, fall through to Supabase
+      console.warn("Prisma lookup failed, falling back to Supabase:", prismaErr);
+    }
+
+    // ── 2. Supabase staff_members (legacy) ────────────────────────────────
     const { data: members, error: membersError } = await supabase
       .from("staff_members")
       .select("id, name")
@@ -75,10 +118,11 @@ export async function POST(request: NextRequest) {
         storeName,
         staffName: member.name,
         staffId:   member.id,
+        source:    "legacy",
       });
     }
 
-    // ── Fallback: outlet_settings.staff_pin (backward compat) ─────────────
+    // ── 3. Fallback: outlet_settings.staff_pin (backward compat) ─────────
     const expected = outletData.staff_pin as string | null;
 
     if (!expected) {
@@ -96,6 +140,7 @@ export async function POST(request: NextRequest) {
       storeName,
       staffName: null,
       staffId:   null,
+      source:    "outlet_pin",
     });
   } catch (err) {
     console.error("Staff auth error:", err);

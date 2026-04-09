@@ -1,10 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseClient } from "@celsius/shared";
 
-// Central DB client — connects to the inventory/backoffice Supabase project
+// Central DB client -- connects to the inventory/backoffice Supabase project
 // Used for staff authentication (single source of truth)
-const centralUrl = process.env.CENTRAL_SUPABASE_URL || '';
-const centralKey = process.env.CENTRAL_SUPABASE_KEY || '';
-
-export const centralDb = centralUrl && centralKey
-  ? createClient(centralUrl, centralKey)
-  : (null as unknown as ReturnType<typeof createClient>);
+export const centralDb = createSupabaseClient(
+  process.env.CENTRAL_SUPABASE_URL || "",
+  process.env.CENTRAL_SUPABASE_KEY || "",
+);

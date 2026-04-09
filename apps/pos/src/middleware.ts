@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken, COOKIE_NAME } from "@/lib/auth-edge";
+import { verifyToken, COOKIE_NAME } from "@celsius/auth";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/pin", "/api/auth/logout", "/api/auth/verify-manager"];
 
