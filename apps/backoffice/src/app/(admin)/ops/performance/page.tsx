@@ -222,39 +222,20 @@ export default function OpsPerformancePage() {
                 <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 text-yellow-500" />Needs Attention
                 </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100">
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SOP</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Outlet</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Assigned To</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Shift</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Progress</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                <div className="space-y-2">
                       {data.incomplete.map((item) => (
-                        <tr key={item.id} className="border-b border-gray-50">
-                          <td className="px-3 py-2">
-                            <p className="font-medium text-gray-900">{item.sopTitle}</p>
-                            <p className="text-[10px] text-gray-400">{item.category}</p>
-                          </td>
-                          <td className="px-3 py-2 text-gray-600">{item.outlet}</td>
-                          <td className="px-3 py-2 text-gray-600">{item.assignedTo}</td>
-                          <td className="px-3 py-2">
-                            <Badge variant="outline" className="text-[10px]">{item.shift}</Badge>
-                          </td>
-                          <td className="px-3 py-2">
-                            <span className="text-xs font-medium text-yellow-600">
-                              {item.itemsCompleted}/{item.totalItems}
-                            </span>
-                          </td>
-                        </tr>
+                        <div key={item.id} className="flex items-center gap-3 rounded-lg border border-gray-100 p-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900">{item.sopTitle}</p>
+                            <p className="text-[10px] text-gray-400">
+                              {item.outlet} · {item.assignedTo} · {item.shift}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] text-yellow-600 border-yellow-300 shrink-0">
+                            {item.itemsCompleted}/{item.totalItems}
+                          </Badge>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
               </CardContent>
             </Card>
           )}

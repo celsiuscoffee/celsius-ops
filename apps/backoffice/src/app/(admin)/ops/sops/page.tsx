@@ -105,55 +105,39 @@ export default function SopsPage() {
           )}
         </CardContent></Card>
       ) : (
-        <div className="rounded-xl border border-gray-200 bg-white">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="px-4 py-3 text-left font-medium text-gray-500">SOP</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Category</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Frequency</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Steps</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Outlets</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="space-y-2">
               {filtered.map((s) => (
-                <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                  <td className="px-4 py-3">
-                    <Link href={`/ops/sops/${s.id}`} className="font-medium text-gray-900 hover:text-terracotta">{s.title}</Link>
-                    {s.description && <p className="text-xs text-gray-400 truncate max-w-xs">{s.description}</p>}
-                  </td>
-                  <td className="px-4 py-3"><Badge variant="secondary" className="text-[10px]">{s.category.name}</Badge></td>
-                  <td className="px-4 py-3">
-                    <div className="text-xs">
-                      <span className="text-gray-700">{FREQ_LABELS[s.expectedRecurrence]}</span>
-                      {s.expectedRecurrence === "SPECIFIC_TIMES" && s.expectedTimes?.length > 0 && (
-                        <p className="text-[10px] text-gray-400 mt-0.5">{s.expectedTimes.join(", ")}</p>
-                      )}
-                      {s.expectedRecurrence === "HOURLY" && (
-                        <p className="text-[10px] text-gray-400 mt-0.5">{s.expectedTimesPerDay}x/day</p>
-                      )}
+                <Card key={s.id}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <Link href={`/ops/sops/${s.id}`} className="font-medium text-gray-900 hover:text-terracotta">{s.title}</Link>
+                        {s.description && <p className="text-xs text-gray-400 truncate mt-0.5">{s.description}</p>}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          <Badge variant="secondary" className="text-[10px]">{s.category.name}</Badge>
+                          <Badge className={`text-[10px] ${STATUS_COLORS[s.status]}`}>{s.status}</Badge>
+                          <span className="text-[10px] text-gray-400">{FREQ_LABELS[s.expectedRecurrence]}</span>
+                          {s.expectedRecurrence === "SPECIFIC_TIMES" && s.expectedTimes?.length > 0 && (
+                            <span className="text-[10px] text-gray-400">{s.expectedTimes.join(", ")}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
+                          <span className="flex items-center gap-1"><ListChecks className="h-3 w-3" />{s._count.steps} steps</span>
+                          <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{s._count.sopOutlets} outlets</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <Link href={`/ops/sops/${s.id}`}>
+                          <Button size="sm" variant="outline" className="h-7 text-xs">Edit</Button>
+                        </Link>
+                        <Button size="sm" variant="outline" className="h-7 text-xs text-red-500 hover:bg-red-50" onClick={() => deleteSop(s.id)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
-                  </td>
-                  <td className="px-4 py-3"><Badge className={`text-[10px] ${STATUS_COLORS[s.status]}`}>{s.status}</Badge></td>
-                  <td className="px-4 py-3 text-gray-500"><span className="flex items-center gap-1"><ListChecks className="h-3 w-3" />{s._count.steps}</span></td>
-                  <td className="px-4 py-3 text-gray-500"><span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{s._count.sopOutlets}</span></td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-1">
-                      <Link href={`/ops/sops/${s.id}`}>
-                        <Button size="sm" variant="outline" className="h-7 text-xs">Edit</Button>
-                      </Link>
-                      <Button size="sm" variant="outline" className="h-7 text-xs text-red-500 hover:bg-red-50" onClick={() => deleteSop(s.id)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
+                  </CardContent>
+                </Card>
               ))}
-            </tbody>
-          </table>
         </div>
       )}
     </div>
