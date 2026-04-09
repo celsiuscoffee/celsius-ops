@@ -25,41 +25,25 @@ export async function GET(req: NextRequest) {
     where.date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
 
-  // Use _count with filter instead of fetching all items
+  // Single query — include item completion counts inline
   const checklists = await prisma.checklist.findMany({
     where,
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     select: {
-      id: true,
-      date: true,
-      shift: true,
-      timeSlot: true,
-      dueAt: true,
-      status: true,
-      completedAt: true,
+      id: true, date: true, shift: true, timeSlot: true, dueAt: true,
+      status: true, completedAt: true,
       sop: { select: { id: true, title: true, category: { select: { name: true } } } },
       outlet: { select: { id: true, code: true, name: true } },
       assignedTo: { select: { id: true, name: true } },
       completedBy: { select: { id: true, name: true } },
       _count: { select: { items: true } },
+      items: { where: { isCompleted: true }, select: { id: true } },
     },
   });
 
-  // Batch count completed items for all checklists
-  const checklistIds = checklists.map((c) => c.id);
-  const completedCounts = checklistIds.length > 0
-    ? await prisma.checklistItem.groupBy({
-        by: ["checklistId"],
-        where: { checklistId: { in: checklistIds }, isCompleted: true },
-        _count: true,
-      })
-    : [];
-
-  const completedMap = new Map(completedCounts.map((c) => [c.checklistId, c._count]));
-
-  const result = checklists.map((cl) => {
+  const result = checklists.map(({ items, ...cl }) => {
     const totalItems = cl._count.items;
-    const completedItems = completedMap.get(cl.id) ?? 0;
+    const completedItems = items.length;
     return {
       ...cl,
       totalItems,
