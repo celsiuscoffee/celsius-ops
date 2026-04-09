@@ -1,0 +1,29 @@
+{
+  "name": "Celsius Staff",
+  "short_name": "Staff",
+  "description": "Outlet operations app for Celsius Coffee",
+  "start_url": "/home",
+  "display": "standalone",
+  "background_color": "#B85C38",
+  "theme_color": "#B85C38",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/images/celsius-logo-sm.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/images/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
