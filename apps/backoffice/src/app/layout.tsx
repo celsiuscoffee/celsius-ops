@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     title: "Celsius Backoffice",
   },
   icons: {
-    icon: "/favicon.ico",
+    icon: "/icon.png",
     apple: "/apple-touch-icon.png",
   },
 };
