@@ -10,6 +10,7 @@
     "dev:backoffice": "cd apps/backoffice && npm run dev",
     "dev:pos": "cd apps/pos && npm run dev",
     "dev:staff": "cd apps/staff && npm run dev",
+    "dev:order": "cd apps/order && npm run dev",
     "db:generate": "cd packages/db && npx prisma generate",
     "db:push": "cd packages/db && npx prisma db push",
     "db:studio": "cd packages/db && npx prisma studio",

@@ -1,0 +1,24 @@
+{
+  "name": "Celsius Coffee — Order & Pickup",
+  "short_name": "Celsius Coffee",
+  "description": "Order your favourite Celsius Coffee drinks ahead and skip the queue.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#7c4a1e",
+  "theme_color": "#7c4a1e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

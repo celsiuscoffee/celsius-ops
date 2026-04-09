@@ -1,0 +1,171 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Peachi display font — letters only (numbers/symbols fall back to sans) */
+@font-face {
+  font-family: "Peachi";
+  src: url("/fonts/Peachi-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0041-005A, U+0061-007A, U+00C0-00D6, U+00D8-00F6, U+00F8-00FF, U+0100-017E;
+}
+@font-face {
+  font-family: "Peachi";
+  src: url("/fonts/Peachi-Medium.otf") format("opentype");
+  font-weight: 500 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0041-005A, U+0061-007A, U+00C0-00D6, U+00D8-00F6, U+00F8-00FF, U+0100-017E;
+}
+@font-face {
+  font-family: "Peachi";
+  src: url("/fonts/Peachi-Bold.otf") format("opentype");
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0041-005A, U+0061-007A, U+00C0-00D6, U+00D8-00F6, U+00F8-00FF, U+0100-017E;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand-dark: var(--brand-dark);
+  --font-sans: var(--font-space-grotesk), system-ui, sans-serif;
+  --font-mono: ui-monospace, monospace;
+  --font-display: "Peachi", var(--font-space-grotesk), serif;
+  --font-heading: var(--font-display);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* ── Celsius Coffee brand tokens ──────────────────────────── */
+  --brand-dark: #160800;            /* deep espresso black (logo bg) */
+
+  /* Primary = terracotta (CTAs, prices, active states) */
+  --primary: oklch(0.55 0.15 25);   /* #C05040 terracotta */
+  --primary-foreground: oklch(0.99 0 0);
+
+  /* Neutral surface */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.10 0.02 50); /* matches brand-dark */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.10 0.02 50);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.10 0.02 50);
+
+  --secondary: oklch(0.96 0 0);
+  --secondary-foreground: oklch(0.20 0.02 50);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.52 0 0);
+  --accent: oklch(0.95 0.03 25);    /* light terracotta tint */
+  --accent-foreground: oklch(0.45 0.12 25);
+  --destructive: oklch(0.577 0.245 27.325);
+
+  --border: oklch(0.91 0 0);
+  --input: oklch(0.91 0 0);
+  --ring: oklch(0.55 0.15 25);      /* terracotta ring */
+
+  --chart-1: oklch(0.55 0.15 25);
+  --chart-2: oklch(0.70 0.10 25);
+  --chart-3: oklch(0.82 0.06 30);
+  --chart-4: oklch(0.45 0.12 25);
+  --chart-5: oklch(0.30 0.10 25);
+  --radius: 0.75rem;
+
+  --sidebar: oklch(0.98 0 0);
+  --sidebar-foreground: oklch(0.10 0.02 50);
+  --sidebar-primary: oklch(0.55 0.15 25);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0.03 25);
+  --sidebar-accent-foreground: oklch(0.45 0.12 25);
+  --sidebar-border: oklch(0.91 0 0);
+  --sidebar-ring: oklch(0.55 0.15 25);
+}
+
+.dark {
+  --primary: oklch(0.68 0.13 25);
+  --primary-foreground: oklch(0.10 0.02 50);
+  --background: oklch(0.10 0.02 50);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.16 0.02 50);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.16 0.02 50);
+  --popover-foreground: oklch(0.97 0 0);
+  --secondary: oklch(0.20 0.02 50);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.20 0.02 50);
+  --muted-foreground: oklch(0.65 0 0);
+  --accent: oklch(0.25 0.05 25);
+  --accent-foreground: oklch(0.75 0.10 25);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.68 0.13 25);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    max-width: 430px;
+    margin: 0 auto;
+    min-height: 100dvh;
+  }
+  h1, h2, h3 {
+    font-family: var(--font-display);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+@media (min-width: 431px) {
+  body {
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+}

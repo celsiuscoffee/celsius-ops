@@ -1,0 +1,23 @@
+{
+  "name": "Celsius Orders",
+  "short_name": "Orders",
+  "description": "Celsius Coffee Staff Order Management",
+  "start_url": "/staff/kds",
+  "scope": "/staff",
+  "display": "standalone",
+  "background_color": "#160800",
+  "theme_color": "#160800",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 100">
+  <!-- Light blue / cyan chevron (left) -->
+  <polygon points="10,15 44,50 10,85 10,67 28,50 10,33" fill="#00AEEF"/>
+  <!-- Dark navy chevron (right, slightly overlapping) -->
+  <polygon points="38,15 72,50 38,85 38,67 56,50 38,33" fill="#1B3F7F"/>
+  <!-- FPX logotype -->
+  <text x="86" y="67" font-family="Arial Black, Arial, sans-serif" font-size="46" font-weight="900" fill="#1B3F7F">FPX</text>
+</svg>

@@ -1,0 +1,47 @@
+<html>
+<head>
+<link rel="Shortcut icon" href="../favicon.ico">
+<link rel="icon" type="image/gif" href="../favicon1.gif">
+
+<link rel="stylesheet" href="../style.css" type="text/css">
+</head>
+<body bgcolor="#FFFFFF">
+<table width="98%" border="0" align="center">
+  <tr> 
+    <td colspan="5" class="pageHeader"><strong> System Status</strong></td>
+  </tr>
+  <tr> 
+    <td colspan="5" class="normal">&nbsp;</td>
+  </tr>
+  <tr> 
+    <td colspan="5" class="normal"> 
+      <table align="center" width="60%" height="100%" class="commentTable">
+        <tr> 
+          <td class="pageHeader">Exception Status :</td>
+        </tr>
+        <tr> 
+          <td class="normal">&nbsp; </td>
+        </tr>
+        <tr> 
+          <td class="normal"> 
+            <div align="center" class="errorFont"><blink><font color="red"><b>No Such 
+              Page Found .Please Contact FPX Help Desk</b></font></blink>  </div>
+          </td>
+        </tr>
+        <tr> 
+          <td colspan="3" class="normal"> 
+            <div align="center"></div>
+          </td>
+        </tr>
+        <tr> 
+          <td colspan="3" class="normal"> 
+            <div align="right"> </div>
+          </td>
+        </tr>
+      </table>
+       
+    </td>
+  </tr>
+</table>
+<div align="center"> </div>
+</html>
