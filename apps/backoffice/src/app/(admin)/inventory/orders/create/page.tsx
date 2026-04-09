@@ -527,7 +527,17 @@ export default function CreateOrderPage() {
               {needsOrdering.length === 0 ? (
                 <Card className="py-12 text-center">
                   <Package className="mx-auto h-8 w-8 text-gray-300" />
-                  <p className="mt-2 text-sm text-gray-400">All stock levels are healthy for this outlet</p>
+                  {stockLevels.every((i) => i.status === "no_par") ? (
+                    <>
+                      <p className="mt-2 text-sm text-gray-500">No par levels set for this outlet</p>
+                      <p className="mt-1 text-xs text-gray-400">Set par levels in Settings → Par Levels, or use the <button onClick={() => setCreateTab("all")} className="text-terracotta underline">All Products</button> tab to order manually</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-2 text-sm text-gray-400">All stock levels are healthy for this outlet</p>
+                      <p className="mt-1 text-xs text-gray-300">Use the <button onClick={() => setCreateTab("all")} className="text-terracotta underline">All Products</button> tab to order anyway</p>
+                    </>
+                  )}
                 </Card>
               ) : (
                 needsOrdering.map((item) => {
