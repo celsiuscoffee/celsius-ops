@@ -20,6 +20,15 @@ type InventoryDashboard = {
   recentOrders: { id: string; orderNumber: string; supplier: string; status: string; totalAmount: number; createdAt: string }[];
 };
 
+type InventoryStats = {
+  inventoryValue: number; cogsThisMonth: number;
+  invoices: { total: number; pendingAmount: number; overdueAmount: number };
+};
+
+type PickupStats = {
+  totalSales: number; totalOrders: number;
+};
+
 type KpiData = {
   collection_rate: { pos_orders: number; loyalty_claims: number; rate: number; outlets: { outlet_name: string; pos_orders: number; loyalty_claims: number; claim_rate: number }[] };
   new_members: number; returning_members: number; returning_sales: number;
@@ -38,13 +47,19 @@ const STATUS_COLORS: Record<string, string> = {
 export default function DashboardPage() {
   const { data: user } = useFetch<UserProfile>("/api/auth/me");
   const { data: invDash } = useFetch<InventoryDashboard>("/api/inventory/dashboard");
+  const { data: invStats } = useFetch<InventoryStats>("/api/inventory/admin/stats");
   const [kpi, setKpi] = useState<KpiData | null>(null);
+  const [pickupStats, setPickupStats] = useState<PickupStats | null>(null);
   const { data: ops } = useFetch<OpsPerformance>("/api/ops/performance?from=" + new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0] + "&to=" + new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
     fetch("/api/loyalty/dashboard/kpi?brand_id=brand-celsius&period=daily", { credentials: "include" })
       .then((r) => r.ok ? r.json() : null)
       .then((d) => { if (d) setKpi(d); })
+      .catch(() => {});
+    fetch("/api/pickup/analytics/summary", { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setPickupStats(d); })
       .catch(() => {});
   }, []);
 
@@ -161,59 +176,69 @@ export default function DashboardPage() {
         {/* Right column */}
         <div className="space-y-6">
           {/* Inventory */}
-          {invDash && (
-            <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                  <Boxes className="h-4 w-4 text-blue-500" />Inventory (This Week)
-                </h2>
-                <Link href="/inventory/orders" className="text-xs text-terracotta hover:underline">Orders →</Link>
+          <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <Boxes className="h-4 w-4 text-blue-500" />Inventory
+              </h2>
+              <Link href="/inventory/orders" className="text-xs text-terracotta hover:underline">Orders →</Link>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg bg-gray-50 p-3 text-center">
+                <p className="text-[10px] text-gray-500">Purchase (Week)</p>
+                <p className="text-lg font-bold text-gray-900">
+                  {invDash ? `RM ${invDash.weeklySpending > 1000 ? `${(invDash.weeklySpending / 1000).toFixed(1)}k` : invDash.weeklySpending.toFixed(0)}` : "—"}
+                </p>
+                {invDash && <p className="text-[10px] text-gray-400">{invDash.ordersPlaced} orders</p>}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-[10px] text-gray-500">Spending</p>
-                  <p className="text-lg font-bold text-gray-900">RM {invDash.weeklySpending > 1000 ? `${(invDash.weeklySpending / 1000).toFixed(1)}k` : invDash.weeklySpending.toFixed(0)}</p>
-                  <p className="text-[10px] text-gray-400">{invDash.ordersPlaced} orders</p>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-[10px] text-gray-500">Receivings</p>
-                  <p className="text-lg font-bold text-gray-900">{invDash.receivingsThisWeek}</p>
-                  <p className="text-[10px] text-gray-400">this week</p>
-                </div>
+              <div className="rounded-lg bg-gray-50 p-3 text-center">
+                <p className="text-[10px] text-gray-500">Inventory Value</p>
+                <p className="text-lg font-bold text-gray-900">
+                  {invStats ? `RM ${invStats.inventoryValue > 1000 ? `${(invStats.inventoryValue / 1000).toFixed(1)}k` : invStats.inventoryValue.toFixed(0)}` : "—"}
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3 text-center">
+                <p className="text-[10px] text-gray-500">COGS (Month)</p>
+                <p className="text-lg font-bold text-gray-900">
+                  {invStats ? `RM ${invStats.cogsThisMonth > 1000 ? `${(invStats.cogsThisMonth / 1000).toFixed(1)}k` : invStats.cogsThisMonth.toFixed(0)}` : "—"}
+                </p>
+              </div>
+            </div>
+            {invDash && (invDash.pendingApprovals > 0 || invDash.deliveriesExpected > 0) && (
+              <div className="mt-3 flex flex-wrap gap-2">
                 {invDash.pendingApprovals > 0 && (
-                  <div className="rounded-lg bg-amber-50 p-3 col-span-2">
-                    <p className="text-xs font-medium text-amber-700">{invDash.pendingApprovals} orders pending approval</p>
-                  </div>
+                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-medium text-amber-700">{invDash.pendingApprovals} pending approval</span>
                 )}
                 {invDash.deliveriesExpected > 0 && (
-                  <div className="rounded-lg bg-blue-50 p-3 col-span-2">
-                    <p className="text-xs font-medium text-blue-700">{invDash.deliveriesExpected} deliveries expected</p>
-                  </div>
+                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-medium text-blue-700">{invDash.deliveriesExpected} deliveries expected</span>
                 )}
               </div>
+            )}
+          </div>
 
-              {/* Recent orders */}
-              {invDash.recentOrders && invDash.recentOrders.length > 0 && (
-                <div className="border-t border-gray-100 mt-3 pt-3">
-                  <p className="text-[10px] font-medium text-gray-400 uppercase mb-2">Recent Orders</p>
-                  {invDash.recentOrders.slice(0, 4).map((order) => (
-                    <div key={order.id} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <code className="text-[10px] text-terracotta">{order.orderNumber}</code>
-                        <span className="text-xs text-gray-600 truncate">{order.supplier}</span>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs font-medium">RM {order.totalAmount.toFixed(0)}</span>
-                        <Badge className={`text-[8px] px-1.5 py-0 ${STATUS_COLORS[order.status] ?? "bg-gray-400"}`}>
-                          {order.status.replace(/_/g, " ").toLowerCase()}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+          {/* Pickup */}
+          <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <ShoppingBag className="h-4 w-4 text-orange-500" />Pickup (Today)
+              </h2>
+              <Link href="/pickup/analytics" className="text-xs text-terracotta hover:underline">Analytics →</Link>
             </div>
-          )}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-gray-50 p-3 text-center">
+                <p className="text-[10px] text-gray-500">Sales</p>
+                <p className="text-lg font-bold text-gray-900">
+                  {pickupStats ? `RM ${pickupStats.totalSales.toLocaleString()}` : "—"}
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3 text-center">
+                <p className="text-[10px] text-gray-500">Orders</p>
+                <p className="text-lg font-bold text-gray-900">
+                  {pickupStats ? pickupStats.totalOrders.toLocaleString() : "—"}
+                </p>
+              </div>
+            </div>
+          </div>
 
         </div>
       </div>
