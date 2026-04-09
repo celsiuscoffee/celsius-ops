@@ -20,7 +20,6 @@ export async function middleware(request: NextRequest) {
 
   // ── API auth guard ─────────────────────────────────────────────────────────
   const isProtectedApi =
-    pathname.startsWith("/api/inventory") ||
     pathname === "/api/push/blast" ||
     pathname === "/api/push/subscriber-count";
 
@@ -49,5 +48,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/inventory/:path*", "/api/push/blast", "/api/push/subscriber-count"],
+  matcher: ["/api/push/blast", "/api/push/subscriber-count"],
 };
