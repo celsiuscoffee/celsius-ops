@@ -34,7 +34,12 @@ export default function ProfilePage() {
       .then((data) => {
         if (data.id) setUser(data);
         const today = new Date().toISOString().split("T")[0];
-        return fetch(`/api/checklists?date=${today}&mine=true`);
+        // For managers, show outlet checklists; for staff, show assigned only
+        const isManager = ["OWNER", "ADMIN", "MANAGER"].includes(data.role);
+        const params = isManager && data.outletId
+          ? `date=${today}&outletId=${data.outletId}`
+          : `date=${today}&mine=true`;
+        return fetch(`/api/checklists?${params}`);
       })
       .then((r) => r.json())
       .then((cls: ChecklistSummary[]) => {
