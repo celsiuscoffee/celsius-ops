@@ -199,7 +199,7 @@ export default function PickupDashboard() {
       activeMonth:   activeCount ?? 0,
       pointsIssued,
       redemptions:   rdmRes.count ?? 0,
-      recentMembers: ((mbRes.data ?? []) as MbRow[]).map((m) => ({
+      recentMembers: ((mbRes.data ?? []) as unknown as MbRow[]).map((m) => ({
         name:   m.members?.name ?? null,
         phone:  m.members?.phone ?? "",
         joined: m.members?.created_at ?? "",
