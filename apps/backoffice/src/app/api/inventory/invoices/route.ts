@@ -5,7 +5,7 @@ export async function GET(req: NextRequest) {
   const tab = req.nextUrl.searchParams.get("tab") || "unpaid";
   const search = req.nextUrl.searchParams.get("search") || "";
 
-  const UNPAID_STATUSES = ["PENDING", "OVERDUE"];
+  const UNPAID_STATUSES = ["DRAFT", "INITIATED", "PENDING", "OVERDUE"];
 
   const type = req.nextUrl.searchParams.get("type") || "all";
 
@@ -76,6 +76,7 @@ export async function GET(req: NextRequest) {
     dueDate: inv.dueDate?.toISOString().split("T")[0] ?? null,
     hasPhoto: inv.photos.length > 0,
     photoCount: inv.photos.length,
+    photos: inv.photos,
     paymentType: inv.paymentType ?? "SUPPLIER",
     claimedBy: inv.order?.claimedBy?.name ?? null,
     notes: inv.notes,

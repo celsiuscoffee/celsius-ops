@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
-import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2 } from "lucide-react";
+import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn } from "lucide-react";
 
 type Invoice = {
   id: string;
@@ -19,6 +19,7 @@ type Invoice = {
   dueDate: string | null;
   hasPhoto: boolean;
   photoCount: number;
+  photos: string[];
   paymentType: string;
   claimedBy: string | null;
   notes: string | null;
@@ -37,6 +38,7 @@ export default function InvoicesPage() {
   const [dueDateFrom, setDueDateFrom] = useState("");
   const [dueDateTo, setDueDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [viewingPhotos, setViewingPhotos] = useState<{ invoiceNumber: string; photos: string[] } | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -78,6 +80,7 @@ export default function InvoicesPage() {
   const statusColor = (status: string) => {
     switch (status) {
       case "PAID": return "bg-green-500";
+      case "INITIATED": return "bg-blue-500";
       case "PENDING": return "bg-terracotta";
       case "OVERDUE": return "bg-red-500";
       case "DRAFT": return "bg-gray-400";
@@ -88,6 +91,9 @@ export default function InvoicesPage() {
   const getActions = (status: string) => {
     switch (status) {
       case "DRAFT": return [
+        { status: "INITIATED", label: "Initiate", color: "bg-blue-500 hover:bg-blue-600" },
+      ];
+      case "INITIATED": return [
         { status: "PENDING", label: "Send", color: "bg-terracotta hover:bg-terracotta-dark" },
       ];
       case "PENDING": return [
@@ -251,7 +257,20 @@ export default function InvoicesPage() {
                   <td className="px-4 py-3 text-xs text-gray-500">{inv.issueDate}</td>
                   <td className="px-4 py-3 text-xs text-gray-500">{inv.dueDate ?? "—"}</td>
                   <td className="px-4 py-3 text-right font-medium">{inv.amount.toFixed(2)}</td>
-                  <td className="px-4 py-3">{inv.hasPhoto ? <ImageIcon className="h-4 w-4 text-green-500" /> : <span className="text-xs text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3">
+                    {inv.hasPhoto ? (
+                      <button
+                        onClick={() => setViewingPhotos({ invoiceNumber: inv.invoiceNumber, photos: inv.photos })}
+                        className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-green-600 hover:bg-green-50 transition-colors"
+                        title={`View ${inv.photoCount} photo${inv.photoCount > 1 ? "s" : ""}`}
+                      >
+                        <ImageIcon className="h-4 w-4" />
+                        <span className="text-[10px] font-medium">{inv.photoCount}</span>
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-1">
                       {actions.map((a) => (
@@ -279,6 +298,33 @@ export default function InvoicesPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Photo viewer modal */}
+      {viewingPhotos && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setViewingPhotos(null)}>
+          <div className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-900">
+                Photos — {viewingPhotos.invoiceNumber}
+                <span className="ml-2 text-xs font-normal text-gray-400">{viewingPhotos.photos.length} photo{viewingPhotos.photos.length > 1 ? "s" : ""}</span>
+              </h3>
+              <button onClick={() => setViewingPhotos(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {viewingPhotos.photos.map((url, i) => (
+                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="group relative block overflow-hidden rounded-lg border border-gray-200 hover:border-blue-300">
+                  <img src={url} alt={`Invoice photo ${i + 1}`} className="h-auto w-full object-contain" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
+                    <ZoomIn className="h-6 w-6 text-white drop-shadow-md" />
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

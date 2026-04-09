@@ -382,6 +382,7 @@ model Invoice {
 
 enum InvoiceStatus {
   DRAFT
+  INITIATED
   PENDING
   PAID
   OVERDUE
