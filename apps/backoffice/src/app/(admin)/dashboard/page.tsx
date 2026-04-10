@@ -152,12 +152,12 @@ export default function DashboardPage() {
                   <span className="text-[10px] text-gray-400">8am – 3:30pm</span>
                 </div>
                 <p className="text-xl font-bold text-gray-900">
-                  {kpiAM && kpiAM.collection_rate.loyalty_claims > 0
-                    ? `${Math.round((kpiAM.returning_members / kpiAM.collection_rate.loyalty_claims) * 100)}%`
+                  {kpiAM && kpiAM.collection_rate.pos_orders > 0
+                    ? `${Math.round((kpiAM.returning_members / kpiAM.collection_rate.pos_orders) * 100)}%`
                     : "—"}
                 </p>
                 <p className="text-[10px] text-gray-400">
-                  {kpiAM ? `${kpiAM.returning_members} returning · ${kpiAM.collection_rate.pos_orders} orders` : "Loading..."}
+                  {kpiAM ? `${kpiAM.returning_members} returning / ${kpiAM.collection_rate.pos_orders} orders` : "Loading..."}
                 </p>
                 {kpiAM && <p className="text-[10px] font-medium text-green-600 mt-0.5">RM {kpiAM.returning_sales.toLocaleString()}</p>}
               </div>
@@ -168,12 +168,12 @@ export default function DashboardPage() {
                   <span className="text-[10px] text-gray-400">3:30pm – 11pm</span>
                 </div>
                 <p className="text-xl font-bold text-gray-900">
-                  {kpiPM && kpiPM.collection_rate.loyalty_claims > 0
-                    ? `${Math.round((kpiPM.returning_members / kpiPM.collection_rate.loyalty_claims) * 100)}%`
+                  {kpiPM && kpiPM.collection_rate.pos_orders > 0
+                    ? `${Math.round((kpiPM.returning_members / kpiPM.collection_rate.pos_orders) * 100)}%`
                     : "—"}
                 </p>
                 <p className="text-[10px] text-gray-400">
-                  {kpiPM ? `${kpiPM.returning_members} returning · ${kpiPM.collection_rate.pos_orders} orders` : "Loading..."}
+                  {kpiPM ? `${kpiPM.returning_members} returning / ${kpiPM.collection_rate.pos_orders} orders` : "Loading..."}
                 </p>
                 {kpiPM && <p className="text-[10px] font-medium text-green-600 mt-0.5">RM {kpiPM.returning_sales.toLocaleString()}</p>}
               </div>
