@@ -47,12 +47,21 @@ async function fetchSHOrderCount(storeId: string, from: string, to: string, shif
     const txns = Array.isArray(data) ? data : data.transactions || [];
     // Count sales only — optionally filter by shift time-of-day
     let salesCount = 0;
+    // StoreHub uses various timestamp fields — check which one exists
+    const sampleTxn = txns.find((t: Record<string, unknown>) => !t.isCancelled && t.transactionType === 'Sale');
+    const timeField = sampleTxn
+      ? (sampleTxn.created_at ? 'created_at' : sampleTxn.createdAt ? 'createdAt' : sampleTxn.date ? 'date' : sampleTxn.transactionDate ? 'transactionDate' : null)
+      : null;
     for (const t of txns) {
       if (t.isCancelled || t.transactionType !== 'Sale') continue;
-      if (shift !== 'all' && t.createdAt && !isInShift(t.createdAt, shift)) continue;
+      if (shift !== 'all') {
+        const ts = timeField ? t[timeField] : null;
+        if (!ts || !isInShift(ts as string, shift)) continue;
+      }
       salesCount++;
     }
-    return { count: salesCount, debug: `ok: ${salesCount} sales of ${txns.length} txns` };
+    const debugTimeKeys = sampleTxn ? Object.keys(sampleTxn).filter(k => /date|time|creat/i.test(k)).join(',') : 'no_sample';
+    return { count: salesCount, debug: `ok: ${salesCount} sales of ${txns.length} txns [shift=${shift}, timeField=${timeField}, keys=${debugTimeKeys}]` };
   } catch (err) {
     return { count: 0, debug: `error: ${err instanceof Error ? err.message : String(err)}` };
   }
