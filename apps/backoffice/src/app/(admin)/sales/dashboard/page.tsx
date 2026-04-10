@@ -8,20 +8,28 @@ import {
   Loader2,
   Store,
   CalendarDays,
+  UtensilsCrossed,
+  ShoppingBag,
+  Truck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
-type Period = "daily" | "weekly" | "monthly" | "custom";
+type Period = "daily" | "yesterday" | "last7days" | "last30days" | "weekly" | "monthly" | "custom";
 
 type OutletOption = { id: string; name: string };
+
+type ChannelBreakdown = { revenue: number; orders: number };
 
 type DailyCell = {
   date: string;
   revenue: number;
   orders: number;
   aov: number;
+  dineIn: ChannelBreakdown;
+  takeaway: ChannelBreakdown;
+  delivery: ChannelBreakdown;
 };
 
 type RoundData = {
@@ -29,8 +37,23 @@ type RoundData = {
   label: string;
   timeRange: string;
   daily: DailyCell[];
-  totals: { revenue: number; orders: number; aov: number };
-  averages: { revenue: number; orders: number; aov: number };
+  totals: {
+    revenue: number;
+    orders: number;
+    aov: number;
+    dineIn: ChannelBreakdown;
+    takeaway: ChannelBreakdown;
+    delivery: ChannelBreakdown;
+    pctOfTarget: number;
+  };
+  averages: {
+    revenue: number;
+    orders: number;
+    aov: number;
+    dineIn: ChannelBreakdown;
+    takeaway: ChannelBreakdown;
+    delivery: ChannelBreakdown;
+  };
   target: { revenue: number };
 };
 
@@ -62,12 +85,37 @@ function formatDateShort(dateStr: string): string {
   return `${day} ${num}`;
 }
 
-const PERIOD_LABELS: Record<Period, string> = {
-  daily: "Today",
-  weekly: "This Week",
-  monthly: "This Month",
-  custom: "Custom",
-};
+const PERIOD_OPTIONS: { key: Period; label: string }[] = [
+  { key: "daily", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "last7days", label: "Last 7 Days" },
+  { key: "last30days", label: "Last 30 Days" },
+  { key: "weekly", label: "This Week" },
+  { key: "monthly", label: "This Month" },
+  { key: "custom", label: "Custom" },
+];
+
+function getPeriodLabel(p: Period): string {
+  return PERIOD_OPTIONS.find((o) => o.key === p)?.label ?? p;
+}
+
+/** Color for % of target */
+function targetColor(pct: number): { bg: string; text: string; label: string } {
+  if (pct >= 100) return { bg: "bg-green-50", text: "text-green-700", label: "On Target" };
+  if (pct >= 80) return { bg: "bg-yellow-50", text: "text-yellow-700", label: "Near Target" };
+  if (pct >= 50) return { bg: "bg-orange-50", text: "text-orange-700", label: "Below Target" };
+  return { bg: "bg-red-50", text: "text-red-700", label: "Critical" };
+}
+
+/** Color for a cell value vs daily target */
+function cellColor(val: number, target: number): string {
+  if (val === 0) return "text-gray-300";
+  const pct = (val / target) * 100;
+  if (pct >= 100) return "font-semibold text-green-600";
+  if (pct >= 80) return "text-yellow-600";
+  if (pct >= 50) return "text-orange-600";
+  return "text-red-500";
+}
 
 // ─── Component ──────────────────────────────────────────────────────────
 
@@ -157,19 +205,19 @@ export default function SalesDashboard() {
               </select>
             )}
             {/* Period toggle */}
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {(["daily", "weekly", "monthly", "custom"] as Period[]).map((p) => (
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden flex-wrap">
+              {PERIOD_OPTIONS.map((p) => (
                 <button
-                  key={p}
-                  onClick={() => setPeriod(p)}
+                  key={p.key}
+                  onClick={() => setPeriod(p.key)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-medium transition-colors capitalize",
-                    period === p
+                    "px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap",
+                    period === p.key
                       ? "bg-[#C2452D] text-white"
                       : "bg-white text-gray-600 hover:bg-gray-50",
                   )}
                 >
-                  {p}
+                  {p.label}
                 </button>
               ))}
             </div>
@@ -228,7 +276,7 @@ export default function SalesDashboard() {
               <p className="font-sans text-2xl font-bold text-gray-900">
                 RM {data.summary.revenue.toLocaleString("en-MY", { minimumFractionDigits: 2 })}
               </p>
-              <p className="text-xs text-gray-500 mt-1">{PERIOD_LABELS[period as Period]}</p>
+              <p className="text-xs text-gray-500 mt-1">{getPeriodLabel(period)}</p>
             </div>
 
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -243,7 +291,7 @@ export default function SalesDashboard() {
               <p className="font-sans text-2xl font-bold text-gray-900">
                 {data.summary.orders.toLocaleString()}
               </p>
-              <p className="text-xs text-gray-500 mt-1">{PERIOD_LABELS[period as Period]}</p>
+              <p className="text-xs text-gray-500 mt-1">{getPeriodLabel(period)}</p>
             </div>
 
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -258,9 +306,47 @@ export default function SalesDashboard() {
               <p className="font-sans text-2xl font-bold text-gray-900">
                 RM {data.summary.aov.toFixed(2)}
               </p>
-              <p className="text-xs text-gray-500 mt-1">{PERIOD_LABELS[period as Period]}</p>
+              <p className="text-xs text-gray-500 mt-1">{getPeriodLabel(period)}</p>
             </div>
           </div>
+
+          {/* ─── Channel Summary Cards ─── */}
+          {(() => {
+            const totDineIn = data.rounds.reduce((s, r) => s + r.totals.dineIn.orders, 0);
+            const totTakeaway = data.rounds.reduce((s, r) => s + r.totals.takeaway.orders, 0);
+            const totDelivery = data.rounds.reduce((s, r) => s + r.totals.delivery.orders, 0);
+            const revDineIn = data.rounds.reduce((s, r) => s + r.totals.dineIn.revenue, 0);
+            const revTakeaway = data.rounds.reduce((s, r) => s + r.totals.takeaway.revenue, 0);
+            const revDelivery = data.rounds.reduce((s, r) => s + r.totals.delivery.revenue, 0);
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <UtensilsCrossed className="h-4 w-4 text-blue-500" />
+                    <span className="text-xs font-semibold text-gray-600 uppercase">Dine-In</span>
+                  </div>
+                  <p className="text-lg font-bold text-gray-900">RM {revDineIn.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
+                  <p className="text-xs text-gray-400">{totDineIn} orders</p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ShoppingBag className="h-4 w-4 text-amber-500" />
+                    <span className="text-xs font-semibold text-gray-600 uppercase">Takeaway</span>
+                  </div>
+                  <p className="text-lg font-bold text-gray-900">RM {revTakeaway.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
+                  <p className="text-xs text-gray-400">{totTakeaway} orders</p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Truck className="h-4 w-4 text-purple-500" />
+                    <span className="text-xs font-semibold text-gray-600 uppercase">Delivery</span>
+                  </div>
+                  <p className="text-lg font-bold text-gray-900">RM {revDelivery.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
+                  <p className="text-xs text-gray-400">{totDelivery} orders</p>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ─── Metric Toggle ─── */}
           <div className="flex items-center gap-2">
@@ -311,8 +397,20 @@ export default function SalesDashboard() {
                     <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-700 min-w-[80px] bg-gray-100">
                       Avg
                     </th>
+                    <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[60px] bg-blue-50 text-blue-700" title="Dine-In">
+                      <UtensilsCrossed className="h-3.5 w-3.5 mx-auto" />
+                    </th>
+                    <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[60px] bg-amber-50 text-amber-700" title="Takeaway">
+                      <ShoppingBag className="h-3.5 w-3.5 mx-auto" />
+                    </th>
+                    <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[60px] bg-purple-50 text-purple-700" title="Delivery">
+                      <Truck className="h-3.5 w-3.5 mx-auto" />
+                    </th>
                     <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-[#C2452D] min-w-[80px] bg-orange-50">
                       Target
+                    </th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[70px] bg-gray-100 text-gray-600">
+                      %
                     </th>
                   </tr>
                 </thead>
@@ -348,14 +446,15 @@ export default function SalesDashboard() {
                       return v > 0 ? v.toFixed(1) : "-";
                     };
 
-                    // Check if total meets target
                     const totalVal = getTotal();
                     const targetVal = getTarget();
-                    const meetsTarget =
-                      activeMetric === "revenue" &&
-                      typeof targetVal === "number" &&
-                      typeof totalVal === "number" &&
-                      totalVal >= targetVal * data.dates.length;
+                    const pct = round.totals.pctOfTarget;
+                    const tc = targetColor(pct);
+
+                    // Channel values for totals row
+                    const chDineIn = activeMetric === "revenue" ? round.totals.dineIn.revenue : round.totals.dineIn.orders;
+                    const chTakeaway = activeMetric === "revenue" ? round.totals.takeaway.revenue : round.totals.takeaway.orders;
+                    const chDelivery = activeMetric === "revenue" ? round.totals.delivery.revenue : round.totals.delivery.orders;
 
                     return (
                       <tr key={round.key} className="hover:bg-gray-50/50 transition-colors">
@@ -367,17 +466,15 @@ export default function SalesDashboard() {
                         </td>
                         {round.daily.map((cell) => {
                           const val = getValue(cell);
-                          const isHigh =
-                            activeMetric === "revenue" && val >= round.target.revenue;
                           return (
                             <td key={cell.date} className="px-3 py-3 text-center">
                               <span
                                 className={cn(
                                   "font-sans text-sm",
-                                  val === 0
-                                    ? "text-gray-300"
-                                    : isHigh
-                                      ? "font-semibold text-green-600"
+                                  activeMetric === "revenue"
+                                    ? cellColor(val, round.target.revenue)
+                                    : val === 0
+                                      ? "text-gray-300"
                                       : "text-gray-700",
                                 )}
                               >
@@ -398,19 +495,42 @@ export default function SalesDashboard() {
                               : getAvg()}
                           </span>
                         </td>
+                        {/* Channel columns */}
+                        <td className="px-2 py-3 text-center bg-blue-50/30">
+                          <span className="font-sans text-xs text-gray-700">
+                            {activeMetric === "aov" ? "-" : chDineIn > 0 ? (activeMetric === "revenue" ? formatRM(chDineIn) : chDineIn) : "-"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-3 text-center bg-amber-50/30">
+                          <span className="font-sans text-xs text-gray-700">
+                            {activeMetric === "aov" ? "-" : chTakeaway > 0 ? (activeMetric === "revenue" ? formatRM(chTakeaway) : chTakeaway) : "-"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-3 text-center bg-purple-50/30">
+                          <span className="font-sans text-xs text-gray-700">
+                            {activeMetric === "aov" ? "-" : chDelivery > 0 ? (activeMetric === "revenue" ? formatRM(chDelivery) : chDelivery) : "-"}
+                          </span>
+                        </td>
+                        {/* Target */}
                         <td
                           className={cn(
                             "px-3 py-3 text-center",
-                            meetsTarget ? "bg-green-50" : "bg-orange-50",
+                            pct >= 100 ? "bg-green-50" : "bg-orange-50",
                           )}
                         >
                           <span
                             className={cn(
                               "font-sans font-semibold",
-                              meetsTarget ? "text-green-600" : "text-[#C2452D]",
+                              pct >= 100 ? "text-green-600" : "text-[#C2452D]",
                             )}
                           >
                             {typeof targetVal === "number" ? formatRM(targetVal) : targetVal}
+                          </span>
+                        </td>
+                        {/* % of target */}
+                        <td className={cn("px-3 py-3 text-center", tc.bg)}>
+                          <span className={cn("font-sans text-xs font-bold", tc.text)}>
+                            {pct > 0 ? `${pct}%` : "-"}
                           </span>
                         </td>
                       </tr>
@@ -431,7 +551,6 @@ export default function SalesDashboard() {
                         return sum; // AOV doesn't sum
                       }, 0);
 
-                      // For AOV, compute weighted average across rounds for this day
                       let displayVal: string;
                       if (activeMetric === "aov") {
                         const dayRev = data.rounds.reduce(
@@ -463,10 +582,38 @@ export default function SalesDashboard() {
                           : data.summary.aov.toFixed(1)}
                     </td>
                     <td className="px-3 py-3 text-center bg-gray-200 text-gray-600">-</td>
+                    {/* Grand total channels */}
+                    {(() => {
+                      const gtDineIn = data.rounds.reduce((s, r) => s + (activeMetric === "revenue" ? r.totals.dineIn.revenue : r.totals.dineIn.orders), 0);
+                      const gtTakeaway = data.rounds.reduce((s, r) => s + (activeMetric === "revenue" ? r.totals.takeaway.revenue : r.totals.takeaway.orders), 0);
+                      const gtDelivery = data.rounds.reduce((s, r) => s + (activeMetric === "revenue" ? r.totals.delivery.revenue : r.totals.delivery.orders), 0);
+                      return (
+                        <>
+                          <td className="px-2 py-3 text-center bg-blue-100/50 text-gray-900 text-xs font-bold">
+                            {activeMetric === "aov" ? "-" : gtDineIn > 0 ? (activeMetric === "revenue" ? formatRM(gtDineIn) : gtDineIn) : "-"}
+                          </td>
+                          <td className="px-2 py-3 text-center bg-amber-100/50 text-gray-900 text-xs font-bold">
+                            {activeMetric === "aov" ? "-" : gtTakeaway > 0 ? (activeMetric === "revenue" ? formatRM(gtTakeaway) : gtTakeaway) : "-"}
+                          </td>
+                          <td className="px-2 py-3 text-center bg-purple-100/50 text-gray-900 text-xs font-bold">
+                            {activeMetric === "aov" ? "-" : gtDelivery > 0 ? (activeMetric === "revenue" ? formatRM(gtDelivery) : gtDelivery) : "-"}
+                          </td>
+                        </>
+                      );
+                    })()}
                     <td className="px-3 py-3 text-center bg-orange-100">
                       {activeMetric === "revenue"
                         ? `RM ${(data.rounds.reduce((s, r) => s + r.target.revenue, 0)).toLocaleString()}`
                         : "-"}
+                    </td>
+                    <td className="px-3 py-3 text-center bg-gray-200">
+                      {(() => {
+                        const avgPct = data.rounds.filter((r) => r.totals.pctOfTarget > 0).length > 0
+                          ? Math.round(data.rounds.reduce((s, r) => s + r.totals.pctOfTarget, 0) / data.rounds.filter((r) => r.totals.pctOfTarget > 0).length)
+                          : 0;
+                        const c = targetColor(avgPct);
+                        return <span className={cn("text-xs font-bold", c.text)}>{avgPct > 0 ? `${avgPct}%` : "-"}</span>;
+                      })()}
                     </td>
                   </tr>
                 </tbody>
@@ -485,6 +632,7 @@ export default function SalesDashboard() {
                 const maxRevenue = Math.max(...data.rounds.map((r) => r.totals.revenue), 1);
                 const pct = (round.totals.revenue / maxRevenue) * 100;
                 const targetPct = (round.target.revenue * data.dates.length) / maxRevenue * 100;
+                const tc = targetColor(round.totals.pctOfTarget);
 
                 return (
                   <div key={round.key} className="flex items-center gap-3">
@@ -499,9 +647,13 @@ export default function SalesDashboard() {
                           style={{
                             width: `${Math.min(pct, 100)}%`,
                             backgroundColor:
-                              round.totals.revenue >= round.target.revenue * data.dates.length
+                              round.totals.pctOfTarget >= 100
                                 ? "#16a34a"
-                                : "#C2452D",
+                                : round.totals.pctOfTarget >= 80
+                                  ? "#ca8a04"
+                                  : round.totals.pctOfTarget >= 50
+                                    ? "#ea580c"
+                                    : "#dc2626",
                             minWidth: round.totals.revenue > 0 ? "8px" : "0px",
                           }}
                         />
@@ -515,13 +667,18 @@ export default function SalesDashboard() {
                         />
                       )}
                     </div>
-                    <div className="w-28 shrink-0 text-right">
+                    <div className="w-32 shrink-0 text-right">
                       <p className="text-sm font-bold font-sans text-gray-900">
                         RM {round.totals.revenue.toLocaleString("en-MY", { minimumFractionDigits: 0 })}
                       </p>
-                      <p className="text-[11px] text-gray-400">
-                        {round.totals.orders} orders
-                      </p>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span className="text-[11px] text-gray-400">
+                          {round.totals.orders} orders
+                        </span>
+                        <span className={cn("text-[10px] font-bold px-1 py-0.5 rounded", tc.bg, tc.text)}>
+                          {round.totals.pctOfTarget}%
+                        </span>
+                      </div>
                     </div>
                   </div>
                 );

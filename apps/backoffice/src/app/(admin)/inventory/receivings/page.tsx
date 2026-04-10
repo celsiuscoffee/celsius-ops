@@ -129,13 +129,13 @@ export default function ReceivingsPage() {
   const pendingOrdersRef = React.useRef<PendingOrder[]>([]);
 
   const openReceiveDialog = async (autoSelectOrderId?: string) => {
-    // Fetch orders that are awaiting delivery or sent
+    // Fetch orders and transfers in parallel
     const [ordersRes, transfersRes] = await Promise.all([
       fetch("/api/inventory/orders?tab=active"),
       fetch("/api/inventory/transfers"),
     ]);
-    const orders = await ordersRes.json();
-    const transfers = await transfersRes.json();
+    const orders = ordersRes.ok ? await ordersRes.json() : [];
+    const transfers = transfersRes.ok ? await transfersRes.json() : [];
 
     const pendingFromOrders: PendingOrder[] = orders
       .filter((o: { status: string }) =>
@@ -157,7 +157,7 @@ export default function ReceivingsPage() {
 
     // Map IN_TRANSIT / APPROVED transfers as pending orders
     const pendingFromTransfers: PendingOrder[] = transfers
-      .filter((t: { status: string }) => ["IN_TRANSIT", "APPROVED"].includes(t.status))
+      .filter((t: { status: string }) => ["PENDING_APPROVAL", "APPROVED", "IN_TRANSIT", "PENDING"].includes(t.status))
       .map((t: { id: string; fromOutlet: string; toOutlet: string; toOutletId: string; status: string; items: { id: string; productId: string; productPackageId: string | null; product: string; sku: string; package: string; quantity: number }[] }) => ({
         id: `transfer-${t.id}`,
         orderNumber: `TFR (Transfer from ${t.fromOutlet})`,
