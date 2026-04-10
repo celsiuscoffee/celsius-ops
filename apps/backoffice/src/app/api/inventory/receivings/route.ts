@@ -7,8 +7,12 @@ export async function GET(req: NextRequest) {
   const tab = req.nextUrl.searchParams.get("tab") || "recent";
   const search = req.nextUrl.searchParams.get("search") || "";
 
+  const orderId = req.nextUrl.searchParams.get("orderId") || "";
+
   const where: Record<string, unknown> = {};
-  if (tab === "recent") {
+  if (orderId) {
+    where.orderId = orderId;
+  } else if (tab === "recent") {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     where.receivedAt = { gte: thirtyDaysAgo };

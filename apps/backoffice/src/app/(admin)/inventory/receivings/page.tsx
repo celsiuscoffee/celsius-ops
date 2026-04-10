@@ -79,6 +79,7 @@ type ReceiveLineItem = {
   product: string;
   sku: string;
   orderedQty: number;
+  alreadyReceived: number;
   receivedQty: number;
   discrepancyReason: string;
 };
@@ -152,22 +153,44 @@ export default function ReceivingsPage() {
       });
   };
 
-  const selectOrder = (orderId: string) => {
+  const selectOrder = async (orderId: string) => {
     setSelectedOrderId(orderId);
     const order = pendingOrders.find((o) => o.id === orderId);
-    if (order) {
-      setReceiveItems(
-        order.items.map((i) => ({
-          productId: i.productId,
-          productPackageId: i.productPackageId,
-          product: i.product,
-          sku: i.sku,
-          orderedQty: i.quantity,
-          receivedQty: i.quantity, // Default to full quantity
-          discrepancyReason: "",
-        })),
-      );
-    }
+    if (!order) return;
+
+    // Fetch previous receivings for this order to calculate remaining balance
+    let prevReceived: Record<string, number> = {};
+    try {
+      const res = await fetch(`/api/inventory/receivings?orderId=${orderId}`);
+      if (res.ok) {
+        const prev: Receiving[] = await res.json();
+        for (const r of prev) {
+          for (const item of r.items) {
+            // Key by product name since productId isn't in the receiving response
+            prevReceived[item.product] = (prevReceived[item.product] || 0) + item.receivedQty;
+          }
+        }
+      }
+    } catch { /* ignore — will default to full qty */ }
+
+    setReceiveItems(
+      order.items
+        .map((i) => {
+          const alreadyReceived = prevReceived[i.product] || 0;
+          const remaining = Math.max(0, i.quantity - alreadyReceived);
+          return {
+            productId: i.productId,
+            productPackageId: i.productPackageId,
+            product: i.product,
+            sku: i.sku,
+            orderedQty: i.quantity,
+            alreadyReceived,
+            receivedQty: remaining, // Default to remaining balance
+            discrepancyReason: "",
+          };
+        })
+        .filter((i) => i.orderedQty - i.alreadyReceived > 0), // Hide fully received items
+    );
   };
 
   const updateReceivedQty = (idx: number, qty: number) => {
@@ -474,14 +497,18 @@ export default function ReceivingsPage() {
                       <tr className="border-b bg-gray-50 text-gray-500">
                         <th className="px-3 py-2 text-left font-medium">Product</th>
                         <th className="px-3 py-2 text-right font-medium">Ordered</th>
-                        <th className="px-3 py-2 text-center font-medium w-24">Received</th>
+                        <th className="px-3 py-2 text-right font-medium">Prev Recv</th>
+                        <th className="px-3 py-2 text-right font-medium">Balance</th>
+                        <th className="px-3 py-2 text-center font-medium w-24">This Delivery</th>
                         <th className="px-3 py-2 text-left font-medium">Status</th>
                         <th className="px-3 py-2 text-left font-medium">Reason</th>
                       </tr>
                     </thead>
                     <tbody>
                       {receiveItems.map((item, idx) => {
-                        const isShort = item.receivedQty < item.orderedQty;
+                        const remaining = item.orderedQty - item.alreadyReceived;
+                        const isShort = item.receivedQty < remaining;
+                        const isOver = item.receivedQty > remaining;
                         return (
                           <tr key={idx} className="border-b border-gray-50">
                             <td className="px-3 py-2">
@@ -489,6 +516,10 @@ export default function ReceivingsPage() {
                               <code className="text-gray-400">{item.sku}</code>
                             </td>
                             <td className="px-3 py-2 text-right text-gray-600">{item.orderedQty}</td>
+                            <td className="px-3 py-2 text-right text-gray-400">
+                              {item.alreadyReceived > 0 ? item.alreadyReceived : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium text-purple-600">{remaining}</td>
                             <td className="px-3 py-2">
                               <input
                                 type="number"
@@ -499,16 +530,16 @@ export default function ReceivingsPage() {
                               />
                             </td>
                             <td className="px-3 py-2">
-                              {item.receivedQty === item.orderedQty ? (
+                              {item.receivedQty === remaining ? (
                                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                               ) : isShort ? (
                                 <span className="flex items-center gap-1 text-red-500">
                                   <AlertTriangle className="h-3 w-3" />
-                                  Short {item.orderedQty - item.receivedQty}
+                                  Short {remaining - item.receivedQty}
                                 </span>
-                              ) : (
-                                <span className="text-blue-500 text-xs">Over +{item.receivedQty - item.orderedQty}</span>
-                              )}
+                              ) : isOver ? (
+                                <span className="text-blue-500 text-xs">Over +{item.receivedQty - remaining}</span>
+                              ) : null}
                             </td>
                             <td className="px-3 py-2">
                               {isShort && (
