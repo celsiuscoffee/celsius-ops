@@ -13,8 +13,10 @@ import {
   Loader2,
   Receipt,
   X,
+  ChevronDown,
 } from "lucide-react";
 
+type Supplier = { id: string; name: string };
 type ExtractedData = {
   invoiceNumber: string | null;
   issueDate: string | null;
@@ -38,6 +40,8 @@ export default function ClaimsPage() {
   const [selectedOutletId, setSelectedOutletId] = useState("");
   const [outletName, setOutletName] = useState("");
   const [userName, setUserName] = useState("");
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierId, setSupplierId] = useState("");
   const [supplierName, setSupplierName] = useState("");
   const [amount, setAmount] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(
@@ -55,7 +59,7 @@ export default function ClaimsPage() {
   } | null>(null);
   const [error, setError] = useState("");
 
-  // Load user profile — auto-set outlet and who paid
+  // Load user profile and suppliers
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
@@ -64,6 +68,13 @@ export default function ClaimsPage() {
         if (me.outletName) setOutletName(me.outletName);
         if (me.id) setClaimedById(me.id);
         if (me.name) setUserName(me.name);
+      })
+      .catch(() => {});
+
+    fetch("/api/suppliers")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setSuppliers(data);
       })
       .catch(() => {});
   }, []);
@@ -133,7 +144,23 @@ export default function ClaimsPage() {
         setExtracted(data);
 
         // Auto-fill form fields
-        if (data.supplierName) setSupplierName(data.supplierName);
+        if (data.supplierName) {
+          setSupplierName(data.supplierName);
+          // Try to match against existing suppliers
+          const aiName = data.supplierName.toLowerCase();
+          const match = suppliers.find((s) => {
+            const sName = s.name.toLowerCase();
+            return sName.includes(aiName) || aiName.includes(sName) ||
+              // Fuzzy: check if >50% of words overlap
+              (() => {
+                const aiWords = aiName.split(/\s+/);
+                const sWords = sName.split(/\s+/);
+                const overlap = aiWords.filter((w) => sWords.some((sw) => sw.includes(w) || w.includes(sw)));
+                return overlap.length >= Math.min(aiWords.length, sWords.length) * 0.5;
+              })();
+          });
+          if (match) setSupplierId(match.id);
+        }
         if (data.amount) setAmount(String(data.amount));
         if (data.issueDate) setPurchaseDate(data.issueDate);
       }
@@ -165,6 +192,7 @@ export default function ClaimsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           outletId: selectedOutletId,
+          supplierId: supplierId || undefined,
           supplierName: supplierName || null,
           claimedById,
           amount: parseFloat(amount),
@@ -196,6 +224,7 @@ export default function ClaimsPage() {
   const resetForm = () => {
     setPhotos([]);
     setExtracted(null);
+    setSupplierId("");
     setSupplierName("");
     setAmount("");
     setPurchaseDate(new Date().toISOString().split("T")[0]);
@@ -357,15 +386,38 @@ export default function ClaimsPage() {
 
             {/* Supplier */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">
+              <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-500">
                 Supplier
+                {extracted?.supplierName && supplierId && (
+                  <span className="rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-600">
+                    AI matched
+                  </span>
+                )}
+                {extracted?.supplierName && !supplierId && (
+                  <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+                    AI: {extracted.supplierName}
+                  </span>
+                )}
               </label>
-              <Input
-                value={supplierName}
-                onChange={(e) => setSupplierName(e.target.value)}
-                placeholder={extracting ? "Detecting..." : "Supplier name"}
-                className="text-sm"
-              />
+              <div className="relative">
+                <select
+                  value={supplierId}
+                  onChange={(e) => {
+                    setSupplierId(e.target.value);
+                    const s = suppliers.find((s) => s.id === e.target.value);
+                    if (s) setSupplierName(s.name);
+                  }}
+                  className="w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 py-2.5 pr-8 text-sm text-gray-900 focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta"
+                >
+                  <option value="">Select supplier</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2.5 top-3 h-4 w-4 text-gray-400" />
+              </div>
             </div>
 
             {/* Amount */}
