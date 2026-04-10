@@ -177,10 +177,9 @@ export default function InvoicesPage() {
     }
   };
 
-  const totalPending = invoices.filter((i) => i.status === "PENDING").reduce((a, i) => a + i.amount, 0);
-  const totalOverdue = invoices.filter((i) => i.status === "OVERDUE").reduce((a, i) => a + i.amount, 0);
-  const totalPaid = invoices.filter((i) => i.status === "PAID").reduce((a, i) => a + i.amount, 0);
-  const totalAll = invoices.reduce((a, i) => a + i.amount, 0);
+  const totalOverdue = allInvoices.filter((i) => i.status === "OVERDUE").reduce((a, i) => a + i.amount, 0);
+  const totalPaid = allInvoices.filter((i) => i.status === "PAID").reduce((a, i) => a + i.amount, 0);
+  const totalAll = allInvoices.reduce((a, i) => a + i.amount, 0);
 
   const statusColor = (status: string) => {
     switch (status) {
@@ -230,12 +229,12 @@ export default function InvoicesPage() {
       </div>
 
       {/* Summary cards — clickable to filter */}
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
         {([
-          { key: "all" as const, label: "Total", amount: totalAll, color: "text-gray-900", border: "border-gray-300", ring: "ring-gray-200" },
-          { key: "pending" as const, label: "Pending", amount: totalPending, color: "text-terracotta", border: "border-terracotta", ring: "ring-terracotta/20" },
-          { key: "overdue" as const, label: "Overdue", amount: totalOverdue, color: "text-red-600", border: "border-red-400", ring: "ring-red-100" },
-          { key: "paid" as const, label: "Paid", amount: totalPaid, color: "text-green-600", border: "border-green-400", ring: "ring-green-100" },
+          { key: "all" as const, label: "Total", amount: totalAll, count: allInvoices.length, color: "text-gray-900", border: "border-gray-300", ring: "ring-gray-200" },
+          { key: "due_today" as const, label: "Due Today", amount: dueTodayAmount, count: dueTodayCount, color: dueTodayCount > 0 ? "text-blue-600" : "text-gray-400", border: "border-blue-400", ring: "ring-blue-100" },
+          { key: "overdue" as const, label: "Overdue", amount: totalOverdue, count: allInvoices.filter((i) => i.status === "OVERDUE").length, color: "text-red-600", border: "border-red-400", ring: "ring-red-100" },
+          { key: "paid" as const, label: "Paid", amount: totalPaid, count: allInvoices.filter((i) => i.status === "PAID").length, color: "text-green-600", border: "border-green-400", ring: "ring-green-100" },
         ]).map((card) => (
           <button
             key={card.key}
@@ -243,51 +242,39 @@ export default function InvoicesPage() {
             className={`rounded-lg border bg-white px-3 py-2.5 text-left transition-all hover:shadow-sm ${
               cardFilter === card.key
                 ? `${card.border} ring-2 ${card.ring} shadow-sm`
-                : "border-gray-200 hover:border-gray-300"
+                : card.key === "due_today" && card.count > 0
+                  ? "border-blue-200 bg-blue-50/50 hover:border-blue-300"
+                  : "border-gray-200 hover:border-gray-300"
             }`}
           >
-            <p className="text-xs text-gray-500">{card.label}</p>
-            <p className={`text-lg font-bold ${card.color}`}>RM {card.amount.toFixed(2)}</p>
-          </button>
-        ))}
-        {/* Due Today — action card */}
-        <button
-          onClick={() => setCardFilter(cardFilter === "due_today" ? null : "due_today")}
-          className={`group relative rounded-lg border bg-white px-3 py-2.5 text-left transition-all hover:shadow-sm ${
-            cardFilter === "due_today"
-              ? "border-blue-400 ring-2 ring-blue-100 shadow-sm"
-              : dueTodayCount > 0
-                ? "border-blue-200 bg-blue-50/50 hover:border-blue-300"
-                : "border-gray-200 hover:border-gray-300"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-500">Due Today</p>
-            {dueTodayCount > 0 && (
-              <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-500 px-1.5 text-[10px] font-bold text-white">
-                {dueTodayCount}
-              </span>
-            )}
-          </div>
-          <p className={`text-lg font-bold ${dueTodayCount > 0 ? "text-blue-600" : "text-gray-400"}`}>
-            RM {dueTodayAmount.toFixed(2)}
-          </p>
-          {dueTodayCount > 0 && cardFilter === "due_today" && (
-            <div
-              onClick={(e) => { e.stopPropagation(); batchInitiateDueToday(); }}
-              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-500 px-2 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-600"
-            >
-              {batchInitiating ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <>
-                  <DollarSign className="h-3 w-3" />
-                  Initiate All Payments
-                </>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-500">{card.label}</p>
+              {card.count > 0 && card.key !== "all" && (
+                <span className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white ${
+                  card.key === "due_today" ? "bg-blue-500" : card.key === "overdue" ? "bg-red-500" : "bg-green-500"
+                }`}>
+                  {card.count}
+                </span>
               )}
             </div>
-          )}
-        </button>
+            <p className={`text-lg font-bold ${card.color}`}>RM {card.amount.toFixed(2)}</p>
+            {card.key === "due_today" && card.count > 0 && cardFilter === "due_today" && (
+              <div
+                onClick={(e) => { e.stopPropagation(); batchInitiateDueToday(); }}
+                className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-500 px-2 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-600"
+              >
+                {batchInitiating ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <>
+                    <DollarSign className="h-3 w-3" />
+                    Initiate All Payments
+                  </>
+                )}
+              </div>
+            )}
+          </button>
+        ))}
       </div>
       {cardFilter && (
         <div className="mt-2 flex items-center gap-2">

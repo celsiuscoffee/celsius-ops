@@ -444,45 +444,41 @@ export default function PayAndClaimPage() {
 
       {/* ── Summary Cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card
-          className="p-5 cursor-pointer hover:ring-2 hover:ring-amber-300 transition-all"
-          onClick={() => setTab("draft")}
-        >
-          <div className="flex items-center gap-2 mb-1.5">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-            <span className="text-xs text-gray-500">Draft / Review</span>
-          </div>
-          <p className="text-xl font-bold font-sans text-amber-600">
-            {draftClaims.length} <span className="text-sm font-normal text-gray-400">claims</span>
-          </p>
-          <p className="text-xs text-gray-400 mt-0.5">
-            RM {draftAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-          </p>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Clock className="h-4 w-4 text-[#C2714F]" />
-            <span className="text-xs text-gray-500">Pending Reimbursement</span>
-          </div>
-          <p className="text-xl font-bold font-sans text-[#C2714F]">
-            {pendingClaims.length} <span className="text-sm font-normal text-gray-400">claims</span>
-          </p>
-          <p className="text-xs text-gray-400 mt-0.5">
-            RM {pendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-          </p>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-2 mb-1.5">
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <span className="text-xs text-gray-500">Reimbursed</span>
-          </div>
-          <p className="text-xl font-bold font-sans text-green-600">
-            {reimbursedClaims.length} <span className="text-sm font-normal text-gray-400">claims</span>
-          </p>
-          <p className="text-xs text-gray-400 mt-0.5">
-            RM {reimbursedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-          </p>
-        </Card>
+        {([
+          { key: "draft" as const, label: "Draft / Review", icon: AlertTriangle, iconColor: "text-amber-500", valueColor: "text-amber-600", ring: "ring-amber-300", border: "border-amber-300", count: draftClaims.length, amount: draftAmount },
+          { key: "pending" as const, label: "Pending Reimbursement", icon: Clock, iconColor: "text-[#C2714F]", valueColor: "text-[#C2714F]", ring: "ring-[#C2714F]/30", border: "border-[#C2714F]", count: pendingClaims.length, amount: pendingAmount },
+          { key: "reimbursed" as const, label: "Reimbursed", icon: CheckCircle2, iconColor: "text-green-500", valueColor: "text-green-600", ring: "ring-green-300", border: "border-green-300", count: reimbursedClaims.length, amount: reimbursedAmount },
+        ]).map((card) => (
+          <Card
+            key={card.key}
+            className={`p-5 cursor-pointer transition-all hover:shadow-sm ${
+              tab === card.key
+                ? `${card.border} ring-2 ${card.ring} shadow-sm`
+                : "hover:ring-2 hover:ring-gray-200"
+            }`}
+            onClick={() => setTab(card.key)}
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-2">
+                <card.icon className={`h-4 w-4 ${card.iconColor}`} />
+                <span className="text-xs text-gray-500">{card.label}</span>
+              </div>
+              {card.count > 0 && (
+                <span className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white ${
+                  card.key === "draft" ? "bg-amber-500" : card.key === "pending" ? "bg-[#C2714F]" : "bg-green-500"
+                }`}>
+                  {card.count}
+                </span>
+              )}
+            </div>
+            <p className={`text-xl font-bold font-sans ${card.valueColor}`}>
+              {card.count} <span className="text-sm font-normal text-gray-400">claims</span>
+            </p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              RM {card.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            </p>
+          </Card>
+        ))}
       </div>
 
       {/* ── Tabs + Search + Outlet Filter ── */}

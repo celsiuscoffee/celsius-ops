@@ -15,8 +15,8 @@ export async function GET() {
       baseUom: true,
       storageArea: true,
       checkFrequency: true,
-      categoryId: true,
-      category: { select: { name: true } },
+      groupId: true,
+      group: { select: { name: true } },
       packages: {
         select: {
           id: true,
@@ -46,8 +46,8 @@ export async function GET() {
     baseUom: p.baseUom,
     storageArea: p.storageArea || "UNCATEGORIZED",
     checkFrequency: p.checkFrequency,
-    categoryId: p.categoryId,
-    category: p.category.name,
+    categoryId: p.groupId,
+    category: p.group.name,
     packages: p.packages.map((pkg) => ({
       id: pkg.id,
       name: pkg.packageName,
