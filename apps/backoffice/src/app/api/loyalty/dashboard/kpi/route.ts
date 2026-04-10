@@ -3,7 +3,8 @@ import { supabaseAdmin } from '@/lib/loyalty/supabase';
 import { requireAuth } from '@/lib/auth';
 
 // Fetch order COUNT from StoreHub — only count, don't parse full data
-async function fetchSHOrderCount(storeId: string, from: string, to: string): Promise<{ count: number; debug: string }> {
+// shiftFrom/shiftTo are optional ISO datetime boundaries for shift filtering
+async function fetchSHOrderCount(storeId: string, from: string, to: string, shiftFrom?: string, shiftTo?: string): Promise<{ count: number; debug: string }> {
   // STOREHUB_API_KEY is already in "username:password" format
   const shKey = process.env.STOREHUB_API_KEY || '';
   const shApi = process.env.STOREHUB_API_URL || 'https://api.storehubhq.com';
@@ -23,10 +24,17 @@ async function fetchSHOrderCount(storeId: string, from: string, to: string): Pro
     }
     const data = await res.json();
     const txns = Array.isArray(data) ? data : data.transactions || [];
-    // Count sales only — don't process full payload
+    // Count sales only — optionally filter by shift time window
     let salesCount = 0;
+    const shiftStart = shiftFrom ? new Date(shiftFrom).getTime() : null;
+    const shiftEnd = shiftTo ? new Date(shiftTo).getTime() : null;
     for (const t of txns) {
-      if (!t.isCancelled && t.transactionType === 'Sale') salesCount++;
+      if (t.isCancelled || t.transactionType !== 'Sale') continue;
+      if (shiftStart && shiftEnd && t.createdAt) {
+        const txTime = new Date(t.createdAt).getTime();
+        if (txTime < shiftStart || txTime > shiftEnd) continue;
+      }
+      salesCount++;
     }
     return { count: salesCount, debug: `ok: ${salesCount} sales of ${txns.length} txns` };
   } catch (err) {
@@ -44,12 +52,16 @@ export async function GET(request: NextRequest) {
     const brandId = searchParams.get('brand_id') || 'brand-celsius';
     const period = searchParams.get('period') || 'monthly';
     const outletFilter = searchParams.get('outlet_id') || null;
+    const shift = searchParams.get('shift') || 'all'; // 'all' | 'morning' | 'evening'
 
     const now = new Date();
     let fromDate: string;
-    const toDate = now.toISOString().split('T')[0];
+    let toDate = now.toISOString().split('T')[0];
 
-    if (period === 'daily') {
+    if (period === 'custom') {
+      fromDate = searchParams.get('from') || toDate;
+      toDate = searchParams.get('to') || toDate;
+    } else if (period === 'daily') {
       fromDate = toDate;
     } else if (period === 'weekly') {
       fromDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -57,8 +69,19 @@ export async function GET(request: NextRequest) {
       fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
     }
 
-    const fromISO = `${fromDate}T00:00:00Z`;
-    const toISO = `${toDate}T23:59:59Z`;
+    // Shift time boundaries: morning = 08:00-15:30, evening = 15:30-23:00
+    let fromISO: string;
+    let toISO: string;
+    if (shift === 'morning') {
+      fromISO = `${fromDate}T08:00:00+08:00`;
+      toISO = `${toDate}T15:30:00+08:00`;
+    } else if (shift === 'evening') {
+      fromISO = `${fromDate}T15:30:00+08:00`;
+      toISO = `${toDate}T23:00:00+08:00`;
+    } else {
+      fromISO = `${fromDate}T00:00:00Z`;
+      toISO = `${toDate}T23:59:59Z`;
+    }
 
     // Build queries with optional outlet filter
     let outletsQuery = supabaseAdmin.from('outlets').select('id, name, storehub_store_id').eq('brand_id', brandId).eq('is_active', true);
@@ -116,7 +139,11 @@ export async function GET(request: NextRequest) {
     for (const outlet of outlets) {
       let posOrders = 0;
       if (outlet.storehub_store_id) {
-        const sh = await fetchSHOrderCount(outlet.storehub_store_id, fromDate, toDate);
+        const sh = await fetchSHOrderCount(
+          outlet.storehub_store_id, fromDate, toDate,
+          shift !== 'all' ? fromISO : undefined,
+          shift !== 'all' ? toISO : undefined,
+        );
         posOrders = sh.count;
         debugInfo.push(`${outlet.name}: ${sh.debug}`);
       } else {

@@ -21,7 +21,8 @@ import { cn } from "@/lib/utils";
 // Types
 // ---------------------------------------------------------------------------
 
-type KpiPeriod = "daily" | "weekly" | "monthly";
+type KpiPeriod = "daily" | "weekly" | "monthly" | "custom";
+type KpiShift = "all" | "morning" | "evening";
 
 type OutletOption = { id: string; name: string };
 
@@ -84,6 +85,7 @@ const PERIOD_LABELS: Record<KpiPeriod, string> = {
   daily: "Today",
   weekly: "This Week",
   monthly: "This Month",
+  custom: "Custom",
 };
 
 // ---------------------------------------------------------------------------
@@ -196,13 +198,22 @@ export default function LoyaltyDashboard() {
   const [kpiOutlet, setKpiOutlet] = useState<string>("all");
   const [kpi, setKpi] = useState<KpiData | null>(null);
   const [kpiLoading, setKpiLoading] = useState(true);
+  const [kpiCustomFrom, setKpiCustomFrom] = useState(() => new Date().toISOString().split("T")[0]);
+  const [kpiCustomTo, setKpiCustomTo] = useState(() => new Date().toISOString().split("T")[0]);
+  const [kpiShift, setKpiShift] = useState<KpiShift>("all");
 
   // Load KPI data when period or outlet changes
-  const loadKpi = useCallback(async (period: KpiPeriod, outlet: string) => {
+  const loadKpi = useCallback(async (period: KpiPeriod, outlet: string, shift: KpiShift, customFrom?: string, customTo?: string) => {
     setKpiLoading(true);
     try {
-      let url = `/api/loyalty/dashboard/kpi?brand_id=brand-celsius&period=${period}`;
+      let url: string;
+      if (period === "custom" && customFrom && customTo) {
+        url = `/api/loyalty/dashboard/kpi?brand_id=brand-celsius&period=custom&from=${customFrom}&to=${customTo}`;
+      } else {
+        url = `/api/loyalty/dashboard/kpi?brand_id=brand-celsius&period=${period}`;
+      }
       if (outlet !== "all") url += `&outlet_id=${outlet}`;
+      if (shift !== "all") url += `&shift=${shift}`;
       const res = await fetch(url, { credentials: "include" });
       if (res.ok) {
         setKpi(await res.json());
@@ -212,8 +223,12 @@ export default function LoyaltyDashboard() {
   }, []);
 
   useEffect(() => {
-    loadKpi(kpiPeriod, kpiOutlet);
-  }, [kpiPeriod, kpiOutlet, loadKpi]);
+    if (kpiPeriod === "custom") {
+      loadKpi(kpiPeriod, kpiOutlet, kpiShift, kpiCustomFrom, kpiCustomTo);
+    } else {
+      loadKpi(kpiPeriod, kpiOutlet, kpiShift);
+    }
+  }, [kpiPeriod, kpiOutlet, kpiShift, kpiCustomFrom, kpiCustomTo, loadKpi]);
 
   // Load general stats once
   useEffect(() => {
@@ -289,9 +304,30 @@ export default function LoyaltyDashboard() {
                   ))}
                 </select>
               )}
+              {/* Shift filter */}
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {([
+                  { value: "all", label: "All" },
+                  { value: "morning", label: "AM" },
+                  { value: "evening", label: "PM" },
+                ] as { value: KpiShift; label: string }[]).map((s) => (
+                  <button
+                    key={s.value}
+                    onClick={() => setKpiShift(s.value)}
+                    className={cn(
+                      "px-2.5 py-1.5 text-xs font-medium transition-colors",
+                      kpiShift === s.value
+                        ? "bg-gray-800 text-white"
+                        : "bg-white text-gray-600 hover:bg-gray-50"
+                    )}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
               {/* Period toggle */}
               <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {(["daily", "weekly", "monthly"] as KpiPeriod[]).map((p) => (
+                {(["daily", "weekly", "monthly", "custom"] as KpiPeriod[]).map((p) => (
                   <button
                     key={p}
                     onClick={() => setKpiPeriod(p)}
@@ -308,6 +344,25 @@ export default function LoyaltyDashboard() {
               </div>
             </div>
           </div>
+
+          {/* Custom date pickers */}
+          {kpiPeriod === "custom" && (
+            <div className="flex items-center gap-2 mb-4">
+              <input
+                type="date"
+                value={kpiCustomFrom}
+                onChange={(e) => setKpiCustomFrom(e.target.value)}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+              />
+              <span className="text-xs text-gray-400">to</span>
+              <input
+                type="date"
+                value={kpiCustomTo}
+                onChange={(e) => setKpiCustomTo(e.target.value)}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+              />
+            </div>
+          )}
 
           {/* KPI Cards */}
           {kpiLoading ? (
