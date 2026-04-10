@@ -31,8 +31,10 @@ export async function GET(req: NextRequest) {
     const mapped = transfers.map((t) => ({
       id: t.id,
       fromOutlet: t.fromOutlet.name,
+      fromOutletId: t.fromOutletId,
       fromOutletCode: t.fromOutlet.code,
       toOutlet: t.toOutlet.name,
+      toOutletId: t.toOutletId,
       toOutletCode: t.toOutlet.code,
       status: t.status,
       transferredBy: t.transferredBy.name,
@@ -46,6 +48,8 @@ export async function GET(req: NextRequest) {
       rejectionReason: t.rejectionReason ?? null,
       items: t.items.map((i) => ({
         id: i.id,
+        productId: i.productId,
+        productPackageId: i.productPackageId ?? null,
         product: i.product.name,
         sku: i.product.sku,
         package: i.productPackage?.packageLabel ?? i.productPackage?.packageName ?? "",

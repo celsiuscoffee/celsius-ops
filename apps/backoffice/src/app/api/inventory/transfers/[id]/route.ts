@@ -121,9 +121,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
 
       // IN_TRANSIT -> RECEIVED: add stock to destination outlet
+      // Skip if a receiving record already exists (stock was added by the receivings POST)
       if (existing.status === "IN_TRANSIT" && status === "RECEIVED") {
-        for (const item of updated.items) {
-          await adjustStockBalance(updated.toOutletId, item.productId, Number(item.quantity));
+        const existingReceiving = await tx.receiving.findFirst({
+          where: { transferId: id },
+        });
+        if (!existingReceiving) {
+          for (const item of updated.items) {
+            await adjustStockBalance(updated.toOutletId, item.productId, Number(item.quantity));
+          }
         }
       }
 

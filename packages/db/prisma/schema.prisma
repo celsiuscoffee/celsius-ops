@@ -413,10 +413,12 @@ model Receiving {
   id            String          @id @default(uuid())
   orderId       String?
   order         Order?          @relation(fields: [orderId], references: [id])
+  transferId    String?
+  transfer      StockTransfer?  @relation(fields: [transferId], references: [id])
   outletId      String
   outlet        Outlet          @relation(fields: [outletId], references: [id])
-  supplierId    String
-  supplier      Supplier        @relation(fields: [supplierId], references: [id])
+  supplierId    String?
+  supplier      Supplier?       @relation(fields: [supplierId], references: [id])
   receivedById  String
   receivedBy    User            @relation(fields: [receivedById], references: [id])
   receivedAt    DateTime        @default(now())
@@ -557,7 +559,8 @@ model StockTransfer {
   createdAt       DateTime       @default(now())
   completedAt     DateTime?
 
-  items StockTransferItem[]
+  items      StockTransferItem[]
+  receivings Receiving[]
 }
 
 enum TransferStatus {

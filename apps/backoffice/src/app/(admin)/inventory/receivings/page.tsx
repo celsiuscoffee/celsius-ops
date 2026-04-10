@@ -71,6 +71,8 @@ type PendingOrder = {
   supplier: string;
   supplierId: string;
   items: POItem[];
+  isTransfer?: boolean;
+  transferId?: string;
 };
 
 type ReceiveLineItem = {
@@ -128,9 +130,14 @@ export default function ReceivingsPage() {
 
   const openReceiveDialog = async (autoSelectOrderId?: string) => {
     // Fetch orders that are awaiting delivery or sent
-    const res = await fetch("/api/inventory/orders?tab=active");
-    const orders = await res.json();
-    const pending: PendingOrder[] = orders
+    const [ordersRes, transfersRes] = await Promise.all([
+      fetch("/api/inventory/orders?tab=active"),
+      fetch("/api/inventory/transfers"),
+    ]);
+    const orders = await ordersRes.json();
+    const transfers = await transfersRes.json();
+
+    const pendingFromOrders: PendingOrder[] = orders
       .filter((o: { status: string }) =>
         ["SENT", "AWAITING_DELIVERY", "APPROVED", "PARTIALLY_RECEIVED"].includes(o.status),
       )
@@ -147,6 +154,31 @@ export default function ReceivingsPage() {
           productPackageId: i.productPackageId ?? null,
         })),
       }));
+
+    // Map IN_TRANSIT / APPROVED transfers as pending orders
+    const pendingFromTransfers: PendingOrder[] = transfers
+      .filter((t: { status: string }) => ["IN_TRANSIT", "APPROVED"].includes(t.status))
+      .map((t: { id: string; fromOutlet: string; toOutlet: string; toOutletId: string; status: string; items: { id: string; productId: string; productPackageId: string | null; product: string; sku: string; package: string; quantity: number }[] }) => ({
+        id: `transfer-${t.id}`,
+        orderNumber: `TFR (Transfer from ${t.fromOutlet})`,
+        outlet: t.toOutlet,
+        outletId: t.toOutletId,
+        supplier: t.fromOutlet,
+        supplierId: "",
+        isTransfer: true,
+        transferId: t.id,
+        items: t.items.map((i) => ({
+          id: i.id,
+          productId: i.productId,
+          productPackageId: i.productPackageId,
+          product: i.product,
+          sku: i.sku,
+          package: i.package,
+          quantity: i.quantity,
+        })),
+      }));
+
+    const pending = [...pendingFromOrders, ...pendingFromTransfers];
     setPendingOrders(pending);
     pendingOrdersRef.current = pending;
     setSelectedOrderId("");
@@ -219,10 +251,16 @@ export default function ReceivingsPage() {
       if (!selectedOrder) return;
 
       const outletId = selectedOrder.outletId;
-      const supplierId = selectedOrder.supplierId;
+      const isTransfer = !!selectedOrder.isTransfer;
 
-      if (!outletId || !supplierId) {
-        alert("Missing outlet or supplier ID. Please try again.");
+      if (!outletId) {
+        alert("Missing outlet ID. Please try again.");
+        setSaving(false);
+        return;
+      }
+
+      if (!isTransfer && !selectedOrder.supplierId) {
+        alert("Missing supplier ID. Please try again.");
         setSaving(false);
         return;
       }
@@ -243,16 +281,23 @@ export default function ReceivingsPage() {
         return;
       }
 
+      const payload: Record<string, unknown> = {
+        outletId,
+        notes: receiveNotes || null,
+        items: itemsToSubmit,
+      };
+
+      if (isTransfer) {
+        payload.transferId = selectedOrder.transferId;
+      } else {
+        payload.orderId = selectedOrder.id;
+        payload.supplierId = selectedOrder.supplierId;
+      }
+
       await fetch("/api/inventory/receivings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId: selectedOrderId,
-          outletId,
-          supplierId,
-          notes: receiveNotes || null,
-          items: itemsToSubmit,
-        }),
+        body: JSON.stringify(payload),
       });
       setShowReceive(false);
       loadData();
@@ -481,13 +526,13 @@ export default function ReceivingsPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Select Purchase Order</label>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Select Purchase Order or Transfer</label>
               <select
                 value={selectedOrderId}
                 onChange={(e) => selectOrder(e.target.value)}
                 className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
               >
-                <option value="">Select a PO...</option>
+                <option value="">Select a PO or Transfer...</option>
                 {pendingOrders.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.orderNumber} — {o.supplier} ({o.outlet})
@@ -495,7 +540,7 @@ export default function ReceivingsPage() {
                 ))}
               </select>
               {pendingOrders.length === 0 && (
-                <p className="mt-1 text-xs text-gray-400">No pending orders to receive. Create and send an order first.</p>
+                <p className="mt-1 text-xs text-gray-400">No pending orders or transfers to receive.</p>
               )}
             </div>
 

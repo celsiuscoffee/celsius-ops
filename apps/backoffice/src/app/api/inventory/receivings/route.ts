@@ -32,11 +32,13 @@ export async function GET(req: NextRequest) {
     select: {
       id: true,
       orderId: true,
+      transferId: true,
       status: true,
       notes: true,
       invoicePhotos: true,
       receivedAt: true,
       order: { select: { orderNumber: true } },
+      transfer: { select: { fromOutlet: { select: { name: true } } } },
       outlet: { select: { name: true } },
       supplier: { select: { name: true } },
       receivedBy: { select: { name: true } },
@@ -58,9 +60,10 @@ export async function GET(req: NextRequest) {
   const mapped = receivings.map((r) => ({
     id: r.id,
     orderId: r.orderId,
-    orderNumber: r.order?.orderNumber ?? "Ad-hoc",
+    transferId: r.transferId,
+    orderNumber: r.order?.orderNumber ?? (r.transferId ? "Transfer" : "Ad-hoc"),
     outlet: r.outlet.name,
-    supplier: r.supplier.name,
+    supplier: r.supplier?.name ?? r.transfer?.fromOutlet?.name ?? "Transfer",
     receivedBy: r.receivedBy.name,
     receivedAt: r.receivedAt.toISOString(),
     status: r.status,
@@ -83,10 +86,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { orderId, outletId, supplierId, items, notes, status, invoicePhotos } = body;
+  const { orderId, transferId, outletId, supplierId, items, notes, status, invoicePhotos } = body;
 
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const isTransfer = !!transferId;
 
   let receivingStatus = status || "COMPLETE";
   if (orderId) {
@@ -100,8 +105,9 @@ export async function POST(req: NextRequest) {
   const receiving = await prisma.receiving.create({
     data: {
       orderId: orderId || null,
+      transferId: transferId || null,
       outletId,
-      supplierId,
+      supplierId: supplierId || null,
       receivedById: caller.id,
       status: receivingStatus,
       notes: notes || null,
@@ -126,7 +132,7 @@ export async function POST(req: NextRequest) {
     ),
   );
 
-  // Update order status if linked
+  // Update order status if linked to a PO
   if (orderId) {
     const allReceivings = await prisma.receiving.findMany({
       where: { orderId },
@@ -144,28 +150,43 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Auto-create invoice from receiving
-  try {
-    const invCount = await prisma.invoice.count();
-    const invoiceNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
-    const totalAmount = orderId
-      ? (await prisma.order.findUnique({ where: { id: orderId }, select: { totalAmount: true } }))?.totalAmount ?? 0
-      : items.reduce((s: number, i: { receivedQty: number; unitPrice?: number }) => s + (i.receivedQty * (i.unitPrice ?? 0)), 0);
-
-    await prisma.invoice.create({
+  // Update transfer status to RECEIVED if linked to a transfer
+  if (isTransfer) {
+    await prisma.stockTransfer.update({
+      where: { id: transferId },
       data: {
-        invoiceNumber,
-        orderId: orderId || null,
-        outletId,
-        supplierId,
-        amount: totalAmount,
-        status: "PENDING",
-        photos: invoicePhotos || [],
-        notes: notes ? `From receiving: ${notes}` : null,
+        status: "RECEIVED",
+        receivedById: caller.id,
+        receivedAt: new Date(),
+        completedAt: new Date(),
       },
     });
-  } catch {
-    // Invoice creation is non-critical — don't fail the receiving
+  }
+
+  // Auto-create invoice from receiving (skip for transfers — no supplier invoice)
+  if (!isTransfer) {
+    try {
+      const invCount = await prisma.invoice.count();
+      const invoiceNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
+      const totalAmount = orderId
+        ? (await prisma.order.findUnique({ where: { id: orderId }, select: { totalAmount: true } }))?.totalAmount ?? 0
+        : items.reduce((s: number, i: { receivedQty: number; unitPrice?: number }) => s + (i.receivedQty * (i.unitPrice ?? 0)), 0);
+
+      await prisma.invoice.create({
+        data: {
+          invoiceNumber,
+          orderId: orderId || null,
+          outletId,
+          supplierId: supplierId!,
+          amount: totalAmount,
+          status: "PENDING",
+          photos: invoicePhotos || [],
+          notes: notes ? `From receiving: ${notes}` : null,
+        },
+      });
+    } catch {
+      // Invoice creation is non-critical — don't fail the receiving
+    }
   }
 
   return NextResponse.json(receiving, { status: 201 });
