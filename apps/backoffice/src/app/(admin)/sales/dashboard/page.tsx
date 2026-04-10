@@ -264,23 +264,18 @@ export default function SalesDashboard() {
                 ))}
               </select>
             )}
-            {/* Period toggle */}
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden flex-wrap">
+            {/* Period dropdown */}
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value as Period)}
+              className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+            >
               {PERIOD_OPTIONS.map((p) => (
-                <button
-                  key={p.key}
-                  onClick={() => setPeriod(p.key)}
-                  className={cn(
-                    "px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap",
-                    period === p.key
-                      ? "bg-[#C2452D] text-white"
-                      : "bg-white text-gray-600 hover:bg-gray-50",
-                  )}
-                >
+                <option key={p.key} value={p.key}>
                   {p.label}
-                </button>
+                </option>
               ))}
-            </div>
+            </select>
           </div>
         </div>
 
