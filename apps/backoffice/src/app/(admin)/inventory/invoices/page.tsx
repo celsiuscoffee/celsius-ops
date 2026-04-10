@@ -150,17 +150,16 @@ export default function InvoicesPage() {
 
   const getActions = (status: string) => {
     switch (status) {
-      case "DRAFT": return [
-        { status: "INITIATED", label: "Initiate", color: "bg-blue-500 hover:bg-blue-600" },
+      case "PENDING": return [
+        { status: "INITIATED", label: "Initiate Payment", color: "bg-blue-500 hover:bg-blue-600" },
+        { status: "OVERDUE", label: "Mark Overdue", color: "bg-red-500 hover:bg-red-600" },
       ];
       case "INITIATED": return [
-        { status: "PENDING", label: "Send", color: "bg-terracotta hover:bg-terracotta-dark" },
-      ];
-      case "PENDING": return [
-        { status: "PAID", label: "Mark Paid", color: "bg-green-500 hover:bg-green-600" },
+        { status: "PAID", label: "Approve / Paid", color: "bg-green-500 hover:bg-green-600" },
         { status: "OVERDUE", label: "Mark Overdue", color: "bg-red-500 hover:bg-red-600" },
       ];
       case "OVERDUE": return [
+        { status: "INITIATED", label: "Initiate Payment", color: "bg-blue-500 hover:bg-blue-600" },
         { status: "PAID", label: "Mark Paid", color: "bg-green-500 hover:bg-green-600" },
       ];
       case "PAID": return [];
