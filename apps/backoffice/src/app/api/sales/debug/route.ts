@@ -69,14 +69,34 @@ export async function GET() {
           const { items, ...rest } = t;
           return { ...rest, itemCount: items?.length ?? 0 };
         }),
-        // Also find a takeaway sample if any
+        // Search ALL fields of every transaction for "take" to find takeaway marker
+        takeawaySearch: (() => {
+          const results: { refId: string; matchedField: string; matchedValue: string }[] = [];
+          for (const t of txns) {
+            for (const [key, val] of Object.entries(t)) {
+              if (key === "items") continue;
+              const str = typeof val === "string" ? val : Array.isArray(val) ? JSON.stringify(val) : "";
+              if (/take/i.test(str)) {
+                results.push({ refId: t.refId, matchedField: key, matchedValue: str.slice(0, 200) });
+              }
+            }
+            if (results.length >= 10) break;
+          }
+          return results.length > 0 ? results : "No transactions with 'take' found in any field";
+        })(),
+        // Show ALL unique field names across transactions
+        allFieldNames: [...new Set(txns.flatMap((t) => Object.keys(t)))].sort(),
+        // Find a takeaway sample — dump ALL its fields
         takeawaySample: (() => {
-          const ta = txns.find((t) =>
-            (t.channel && /take/i.test(t.channel)) ||
-            (t.remarks && /take/i.test(t.remarks)) ||
-            (t.orderType && /take/i.test(t.orderType)) ||
-            (t.tags && t.tags.some((tag: string) => /take/i.test(tag)))
-          );
+          const ta = txns.find((t) => {
+            // Search every string field for takeaway hints
+            for (const [key, val] of Object.entries(t)) {
+              if (key === "items") continue;
+              const str = typeof val === "string" ? val : Array.isArray(val) ? JSON.stringify(val) : "";
+              if (/take|tapau|dabao|bungkus/i.test(str)) return true;
+            }
+            return false;
+          });
           if (!ta) return null;
           const { items, ...rest } = ta;
           return { ...rest, itemCount: items?.length ?? 0 };
