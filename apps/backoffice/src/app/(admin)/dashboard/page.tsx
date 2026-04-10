@@ -34,6 +34,8 @@ type KpiData = {
   new_members: number; returning_members: number; returning_sales: number;
 };
 
+type ShiftKpi = { shift: string; data: KpiData } | null;
+
 type OpsPerformance = {
   summary: { totalChecklists: number; completedChecklists: number; completionRate: number; photoRate: number };
 };
@@ -49,14 +51,23 @@ export default function DashboardPage() {
   const { data: invDash } = useFetch<InventoryDashboard>("/api/inventory/dashboard");
   const { data: invStats } = useFetch<InventoryStats>("/api/inventory/admin/stats");
   const [kpi, setKpi] = useState<KpiData | null>(null);
+  const [kpiAM, setKpiAM] = useState<KpiData | null>(null);
+  const [kpiPM, setKpiPM] = useState<KpiData | null>(null);
   const [pickupStats, setPickupStats] = useState<PickupStats | null>(null);
   const { data: ops } = useFetch<OpsPerformance>("/api/ops/performance?from=" + new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0] + "&to=" + new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
-    fetch("/api/loyalty/dashboard/kpi?brand_id=brand-celsius&period=daily", { credentials: "include" })
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d) setKpi(d); })
-      .catch(() => {});
+    const base = "/api/loyalty/dashboard/kpi?brand_id=brand-celsius&period=daily";
+    // Fetch all three: total, AM, PM
+    Promise.all([
+      fetch(base, { credentials: "include" }).then((r) => r.ok ? r.json() : null),
+      fetch(`${base}&shift=morning`, { credentials: "include" }).then((r) => r.ok ? r.json() : null),
+      fetch(`${base}&shift=evening`, { credentials: "include" }).then((r) => r.ok ? r.json() : null),
+    ]).then(([all, am, pm]) => {
+      if (all) setKpi(all);
+      if (am) setKpiAM(am);
+      if (pm) setKpiPM(pm);
+    }).catch(() => {});
     fetch("/api/pickup/analytics/summary", { credentials: "include" })
       .then((r) => r.ok ? r.json() : null)
       .then((d) => { if (d) setPickupStats(d); })
@@ -132,19 +143,39 @@ export default function DashboardPage() {
               </h2>
               <Link href="/loyalty/members" className="text-xs text-terracotta hover:underline">View →</Link>
             </div>
+            {/* AM / PM Snapshot */}
             <div className="grid grid-cols-2 gap-3 mb-3">
-              <div className="rounded-lg bg-gray-50 p-3">
-                <div className="flex items-center gap-1.5 mb-1"><Repeat className="h-3.5 w-3.5 text-emerald-500" /><span className="text-[10px] text-gray-500">Returning Rate</span></div>
+              {/* AM Shift */}
+              <div className="rounded-lg bg-amber-50/60 border border-amber-100 p-3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-[10px] font-bold text-amber-600 bg-amber-100 rounded px-1.5 py-0.5">AM</span>
+                  <span className="text-[10px] text-gray-400">8am – 3:30pm</span>
+                </div>
                 <p className="text-xl font-bold text-gray-900">
-                  {kpi.collection_rate.loyalty_claims > 0
-                    ? `${Math.round((kpi.returning_members / kpi.collection_rate.loyalty_claims) * 100)}%`
+                  {kpiAM && kpiAM.collection_rate.loyalty_claims > 0
+                    ? `${Math.round((kpiAM.returning_members / kpiAM.collection_rate.loyalty_claims) * 100)}%`
                     : "—"}
                 </p>
-                <p className="text-[10px] text-gray-400">{kpi.returning_members} of {kpi.collection_rate.loyalty_claims} members</p>
+                <p className="text-[10px] text-gray-400">
+                  {kpiAM ? `${kpiAM.returning_members} returning · ${kpiAM.collection_rate.pos_orders} orders` : "Loading..."}
+                </p>
+                {kpiAM && <p className="text-[10px] font-medium text-green-600 mt-0.5">RM {kpiAM.returning_sales.toLocaleString()}</p>}
               </div>
-              <div className="rounded-lg bg-gray-50 p-3">
-                <div className="flex items-center gap-1.5 mb-1"><DollarSign className="h-3.5 w-3.5 text-green-500" /><span className="text-[10px] text-gray-500">Returning Sales</span></div>
-                <p className="text-xl font-bold text-gray-900">RM {kpi.returning_sales.toLocaleString()}</p>
+              {/* PM Shift */}
+              <div className="rounded-lg bg-indigo-50/60 border border-indigo-100 p-3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-[10px] font-bold text-indigo-600 bg-indigo-100 rounded px-1.5 py-0.5">PM</span>
+                  <span className="text-[10px] text-gray-400">3:30pm – 11pm</span>
+                </div>
+                <p className="text-xl font-bold text-gray-900">
+                  {kpiPM && kpiPM.collection_rate.loyalty_claims > 0
+                    ? `${Math.round((kpiPM.returning_members / kpiPM.collection_rate.loyalty_claims) * 100)}%`
+                    : "—"}
+                </p>
+                <p className="text-[10px] text-gray-400">
+                  {kpiPM ? `${kpiPM.returning_members} returning · ${kpiPM.collection_rate.pos_orders} orders` : "Loading..."}
+                </p>
+                {kpiPM && <p className="text-[10px] font-medium text-green-600 mt-0.5">RM {kpiPM.returning_sales.toLocaleString()}</p>}
               </div>
             </div>
             {kpi.collection_rate.outlets.length > 0 && kpi.collection_rate.pos_orders > 0 && (
