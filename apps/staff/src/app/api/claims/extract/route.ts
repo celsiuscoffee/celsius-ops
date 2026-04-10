@@ -3,11 +3,20 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+type ExtractedItem = {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  uom: string | null;
+};
+
 type ExtractedReceipt = {
   invoiceNumber: string | null;
   issueDate: string | null; // YYYY-MM-DD
   amount: number | null;
   supplierName: string | null;
+  items: ExtractedItem[];
   confidence: "high" | "medium" | "low";
   notes: string | null;
 };
@@ -76,7 +85,8 @@ Return a JSON object with these fields:
 - issueDate: purchase/issue date in YYYY-MM-DD format (string or null)
 - amount: total amount in MYR as a number (number or null). Only the final total, not subtotals.
 - supplierName: the vendor/supplier name (string or null)
-- notes: any relevant notes like items purchased, payment method (string or null)
+- items: array of line items found on the receipt. Each item: { name: string, quantity: number, unitPrice: number, totalPrice: number, uom: string|null }. Extract ALL products/items listed. uom = unit of measure (e.g. "pcs", "kg", "pack", "carton", "box"). If no line items found, return empty array [].
+- notes: any relevant notes like payment method (string or null)
 - confidence: "high" if all key fields are clearly readable, "medium" if some fields are ambiguous, "low" if document is unclear
 
 IMPORTANT: Return ONLY the JSON object, no markdown, no explanation. If a field is not found, use null.`,
@@ -84,7 +94,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown, no explanation. If a field 
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
+      max_tokens: 2000,
       messages: [{ role: "user", content: contentBlocks }],
     });
 
@@ -104,6 +114,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown, no explanation. If a field 
         issueDate: null,
         amount: null,
         supplierName: null,
+        items: [],
         confidence: "low",
         notes: text,
       };

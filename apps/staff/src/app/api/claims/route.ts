@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
       purchaseDate,
       photos,
       notes,
+      items,
     } = body as {
       outletId: string;
       supplierId?: string;
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
       purchaseDate: string;
       photos: string[];
       notes?: string;
+      items?: { productId: string; quantity: number; unitPrice: number }[];
     };
 
     if (!outletId || !claimedById || !amount || !photos?.length) {
@@ -112,6 +114,16 @@ export async function POST(req: NextRequest) {
           notes: fullNotes,
           claimedById,
           createdById: session.id,
+          ...(items?.length ? {
+            items: {
+              create: items.map((i) => ({
+                productId: i.productId,
+                quantity: i.quantity,
+                unitPrice: i.unitPrice,
+                totalPrice: i.quantity * i.unitPrice,
+              })),
+            },
+          } : {}),
         },
         select: { id: true, orderNumber: true },
       });
