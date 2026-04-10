@@ -207,6 +207,7 @@ model ProductPackage {
   id               String  @id @default(uuid())
   productId        String
   product          Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku              String?
   packageName      String
   packageLabel     String
   conversionFactor Decimal

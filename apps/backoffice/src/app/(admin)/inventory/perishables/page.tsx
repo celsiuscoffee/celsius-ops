@@ -24,11 +24,29 @@ type Product = {
   shelfLifeDays: number | null;
   description: string;
   checkFrequency: string;
-  packages: { name: string; uom: string; label: string; conversion: number }[];
+  packages: { id: string; sku: string; name: string; uom: string; label: string; conversion: number; isDefault: boolean }[];
   suppliers: { name: string; price: number; uom: string }[];
 };
 
 type GroupOption = { id: string; name: string };
+type SupplierOption = { id: string; name: string };
+
+type PackageEntry = {
+  id?: string;
+  sku: string;
+  packageName: string;
+  packageLabel: string;
+  conversionFactor: string;
+  isDefault: boolean;
+};
+
+type SupplierEntry = {
+  supplierId?: string;
+  supplierName?: string;
+  phone?: string;
+  price: number;
+  productPackageId?: string;
+};
 
 type ProductForm = {
   name: string;
@@ -39,15 +57,26 @@ type ProductForm = {
   shelfLifeDays: string;
   checkFrequency: string;
   description: string;
+  packages: PackageEntry[];
+  suppliers: SupplierEntry[];
 };
 
 const STORAGE_AREAS = ["FRIDGE", "FREEZER", "DRY_STORE", "COUNTER", "BAR"];
 
-const emptyForm: ProductForm = { name: "", sku: "", groupId: "", baseUom: "", storageArea: "", shelfLifeDays: "", checkFrequency: "MONTHLY", description: "" };
+const PACKAGE_PRESETS = [
+  { name: "Carton", label: "Carton" },
+  { name: "Bottle", label: "Bottle" },
+  { name: "Pack", label: "Pack" },
+  { name: "Bag", label: "Bag" },
+  { name: "Box", label: "Box" },
+  { name: "Can", label: "Can" },
+  { name: "Tub", label: "Tub" },
+  { name: "Drum", label: "Drum" },
+  { name: "Roll", label: "Roll" },
+  { name: "Sleeve", label: "Sleeve" },
+];
 
-// Inline supplier types
-type SupplierOption = { id: string; name: string };
-type SupplierEntry = { supplierId?: string; supplierName?: string; phone?: string; price: number };
+const emptyForm: ProductForm = { name: "", sku: "", groupId: "", baseUom: "", storageArea: "", shelfLifeDays: "", checkFrequency: "MONTHLY", description: "", packages: [], suppliers: [] };
 
 export default function PerishablesPage() {
   const { data: products = [], isLoading: loading, mutate: reloadProducts } = useFetch<Product[]>("/api/inventory/products?itemType=PERISHABLE");
@@ -61,8 +90,12 @@ export default function PerishablesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Suppliers inline
-  const [suppliers, setSuppliers] = useState<SupplierEntry[]>([]);
+  // Inline supplier form state
+  const [selectedSupplierId, setSelectedSupplierId] = useState("");
+  const [supplierPrice, setSupplierPrice] = useState("");
+  const [showNewSupplier, setShowNewSupplier] = useState(false);
+  const [newSupplierName, setNewSupplierName] = useState("");
+  const [newSupplierPhone, setNewSupplierPhone] = useState("");
 
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -90,7 +123,15 @@ export default function PerishablesPage() {
           description: form.description || null,
           checkFrequency: form.checkFrequency,
           itemType: "PERISHABLE",
-          suppliers: suppliers.filter((s) => s.supplierId || s.supplierName),
+          packages: form.packages.filter((p) => p.packageName && p.conversionFactor).map((p) => ({
+            id: p.id || undefined,
+            sku: p.sku || undefined,
+            packageName: p.packageName,
+            packageLabel: p.packageLabel || p.packageName,
+            conversionFactor: parseFloat(p.conversionFactor) || 1,
+            isDefault: p.isDefault,
+          })),
+          suppliers: form.suppliers,
         }),
       });
       if (!res.ok) { alert("Failed to save perishable. Please try again."); return; }
@@ -119,7 +160,7 @@ export default function PerishablesPage() {
   const openAdd = () => {
     setForm(emptyForm);
     setEditingId(null);
-    setSuppliers([]);
+    resetSupplierForm();
     setDialogOpen(true);
   };
 
@@ -133,14 +174,69 @@ export default function PerishablesPage() {
       shelfLifeDays: product.shelfLifeDays?.toString() || "",
       checkFrequency: product.checkFrequency || "MONTHLY",
       description: product.description || "",
+      packages: product.packages.map((pkg) => ({
+        id: pkg.id,
+        sku: pkg.sku || "",
+        packageName: pkg.name,
+        packageLabel: pkg.label,
+        conversionFactor: pkg.conversion.toString(),
+        isDefault: pkg.isDefault,
+      })),
+      suppliers: [],
     });
     setEditingId(product.id);
-    setSuppliers(product.suppliers.map((s) => ({ supplierName: s.name, price: s.price })));
+    resetSupplierForm();
     setDialogOpen(true);
   };
 
-  const updateField = (key: keyof ProductForm, value: string) => {
+  const updateField = (key: keyof ProductForm, value: string | PackageEntry[] | SupplierEntry[]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const resetSupplierForm = () => {
+    setSelectedSupplierId("");
+    setSupplierPrice("");
+    setShowNewSupplier(false);
+    setNewSupplierName("");
+    setNewSupplierPhone("");
+  };
+
+  const addExistingSupplier = () => {
+    if (!selectedSupplierId || !supplierPrice) return;
+    const supplier = supplierOptions.find((s) => s.id === selectedSupplierId);
+    if (!supplier) return;
+    const pkgSelect = document.getElementById("perishable-supplier-pkg-select") as HTMLSelectElement | null;
+    const pkgId = pkgSelect?.value || undefined;
+    setForm((prev) => ({
+      ...prev,
+      suppliers: [...prev.suppliers, {
+        supplierId: selectedSupplierId,
+        price: parseFloat(supplierPrice),
+        productPackageId: pkgId && !pkgId.startsWith("new-") ? pkgId : undefined,
+      }],
+    }));
+    setSelectedSupplierId("");
+    setSupplierPrice("");
+    if (pkgSelect) pkgSelect.value = "";
+  };
+
+  const addNewSupplier = () => {
+    if (!newSupplierName || !supplierPrice) return;
+    setForm((prev) => ({
+      ...prev,
+      suppliers: [...prev.suppliers, { supplierName: newSupplierName, phone: newSupplierPhone || undefined, price: parseFloat(supplierPrice) }],
+    }));
+    setNewSupplierName("");
+    setNewSupplierPhone("");
+    setSupplierPrice("");
+    setShowNewSupplier(false);
+  };
+
+  const removeSupplierEntry = (index: number) => {
+    setForm((prev) => ({
+      ...prev,
+      suppliers: prev.suppliers.filter((_, i) => i !== index),
+    }));
   };
 
   // Bulk selection helpers
@@ -212,19 +308,6 @@ export default function PerishablesPage() {
     } finally {
       setBulkSaving(false);
     }
-  };
-
-  // Supplier helpers
-  const addSupplierRow = () => {
-    setSuppliers((prev) => [...prev, { supplierId: "", price: 0 }]);
-  };
-
-  const updateSupplier = (idx: number, field: string, value: string | number) => {
-    setSuppliers((prev) => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
-  };
-
-  const removeSupplier = (idx: number) => {
-    setSuppliers((prev) => prev.filter((_, i) => i !== idx));
   };
 
   return (
@@ -362,6 +445,7 @@ export default function PerishablesPage() {
                     <div className="mt-1 space-y-0.5">
                       {product.packages.map((pkg) => (
                         <p key={pkg.name} className="text-xs text-gray-500">
+                          {pkg.sku && <code className="mr-1 rounded bg-gray-100 px-1 text-[10px]">{pkg.sku}</code>}
                           1 {pkg.name} = {pkg.conversion > 1 ? `${pkg.conversion.toLocaleString()} ${product.baseUom}` : pkg.label}
                         </p>
                       ))}
@@ -499,151 +583,364 @@ export default function PerishablesPage() {
       </Dialog>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditingId(null); setForm(emptyForm); setSuppliers([]); } }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditingId(null); setForm(emptyForm); resetSupplierForm(); } }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Perishable" : "Add Perishable"}</DialogTitle>
+            <DialogTitle className="text-lg">{editingId ? "Edit Perishable" : "Add Perishable"}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Perishable Name</label>
-                <Input
-                  className="mt-1"
-                  placeholder="e.g. Paper Cup 12oz"
-                  value={form.name}
-                  onChange={(e) => updateField("name", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">SKU Code</label>
-                <Input
-                  className="mt-1"
-                  placeholder="e.g. PER001"
-                  value={form.sku}
-                  onChange={(e) => updateField("sku", e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Group</label>
-                <select
-                  className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-                  value={form.groupId}
-                  onChange={(e) => updateField("groupId", e.target.value)}
-                >
-                  <option value="">Select...</option>
-                  {groupOptions.map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Base UOM</label>
-                <select
-                  className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-                  value={form.baseUom}
-                  onChange={(e) => updateField("baseUom", e.target.value)}
-                >
-                  <option value="">Select...</option>
-                  <option value="ml">Milliliter (ml)</option>
-                  <option value="g">Gram (g)</option>
-                  <option value="pcs">Piece (pcs)</option>
-                  <option value="roll">Roll (roll)</option>
-                  <option value="pack">Pack (pack)</option>
-                  <option value="box">Box (box)</option>
-                  <option value="bottle">Bottle (bottle)</option>
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Storage Area</label>
-                <div className="relative mt-1">
-                  <input
-                    list="storage-area-options"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-                    placeholder="Type or select..."
-                    value={form.storageArea}
-                    onChange={(e) => updateField("storageArea", e.target.value)}
+          <div className="grid gap-5 py-3">
+            {/* Basic Info */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50/30 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Basic Info</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Perishable Name</label>
+                  <Input
+                    className="mt-1.5 h-10"
+                    placeholder="e.g. Paper Cup 12oz"
+                    value={form.name}
+                    onChange={(e) => updateField("name", e.target.value)}
                   />
-                  <datalist id="storage-area-options">
-                    {[...new Set([
-                      "FRIDGE", "FREEZER", "DRY_STORE", "COUNTER", "BAR",
-                      ...products.map((p) => p.storageArea).filter(Boolean),
-                    ])].sort().map((area) => (
-                      <option key={area} value={area}>{area.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}</option>
-                    ))}
-                  </datalist>
                 </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Shelf Life (days)</label>
-                <Input
-                  className="mt-1"
-                  type="number"
-                  placeholder="Leave blank if N/A"
-                  value={form.shelfLifeDays}
-                  onChange={(e) => updateField("shelfLifeDays", e.target.value)}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">Stock Check Frequency</label>
-              <select
-                className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-                value={form.checkFrequency}
-                onChange={(e) => updateField("checkFrequency", e.target.value)}
-              >
-                <option value="DAILY">Daily</option>
-                <option value="WEEKLY">Weekly</option>
-                <option value="MONTHLY">Monthly</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">Description</label>
-              <Input
-                className="mt-1"
-                placeholder="Optional notes..."
-                value={form.description}
-                onChange={(e) => updateField("description", e.target.value)}
-              />
-            </div>
-
-            {/* Inline Suppliers */}
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-gray-700">Suppliers</label>
-                <button type="button" onClick={addSupplierRow} className="text-xs text-terracotta hover:underline">+ Add supplier</button>
-              </div>
-              {suppliers.map((s, idx) => (
-                <div key={idx} className="mt-2 flex items-center gap-2">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">SKU Code</label>
+                  <Input
+                    className="mt-1.5 h-10"
+                    placeholder="e.g. PER001"
+                    value={form.sku}
+                    onChange={(e) => updateField("sku", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Group</label>
                   <select
-                    className="flex-1 rounded-md border border-gray-200 px-2 py-1.5 text-sm"
-                    value={s.supplierId || ""}
-                    onChange={(e) => updateSupplier(idx, "supplierId", e.target.value)}
+                    className="mt-1.5 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                    value={form.groupId}
+                    onChange={(e) => updateField("groupId", e.target.value)}
                   >
-                    <option value="">Select supplier...</option>
-                    {supplierOptions.map((opt) => (
-                      <option key={opt.id} value={opt.id}>{opt.name}</option>
+                    <option value="">Select...</option>
+                    {groupOptions.map((g) => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
                     ))}
                   </select>
-                  <Input
-                    type="number"
-                    placeholder="Price"
-                    className="w-24"
-                    value={s.price || ""}
-                    onChange={(e) => updateSupplier(idx, "price", parseFloat(e.target.value) || 0)}
-                  />
-                  <button type="button" onClick={() => removeSupplier(idx)} className="text-red-400 hover:text-red-600">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
                 </div>
-              ))}
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Base UOM</label>
+                  <select
+                    className="mt-1.5 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                    value={form.baseUom}
+                    onChange={(e) => updateField("baseUom", e.target.value)}
+                  >
+                    <option value="">Select...</option>
+                    <option value="ml">Milliliter (ml)</option>
+                    <option value="g">Gram (g)</option>
+                    <option value="pcs">Piece (pcs)</option>
+                    <option value="roll">Roll (roll)</option>
+                    <option value="pack">Pack (pack)</option>
+                    <option value="box">Box (box)</option>
+                    <option value="bottle">Bottle (bottle)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Description</label>
+                  <Input
+                    className="mt-1.5 h-10"
+                    placeholder="Optional notes..."
+                    value={form.description}
+                    onChange={(e) => updateField("description", e.target.value)}
+                  />
+                </div>
+              </div>
             </div>
 
-            <Button onClick={handleSubmit} disabled={saving || !form.name || !form.sku || !form.groupId} className="w-full bg-terracotta hover:bg-terracotta-dark disabled:opacity-50">
+            {/* Storage & Tracking */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50/30 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Storage &amp; Tracking</p>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Storage Area</label>
+                  <div className="relative mt-1.5">
+                    <input
+                      list="perishable-storage-area-options"
+                      className="h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                      placeholder="Type or select..."
+                      value={form.storageArea}
+                      onChange={(e) => updateField("storageArea", e.target.value)}
+                    />
+                    <datalist id="perishable-storage-area-options">
+                      {[...new Set([
+                        "FRIDGE", "FREEZER", "DRY_STORE", "COUNTER", "BAR",
+                        ...products.map((p) => p.storageArea).filter(Boolean),
+                      ])].sort().map((area) => (
+                        <option key={area} value={area}>{area.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}</option>
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Shelf Life (days)</label>
+                  <Input
+                    className="mt-1.5 h-10"
+                    type="number"
+                    placeholder="e.g. 30"
+                    value={form.shelfLifeDays}
+                    onChange={(e) => updateField("shelfLifeDays", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Check Frequency</label>
+                  <select
+                    className="mt-1.5 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                    value={form.checkFrequency}
+                    onChange={(e) => updateField("checkFrequency", e.target.value)}
+                  >
+                    <option value="DAILY">Daily</option>
+                    <option value="WEEKLY">Weekly</option>
+                    <option value="MONTHLY">Monthly</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Packages */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50/30 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Packages</p>
+              <p className="mb-3 text-xs text-gray-400">
+                Define how this item is packaged when purchased. E.g. 1 Carton = 50 {form.baseUom || "units"}
+              </p>
+
+              {/* Existing package entries */}
+              {form.packages.length > 0 && (
+                <div className="mb-3 space-y-2">
+                  {form.packages.map((pkg, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5">
+                      <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">{pkg.sku || "—"}</code>
+                      <span className="text-sm font-medium text-gray-700">{pkg.packageName}</span>
+                      <span className="text-xs text-gray-400">=</span>
+                      <span className="text-sm text-gray-600">{Number(pkg.conversionFactor).toLocaleString()} {form.baseUom || "units"}</span>
+                      {pkg.isDefault && <Badge variant="outline" className="text-xs border-blue-200 bg-blue-50 text-blue-600">Default</Badge>}
+                      <div className="flex-1" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => ({ ...prev, packages: prev.packages.filter((_, idx) => idx !== i) }));
+                        }}
+                        className="text-gray-400 hover:text-red-500"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add new package row */}
+              <div className="flex items-end gap-3">
+                <div className="w-28">
+                  <label className="text-xs text-gray-500">SKU</label>
+                  <Input
+                    id="perishable-new-pkg-sku"
+                    placeholder="e.g. PER001-CTN"
+                    className="mt-1 h-10"
+                  />
+                </div>
+                <div className="w-36">
+                  <label className="text-xs text-gray-500">Package Type</label>
+                  <select
+                    id="perishable-new-pkg-name"
+                    className="mt-1 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Select...</option>
+                    {PACKAGE_PRESETS.filter((p) => !form.packages.some((ep) => ep.packageName === p.name)).map((p) => (
+                      <option key={p.name} value={p.name}>{p.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-32">
+                  <label className="text-xs text-gray-500">= {form.baseUom || "units"}</label>
+                  <Input
+                    id="perishable-new-pkg-conv"
+                    type="number"
+                    placeholder="e.g. 50"
+                    className="mt-1 h-10"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10"
+                  onClick={() => {
+                    const skuEl = document.getElementById("perishable-new-pkg-sku") as HTMLInputElement;
+                    const nameEl = document.getElementById("perishable-new-pkg-name") as HTMLSelectElement;
+                    const convEl = document.getElementById("perishable-new-pkg-conv") as HTMLInputElement;
+                    if (!nameEl.value || !convEl.value) return;
+                    setForm((prev) => ({
+                      ...prev,
+                      packages: [...prev.packages, {
+                        sku: skuEl.value || "",
+                        packageName: nameEl.value,
+                        packageLabel: nameEl.value,
+                        conversionFactor: convEl.value,
+                        isDefault: prev.packages.length === 0,
+                      }],
+                    }));
+                    skuEl.value = "";
+                    nameEl.value = "";
+                    convEl.value = "";
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+
+            {/* Suppliers & Pricing */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50/30 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Suppliers &amp; Pricing</p>
+
+              {/* Existing supplier entries */}
+              {form.suppliers.length > 0 && (
+                <div className="mb-3 space-y-2">
+                  {form.suppliers.map((entry, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5">
+                      <span className="flex-1 text-sm font-medium text-gray-700">
+                        {entry.supplierId
+                          ? supplierOptions.find((s) => s.id === entry.supplierId)?.name ?? "Supplier"
+                          : entry.supplierName ?? "New Supplier"}
+                        {entry.productPackageId && (
+                          <span className="ml-1.5 text-xs text-gray-400">
+                            ({form.packages.find((p) => p.id === entry.productPackageId)?.packageName || "Package"})
+                          </span>
+                        )}
+                      </span>
+                      <span className="rounded-full bg-green-50 px-3 py-0.5 text-sm font-medium text-green-700">RM{entry.price.toFixed(2)}</span>
+                      <button onClick={() => removeSupplierEntry(i)} className="text-gray-400 hover:text-red-500">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add existing supplier */}
+              {!showNewSupplier && (
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="text-xs text-gray-500">Supplier</label>
+                    <select
+                      className="mt-1 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                      value={selectedSupplierId}
+                      onChange={(e) => setSelectedSupplierId(e.target.value)}
+                    >
+                      <option value="">Select supplier...</option>
+                      {supplierOptions.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {form.packages.length > 0 && (
+                    <div className="w-36">
+                      <label className="text-xs text-gray-500">Package</label>
+                      <select
+                        id="perishable-supplier-pkg-select"
+                        className="mt-1 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                        defaultValue=""
+                      >
+                        <option value="">Base ({form.baseUom})</option>
+                        {form.packages.map((pkg, i) => (
+                          <option key={i} value={pkg.id || `new-${i}`}>{pkg.packageName}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div className="w-32">
+                    <label className="text-xs text-gray-500">Price (RM)</label>
+                    <Input
+                      type="number"
+                      placeholder="0.00"
+                      value={supplierPrice}
+                      onChange={(e) => setSupplierPrice(e.target.value)}
+                      className="mt-1 h-10"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10"
+                    onClick={addExistingSupplier}
+                    disabled={!selectedSupplierId || !supplierPrice}
+                  >
+                    Add
+                  </Button>
+                </div>
+              )}
+
+              {/* New supplier toggle */}
+              {!showNewSupplier ? (
+                <button
+                  type="button"
+                  onClick={() => setShowNewSupplier(true)}
+                  className="mt-3 text-sm text-terracotta hover:underline"
+                >
+                  + Create New Supplier
+                </button>
+              ) : (
+                <div className="mt-3 space-y-3 rounded-lg border border-dashed border-gray-300 bg-white p-4">
+                  <p className="text-sm font-medium text-gray-700">New Supplier</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500">Supplier Name</label>
+                      <Input
+                        placeholder="e.g. Jinka Supply"
+                        value={newSupplierName}
+                        onChange={(e) => setNewSupplierName(e.target.value)}
+                        className="mt-1 h-10"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Phone (optional)</label>
+                      <Input
+                        placeholder="e.g. 012-3456789"
+                        value={newSupplierPhone}
+                        onChange={(e) => setNewSupplierPhone(e.target.value)}
+                        className="mt-1 h-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-end gap-3">
+                    <div className="w-32">
+                      <label className="text-xs text-gray-500">Price (RM)</label>
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        value={supplierPrice}
+                        onChange={(e) => setSupplierPrice(e.target.value)}
+                        className="mt-1 h-10"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10"
+                      onClick={addNewSupplier}
+                      disabled={!newSupplierName || !supplierPrice}
+                    >
+                      Add
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewSupplier(false); setNewSupplierName(""); setNewSupplierPhone(""); }}
+                      className="text-sm text-gray-400 hover:text-gray-600"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Button onClick={handleSubmit} disabled={saving || !form.name || !form.sku || !form.groupId} className="h-11 w-full bg-terracotta text-base hover:bg-terracotta-dark disabled:opacity-50">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
               {editingId ? "Save Changes" : "Add Perishable"}
             </Button>

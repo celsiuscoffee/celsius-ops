@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
       packages: {
         select: {
           id: true,
+          sku: true,
           packageName: true,
           packageLabel: true,
           conversionFactor: true,
@@ -58,6 +59,7 @@ export async function GET(req: NextRequest) {
     isActive: p.isActive,
     packages: p.packages.map((pkg) => ({
       id: pkg.id,
+      sku: pkg.sku ?? "",
       name: pkg.packageName,
       label: pkg.packageLabel,
       uom: pkg.packageLabel ?? pkg.packageName,
@@ -93,13 +95,33 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // Handle packages array
+  const { packages, suppliers: suppliersInput } = body as {
+    packages?: { sku?: string; packageName: string; packageLabel: string; conversionFactor: number; isDefault?: boolean }[];
+    suppliers?: { supplierId?: string; supplierName?: string; phone?: string; price: number; productPackageId?: string }[];
+  };
+
+  if (packages && Array.isArray(packages)) {
+    for (const pkg of packages) {
+      await prisma.productPackage.create({
+        data: {
+          productId: product.id,
+          sku: pkg.sku || null,
+          packageName: pkg.packageName,
+          packageLabel: pkg.packageLabel,
+          conversionFactor: pkg.conversionFactor,
+          isDefault: pkg.isDefault ?? false,
+        },
+      });
+    }
+  }
+
   // Handle suppliers array
-  if (suppliers && Array.isArray(suppliers)) {
-    for (const entry of suppliers as { supplierId?: string; supplierName?: string; phone?: string; price: number }[]) {
+  if (suppliersInput && Array.isArray(suppliersInput)) {
+    for (const entry of suppliersInput) {
       let supplierId = entry.supplierId;
 
       if (!supplierId && entry.supplierName) {
-        // Create new supplier
         const count = await prisma.supplier.count();
         const supplierCode = `SUP-${String(count + 1).padStart(4, "0")}`;
         const newSupplier = await prisma.supplier.create({
@@ -118,6 +140,7 @@ export async function POST(req: NextRequest) {
           data: {
             supplierId,
             productId: product.id,
+            productPackageId: entry.productPackageId || null,
             price: entry.price,
           },
         });
