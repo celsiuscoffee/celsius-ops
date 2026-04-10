@@ -20,7 +20,8 @@ import {
   Package,
 } from "lucide-react";
 
-type Supplier = { id: string; name: string };
+type SupplierProduct = { id: string; name: string; sku: string; uom: string };
+type Supplier = { id: string; name: string; products: SupplierProduct[] };
 type ProductOption = {
   id: string;
   name: string;
@@ -198,10 +199,15 @@ export default function ClaimsPage() {
   const triggerExtraction = async (urls: string[]) => {
     setExtracting(true);
     try {
+      // Send all product names to AI for better matching
+      const allProductNames = products.map((p) => p.name);
       const res = await fetch("/api/claims/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls }),
+        body: JSON.stringify({
+          urls,
+          productNames: allProductNames,
+        }),
       });
 
       if (res.ok) {
@@ -538,24 +544,32 @@ export default function ClaimsPage() {
               </label>
 
               {/* Product picker */}
-              {showProductPicker && (
-                <div className="mb-2 rounded-lg border border-gray-200 bg-white p-2">
-                  <Input
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    placeholder="Search products..."
-                    className="mb-2 text-xs"
-                    autoFocus
-                  />
-                  <div className="max-h-40 overflow-y-auto space-y-0.5">
-                    {products
-                      .filter((p) =>
-                        !productSearch ||
-                        p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-                        p.sku.toLowerCase().includes(productSearch.toLowerCase())
-                      )
-                      .slice(0, 20)
-                      .map((p) => (
+              {showProductPicker && (() => {
+                // Show supplier products first, then all others
+                const selectedSupplier = suppliers.find((s) => s.id === supplierId);
+                const supplierProductIds = new Set(selectedSupplier?.products.map((p) => p.id) ?? []);
+                const sortedProducts = supplierId
+                  ? [
+                      ...products.filter((p) => supplierProductIds.has(p.id)),
+                      ...products.filter((p) => !supplierProductIds.has(p.id)),
+                    ]
+                  : products;
+                const filtered = sortedProducts.filter((p) =>
+                  !productSearch ||
+                  p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                  p.sku.toLowerCase().includes(productSearch.toLowerCase())
+                );
+                return (
+                  <div className="mb-2 rounded-lg border border-gray-200 bg-white p-2">
+                    <Input
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder="Search products..."
+                      className="mb-2 text-xs"
+                      autoFocus
+                    />
+                    <div className="max-h-40 overflow-y-auto space-y-0.5">
+                      {filtered.slice(0, 20).map((p) => (
                         <button
                           key={p.id}
                           type="button"
@@ -579,20 +593,22 @@ export default function ClaimsPage() {
                           }}
                           className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs hover:bg-gray-50"
                         >
-                          <span className="font-medium text-gray-900">{p.name}</span>
+                          <span className="font-medium text-gray-900">
+                            {p.name}
+                            {supplierProductIds.has(p.id) && (
+                              <span className="ml-1.5 text-[9px] text-green-600">● supplier</span>
+                            )}
+                          </span>
                           <span className="text-gray-400">{p.sku}</span>
                         </button>
                       ))}
-                    {products.filter((p) =>
-                      !productSearch ||
-                      p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-                      p.sku.toLowerCase().includes(productSearch.toLowerCase())
-                    ).length === 0 && (
-                      <p className="px-2 py-2 text-center text-xs text-gray-400">No products found</p>
-                    )}
+                      {filtered.length === 0 && (
+                        <p className="px-2 py-2 text-center text-xs text-gray-400">No products found</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Cart items list */}
               {cartItems.length > 0 && (

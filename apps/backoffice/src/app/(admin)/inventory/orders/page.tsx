@@ -170,7 +170,11 @@ export default function OrdersPage() {
       const res = await fetch("/api/inventory/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls, context: supplierName ? `Supplier: ${supplierName}` : undefined }),
+        body: JSON.stringify({
+          urls,
+          context: supplierName ? `Supplier: ${supplierName}` : undefined,
+          productNames: editItems.map((i) => i.product),
+        }),
       });
       if (!res.ok) {
         console.warn("[AI Extract] Failed:", res.status);

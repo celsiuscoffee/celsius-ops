@@ -8,9 +8,31 @@ export async function GET() {
 
   const suppliers = await prisma.supplier.findMany({
     where: { status: "ACTIVE" },
-    select: { id: true, name: true },
+    select: {
+      id: true,
+      name: true,
+      supplierProducts: {
+        where: { isActive: true },
+        select: {
+          product: {
+            select: { id: true, name: true, sku: true, baseUom: true },
+          },
+        },
+      },
+    },
     orderBy: { name: "asc" },
   });
 
-  return NextResponse.json(suppliers);
+  const result = suppliers.map((s) => ({
+    id: s.id,
+    name: s.name,
+    products: s.supplierProducts.map((sp) => ({
+      id: sp.product.id,
+      name: sp.product.name,
+      sku: sp.product.sku,
+      uom: sp.product.baseUom,
+    })),
+  }));
+
+  return NextResponse.json(result);
 }

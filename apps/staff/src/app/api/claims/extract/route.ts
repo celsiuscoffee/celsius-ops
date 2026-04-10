@@ -24,7 +24,7 @@ type ExtractedReceipt = {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { urls } = body as { urls: string[] };
+    const { urls, productNames } = body as { urls: string[]; productNames?: string[] };
 
     if (!urls?.length) {
       return NextResponse.json({ error: "No URLs provided" }, { status: 400 });
@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
     contentBlocks.push({
       type: "text",
       text: `Extract receipt/invoice details from the uploaded document(s). This is a staff pay & claim receipt from a Malaysian F&B business.
+${productNames?.length ? `\nKNOWN PRODUCT CATALOG (use these exact names when matching items on the receipt):\n${productNames.join("\n")}\n\nWhen extracting items, match each line item to the closest product name from the catalog above. Use the EXACT catalog name in the "name" field. If no close match exists, use the name as written on the receipt.` : ""}
 
 Return a JSON object with these fields:
 - invoiceNumber: the invoice/receipt number (string or null)
