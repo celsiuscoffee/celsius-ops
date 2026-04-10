@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     select: {
       id: true,
       orderNumber: true,
+      outletId: true,
       status: true,
       totalAmount: true,
       notes: true,
@@ -63,6 +64,7 @@ export async function GET(req: NextRequest) {
   const mapped = orders.map((o) => ({
     id: o.id,
     orderNumber: o.orderNumber,
+    outletId: o.outletId,
     outlet: o.outlet.name,
     outletCode: o.outlet.code,
     supplierId: o.supplier.id,

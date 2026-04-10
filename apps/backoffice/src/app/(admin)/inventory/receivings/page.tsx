@@ -131,17 +131,17 @@ export default function ReceivingsPage() {
           .filter((o: { status: string }) =>
             ["SENT", "AWAITING_DELIVERY", "APPROVED", "PARTIALLY_RECEIVED"].includes(o.status),
           )
-          .map((o: { id: string; orderNumber: string; outlet: string; outletCode: string; supplier: string; supplierPhone: string; items: { id: string; product: string; sku: string; package: string; quantity: number }[] }) => ({
+          .map((o: { id: string; orderNumber: string; outlet: string; outletId: string; outletCode: string; supplierId: string; supplier: string; supplierPhone: string; items: { id: string; productId: string; product: string; sku: string; package: string; quantity: number; productPackageId?: string }[] }) => ({
             id: o.id,
             orderNumber: o.orderNumber,
             outlet: o.outlet,
-            outletId: "", // We'll need this from the full order
+            outletId: o.outletId,
             supplier: o.supplier,
-            supplierId: "",
+            supplierId: o.supplierId,
             items: o.items.map((i) => ({
               ...i,
-              productId: "",
-              productPackageId: null,
+              productId: i.productId,
+              productPackageId: i.productPackageId ?? null,
             })),
           }));
         setPendingOrders(pending);
@@ -186,35 +186,16 @@ export default function ReceivingsPage() {
     if (!selectedOrderId || receiveItems.length === 0) return;
     setSaving(true);
     try {
-      // We need outletId and supplierId - fetch the full order
-      const orderRes = await fetch("/api/inventory/orders");
-      const allOrders = await orderRes.json();
-      const fullOrder = allOrders.find((o: { id: string }) => o.id === selectedOrderId);
-      if (!fullOrder) return;
+      const selectedOrder = pendingOrders.find((o) => o.id === selectedOrderId);
+      if (!selectedOrder) return;
 
-      // We need the actual IDs - fetch from the order API with IDs
-      const orderDetailRes = await fetch(`/api/inventory/orders/${selectedOrderId}`);
-      let outletId = "";
-      let supplierId = "";
+      const outletId = selectedOrder.outletId;
+      const supplierId = selectedOrder.supplierId;
 
-      if (orderDetailRes.ok) {
-        const detail = await orderDetailRes.json();
-        outletId = detail.outletId;
-        supplierId = detail.supplierId;
-      }
-
-      // Fallback: look up outlet and supplier by name
       if (!outletId || !supplierId) {
-        const [outletsRes, suppliersRes] = await Promise.all([
-          fetch("/api/settings/outlets"),
-          fetch("/api/inventory/suppliers/products"),
-        ]);
-        const outletsData = await outletsRes.json();
-        const suppliers = await suppliersRes.json();
-        const outletMatch = outletsData.find((b: { name: string }) => b.name === fullOrder.outlet);
-        const supplier = suppliers.find((s: { name: string }) => s.name === fullOrder.supplier);
-        outletId = outletMatch?.id ?? "";
-        supplierId = supplier?.id ?? "";
+        alert("Missing outlet or supplier ID. Please try again.");
+        setSaving(false);
+        return;
       }
 
       await fetch("/api/inventory/receivings", {

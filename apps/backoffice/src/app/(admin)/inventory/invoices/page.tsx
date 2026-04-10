@@ -68,12 +68,19 @@ export default function InvoicesPage() {
   const updateStatus = async (invoiceId: string, newStatus: string) => {
     setUpdatingId(invoiceId);
     try {
-      await fetch(`/api/inventory/invoices/${invoiceId}`, {
+      const res = await fetch(`/api/inventory/invoices/${invoiceId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      loadInvoices();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Failed to update status: ${err.error || res.statusText}`);
+        return;
+      }
+      await loadInvoices(undefined, { revalidate: true });
+    } catch (err) {
+      alert("Network error updating status");
     } finally {
       setUpdatingId(null);
     }
@@ -126,7 +133,7 @@ export default function InvoicesPage() {
         }),
       });
       setEditingInvoice(null);
-      loadInvoices();
+      loadInvoices(undefined, { revalidate: true });
     } finally {
       setEditSaving(false);
     }
