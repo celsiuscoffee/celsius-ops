@@ -30,6 +30,13 @@ import {
   UserCircle,
   FileText,
   Sparkles,
+  Eye,
+  XCircle,
+  Save,
+  AlertTriangle,
+  ZoomIn,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -56,6 +63,7 @@ type Claim = {
   createdBy: string;
   totalAmount: number;
   notes: string | null;
+  status: string;
   createdAt: string;
   items: ClaimItem[];
   invoice: {
@@ -64,6 +72,7 @@ type Claim = {
     amount: number;
     status: string;
     photoCount: number;
+    photos: string[];
   } | null;
 };
 
@@ -89,33 +98,67 @@ type CartItem = {
   unitPrice: number;
 };
 
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function aiConfidenceBadge(claim: Claim) {
+  const hasSupplier = !!claim.supplierId;
+  const hasItems = claim.items.length > 0;
+  const hasAmount = claim.totalAmount > 0;
+  const hasPhotos = (claim.invoice?.photoCount ?? 0) > 0;
+
+  const score = [hasSupplier, hasItems, hasAmount, hasPhotos].filter(Boolean).length;
+  if (score >= 3) return { label: "High", className: "border-green-200 bg-green-50 text-green-700" };
+  if (score >= 2) return { label: "Medium", className: "border-amber-200 bg-amber-50 text-amber-700" };
+  return { label: "Low", className: "border-red-200 bg-red-50 text-red-700" };
+}
+
 // ── Component ─────────────────────────────────────────────────────────────
 
 export default function PayAndClaimPage() {
   // List state
-  const [tab, setTab] = useState<"pending" | "reimbursed" | "all">("pending");
+  const [tab, setTab] = useState<"draft" | "pending" | "reimbursed" | "all">("draft");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [outletFilter, setOutletFilter] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Create dialog state
-  const [createOpen, setCreateOpen] = useState(false);
+  // Review dialog state
+  const [reviewClaim, setReviewClaim] = useState<Claim | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+
+  // Quick Upload dialog state
+  const [quickUploadOpen, setQuickUploadOpen] = useState(false);
+
+  // Shared options (loaded on demand)
   const [outlets, setOutlets] = useState<OutletOption[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [staff, setStaff] = useState<StaffOption[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState("");
-  const [selectedSupplierId, setSelectedSupplierId] = useState("");
-  const [selectedStaffId, setSelectedStaffId] = useState("");
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [notes, setNotes] = useState("");
-  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [productSearch, setProductSearch] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [optionsLoaded, setOptionsLoaded] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
-  const [extracting, setExtracting] = useState(false);
-  const [aiExtracted, setAiExtracted] = useState<Record<string, boolean>>({});
+
+  // Review form state
+  const [rvSupplierId, setRvSupplierId] = useState("");
+  const [rvStaffId, setRvStaffId] = useState("");
+  const [rvAmount, setRvAmount] = useState("");
+  const [rvDate, setRvDate] = useState("");
+  const [rvInvoiceNum, setRvInvoiceNum] = useState("");
+  const [rvNotes, setRvNotes] = useState("");
+  const [rvCart, setRvCart] = useState<CartItem[]>([]);
+  const [rvProductSearch, setRvProductSearch] = useState("");
+  const [rvPhotoIdx, setRvPhotoIdx] = useState(0);
+  const [rvSaving, setRvSaving] = useState(false);
+  const [rvAiHints, setRvAiHints] = useState<Record<string, string>>({});
+  const [rvAiFields, setRvAiFields] = useState<Record<string, boolean>>({});
+
+  // Quick upload state
+  const [quPhotos, setQuPhotos] = useState<string[]>([]);
+  const [quOutletId, setQuOutletId] = useState("");
+  const [quStaffId, setQuStaffId] = useState("");
+  const [quNotes, setQuNotes] = useState("");
+  const [quUploading, setQuUploading] = useState(false);
+  const [quExtracting, setQuExtracting] = useState(false);
+  const [quSubmitting, setQuSubmitting] = useState(false);
+  const [quAiData, setQuAiData] = useState<Record<string, unknown>>({});
 
   // Debounced search
   useEffect(() => {
@@ -124,20 +167,23 @@ export default function PayAndClaimPage() {
   }, [search]);
 
   // Fetch claims list
-  const { data: claims, isLoading, mutate } = useFetch<Claim[]>(
-    `/api/inventory/pay-and-claim?tab=${tab}&search=${debouncedSearch}`,
-  );
+  const queryUrl = `/api/inventory/pay-and-claim?tab=${tab}&search=${debouncedSearch}${outletFilter ? `&outlet=${outletFilter}` : ""}`;
+  const { data: claims, isLoading, mutate } = useFetch<Claim[]>(queryUrl);
 
-  // Summaries
-  const totalAmount = claims?.reduce((s, c) => s + c.totalAmount, 0) ?? 0;
-  const pendingAmount = claims?.filter((c) => c.invoice?.status === "PENDING" || c.invoice?.status === "OVERDUE")
-    .reduce((s, c) => s + c.totalAmount, 0) ?? 0;
-  const reimbursedAmount = claims?.filter((c) => c.invoice?.status === "PAID")
-    .reduce((s, c) => s + c.totalAmount, 0) ?? 0;
+  // Summary counts (fetch all for counts)
+  const { data: allClaims } = useFetch<Claim[]>(`/api/inventory/pay-and-claim?tab=all`);
 
-  // Load options when dialog opens
-  const openCreateDialog = async () => {
-    setCreateOpen(true);
+  const draftClaims = allClaims?.filter((c) => c.status === "DRAFT") ?? [];
+  const pendingClaims = allClaims?.filter((c) => c.status !== "DRAFT" && (c.invoice?.status === "PENDING" || c.invoice?.status === "OVERDUE")) ?? [];
+  const reimbursedClaims = allClaims?.filter((c) => c.invoice?.status === "PAID") ?? [];
+
+  const draftAmount = draftClaims.reduce((s, c) => s + c.totalAmount, 0);
+  const pendingAmount = pendingClaims.reduce((s, c) => s + c.totalAmount, 0);
+  const reimbursedAmount = reimbursedClaims.reduce((s, c) => s + c.totalAmount, 0);
+
+  // Load options
+  const loadOptions = async () => {
+    if (optionsLoaded || loadingOptions) return;
     setLoadingOptions(true);
     try {
       const [o, s, st] = await Promise.all([
@@ -148,35 +194,79 @@ export default function PayAndClaimPage() {
       setOutlets(o);
       setSuppliers(s);
       setStaff(Array.isArray(st) ? st : st.staff ?? []);
-      if (o.length > 0) setSelectedOutletId(o[0].id);
+      setOptionsLoaded(true);
     } catch { /* ignore */ }
     setLoadingOptions(false);
   };
 
-  const resetCreateDialog = () => {
-    setCreateOpen(false);
-    setSelectedOutletId("");
-    setSelectedSupplierId("");
-    setSelectedStaffId("");
-    setCart([]);
-    setNotes("");
-    setPurchaseDate(new Date().toISOString().split("T")[0]);
-    setPhotos([]);
-    setProductSearch("");
-    setAiExtracted({});
+  // ── Review Dialog ───────────────────────────────────────────────────────
+
+  const openReview = async (claim: Claim) => {
+    await loadOptions();
+    setReviewClaim(claim);
+
+    // Parse AI hints from notes if JSON
+    let aiHints: Record<string, string> = {};
+    let aiFields: Record<string, boolean> = {};
+    let userNotes = claim.notes ?? "";
+    try {
+      const parsed = JSON.parse(claim.notes ?? "");
+      if (parsed?.aiExtracted) {
+        aiHints = {
+          supplierName: parsed.aiExtracted.supplierName ?? "",
+          totalAmount: parsed.aiExtracted.totalAmount ?? "",
+          issueDate: parsed.aiExtracted.issueDate ?? "",
+          invoiceNumber: parsed.aiExtracted.invoiceNumber ?? "",
+        };
+        userNotes = parsed.userNotes ?? "";
+        if (parsed.aiExtracted.supplierName) aiFields.supplier = true;
+        if (parsed.aiExtracted.totalAmount) aiFields.amount = true;
+        if (parsed.aiExtracted.issueDate) aiFields.date = true;
+        if (parsed.aiExtracted.invoiceNumber) aiFields.invoiceNumber = true;
+      }
+    } catch { /* not JSON, use as-is */ }
+
+    setRvAiHints(aiHints);
+    setRvAiFields(aiFields);
+    setRvSupplierId(claim.supplierId ?? "");
+    setRvStaffId("");
+    setRvAmount(claim.totalAmount > 0 ? claim.totalAmount.toString() : (aiHints.totalAmount || ""));
+    setRvDate(aiHints.issueDate || new Date(claim.createdAt).toISOString().split("T")[0]);
+    setRvInvoiceNum(claim.invoice?.invoiceNumber ?? (aiHints.invoiceNumber || ""));
+    setRvNotes(userNotes);
+    setRvCart(
+      claim.items.map((i) => ({
+        productId: i.productId,
+        productPackageId: null,
+        name: i.product,
+        sku: i.sku,
+        packageLabel: i.uom,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+      })),
+    );
+    setRvProductSearch("");
+    setRvPhotoIdx(0);
+    setRvSaving(false);
+    setReviewOpen(true);
   };
 
-  // Cart helpers
-  const addToCart = (p: SupplierProduct) => {
-    const existing = cart.find((c) => c.productId === p.id && c.productPackageId === (p.packageId || null));
+  const closeReview = () => {
+    setReviewOpen(false);
+    setReviewClaim(null);
+  };
+
+  // Review cart helpers
+  const rvAddToCart = (p: SupplierProduct) => {
+    const existing = rvCart.find((c) => c.productId === p.id && c.productPackageId === (p.packageId || null));
     if (existing) {
-      setCart(cart.map((c) =>
+      setRvCart(rvCart.map((c) =>
         c.productId === p.id && c.productPackageId === (p.packageId || null)
           ? { ...c, quantity: c.quantity + 1 }
           : c,
       ));
     } else {
-      setCart([...cart, {
+      setRvCart([...rvCart, {
         productId: p.id,
         productPackageId: p.packageId || null,
         name: p.name,
@@ -188,64 +278,79 @@ export default function PayAndClaimPage() {
     }
   };
 
-  const updateCartQty = (idx: number, qty: number) => {
-    if (qty <= 0) {
-      setCart(cart.filter((_, i) => i !== idx));
-    } else {
-      setCart(cart.map((c, i) => (i === idx ? { ...c, quantity: qty } : c)));
-    }
+  const rvUpdateQty = (idx: number, qty: number) => {
+    if (qty <= 0) setRvCart(rvCart.filter((_, i) => i !== idx));
+    else setRvCart(rvCart.map((c, i) => (i === idx ? { ...c, quantity: qty } : c)));
   };
 
-  const updateCartPrice = (idx: number, price: number) => {
-    setCart(cart.map((c, i) => (i === idx ? { ...c, unitPrice: price } : c)));
+  const rvUpdatePrice = (idx: number, price: number) => {
+    setRvCart(rvCart.map((c, i) => (i === idx ? { ...c, unitPrice: price } : c)));
   };
 
-  const cartTotal = cart.reduce((s, c) => s + c.quantity * c.unitPrice, 0);
+  const rvCartTotal = rvCart.reduce((s, c) => s + c.quantity * c.unitPrice, 0);
 
-  // AI extraction from receipt
-  const extractReceiptData = async (urls: string[]) => {
-    setExtracting(true);
+  const rvFilteredProducts = rvSupplierId
+    ? (suppliers.find((s) => s.id === rvSupplierId)?.products ?? []).filter(
+        (p) =>
+          !rvProductSearch ||
+          p.name.toLowerCase().includes(rvProductSearch.toLowerCase()) ||
+          p.sku.toLowerCase().includes(rvProductSearch.toLowerCase()),
+      )
+    : [];
+
+  const reviewPhotos = reviewClaim?.invoice?.photos ?? [];
+
+  const handleReviewAction = async (action: "approve" | "reject" | "save") => {
+    if (!reviewClaim) return;
+    setRvSaving(true);
     try {
-      const res = await fetch("/api/inventory/extract", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls, context: "Staff pay & claim receipt. Extract supplier name, total amount, and purchase date." }),
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const filled: Record<string, boolean> = {};
-
-      // Auto-select supplier if name matches
-      if (data.supplierName && !selectedSupplierId) {
-        const match = suppliers.find((s) => s.name.toLowerCase().includes(data.supplierName.toLowerCase()) || data.supplierName.toLowerCase().includes(s.name.toLowerCase()));
-        if (match) {
-          setSelectedSupplierId(match.id);
-          filled.supplier = true;
+      const payload: Record<string, unknown> = { action };
+      if (action !== "reject") {
+        payload.supplierId = rvSupplierId || undefined;
+        payload.claimedById = rvStaffId || undefined;
+        payload.amount = parseFloat(rvAmount) || undefined;
+        payload.purchaseDate = rvDate || undefined;
+        payload.invoiceNumber = rvInvoiceNum || undefined;
+        payload.notes = rvNotes;
+        if (rvCart.length > 0) {
+          payload.items = rvCart.map((c) => ({
+            productId: c.productId,
+            productPackageId: c.productPackageId,
+            quantity: c.quantity,
+            unitPrice: c.unitPrice,
+          }));
         }
       }
 
-      // Auto-fill purchase date
-      if (data.issueDate && purchaseDate === new Date().toISOString().split("T")[0]) {
-        setPurchaseDate(data.issueDate);
-        filled.purchaseDate = true;
+      const res = await fetch(`/api/inventory/pay-and-claim/${reviewClaim.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        closeReview();
+        mutate();
       }
-
-      // Auto-fill notes with supplier name if no supplier match
-      if (data.supplierName && !suppliers.find((s) => s.name.toLowerCase().includes(data.supplierName.toLowerCase()))) {
-        setNotes((prev) => prev || `Purchased from: ${data.supplierName}`);
-        filled.notes = true;
-      }
-
-      setAiExtracted((prev) => ({ ...prev, ...filled }));
-    } catch { /* silent */ }
-    setExtracting(false);
+    } catch { /* ignore */ }
+    setRvSaving(false);
   };
 
-  // Photo upload with AI extraction
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ── Quick Upload ────────────────────────────────────────────────────────
+
+  const openQuickUpload = async () => {
+    await loadOptions();
+    setQuPhotos([]);
+    setQuOutletId(outlets[0]?.id ?? "");
+    setQuStaffId("");
+    setQuNotes("");
+    setQuAiData({});
+    setQuickUploadOpen(true);
+  };
+
+  const handleQuickPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
-    setUploading(true);
+    setQuUploading(true);
     const newUrls: string[] = [];
     try {
       for (const file of Array.from(files)) {
@@ -255,48 +360,54 @@ export default function PayAndClaimPage() {
         if (res.ok) {
           const data = await res.json();
           newUrls.push(data.url);
-          setPhotos((prev) => [...prev, data.url]);
+          setQuPhotos((prev) => [...prev, data.url]);
         }
       }
     } catch { /* ignore */ }
-    setUploading(false);
+    setQuUploading(false);
     e.target.value = "";
 
-    // Trigger AI extraction after first upload batch
-    if (newUrls.length > 0 && photos.length === 0) {
-      extractReceiptData(newUrls);
+    // AI extraction
+    if (newUrls.length > 0) {
+      setQuExtracting(true);
+      try {
+        const res = await fetch("/api/inventory/extract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls: newUrls, context: "Staff pay & claim receipt. Extract supplier name, total amount, purchase date, and invoice number." }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setQuAiData(data);
+        }
+      } catch { /* ignore */ }
+      setQuExtracting(false);
     }
   };
 
-  // Submit
-  const handleSubmit = async () => {
-    if (!selectedOutletId || !selectedSupplierId || !selectedStaffId || cart.length === 0) return;
-    setSaving(true);
+  const handleQuickSubmit = async (asDraft: boolean) => {
+    if (!quOutletId) return;
+    setQuSubmitting(true);
     try {
       const res = await fetch("/api/inventory/pay-and-claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          outletId: selectedOutletId,
-          supplierId: selectedSupplierId,
-          claimedById: selectedStaffId,
-          items: cart.map((c) => ({
-            productId: c.productId,
-            productPackageId: c.productPackageId,
-            quantity: c.quantity,
-            unitPrice: c.unitPrice,
-          })),
-          notes,
-          photos,
-          purchaseDate,
+          outletId: quOutletId,
+          claimedById: quStaffId || undefined,
+          photos: quPhotos,
+          notes: quNotes,
+          draft: asDraft,
+          aiExtracted: quAiData,
+          purchaseDate: (quAiData as Record<string, string>).issueDate || undefined,
         }),
       });
       if (res.ok) {
-        resetCreateDialog();
+        setQuickUploadOpen(false);
         mutate();
       }
     } catch { /* ignore */ }
-    setSaving(false);
+    setQuSubmitting(false);
   };
 
   // Mark invoice as paid (reimbursed)
@@ -309,21 +420,12 @@ export default function PayAndClaimPage() {
     mutate();
   };
 
-  // Filtered products for create dialog
-  const filteredProducts = selectedSupplierId
-    ? (suppliers.find((s) => s.id === selectedSupplierId)?.products ?? []).filter(
-        (p) =>
-          !productSearch ||
-          p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-          p.sku.toLowerCase().includes(productSearch.toLowerCase()),
-      )
-    : [];
-
   const TABS = [
-    { key: "pending", label: "Pending" },
-    { key: "reimbursed", label: "Reimbursed" },
-    { key: "all", label: "All" },
-  ] as const;
+    { key: "draft" as const, label: "Draft" },
+    { key: "pending" as const, label: "Pending" },
+    { key: "reimbursed" as const, label: "Reimbursed" },
+    { key: "all" as const, label: "All" },
+  ];
 
   return (
     <div className="p-6 space-y-5">
@@ -331,39 +433,59 @@ export default function PayAndClaimPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Pay &amp; Claim</h1>
-          <p className="mt-0.5 text-sm text-gray-500">Track staff supply purchases and reimbursements</p>
+          <p className="mt-0.5 text-sm text-gray-500">Review staff claims and submit receipts</p>
         </div>
-        <Button size="sm" onClick={openCreateDialog}>
-          <Plus className="mr-1.5 h-4 w-4" /> New Claim
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={openQuickUpload}>
+            <Upload className="mr-1.5 h-4 w-4" /> Quick Upload
+          </Button>
+        </div>
       </div>
 
       {/* ── Summary Cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-5">
-          <div className="flex items-center gap-2 mb-1">
-            <DollarSign className="h-4 w-4 text-gray-400" />
-            <span className="text-xs text-gray-500">Total Claims</span>
+        <Card
+          className="p-5 cursor-pointer hover:ring-2 hover:ring-amber-300 transition-all"
+          onClick={() => setTab("draft")}
+        >
+          <div className="flex items-center gap-2 mb-1.5">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <span className="text-xs text-gray-500">Draft / Review</span>
           </div>
-          <p className="text-xl font-bold font-sans">RM {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+          <p className="text-xl font-bold font-sans text-amber-600">
+            {draftClaims.length} <span className="text-sm font-normal text-gray-400">claims</span>
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            RM {draftAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </p>
         </Card>
         <Card className="p-5">
           <div className="flex items-center gap-2 mb-1.5">
-            <Clock className="h-4 w-4 text-amber-500" />
+            <Clock className="h-4 w-4 text-[#C2714F]" />
             <span className="text-xs text-gray-500">Pending Reimbursement</span>
           </div>
-          <p className="text-xl font-bold font-sans text-amber-600">RM {pendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+          <p className="text-xl font-bold font-sans text-[#C2714F]">
+            {pendingClaims.length} <span className="text-sm font-normal text-gray-400">claims</span>
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            RM {pendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </p>
         </Card>
         <Card className="p-5">
           <div className="flex items-center gap-2 mb-1.5">
             <CheckCircle2 className="h-4 w-4 text-green-500" />
             <span className="text-xs text-gray-500">Reimbursed</span>
           </div>
-          <p className="text-xl font-bold font-sans text-green-600">RM {reimbursedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+          <p className="text-xl font-bold font-sans text-green-600">
+            {reimbursedClaims.length} <span className="text-sm font-normal text-gray-400">claims</span>
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            RM {reimbursedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </p>
         </Card>
       </div>
 
-      {/* ── Tabs + Search ── */}
+      {/* ── Tabs + Search + Outlet Filter ── */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex rounded-lg border overflow-hidden">
           {TABS.map((t) => (
@@ -375,6 +497,11 @@ export default function PayAndClaimPage() {
               }`}
             >
               {t.label}
+              {t.key === "draft" && draftClaims.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-amber-500 text-white px-1.5 py-0.5 text-[9px]">
+                  {draftClaims.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -387,349 +514,646 @@ export default function PayAndClaimPage() {
             className="pl-8 h-8 text-xs"
           />
         </div>
+        {outlets.length > 0 && (
+          <select
+            value={outletFilter}
+            onChange={(e) => setOutletFilter(e.target.value)}
+            className="rounded-md border px-2 py-1.5 text-xs h-8"
+          >
+            <option value="">All Outlets</option>
+            {outlets.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
-      {/* ── Claims List ── */}
+      {/* ── Claims Table ── */}
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
       ) : !claims?.length ? (
-        <div className="text-center py-12 text-sm text-gray-400">No claims found</div>
+        <div className="text-center py-12 text-sm text-gray-400">
+          {tab === "draft" ? "No draft claims to review" : "No claims found"}
+        </div>
       ) : (
         <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-gray-50/50 text-gray-500 text-left">
+                <th className="px-4 py-3 font-medium w-10"></th>
                 <th className="px-4 py-3 font-medium">Claim #</th>
                 <th className="px-4 py-3 font-medium">Outlet</th>
                 <th className="px-4 py-3 font-medium">Supplier</th>
                 <th className="px-4 py-3 font-medium">Paid By</th>
                 <th className="px-4 py-3 font-medium text-right">Amount (RM)</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                {tab !== "reimbursed" && <th className="px-4 py-3 font-medium">AI</th>}
                 <th className="px-4 py-3 font-medium">Date</th>
                 <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {claims.map((c) => (
-                <Fragment key={c.id}>
-                  <tr
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => setExpanded(expanded === c.id ? null : c.id)}
-                  >
-                    <td className="px-4 py-3 font-mono font-medium">
-                      <div className="flex items-center gap-1">
-                        <ChevronDown className={`h-3 w-3 transition-transform ${expanded === c.id ? "rotate-180" : ""}`} />
-                        {c.orderNumber}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">{c.outlet}</td>
-                    <td className="px-4 py-3">{c.supplier}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <UserCircle className="h-3 w-3 text-gray-400" />
-                        {c.claimedBy ?? "—"}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono">RM {c.totalAmount.toFixed(2)}</td>
-                    <td className="px-4 py-3">
-                      {c.invoice ? (
-                        <Badge
-                          variant="outline"
-                          className={
-                            c.invoice.status === "PAID"
-                              ? "border-green-200 bg-green-50 text-green-700"
-                              : c.invoice.status === "OVERDUE"
-                                ? "border-red-200 bg-red-50 text-red-700"
-                                : "border-amber-200 bg-amber-50 text-amber-700"
-                          }
-                        >
-                          {c.invoice.status === "PAID" ? "Reimbursed" : c.invoice.status}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline">No Invoice</Badge>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">{new Date(c.createdAt).toLocaleDateString("en-MY")}</td>
-                    <td className="px-4 py-3">
-                      {c.invoice && c.invoice.status !== "PAID" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 text-[10px] px-2"
-                          onClick={(e) => { e.stopPropagation(); handleReimburse(c.invoice!.id); }}
-                        >
-                          <CheckCircle2 className="mr-1 h-3 w-3" /> Reimburse
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                  {expanded === c.id && (
-                    <tr>
-                      <td colSpan={8} className="bg-gray-50 px-6 py-3">
-                        <div className="space-y-2">
-                          <p className="text-[10px] text-gray-500 uppercase font-medium">Items</p>
-                          <div className="grid grid-cols-[1fr_80px_80px_80px] gap-1 text-[11px]">
-                            <span className="font-medium text-gray-500">Product</span>
-                            <span className="font-medium text-gray-500 text-right">Qty</span>
-                            <span className="font-medium text-gray-500 text-right">Price</span>
-                            <span className="font-medium text-gray-500 text-right">Total</span>
-                            {c.items.map((i) => (
-                              <Fragment key={i.id}>
-                                <span>{i.product} <span className="text-gray-400">({i.uom})</span></span>
-                                <span className="text-right font-mono">{i.quantity}</span>
-                                <span className="text-right font-mono">{i.unitPrice.toFixed(2)}</span>
-                                <span className="text-right font-mono">{i.totalPrice.toFixed(2)}</span>
-                              </Fragment>
-                            ))}
+              {claims.map((c) => {
+                const confidence = aiConfidenceBadge(c);
+                return (
+                  <Fragment key={c.id}>
+                    <tr
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => setExpanded(expanded === c.id ? null : c.id)}
+                    >
+                      {/* Photo thumbnail */}
+                      <td className="px-4 py-3">
+                        {c.invoice && c.invoice.photos?.length > 0 ? (
+                          <div
+                            className="w-9 h-9 rounded border overflow-hidden cursor-pointer"
+                            onClick={(e) => { e.stopPropagation(); openReview(c); }}
+                          >
+                            {c.invoice.photos[0].toLowerCase().endsWith(".pdf") ? (
+                              <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                                <FileText className="h-4 w-4 text-red-400" />
+                              </div>
+                            ) : (
+                              <img
+                                src={c.invoice.photos[0]}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                            )}
                           </div>
-                          {c.notes && (
-                            <p className="text-[11px] text-gray-500 mt-2">Notes: {c.notes}</p>
+                        ) : (
+                          <div className="w-9 h-9 rounded border flex items-center justify-center bg-gray-50">
+                            <ImageIcon className="h-3.5 w-3.5 text-gray-300" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 font-mono font-medium">
+                        <div className="flex items-center gap-1">
+                          <ChevronDown className={`h-3 w-3 transition-transform ${expanded === c.id ? "rotate-180" : ""}`} />
+                          {c.orderNumber}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">{c.outlet}</td>
+                      <td className="px-4 py-3">{c.supplier || <span className="text-gray-300">--</span>}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <UserCircle className="h-3 w-3 text-gray-400" />
+                          {c.claimedBy ?? "---"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono">
+                        {c.totalAmount > 0 ? `RM ${c.totalAmount.toFixed(2)}` : "---"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {c.status === "DRAFT" ? (
+                          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                            Draft
+                          </Badge>
+                        ) : c.invoice ? (
+                          <Badge
+                            variant="outline"
+                            className={
+                              c.invoice.status === "PAID"
+                                ? "border-green-200 bg-green-50 text-green-700"
+                                : c.invoice.status === "OVERDUE"
+                                  ? "border-red-200 bg-red-50 text-red-700"
+                                  : "border-[#C2714F]/20 bg-[#C2714F]/5 text-[#C2714F]"
+                            }
+                          >
+                            {c.invoice.status === "PAID" ? "Reimbursed" : c.invoice.status}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">No Invoice</Badge>
+                        )}
+                      </td>
+                      {tab !== "reimbursed" && (
+                        <td className="px-4 py-3">
+                          {c.status === "DRAFT" && (
+                            <Badge variant="outline" className={confidence.className}>
+                              <Sparkles className="h-2.5 w-2.5 mr-1" />
+                              {confidence.label}
+                            </Badge>
                           )}
-                          {c.invoice && (
-                            <p className="text-[11px] text-gray-500">
-                              Invoice: {c.invoice.invoiceNumber}
-                              {c.invoice.photoCount > 0 && (
-                                <span className="ml-2 inline-flex items-center gap-0.5">
-                                  <ImageIcon className="h-3 w-3" /> {c.invoice.photoCount}
-                                </span>
-                              )}
-                            </p>
+                        </td>
+                      )}
+                      <td className="px-4 py-3 text-gray-500">{new Date(c.createdAt).toLocaleDateString("en-MY")}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          {c.status === "DRAFT" && (
+                            <Button
+                              size="sm"
+                              className="h-6 text-[10px] px-2 bg-[#C2714F] hover:bg-[#A85D3F] text-white"
+                              onClick={(e) => { e.stopPropagation(); openReview(c); }}
+                            >
+                              <Eye className="mr-1 h-3 w-3" /> Review
+                            </Button>
                           )}
-                          <p className="text-[11px] text-gray-400">Created by: {c.createdBy}</p>
+                          {c.invoice && c.invoice.status !== "PAID" && c.status !== "DRAFT" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 text-[10px] px-2"
+                              onClick={(e) => { e.stopPropagation(); handleReimburse(c.invoice!.id); }}
+                            >
+                              <CheckCircle2 className="mr-1 h-3 w-3" /> Reimburse
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              ))}
+                    {expanded === c.id && (
+                      <tr>
+                        <td colSpan={tab !== "reimbursed" ? 10 : 9} className="bg-gray-50 px-6 py-3">
+                          <div className="space-y-2">
+                            <p className="text-[10px] text-gray-500 uppercase font-medium">Items</p>
+                            {c.items.length === 0 ? (
+                              <p className="text-[11px] text-gray-400 italic">No items yet -- needs review</p>
+                            ) : (
+                              <div className="grid grid-cols-[1fr_80px_80px_80px] gap-1 text-[11px]">
+                                <span className="font-medium text-gray-500">Product</span>
+                                <span className="font-medium text-gray-500 text-right">Qty</span>
+                                <span className="font-medium text-gray-500 text-right">Price</span>
+                                <span className="font-medium text-gray-500 text-right">Total</span>
+                                {c.items.map((i) => (
+                                  <Fragment key={i.id}>
+                                    <span>{i.product} <span className="text-gray-400">({i.uom})</span></span>
+                                    <span className="text-right font-mono">{i.quantity}</span>
+                                    <span className="text-right font-mono">{i.unitPrice.toFixed(2)}</span>
+                                    <span className="text-right font-mono">{i.totalPrice.toFixed(2)}</span>
+                                  </Fragment>
+                                ))}
+                              </div>
+                            )}
+                            {c.notes && (
+                              <p className="text-[11px] text-gray-500 mt-2">Notes: {c.notes}</p>
+                            )}
+                            {c.invoice && (
+                              <p className="text-[11px] text-gray-500">
+                                Invoice: {c.invoice.invoiceNumber}
+                                {c.invoice.photoCount > 0 && (
+                                  <span className="ml-2 inline-flex items-center gap-0.5">
+                                    <ImageIcon className="h-3 w-3" /> {c.invoice.photoCount}
+                                  </span>
+                                )}
+                              </p>
+                            )}
+                            <p className="text-[11px] text-gray-400">Created by: {c.createdBy}</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* ── Create Claim Dialog ── */}
-      <Dialog open={createOpen} onOpenChange={(open) => { if (!open) resetCreateDialog(); }}>
-        <DialogContent className="!max-w-4xl max-h-[90vh] overflow-y-auto p-6">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Receipt className="h-5 w-5" /> New Pay &amp; Claim
-            </DialogTitle>
-          </DialogHeader>
-
-          {loadingOptions ? (
-            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
-          ) : (
-            <div className="space-y-5">
-              {/* Step 1: Upload Receipt FIRST */}
-              <div className="rounded-lg border-2 border-dashed border-gray-200 p-4">
-                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-700">
-                  <Upload className="h-3.5 w-3.5" /> Step 1: Upload Receipt / Invoice
-                </label>
-                <p className="mb-3 text-[10px] text-gray-400">Upload first — AI will auto-extract details to fill the form below</p>
-                <div className="flex flex-wrap gap-2">
-                  {photos.map((url, i) => (
-                    <div key={i} className="relative w-20 h-20 rounded-lg border overflow-hidden group">
-                      {url.toLowerCase().endsWith(".pdf") || url.includes("/raw/") ? (
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50">
-                          <FileText className="h-6 w-6 text-red-400" />
-                          <span className="text-[9px] text-gray-400 mt-0.5">PDF</span>
+      {/* ── Review Dialog ── */}
+      <Dialog open={reviewOpen} onOpenChange={(open) => { if (!open) closeReview(); }}>
+        <DialogContent className="!max-w-6xl max-h-[92vh] overflow-hidden p-0">
+          <div className="flex h-[85vh]">
+            {/* Left: Photo viewer (40%) */}
+            <div className="w-[40%] bg-gray-900 flex flex-col">
+              <div className="p-4 border-b border-gray-700">
+                <p className="text-xs text-gray-400 font-medium">Receipt / Invoice</p>
+                {reviewPhotos.length > 0 && (
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    {rvPhotoIdx + 1} of {reviewPhotos.length}
+                  </p>
+                )}
+              </div>
+              <div className="flex-1 flex items-center justify-center relative p-4">
+                {reviewPhotos.length === 0 ? (
+                  <div className="text-center text-gray-500">
+                    <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                    <p className="text-xs">No receipt attached</p>
+                  </div>
+                ) : reviewPhotos[rvPhotoIdx]?.toLowerCase().endsWith(".pdf") ? (
+                  <div className="text-center text-gray-400">
+                    <FileText className="h-16 w-16 mx-auto mb-2" />
+                    <p className="text-xs">PDF Document</p>
+                    <a
+                      href={reviewPhotos[rvPhotoIdx]}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-blue-400 underline mt-1 inline-block"
+                    >
+                      Open in new tab
+                    </a>
+                  </div>
+                ) : (
+                  <a
+                    href={reviewPhotos[rvPhotoIdx]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative group"
+                  >
+                    <img
+                      src={reviewPhotos[rvPhotoIdx]}
+                      alt="Receipt"
+                      className="max-w-full max-h-full object-contain rounded"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 rounded transition-opacity">
+                      <ZoomIn className="h-8 w-8 text-white" />
+                    </div>
+                  </a>
+                )}
+                {/* Nav arrows */}
+                {reviewPhotos.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setRvPhotoIdx((i) => (i > 0 ? i - 1 : reviewPhotos.length - 1))}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 rounded-full p-1.5 text-white hover:bg-black/70"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setRvPhotoIdx((i) => (i < reviewPhotos.length - 1 ? i + 1 : 0))}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 rounded-full p-1.5 text-white hover:bg-black/70"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
+              </div>
+              {/* Thumbnails */}
+              {reviewPhotos.length > 1 && (
+                <div className="p-3 border-t border-gray-700 flex gap-2 overflow-x-auto">
+                  {reviewPhotos.map((url, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setRvPhotoIdx(i)}
+                      className={`w-12 h-12 rounded border-2 overflow-hidden shrink-0 ${
+                        i === rvPhotoIdx ? "border-white" : "border-gray-600 opacity-50"
+                      }`}
+                    >
+                      {url.toLowerCase().endsWith(".pdf") ? (
+                        <div className="w-full h-full flex items-center justify-center bg-gray-700">
+                          <FileText className="h-4 w-4 text-gray-400" />
                         </div>
                       ) : (
                         <img src={url} alt="" className="w-full h-full object-cover" />
                       )}
-                      <button
-                        onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
-                        className="absolute top-1 right-1 bg-black/50 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X className="h-3 w-3 text-white" />
-                      </button>
-                    </div>
+                    </button>
                   ))}
-                  <label className="w-20 h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 gap-1">
-                    {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-5 w-5 text-gray-400" />}
-                    <span className="text-[10px] text-gray-400">{uploading ? "..." : "Upload"}</span>
-                    <input type="file" accept="image/*,.pdf" multiple onChange={handlePhotoUpload} className="hidden" />
-                  </label>
                 </div>
+              )}
+            </div>
 
-                {/* AI extraction status */}
-                {extracting && (
-                  <div className="mt-3 flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
-                    <Sparkles className="h-4 w-4 animate-pulse text-purple-500" />
-                    <span className="text-xs text-purple-700">AI is reading the receipt...</span>
-                  </div>
-                )}
-                {Object.keys(aiExtracted).length > 0 && !extracting && (
-                  <div className="mt-3 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-                    <Sparkles className="h-4 w-4 text-green-500" />
-                    <span className="text-xs text-green-700">AI auto-filled fields below — review and correct if needed</span>
-                  </div>
-                )}
+            {/* Right: Editable form (60%) */}
+            <div className="w-[60%] flex flex-col">
+              <div className="p-5 border-b">
+                <h2 className="text-base font-semibold flex items-center gap-2">
+                  <Receipt className="h-4 w-4" />
+                  Review Claim: {reviewClaim?.orderNumber}
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Submitted by {reviewClaim?.createdBy} on{" "}
+                  {reviewClaim ? new Date(reviewClaim.createdAt).toLocaleDateString("en-MY") : ""}
+                </p>
               </div>
 
-              {/* Step 2: Details (auto-filled by AI, editable) */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">Outlet *</label>
-                  <select
-                    value={selectedOutletId}
-                    onChange={(e) => setSelectedOutletId(e.target.value)}
-                    className="w-full rounded-md border px-3 py-2 text-sm"
-                  >
-                    <option value="">Select outlet</option>
-                    {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1.5">
-                    Supplier *
-                    {aiExtracted.supplier && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
-                  </label>
-                  <select
-                    value={selectedSupplierId}
-                    onChange={(e) => { setSelectedSupplierId(e.target.value); setProductSearch(""); }}
-                    className="w-full rounded-md border px-3 py-2 text-sm"
-                  >
-                    <option value="">Select supplier</option>
-                    {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">Paid By (Staff) *</label>
-                  <select
-                    value={selectedStaffId}
-                    onChange={(e) => setSelectedStaffId(e.target.value)}
-                    className="w-full rounded-md border px-3 py-2 text-sm"
-                  >
-                    <option value="">Select staff</option>
-                    {staff.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1.5">
-                    Purchase Date
-                    {aiExtracted.purchaseDate && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
-                  </label>
-                  <Input
-                    type="date"
-                    value={purchaseDate}
-                    onChange={(e) => setPurchaseDate(e.target.value)}
-                    className="h-9 text-sm"
-                  />
-                </div>
-              </div>
-
-              {/* Product picker */}
-              {selectedSupplierId && (
-                <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">Add Products</label>
-                  <div className="relative mb-2">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Search products..."
-                      value={productSearch}
-                      onChange={(e) => setProductSearch(e.target.value)}
-                      className="pl-9 h-9 text-sm"
-                    />
-                  </div>
-                  {filteredProducts.length > 0 && (
-                    <div className="border rounded-lg max-h-48 overflow-y-auto divide-y">
-                      {filteredProducts.map((p) => (
-                        <button
-                          key={`${p.id}-${p.packageId}`}
-                          onClick={() => addToCart(p)}
-                          className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-gray-50"
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                {loadingOptions ? (
+                  <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
+                ) : (
+                  <>
+                    {/* Form fields */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1.5">
+                          Supplier
+                          {rvAiFields.supplier && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                        </label>
+                        <select
+                          value={rvSupplierId}
+                          onChange={(e) => setRvSupplierId(e.target.value)}
+                          className="w-full rounded-md border px-3 py-2 text-sm"
                         >
-                          <div>
-                            <span className="font-medium">{p.name}</span>
-                            <span className="text-gray-400 ml-1.5">({p.packageLabel})</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-gray-500 font-mono">RM {p.price.toFixed(2)}</span>
-                            <Plus className="h-4 w-4 text-gray-400" />
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Cart */}
-              {cart.length > 0 && (
-                <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">Items ({cart.length})</label>
-                  <div className="border rounded-lg divide-y">
-                    {cart.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-3 px-4 py-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{item.name}</p>
-                          <p className="text-xs text-gray-400">{item.packageLabel}</p>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => updateCartQty(idx, item.quantity - 1)} className="rounded p-1 hover:bg-gray-100">
-                            <Minus className="h-3.5 w-3.5" />
-                          </button>
-                          <Input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => updateCartQty(idx, parseInt(e.target.value) || 0)}
-                            className="w-16 h-8 text-sm text-center"
-                          />
-                          <button onClick={() => updateCartQty(idx, item.quantity + 1)} className="rounded p-1 hover:bg-gray-100">
-                            <Plus className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs text-gray-400">RM</span>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={item.unitPrice}
-                            onChange={(e) => updateCartPrice(idx, parseFloat(e.target.value) || 0)}
-                            className="w-24 h-8 text-sm text-right"
-                          />
-                        </div>
-                        <span className="text-sm font-mono w-24 text-right">
-                          RM {(item.quantity * item.unitPrice).toFixed(2)}
-                        </span>
-                        <button onClick={() => setCart(cart.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 p-1">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                          <option value="">Select supplier</option>
+                          {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                        {rvAiHints.supplierName && !rvSupplierId && (
+                          <p className="text-[10px] text-purple-500 mt-1">
+                            <Sparkles className="h-2.5 w-2.5 inline mr-0.5" />
+                            Detected: &quot;{rvAiHints.supplierName}&quot;
+                          </p>
+                        )}
                       </div>
-                    ))}
-                    <div className="flex items-center justify-between px-4 py-3 bg-gray-50 font-medium text-sm">
-                      <span>Total</span>
-                      <span className="font-mono">RM {cartTotal.toFixed(2)}</span>
+                      <div>
+                        <label className="text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1.5">
+                          Amount (RM)
+                          {rvAiFields.amount && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                        </label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={rvAmount}
+                          onChange={(e) => setRvAmount(e.target.value)}
+                          placeholder="0.00"
+                          className={`h-9 text-sm ${rvAiFields.amount ? "border-purple-300 bg-purple-50/30" : ""}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1.5">
+                          Purchase Date
+                          {rvAiFields.date && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                        </label>
+                        <Input
+                          type="date"
+                          value={rvDate}
+                          onChange={(e) => setRvDate(e.target.value)}
+                          className={`h-9 text-sm ${rvAiFields.date ? "border-purple-300 bg-purple-50/30" : ""}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1.5">
+                          Invoice Number
+                          {rvAiFields.invoiceNumber && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                        </label>
+                        <Input
+                          value={rvInvoiceNum}
+                          onChange={(e) => setRvInvoiceNum(e.target.value)}
+                          placeholder="Auto-generated if empty"
+                          className={`h-9 text-sm ${rvAiFields.invoiceNumber ? "border-purple-300 bg-purple-50/30" : ""}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-500 mb-1.5 block">Claimed By (Staff)</label>
+                        <select
+                          value={rvStaffId}
+                          onChange={(e) => setRvStaffId(e.target.value)}
+                          className="w-full rounded-md border px-3 py-2 text-sm"
+                        >
+                          <option value="">{reviewClaim?.claimedBy || "Select staff"}</option>
+                          {staff.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-500 mb-1.5 block">Outlet</label>
+                        <Input value={reviewClaim?.outlet ?? ""} disabled className="h-9 text-sm bg-gray-50" />
+                      </div>
                     </div>
-                  </div>
-                </div>
-              )}
 
-              {/* Notes */}
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1.5">
-                  Notes
-                  {aiExtracted.notes && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
-                </label>
-                <Input
-                  placeholder="e.g. Bought from nearby store, receipt attached"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className={`h-9 text-sm ${aiExtracted.notes ? "border-purple-300 bg-purple-50/30" : ""}`}
-                />
+                    {/* Notes */}
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">Notes</label>
+                      <Input
+                        value={rvNotes}
+                        onChange={(e) => setRvNotes(e.target.value)}
+                        placeholder="Add notes..."
+                        className="h-9 text-sm"
+                      />
+                    </div>
+
+                    {/* Product items */}
+                    <div className="border-t pt-4">
+                      <label className="text-xs font-semibold text-gray-700 mb-2 block">
+                        Product Items
+                        {rvCart.length === 0 && (
+                          <span className="ml-2 text-[10px] font-normal text-amber-500">Add items before approving</span>
+                        )}
+                      </label>
+
+                      {/* Product picker */}
+                      {rvSupplierId && (
+                        <div className="mb-3">
+                          <div className="relative mb-2">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                              placeholder="Search products to add..."
+                              value={rvProductSearch}
+                              onChange={(e) => setRvProductSearch(e.target.value)}
+                              className="pl-9 h-9 text-sm"
+                            />
+                          </div>
+                          {rvProductSearch && rvFilteredProducts.length > 0 && (
+                            <div className="border rounded-lg max-h-36 overflow-y-auto divide-y mb-2">
+                              {rvFilteredProducts.slice(0, 10).map((p) => (
+                                <button
+                                  key={`${p.id}-${p.packageId}`}
+                                  onClick={() => { rvAddToCart(p); setRvProductSearch(""); }}
+                                  className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50"
+                                >
+                                  <div>
+                                    <span className="font-medium">{p.name}</span>
+                                    <span className="text-gray-400 ml-1.5 text-xs">({p.packageLabel})</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-gray-500 font-mono text-xs">RM {p.price.toFixed(2)}</span>
+                                    <Plus className="h-3.5 w-3.5 text-gray-400" />
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Cart */}
+                      {rvCart.length > 0 ? (
+                        <div className="border rounded-lg divide-y">
+                          {rvCart.map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-2 px-3 py-2.5">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{item.name}</p>
+                                <p className="text-[10px] text-gray-400">{item.packageLabel}</p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button onClick={() => rvUpdateQty(idx, item.quantity - 1)} className="rounded p-0.5 hover:bg-gray-100">
+                                  <Minus className="h-3 w-3" />
+                                </button>
+                                <Input
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) => rvUpdateQty(idx, parseInt(e.target.value) || 0)}
+                                  className="w-14 h-7 text-xs text-center"
+                                />
+                                <button onClick={() => rvUpdateQty(idx, item.quantity + 1)} className="rounded p-0.5 hover:bg-gray-100">
+                                  <Plus className="h-3 w-3" />
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-gray-400">RM</span>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={item.unitPrice}
+                                  onChange={(e) => rvUpdatePrice(idx, parseFloat(e.target.value) || 0)}
+                                  className="w-20 h-7 text-xs text-right"
+                                />
+                              </div>
+                              <span className="text-xs font-mono w-20 text-right">
+                                RM {(item.quantity * item.unitPrice).toFixed(2)}
+                              </span>
+                              <button onClick={() => setRvCart(rvCart.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 p-0.5">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                          <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50 font-medium text-sm">
+                            <span>Total</span>
+                            <span className="font-mono">RM {rvCartTotal.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      ) : !rvSupplierId ? (
+                        <p className="text-xs text-gray-400 italic">Select a supplier first to add products</p>
+                      ) : null}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div className="border-t px-5 py-3 flex items-center justify-between bg-white">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-red-200 text-red-600 hover:bg-red-50"
+                  disabled={rvSaving}
+                  onClick={() => handleReviewAction("reject")}
+                >
+                  <XCircle className="mr-1.5 h-3.5 w-3.5" /> Reject
+                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={rvSaving}
+                    onClick={() => handleReviewAction("save")}
+                  >
+                    {rvSaving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+                    Save Draft
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    disabled={rvSaving || rvCart.length === 0 || !rvSupplierId}
+                    onClick={() => handleReviewAction("approve")}
+                  >
+                    {rvSaving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}
+                    Approve
+                  </Button>
+                </div>
               </div>
             </div>
-          )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={resetCreateDialog}>Cancel</Button>
+      {/* ── Quick Upload Dialog ── */}
+      <Dialog open={quickUploadOpen} onOpenChange={(open) => { if (!open) setQuickUploadOpen(false); }}>
+        <DialogContent className="!max-w-lg p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" /> Quick Upload Receipt
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Photo upload */}
+            <div className="rounded-lg border-2 border-dashed border-gray-200 p-4">
+              <p className="text-xs font-medium text-gray-600 mb-2">Upload receipt photo(s)</p>
+              <div className="flex flex-wrap gap-2">
+                {quPhotos.map((url, i) => (
+                  <div key={i} className="relative w-20 h-20 rounded-lg border overflow-hidden group">
+                    {url.toLowerCase().endsWith(".pdf") ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50">
+                        <FileText className="h-6 w-6 text-red-400" />
+                        <span className="text-[9px] text-gray-400 mt-0.5">PDF</span>
+                      </div>
+                    ) : (
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                    )}
+                    <button
+                      onClick={() => setQuPhotos(quPhotos.filter((_, j) => j !== i))}
+                      className="absolute top-1 right-1 bg-black/50 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-3 w-3 text-white" />
+                    </button>
+                  </div>
+                ))}
+                <label className="w-20 h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 gap-1">
+                  {quUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-5 w-5 text-gray-400" />}
+                  <span className="text-[10px] text-gray-400">{quUploading ? "..." : "Upload"}</span>
+                  <input type="file" accept="image/*,.pdf" multiple onChange={handleQuickPhotoUpload} className="hidden" />
+                </label>
+              </div>
+
+              {quExtracting && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
+                  <Sparkles className="h-4 w-4 animate-pulse text-purple-500" />
+                  <span className="text-xs text-purple-700">AI is reading the receipt...</span>
+                </div>
+              )}
+              {Object.keys(quAiData).length > 0 && !quExtracting && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                  <Sparkles className="h-4 w-4 text-green-500" />
+                  <span className="text-xs text-green-700">
+                    AI detected:{" "}
+                    {(quAiData as Record<string, string>).supplierName && `${(quAiData as Record<string, string>).supplierName}`}
+                    {(quAiData as Record<string, string>).totalAmount && ` / RM ${(quAiData as Record<string, string>).totalAmount}`}
+                    {(quAiData as Record<string, string>).issueDate && ` / ${(quAiData as Record<string, string>).issueDate}`}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Outlet + Staff */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Outlet *</label>
+                <select
+                  value={quOutletId}
+                  onChange={(e) => setQuOutletId(e.target.value)}
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                >
+                  <option value="">Select outlet</option>
+                  {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Who Paid?</label>
+                <select
+                  value={quStaffId}
+                  onChange={(e) => setQuStaffId(e.target.value)}
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                >
+                  <option value="">Select staff</option>
+                  {staff.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1.5 block">Notes</label>
+              <Input
+                value={quNotes}
+                onChange={(e) => setQuNotes(e.target.value)}
+                placeholder="Optional notes..."
+                className="h-9 text-sm"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setQuickUploadOpen(false)}>Cancel</Button>
             <Button
-              onClick={handleSubmit}
-              disabled={saving || !selectedOutletId || !selectedSupplierId || !selectedStaffId || cart.length === 0}
+              variant="outline"
+              disabled={quSubmitting || !quOutletId || quPhotos.length === 0}
+              onClick={() => handleQuickSubmit(true)}
             >
-              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Receipt className="mr-1.5 h-4 w-4" />}
-              Submit Claim
+              {quSubmitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
+              Save as Draft
+            </Button>
+            <Button
+              disabled={quSubmitting || !quOutletId || quPhotos.length === 0}
+              onClick={() => handleQuickSubmit(false)}
+              className="bg-[#C2714F] hover:bg-[#A85D3F] text-white"
+            >
+              {quSubmitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
+              Submit Approved
             </Button>
           </DialogFooter>
         </DialogContent>

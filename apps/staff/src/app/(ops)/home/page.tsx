@@ -13,6 +13,7 @@ import {
   Loader2,
   Trash2,
   ArrowLeftRight,
+  Receipt,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -394,12 +395,13 @@ export default function HomePage() {
         {/* Quick actions */}
         <div>
           <h2 className="mb-2 text-sm font-semibold text-gray-900">Quick Actions</h2>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-5 gap-2">
             {[
               { href: "/stock-count", icon: ClipboardCheck, label: "Check" },
               { href: "/receiving", icon: Package, label: "Receive" },
               { href: "/wastage", icon: Trash2, label: "Wastage" },
               { href: "/transfers", icon: ArrowLeftRight, label: "Transfer" },
+              { href: "/claims", icon: Receipt, label: "Claim" },
             ].map((action) => {
               const Icon = action.icon;
               return (

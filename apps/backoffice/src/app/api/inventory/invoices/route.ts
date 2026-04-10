@@ -64,6 +64,20 @@ export async function GET(req: NextRequest) {
     orderBy: { name: "asc" },
   });
 
+  // Count due-today invoices (unpaid, due date = today)
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayEnd = new Date(todayStart.getTime() + 86400000);
+  const dueTodayInvoices = await prisma.invoice.findMany({
+    where: {
+      status: { in: UNPAID_STATUSES as ("DRAFT" | "INITIATED" | "PENDING" | "OVERDUE")[] },
+      dueDate: { gte: todayStart, lt: todayEnd },
+    },
+    select: { id: true, amount: true },
+  });
+  const dueTodayCount = dueTodayInvoices.length;
+  const dueTodayAmount = dueTodayInvoices.reduce((s, i) => s + Number(i.amount), 0);
+
   const mapped = invoices.map((inv) => ({
     id: inv.id,
     invoiceNumber: inv.invoiceNumber,
@@ -82,7 +96,7 @@ export async function GET(req: NextRequest) {
     notes: inv.notes,
   }));
 
-  return NextResponse.json({ invoices: mapped, outlets });
+  return NextResponse.json({ invoices: mapped, outlets, dueTodayCount, dueTodayAmount });
 }
 
 export async function POST(req: NextRequest) {

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
-import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown } from "lucide-react";
+import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign } from "lucide-react";
 
 const isPdf = (url: string) => /\.pdf($|\?)/i.test(url) || url.includes("/raw/");
 
@@ -28,7 +28,7 @@ type Invoice = {
 };
 
 type OutletOption = { id: string; name: string };
-type InvoicesResponse = { invoices: Invoice[]; outlets: OutletOption[] };
+type InvoicesResponse = { invoices: Invoice[]; outlets: OutletOption[]; dueTodayCount: number; dueTodayAmount: number };
 
 export default function InvoicesPage() {
   const [tab, setTab] = useState("unpaid");
@@ -41,6 +41,8 @@ export default function InvoicesPage() {
   const [dueDateTo, setDueDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [viewingPhotos, setViewingPhotos] = useState<{ invoiceNumber: string; photos: string[] } | null>(null);
+  const [cardFilter, setCardFilter] = useState<"all" | "pending" | "overdue" | "paid" | "due_today" | null>(null);
+  const [batchInitiating, setBatchInitiating] = useState(false);
 
   // Edit invoice dialog
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -62,8 +64,23 @@ export default function InvoicesPage() {
 
   const url = `/api/inventory/invoices?${params.toString()}`;
   const { data, isLoading: loading, mutate: loadInvoices } = useFetch<InvoicesResponse>(url);
-  const invoices = data?.invoices ?? [];
+  const allInvoices = data?.invoices ?? [];
   const outletOptions = data?.outlets ?? [];
+  const dueTodayCount = data?.dueTodayCount ?? 0;
+  const dueTodayAmount = data?.dueTodayAmount ?? 0;
+
+  const today = new Date().toISOString().split("T")[0];
+
+  // Apply card filter on top of API results
+  const invoices = cardFilter
+    ? allInvoices.filter((inv) => {
+        if (cardFilter === "pending") return inv.status === "PENDING";
+        if (cardFilter === "overdue") return inv.status === "OVERDUE";
+        if (cardFilter === "paid") return inv.status === "PAID";
+        if (cardFilter === "due_today") return inv.dueDate === today && inv.status !== "PAID";
+        return true;
+      })
+    : allInvoices;
 
   const activeFilterCount = [outletFilter, dueDateFrom, dueDateTo].filter(Boolean).length;
 
@@ -141,6 +158,25 @@ export default function InvoicesPage() {
     }
   };
 
+  const batchInitiateDueToday = async () => {
+    const dueTodayUnpaid = allInvoices.filter((inv) => inv.dueDate === today && (inv.status === "PENDING" || inv.status === "OVERDUE"));
+    if (dueTodayUnpaid.length === 0) return;
+    if (!confirm(`Initiate payment for ${dueTodayUnpaid.length} invoice${dueTodayUnpaid.length > 1 ? "s" : ""} due today?`)) return;
+    setBatchInitiating(true);
+    try {
+      for (const inv of dueTodayUnpaid) {
+        await fetch(`/api/inventory/invoices/${inv.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "INITIATED" }),
+        });
+      }
+      await loadInvoices(undefined, { revalidate: true });
+    } finally {
+      setBatchInitiating(false);
+    }
+  };
+
   const totalPending = invoices.filter((i) => i.status === "PENDING").reduce((a, i) => a + i.amount, 0);
   const totalOverdue = invoices.filter((i) => i.status === "OVERDUE").reduce((a, i) => a + i.amount, 0);
   const totalPaid = invoices.filter((i) => i.status === "PAID").reduce((a, i) => a + i.amount, 0);
@@ -193,13 +229,77 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {/* Summary cards */}
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-lg border bg-white px-3 py-2.5"><p className="text-xs text-gray-500">Total</p><p className="text-lg font-bold">RM {totalAll.toFixed(2)}</p></div>
-        <div className="rounded-lg border bg-white px-3 py-2.5"><p className="text-xs text-gray-500">Pending</p><p className="text-lg font-bold text-terracotta">RM {totalPending.toFixed(2)}</p></div>
-        <div className="rounded-lg border bg-white px-3 py-2.5"><p className="text-xs text-gray-500">Overdue</p><p className="text-lg font-bold text-red-600">RM {totalOverdue.toFixed(2)}</p></div>
-        <div className="rounded-lg border bg-white px-3 py-2.5"><p className="text-xs text-gray-500">Paid</p><p className="text-lg font-bold text-green-600">RM {totalPaid.toFixed(2)}</p></div>
+      {/* Summary cards — clickable to filter */}
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {([
+          { key: "all" as const, label: "Total", amount: totalAll, color: "text-gray-900", border: "border-gray-300", ring: "ring-gray-200" },
+          { key: "pending" as const, label: "Pending", amount: totalPending, color: "text-terracotta", border: "border-terracotta", ring: "ring-terracotta/20" },
+          { key: "overdue" as const, label: "Overdue", amount: totalOverdue, color: "text-red-600", border: "border-red-400", ring: "ring-red-100" },
+          { key: "paid" as const, label: "Paid", amount: totalPaid, color: "text-green-600", border: "border-green-400", ring: "ring-green-100" },
+        ]).map((card) => (
+          <button
+            key={card.key}
+            onClick={() => setCardFilter(cardFilter === card.key ? null : card.key)}
+            className={`rounded-lg border bg-white px-3 py-2.5 text-left transition-all hover:shadow-sm ${
+              cardFilter === card.key
+                ? `${card.border} ring-2 ${card.ring} shadow-sm`
+                : "border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            <p className="text-xs text-gray-500">{card.label}</p>
+            <p className={`text-lg font-bold ${card.color}`}>RM {card.amount.toFixed(2)}</p>
+          </button>
+        ))}
+        {/* Due Today — action card */}
+        <button
+          onClick={() => setCardFilter(cardFilter === "due_today" ? null : "due_today")}
+          className={`group relative rounded-lg border bg-white px-3 py-2.5 text-left transition-all hover:shadow-sm ${
+            cardFilter === "due_today"
+              ? "border-blue-400 ring-2 ring-blue-100 shadow-sm"
+              : dueTodayCount > 0
+                ? "border-blue-200 bg-blue-50/50 hover:border-blue-300"
+                : "border-gray-200 hover:border-gray-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-500">Due Today</p>
+            {dueTodayCount > 0 && (
+              <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-500 px-1.5 text-[10px] font-bold text-white">
+                {dueTodayCount}
+              </span>
+            )}
+          </div>
+          <p className={`text-lg font-bold ${dueTodayCount > 0 ? "text-blue-600" : "text-gray-400"}`}>
+            RM {dueTodayAmount.toFixed(2)}
+          </p>
+          {dueTodayCount > 0 && cardFilter === "due_today" && (
+            <div
+              onClick={(e) => { e.stopPropagation(); batchInitiateDueToday(); }}
+              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-500 px-2 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-600"
+            >
+              {batchInitiating ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <>
+                  <DollarSign className="h-3 w-3" />
+                  Initiate All Payments
+                </>
+              )}
+            </div>
+          )}
+        </button>
       </div>
+      {cardFilter && (
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-xs text-gray-500">
+            Showing: <span className="font-medium text-gray-700">{cardFilter === "due_today" ? "Due Today" : cardFilter === "all" ? "All" : cardFilter.charAt(0).toUpperCase() + cardFilter.slice(1)}</span>
+            {" "}({invoices.length} invoice{invoices.length !== 1 ? "s" : ""})
+          </span>
+          <button onClick={() => setCardFilter(null)} className="flex items-center gap-0.5 rounded-full border border-gray-200 px-2 py-0.5 text-[10px] text-gray-500 hover:bg-gray-50">
+            <X className="h-3 w-3" /> Clear
+          </button>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-md">

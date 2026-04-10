@@ -7,6 +7,7 @@ import {
   Package,
   Trash2,
   ArrowLeftRight,
+  Receipt,
   ChevronRight,
 } from "lucide-react";
 
@@ -38,6 +39,13 @@ const modules = [
     label: "Transfers",
     description: "Inter-outlet transfers",
     color: "bg-purple-100 text-purple-600",
+  },
+  {
+    href: "/claims",
+    icon: Receipt,
+    label: "Pay & Claim",
+    description: "Submit receipts for reimbursement",
+    color: "bg-amber-100 text-amber-600",
   },
 ];
 

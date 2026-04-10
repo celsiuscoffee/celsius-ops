@@ -7,12 +7,22 @@ export async function GET(req: NextRequest) {
   const tab = req.nextUrl.searchParams.get("tab") || "pending";
   const search = req.nextUrl.searchParams.get("search") || "";
 
+  const outlet = req.nextUrl.searchParams.get("outlet") || "";
+
   const where: Record<string, unknown> = { orderType: "PAY_AND_CLAIM" };
 
-  if (tab === "pending") {
+  if (tab === "draft") {
+    where.status = "DRAFT";
+  } else if (tab === "pending") {
+    where.status = { not: "DRAFT" };
     where.invoices = { some: { status: { in: ["PENDING", "OVERDUE"] } } };
   } else if (tab === "reimbursed") {
+    where.status = { not: "DRAFT" };
     where.invoices = { every: { status: "PAID" } };
+  }
+
+  if (outlet) {
+    where.outletId = outlet;
   }
 
   if (search) {
@@ -79,6 +89,7 @@ export async function GET(req: NextRequest) {
       unitPrice: Number(i.unitPrice),
       totalPrice: Number(i.totalPrice),
     })),
+    status: o.status,
     invoice: o.invoices[0]
       ? {
           id: o.invoices[0].id,
@@ -86,6 +97,7 @@ export async function GET(req: NextRequest) {
           amount: Number(o.invoices[0].amount),
           status: o.invoices[0].status,
           photoCount: o.invoices[0].photos.length,
+          photos: o.invoices[0].photos,
         }
       : null,
   }));
@@ -95,27 +107,101 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { outletId, supplierId, claimedById, items, notes, photos, purchaseDate } = body;
+  const { outletId, supplierId, claimedById, items, notes, photos, purchaseDate, draft, aiExtracted } = body;
 
-  if (!outletId || !supplierId || !claimedById || !items?.length) {
+  const isDraft = draft === true;
+
+  // For non-draft: require supplier, staff, items
+  if (!isDraft && (!outletId || !supplierId || !claimedById || !items?.length)) {
     return NextResponse.json(
       { error: "outletId, supplierId, claimedById, and items are required" },
       { status: 400 },
     );
   }
 
+  // For draft: at minimum need outletId
+  if (isDraft && !outletId) {
+    return NextResponse.json({ error: "outletId is required" }, { status: 400 });
+  }
+
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Generate order number with PC- prefix
-  const outlet = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId } });
+  const outletRecord = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId } });
   const count = await prisma.order.count({ where: { outletId, orderType: "PAY_AND_CLAIM" } });
-  const orderNumber = `PC-${outlet.code}-${String(count + 1).padStart(4, "0")}`;
+  const orderNumber = `PC-${outletRecord.code}-${String(count + 1).padStart(4, "0")}`;
 
-  const totalAmount = items.reduce(
-    (sum: number, i: { quantity: number; unitPrice: number }) => sum + i.quantity * i.unitPrice,
-    0,
-  );
+  const totalAmount = items?.length
+    ? items.reduce(
+        (sum: number, i: { quantity: number; unitPrice: number }) => sum + i.quantity * i.unitPrice,
+        0,
+      )
+    : 0;
+
+  // Store AI-extracted data in notes for draft review
+  const orderNotes = isDraft && aiExtracted
+    ? JSON.stringify({ userNotes: notes || null, aiExtracted })
+    : notes || null;
+
+  if (isDraft) {
+    // ── Draft mode: no receiving, no stock adjustment ──
+    const order = await prisma.order.create({
+      data: {
+        orderNumber,
+        orderType: "PAY_AND_CLAIM",
+        outletId,
+        supplierId: supplierId || null,
+        status: "DRAFT",
+        totalAmount,
+        notes: orderNotes,
+        deliveryDate: purchaseDate ? new Date(purchaseDate) : new Date(),
+        createdById: caller.id,
+        claimedById: claimedById || caller.id,
+        ...(items?.length
+          ? {
+              items: {
+                create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }) => ({
+                  productId: i.productId,
+                  productPackageId: i.productPackageId || null,
+                  quantity: i.quantity,
+                  unitPrice: i.unitPrice,
+                  totalPrice: i.quantity * i.unitPrice,
+                })),
+              },
+            }
+          : {}),
+      },
+    });
+
+    // Create draft invoice
+    const invCount = await prisma.invoice.count();
+    const invoiceNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
+    const invoice = await prisma.invoice.create({
+      data: {
+        invoiceNumber,
+        orderId: order.id,
+        outletId,
+        supplierId: supplierId || null,
+        amount: totalAmount,
+        status: "DRAFT",
+        paymentType: "STAFF_CLAIM",
+        claimedById: claimedById || caller.id,
+        photos: photos || [],
+        notes: notes ? `Draft claim: ${notes}` : "Draft claim",
+      },
+    });
+
+    return NextResponse.json(
+      {
+        order: { id: order.id, orderNumber: order.orderNumber },
+        invoice: { id: invoice.id, invoiceNumber: invoice.invoiceNumber },
+      },
+      { status: 201 },
+    );
+  }
+
+  // ── Non-draft: full flow (existing behavior) ──
 
   // 1. Create order (already COMPLETED since items are in hand)
   const order = await prisma.order.create({

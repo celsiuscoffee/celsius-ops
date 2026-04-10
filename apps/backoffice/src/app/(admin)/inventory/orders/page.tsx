@@ -172,21 +172,65 @@ export default function OrdersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ urls, context: supplierName ? `Supplier: ${supplierName}` : undefined }),
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.warn("[AI Extract] Failed:", res.status);
+        return;
+      }
       const data = await res.json();
+      if (data.error) {
+        console.warn("[AI Extract] Error:", data.error);
+        return;
+      }
       const filled: Record<string, boolean> = {};
+
+      // Invoice number
       if (data.invoiceNumber) {
         setEditInvoiceNumber((prev) => { if (!prev) { filled.invoiceNumber = true; return data.invoiceNumber; } return prev; });
       }
+
+      // Due date
       if (data.dueDate) {
         setEditInvoiceDueDate((prev) => { if (!prev) { filled.dueDate = true; return data.dueDate; } return prev; });
       }
-      if (data.issueDate && !editDeliveryDate) {
-        // Use issue date as delivery date hint if not set
+
+      // Delivery date — use deliveryDate or issueDate
+      const detectedDeliveryDate = data.deliveryDate || data.issueDate;
+      if (detectedDeliveryDate && !editDeliveryDate) {
+        setEditDeliveryDate(detectedDeliveryDate);
+        filled.deliveryDate = true;
       }
+
+      // Match extracted items to order items by name similarity — update qty & price
+      if (data.items?.length > 0) {
+        setEditItems((prevItems) => {
+          const updated = [...prevItems];
+          let matched = false;
+          for (const aiItem of data.items) {
+            const aiName = (aiItem.name || "").toLowerCase();
+            // Find best match in existing order items
+            const idx = updated.findIndex((oi) => {
+              const orderName = oi.product.toLowerCase();
+              return orderName.includes(aiName) || aiName.includes(orderName) ||
+                // Fuzzy: check if most words match
+                aiName.split(/\s+/).filter((w: string) => orderName.includes(w)).length >= Math.ceil(aiName.split(/\s+/).length * 0.5);
+            });
+            if (idx >= 0) {
+              if (aiItem.quantity > 0) updated[idx].qtyStr = String(aiItem.quantity);
+              if (aiItem.unitPrice > 0) updated[idx].priceStr = String(aiItem.unitPrice);
+              matched = true;
+            }
+          }
+          if (matched) filled.items = true;
+          return updated;
+        });
+      }
+
       setAiExtracted((prev) => ({ ...prev, ...filled }));
-    } catch { /* silent */ }
-    setExtracting(false);
+    } catch (err) {
+      console.warn("[AI Extract] Exception:", err);
+    } finally {
+      setExtracting(false);
+    }
   }, [editDeliveryDate]);
 
   const uploadFile = useCallback(async (file: File) => {
@@ -603,7 +647,10 @@ export default function OrdersPage() {
 
               {/* Editable Items */}
               <div>
-                <p className="mb-2 text-xs font-semibold text-gray-700 uppercase">Order Items</p>
+                <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 uppercase">
+                  Order Items
+                  {aiExtracted.items && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium normal-case text-purple-600">AI updated qty &amp; prices</span>}
+                </p>
                 <div className="rounded-lg border overflow-hidden">
                   <table className="w-full text-xs">
                     <thead>
@@ -680,6 +727,7 @@ export default function OrdersPage() {
                 <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
                   <Truck className="h-3.5 w-3.5" /> Delivery Date
                   {editOrder.status === "SENT" && <span className="text-red-500">*</span>}
+                  {aiExtracted.deliveryDate && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
                 </label>
                 <Input
                   type="date"
