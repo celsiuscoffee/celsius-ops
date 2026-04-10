@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
-import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2 } from "lucide-react";
+import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown } from "lucide-react";
+
+const isPdf = (url: string) => /\.pdf($|\?)/i.test(url) || url.includes("/raw/");
 
 type Invoice = {
   id: string;
@@ -421,7 +423,14 @@ export default function InvoicesPage() {
                   <div className="mb-2 grid grid-cols-3 gap-2">
                     {editPhotos.map((url, i) => (
                       <div key={i} className="group relative overflow-hidden rounded-lg border border-gray-200">
-                        <img src={url} alt={`Photo ${i + 1}`} className="h-24 w-full object-cover" />
+                        {isPdf(url) ? (
+                          <a href={url} target="_blank" rel="noopener noreferrer" className="flex h-24 w-full flex-col items-center justify-center bg-gray-50 text-gray-400 hover:text-blue-500">
+                            <FileDown className="h-6 w-6" />
+                            <span className="mt-1 text-[10px]">PDF</span>
+                          </a>
+                        ) : (
+                          <img src={url} alt={`Photo ${i + 1}`} className="h-24 w-full object-cover" />
+                        )}
                         <button
                           onClick={() => setEditPhotos(editPhotos.filter((_, j) => j !== i))}
                           className="absolute right-1 top-1 rounded-full bg-red-500 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
@@ -471,14 +480,22 @@ export default function InvoicesPage() {
               </button>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {viewingPhotos.photos.map((url, i) => (
-                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="group relative block overflow-hidden rounded-lg border border-gray-200 hover:border-blue-300">
-                  <img src={url} alt={`Invoice photo ${i + 1}`} className="h-auto w-full object-contain" />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
-                    <ZoomIn className="h-6 w-6 text-white drop-shadow-md" />
-                  </div>
-                </a>
-              ))}
+              {viewingPhotos.photos.map((url, i) =>
+                isPdf(url) ? (
+                  <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-4 py-8 text-gray-500 hover:border-blue-400 hover:bg-blue-50/30 hover:text-blue-600 transition-colors">
+                    <FileDown className="h-10 w-10" />
+                    <span className="text-sm font-medium">PDF Document</span>
+                    <span className="text-xs">Click to open</span>
+                  </a>
+                ) : (
+                  <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="group relative block overflow-hidden rounded-lg border border-gray-200 hover:border-blue-300">
+                    <img src={url} alt={`Invoice photo ${i + 1}`} className="h-auto w-full object-contain" />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
+                      <ZoomIn className="h-6 w-6 text-white drop-shadow-md" />
+                    </div>
+                  </a>
+                ),
+              )}
             </div>
           </div>
         </div>
