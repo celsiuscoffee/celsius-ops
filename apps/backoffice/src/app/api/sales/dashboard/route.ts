@@ -281,8 +281,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate previous period for comparison
-    const fromD = new Date(fromDate + "T00:00:00+08:00");
-    const toD = new Date(toDate + "T23:59:59+08:00");
+    // Use noon to avoid rounding issues with midnight boundaries
+    const fromD = new Date(fromDate + "T12:00:00+08:00");
+    const toD = new Date(toDate + "T12:00:00+08:00");
     const periodDays = Math.round((toD.getTime() - fromD.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     const prevToD = new Date(fromD);
     prevToD.setDate(prevToD.getDate() - 1);
