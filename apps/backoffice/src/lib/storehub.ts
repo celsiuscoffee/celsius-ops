@@ -50,8 +50,10 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** Format date as YYYY-MM-DD in MYT (UTC+8) */
 function formatDate(d: Date): string {
-  return d.toISOString().split("T")[0];
+  const myt = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+  return myt.toISOString().split("T")[0];
 }
 
 // ─── Types ───────────────────────────────────────────────────
