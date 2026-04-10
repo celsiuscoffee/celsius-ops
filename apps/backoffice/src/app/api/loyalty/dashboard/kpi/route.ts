@@ -37,14 +37,14 @@ function isInShift(dateStr: string, shift: string): boolean {
 // Fetch order COUNT from StoreHub — only count, don't parse full data
 // shift: 'all' | 'morning' | 'evening' — filters by time-of-day per transaction
 async function fetchSHOrderCount(storeId: string, from: string, to: string, shift = 'all'): Promise<{ count: number; debug: string }> {
-  // STOREHUB_API_KEY is already in "username:password" format
-  const shKey = process.env.STOREHUB_API_KEY || '';
+  const accountId = process.env.STOREHUB_ACCOUNT_ID || '';
+  const apiKey = process.env.STOREHUB_API_KEY || '';
   const shApi = process.env.STOREHUB_API_URL || 'https://api.storehubhq.com';
 
-  if (!shKey) {
-    return { count: 0, debug: `no_credentials` };
+  if (!accountId || !apiKey) {
+    return { count: 0, debug: `no_credentials (accountId=${accountId ? 'set' : 'missing'}, apiKey=${apiKey ? 'set' : 'missing'})` };
   }
-  const auth = Buffer.from(shKey).toString('base64');
+  const auth = Buffer.from(`${accountId}:${apiKey}`).toString('base64');
   const url = `${shApi}/transactions?storeId=${storeId}&from=${from}&to=${to}&includeOnline=false`;
   try {
     const res = await fetch(url, {
@@ -86,8 +86,11 @@ export async function GET(request: NextRequest) {
     const shift = searchParams.get('shift') || 'all'; // 'all' | 'morning' | 'evening'
 
     const now = new Date();
+    // Use MYT (UTC+8) for date calculations
+    const mytNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+    const todayMYT = mytNow.toISOString().split('T')[0];
     let fromDate: string;
-    let toDate = now.toISOString().split('T')[0];
+    let toDate = todayMYT;
 
     if (period === 'custom') {
       fromDate = searchParams.get('from') || toDate;
@@ -95,9 +98,11 @@ export async function GET(request: NextRequest) {
     } else if (period === 'daily') {
       fromDate = toDate;
     } else if (period === 'weekly') {
-      fromDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const d = new Date(mytNow);
+      d.setDate(d.getDate() - 7);
+      fromDate = d.toISOString().split('T')[0];
     } else {
-      fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      fromDate = new Date(mytNow.getUTCFullYear(), mytNow.getUTCMonth(), 1).toISOString().split('T')[0];
     }
 
     // Always query the full day range — shift filtering is done per-transaction
