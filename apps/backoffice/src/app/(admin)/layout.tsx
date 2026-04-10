@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   ShoppingBag,
+  Box,
   Boxes,
   Gift,
   SlidersHorizontal,
@@ -115,9 +116,10 @@ const NAV_SECTIONS: NavSection[] = [
       {
         label: "Master Data",
         items: [
-          { label: "Products", href: "/inventory/products", icon: <Package className={ICON_SIZE} />, moduleKey: "inventory:products" },
+          { label: "Ingredients", href: "/inventory/products", icon: <Package className={ICON_SIZE} />, moduleKey: "inventory:products" },
+          { label: "Perishables", href: "/inventory/perishables", icon: <Box className={ICON_SIZE} />, moduleKey: "inventory:perishables" },
           { label: "Suppliers", href: "/inventory/suppliers", icon: <Truck className={ICON_SIZE} />, moduleKey: "inventory:suppliers" },
-          { label: "Categories", href: "/inventory/categories", icon: <Tags className={ICON_SIZE} />, moduleKey: "inventory:categories" },
+          { label: "Item Groups", href: "/inventory/groups", icon: <Tags className={ICON_SIZE} />, moduleKey: "inventory:categories" },
           { label: "Menu & BOM", href: "/inventory/menus", icon: <BookOpen className={ICON_SIZE} />, moduleKey: "inventory:menus" },
         ],
       },

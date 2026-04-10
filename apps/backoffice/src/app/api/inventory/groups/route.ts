@@ -2,18 +2,18 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
-  const categories = await prisma.itemGroup.findMany({
+  const groups = await prisma.itemGroup.findMany({
     include: {
       _count: { select: { products: true } },
     },
     orderBy: { name: "asc" },
   });
 
-  const mapped = categories.map((c) => ({
-    id: c.id,
-    name: c.name,
-    slug: c.slug,
-    productCount: c._count.products,
+  const mapped = groups.map((g) => ({
+    id: g.id,
+    name: g.name,
+    slug: g.slug,
+    productCount: g._count.products,
   }));
 
   return NextResponse.json(mapped);
@@ -23,9 +23,9 @@ export async function POST(req: NextRequest) {
   const { name } = await req.json();
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-  const category = await prisma.itemGroup.create({
+  const group = await prisma.itemGroup.create({
     data: { name, slug },
   });
 
-  return NextResponse.json(category, { status: 201 });
+  return NextResponse.json(group, { status: 201 });
 }

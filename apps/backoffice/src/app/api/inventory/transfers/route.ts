@@ -1,6 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { adjustStockBalance } from "@/lib/stock";
 
 export async function GET(req: NextRequest) {
   try {
@@ -17,6 +16,8 @@ export async function GET(req: NextRequest) {
         fromOutlet: true,
         toOutlet: true,
         transferredBy: true,
+        approvedBy: true,
+        receivedBy: true,
         items: {
           include: {
             product: true,
@@ -38,6 +39,11 @@ export async function GET(req: NextRequest) {
       notes: t.notes,
       createdAt: t.createdAt.toISOString(),
       completedAt: t.completedAt?.toISOString() ?? null,
+      approvedBy: t.approvedBy?.name ?? null,
+      approvedAt: t.approvedAt?.toISOString() ?? null,
+      receivedBy: t.receivedBy?.name ?? null,
+      receivedAt: t.receivedAt?.toISOString() ?? null,
+      rejectionReason: t.rejectionReason ?? null,
       items: t.items.map((i) => ({
         id: i.id,
         product: i.product.name,
@@ -65,7 +71,7 @@ export async function POST(req: NextRequest) {
           fromOutletId,
           toOutletId,
           transferredById,
-          status: "PENDING",
+          status: "DRAFT",
           notes: notes || null,
           items: {
             create: items.map((i: { productId: string; productPackageId?: string; quantity: number }) => ({
@@ -82,11 +88,6 @@ export async function POST(req: NextRequest) {
           items: { include: { product: true, productPackage: true } },
         },
       });
-
-      // Subtract from source outlet immediately when transfer is created
-      for (const item of items as { productId: string; quantity: number }[]) {
-        await adjustStockBalance(fromOutletId, item.productId, -item.quantity);
-      }
 
       return created;
     });

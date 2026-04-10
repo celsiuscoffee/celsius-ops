@@ -28,7 +28,7 @@ export async function GET() {
   ] = await Promise.all([
     prisma.product.count({ where: { isActive: true } }),
     prisma.supplier.count({ where: { status: "ACTIVE" } }),
-    prisma.category.count(),
+    prisma.itemGroup.count(),
     prisma.outlet.count(),
     prisma.user.count({ where: { status: "ACTIVE" } }),
     prisma.menu.count({ where: { isActive: true } }),

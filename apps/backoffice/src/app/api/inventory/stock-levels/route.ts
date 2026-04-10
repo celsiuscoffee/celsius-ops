@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
         sku: true,
         baseUom: true,
         storageArea: true,
-        category: { select: { name: true } },
+        group: { select: { name: true } },
       },
     }),
   ]);
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
       productId: product.id,
       name: product.name,
       sku: product.sku,
-      category: product.category.name,
+      category: product.group.name,
       baseUom: product.baseUom,
       storageArea: product.storageArea,
       currentQty,

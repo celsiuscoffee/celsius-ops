@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import {
   ArrowLeftRight, Loader2, Search, ArrowRight,
   CheckCircle2, Package, Eye, Truck, Plus, X, Ban, Trash2,
+  Clock, ShieldCheck, Send, PackageCheck,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -32,6 +33,11 @@ interface Transfer {
   createdAt: string;
   completedAt: string | null;
   items: TransferItem[];
+  approvedBy?: string;
+  approvedAt?: string;
+  receivedBy?: string;
+  receivedAt?: string;
+  rejectionReason?: string;
 }
 
 type Outlet = { id: string; name: string; code: string };
@@ -39,9 +45,25 @@ type Product = { id: string; name: string; sku: string; baseUom: string; categor
 type CartItem = { productId: string; name: string; sku: string; uom: string; quantity: number };
 
 const STATUS_STYLES: Record<string, string> = {
-  PENDING: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  DRAFT: "bg-gray-50 text-gray-600 border-gray-200",
+  PENDING_APPROVAL: "bg-amber-50 text-amber-700 border-amber-200",
+  APPROVED: "bg-blue-50 text-blue-700 border-blue-200",
+  IN_TRANSIT: "bg-purple-50 text-purple-700 border-purple-200",
+  RECEIVED: "bg-green-50 text-green-700 border-green-200",
   COMPLETED: "bg-green-50 text-green-700 border-green-200",
-  CANCELLED: "bg-gray-50 text-gray-500 border-gray-200",
+  CANCELLED: "bg-red-50 text-red-500 border-red-200",
+  PENDING: "bg-yellow-50 text-yellow-700 border-yellow-200",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  PENDING_APPROVAL: "Pending Approval",
+  APPROVED: "Approved",
+  IN_TRANSIT: "In Transit",
+  RECEIVED: "Received",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+  PENDING: "Pending",
 };
 
 function formatDate(iso: string) {
@@ -59,6 +81,11 @@ export default function TransfersPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Transfer | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Reject dialog state
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectTransferId, setRejectTransferId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
 
   // Create dialog state
   const [createOpen, setCreateOpen] = useState(false);
@@ -164,12 +191,22 @@ export default function TransfersPage() {
 
   const stats = useMemo(() => ({
     total: data.length,
-    pending: data.filter((t) => t.status === "PENDING").length,
+    draft: data.filter((t) => t.status === "DRAFT").length,
+    pendingApproval: data.filter((t) => t.status === "PENDING_APPROVAL").length,
+    approved: data.filter((t) => t.status === "APPROVED").length,
+    inTransit: data.filter((t) => t.status === "IN_TRANSIT").length,
+    received: data.filter((t) => t.status === "RECEIVED" || t.status === "COMPLETED").length,
     cancelled: data.filter((t) => t.status === "CANCELLED").length,
-    completed: data.filter((t) => t.status === "COMPLETED").length,
+    pending: data.filter((t) => t.status === "PENDING").length,
   }), [data]);
 
-  async function updateTransferStatus(id: string, status: string) {
+  async function updateTransferStatus(id: string, status: string, extra?: { rejectionReason?: string }) {
+    if (status === "RECEIVED") {
+      if (!confirm("Confirm received? Stock will be added to the destination outlet.")) return;
+    }
+    if (status === "APPROVED") {
+      if (!confirm("Approve this transfer? Stock will be subtracted from the source outlet.")) return;
+    }
     if (status === "COMPLETED") {
       if (!confirm("Complete this transfer? Stock will be moved between outlets.")) return;
     }
@@ -178,15 +215,122 @@ export default function TransfersPage() {
       const res = await fetch(`/api/inventory/transfers/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...extra }),
       });
       if (!res.ok) { alert("Failed to update transfer status."); return; }
-      setData((prev) => prev.map((t) => t.id === id ? { ...t, status, completedAt: status === "COMPLETED" ? new Date().toISOString() : t.completedAt } : t));
-      setSelected((prev) => prev ? { ...prev, status, completedAt: status === "COMPLETED" ? new Date().toISOString() : prev.completedAt } : null);
+      // Reload to get fresh data with user names
+      reload();
+      if (selected?.id === id) {
+        const updated = await res.json();
+        setSelected((prev) => prev ? { ...prev, ...updated, status } : null);
+      }
     } finally {
       setActionLoading(false);
     }
   }
+
+  const openRejectDialog = (transferId: string) => {
+    setRejectTransferId(transferId);
+    setRejectionReason("");
+    setRejectDialogOpen(true);
+  };
+
+  const handleReject = async () => {
+    if (!rejectTransferId || !rejectionReason.trim()) return;
+    setRejectDialogOpen(false);
+    await updateTransferStatus(rejectTransferId, "CANCELLED", { rejectionReason: rejectionReason.trim() });
+    setRejectTransferId(null);
+    setRejectionReason("");
+  };
+
+  const renderActionButtons = (t: Transfer, size: "sm" | "md" = "sm") => {
+    const iconSize = size === "sm" ? "h-3 w-3" : "h-4 w-4";
+
+    switch (t.status) {
+      case "DRAFT":
+        return (
+          <button
+            onClick={() => updateTransferStatus(t.id, "PENDING_APPROVAL")}
+            disabled={actionLoading}
+            className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-amber-500 hover:bg-amber-600"
+            title="Submit for Approval"
+          >
+            <Send className={iconSize} />
+          </button>
+        );
+      case "PENDING_APPROVAL":
+        return (
+          <>
+            <button
+              onClick={() => updateTransferStatus(t.id, "APPROVED")}
+              disabled={actionLoading}
+              className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-green-500 hover:bg-green-600"
+              title="Approve"
+            >
+              <ShieldCheck className={iconSize} />
+            </button>
+            <button
+              onClick={() => openRejectDialog(t.id)}
+              disabled={actionLoading}
+              className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50"
+              title="Reject"
+            >
+              <Ban className={iconSize} />
+            </button>
+          </>
+        );
+      case "APPROVED":
+        return (
+          <button
+            onClick={() => updateTransferStatus(t.id, "IN_TRANSIT")}
+            disabled={actionLoading}
+            className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-purple-500 hover:bg-purple-600"
+            title="Mark In Transit"
+          >
+            <Truck className={iconSize} />
+          </button>
+        );
+      case "IN_TRANSIT":
+        return (
+          <button
+            onClick={() => updateTransferStatus(t.id, "RECEIVED")}
+            disabled={actionLoading}
+            className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-green-500 hover:bg-green-600"
+            title="Confirm Received"
+          >
+            <PackageCheck className={iconSize} />
+          </button>
+        );
+      case "PENDING":
+        return (
+          <>
+            <button
+              onClick={() => updateTransferStatus(t.id, "COMPLETED")}
+              disabled={actionLoading}
+              className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-green-500 hover:bg-green-600"
+              title="Complete"
+            >
+              <CheckCircle2 className={iconSize} />
+            </button>
+            <button
+              onClick={() => { if (confirm("Cancel this transfer?")) updateTransferStatus(t.id, "CANCELLED"); }}
+              disabled={actionLoading}
+              className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50"
+              title="Cancel"
+            >
+              <Ban className={iconSize} />
+            </button>
+          </>
+        );
+      case "RECEIVED":
+      case "COMPLETED":
+        return <CheckCircle2 className={`${iconSize} text-green-500`} />;
+      case "CANCELLED":
+        return <Ban className={`${iconSize} text-gray-400`} />;
+      default:
+        return null;
+    }
+  };
 
   if (loading) {
     return (
@@ -202,7 +346,7 @@ export default function TransfersPage() {
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Transfers</h2>
           <p className="mt-0.5 text-sm text-gray-500">
-            {stats.total} transfers — {stats.pending} pending, {stats.completed} completed
+            {stats.total} transfers — {stats.draft} draft, {stats.pendingApproval} pending approval, {stats.inTransit} in transit, {stats.received} received
           </p>
         </div>
         <Button onClick={openCreate} className="bg-terracotta hover:bg-terracotta-dark">
@@ -216,11 +360,14 @@ export default function TransfersPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input placeholder="Search outlet or staff..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 flex-wrap">
           {[
             { key: "all", label: `All (${stats.total})` },
-            { key: "PENDING", label: `Pending (${stats.pending})` },
-            { key: "COMPLETED", label: `Completed (${stats.completed})` },
+            { key: "DRAFT", label: `Draft (${stats.draft})` },
+            { key: "PENDING_APPROVAL", label: `Pending Approval (${stats.pendingApproval})` },
+            { key: "APPROVED", label: `Approved (${stats.approved})` },
+            { key: "IN_TRANSIT", label: `In Transit (${stats.inTransit})` },
+            { key: "RECEIVED", label: `Received (${stats.received})` },
             { key: "CANCELLED", label: `Cancelled (${stats.cancelled})` },
           ].map((t) => (
             <button key={t.key} onClick={() => setStatusFilter(t.key)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === t.key ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500"}`}>
@@ -272,7 +419,7 @@ export default function TransfersPage() {
                 <td className="px-4 py-3 text-gray-600">{t.transferredBy}</td>
                 <td className="px-4 py-3">
                   <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[t.status] ?? ""}`}>
-                    {t.status === "PENDING" ? "Pending" : t.status.charAt(0) + t.status.slice(1).toLowerCase()}
+                    {STATUS_LABELS[t.status] ?? t.status}
                   </Badge>
                 </td>
                 <td className="px-4 py-3 text-right">
@@ -280,16 +427,7 @@ export default function TransfersPage() {
                     <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSelected(t)}>
                       <Eye className="h-3 w-3 mr-1" />View
                     </Button>
-                    {t.status === "PENDING" && (
-                      <>
-                        <button onClick={() => updateTransferStatus(t.id, "COMPLETED")} className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-green-500 hover:bg-green-600" title="Complete">
-                          <CheckCircle2 className="h-3 w-3" />
-                        </button>
-                        <button onClick={() => { if (confirm("Cancel this transfer?")) updateTransferStatus(t.id, "CANCELLED"); }} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50" title="Cancel">
-                          <Ban className="h-3 w-3" />
-                        </button>
-                      </>
-                    )}
+                    {renderActionButtons(t)}
                   </div>
                 </td>
               </tr>
@@ -326,13 +464,34 @@ export default function TransfersPage() {
                 <div className="rounded-lg border p-3">
                   <p className="text-[10px] text-gray-500 uppercase">Status</p>
                   <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[selected.status] ?? ""}`}>
-                    {selected.status.charAt(0) + selected.status.slice(1).toLowerCase()}
+                    {STATUS_LABELS[selected.status] ?? selected.status}
                   </Badge>
                 </div>
               </div>
 
               {selected.notes && (
                 <p className="text-xs text-gray-500 mt-2 bg-gray-50 rounded-lg px-3 py-2">Note: {selected.notes}</p>
+              )}
+
+              {/* Approval info */}
+              {selected.approvedBy && selected.approvedAt && (
+                <p className="text-xs text-blue-600 mt-2 bg-blue-50 rounded-lg px-3 py-2">
+                  Approved by: {selected.approvedBy} on {formatDate(selected.approvedAt)} at {formatTime(selected.approvedAt)}
+                </p>
+              )}
+
+              {/* Received info */}
+              {selected.receivedBy && selected.receivedAt && (
+                <p className="text-xs text-green-600 mt-2 bg-green-50 rounded-lg px-3 py-2">
+                  Received by: {selected.receivedBy} on {formatDate(selected.receivedAt)} at {formatTime(selected.receivedAt)}
+                </p>
+              )}
+
+              {/* Rejection reason */}
+              {selected.status === "CANCELLED" && selected.rejectionReason && (
+                <p className="text-xs text-red-600 mt-2 bg-red-50 rounded-lg px-3 py-2">
+                  Rejection reason: {selected.rejectionReason}
+                </p>
               )}
 
               <div className="mt-3 rounded-lg border overflow-hidden">
@@ -358,24 +517,79 @@ export default function TransfersPage() {
                 </table>
               </div>
 
-              {selected.status === "PENDING" && (
+              {/* Action buttons in detail dialog */}
+              {(selected.status === "DRAFT" || selected.status === "PENDING_APPROVAL" || selected.status === "APPROVED" || selected.status === "IN_TRANSIT" || selected.status === "PENDING") && (
                 <div className="mt-4 flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => { if (confirm("Cancel this transfer?")) updateTransferStatus(selected.id, "CANCELLED"); }}
-                    disabled={actionLoading}
-                    className="border-red-200 text-red-600 hover:bg-red-50"
-                  >
-                    <Ban className="h-4 w-4 mr-1" />Cancel
-                  </Button>
-                  <Button
-                    onClick={() => updateTransferStatus(selected.id, "COMPLETED")}
-                    disabled={actionLoading}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Truck className="h-4 w-4 mr-1" />}
-                    Mark as Completed
-                  </Button>
+                  {selected.status === "DRAFT" && (
+                    <Button
+                      onClick={() => updateTransferStatus(selected.id, "PENDING_APPROVAL")}
+                      disabled={actionLoading}
+                      className="bg-amber-500 hover:bg-amber-600"
+                    >
+                      {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+                      Submit for Approval
+                    </Button>
+                  )}
+                  {selected.status === "PENDING_APPROVAL" && (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => openRejectDialog(selected.id)}
+                        disabled={actionLoading}
+                        className="border-red-200 text-red-600 hover:bg-red-50"
+                      >
+                        <Ban className="h-4 w-4 mr-1" />Reject
+                      </Button>
+                      <Button
+                        onClick={() => updateTransferStatus(selected.id, "APPROVED")}
+                        disabled={actionLoading}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-1" />}
+                        Approve
+                      </Button>
+                    </>
+                  )}
+                  {selected.status === "APPROVED" && (
+                    <Button
+                      onClick={() => updateTransferStatus(selected.id, "IN_TRANSIT")}
+                      disabled={actionLoading}
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Truck className="h-4 w-4 mr-1" />}
+                      Mark In Transit
+                    </Button>
+                  )}
+                  {selected.status === "IN_TRANSIT" && (
+                    <Button
+                      onClick={() => updateTransferStatus(selected.id, "RECEIVED")}
+                      disabled={actionLoading}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <PackageCheck className="h-4 w-4 mr-1" />}
+                      Confirm Received
+                    </Button>
+                  )}
+                  {selected.status === "PENDING" && (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => { if (confirm("Cancel this transfer?")) updateTransferStatus(selected.id, "CANCELLED"); }}
+                        disabled={actionLoading}
+                        className="border-red-200 text-red-600 hover:bg-red-50"
+                      >
+                        <Ban className="h-4 w-4 mr-1" />Cancel
+                      </Button>
+                      <Button
+                        onClick={() => updateTransferStatus(selected.id, "COMPLETED")}
+                        disabled={actionLoading}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Truck className="h-4 w-4 mr-1" />}
+                        Mark as Completed
+                      </Button>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -386,6 +600,33 @@ export default function TransfersPage() {
               )}
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reject Transfer</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-500">Please provide a reason for rejecting this transfer.</p>
+          <textarea
+            className="mt-2 w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-terracotta focus:outline-none"
+            rows={3}
+            placeholder="Reason for rejection..."
+            value={rejectionReason}
+            onChange={(e) => setRejectionReason(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleReject}
+              disabled={!rejectionReason.trim()}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Reject Transfer
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

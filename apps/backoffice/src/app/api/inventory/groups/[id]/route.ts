@@ -12,17 +12,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-    const category = await prisma.itemGroup.update({
+    const group = await prisma.itemGroup.update({
       where: { id },
       data: { name, slug },
     });
 
-    return NextResponse.json(category);
+    return NextResponse.json(group);
   } catch (err) {
     if (typeof err === "object" && err !== null && "code" in err && (err as { code: string }).code === "P2003") {
-      return NextResponse.json({ error: "Cannot update category: related records exist" }, { status: 409 });
+      return NextResponse.json({ error: "Cannot update group: related records exist" }, { status: 409 });
     }
-    console.error("[categories/[id] PATCH]", err);
+    console.error("[groups/[id] PATCH]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -34,9 +34,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (typeof err === "object" && err !== null && "code" in err && (err as { code: string }).code === "P2003") {
-      return NextResponse.json({ error: "Cannot delete category: it has associated products" }, { status: 409 });
+      return NextResponse.json({ error: "Cannot delete group: it has associated items" }, { status: 409 });
     }
-    console.error("[categories/[id] DELETE]", err);
+    console.error("[groups/[id] DELETE]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Search, Pencil, Trash2, Package, ChevronDown, Loader2, CheckSquare, X } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Box, ChevronDown, Loader2, CheckSquare, X } from "lucide-react";
 
 type Product = {
   id: string;
@@ -19,7 +19,6 @@ type Product = {
   sku: string;
   group: string;
   groupId: string;
-  itemType: string;
   baseUom: string;
   storageArea: string;
   shelfLifeDays: number | null;
@@ -31,15 +30,6 @@ type Product = {
 
 type GroupOption = { id: string; name: string };
 
-type SupplierOption = { id: string; name: string };
-
-type SupplierEntry = {
-  supplierId?: string;
-  supplierName?: string;
-  phone?: string;
-  price: number;
-};
-
 type ProductForm = {
   name: string;
   sku: string;
@@ -49,15 +39,18 @@ type ProductForm = {
   shelfLifeDays: string;
   checkFrequency: string;
   description: string;
-  suppliers: SupplierEntry[];
 };
 
 const STORAGE_AREAS = ["FRIDGE", "FREEZER", "DRY_STORE", "COUNTER", "BAR"];
 
-const emptyForm: ProductForm = { name: "", sku: "", groupId: "", baseUom: "", storageArea: "", shelfLifeDays: "", checkFrequency: "MONTHLY", description: "", suppliers: [] };
+const emptyForm: ProductForm = { name: "", sku: "", groupId: "", baseUom: "", storageArea: "", shelfLifeDays: "", checkFrequency: "MONTHLY", description: "" };
 
-export default function ProductsPage() {
-  const { data: products = [], isLoading: loading, mutate: reloadProducts } = useFetch<Product[]>("/api/inventory/products?itemType=INGREDIENT");
+// Inline supplier types
+type SupplierOption = { id: string; name: string };
+type SupplierEntry = { supplierId?: string; supplierName?: string; phone?: string; price: number };
+
+export default function PerishablesPage() {
+  const { data: products = [], isLoading: loading, mutate: reloadProducts } = useFetch<Product[]>("/api/inventory/products?itemType=PERISHABLE");
   const { data: groupOptions = [] } = useFetch<GroupOption[]>("/api/inventory/groups");
   const { data: supplierOptions = [] } = useFetch<SupplierOption[]>("/api/inventory/suppliers");
   const [search, setSearch] = useState("");
@@ -68,13 +61,8 @@ export default function ProductsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Inline supplier form state
-  const [supplierSearchTerm, setSupplierSearchTerm] = useState("");
-  const [selectedSupplierId, setSelectedSupplierId] = useState("");
-  const [supplierPrice, setSupplierPrice] = useState("");
-  const [showNewSupplier, setShowNewSupplier] = useState(false);
-  const [newSupplierName, setNewSupplierName] = useState("");
-  const [newSupplierPhone, setNewSupplierPhone] = useState("");
+  // Suppliers inline
+  const [suppliers, setSuppliers] = useState<SupplierEntry[]>([]);
 
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -101,11 +89,11 @@ export default function ProductsPage() {
           shelfLifeDays: form.shelfLifeDays || null,
           description: form.description || null,
           checkFrequency: form.checkFrequency,
-          itemType: "INGREDIENT",
-          suppliers: form.suppliers,
+          itemType: "PERISHABLE",
+          suppliers: suppliers.filter((s) => s.supplierId || s.supplierName),
         }),
       });
-      if (!res.ok) { alert("Failed to save ingredient. Please try again."); return; }
+      if (!res.ok) { alert("Failed to save perishable. Please try again."); return; }
       setDialogOpen(false);
       loadProducts();
     } finally {
@@ -114,9 +102,9 @@ export default function ProductsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this ingredient?")) return;
+    if (!confirm("Delete this perishable?")) return;
     const res = await fetch(`/api/inventory/products/${id}`, { method: "DELETE" });
-    if (!res.ok) { alert("Failed to delete ingredient. It may be linked to orders or recipes."); return; }
+    if (!res.ok) { alert("Failed to delete perishable. It may be linked to orders or recipes."); return; }
     loadProducts();
   };
 
@@ -131,7 +119,7 @@ export default function ProductsPage() {
   const openAdd = () => {
     setForm(emptyForm);
     setEditingId(null);
-    resetSupplierForm();
+    setSuppliers([]);
     setDialogOpen(true);
   };
 
@@ -145,61 +133,15 @@ export default function ProductsPage() {
       shelfLifeDays: product.shelfLifeDays?.toString() || "",
       checkFrequency: product.checkFrequency || "MONTHLY",
       description: product.description || "",
-      suppliers: [],
     });
     setEditingId(product.id);
-    resetSupplierForm();
+    setSuppliers(product.suppliers.map((s) => ({ supplierName: s.name, price: s.price })));
     setDialogOpen(true);
   };
 
-  const updateField = (key: keyof ProductForm, value: string | SupplierEntry[]) => {
+  const updateField = (key: keyof ProductForm, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
-
-  const resetSupplierForm = () => {
-    setSupplierSearchTerm("");
-    setSelectedSupplierId("");
-    setSupplierPrice("");
-    setShowNewSupplier(false);
-    setNewSupplierName("");
-    setNewSupplierPhone("");
-  };
-
-  const addExistingSupplier = () => {
-    if (!selectedSupplierId || !supplierPrice) return;
-    const supplier = supplierOptions.find((s) => s.id === selectedSupplierId);
-    if (!supplier) return;
-    setForm((prev) => ({
-      ...prev,
-      suppliers: [...prev.suppliers, { supplierId: selectedSupplierId, price: parseFloat(supplierPrice) }],
-    }));
-    setSelectedSupplierId("");
-    setSupplierPrice("");
-    setSupplierSearchTerm("");
-  };
-
-  const addNewSupplier = () => {
-    if (!newSupplierName || !supplierPrice) return;
-    setForm((prev) => ({
-      ...prev,
-      suppliers: [...prev.suppliers, { supplierName: newSupplierName, phone: newSupplierPhone || undefined, price: parseFloat(supplierPrice) }],
-    }));
-    setNewSupplierName("");
-    setNewSupplierPhone("");
-    setSupplierPrice("");
-    setShowNewSupplier(false);
-  };
-
-  const removeSupplierEntry = (index: number) => {
-    setForm((prev) => ({
-      ...prev,
-      suppliers: prev.suppliers.filter((_, i) => i !== index),
-    }));
-  };
-
-  const filteredSupplierOptions = supplierOptions.filter((s) =>
-    s.name.toLowerCase().includes(supplierSearchTerm.toLowerCase())
-  );
 
   // Bulk selection helpers
   const filteredIds = filtered.map((p) => p.id);
@@ -245,7 +187,7 @@ export default function ProductsPage() {
       });
       if (!res.ok) { alert("Bulk update failed"); return; }
       const result = await res.json();
-      alert(`Updated ${result.updated} ingredients`);
+      alert(`Updated ${result.updated} perishables`);
       clearSelection();
       reloadProducts();
     } finally {
@@ -254,7 +196,7 @@ export default function ProductsPage() {
   };
 
   const handleBulkDelete = async () => {
-    if (!confirm(`Delete ${selected.size} ingredients? This cannot be undone.`)) return;
+    if (!confirm(`Delete ${selected.size} perishables? This cannot be undone.`)) return;
     setBulkSaving(true);
     try {
       const res = await fetch("/api/inventory/products/bulk", {
@@ -262,9 +204,9 @@ export default function ProductsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: Array.from(selected) }),
       });
-      if (!res.ok) { alert("Bulk delete failed. Some ingredients may be linked to orders."); return; }
+      if (!res.ok) { alert("Bulk delete failed. Some perishables may be linked to orders."); return; }
       const result = await res.json();
-      alert(`Deleted ${result.deleted} ingredients`);
+      alert(`Deleted ${result.deleted} perishables`);
       clearSelection();
       reloadProducts();
     } finally {
@@ -272,17 +214,30 @@ export default function ProductsPage() {
     }
   };
 
+  // Supplier helpers
+  const addSupplierRow = () => {
+    setSuppliers((prev) => [...prev, { supplierId: "", price: 0 }]);
+  };
+
+  const updateSupplier = (idx: number, field: string, value: string | number) => {
+    setSuppliers((prev) => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  };
+
+  const removeSupplier = (idx: number) => {
+    setSuppliers((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   return (
     <div className="p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Ingredients</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{products.length} ingredients across {new Set(products.map((p) => p.group)).size} groups</p>
+          <h2 className="text-xl font-semibold text-gray-900">Perishables</h2>
+          <p className="mt-0.5 text-sm text-gray-500">{products.length} perishables — packaging, tissue, cleaning supplies</p>
         </div>
         <Button onClick={openAdd} className="bg-terracotta hover:bg-terracotta-dark">
           <Plus className="mr-1.5 h-4 w-4" />
-          Add Ingredient
+          Add Perishable
         </Button>
       </div>
 
@@ -298,17 +253,17 @@ export default function ProductsPage() {
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {groups.slice(0, 12).map((grp) => (
+          {groups.slice(0, 12).map((g) => (
             <button
-              key={grp}
-              onClick={() => setGroupFilter(grp)}
+              key={g}
+              onClick={() => setGroupFilter(g)}
               className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                groupFilter === grp
+                groupFilter === g
                   ? "border-terracotta bg-terracotta/5 text-terracotta-dark"
                   : "border-gray-200 text-gray-500 hover:bg-gray-50"
               }`}
             >
-              {grp}
+              {g}
             </button>
           ))}
         </div>
@@ -327,7 +282,7 @@ export default function ProductsPage() {
                   className="h-4 w-4 rounded border-gray-300 text-terracotta accent-terracotta"
                 />
               </th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Ingredient</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Perishable</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">SKU</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Group</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Base UOM</th>
@@ -343,13 +298,13 @@ export default function ProductsPage() {
               <tr>
                 <td colSpan={10} className="px-4 py-12 text-center">
                   <Loader2 className="mx-auto h-6 w-6 animate-spin text-terracotta" />
-                  <p className="mt-2 text-sm text-gray-500">Loading ingredients...</p>
+                  <p className="mt-2 text-sm text-gray-500">Loading perishables...</p>
                 </td>
               </tr>
             )}
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-sm text-gray-400">No ingredients found</td>
+                <td colSpan={10} className="px-4 py-12 text-center text-sm text-gray-400">No perishables found</td>
               </tr>
             )}
             {!loading && filtered.map((product) => (
@@ -368,7 +323,7 @@ export default function ProductsPage() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100">
-                      <Package className="h-4 w-4 text-gray-400" />
+                      <Box className="h-4 w-4 text-gray-400" />
                     </div>
                     <div>
                       <p className="font-medium text-gray-900">{product.name}</p>
@@ -490,7 +445,7 @@ export default function ProductsPage() {
               {bulkAction === "frequency" && "Change Check Frequency"}
             </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-gray-500">Apply to {selected.size} selected ingredients</p>
+          <p className="text-sm text-gray-500">Apply to {selected.size} selected perishables</p>
           <div className="mt-2">
             {bulkAction === "group" && (
               <select
@@ -501,8 +456,8 @@ export default function ProductsPage() {
                 }}
               >
                 <option value="" disabled>Select group...</option>
-                {groupOptions.map((grp) => (
-                  <option key={grp.id} value={grp.id}>{grp.name}</option>
+                {groupOptions.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
                 ))}
               </select>
             )}
@@ -544,18 +499,18 @@ export default function ProductsPage() {
       </Dialog>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditingId(null); setForm(emptyForm); resetSupplierForm(); } }}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditingId(null); setForm(emptyForm); setSuppliers([]); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Ingredient" : "Add Ingredient"}</DialogTitle>
+            <DialogTitle>{editingId ? "Edit Perishable" : "Add Perishable"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium text-gray-700">Ingredient Name</label>
+                <label className="text-sm font-medium text-gray-700">Perishable Name</label>
                 <Input
                   className="mt-1"
-                  placeholder="e.g. Monin Caramel Syrup"
+                  placeholder="e.g. Paper Cup 12oz"
                   value={form.name}
                   onChange={(e) => updateField("name", e.target.value)}
                 />
@@ -564,7 +519,7 @@ export default function ProductsPage() {
                 <label className="text-sm font-medium text-gray-700">SKU Code</label>
                 <Input
                   className="mt-1"
-                  placeholder="e.g. FM001"
+                  placeholder="e.g. PER001"
                   value={form.sku}
                   onChange={(e) => updateField("sku", e.target.value)}
                 />
@@ -579,8 +534,8 @@ export default function ProductsPage() {
                   onChange={(e) => updateField("groupId", e.target.value)}
                 >
                   <option value="">Select...</option>
-                  {groupOptions.map((grp) => (
-                    <option key={grp.id} value={grp.id}>{grp.name}</option>
+                  {groupOptions.map((g) => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
                   ))}
                 </select>
               </div>
@@ -595,6 +550,10 @@ export default function ProductsPage() {
                   <option value="ml">Milliliter (ml)</option>
                   <option value="g">Gram (g)</option>
                   <option value="pcs">Piece (pcs)</option>
+                  <option value="roll">Roll (roll)</option>
+                  <option value="pack">Pack (pack)</option>
+                  <option value="box">Box (box)</option>
+                  <option value="bottle">Bottle (bottle)</option>
                 </select>
               </div>
             </div>
@@ -624,7 +583,7 @@ export default function ProductsPage() {
                 <Input
                   className="mt-1"
                   type="number"
-                  placeholder="Leave blank for non-perishable"
+                  placeholder="Leave blank if N/A"
                   value={form.shelfLifeDays}
                   onChange={(e) => updateField("shelfLifeDays", e.target.value)}
                 />
@@ -652,125 +611,41 @@ export default function ProductsPage() {
               />
             </div>
 
-            {/* Suppliers & Pricing */}
-            <div className="border-t border-gray-200 pt-4">
-              <label className="text-sm font-semibold text-gray-700">Suppliers &amp; Pricing</label>
-
-              {/* Existing supplier entries */}
-              {form.suppliers.length > 0 && (
-                <div className="mt-2 space-y-1.5">
-                  {form.suppliers.map((entry, i) => (
-                    <div key={i} className="flex items-center gap-2 rounded-md bg-gray-50 px-3 py-1.5 text-sm">
-                      <span className="flex-1 text-gray-700">
-                        {entry.supplierId
-                          ? supplierOptions.find((s) => s.id === entry.supplierId)?.name ?? "Supplier"
-                          : entry.supplierName ?? "New Supplier"}
-                      </span>
-                      <span className="text-gray-500">RM{entry.price.toFixed(2)}</span>
-                      <button onClick={() => removeSupplierEntry(i)} className="text-gray-400 hover:text-red-500">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Add existing supplier */}
-              {!showNewSupplier && (
-                <div className="mt-3 flex items-end gap-2">
-                  <div className="flex-1">
-                    <select
-                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-                      value={selectedSupplierId}
-                      onChange={(e) => setSelectedSupplierId(e.target.value)}
-                    >
-                      <option value="">Select supplier...</option>
-                      {filteredSupplierOptions.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="w-28">
-                    <Input
-                      type="number"
-                      placeholder="Price"
-                      value={supplierPrice}
-                      onChange={(e) => setSupplierPrice(e.target.value)}
-                      className="text-sm"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addExistingSupplier}
-                    disabled={!selectedSupplierId || !supplierPrice}
+            {/* Inline Suppliers */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">Suppliers</label>
+                <button type="button" onClick={addSupplierRow} className="text-xs text-terracotta hover:underline">+ Add supplier</button>
+              </div>
+              {suppliers.map((s, idx) => (
+                <div key={idx} className="mt-2 flex items-center gap-2">
+                  <select
+                    className="flex-1 rounded-md border border-gray-200 px-2 py-1.5 text-sm"
+                    value={s.supplierId || ""}
+                    onChange={(e) => updateSupplier(idx, "supplierId", e.target.value)}
                   >
-                    Add
-                  </Button>
+                    <option value="">Select supplier...</option>
+                    {supplierOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>{opt.name}</option>
+                    ))}
+                  </select>
+                  <Input
+                    type="number"
+                    placeholder="Price"
+                    className="w-24"
+                    value={s.price || ""}
+                    onChange={(e) => updateSupplier(idx, "price", parseFloat(e.target.value) || 0)}
+                  />
+                  <button type="button" onClick={() => removeSupplier(idx)} className="text-red-400 hover:text-red-600">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              )}
-
-              {/* New supplier toggle */}
-              {!showNewSupplier ? (
-                <button
-                  type="button"
-                  onClick={() => setShowNewSupplier(true)}
-                  className="mt-2 text-xs text-terracotta hover:underline"
-                >
-                  + New Supplier
-                </button>
-              ) : (
-                <div className="mt-3 space-y-2 rounded-md border border-gray-200 bg-gray-50/50 p-3">
-                  <p className="text-xs font-medium text-gray-600">New Supplier</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      placeholder="Supplier name"
-                      value={newSupplierName}
-                      onChange={(e) => setNewSupplierName(e.target.value)}
-                      className="text-sm"
-                    />
-                    <Input
-                      placeholder="Phone (optional)"
-                      value={newSupplierPhone}
-                      onChange={(e) => setNewSupplierPhone(e.target.value)}
-                      className="text-sm"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-28">
-                      <Input
-                        type="number"
-                        placeholder="Price"
-                        value={supplierPrice}
-                        onChange={(e) => setSupplierPrice(e.target.value)}
-                        className="text-sm"
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={addNewSupplier}
-                      disabled={!newSupplierName || !supplierPrice}
-                    >
-                      Add
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => { setShowNewSupplier(false); setNewSupplierName(""); setNewSupplierPhone(""); }}
-                      className="text-xs text-gray-400 hover:text-gray-600"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
+              ))}
             </div>
 
             <Button onClick={handleSubmit} disabled={saving || !form.name || !form.sku || !form.groupId} className="w-full bg-terracotta hover:bg-terracotta-dark disabled:opacity-50">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-              {editingId ? "Save Changes" : "Add Ingredient"}
+              {editingId ? "Save Changes" : "Add Perishable"}
             </Button>
           </div>
         </DialogContent>

@@ -5,15 +5,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = await req.json();
-    const { name, sku, categoryId, baseUom, storageArea, shelfLifeDays, description, checkFrequency } = body;
+    const { name, sku, groupId, baseUom, storageArea, shelfLifeDays, description, checkFrequency, itemType } = body;
 
     const product = await prisma.product.update({
       where: { id },
       data: {
         ...(name && { name }),
         ...(sku && { sku }),
-        ...(categoryId && { categoryId }),
+        ...(groupId && { groupId }),
         ...(baseUom && { baseUom }),
+        ...(itemType && { itemType }),
         storageArea: storageArea ?? undefined,
         shelfLifeDays: shelfLifeDays !== undefined ? (shelfLifeDays ? parseInt(shelfLifeDays) : null) : undefined,
         description: description ?? undefined,

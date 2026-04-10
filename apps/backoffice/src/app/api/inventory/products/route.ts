@@ -1,14 +1,22 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const itemType = searchParams.get("itemType");
+
+  const where: Record<string, string> = {};
+  if (itemType) where.itemType = itemType;
+
   const products = await prisma.product.findMany({
+    where,
     select: {
       id: true,
       name: true,
       sku: true,
-      categoryId: true,
-      category: { select: { name: true } },
+      groupId: true,
+      group: { select: { name: true } },
+      itemType: true,
       baseUom: true,
       storageArea: true,
       shelfLifeDays: true,
@@ -39,8 +47,9 @@ export async function GET() {
     id: p.id,
     name: p.name,
     sku: p.sku,
-    category: p.category.name,
-    categoryId: p.categoryId,
+    group: p.group.name,
+    groupId: p.groupId,
+    itemType: p.itemType,
     baseUom: p.baseUom,
     storageArea: p.storageArea ?? "",
     shelfLifeDays: p.shelfLifeDays,
@@ -68,20 +77,53 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, sku, categoryId, baseUom, storageArea, shelfLifeDays, description, checkFrequency } = body;
+  const { name, sku, groupId, baseUom, storageArea, shelfLifeDays, description, checkFrequency, itemType, suppliers } = body;
 
   const product = await prisma.product.create({
     data: {
       name,
       sku,
-      categoryId,
+      groupId,
       baseUom,
+      itemType: itemType || "INGREDIENT",
       storageArea: storageArea || null,
       shelfLifeDays: shelfLifeDays ? parseInt(shelfLifeDays) : null,
       description: description || null,
       checkFrequency: checkFrequency || "MONTHLY",
     },
   });
+
+  // Handle suppliers array
+  if (suppliers && Array.isArray(suppliers)) {
+    for (const entry of suppliers as { supplierId?: string; supplierName?: string; phone?: string; price: number }[]) {
+      let supplierId = entry.supplierId;
+
+      if (!supplierId && entry.supplierName) {
+        // Create new supplier
+        const count = await prisma.supplier.count();
+        const supplierCode = `SUP-${String(count + 1).padStart(4, "0")}`;
+        const newSupplier = await prisma.supplier.create({
+          data: {
+            name: entry.supplierName,
+            supplierCode,
+            phone: entry.phone || null,
+            status: "ACTIVE",
+          },
+        });
+        supplierId = newSupplier.id;
+      }
+
+      if (supplierId) {
+        await prisma.supplierProduct.create({
+          data: {
+            supplierId,
+            productId: product.id,
+            price: entry.price,
+          },
+        });
+      }
+    }
+  }
 
   return NextResponse.json(product, { status: 201 });
 }

@@ -119,8 +119,11 @@ model User {
   stockCounts      StockCount[]
   stockAdjustments StockAdjustment[]
   receivings       Receiving[]
-  transfers        StockTransfer[]
-  activityLogs     ActivityLog[]
+  transfers          StockTransfer[]
+  transfersApproved  StockTransfer[] @relation("TransferApprovedBy")
+  transfersReceived  StockTransfer[] @relation("TransferReceivedBy")
+  transfersRejected  StockTransfer[] @relation("TransferRejectedBy")
+  activityLogs       ActivityLog[]
 }
 
 enum UserRole {
@@ -149,13 +152,20 @@ model Otp {
   @@index([phone, code])
 }
 
-// ─── CATEGORIES ─────────────────────────────────────────────
+// ─── ITEM GROUPS ────────────────────────────────────────────
 
-model Category {
+model ItemGroup {
   id       String    @id @default(uuid())
   name     String    @unique
   slug     String    @unique
   products Product[]
+
+  @@map("ItemGroup")
+}
+
+enum ItemType {
+  INGREDIENT
+  PERISHABLE
 }
 
 // ─── PRODUCTS (Inventory Items) ─────────────────────────────
@@ -164,10 +174,11 @@ model Product {
   id             String   @id @default(uuid())
   name           String
   sku            String   @unique
-  categoryId     String
-  category       Category @relation(fields: [categoryId], references: [id])
+  groupId        String
+  group          ItemGroup @relation(fields: [groupId], references: [id])
   description    String?
   imageUrl       String?
+  itemType       ItemType @default(INGREDIENT)
   baseUom        String
   tags           String[] @default([])
   storageArea    String?
@@ -531,6 +542,16 @@ model StockTransfer {
   transferredById String
   transferredBy   User           @relation(fields: [transferredById], references: [id])
   notes           String?
+  approvedById    String?
+  approvedBy      User?          @relation("TransferApprovedBy", fields: [approvedById], references: [id])
+  approvedAt      DateTime?
+  receivedById    String?
+  receivedBy      User?          @relation("TransferReceivedBy", fields: [receivedById], references: [id])
+  receivedAt      DateTime?
+  rejectedById    String?
+  rejectedBy      User?          @relation("TransferRejectedBy", fields: [rejectedById], references: [id])
+  rejectedAt      DateTime?
+  rejectionReason String?
   createdAt       DateTime       @default(now())
   completedAt     DateTime?
 
@@ -538,7 +559,12 @@ model StockTransfer {
 }
 
 enum TransferStatus {
+  DRAFT
+  PENDING_APPROVAL
   PENDING
+  APPROVED
+  IN_TRANSIT
+  RECEIVED
   COMPLETED
   CANCELLED
 }

@@ -3,13 +3,13 @@ import { prisma } from "@/lib/prisma";
 
 /**
  * PATCH /api/products/bulk
- * Bulk update products. Accepts { ids: string[], data: { categoryId?, storageArea?, checkFrequency? } }
+ * Bulk update products. Accepts { ids: string[], data: { groupId?, storageArea?, checkFrequency? } }
  */
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const { ids, data } = body as {
     ids: string[];
-    data: { categoryId?: string; storageArea?: string; checkFrequency?: string };
+    data: { groupId?: string; storageArea?: string; checkFrequency?: string };
   };
 
   if (!ids?.length || !data) {
@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const updateData: Record<string, string> = {};
-  if (data.categoryId) updateData.categoryId = data.categoryId;
+  if (data.groupId) updateData.groupId = data.groupId;
   if (data.storageArea) updateData.storageArea = data.storageArea;
   if (data.checkFrequency) updateData.checkFrequency = data.checkFrequency;
 
