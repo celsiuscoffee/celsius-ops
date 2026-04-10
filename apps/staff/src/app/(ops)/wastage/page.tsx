@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, Search, Trash2, AlertTriangle, Loader2 } from "lucide-react";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 
 const REASONS = ["Expired", "Spillage", "Breakage", "Quality Issue", "Other"];
 
@@ -155,6 +156,7 @@ export default function WastagePage() {
   return (
     <>
       <TopBar title="Record Wastage" />
+      <PullToRefresh onRefresh={() => fetchWastage(user?.outletId)}>
       <div className="px-4 py-3">
         <div className="mx-auto max-w-lg space-y-4">
           {/* Summary */}
@@ -202,6 +204,7 @@ export default function WastagePage() {
           </div>
         </div>
       </div>
+      </PullToRefresh>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="mx-auto max-w-sm">

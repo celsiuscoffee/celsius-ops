@@ -124,4 +124,14 @@
   html {
     @apply font-sans;
   }
+  /* Lock horizontal scroll — prevent PWA wobble on swipe */
+  html, body {
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    position: relative;
+    width: 100%;
+    max-width: 100vw;
+  }
 }
