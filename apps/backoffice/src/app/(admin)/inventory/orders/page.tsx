@@ -645,6 +645,134 @@ export default function OrdersPage() {
                 {editOrder.supplier} → {editOrder.outlet}
               </div>
 
+              {/* Invoice section — UPLOAD FIRST */}
+              <div className="border-b pb-3">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-700">
+                  <Receipt className="h-3.5 w-3.5" />
+                  Invoice
+                  {editOrder.invoice && (
+                    <Badge className="ml-1 text-[9px] bg-gray-400">{editOrder.invoice.invoiceNumber}</Badge>
+                  )}
+                  {!editOrder.invoice && (
+                    <span className="ml-1 text-[10px] font-normal text-gray-400">— will be created when you add a due date or photo</span>
+                  )}
+                </p>
+
+                {/* Upload invoice/receipt */}
+                <div className="mb-3">
+                  <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                    <Upload className="h-3.5 w-3.5" /> Upload Invoice / Receipt
+                  </label>
+                  <p className="mb-2 text-[10px] text-gray-400">Upload first — AI will auto-extract invoice details &amp; update order items below</p>
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={handleDrop}
+                    onClick={openFilePicker}
+                    className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-5 transition-colors ${
+                      dragOver ? "border-terracotta bg-terracotta/5" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+                    ) : (
+                      <Upload className="h-6 w-6 text-gray-300" />
+                    )}
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      {uploading ? "Uploading..." : "Drag & drop invoice files here"}
+                    </p>
+                    <span className="mt-2 rounded-md bg-terracotta/10 px-3 py-1.5 text-xs font-medium text-terracotta">
+                      Browse Files
+                    </span>
+                  </div>
+
+                  {/* File previews */}
+                  {editInvoiceFiles.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {editInvoiceFiles.map((f, i) => (
+                        <div key={i} className="group relative rounded-md border overflow-hidden">
+                          {f.type === "pdf" ? (
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50">
+                              <FileText className="h-4 w-4 text-red-500" />
+                              <span className="text-xs text-gray-700 max-w-[120px] truncate">{f.name}</span>
+                            </div>
+                          ) : (
+                            <div className="h-16 w-16">
+                              <Image src={f.url} alt={`Invoice ${i + 1}`} fill className="object-cover" sizes="64px" />
+                            </div>
+                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setEditInvoiceFiles((prev) => prev.filter((_, j) => j !== i)); }}
+                            className="absolute -right-1 -top-1 rounded-full bg-red-500 p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* AI extraction status */}
+                {extracting && (
+                  <div className="mb-3 flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
+                    <Sparkles className="h-4 w-4 animate-pulse text-purple-500" />
+                    <span className="text-xs text-purple-700">AI is extracting invoice details...</span>
+                  </div>
+                )}
+
+                {Object.keys(aiExtracted).length > 0 && !extracting && (
+                  <div className="mb-3 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                    <Sparkles className="h-4 w-4 text-green-500" />
+                    <span className="text-xs text-green-700">AI auto-filled fields — review and correct if needed</span>
+                  </div>
+                )}
+
+                {/* Invoice details */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                      <FileText className="h-3.5 w-3.5" /> Invoice Number
+                      {editOrder.status === "SENT" && <span className="text-red-500">*</span>}
+                      {aiExtracted.invoiceNumber && <span className="ml-1 rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="e.g. INV-001234"
+                      value={editInvoiceNumber}
+                      onChange={(e) => { setEditInvoiceNumber(e.target.value); setAiExtracted((p) => { const n = { ...p }; delete n.invoiceNumber; return n; }); }}
+                      className={aiExtracted.invoiceNumber ? "border-purple-300 bg-purple-50/30" : ""}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                      <CalendarDays className="h-3.5 w-3.5" /> Invoice Due Date
+                      {aiExtracted.dueDate && <span className="ml-1 rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                    </label>
+                    <Input
+                      type="date"
+                      value={editInvoiceDueDate}
+                      onChange={(e) => { setEditInvoiceDueDate(e.target.value); setAiExtracted((p) => { const n = { ...p }; delete n.dueDate; return n; }); }}
+                      className={aiExtracted.dueDate ? "border-purple-300 bg-purple-50/30" : ""}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Delivery Date */}
+              <div>
+                <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                  <Truck className="h-3.5 w-3.5" /> Delivery Date
+                  {editOrder.status === "SENT" && <span className="text-red-500">*</span>}
+                  {aiExtracted.deliveryDate && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                </label>
+                <Input
+                  type="date"
+                  value={editDeliveryDate}
+                  onChange={(e) => setEditDeliveryDate(e.target.value)}
+                />
+              </div>
+
               {/* Editable Items */}
               <div>
                 <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700 uppercase">
@@ -722,132 +850,7 @@ export default function OrdersPage() {
                 </div>
               </div>
 
-              {/* Delivery Date */}
-              <div>
-                <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
-                  <Truck className="h-3.5 w-3.5" /> Delivery Date
-                  {editOrder.status === "SENT" && <span className="text-red-500">*</span>}
-                  {aiExtracted.deliveryDate && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
-                </label>
-                <Input
-                  type="date"
-                  value={editDeliveryDate}
-                  onChange={(e) => setEditDeliveryDate(e.target.value)}
-                />
-              </div>
-
-              {/* Invoice section */}
-              <div className="border-t pt-3">
-                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-700">
-                  <Receipt className="h-3.5 w-3.5" />
-                  Invoice
-                  {editOrder.invoice && (
-                    <Badge className="ml-1 text-[9px] bg-gray-400">{editOrder.invoice.invoiceNumber}</Badge>
-                  )}
-                  {!editOrder.invoice && (
-                    <span className="ml-1 text-[10px] font-normal text-gray-400">— will be created when you add a due date or photo</span>
-                  )}
-                </p>
-
-                {/* Step 1: Upload invoice/receipt FIRST */}
-                <div className="mb-3">
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
-                    <Upload className="h-3.5 w-3.5" /> Step 1: Upload Invoice / Receipt
-                  </label>
-                  <p className="mb-2 text-[10px] text-gray-400">Upload first — AI will auto-extract invoice details below</p>
-                  <div
-                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                    onDragLeave={() => setDragOver(false)}
-                    onDrop={handleDrop}
-                    onClick={openFilePicker}
-                    className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-5 transition-colors ${
-                      dragOver ? "border-terracotta bg-terracotta/5" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                    }`}
-                  >
-                    {uploading ? (
-                      <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
-                    ) : (
-                      <Upload className="h-6 w-6 text-gray-300" />
-                    )}
-                    <p className="mt-1.5 text-xs text-gray-400">
-                      {uploading ? "Uploading..." : "Drag & drop invoice files here"}
-                    </p>
-                    <span className="mt-2 rounded-md bg-terracotta/10 px-3 py-1.5 text-xs font-medium text-terracotta">
-                      Browse Files
-                    </span>
-                  </div>
-
-                  {/* File previews */}
-                  {editInvoiceFiles.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {editInvoiceFiles.map((f, i) => (
-                        <div key={i} className="group relative rounded-md border overflow-hidden">
-                          {f.type === "pdf" ? (
-                            <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50">
-                              <FileText className="h-4 w-4 text-red-500" />
-                              <span className="text-xs text-gray-700 max-w-[120px] truncate">{f.name}</span>
-                            </div>
-                          ) : (
-                            <div className="h-16 w-16">
-                              <Image src={f.url} alt={`Invoice ${i + 1}`} fill className="object-cover" sizes="64px" />
-                            </div>
-                          )}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setEditInvoiceFiles((prev) => prev.filter((_, j) => j !== i)); }}
-                            className="absolute -right-1 -top-1 rounded-full bg-red-500 p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* AI extraction status */}
-                {extracting && (
-                  <div className="mb-3 flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
-                    <Sparkles className="h-4 w-4 animate-pulse text-purple-500" />
-                    <span className="text-xs text-purple-700">AI is extracting invoice details...</span>
-                  </div>
-                )}
-
-                {Object.keys(aiExtracted).length > 0 && !extracting && (
-                  <div className="mb-3 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-                    <Sparkles className="h-4 w-4 text-green-500" />
-                    <span className="text-xs text-green-700">AI auto-filled fields below — review and correct if needed</span>
-                  </div>
-                )}
-
-                {/* Step 2: Invoice details (auto-filled by AI, editable by staff) */}
-                <div className="mb-2">
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
-                    <FileText className="h-3.5 w-3.5" /> Invoice Number
-                    {editOrder.status === "SENT" && <span className="text-red-500">*</span>}
-                    {aiExtracted.invoiceNumber && <span className="ml-1 rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="e.g. INV-001234"
-                    value={editInvoiceNumber}
-                    onChange={(e) => { setEditInvoiceNumber(e.target.value); setAiExtracted((p) => { const n = { ...p }; delete n.invoiceNumber; return n; }); }}
-                    className={aiExtracted.invoiceNumber ? "border-purple-300 bg-purple-50/30" : ""}
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
-                    <CalendarDays className="h-3.5 w-3.5" /> Invoice Due Date
-                    {aiExtracted.dueDate && <span className="ml-1 rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
-                  </label>
-                  <Input
-                    type="date"
-                    value={editInvoiceDueDate}
-                    onChange={(e) => { setEditInvoiceDueDate(e.target.value); setAiExtracted((p) => { const n = { ...p }; delete n.dueDate; return n; }); }}
-                    className={aiExtracted.dueDate ? "border-purple-300 bg-purple-50/30" : ""}
-                  />
-                </div>
-              </div>
+              {/* old invoice section removed — now at top */}
             </div>
           )}
 

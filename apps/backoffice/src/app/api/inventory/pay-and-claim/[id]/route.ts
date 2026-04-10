@@ -5,12 +5,12 @@ import { adjustStockBalance } from "@/lib/stock";
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id } = params;
+  const { id } = await params;
   const body = await req.json();
   const { action, items, supplierId, amount, notes, claimedById, purchaseDate, invoiceNumber } = body;
 
