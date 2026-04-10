@@ -400,7 +400,14 @@ export async function GET(request: NextRequest) {
       }
 
       // Blended target based on weekday/weekend mix of the date range
-      const blendedTarget = getBlendedTarget(r.key, dates);
+      // Targets are per-outlet, so scale by outlet count when viewing multiple
+      const outletCount = outlets.length;
+      const singleBlended = getBlendedTarget(r.key, dates);
+      const blendedTarget = {
+        revenue: singleBlended.revenue * outletCount,
+        orders: singleBlended.orders * outletCount,
+        aov: singleBlended.aov, // AOV doesn't scale — it's per-order
+      };
 
       // pctOfTarget: average daily revenue as % of the round's blended daily target
       let pctOfTarget = 0;
@@ -409,9 +416,14 @@ export async function GET(request: NextRequest) {
         pctOfTarget = Math.round((avgDailyRevenue / blendedTarget.revenue) * 100);
       }
 
-      // Per-day targets for daily cells
+      // Per-day targets for daily cells (scaled by outlet count)
       const dailyWithTargets = dailyData.map((d) => {
-        const dayTarget = isWeekend(d.date) ? ROUND_TARGETS[r.key].weekend : ROUND_TARGETS[r.key].weekday;
+        const base = isWeekend(d.date) ? ROUND_TARGETS[r.key].weekend : ROUND_TARGETS[r.key].weekday;
+        const dayTarget = {
+          revenue: base.revenue * outletCount,
+          orders: base.orders * outletCount,
+          aov: base.aov, // AOV doesn't scale
+        };
         return { ...d, target: dayTarget };
       });
 
@@ -494,7 +506,11 @@ export async function GET(request: NextRequest) {
         revenue: Math.round(outsideRoundRevenue * 100) / 100,
         orders: outsideRoundOrders,
       },
-      deliveryTarget: getBlendedDeliveryTarget(dates),
+      deliveryTarget: (() => {
+        const base = getBlendedDeliveryTarget(dates);
+        const oc = outlets.length;
+        return { revenue: base.revenue * oc, orders: base.orders * oc, aov: base.aov };
+      })(),
       availableOutlets: allOutlets,
       ...(warnings.length > 0 ? { warnings } : {}),
     });
