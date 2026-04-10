@@ -73,10 +73,15 @@ export interface StoreHubTransaction {
   subTotal: number;
   items: StoreHubTransactionItem[];
   channel?: string;
+  remarks?: string;
+  tags?: string[];
+  transactionType?: string;
+  orderType?: string;
   isCancelled?: boolean;
   transactionTime?: string;
   createdAt?: string;
   completedAt?: string;
+  [key: string]: unknown; // capture any extra fields
 }
 
 export interface StoreHubStore {

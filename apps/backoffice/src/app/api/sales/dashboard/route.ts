@@ -67,33 +67,46 @@ function getDateRange(from: string, to: string): string[] {
   return dates;
 }
 
-/** Detect delivery platform or QR table channel */
-function isDeliveryOrQR(channel?: string | null): boolean {
-  if (!channel) return false;
-  const lower = channel.toLowerCase().trim();
-  return [
-    "delivery", "grab", "grabfood", "foodpanda", "shopee", "shopeefood",
-    "qr", "qr table", "qr order", "qr-table", "qr_table", "qrtable",
-  ].includes(lower);
+/** Detect delivery platform or QR table order */
+function isDeliveryOrQR(txn: StoreHubTransaction): boolean {
+  const hints: string[] = [];
+  if (txn.channel) hints.push(txn.channel.toLowerCase().trim());
+  if (txn.remarks) hints.push(txn.remarks.toLowerCase().trim());
+  if (txn.orderType) hints.push(txn.orderType.toLowerCase().trim());
+  const combined = hints.join(" ");
+  return /\b(delivery|grab|grabfood|foodpanda|shopee|shopeefood)\b/.test(combined) ||
+    /\b(qr[\s_-]?table|qr[\s_-]?order|qrtable)\b/.test(combined) ||
+    hints.some((h) => h === "qr");
 }
 
-/** Classify a StoreHub channel string into dine_in | takeaway | delivery */
-function classifyChannel(channel?: string | null): "dine_in" | "takeaway" | "delivery" {
-  if (!channel) return "dine_in";
-  const lower = channel.toLowerCase().trim();
-  if (lower === "takeaway" || lower === "take-away" || lower === "take away") return "takeaway";
-  if (
-    lower === "delivery" ||
-    lower === "grab" ||
-    lower === "grabfood" ||
-    lower === "foodpanda" ||
-    lower === "shopee" ||
-    lower === "shopeefood"
-  ) {
-    return "delivery";
+/** Classify a StoreHub transaction into dine_in | takeaway | delivery.
+ *  Checks channel, remarks, orderType, and tags fields. */
+function classifyChannel(txn: StoreHubTransaction): "dine_in" | "takeaway" | "delivery" {
+  // Collect all text hints from the transaction
+  const hints: string[] = [];
+  if (txn.channel) hints.push(txn.channel.toLowerCase().trim());
+  if (txn.remarks) hints.push(txn.remarks.toLowerCase().trim());
+  if (txn.orderType) hints.push(txn.orderType.toLowerCase().trim());
+  if (txn.tags) {
+    for (const tag of txn.tags) hints.push(tag.toLowerCase().trim());
   }
-  if (lower === "dine-in" || lower === "dine in" || lower === "dinein") return "dine_in";
-  // Anything else defaults to dine_in
+
+  const combined = hints.join(" ");
+
+  // Delivery platforms
+  if (/\b(grab|grabfood|foodpanda|shopee|shopeefood)\b/.test(combined)) return "delivery";
+  if (/\bdelivery\b/.test(combined)) return "delivery";
+
+  // Takeaway — check for "takeaway", "take away", "take-away", "ta", "tapau", "dabao"
+  if (/\b(takeaway|take[\s-]?away|tapau|dabao|bungkus)\b/.test(combined)) return "takeaway";
+  // Short form "TA" only if it's the entire channel/remarks (not substring)
+  for (const h of hints) {
+    if (h === "ta") return "takeaway";
+  }
+
+  // Dine-in explicit
+  if (/\b(dine[\s-]?in|dinein)\b/.test(combined)) return "dine_in";
+
   return "dine_in";
 }
 
@@ -325,13 +338,13 @@ export async function GET(request: NextRequest) {
 
           if (dateStr >= fromDate && dateStr <= toDate) {
             allTxns.push({ txn, outletId: outlet.id });
-            if (isDeliveryOrQR(txn.channel)) {
+            if (isDeliveryOrQR(txn)) {
               deliveryQRRevenue += txn.total;
               deliveryQROrders++;
             }
           } else if (dateStr >= prevFromDate && dateStr <= prevToDate) {
             prevTxns.push(txn);
-            if (isDeliveryOrQR(txn.channel)) {
+            if (isDeliveryOrQR(txn)) {
               prevDeliveryQRRevenue += txn.total;
               prevDeliveryQROrders++;
             }
@@ -351,7 +364,7 @@ export async function GET(request: NextRequest) {
     for (const txn of prevTxns) {
       prevRevenue += txn.total;
       prevOrders += 1;
-      const ch = classifyChannel(txn.channel);
+      const ch = classifyChannel(txn);
       prevChannels[ch].revenue += txn.total;
       prevChannels[ch].orders += 1;
     }
@@ -393,7 +406,7 @@ export async function GET(request: NextRequest) {
       grid[round][dateStr].revenue += txn.total;
       grid[round][dateStr].orders += 1;
 
-      const channelType = classifyChannel(txn.channel);
+      const channelType = classifyChannel(txn);
       addToChannel(grid[round][dateStr].channels, channelType, txn.total);
     }
 

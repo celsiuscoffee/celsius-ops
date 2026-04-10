@@ -63,12 +63,24 @@ export async function GET() {
         dateRange: `${yesterdayStr} to ${today}`,
         transactionCount: txns.length,
         channelBreakdown: channelCounts,
-        sampleTransactions: txns.slice(0, 5).map((t) => ({
-          refId: t.refId,
-          total: t.total,
-          channel: t.channel ?? "(null)",
-          time: t.transactionTime || t.completedAt || t.createdAt,
-        })),
+        // Show all fields from first 5 transactions to identify takeaway/remarks fields
+        sampleTransactions: txns.slice(0, 5).map((t) => {
+          // Extract all non-items keys to see what StoreHub sends
+          const { items, ...rest } = t;
+          return { ...rest, itemCount: items?.length ?? 0 };
+        }),
+        // Also find a takeaway sample if any
+        takeawaySample: (() => {
+          const ta = txns.find((t) =>
+            (t.channel && /take/i.test(t.channel)) ||
+            (t.remarks && /take/i.test(t.remarks)) ||
+            (t.orderType && /take/i.test(t.orderType)) ||
+            (t.tags && t.tags.some((tag: string) => /take/i.test(tag)))
+          );
+          if (!ta) return null;
+          const { items, ...rest } = ta;
+          return { ...rest, itemCount: items?.length ?? 0 };
+        })(),
       };
       if (txns.length > 0) {
         checks.diagnosis = `StoreHub API working. Got ${txns.length} transactions. Dashboard should show data.`;
