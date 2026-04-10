@@ -18,15 +18,31 @@ const ROUNDS = [
   { key: "supper", label: "Supper", startH: 21, endH: 23 },
 ] as const;
 
-const ROUND_TARGETS: Record<string, number> = {
-  breakfast: 200,
-  brunch: 350,
-  lunch: 500,
-  midday: 300,
-  evening: 400,
-  dinner: 450,
-  supper: 200,
+// Weekday targets (used as reference for AI analysis)
+const ROUND_TARGETS: Record<string, { weekday: number; weekend: number }> = {
+  breakfast: { weekday: 400, weekend: 525 },
+  brunch:    { weekday: 400, weekend: 525 },
+  lunch:     { weekday: 450, weekend: 700 },
+  midday:    { weekday: 450, weekend: 350 },
+  evening:   { weekday: 600, weekend: 700 },
+  dinner:    { weekday: 600, weekend: 700 },
+  supper:    { weekday: 375, weekend: 450 },
 };
+
+function isWeekend(dateStr: string): boolean {
+  const d = new Date(dateStr + "T12:00:00+08:00");
+  const day = d.getDay();
+  return day === 0 || day === 6;
+}
+
+function getAvgTarget(roundKey: string, dates: string[]): number {
+  if (dates.length === 0) return 0;
+  let total = 0;
+  for (const d of dates) {
+    total += isWeekend(d) ? ROUND_TARGETS[roundKey].weekend : ROUND_TARGETS[roundKey].weekday;
+  }
+  return Math.round(total / dates.length);
+}
 
 function getMYTHour(dateStr: string): number {
   const d = new Date(dateStr);
@@ -186,26 +202,33 @@ export async function GET(request: NextRequest) {
     }
 
     // Build summary data for AI
+    // Collect all dates seen for blended target
+    const allDates7 = [...new Set(Object.values(roundStats7).flatMap(s => [...s.days]))].sort();
+    const allDates30 = [...new Set(Object.values(roundStats30).flatMap(s => [...s.days]))].sort();
+
     const roundSummary = ROUNDS.map((r) => {
       const s7 = roundStats7[r.key];
       const s30 = roundStats30[r.key];
       const days7 = Math.max(s7.days.size, 1);
       const days30 = Math.max(s30.days.size, 1);
+      const avgTarget7 = getAvgTarget(r.key, allDates7);
+      const avgTarget30 = getAvgTarget(r.key, allDates30);
       return {
         round: r.label,
         timeRange: `${r.startH}:00-${r.endH}:00`,
-        target: ROUND_TARGETS[r.key],
+        targetWeekday: ROUND_TARGETS[r.key].weekday,
+        targetWeekend: ROUND_TARGETS[r.key].weekend,
         last7days: {
           avgDailyRevenue: Math.round(s7.revenue / days7),
           avgDailyOrders: Math.round((s7.orders / days7) * 10) / 10,
           totalRevenue: Math.round(s7.revenue),
-          pctOfTarget: Math.round((s7.revenue / days7 / ROUND_TARGETS[r.key]) * 100),
+          pctOfTarget: avgTarget7 > 0 ? Math.round((s7.revenue / days7 / avgTarget7) * 100) : 0,
         },
         last30days: {
           avgDailyRevenue: Math.round(s30.revenue / days30),
           avgDailyOrders: Math.round((s30.orders / days30) * 10) / 10,
           totalRevenue: Math.round(s30.revenue),
-          pctOfTarget: Math.round((s30.revenue / days30 / ROUND_TARGETS[r.key]) * 100),
+          pctOfTarget: avgTarget30 > 0 ? Math.round((s30.revenue / days30 / avgTarget30) * 100) : 0,
         },
       };
     });
@@ -266,7 +289,7 @@ CHANNEL BREAKDOWN (Last 30 days):
 - Delivery: RM ${Math.round(channelStats.delivery.revenue)} (${channelStats.delivery.orders} orders)
 
 SALES BY ROUND (Daily target vs actual):
-${roundSummary.map((r) => `${r.round} (${r.timeRange}): Target RM${r.target}/day | Last 7d avg: RM${r.last7days.avgDailyRevenue}/day (${r.last7days.pctOfTarget}%) | Last 30d avg: RM${r.last30days.avgDailyRevenue}/day (${r.last30days.pctOfTarget}%)`).join("\n")}
+${roundSummary.map((r) => `${r.round} (${r.timeRange}): Target Weekday RM${r.targetWeekday} / Weekend RM${r.targetWeekend} | Last 7d avg: RM${r.last7days.avgDailyRevenue}/day (${r.last7days.pctOfTarget}%) | Last 30d avg: RM${r.last30days.avgDailyRevenue}/day (${r.last30days.pctOfTarget}%)`).join("\n")}
 
 DAILY TREND (Last 7 days):
 ${dailyTrend.map((d) => `${d.date}: RM${d.revenue} (${d.orders} orders)`).join("\n")}

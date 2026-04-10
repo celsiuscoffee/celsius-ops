@@ -85,16 +85,67 @@ function classifyChannel(channel?: string | null): "dine_in" | "takeaway" | "del
   return "dine_in";
 }
 
-// Hardcoded daily targets per round (RM revenue)
-const ROUND_TARGETS: Record<RoundKey, number> = {
-  breakfast: 200,
-  brunch: 350,
-  lunch: 500,
-  midday: 300,
-  evening: 400,
-  dinner: 450,
-  supper: 200,
+// Targets per round from spreadsheet — weekday vs weekend
+type RoundTarget = {
+  weekday: { revenue: number; orders: number; aov: number };
+  weekend: { revenue: number; orders: number; aov: number };
 };
+
+const ROUND_TARGETS: Record<RoundKey, RoundTarget> = {
+  breakfast: { weekday: { revenue: 400, orders: 20, aov: 20 }, weekend: { revenue: 525, orders: 15, aov: 35 } },
+  brunch:    { weekday: { revenue: 400, orders: 20, aov: 20 }, weekend: { revenue: 525, orders: 15, aov: 35 } },
+  lunch:     { weekday: { revenue: 450, orders: 15, aov: 30 }, weekend: { revenue: 700, orders: 20, aov: 35 } },
+  midday:    { weekday: { revenue: 450, orders: 15, aov: 30 }, weekend: { revenue: 350, orders: 10, aov: 35 } },
+  evening:   { weekday: { revenue: 600, orders: 20, aov: 30 }, weekend: { revenue: 700, orders: 20, aov: 35 } },
+  dinner:    { weekday: { revenue: 600, orders: 20, aov: 30 }, weekend: { revenue: 700, orders: 20, aov: 35 } },
+  supper:    { weekday: { revenue: 375, orders: 15, aov: 25 }, weekend: { revenue: 450, orders: 15, aov: 30 } },
+};
+
+// Delivery/Pickup targets
+const DELIVERY_TARGETS = {
+  weekday: { revenue: 525, orders: 15, aov: 35 },
+  weekend: { revenue: 525, orders: 15, aov: 15 },
+};
+
+/** Is a date string (YYYY-MM-DD) a weekend (Sat=6, Sun=0)? */
+function isWeekend(dateStr: string): boolean {
+  const d = new Date(dateStr + "T12:00:00+08:00");
+  const day = d.getDay();
+  return day === 0 || day === 6;
+}
+
+/** Get blended target for a round across a set of dates */
+function getBlendedTarget(roundKey: RoundKey, dates: string[]): { revenue: number; orders: number; aov: number } {
+  if (dates.length === 0) return { revenue: 0, orders: 0, aov: 0 };
+  let totalRev = 0, totalOrd = 0, totalAov = 0;
+  for (const d of dates) {
+    const t = isWeekend(d) ? ROUND_TARGETS[roundKey].weekend : ROUND_TARGETS[roundKey].weekday;
+    totalRev += t.revenue;
+    totalOrd += t.orders;
+    totalAov += t.aov;
+  }
+  return {
+    revenue: Math.round(totalRev / dates.length),
+    orders: Math.round(totalOrd / dates.length),
+    aov: Math.round((totalAov / dates.length) * 100) / 100,
+  };
+}
+
+function getBlendedDeliveryTarget(dates: string[]): { revenue: number; orders: number; aov: number } {
+  if (dates.length === 0) return { revenue: 0, orders: 0, aov: 0 };
+  let totalRev = 0, totalOrd = 0, totalAov = 0;
+  for (const d of dates) {
+    const t = isWeekend(d) ? DELIVERY_TARGETS.weekend : DELIVERY_TARGETS.weekday;
+    totalRev += t.revenue;
+    totalOrd += t.orders;
+    totalAov += t.aov;
+  }
+  return {
+    revenue: Math.round(totalRev / dates.length),
+    orders: Math.round(totalOrd / dates.length),
+    aov: Math.round((totalAov / dates.length) * 100) / 100,
+  };
+}
 
 // ─── Channel breakdown type ─────────────────────────────────────────────
 
@@ -204,6 +255,17 @@ export async function GET(request: NextRequest) {
       toDate = todayMYT;
     }
 
+    // Calculate previous period for comparison
+    const fromD = new Date(fromDate + "T00:00:00+08:00");
+    const toD = new Date(toDate + "T23:59:59+08:00");
+    const periodDays = Math.round((toD.getTime() - fromD.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const prevToD = new Date(fromD);
+    prevToD.setDate(prevToD.getDate() - 1);
+    const prevFromD = new Date(prevToD);
+    prevFromD.setDate(prevFromD.getDate() - periodDays + 1);
+    const prevFromDate = prevFromD.toISOString().split("T")[0];
+    const prevToDate = prevToD.toISOString().split("T")[0];
+
     // Fetch outlets
     const outletWhere = outletId
       ? { id: outletId, storehubId: { not: null } }
@@ -218,22 +280,42 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No outlets with StoreHub configured" }, { status: 404 });
     }
 
-    // Fetch StoreHub transactions for each outlet
+    // Fetch StoreHub transactions for each outlet (current + previous period)
     const allTxns: { txn: StoreHubTransaction; outletId: string }[] = [];
+    const prevTxns: StoreHubTransaction[] = [];
 
     for (const outlet of outlets) {
       if (!outlet.storehubId) continue;
       try {
-        const from = new Date(fromDate + "T00:00:00+08:00");
+        // Fetch both current and previous period in one wider range
+        const from = new Date(prevFromDate + "T00:00:00+08:00");
         const to = new Date(toDate + "T23:59:59+08:00");
         const txns = await getTransactions(outlet.storehubId, from, to);
         for (const txn of txns) {
-          // Only include Sale transactions (not refunds, voids, etc.)
-          allTxns.push({ txn, outletId: outlet.id });
+          const ts = txn.transactionTime || txn.completedAt || txn.createdAt;
+          if (!ts) continue;
+          const dateStr = getMYTDateStr(ts);
+          if (dateStr >= fromDate && dateStr <= toDate) {
+            allTxns.push({ txn, outletId: outlet.id });
+          } else if (dateStr >= prevFromDate && dateStr <= prevToDate) {
+            prevTxns.push(txn);
+          }
         }
       } catch (err) {
         console.error(`[sales/dashboard] Failed to fetch for outlet ${outlet.name}:`, err);
       }
+    }
+
+    // Previous period totals for comparison
+    let prevRevenue = 0;
+    let prevOrders = 0;
+    const prevChannels = { dine_in: { revenue: 0, orders: 0 }, takeaway: { revenue: 0, orders: 0 }, delivery: { revenue: 0, orders: 0 } };
+    for (const txn of prevTxns) {
+      prevRevenue += txn.total;
+      prevOrders += 1;
+      const ch = classifyChannel(txn.channel);
+      prevChannels[ch].revenue += txn.total;
+      prevChannels[ch].orders += 1;
     }
 
     // Build date range
@@ -310,19 +392,27 @@ export async function GET(request: NextRequest) {
         totalDelivery.orders += d.delivery.orders;
       }
 
-      // pctOfTarget: average daily revenue as % of the round's daily target
-      const target = ROUND_TARGETS[r.key];
+      // Blended target based on weekday/weekend mix of the date range
+      const blendedTarget = getBlendedTarget(r.key, dates);
+
+      // pctOfTarget: average daily revenue as % of the round's blended daily target
       let pctOfTarget = 0;
-      if (daysWithData > 0 && target > 0) {
+      if (daysWithData > 0 && blendedTarget.revenue > 0) {
         const avgDailyRevenue = totalRevenue / daysWithData;
-        pctOfTarget = Math.round((avgDailyRevenue / target) * 100);
+        pctOfTarget = Math.round((avgDailyRevenue / blendedTarget.revenue) * 100);
       }
+
+      // Per-day targets for daily cells
+      const dailyWithTargets = dailyData.map((d) => {
+        const dayTarget = isWeekend(d.date) ? ROUND_TARGETS[r.key].weekend : ROUND_TARGETS[r.key].weekday;
+        return { ...d, target: dayTarget };
+      });
 
       return {
         key: r.key,
         label: r.label,
         timeRange: `${r.startH > 12 ? r.startH - 12 : r.startH}${r.startH >= 12 ? "PM" : "AM"}-${r.endH > 12 ? r.endH - 12 : r.endH}${r.endH >= 12 ? "PM" : "AM"}`,
-        daily: dailyData,
+        daily: dailyWithTargets,
         totals: {
           revenue: Math.round(totalRevenue * 100) / 100,
           orders: totalOrders,
@@ -353,9 +443,7 @@ export async function GET(request: NextRequest) {
             ? roundChannel({ revenue: totalDelivery.revenue / daysWithData, orders: totalDelivery.orders / daysWithData })
             : { revenue: 0, orders: 0 },
         },
-        target: {
-          revenue: ROUND_TARGETS[r.key],
-        },
+        target: blendedTarget,
       };
     });
 
@@ -370,6 +458,11 @@ export async function GET(request: NextRequest) {
       orderBy: { name: "asc" },
     });
 
+    // Previous period comparison
+    const prevAov = prevOrders > 0 ? Math.round((prevRevenue / prevOrders) * 100) / 100 : 0;
+    const prevTakeawayRev = prevChannels.takeaway.revenue + prevChannels.delivery.revenue;
+    const prevTakeawayOrd = prevChannels.takeaway.orders + prevChannels.delivery.orders;
+
     return NextResponse.json({
       period: { from: fromDate, to: toDate, type: period },
       dates,
@@ -378,11 +471,23 @@ export async function GET(request: NextRequest) {
         orders: totalOrders,
         aov: totalOrders > 0 ? Math.round((totalRevenue / totalOrders) * 100) / 100 : 0,
       },
+      previous: {
+        revenue: Math.round(prevRevenue * 100) / 100,
+        orders: prevOrders,
+        aov: prevAov,
+        takeaway: { revenue: Math.round(prevChannels.takeaway.revenue * 100) / 100, orders: prevChannels.takeaway.orders },
+        delivery: { revenue: Math.round(prevChannels.delivery.revenue * 100) / 100, orders: prevChannels.delivery.orders },
+        pickupDeliveryRevenue: Math.round(prevTakeawayRev * 100) / 100,
+        pickupDeliveryOrders: prevTakeawayOrd,
+        periodFrom: prevFromDate,
+        periodTo: prevToDate,
+      },
       rounds: roundsData,
       outsideRounds: {
         revenue: Math.round(outsideRoundRevenue * 100) / 100,
         orders: outsideRoundOrders,
       },
+      deliveryTarget: getBlendedDeliveryTarget(dates),
       availableOutlets: allOutlets,
     });
   } catch (err) {

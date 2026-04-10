@@ -26,6 +26,8 @@ type OutletOption = { id: string; name: string };
 
 type ChannelBreakdown = { revenue: number; orders: number };
 
+type DayTarget = { revenue: number; orders: number; aov: number };
+
 type DailyCell = {
   date: string;
   revenue: number;
@@ -34,6 +36,7 @@ type DailyCell = {
   dineIn: ChannelBreakdown;
   takeaway: ChannelBreakdown;
   delivery: ChannelBreakdown;
+  target: DayTarget;
 };
 
 type RoundData = {
@@ -58,15 +61,29 @@ type RoundData = {
     takeaway: ChannelBreakdown;
     delivery: ChannelBreakdown;
   };
-  target: { revenue: number };
+  target: DayTarget;
+};
+
+type PreviousPeriod = {
+  revenue: number;
+  orders: number;
+  aov: number;
+  takeaway: ChannelBreakdown;
+  delivery: ChannelBreakdown;
+  pickupDeliveryRevenue: number;
+  pickupDeliveryOrders: number;
+  periodFrom: string;
+  periodTo: string;
 };
 
 type DashboardData = {
   period: { from: string; to: string; type: string };
   dates: string[];
   summary: { revenue: number; orders: number; aov: number };
+  previous: PreviousPeriod;
   rounds: RoundData[];
   outsideRounds: { revenue: number; orders: number };
+  deliveryTarget: DayTarget;
   availableOutlets: OutletOption[];
 };
 
@@ -119,9 +136,19 @@ function targetColor(pct: number): { bg: string; text: string; label: string } {
   return { bg: "bg-red-50", text: "text-red-700", label: "Critical" };
 }
 
+/** % change between current and previous */
+function pctChange(current: number, previous: number): { pct: number; label: string; color: string } {
+  if (previous === 0) return current > 0 ? { pct: 100, label: "+100%", color: "text-green-600" } : { pct: 0, label: "-", color: "text-gray-400" };
+  const pct = Math.round(((current - previous) / previous) * 100);
+  if (pct > 0) return { pct, label: `+${pct}%`, color: "text-green-600" };
+  if (pct < 0) return { pct, label: `${pct}%`, color: "text-red-500" };
+  return { pct: 0, label: "0%", color: "text-gray-400" };
+}
+
 /** Color for a cell value vs daily target */
 function cellColor(val: number, target: number): string {
   if (val === 0) return "text-gray-300";
+  if (target <= 0) return "text-gray-700";
   const pct = (val / target) * 100;
   if (pct >= 100) return "font-semibold text-green-600";
   if (pct >= 80) return "text-yellow-600";
@@ -295,52 +322,71 @@ export default function SalesDashboard() {
 
       {data && !loading && (
         <div className="flex flex-col gap-6">
-          {/* ─── Summary Cards ─── */}
+          {/* ─── Summary Cards with comparison ─── */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="flex items-start gap-3 mb-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100">
-                  <DollarSign className="h-5 w-5 text-green-600" />
-                </div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                  Total Revenue
-                </p>
-              </div>
-              <p className="font-sans text-2xl font-bold text-gray-900">
-                RM {data.summary.revenue.toLocaleString("en-MY", { minimumFractionDigits: 2 })}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">{getPeriodLabel(period)}</p>
-            </div>
+            {(() => {
+              const prev = data.previous;
+              const revChange = pctChange(data.summary.revenue, prev.revenue);
+              const ordChange = pctChange(data.summary.orders, prev.orders);
+              const aovChange = pctChange(data.summary.aov, prev.aov);
+              return (
+                <>
+                  <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100">
+                        <DollarSign className="h-5 w-5 text-green-600" />
+                      </div>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        Total Revenue
+                      </p>
+                    </div>
+                    <p className="font-sans text-2xl font-bold text-gray-900">
+                      RM {data.summary.revenue.toLocaleString("en-MY", { minimumFractionDigits: 2 })}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={cn("text-xs font-semibold", revChange.color)}>{revChange.label}</span>
+                      <span className="text-[10px] text-gray-400">vs prev period</span>
+                    </div>
+                  </div>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="flex items-start gap-3 mb-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100">
-                  <ShoppingCart className="h-5 w-5 text-blue-600" />
-                </div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                  Total Orders
-                </p>
-              </div>
-              <p className="font-sans text-2xl font-bold text-gray-900">
-                {data.summary.orders.toLocaleString()}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">{getPeriodLabel(period)}</p>
-            </div>
+                  <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100">
+                        <ShoppingCart className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        Total Orders
+                      </p>
+                    </div>
+                    <p className="font-sans text-2xl font-bold text-gray-900">
+                      {data.summary.orders.toLocaleString()}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={cn("text-xs font-semibold", ordChange.color)}>{ordChange.label}</span>
+                      <span className="text-[10px] text-gray-400">vs prev period</span>
+                    </div>
+                  </div>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="flex items-start gap-3 mb-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100">
-                  <TrendingUp className="h-5 w-5 text-orange-600" />
-                </div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                  Average Order Value
-                </p>
-              </div>
-              <p className="font-sans text-2xl font-bold text-gray-900">
-                RM {data.summary.aov.toFixed(2)}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">{getPeriodLabel(period)}</p>
-            </div>
+                  <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100">
+                        <TrendingUp className="h-5 w-5 text-orange-600" />
+                      </div>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        Average Order Value
+                      </p>
+                    </div>
+                    <p className="font-sans text-2xl font-bold text-gray-900">
+                      RM {data.summary.aov.toFixed(2)}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={cn("text-xs font-semibold", aovChange.color)}>{aovChange.label}</span>
+                      <span className="text-[10px] text-gray-400">vs prev period</span>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
 
           {/* ─── Pickup & Delivery ─── */}
@@ -350,21 +396,79 @@ export default function SalesDashboard() {
             const revTakeaway = data.rounds.reduce((s, r) => s + r.totals.takeaway.revenue, 0);
             const revDelivery = data.rounds.reduce((s, r) => s + r.totals.delivery.revenue, 0);
             const totalPickupDelivery = revTakeaway + revDelivery;
-            const totalOrders = totTakeaway + totDelivery;
+            const pdOrders = totTakeaway + totDelivery;
+            const pdAov = pdOrders > 0 ? totalPickupDelivery / pdOrders : 0;
+
+            // % of total
+            const pctOfSales = data.summary.revenue > 0 ? Math.round((totalPickupDelivery / data.summary.revenue) * 100) : 0;
+            const pctOfOrders = data.summary.orders > 0 ? Math.round((pdOrders / data.summary.orders) * 100) : 0;
+
+            // Target
+            const dt = data.deliveryTarget;
+            const pctTarget = dt && dt.revenue > 0 ? Math.round((totalPickupDelivery / dt.revenue) * 100) : 0;
+            const tc = targetColor(pctTarget);
+
+            // Comparison vs previous
+            const prev = data.previous;
+            const prevPdRev = prev.pickupDeliveryRevenue;
+            const prevPdOrd = prev.pickupDeliveryOrders;
+            const prevPdAov = prevPdOrd > 0 ? prevPdRev / prevPdOrd : 0;
+            const revCh = pctChange(totalPickupDelivery, prevPdRev);
+            const ordCh = pctChange(pdOrders, prevPdOrd);
+            const aovCh = pctChange(pdAov, prevPdAov);
+
+            // Takeaway vs Delivery comparison
+            const prevTaRev = prev.takeaway.revenue;
+            const prevDelRev = prev.delivery.revenue;
+            const taCh = pctChange(revTakeaway, prevTaRev);
+            const delCh = pctChange(revDelivery, prevDelRev);
+
             return (
               <div className="rounded-xl border border-amber-200 bg-amber-50/30 shadow-sm p-4">
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <ShoppingBag className="h-4 w-4 text-amber-600" />
                   <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Pickup & Delivery</h3>
-                  <span className="text-xs text-gray-400 ml-auto">
-                    RM {totalPickupDelivery.toLocaleString("en-MY", { minimumFractionDigits: 0 })} total ({totalOrders} orders)
-                  </span>
+                  <div className="flex items-center gap-2 ml-auto flex-wrap">
+                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                      {pctOfSales}% of sales
+                    </span>
+                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                      {pctOfOrders}% of orders
+                    </span>
+                    {pctTarget > 0 && (
+                      <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded", tc.bg, tc.text)}>
+                        {pctTarget}% of target
+                      </span>
+                    )}
+                  </div>
                 </div>
+
+                {/* Totals row */}
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <div className="rounded-lg border border-gray-100 bg-white p-2.5 text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium mb-0.5">Revenue</p>
+                    <p className="text-sm font-bold text-gray-900">RM {totalPickupDelivery.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
+                    <span className={cn("text-[10px] font-semibold", revCh.color)}>{revCh.label}</span>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-white p-2.5 text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium mb-0.5">Orders</p>
+                    <p className="text-sm font-bold text-gray-900">{pdOrders}</p>
+                    <span className={cn("text-[10px] font-semibold", ordCh.color)}>{ordCh.label}</span>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-white p-2.5 text-center">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium mb-0.5">AOV</p>
+                    <p className="text-sm font-bold text-gray-900">RM {pdAov.toFixed(2)}</p>
+                    <span className={cn("text-[10px] font-semibold", aovCh.color)}>{aovCh.label}</span>
+                  </div>
+                </div>
+
+                {/* Takeaway vs Delivery */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg border border-amber-100 bg-white p-3">
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <ShoppingBag className="h-3.5 w-3.5 text-amber-500" />
                       <span className="text-[11px] font-semibold text-gray-600 uppercase">Takeaway</span>
+                      <span className={cn("text-[10px] font-semibold ml-auto", taCh.color)}>{taCh.label}</span>
                     </div>
                     <p className="text-lg font-bold text-gray-900">RM {revTakeaway.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
                     <p className="text-[11px] text-gray-400">{totTakeaway} orders</p>
@@ -373,11 +477,17 @@ export default function SalesDashboard() {
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <Truck className="h-3.5 w-3.5 text-purple-500" />
                       <span className="text-[11px] font-semibold text-gray-600 uppercase">Delivery</span>
+                      <span className={cn("text-[10px] font-semibold ml-auto", delCh.color)}>{delCh.label}</span>
                     </div>
                     <p className="text-lg font-bold text-gray-900">RM {revDelivery.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
                     <p className="text-[11px] text-gray-400">{totDelivery} orders</p>
                   </div>
                 </div>
+                {dt && (
+                  <div className="mt-2 text-[11px] text-gray-400 text-right">
+                    Target: RM {dt.revenue}/day &middot; {dt.orders} orders &middot; AOV RM {dt.aov}
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -470,8 +580,8 @@ export default function SalesDashboard() {
 
                     const getTarget = () => {
                       if (activeMetric === "revenue") return round.target.revenue;
-                      if (activeMetric === "orders") return "-";
-                      return "-";
+                      if (activeMetric === "orders") return round.target.orders;
+                      return round.target.aov;
                     };
 
                     const formatValue = (v: number) => {
@@ -500,16 +610,16 @@ export default function SalesDashboard() {
                         </td>
                         {round.daily.map((cell) => {
                           const val = getValue(cell);
+                          // Use per-day target for color coding
+                          const dayTarget = activeMetric === "revenue" ? cell.target.revenue
+                            : activeMetric === "orders" ? cell.target.orders
+                            : cell.target.aov;
                           return (
                             <td key={cell.date} className="px-3 py-3 text-center">
                               <span
                                 className={cn(
                                   "font-sans text-sm",
-                                  activeMetric === "revenue"
-                                    ? cellColor(val, round.target.revenue)
-                                    : val === 0
-                                      ? "text-gray-300"
-                                      : "text-gray-700",
+                                  cellColor(val, dayTarget),
                                 )}
                               >
                                 {formatValue(val)}
@@ -558,7 +668,7 @@ export default function SalesDashboard() {
                               pct >= 100 ? "text-green-600" : "text-[#C2452D]",
                             )}
                           >
-                            {typeof targetVal === "number" ? formatRM(targetVal) : targetVal}
+                            {typeof targetVal === "number" ? (activeMetric === "revenue" ? formatRM(targetVal) : activeMetric === "orders" ? targetVal : targetVal.toFixed(0)) : targetVal}
                           </span>
                         </td>
                         {/* % of target */}
