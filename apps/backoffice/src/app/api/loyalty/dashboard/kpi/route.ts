@@ -8,15 +8,26 @@ const SHIFT_HOURS: Record<string, { startH: number; startM: number; endH: number
   evening: { startH: 15, startM: 30, endH: 23, endM: 0 },   // 3:30pm – 11:00pm
 };
 
-// Check if a timestamp falls within a shift's time-of-day window (MYT)
+// Check if a timestamp falls within a shift's time-of-day window (MYT = UTC+8)
 function isInShift(dateStr: string, shift: string): boolean {
   const bounds = SHIFT_HOURS[shift];
   if (!bounds) return true;
   const d = new Date(dateStr);
-  // Convert to MYT (UTC+8)
-  const myt = new Date(d.getTime() + 8 * 60 * 60 * 1000);
-  const h = myt.getUTCHours();
-  const m = myt.getUTCMinutes();
+  if (isNaN(d.getTime())) return true; // skip invalid dates
+  // Convert to MYT hours/minutes
+  // If the string has no timezone indicator (no Z, no +/-), assume it's already MYT
+  const isUTC = /Z|[+-]\d{2}:\d{2}$/.test(dateStr);
+  let h: number, m: number;
+  if (isUTC) {
+    // Convert UTC → MYT (UTC+8)
+    const myt = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+    h = myt.getUTCHours();
+    m = myt.getUTCMinutes();
+  } else {
+    // Already local time (MYT) — use as-is
+    h = d.getUTCHours();
+    m = d.getUTCMinutes();
+  }
   const mins = h * 60 + m;
   const startMins = bounds.startH * 60 + bounds.startM;
   const endMins = bounds.endH * 60 + bounds.endM;
@@ -46,22 +57,17 @@ async function fetchSHOrderCount(storeId: string, from: string, to: string, shif
     const data = await res.json();
     const txns = Array.isArray(data) ? data : data.transactions || [];
     // Count sales only — optionally filter by shift time-of-day
+    // StoreHub fields: transactionTime (preferred), createdAt, completedAt
     let salesCount = 0;
-    // StoreHub uses various timestamp fields — check which one exists
-    const sampleTxn = txns.find((t: Record<string, unknown>) => !t.isCancelled && t.transactionType === 'Sale');
-    const timeField = sampleTxn
-      ? (sampleTxn.created_at ? 'created_at' : sampleTxn.createdAt ? 'createdAt' : sampleTxn.date ? 'date' : sampleTxn.transactionDate ? 'transactionDate' : null)
-      : null;
     for (const t of txns) {
       if (t.isCancelled || t.transactionType !== 'Sale') continue;
       if (shift !== 'all') {
-        const ts = timeField ? t[timeField] : null;
+        const ts = t.transactionTime || t.createdAt || t.completedAt;
         if (!ts || !isInShift(ts as string, shift)) continue;
       }
       salesCount++;
     }
-    const debugTimeKeys = sampleTxn ? Object.keys(sampleTxn).filter(k => /date|time|creat/i.test(k)).join(',') : 'no_sample';
-    return { count: salesCount, debug: `ok: ${salesCount} sales of ${txns.length} txns [shift=${shift}, timeField=${timeField}, keys=${debugTimeKeys}]` };
+    return { count: salesCount, debug: `ok: ${salesCount} sales of ${txns.length} txns [shift=${shift}]` };
   } catch (err) {
     return { count: 0, debug: `error: ${err instanceof Error ? err.message : String(err)}` };
   }
