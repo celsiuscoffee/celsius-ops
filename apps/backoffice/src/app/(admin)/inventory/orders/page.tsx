@@ -183,19 +183,21 @@ export default function OrdersPage() {
       }
       const filled: Record<string, boolean> = {};
 
-      // Invoice number
+      // Invoice number — always override with AI data
       if (data.invoiceNumber) {
-        setEditInvoiceNumber((prev) => { if (!prev) { filled.invoiceNumber = true; return data.invoiceNumber; } return prev; });
+        setEditInvoiceNumber(data.invoiceNumber);
+        filled.invoiceNumber = true;
       }
 
-      // Due date
+      // Due date — always override with AI data
       if (data.dueDate) {
-        setEditInvoiceDueDate((prev) => { if (!prev) { filled.dueDate = true; return data.dueDate; } return prev; });
+        setEditInvoiceDueDate(data.dueDate);
+        filled.dueDate = true;
       }
 
-      // Delivery date — use deliveryDate or issueDate
+      // Delivery date — use deliveryDate or issueDate (always override with AI data)
       const detectedDeliveryDate = data.deliveryDate || data.issueDate;
-      if (detectedDeliveryDate && !editDeliveryDate) {
+      if (detectedDeliveryDate) {
         setEditDeliveryDate(detectedDeliveryDate);
         filled.deliveryDate = true;
       }
