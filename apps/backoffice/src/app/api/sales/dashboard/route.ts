@@ -59,7 +59,9 @@ function getDateRange(from: string, to: string): string[] {
   const end = new Date(to + "T00:00:00+08:00");
   const cur = new Date(start);
   while (cur <= end) {
-    dates.push(cur.toISOString().split("T")[0]);
+    // Add +8h to get MYT before extracting the date string
+    const myt = new Date(cur.getTime() + 8 * 60 * 60 * 1000);
+    dates.push(myt.toISOString().split("T")[0]);
     cur.setDate(cur.getDate() + 1);
   }
   return dates;
@@ -263,8 +265,10 @@ export async function GET(request: NextRequest) {
     prevToD.setDate(prevToD.getDate() - 1);
     const prevFromD = new Date(prevToD);
     prevFromD.setDate(prevFromD.getDate() - periodDays + 1);
-    const prevFromDate = prevFromD.toISOString().split("T")[0];
-    const prevToDate = prevToD.toISOString().split("T")[0];
+    const prevFromMYT = new Date(prevFromD.getTime() + 8 * 60 * 60 * 1000);
+    const prevToMYT = new Date(prevToD.getTime() + 8 * 60 * 60 * 1000);
+    const prevFromDate = prevFromMYT.toISOString().split("T")[0];
+    const prevToDate = prevToMYT.toISOString().split("T")[0];
 
     // Fetch outlets
     const outletWhere = outletId
