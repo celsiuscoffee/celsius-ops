@@ -84,3 +84,40 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ invoices: mapped, outlets });
 }
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { orderId, outletId, supplierId, amount, invoiceNumber, dueDate, photos } = body;
+
+    if (!outletId || !supplierId) {
+      return NextResponse.json({ error: "outletId and supplierId are required" }, { status: 400 });
+    }
+
+    // Generate invoice number if not provided
+    let invNumber = invoiceNumber;
+    if (!invNumber) {
+      const invCount = await prisma.invoice.count();
+      invNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
+    }
+
+    const invoice = await prisma.invoice.create({
+      data: {
+        invoiceNumber: invNumber,
+        orderId: orderId || null,
+        outletId,
+        supplierId,
+        amount: amount ?? 0,
+        status: "PENDING",
+        dueDate: dueDate ? new Date(dueDate) : null,
+        photos: photos || [],
+      },
+    });
+
+    return NextResponse.json(invoice, { status: 201 });
+  } catch (err) {
+    console.error("[invoices POST]", err);
+    const message = err instanceof Error ? err.message : "Failed to create invoice";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

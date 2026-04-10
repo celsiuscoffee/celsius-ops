@@ -25,7 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = await req.json();
-    const { status, totalAmount, deliveryDate, items } = body;
+    const { status, totalAmount, deliveryDate, items, invoiceNumber: bodyInvoiceNumber, invoiceDueDate, invoicePhotos } = body;
 
     const data: Record<string, unknown> = {};
 
@@ -104,7 +104,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const existingInvoice = await prisma.invoice.findFirst({ where: { orderId: id } });
         if (!existingInvoice) {
           const invCount = await prisma.invoice.count();
-          const invoiceNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
+          const invoiceNumber = bodyInvoiceNumber || `INV-${String(invCount + 1).padStart(4, "0")}`;
           await prisma.invoice.create({
             data: {
               invoiceNumber,
@@ -113,7 +113,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               supplierId: order.supplierId,
               amount: order.totalAmount,
               status: "PENDING",
-              photos: [],
+              dueDate: invoiceDueDate ? new Date(invoiceDueDate) : null,
+              photos: invoicePhotos || [],
             },
           });
         }
@@ -132,7 +133,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               supplierId: order.supplierId,
               receivedById: caller.id,
               status: "COMPLETE",
-              invoicePhotos: [],
+              invoicePhotos: invoicePhotos || [],
               items: {
                 create: order.items.map((i) => ({
                   productId: i.productId,
