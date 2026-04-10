@@ -182,22 +182,20 @@ export default function ReceivingsPage() {
     } catch { /* ignore — will default to full qty */ }
 
     setReceiveItems(
-      order.items
-        .map((i) => {
-          const alreadyReceived = prevReceived[i.product] || 0;
-          const remaining = Math.max(0, i.quantity - alreadyReceived);
-          return {
-            productId: i.productId,
-            productPackageId: i.productPackageId,
-            product: i.product,
-            sku: i.sku,
-            orderedQty: i.quantity,
-            alreadyReceived,
-            receivedQty: remaining, // Default to remaining balance
-            discrepancyReason: "",
-          };
-        })
-        .filter((i) => i.orderedQty - i.alreadyReceived > 0), // Hide fully received items
+      order.items.map((i) => {
+        const alreadyReceived = prevReceived[i.product] || 0;
+        const remaining = Math.max(0, i.quantity - alreadyReceived);
+        return {
+          productId: i.productId,
+          productPackageId: i.productPackageId,
+          product: i.product,
+          sku: i.sku,
+          orderedQty: i.quantity,
+          alreadyReceived,
+          receivedQty: remaining, // Default to remaining balance
+          discrepancyReason: "",
+        };
+      }),
     );
   };
 
@@ -229,6 +227,22 @@ export default function ReceivingsPage() {
         return;
       }
 
+      const itemsToSubmit = receiveItems
+        .filter((i) => i.receivedQty > 0)
+        .map((i) => ({
+          productId: i.productId,
+          productPackageId: i.productPackageId,
+          orderedQty: i.orderedQty,
+          receivedQty: i.receivedQty,
+          discrepancyReason: i.receivedQty < i.orderedQty ? (i.discrepancyReason || "short") : null,
+        }));
+
+      if (itemsToSubmit.length === 0) {
+        alert("Please enter received quantities for at least one item.");
+        setSaving(false);
+        return;
+      }
+
       await fetch("/api/inventory/receivings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -237,13 +251,7 @@ export default function ReceivingsPage() {
           outletId,
           supplierId,
           notes: receiveNotes || null,
-          items: receiveItems.map((i) => ({
-            productId: i.productId,
-            productPackageId: i.productPackageId,
-            orderedQty: i.orderedQty,
-            receivedQty: i.receivedQty,
-            discrepancyReason: i.receivedQty < i.orderedQty ? (i.discrepancyReason || "short") : null,
-          })),
+          items: itemsToSubmit,
         }),
       });
       setShowReceive(false);
@@ -493,7 +501,7 @@ export default function ReceivingsPage() {
 
             {/* Receive items */}
             {selectedOrderId && receiveItems.length === 0 && (
-              <p className="text-sm text-gray-500 text-center py-4">All items for this order have been fully received.</p>
+              <p className="text-sm text-gray-500 text-center py-4">This order has no items.</p>
             )}
             {receiveItems.length > 0 && (
               <div>

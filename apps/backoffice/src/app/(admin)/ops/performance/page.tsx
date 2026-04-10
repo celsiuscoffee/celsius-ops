@@ -115,6 +115,35 @@ export default function OpsPerformancePage() {
             ))}
           </div>
 
+          {/* Needs Attention — shown first */}
+          {data.incomplete.length > 0 && (
+            <Card className="mb-8 border-yellow-200">
+              <CardContent className="p-5">
+                <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-yellow-500" />Needs Attention
+                  <Badge variant="outline" className="text-[10px] text-yellow-600 border-yellow-300 ml-auto">
+                    {data.incomplete.length}
+                  </Badge>
+                </h3>
+                <div className="space-y-2">
+                  {data.incomplete.map((item) => (
+                    <div key={item.id} className="flex items-center gap-3 rounded-lg border border-yellow-100 bg-yellow-50/30 p-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900">{item.sopTitle}</p>
+                        <p className="text-[10px] text-gray-400">
+                          {item.outlet} · {item.assignedTo} · {item.shift}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] text-yellow-600 border-yellow-300 shrink-0">
+                        {item.itemsCompleted}/{item.totalItems}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Daily Trend */}
           {data.dailyTrend.length > 0 && (
             <Card className="mb-8">
@@ -253,31 +282,6 @@ export default function OpsPerformancePage() {
             </Card>
           </div>
 
-          {/* Needs Attention */}
-          {data.incomplete.length > 0 && (
-            <Card>
-              <CardContent className="p-5">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-yellow-500" />Needs Attention
-                </h3>
-                <div className="space-y-2">
-                      {data.incomplete.map((item) => (
-                        <div key={item.id} className="flex items-center gap-3 rounded-lg border border-gray-100 p-3">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900">{item.sopTitle}</p>
-                            <p className="text-[10px] text-gray-400">
-                              {item.outlet} · {item.assignedTo} · {item.shift}
-                            </p>
-                          </div>
-                          <Badge variant="outline" className="text-[10px] text-yellow-600 border-yellow-300 shrink-0">
-                            {item.itemsCompleted}/{item.totalItems}
-                          </Badge>
-                        </div>
-                      ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </>
       )}
     </div>

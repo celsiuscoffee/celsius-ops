@@ -164,6 +164,13 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Sales",
+    icon: <BarChart3 className={ICON_SIZE} />,
+    items: [
+      { label: "Dashboard", href: "/sales/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "sales:dashboard" },
+    ],
+  },
+  {
     label: "Ops",
     icon: <ClipboardCheckIcon className={ICON_SIZE} />,
     items: [
