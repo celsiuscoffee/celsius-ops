@@ -64,6 +64,24 @@ public class SunmiPrinterPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getStatus(PluginCall call) {
+        if (!isConnected || printerService == null) {
+            call.reject("Printer not connected");
+            return;
+        }
+        try {
+            int state = printerService.updatePrinterState();
+            // 1=normal, 2=preparing, 3=comm error, 4=out of paper, 5=overheated, 6=cover open, 505=no printer, 507=firmware update
+            Log.i(TAG, "Printer state: " + state);
+            JSObject ret = new JSObject();
+            ret.put("state", state);
+            call.resolve(ret);
+        } catch (RemoteException e) {
+            call.reject("Error getting status: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
     public void printText(PluginCall call) {
         if (!isConnected || printerService == null) {
             call.reject("Printer not connected");
@@ -107,6 +125,8 @@ public class SunmiPrinterPlugin extends Plugin {
         String payment = call.getString("payment", "");
 
         try {
+            int state = printerService.updatePrinterState();
+            Log.i(TAG, "Printer state before print: " + state + " (1=normal, 2=preparing, 3=comm_err, 4=no_paper, 5=hot, 6=cover_open, 505=no_printer)");
             Log.i(TAG, "Starting print job, type=" + type + " order=#" + orderNumber);
             printerService.printerInit(null);
 
