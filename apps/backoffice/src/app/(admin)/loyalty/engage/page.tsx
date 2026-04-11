@@ -56,12 +56,11 @@ function aggregateSmsLogs(
 ): NotificationMessage[] {
   if (logs.length === 0) return [];
 
-  // Strip the RM0 prefix for display grouping
-  const PREFIX = "RM0 [CelsiusCoffee] ";
+  // Strip any RM0 [SenderID] prefix for display grouping
   const grouped = new Map<string, { sent: number; delivered: number; failed: number; earliest: string }>();
 
   for (const log of logs) {
-    const displayMsg = log.message.startsWith(PREFIX) ? log.message.slice(PREFIX.length) : log.message;
+    const displayMsg = log.message.replace(/^RM0 \[[^\]]+\] /, "");
     const existing = grouped.get(displayMsg) || { sent: 0, delivered: 0, failed: 0, earliest: log.created_at };
     existing.sent++;
     if (log.status === "sent" || log.status === "delivered") existing.delivered++;
@@ -437,19 +436,19 @@ export default function NotificationsPage() {
   };
 
   // Build preview text by replacing variables with sample data
-  // No header needed here — the blast API auto-prepends "RM0 [CelsiusCoffee] "
+  // No header needed here — the blast API auto-prepends "RM0 [<SenderID>] "
   const fullMessage = formMessage;
 
   const previewText = useMemo(() => {
     if (!fullMessage) return "Your message preview will appear here...";
     // Show the actual message that will be sent (with RM0 prefix the API adds)
-    const SMS_PREFIX = "RM0 [CelsiusCoffee] ";
+    const SMS_PREFIX = `RM0 [${formSenderId || "CelsiusCoffee"}] `;
     let text = fullMessage.startsWith(SMS_PREFIX) ? fullMessage : `${SMS_PREFIX}${fullMessage}`;
     variables.forEach((v) => {
       text = text.replaceAll(v.key, v.preview);
     });
     return text;
-  }, [fullMessage]);
+  }, [fullMessage, formSenderId]);
 
   // KPI data
   const totalSent = messages.reduce((acc, m) => acc + (m.sent ?? 0), 0);
@@ -1239,7 +1238,7 @@ export default function NotificationsPage() {
                         )}
                       >
                         {fullMessage.length}/{charLimit} characters
-                        <span className="text-gray-300"> (auto-prefix: RM0 [CelsiusCoffee])</span>
+                        <span className="text-gray-300"> (auto-prefix: RM0 [{formSenderId || "CelsiusCoffee"}])</span>
                       </span>
                       {(formChannel === "sms" || formChannel === "both") && formScheduleType === "now" && smsBalance !== null && (
                         <span className="text-xs text-gray-400">

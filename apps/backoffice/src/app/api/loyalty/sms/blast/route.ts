@@ -64,9 +64,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Auto-prepend RM0 [CelsiusCoffee] prefix if not already present
-    const SMS_PREFIX = 'RM0 [CelsiusCoffee] ';
-    const finalMessage = message.startsWith(SMS_PREFIX) ? message : `${SMS_PREFIX}${message}`;
+    // Auto-prepend RM0 [<SenderID>] prefix if not already present
+    const senderLabel = sender_id || 'CelsiusCoffee';
+    const SMS_PREFIX = `RM0 [${senderLabel}] `;
+    const finalMessage = message.startsWith('RM0 ') ? message : `${SMS_PREFIX}${message}`;
 
     // Send SMS in parallel batches of BATCH_SIZE
     let sent = 0;
