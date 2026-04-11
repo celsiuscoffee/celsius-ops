@@ -109,59 +109,75 @@ public class SunmiPrinterPlugin extends Plugin {
         try {
             Log.i(TAG, "Starting print job, type=" + type + " order=#" + orderNumber);
             printerService.printerInit(null);
-            printerService.enterPrinterBuffer(true);
+
+            String DASHES = "--------------------------------\n";
 
             if (type.equals("kitchen")) {
-                // Kitchen slip
+                // Kitchen slip — use printText + setFontSize for V3 compatibility
                 printerService.setAlignment(1, null);
-                printerService.printTextWithFont("KITCHEN ORDER\n", "", 24, null);
-                printerService.printTextWithFont("Celsius Coffee\n", "", 28, null);
-                printerService.printTextWithFont(storeName + "\n", "", 20, null);
-                printerService.printOriginalText("--------------------------------\n", null);
-                printerService.printTextWithFont("#" + orderNumber + "\n", "", 52, null);
-                printerService.printTextWithFont(time + "\n", "", 20, null);
-                printerService.printOriginalText("--------------------------------\n", null);
+                printerService.setFontSize(24, null);
+                printerService.printText("KITCHEN ORDER\n", null);
+                printerService.setFontSize(28, null);
+                printerService.printText("Celsius Coffee\n", null);
+                printerService.setFontSize(20, null);
+                printerService.printText(storeName + "\n", null);
+                printerService.printText(DASHES, null);
+                printerService.setFontSize(48, null);
+                printerService.printText("#" + orderNumber + "\n", null);
+                printerService.setFontSize(20, null);
+                printerService.printText(time + "\n", null);
+                printerService.printText(DASHES, null);
 
                 printerService.setAlignment(0, null);
-                printerService.printOriginalText(items + "\n", null);
+                printerService.setFontSize(24, null);
+                printerService.printText(items + "\n", null);
 
                 if (notes != null && !notes.isEmpty()) {
-                    printerService.printOriginalText("--------------------------------\n", null);
-                    printerService.printTextWithFont("NOTE: " + notes + "\n", "", 24, null);
+                    printerService.printText(DASHES, null);
+                    printerService.setFontSize(24, null);
+                    printerService.printText("NOTE: " + notes + "\n", null);
                 }
 
                 printerService.setAlignment(1, null);
-                printerService.printOriginalText("--------------------------------\n", null);
-                printerService.printOriginalText("SELF-PICKUP\n", null);
+                printerService.setFontSize(20, null);
+                printerService.printText(DASHES, null);
+                printerService.printText("SELF-PICKUP\n", null);
             } else {
                 // Receipt
                 printerService.setAlignment(1, null);
-                printerService.printTextWithFont("Celsius Coffee\n", "", 28, null);
-                printerService.printTextWithFont(storeName + "\n", "", 20, null);
-                printerService.printTextWithFont(time + "\n", "", 18, null);
-                printerService.printOriginalText("--------------------------------\n", null);
-                printerService.printTextWithFont("#" + orderNumber + "\n", "", 42, null);
-                printerService.printOriginalText("--------------------------------\n", null);
+                printerService.setFontSize(28, null);
+                printerService.printText("Celsius Coffee\n", null);
+                printerService.setFontSize(20, null);
+                printerService.printText(storeName + "\n", null);
+                printerService.setFontSize(18, null);
+                printerService.printText(time + "\n", null);
+                printerService.setFontSize(20, null);
+                printerService.printText(DASHES, null);
+                printerService.setFontSize(42, null);
+                printerService.printText("#" + orderNumber + "\n", null);
+                printerService.setFontSize(20, null);
+                printerService.printText(DASHES, null);
 
                 printerService.setAlignment(0, null);
-                printerService.printOriginalText(items + "\n", null);
+                printerService.setFontSize(24, null);
+                printerService.printText(items + "\n", null);
 
-                printerService.printOriginalText("--------------------------------\n", null);
-                printerService.printOriginalText("Subtotal          " + subtotal + "\n", null);
-                printerService.printOriginalText("--------------------------------\n", null);
-                printerService.setFontSize(28, null);
-                printerService.printTextWithFont("TOTAL  " + total + "\n", "", 28, null);
                 printerService.setFontSize(20, null);
-                printerService.printOriginalText("Payment: " + payment + "\n", null);
+                printerService.printText(DASHES, null);
+                printerService.printText("Subtotal          " + subtotal + "\n", null);
+                printerService.printText(DASHES, null);
+                printerService.setFontSize(28, null);
+                printerService.printText("TOTAL  " + total + "\n", null);
+                printerService.setFontSize(20, null);
+                printerService.printText("Payment: " + payment + "\n", null);
 
                 printerService.setAlignment(1, null);
-                printerService.printOriginalText("--------------------------------\n", null);
-                printerService.printOriginalText("Thank you!\n", null);
+                printerService.printText(DASHES, null);
+                printerService.printText("Thank you!\n", null);
             }
 
             printerService.lineWrap(4, null);
-            printerService.exitPrinterBuffer(true);
-            Log.i(TAG, "Print job committed successfully");
+            Log.i(TAG, "Print job sent successfully");
             call.resolve();
         } catch (RemoteException e) {
             call.reject("Print error: " + e.getMessage());
