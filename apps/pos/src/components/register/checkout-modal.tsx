@@ -65,7 +65,11 @@ export function CheckoutModal({
   const [queueNumber] = useState(initialQueueNumber ?? "");
   const [error, setError] = useState("");
 
-  async function handlePay(methodId: string) {
+  function handleSelectMethod(methodId: string) {
+    handleTerminalPay(methodId);
+  }
+
+  async function handleTerminalPay(methodId: string) {
     setSelectedMethod(methodId);
     setStep("processing");
     setError("");
@@ -179,7 +183,7 @@ export function CheckoutModal({
                 {PAYMENT_METHODS.map((method) => (
                   <button
                     key={method.id}
-                    onClick={() => handlePay(method.id)}
+                    onClick={() => handleSelectMethod(method.id)}
                     className="flex items-center gap-3 rounded-xl border border-border p-4 text-left transition-all hover:border-brand hover:shadow-sm active:scale-[0.98]"
                   >
                     <span className="text-2xl">{method.icon}</span>

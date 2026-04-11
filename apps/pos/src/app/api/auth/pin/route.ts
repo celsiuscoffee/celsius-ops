@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createToken, verifyPin, hashPin, COOKIE_NAME, SESSION_MAX_AGE } from "@celsius/auth";
+import { createToken, verifyPin, hashPin, COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/auth";
 
 // Use the inventory Supabase project (where User table lives via Prisma)
 const supabase = createClient(

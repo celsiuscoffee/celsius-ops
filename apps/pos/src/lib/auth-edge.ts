@@ -6,5 +6,5 @@
  * COOKIE_NAME) only depend on jose, which is fully edge-compatible.
  */
 
-export { verifyToken, COOKIE_NAME } from "@celsius/auth";
-export type { SessionUser } from "@celsius/auth";
+export { verifyToken, COOKIE_NAME } from "@/lib/auth";
+export type { SessionUser } from "@/lib/auth";
