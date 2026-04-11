@@ -35,6 +35,11 @@
         </provider>
     </application>
 
+    <!-- Allow binding to Sunmi printer AIDL service (required Android 11+) -->
+    <queries>
+        <package android:name="woyou.aidlservice.jiuiv5" />
+    </queries>
+
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
