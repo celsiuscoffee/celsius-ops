@@ -9,10 +9,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   function handleDigit(digit: string) {
-    if (pin.length < 4) {
+    if (pin.length < 6) {
       const newPin = pin + digit;
       setPin(newPin);
-      if (newPin.length === 4) handleLogin(newPin);
+      if (newPin.length === 6) handleLogin(newPin);
     }
   }
 
@@ -55,11 +55,11 @@ export default function LoginPage() {
         <div className="flex flex-col items-center gap-3">
           <Image src="/images/celsius-logo-sm.jpg" alt="Celsius Coffee" width={80} height={80} className="rounded-2xl" priority />
           <Image src="/images/celsius-wordmark-white.png" alt="Celsius Coffee" width={180} height={40} className="opacity-90" priority />
-          <p className="text-sm text-text-muted">Enter your 4-digit PIN</p>
+          <p className="text-sm text-text-muted">Enter your 6-digit PIN</p>
         </div>
 
-        <div className="flex gap-4">
-          {[0, 1, 2, 3].map((i) => (
+        <div className="flex gap-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <div key={i} className={`h-4 w-4 rounded-full transition-all duration-200 ${
               i < pin.length ? (error ? "scale-125 bg-danger" : "scale-125 bg-brand") : "bg-[#444]"
             }`} />

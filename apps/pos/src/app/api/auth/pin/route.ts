@@ -33,8 +33,8 @@ export async function POST(req: NextRequest) {
   try {
     const { pin } = await req.json();
 
-    if (!pin || pin.length < 4) {
-      return NextResponse.json({ error: "PIN required (minimum 4 digits)" }, { status: 400 });
+    if (!pin || pin.length < 6) {
+      return NextResponse.json({ error: "PIN required (6 digits)" }, { status: 400 });
     }
 
     // Try Prisma first, fall back to direct Supabase REST
