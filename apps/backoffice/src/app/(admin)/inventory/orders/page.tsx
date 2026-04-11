@@ -207,10 +207,11 @@ export default function OrdersPage() {
       }
 
       // Match extracted items to order items by name similarity — update qty & price
+      // Items not matched are added as new rows
       if (data.items?.length > 0) {
         setEditItems((prevItems) => {
           const updated = [...prevItems];
-          let matched = false;
+          let changed = false;
           for (const aiItem of data.items) {
             const aiName = (aiItem.name || "").toLowerCase();
             // Find best match in existing order items
@@ -221,12 +222,31 @@ export default function OrdersPage() {
                 aiName.split(/\s+/).filter((w: string) => orderName.includes(w)).length >= Math.ceil(aiName.split(/\s+/).length * 0.5);
             });
             if (idx >= 0) {
+              // Update existing item
               if (aiItem.quantity > 0) updated[idx].qtyStr = String(aiItem.quantity);
               if (aiItem.unitPrice > 0) updated[idx].priceStr = String(aiItem.unitPrice);
-              matched = true;
+              changed = true;
+            } else if (aiItem.name && aiItem.quantity > 0) {
+              // Add as new item — not in original PO
+              const qty = aiItem.quantity || 0;
+              const price = aiItem.unitPrice || 0;
+              updated.push({
+                id: `ai-new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                product: aiItem.name,
+                sku: "",
+                uom: aiItem.uom || "pcs",
+                package: aiItem.uom || "pcs",
+                quantity: qty,
+                unitPrice: price,
+                totalPrice: qty * price,
+                notes: "Added from invoice",
+                qtyStr: String(qty),
+                priceStr: String(price),
+              });
+              changed = true;
             }
           }
-          if (matched) filled.items = true;
+          if (changed) filled.items = true;
           return updated;
         });
       }
