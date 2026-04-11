@@ -134,7 +134,8 @@ export default function TransfersPage() {
     try {
       const res = await fetch(`/api/inventory/stock-levels?outletId=${outletId}`);
       if (res.ok) {
-        const items: { productId: string; currentQty: number }[] = await res.json();
+        const data = await res.json();
+        const items: { productId: string; currentQty: number }[] = data.items || data;
         const map: Record<string, number> = {};
         for (const item of items) map[item.productId] = item.currentQty;
         setter(map);
