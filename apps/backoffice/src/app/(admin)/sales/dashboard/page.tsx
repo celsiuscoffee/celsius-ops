@@ -13,7 +13,6 @@ import {
   Sparkles,
   AlertTriangle,
   Lightbulb,
-  Target,
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -566,12 +565,6 @@ export default function SalesDashboard() {
                     <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[60px] bg-purple-50 text-purple-700" title="Delivery">
                       <Truck className="h-3.5 w-3.5 mx-auto" />
                     </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-[#C2452D] min-w-[80px] bg-orange-50">
-                      Target
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[70px] bg-gray-100 text-gray-600">
-                      %
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -594,12 +587,6 @@ export default function SalesDashboard() {
                       return round.averages.aov;
                     };
 
-                    const getTarget = () => {
-                      if (activeMetric === "revenue") return round.target.revenue;
-                      if (activeMetric === "orders") return round.target.orders;
-                      return round.target.aov;
-                    };
-
                     const formatValue = (v: number) => {
                       if (activeMetric === "revenue") return v > 0 ? formatRM(v) : "-";
                       if (activeMetric === "orders") return v > 0 ? v.toString() : "-";
@@ -607,9 +594,6 @@ export default function SalesDashboard() {
                     };
 
                     const totalVal = getTotal();
-                    const targetVal = getTarget();
-                    const pct = round.totals.pctOfTarget;
-                    const tc = targetColor(pct);
 
                     // Channel values for totals row
                     const chDineIn = activeMetric === "revenue" ? round.totals.dineIn.revenue : round.totals.dineIn.orders;
@@ -669,28 +653,6 @@ export default function SalesDashboard() {
                         <td className="px-2 py-3 text-center bg-purple-50/30">
                           <span className="font-sans text-xs text-gray-700">
                             {activeMetric === "aov" ? "-" : chDelivery > 0 ? (activeMetric === "revenue" ? formatRM(chDelivery) : chDelivery) : "-"}
-                          </span>
-                        </td>
-                        {/* Target */}
-                        <td
-                          className={cn(
-                            "px-3 py-3 text-center",
-                            pct >= 100 ? "bg-green-50" : "bg-orange-50",
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "font-sans font-semibold",
-                              pct >= 100 ? "text-green-600" : "text-[#C2452D]",
-                            )}
-                          >
-                            {typeof targetVal === "number" ? (activeMetric === "revenue" ? formatRM(targetVal) : activeMetric === "orders" ? targetVal : targetVal.toFixed(0)) : targetVal}
-                          </span>
-                        </td>
-                        {/* % of target */}
-                        <td className={cn("px-3 py-3 text-center", tc.bg)}>
-                          <span className={cn("font-sans text-xs font-bold", tc.text)}>
-                            {pct > 0 ? `${pct}%` : "-"}
                           </span>
                         </td>
                       </tr>
@@ -761,20 +723,6 @@ export default function SalesDashboard() {
                         </>
                       );
                     })()}
-                    <td className="px-3 py-3 text-center bg-orange-100">
-                      {activeMetric === "revenue"
-                        ? `RM ${(data.rounds.reduce((s, r) => s + r.target.revenue, 0)).toLocaleString()}`
-                        : "-"}
-                    </td>
-                    <td className="px-3 py-3 text-center bg-gray-200">
-                      {(() => {
-                        const avgPct = data.rounds.filter((r) => r.totals.pctOfTarget > 0).length > 0
-                          ? Math.round(data.rounds.reduce((s, r) => s + r.totals.pctOfTarget, 0) / data.rounds.filter((r) => r.totals.pctOfTarget > 0).length)
-                          : 0;
-                        const c = targetColor(avgPct);
-                        return <span className={cn("text-xs font-bold", c.text)}>{avgPct > 0 ? `${avgPct}%` : "-"}</span>;
-                      })()}
-                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -842,7 +790,7 @@ export default function SalesDashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {recommendations.map((rec, idx) => {
                   const iconMap: Record<string, React.ReactNode> = {
-                    opportunity: <Target className="h-4 w-4 text-green-500" />,
+                    opportunity: <Sparkles className="h-4 w-4 text-green-500" />,
                     warning: <AlertTriangle className="h-4 w-4 text-amber-500" />,
                     insight: <Lightbulb className="h-4 w-4 text-blue-500" />,
                     action: <Zap className="h-4 w-4 text-purple-500" />,
