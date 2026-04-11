@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
     // ─── 1. REORDER DECISIONS — Generate PO line items ──────────────
 
     // For each product at each outlet, check if below reorder point
+    // First check if another outlet has surplus → suggest transfer instead of PO
     // Group by outlet+supplier → becomes a draft PO
 
     // Build cheapest supplier map: productId → { supplierId, price, packageId, packageName, unitCost }
@@ -154,6 +155,25 @@ export async function GET(request: NextRequest) {
       daysUntilStockout: number;
     };
 
+    // ── Pre-compute surplus stock at each outlet per product ──
+    // (stock above par level = available for transfer to deficit outlets)
+    // Track how much surplus has been "claimed" by transfer suggestions
+    const surplusClaimed: Record<string, number> = {}; // key: productId_outletId → qty already allocated
+
+    // Transfer recommendations generated from PO analysis (surplus at other outlets)
+    type TransferFromPOItem = {
+      productId: string; productName: string;
+      fromQty: number; toQty: number; transferQty: number; toParLevel: number;
+    };
+    type TransferFromPO = {
+      type: "transfer";
+      fromOutletId: string; fromOutletName: string;
+      toOutletId: string; toOutletName: string;
+      items: TransferFromPOItem[];
+      reason: string;
+    };
+    const transferFromPO: TransferFromPO[] = [];
+
     // Group: outletId → supplierId → ReorderItem[]
     const reorderGroups: Record<string, Record<string, ReorderItem[]>> = {};
     let totalReorderValue = 0;
@@ -175,14 +195,72 @@ export async function GET(request: NextRequest) {
         // Skip if already in a DRAFT order
         if (draftProductSet.has(key)) continue;
 
+        // ── Check if other outlets have surplus we can transfer ──
+        let baseUnitsNeeded = Math.max(parLevel - currentQty, 0);
+        if (baseUnitsNeeded <= 0) continue;
+
+        // Look for surplus at other outlets (stock above par level)
+        if (outlets.length > 1) {
+          for (const otherOutlet of outlets) {
+            if (otherOutlet.id === outlet.id) continue;
+            const otherKey = `${product.id}_${otherOutlet.id}`;
+            const otherPar = parMap.get(otherKey);
+            if (!otherPar) continue;
+            const otherQty = stockMap.get(otherKey) ?? 0;
+            const otherParLevel = Number(otherPar.parLevel);
+            const claimed = surplusClaimed[otherKey] || 0;
+            const surplus = otherQty - otherParLevel - claimed;
+            if (surplus <= 0) continue;
+
+            // Transfer what we can from this outlet
+            const transferQty = Math.min(surplus, baseUnitsNeeded);
+            if (transferQty <= 0) continue;
+
+            // Track the claim so we don't double-allocate
+            surplusClaimed[otherKey] = claimed + transferQty;
+
+            // Create or append to transfer recommendation
+            const fromOutlet = outletMap.get(otherOutlet.id);
+            const toOutlet = outletMap.get(outlet.id);
+            if (fromOutlet && toOutlet) {
+              let existing = transferFromPO.find(
+                (t) => t.fromOutletId === otherOutlet.id && t.toOutletId === outlet.id
+              );
+              if (!existing) {
+                existing = {
+                  type: "transfer",
+                  fromOutletId: otherOutlet.id,
+                  fromOutletName: fromOutlet.name,
+                  toOutletId: outlet.id,
+                  toOutletName: toOutlet.name,
+                  items: [],
+                  reason: `Transfer surplus from ${fromOutlet.name} instead of new PO`,
+                };
+                transferFromPO.push(existing);
+              }
+              existing.items.push({
+                productId: product.id,
+                productName: product.name,
+                fromQty: otherQty,
+                toQty: currentQty,
+                transferQty: Math.round(transferQty),
+                toParLevel: parLevel,
+              });
+            }
+
+            baseUnitsNeeded -= transferQty;
+            if (baseUnitsNeeded <= 0) break;
+          }
+        }
+
+        // If transfer covered all the deficit, skip the PO
+        if (baseUnitsNeeded <= 0) continue;
+
         // Find cheapest supplier
         const supplier = cheapestSupplier[product.id];
         if (!supplier) continue; // no supplier = can't order
 
-        // Calculate order quantity: bring up to par level, in package units
-        const baseUnitsNeeded = Math.max(parLevel - currentQty, 0);
-        if (baseUnitsNeeded <= 0) continue;
-
+        // Calculate order quantity: only remaining deficit after transfers, in package units
         const packageQty = Math.ceil(baseUnitsNeeded / supplier.conversionFactor);
         // Respect MOQ
         const orderQty = Math.max(packageQty, supplier.moq);
@@ -345,6 +423,24 @@ export async function GET(request: NextRequest) {
             });
           }
         }
+      }
+    }
+
+    // Merge transfer recommendations from PO analysis (surplus at other outlets)
+    for (const tfr of transferFromPO) {
+      // Check if there's already a recommendation for this outlet pair
+      const existing = transferRecommendations.find(
+        (t) => t.fromOutletId === tfr.fromOutletId && t.toOutletId === tfr.toOutletId
+      );
+      if (existing) {
+        // Merge items, avoid duplicates
+        for (const item of tfr.items) {
+          if (!existing.items.some((i) => i.productId === item.productId)) {
+            existing.items.push(item);
+          }
+        }
+      } else {
+        transferRecommendations.push(tfr);
       }
     }
 

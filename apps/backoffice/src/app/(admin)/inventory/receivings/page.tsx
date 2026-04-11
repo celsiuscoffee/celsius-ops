@@ -96,13 +96,17 @@ export default function ReceivingsPage() {
   const receivingsUrl = `/api/inventory/receivings?tab=${tab}`;
   const { data: receivings = [], isLoading: recLoading, mutate: reloadReceivings } = useFetch<Receiving[]>(receivingsUrl);
 
-  type AwaitingOrder = { id: string; orderNumber: string; outlet: string; supplier: string; status: string; totalAmount: number; items: number; deliveryDate: string | null; createdAt: string };
+  type AwaitingOrder = { id: string; orderNumber: string; outlet: string; supplier: string; status: string; totalAmount: number; items: number; deliveryDate: string | null; createdAt: string; isTransfer?: boolean; transferId?: string };
   const { data: rawActiveOrders = [], isLoading: ordLoading, mutate: reloadOrders } = useFetch<{ id: string; orderNumber: string; outlet: string; supplier: string; status: string; totalAmount: number; items: { id: string }[]; deliveryDate: string | null; createdAt: string }[]>("/api/inventory/orders?tab=active");
 
-  const loading = recLoading || ordLoading;
+  // Also fetch transfers that are approved/in-transit — they need receiving too
+  type TransferRaw = { id: string; fromOutlet: string; toOutlet: string; status: string; items: { id: string }[]; createdAt: string; approvedAt: string | null };
+  const { data: rawTransfers = [], isLoading: tfrLoading, mutate: reloadTransfers } = useFetch<TransferRaw[]>("/api/inventory/transfers");
+
+  const loading = recLoading || ordLoading || tfrLoading;
 
   const AWAITING_STATUSES = ["SENT", "APPROVED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
-  const awaitingOrders: AwaitingOrder[] = rawActiveOrders
+  const awaitingFromOrders: AwaitingOrder[] = rawActiveOrders
     .filter((o) => AWAITING_STATUSES.includes(o.status))
     .map((o) => ({
       id: o.id,
@@ -116,7 +120,27 @@ export default function ReceivingsPage() {
       createdAt: o.createdAt,
     }));
 
-  const loadData = () => { reloadReceivings(); reloadOrders(); };
+  // Approved / In-Transit transfers show as awaiting delivery
+  const TRANSFER_AWAITING = ["APPROVED", "IN_TRANSIT"];
+  const awaitingFromTransfers: AwaitingOrder[] = rawTransfers
+    .filter((t) => TRANSFER_AWAITING.includes(t.status))
+    .map((t) => ({
+      id: `transfer-${t.id}`,
+      orderNumber: `TFR from ${t.fromOutlet}`,
+      outlet: t.toOutlet,
+      supplier: t.fromOutlet,
+      status: t.status,
+      totalAmount: 0,
+      items: t.items.length,
+      deliveryDate: null,
+      createdAt: t.createdAt,
+      isTransfer: true,
+      transferId: t.id,
+    }));
+
+  const awaitingOrders = [...awaitingFromOrders, ...awaitingFromTransfers];
+
+  const loadData = () => { reloadReceivings(); reloadOrders(); reloadTransfers(); };
 
   // Receive dialog state
   const [showReceive, setShowReceive] = useState(false);
@@ -375,16 +399,18 @@ export default function ReceivingsPage() {
             {awaitingOrders.map((o) => (
               <Card
                 key={o.id}
-                className={`cursor-pointer px-4 py-3 transition-colors hover:bg-gray-50 ${o.status === "PARTIALLY_RECEIVED" ? "border-amber-300 bg-amber-50/30" : ""}`}
+                className={`cursor-pointer px-4 py-3 transition-colors hover:bg-gray-50 ${o.status === "PARTIALLY_RECEIVED" ? "border-amber-300 bg-amber-50/30" : o.isTransfer ? "border-blue-200 bg-blue-50/30" : ""}`}
                 onClick={() => openReceiveDialog(o.id)}
               >
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{o.supplier}</p>
-                    <p className="text-xs text-gray-500">{o.orderNumber} &middot; {o.items} items &middot; RM {o.totalAmount.toFixed(2)}</p>
+                    <p className="text-xs text-gray-500">{o.orderNumber} &middot; {o.items} items{o.totalAmount > 0 ? ` · RM ${o.totalAmount.toFixed(2)}` : ""}</p>
                   </div>
                   <div className="text-right">
-                    <Badge className={`text-[10px] ${o.status === "PARTIALLY_RECEIVED" ? "bg-amber-500" : "bg-purple-500"}`}>{o.status.replace(/_/g, " ")}</Badge>
+                    <Badge className={`text-[10px] ${o.status === "PARTIALLY_RECEIVED" ? "bg-amber-500" : o.isTransfer ? "bg-blue-500" : "bg-purple-500"}`}>
+                      {o.isTransfer ? "TRANSFER" : o.status.replace(/_/g, " ")}
+                    </Badge>
                     {o.deliveryDate && (
                       <p className="mt-0.5 text-[10px] text-gray-400">Due: {o.deliveryDate}</p>
                     )}

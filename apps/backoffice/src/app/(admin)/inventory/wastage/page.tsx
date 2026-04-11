@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, Search, Trash2, AlertTriangle, Loader2 } from "lucide-react";
+import { AIInsightBanner } from "@/components/ai-insight-banner";
 
 const REASONS = ["Expired", "Spillage", "Breakage", "Quality Issue", "Other"];
 
@@ -169,6 +170,9 @@ export default function WastagePage() {
       {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
+
+      {/* AI Suggestions */}
+      <AIInsightBanner type="wastageAlerts" />
 
       <div className="mx-auto max-w-4xl space-y-4">
         {/* Summary */}

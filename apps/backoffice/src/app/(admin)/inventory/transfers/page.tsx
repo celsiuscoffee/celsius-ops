@@ -12,6 +12,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import { AIInsightBanner } from "@/components/ai-insight-banner";
 
 interface TransferItem {
   id: string;
@@ -352,6 +353,11 @@ export default function TransfersPage() {
         <Button onClick={openCreate} className="bg-terracotta hover:bg-terracotta-dark">
           <Plus className="mr-1.5 h-4 w-4" />New Transfer
         </Button>
+      </div>
+
+      {/* AI Suggestions */}
+      <div className="mt-4">
+        <AIInsightBanner type="transfers" onCreated={reload} />
       </div>
 
       {/* Filters */}
