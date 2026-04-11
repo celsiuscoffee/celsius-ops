@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/loyalty/utils";
 import { exportToCSV } from "@/lib/loyalty/export";
 import { fetchMembers } from "@/lib/loyalty/api";
+import Link from "next/link";
 import type { MemberWithBrand } from "@/lib/loyalty/types";
 
 // ---------------------------------------------------------------------------
@@ -679,6 +680,15 @@ export default function NotificationsPage() {
           >
             <Download className="h-4 w-4" />
           </button>
+
+          {/* Test SMS */}
+          <Link
+            href="/loyalty/engage/test"
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-700 px-3 text-sm font-medium transition-colors"
+          >
+            <AlertTriangle className="h-4 w-4" />
+            <span className="hidden sm:inline">Test</span>
+          </Link>
 
           {/* View log */}
           <button

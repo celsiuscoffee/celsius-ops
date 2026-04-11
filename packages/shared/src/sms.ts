@@ -142,7 +142,7 @@ class SMS123Provider implements SMSProvider {
 
 // ─── Provider Factory ────────────────────────────────
 export function getSMSProvider(): SMSProvider {
-  const provider = (process.env.SMS_PROVIDER || 'console').trim();
+  const provider = (process.env.SMS_PROVIDER || 'console').trim().toLowerCase();
 
   switch (provider) {
     case 'smsniaga':
@@ -150,6 +150,9 @@ export function getSMSProvider(): SMSProvider {
     case 'sms123':
       return new SMS123Provider();
     default:
+      if (provider !== 'console') {
+        console.warn(`Unknown SMS_PROVIDER "${provider}", falling back to console`);
+      }
       return new ConsoleSMSProvider();
   }
 }

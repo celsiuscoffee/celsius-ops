@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
           phone: batch[j],
           message: finalMessage,
           status: result.success ? 'sent' : 'failed',
-          provider: process.env.SMS_PROVIDER || 'console',
+          provider: (process.env.SMS_PROVIDER || 'console').trim(),
           provider_message_id: result.messageId || null,
           error: result.error || null,
         });
