@@ -44,7 +44,7 @@ interface Transfer {
 type Outlet = { id: string; name: string; code: string };
 type ProductPackage = { id: string; name: string; label: string; conversionFactor: number; isDefault: boolean };
 type Product = { id: string; name: string; sku: string; baseUom: string; category: string; packages: ProductPackage[] };
-type CartItem = { productId: string; name: string; sku: string; uom: string; quantity: number; productPackageId: string | null };
+type CartItem = { productId: string; name: string; sku: string; uom: string; quantity: number; productPackageId: string | null; conversionFactor: number; availableStock: number };
 
 const STATUS_STYLES: Record<string, string> = {
   DRAFT: "bg-gray-50 text-gray-600 border-gray-200",
@@ -100,6 +100,7 @@ export default function TransfersPage() {
   const [productSearch, setProductSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [user, setUser] = useState<{ id: string; name: string } | null>(null);
+  const [stockBalances, setStockBalances] = useState<Record<string, number>>({}); // productId → base qty
 
   const reload = useCallback(() => {
     fetch("/api/inventory/transfers")
@@ -126,6 +127,20 @@ export default function TransfersPage() {
     setProducts(await productsRes.json());
   }, []);
 
+  // Fetch stock when source outlet changes
+  const fetchStock = useCallback(async (outletId: string) => {
+    if (!outletId) { setStockBalances({}); return; }
+    try {
+      const res = await fetch(`/api/inventory/stock-levels?outletId=${outletId}`);
+      if (res.ok) {
+        const items: { productId: string; currentQty: number }[] = await res.json();
+        const map: Record<string, number> = {};
+        for (const item of items) map[item.productId] = item.currentQty;
+        setStockBalances(map);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   const openCreate = () => {
     setCreateOpen(true);
     setFromOutletId("");
@@ -133,28 +148,36 @@ export default function TransfersPage() {
     setTransferNotes("");
     setCart([]);
     setProductSearch("");
+    setStockBalances({});
     loadCreateData();
   };
 
   const filteredProducts = products.filter(
-    (p) => (p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.sku.toLowerCase().includes(productSearch.toLowerCase())) && !cart.some((c) => c.productId === p.id)
+    (p) => (p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.sku.toLowerCase().includes(productSearch.toLowerCase()))
+      && !cart.some((c) => c.productId === p.id)
+      && (stockBalances[p.id] ?? 0) > 0 // only show products with stock at source outlet
   );
 
   const addToCart = (product: Product) => {
     const pkg = product.packages.find((p) => p.isDefault) || product.packages[0] || null;
+    const conv = pkg?.conversionFactor || 1;
+    const baseStock = stockBalances[product.id] ?? 0;
+    const pkgStock = Math.floor(baseStock / conv);
     setCart((prev) => [...prev, {
       productId: product.id,
       name: product.name,
       sku: product.sku,
       uom: pkg?.label || pkg?.name || product.baseUom,
-      quantity: 1,
+      quantity: Math.min(1, pkgStock),
       productPackageId: pkg?.id || null,
+      conversionFactor: conv,
+      availableStock: pkgStock,
     }]);
     setProductSearch("");
   };
 
   const updateCartQty = (idx: number, qty: number) => {
-    setCart((prev) => prev.map((c, i) => i === idx ? { ...c, quantity: Math.max(0, qty) } : c));
+    setCart((prev) => prev.map((c, i) => i === idx ? { ...c, quantity: Math.max(0, Math.min(qty, c.availableStock)) } : c));
   };
 
   const removeFromCart = (idx: number) => {
@@ -664,7 +687,7 @@ export default function TransfersPage() {
                 <select
                   className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
                   value={fromOutletId}
-                  onChange={(e) => setFromOutletId(e.target.value)}
+                  onChange={(e) => { setFromOutletId(e.target.value); setCart([]); fetchStock(e.target.value); }}
                 >
                   <option value="">Select...</option>
                   {outlets.filter((o) => o.id !== toOutletId).map((o) => (
@@ -690,13 +713,15 @@ export default function TransfersPage() {
             {/* Product search + add */}
             <div>
               <label className="text-xs font-medium text-gray-600">Add Products</label>
+              {!fromOutletId && <p className="mt-1 text-xs text-amber-600">Select source outlet first</p>}
               <div className="relative mt-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <Input
-                  placeholder="Search product..."
+                  placeholder={fromOutletId ? "Search product..." : "Select source outlet first..."}
                   className="pl-9"
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
+                  disabled={!fromOutletId}
                 />
               </div>
               {productSearch && (
@@ -706,6 +731,9 @@ export default function TransfersPage() {
                   )}
                   {filteredProducts.slice(0, 8).map((p) => {
                     const pkg = p.packages.find((pk) => pk.isDefault) || p.packages[0];
+                    const conv = pkg?.conversionFactor || 1;
+                    const baseStock = stockBalances[p.id] ?? 0;
+                    const pkgStock = Math.floor(baseStock / conv);
                     return (
                       <button
                         key={p.id}
@@ -713,7 +741,7 @@ export default function TransfersPage() {
                         onClick={() => addToCart(p)}
                       >
                         <span className="text-gray-900">{p.name}</span>
-                        <span className="text-xs text-gray-400">{pkg?.label || p.baseUom} · {p.sku}</span>
+                        <span className="text-xs text-gray-400">{pkgStock} {pkg?.label || p.baseUom} · {p.sku}</span>
                       </button>
                     );
                   })}
@@ -728,23 +756,28 @@ export default function TransfersPage() {
                   <thead>
                     <tr className="bg-gray-50 border-b">
                       <th className="px-3 py-2 text-left font-medium text-gray-500">Product</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-500">UOM</th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-500">Package</th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-500">Stock</th>
                       <th className="px-3 py-2 text-right font-medium text-gray-500 w-20">Qty</th>
                       <th className="px-3 py-2 w-8"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {cart.map((item, idx) => (
-                      <tr key={item.productId} className="border-b border-gray-50">
+                      <tr key={item.productId} className={`border-b border-gray-50 ${item.quantity > item.availableStock ? "bg-red-50" : ""}`}>
                         <td className="px-3 py-2">
                           <p className="font-medium text-gray-900">{item.name}</p>
                           <p className="text-[10px] text-gray-400">{item.sku}</p>
                         </td>
                         <td className="px-3 py-2 text-gray-500">{item.uom}</td>
+                        <td className="px-3 py-2 text-right">
+                          <span className={item.availableStock <= 0 ? "text-red-600 font-medium" : "text-gray-500"}>{item.availableStock}</span>
+                        </td>
                         <td className="px-3 py-2">
                           <input
                             type="number"
                             min="1"
+                            max={item.availableStock}
                             className="w-full rounded border border-gray-200 px-2 py-1 text-right text-xs focus:border-terracotta focus:outline-none"
                             value={item.quantity}
                             onChange={(e) => updateCartQty(idx, parseInt(e.target.value) || 0)}
