@@ -18,8 +18,8 @@ const JWT_SECRET = new TextEncoder().encode(
 );
 
 const COOKIE_NAME = 'celsius-admin-token';
-const ADMIN_TOKEN_EXPIRY = '24h';
-const STAFF_TOKEN_EXPIRY = '8h';
+const ADMIN_TOKEN_EXPIRY = '7d';
+const STAFF_TOKEN_EXPIRY = '24h';
 const SALT_ROUNDS = 10;
 
 // ─── JWT Token ────────────────────────────────────────
@@ -59,7 +59,7 @@ export function setAuthCookie(response: NextResponse, token: string): NextRespon
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    maxAge: 60 * 60 * 24, // 24 hours
+    maxAge: 60 * 60 * 24 * 7, // 7 days
     path: '/',
   });
   return response;
