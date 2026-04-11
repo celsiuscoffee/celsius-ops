@@ -12,12 +12,22 @@ import {
 } from "@/components/ui/dialog";
 import { Search, Loader2, TrendingDown, Check, X, Sparkles, RefreshCw, Clock, Package, AlertTriangle } from "lucide-react";
 
+type ProductPackage = {
+  id: string;
+  name: string;
+  label: string;
+  conversion: number;
+  conversionFactor: number;
+  isDefault: boolean;
+};
+
 type Product = {
   id: string;
   name: string;
   sku: string;
   category: string;
   baseUom: string;
+  packages: ProductPackage[];
 };
 
 type Outlet = {
@@ -125,11 +135,42 @@ export default function ParLevelsPage() {
     return sl ? sl.currentQty : null;
   };
 
+  // Package unit helpers — convert base UOM ↔ package units
+  const getDefaultPackage = (productId: string): ProductPackage | null => {
+    const product = products.find((p) => p.id === productId);
+    if (!product || !product.packages?.length) return null;
+    return product.packages.find((pkg) => pkg.isDefault) ?? product.packages[0] ?? null;
+  };
+
+  const getPackageLabel = (productId: string): string => {
+    const pkg = getDefaultPackage(productId);
+    const product = products.find((p) => p.id === productId);
+    return pkg?.label ?? pkg?.name ?? product?.baseUom ?? "";
+  };
+
+  const getConversionFactor = (productId: string): number => {
+    const pkg = getDefaultPackage(productId);
+    return pkg ? pkg.conversionFactor : 1;
+  };
+
+  // Convert from base UOM to package units for display
+  const toPackageUnits = (productId: string, baseValue: number): number => {
+    const cf = getConversionFactor(productId);
+    return cf > 0 ? Math.round((baseValue / cf) * 100) / 100 : baseValue;
+  };
+
+  // Convert from package units to base UOM for storage
+  const toBaseUom = (productId: string, pkgValue: number): number => {
+    const cf = getConversionFactor(productId);
+    return Math.round(pkgValue * cf * 100) / 100;
+  };
+
   const getStatus = (productId: string): "none" | "critical" | "low" | "ok" => {
     const par = getParLevel(productId);
     const stock = getStock(productId);
     if (!par) return "none";
     if (stock === null) return "none";
+    // Compare in base UOM (both stock and par are stored in base UOM)
     if (stock <= par.reorderPoint) return "critical";
     if (stock < par.parLevel) return "low";
     return "ok";
@@ -179,7 +220,8 @@ export default function ParLevelsPage() {
 
   const handleCellClick = (productId: string, field: EditingCell["field"], currentValue: number) => {
     setEditingCell({ productId, field });
-    setEditValue(currentValue.toString());
+    // Show value in package units for editing
+    setEditValue(toPackageUnits(productId, currentValue).toString());
   };
 
   const handleCellSave = () => {
@@ -189,7 +231,9 @@ export default function ParLevelsPage() {
       setEditingCell(null);
       return;
     }
-    saveParLevel(editingCell.productId, { [editingCell.field]: numValue });
+    // Convert from package units (what user entered) to base UOM (what we store)
+    const baseValue = toBaseUom(editingCell.productId, numValue);
+    saveParLevel(editingCell.productId, { [editingCell.field]: baseValue });
     setEditingCell(null);
   };
 
@@ -203,10 +247,11 @@ export default function ParLevelsPage() {
     const reorder = parseFloat(quickSetForm.reorderPoint);
     const usage = parseFloat(quickSetForm.avgDailyUsage);
     if (isNaN(par) || isNaN(reorder)) return;
+    // Convert from package units (user input) to base UOM (storage)
     saveParLevel(productId, {
-      parLevel: par,
-      reorderPoint: reorder,
-      avgDailyUsage: isNaN(usage) ? 0 : usage,
+      parLevel: toBaseUom(productId, par),
+      reorderPoint: toBaseUom(productId, reorder),
+      avgDailyUsage: isNaN(usage) ? 0 : toBaseUom(productId, usage),
     });
     setQuickSetProductId(null);
     setQuickSetForm(emptyQuickSet);
@@ -394,7 +439,7 @@ export default function ParLevelsPage() {
               <th className="px-4 py-3 text-left font-medium text-gray-500">Product</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">SKU</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Category</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Base UOM</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Order Unit</th>
               <th className="px-4 py-3 text-right font-medium text-gray-500">Current Stock</th>
               <th className="px-4 py-3 text-right font-medium text-gray-500">Par Level</th>
               <th className="px-4 py-3 text-right font-medium text-gray-500">Reorder Point</th>
@@ -440,12 +485,19 @@ export default function ParLevelsPage() {
                         {product.category}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{product.baseUom}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      <span className="font-medium">{getPackageLabel(product.id)}</span>
+                      {getDefaultPackage(product.id) && (
+                        <span className="ml-1 text-xs text-gray-400">
+                          (1 = {getConversionFactor(product.id)} {product.baseUom})
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right text-gray-600">
-                      {stock !== null ? stock.toLocaleString() : "—"}
+                      {stock !== null ? toPackageUnits(product.id, stock).toLocaleString() : "—"}
                     </td>
 
-                    {/* Par Level - editable */}
+                    {/* Par Level - editable (displayed in package units) */}
                     <td className="px-4 py-3 text-right">
                       {par ? (
                         isEditing("parLevel") ? (
@@ -463,7 +515,7 @@ export default function ParLevelsPage() {
                             onClick={() => handleCellClick(product.id, "parLevel", par.parLevel)}
                             className="rounded px-2 py-1 text-right text-gray-900 hover:bg-terracotta/10"
                           >
-                            {par.parLevel.toLocaleString()}
+                            {toPackageUnits(product.id, par.parLevel).toLocaleString()}
                           </button>
                         )
                       ) : (
@@ -471,7 +523,7 @@ export default function ParLevelsPage() {
                       )}
                     </td>
 
-                    {/* Reorder Point - editable */}
+                    {/* Reorder Point - editable (displayed in package units) */}
                     <td className="px-4 py-3 text-right">
                       {par ? (
                         isEditing("reorderPoint") ? (
@@ -489,7 +541,7 @@ export default function ParLevelsPage() {
                             onClick={() => handleCellClick(product.id, "reorderPoint", par.reorderPoint)}
                             className="rounded px-2 py-1 text-right text-gray-900 hover:bg-terracotta/10"
                           >
-                            {par.reorderPoint.toLocaleString()}
+                            {toPackageUnits(product.id, par.reorderPoint).toLocaleString()}
                           </button>
                         )
                       ) : (
@@ -497,7 +549,7 @@ export default function ParLevelsPage() {
                       )}
                     </td>
 
-                    {/* Avg Daily Usage - editable */}
+                    {/* Avg Daily Usage - editable (displayed in package units) */}
                     <td className="px-4 py-3 text-right">
                       {par ? (
                         isEditing("avgDailyUsage") ? (
@@ -515,7 +567,7 @@ export default function ParLevelsPage() {
                             onClick={() => handleCellClick(product.id, "avgDailyUsage", par.avgDailyUsage)}
                             className="rounded px-2 py-1 text-right text-gray-900 hover:bg-terracotta/10"
                           >
-                            {par.avgDailyUsage.toLocaleString()}
+                            {toPackageUnits(product.id, par.avgDailyUsage).toLocaleString()}
                           </button>
                         )
                       ) : (
@@ -547,22 +599,22 @@ export default function ParLevelsPage() {
                         <div className="flex items-center justify-end gap-1">
                           <input
                             type="number"
-                            placeholder="Par"
-                            className="w-16 rounded border border-gray-200 px-1.5 py-1 text-xs"
+                            placeholder={`Par (${getPackageLabel(product.id)})`}
+                            className="w-20 rounded border border-gray-200 px-1.5 py-1 text-xs"
                             value={quickSetForm.parLevel}
                             onChange={(e) => setQuickSetForm((f) => ({ ...f, parLevel: e.target.value }))}
                           />
                           <input
                             type="number"
-                            placeholder="Reorder"
-                            className="w-16 rounded border border-gray-200 px-1.5 py-1 text-xs"
+                            placeholder={`Reorder (${getPackageLabel(product.id)})`}
+                            className="w-20 rounded border border-gray-200 px-1.5 py-1 text-xs"
                             value={quickSetForm.reorderPoint}
                             onChange={(e) => setQuickSetForm((f) => ({ ...f, reorderPoint: e.target.value }))}
                           />
                           <input
                             type="number"
-                            placeholder="Usage"
-                            className="w-16 rounded border border-gray-200 px-1.5 py-1 text-xs"
+                            placeholder={`Usage/day`}
+                            className="w-20 rounded border border-gray-200 px-1.5 py-1 text-xs"
                             value={quickSetForm.avgDailyUsage}
                             onChange={(e) => setQuickSetForm((f) => ({ ...f, avgDailyUsage: e.target.value }))}
                           />
@@ -761,21 +813,28 @@ export default function ParLevelsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {recalcResult.details?.map((d) => (
-                      <tr key={d.productId || d.name} className="border-b border-gray-50 hover:bg-gray-50/50">
-                        <td className="px-3 py-2 font-medium text-gray-900">{d.name}</td>
-                        <td className="px-3 py-2 text-right text-gray-600">{d.dailyUsage}</td>
-                        <td className="px-3 py-2 text-right">
-                          <span className="inline-flex items-center gap-1 text-gray-600">
-                            <Clock className="h-3 w-3 text-gray-400" />
-                            {d.leadTime}d
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-right font-medium text-amber-600">{d.reorderPoint}</td>
-                        <td className="px-3 py-2 text-right font-medium text-blue-600">{d.parLevel}</td>
-                        <td className="px-3 py-2 text-right font-medium text-purple-600">{d.maxLevel}</td>
-                      </tr>
-                    ))}
+                    {recalcResult.details?.map((d) => {
+                      const cf = getConversionFactor(d.productId);
+                      const toPkg = (v: number) => cf > 0 ? Math.round((v / cf) * 100) / 100 : v;
+                      return (
+                        <tr key={d.productId || d.name} className="border-b border-gray-50 hover:bg-gray-50/50">
+                          <td className="px-3 py-2">
+                            <span className="font-medium text-gray-900">{d.name}</span>
+                            <span className="ml-1 text-xs text-gray-400">{getPackageLabel(d.productId)}</span>
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-600">{toPkg(d.dailyUsage)}</td>
+                          <td className="px-3 py-2 text-right">
+                            <span className="inline-flex items-center gap-1 text-gray-600">
+                              <Clock className="h-3 w-3 text-gray-400" />
+                              {d.leadTime}d
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium text-amber-600">{toPkg(d.reorderPoint)}</td>
+                          <td className="px-3 py-2 text-right font-medium text-blue-600">{toPkg(d.parLevel)}</td>
+                          <td className="px-3 py-2 text-right font-medium text-purple-600">{toPkg(d.maxLevel)}</td>
+                        </tr>
+                      );
+                    })}
                     {(!recalcResult.details || recalcResult.details.length === 0) && (
                       <tr>
                         <td colSpan={6} className="px-3 py-8 text-center text-sm text-gray-400">

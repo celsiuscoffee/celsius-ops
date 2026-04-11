@@ -10,26 +10,52 @@ export async function GET(req: NextRequest) {
   const parLevels = await prisma.parLevel.findMany({
     where,
     include: {
-      product: true,
+      product: {
+        include: {
+          packages: {
+            select: {
+              id: true,
+              packageName: true,
+              packageLabel: true,
+              conversionFactor: true,
+              isDefault: true,
+            },
+          },
+        },
+      },
       outlet: true,
     },
     orderBy: { product: { name: "asc" } },
   });
 
   return NextResponse.json(
-    parLevels.map((p) => ({
-      id: p.id,
-      productId: p.productId,
-      productName: p.product.name,
-      productSku: p.product.sku,
-      baseUom: p.product.baseUom,
-      outletId: p.outletId,
-      outletName: p.outlet.name,
-      parLevel: Number(p.parLevel),
-      reorderPoint: Number(p.reorderPoint),
-      maxLevel: p.maxLevel ? Number(p.maxLevel) : null,
-      avgDailyUsage: p.avgDailyUsage ? Number(p.avgDailyUsage) : null,
-    })),
+    parLevels.map((p) => {
+      // Find default package, or first package, or null
+      const defaultPkg = p.product.packages.find((pk) => pk.isDefault)
+        ?? p.product.packages[0]
+        ?? null;
+      const cf = defaultPkg ? Number(defaultPkg.conversionFactor) : 1;
+      const pkgLabel = defaultPkg?.packageLabel ?? defaultPkg?.packageName ?? p.product.baseUom;
+
+      return {
+        id: p.id,
+        productId: p.productId,
+        productName: p.product.name,
+        productSku: p.product.sku,
+        baseUom: p.product.baseUom,
+        // Package info for display
+        packageLabel: pkgLabel,
+        conversionFactor: cf,
+        hasPackage: !!defaultPkg,
+        outletId: p.outletId,
+        outletName: p.outlet.name,
+        // Values stored in base UOM
+        parLevel: Number(p.parLevel),
+        reorderPoint: Number(p.reorderPoint),
+        maxLevel: p.maxLevel ? Number(p.maxLevel) : null,
+        avgDailyUsage: p.avgDailyUsage ? Number(p.avgDailyUsage) : null,
+      };
+    }),
   );
 }
 
