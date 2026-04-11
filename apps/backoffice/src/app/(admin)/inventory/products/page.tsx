@@ -290,7 +290,7 @@ export default function ProductsPage() {
       });
       if (!res.ok) { alert("Bulk update failed"); return; }
       const result = await res.json();
-      alert(`Updated ${result.updated} ingredients`);
+      alert(`Updated ${result.updated} ${result.updated === 1 ? 'ingredient' : 'ingredients'}`);
       clearSelection();
       reloadProducts();
     } finally {
@@ -299,7 +299,7 @@ export default function ProductsPage() {
   };
 
   const handleBulkDelete = async () => {
-    if (!confirm(`Delete ${selected.size} ingredients? This cannot be undone.`)) return;
+    if (!confirm(`Delete ${selected.size} ${selected.size === 1 ? 'ingredient' : 'ingredients'}? This cannot be undone.`)) return;
     setBulkSaving(true);
     try {
       const res = await fetch("/api/inventory/products/bulk", {
@@ -309,7 +309,7 @@ export default function ProductsPage() {
       });
       if (!res.ok) { alert("Bulk delete failed. Some ingredients may be linked to orders."); return; }
       const result = await res.json();
-      alert(`Deleted ${result.deleted} ingredients`);
+      alert(`Deleted ${result.deleted} ${result.deleted === 1 ? 'ingredient' : 'ingredients'}`);
       clearSelection();
       reloadProducts();
     } finally {

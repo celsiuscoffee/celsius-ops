@@ -833,7 +833,7 @@ export default function CreateOrderPage() {
                   </p>
                   <p className="mt-1 text-xs text-gray-300">
                     {!supplierFilter && (!productSearch || productSearch.trim().length < 2)
-                      ? `${suppliers.reduce((acc, s) => acc + s.products.length, 0)} products from ${suppliers.length} suppliers available`
+                      ? `${suppliers.reduce((acc, s) => acc + s.products.length, 0)} products from ${suppliers.length} ${suppliers.length === 1 ? 'supplier' : 'suppliers'} available`
                       : "Try a different supplier or keyword"}
                   </p>
                 </Card>

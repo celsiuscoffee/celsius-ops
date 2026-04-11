@@ -30,7 +30,16 @@ export async function GET() {
     position:     i + 1,
   }));
 
-  return NextResponse.json(mapped);
+  // Also fetch categories so the menu page can group/filter by category
+  const { data: catData } = await supabase
+    .from("categories")
+    .select("id, name, slug")
+    .order("position");
+
+  return NextResponse.json({
+    products: mapped,
+    categories: catData ?? [],
+  });
 }
 
 // POST /api/pickup/products — create

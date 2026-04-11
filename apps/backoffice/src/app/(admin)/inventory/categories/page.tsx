@@ -72,7 +72,7 @@ export default function CategoriesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Categories</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{categories.length} product categories</p>
+          <p className="mt-0.5 text-sm text-gray-500">{categories.length} product {categories.length === 1 ? 'category' : 'categories'}</p>
         </div>
         <Button onClick={openAdd} className="bg-terracotta hover:bg-terracotta-dark">
           <Plus className="mr-1.5 h-4 w-4" />
@@ -92,7 +92,7 @@ export default function CategoriesPage() {
               </div>
               <div>
                 <p className="font-medium text-gray-900">{cat.name}</p>
-                <p className="text-xs text-gray-500">{cat.productCount} products</p>
+                <p className="text-xs text-gray-500">{cat.productCount} {cat.productCount === 1 ? 'product' : 'products'}</p>
               </div>
             </div>
             <div className="flex items-center gap-1">

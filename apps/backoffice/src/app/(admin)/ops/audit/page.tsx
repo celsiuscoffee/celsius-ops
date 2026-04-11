@@ -47,7 +47,7 @@ const STATUS_COLORS: Record<string, string> = { PENDING: "bg-yellow-100 text-yel
 
 export default function AuditPage() {
   const { data: outlets } = useFetch<Outlet[]>("/api/ops/outlets");
-  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }));
   const [outletId, setOutletId] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -151,7 +151,7 @@ export default function AuditPage() {
                         <div className="mt-1 flex items-center gap-4 text-xs text-gray-400">
                           <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />{cl.outlet.name}</span>
                           {cl.assignedTo && <span className="flex items-center gap-1"><User className="h-3 w-3" />{cl.assignedTo.name}</span>}
-                          <span>{cl.completedItems}/{cl.totalItems} items</span>
+                          <span>{cl.completedItems}/{cl.totalItems} {cl.totalItems === 1 ? 'item' : 'items'}</span>
                           {cl.completedAt && <span>Completed {new Date(cl.completedAt).toLocaleTimeString()}</span>}
                         </div>
                       </div>

@@ -114,7 +114,7 @@ export function AIInsightBanner({
         const newExecuted = new Set(executed);
         pending.forEach((po) => newExecuted.add(`po_${po.outletId}_${po.supplierId}`));
         setExecuted(newExecuted);
-        setResults((prev) => ({ ...prev, all_pos: `Created ${json.created.length} orders` }));
+        setResults((prev) => ({ ...prev, all_pos: `Created ${json.created.length} ${json.created.length === 1 ? 'order' : 'orders'}` }));
         onCreated?.();
       }
     } catch { setResults((prev) => ({ ...prev, all_pos: "Failed" })); }
@@ -210,7 +210,7 @@ export function AIInsightBanner({
                     <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${u.cls}`}>{u.label}</span>
                     <span className="text-sm font-medium text-gray-900">{po.supplierName}</span>
                     <span className="text-xs text-gray-400">&rarr; {po.outletName}</span>
-                    <span className="text-xs text-gray-400">{po.items.length} items</span>
+                    <span className="text-xs text-gray-400">{po.items.length} {po.items.length === 1 ? 'item' : 'items'}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-semibold text-gray-900">RM {po.totalAmount.toLocaleString()}</span>
@@ -256,7 +256,7 @@ export function AIInsightBanner({
                     <span className="text-sm font-medium text-gray-900">{t.fromOutletName}</span>
                     <span className="text-xs text-gray-400 mx-2">&rarr;</span>
                     <span className="text-sm text-gray-700">{t.toOutletName}</span>
-                    <span className="text-xs text-gray-400 ml-2">{t.items.length} items · {t.reason}</span>
+                    <span className="text-xs text-gray-400 ml-2">{t.items.length} {t.items.length === 1 ? 'item' : 'items'} · {t.reason}</span>
                   </div>
                   {isDone ? (
                     <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle2 className="h-3.5 w-3.5" />{results[key]}</span>

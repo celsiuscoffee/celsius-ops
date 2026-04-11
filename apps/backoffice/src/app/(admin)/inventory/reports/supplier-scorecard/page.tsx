@@ -267,7 +267,7 @@ export default function SupplierScorecardPage() {
                     {s.name}
                   </h3>
                   <p className="mt-0.5 text-xs text-gray-500">
-                    {s.totalOrders} orders &middot; {s.completedOrders}{" "}
+                    {s.totalOrders} {s.totalOrders === 1 ? 'order' : 'orders'} &middot; {s.completedOrders}{" "}
                     completed
                   </p>
                 </div>

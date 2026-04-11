@@ -312,7 +312,7 @@ export default function SuppliersPage() {
                 >
                   <span className="flex items-center gap-1.5 text-sm text-gray-700">
                     <Package className="h-3.5 w-3.5 text-gray-400" />
-                    {supplier.products.length} products
+                    {supplier.products.length} {supplier.products.length === 1 ? 'product' : 'products'}
                   </span>
                   <span className="text-xs text-terracotta">View price list →</span>
                 </button>
@@ -376,7 +376,7 @@ export default function SuppliersPage() {
           {selectedSupplier && (
             <div className="py-2">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-sm text-gray-500">{selectedSupplier.products.length} products</p>
+                <p className="text-sm text-gray-500">{selectedSupplier.products.length} {selectedSupplier.products.length === 1 ? 'product' : 'products'}</p>
                 <Button size="sm" variant="outline" onClick={() => { setAddingProduct(true); setProductSearch(""); }}>
                   <Plus className="mr-1 h-3 w-3" />
                   Add Product

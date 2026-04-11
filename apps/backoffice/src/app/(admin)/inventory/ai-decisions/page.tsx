@@ -169,7 +169,7 @@ export default function AIDecisionsPage() {
         setExecuted(newExecuted);
         setResults((prev) => ({
           ...prev,
-          all_pos: `Created ${json.created.length} orders: ${json.created.map((o: { orderNumber: string }) => o.orderNumber).join(", ")}`,
+          all_pos: `Created ${json.created.length} ${json.created.length === 1 ? 'order' : 'orders'}: ${json.created.map((o: { orderNumber: string }) => o.orderNumber).join(", ")}`,
         }));
       }
     } catch {
@@ -304,7 +304,7 @@ export default function AIDecisionsPage() {
                           <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${u.bg}`}>{u.label}</span>
                         </div>
                         <div className="text-xs text-zinc-500 mt-0.5">
-                          {po.items.length} items &bull; Lead time: {po.leadTimeDays}d
+                          {po.items.length} {po.items.length === 1 ? 'item' : 'items'} &bull; Lead time: {po.leadTimeDays}d
                         </div>
                       </div>
                     </div>
@@ -389,7 +389,7 @@ export default function AIDecisionsPage() {
                       <span className="text-sm text-white font-medium">{t.fromOutletName}</span>
                       <span className="text-blue-400">&rarr;</span>
                       <span className="text-sm text-white font-medium">{t.toOutletName}</span>
-                      <span className="text-xs text-zinc-500">{t.items.length} items</span>
+                      <span className="text-xs text-zinc-500">{t.items.length} {t.items.length === 1 ? 'item' : 'items'}</span>
                     </div>
                     {isDone ? (
                       <span className="text-xs text-emerald-400">{results[key]}</span>

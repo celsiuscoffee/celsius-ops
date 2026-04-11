@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ShoppingBag, Boxes, Gift, ArrowRight,
@@ -23,10 +23,6 @@ type InventoryDashboard = {
 type InventoryStats = {
   inventoryValue: number; cogsThisMonth: number;
   invoices: { total: number; pendingAmount: number; overdueAmount: number };
-};
-
-type PickupStats = {
-  totalSales: number; totalOrders: number;
 };
 
 type KpiData = {
@@ -53,7 +49,6 @@ export default function DashboardPage() {
   const [kpi, setKpi] = useState<KpiData | null>(null);
   const [kpiAM, setKpiAM] = useState<KpiData | null>(null);
   const [kpiPM, setKpiPM] = useState<KpiData | null>(null);
-  const [pickupStats, setPickupStats] = useState<PickupStats | null>(null);
   const { data: ops } = useFetch<OpsPerformance>("/api/ops/performance?from=" + new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0] + "&to=" + new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
@@ -68,10 +63,6 @@ export default function DashboardPage() {
       if (am) setKpiAM(am);
       if (pm) setKpiPM(pm);
     }).catch(() => {});
-    fetch("/api/pickup/analytics/summary", { credentials: "include" })
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d) setPickupStats(d); })
-      .catch(() => {});
   }, []);
 
   const now = new Date();
@@ -123,7 +114,7 @@ export default function DashboardPage() {
       {/* Alerts */}
       {invDash && invDash.pendingApprovals > 0 && (
         <div className="flex flex-wrap gap-2 mb-6">
-          <Link href="/inventory/orders" className="rounded-full bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100">⚠️ {invDash.pendingApprovals} orders pending approval</Link>
+          <Link href="/inventory/orders" className="rounded-full bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100">⚠️ {invDash.pendingApprovals} {invDash.pendingApprovals === 1 ? 'order' : 'orders'} pending approval</Link>
         </div>
       )}
 
@@ -152,7 +143,7 @@ export default function DashboardPage() {
                     : "—"}
                 </p>
                 <p className="text-[10px] text-gray-400">
-                  {kpiAM ? `${kpiAM.returning_members} returning / ${kpiAM.collection_rate.pos_orders} orders` : "Loading..."}
+                  {kpiAM ? `${kpiAM.returning_members} returning / ${kpiAM.collection_rate.pos_orders} ${kpiAM.collection_rate.pos_orders === 1 ? 'order' : 'orders'}` : "Loading..."}
                 </p>
                 {kpiAM && <p className="text-[10px] font-medium text-green-600 mt-0.5">RM {kpiAM.returning_sales.toLocaleString()}</p>}
               </div>
@@ -168,7 +159,7 @@ export default function DashboardPage() {
                     : "—"}
                 </p>
                 <p className="text-[10px] text-gray-400">
-                  {kpiPM ? `${kpiPM.returning_members} returning / ${kpiPM.collection_rate.pos_orders} orders` : "Loading..."}
+                  {kpiPM ? `${kpiPM.returning_members} returning / ${kpiPM.collection_rate.pos_orders} ${kpiPM.collection_rate.pos_orders === 1 ? 'order' : 'orders'}` : "Loading..."}
                 </p>
                 {kpiPM && <p className="text-[10px] font-medium text-green-600 mt-0.5">RM {kpiPM.returning_sales.toLocaleString()}</p>}
               </div>

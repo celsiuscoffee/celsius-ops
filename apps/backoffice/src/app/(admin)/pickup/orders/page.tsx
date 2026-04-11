@@ -106,7 +106,7 @@ export default function PickupOrders() {
         <div>
           <h1 className="text-2xl font-bold text-[#160800]">Pickup Orders</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {filtered.length} orders · RM {(totalRevenue / 100).toFixed(2)} total
+            {filtered.length} {filtered.length === 1 ? 'order' : 'orders'} · RM {(totalRevenue / 100).toFixed(2)} total
           </p>
         </div>
         <div className="flex items-center gap-2">

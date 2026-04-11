@@ -139,12 +139,18 @@ function targetColor(pct: number): { bg: string; text: string; label: string } {
 }
 
 /** % change between current and previous */
-function pctChange(current: number, previous: number): { pct: number; label: string; color: string } {
-  if (previous === 0) return current > 0 ? { pct: 100, label: "+100%", color: "text-green-600" } : { pct: 0, label: "-", color: "text-gray-400" };
+function pctChange(current: number, previous: number): { pct: number; label: string; color: string; diff: number; diffLabel: string } {
+  const diff = current - previous;
+  const diffAbs = Math.abs(diff);
+  const fmtDiff = diffAbs >= 1000 ? `${(diffAbs / 1000).toFixed(1)}k` : diffAbs.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const diffLabel = diff > 0 ? `+RM ${fmtDiff}` : diff < 0 ? `-RM ${fmtDiff}` : "";
+  if (current === 0 && previous === 0) return { pct: 0, label: "\u2014", color: "text-gray-400", diff: 0, diffLabel: "" };
+  if (previous === 0) return { pct: 0, label: "New", color: "text-green-600", diff, diffLabel };
+  if (current === 0) return { pct: -100, label: "-100%", color: "text-red-500", diff, diffLabel };
   const pct = Math.round(((current - previous) / previous) * 100);
-  if (pct > 0) return { pct, label: `+${pct}%`, color: "text-green-600" };
-  if (pct < 0) return { pct, label: `${pct}%`, color: "text-red-500" };
-  return { pct: 0, label: "0%", color: "text-gray-400" };
+  if (pct > 0) return { pct, label: `+${pct}%`, color: "text-green-600", diff, diffLabel };
+  if (pct < 0) return { pct, label: `${pct}%`, color: "text-red-500", diff, diffLabel };
+  return { pct: 0, label: "0%", color: "text-gray-400", diff: 0, diffLabel: "" };
 }
 
 /** Color for a cell value vs daily target */
@@ -354,6 +360,7 @@ export default function SalesDashboard() {
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={cn("text-xs font-semibold", revChange.color)}>{revChange.label}</span>
+                      {revChange.diffLabel && <span className={cn("text-xs", revChange.color)}>{revChange.diffLabel}</span>}
                       <span className="text-[10px] text-gray-400">vs prev period</span>
                     </div>
                     {data.deliveryQR && data.deliveryQR.orders > 0 && (
@@ -378,6 +385,7 @@ export default function SalesDashboard() {
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={cn("text-xs font-semibold", ordChange.color)}>{ordChange.label}</span>
+                      {ordChange.diff !== 0 && <span className={cn("text-xs", ordChange.color)}>{ordChange.diff > 0 ? "+" : ""}{ordChange.diff}</span>}
                       <span className="text-[10px] text-gray-400">vs prev period</span>
                     </div>
                   </div>
@@ -396,6 +404,7 @@ export default function SalesDashboard() {
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={cn("text-xs font-semibold", aovChange.color)}>{aovChange.label}</span>
+                      {aovChange.diffLabel && <span className={cn("text-xs", aovChange.color)}>{aovChange.diffLabel}</span>}
                       <span className="text-[10px] text-gray-400">vs prev period</span>
                     </div>
                   </div>
@@ -650,7 +659,7 @@ export default function SalesDashboard() {
           {data.outsideRounds.orders > 0 && (
             <div className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-xs text-gray-500">
               <span className="font-medium text-gray-700">
-                {data.outsideRounds.orders} order{data.outsideRounds.orders > 1 ? "s" : ""}
+                {data.outsideRounds.orders} order{data.outsideRounds.orders !== 1 ? "s" : ""}
               </span>{" "}
               outside tracked rounds (before 8AM or after 11PM) totalling{" "}
               <span className="font-medium text-gray-700">
@@ -735,7 +744,7 @@ export default function SalesDashboard() {
                       <span className={cn("text-[10px] font-semibold ml-auto", taCh.color)}>{taCh.label}</span>
                     </div>
                     <p className="text-lg font-bold text-gray-900">RM {revTakeaway.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
-                    <p className="text-[11px] text-gray-400">{totTakeaway} orders</p>
+                    <p className="text-[11px] text-gray-400">{totTakeaway} {totTakeaway === 1 ? 'order' : 'orders'}</p>
                   </div>
                   <div className="rounded-lg border border-purple-100 bg-white p-3">
                     <div className="flex items-center gap-1.5 mb-1.5">
@@ -744,12 +753,12 @@ export default function SalesDashboard() {
                       <span className={cn("text-[10px] font-semibold ml-auto", delCh.color)}>{delCh.label}</span>
                     </div>
                     <p className="text-lg font-bold text-gray-900">RM {revDelivery.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
-                    <p className="text-[11px] text-gray-400">{totDelivery} orders</p>
+                    <p className="text-[11px] text-gray-400">{totDelivery} {totDelivery === 1 ? 'order' : 'orders'}</p>
                   </div>
                 </div>
                 {dt && (
                   <div className="mt-2 text-[11px] text-gray-400 text-right">
-                    Target: RM {dt.revenue}/day &middot; {dt.orders} orders &middot; AOV RM {dt.aov}
+                    Target: RM {dt.revenue}/day &middot; {dt.orders} {dt.orders === 1 ? 'order' : 'orders'} &middot; AOV RM {dt.aov}
                   </div>
                 )}
               </div>

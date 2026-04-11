@@ -249,7 +249,7 @@ export default function MenusPage() {
                         </span>
                       ) : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{menu.ingredientCount} items</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{menu.ingredientCount} {menu.ingredientCount === 1 ? 'item' : 'items'}</td>
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       {isEditing ? (
                         <div className="flex items-center justify-end gap-1">
@@ -426,14 +426,14 @@ export default function MenusPage() {
             <Card className="px-4 py-3">
               <p className="text-xs text-gray-500">Ingredients Mapped</p>
               <p className="text-xl font-bold text-gray-900">{menus.reduce((a, m) => a + m.ingredientCount, 0)}</p>
-              <p className="text-xs text-gray-400">across {mapped} items</p>
+              <p className="text-xs text-gray-400">across {mapped} {mapped === 1 ? 'item' : 'items'}</p>
             </Card>
             <Card className="px-4 py-3">
               <p className="text-xs text-gray-500">Avg COGS %</p>
               <p className={`text-xl font-bold ${avgCogs > 40 ? "text-red-600" : avgCogs > 30 ? "text-amber-600" : "text-green-600"}`}>
                 {avgCogs > 0 ? `${avgCogs.toFixed(1)}%` : "—"}
               </p>
-              <p className="text-xs text-gray-400">{withCogs.length} items costed</p>
+              <p className="text-xs text-gray-400">{withCogs.length} {withCogs.length === 1 ? 'item' : 'items'} costed</p>
             </Card>
             <Card className="px-4 py-3">
               <p className="text-xs text-gray-500">No Recipe Yet</p>

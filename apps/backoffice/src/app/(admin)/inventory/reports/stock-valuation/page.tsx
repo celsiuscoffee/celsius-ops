@@ -30,9 +30,10 @@ type ValuationData = {
   summary: {
     totalProducts: number;
     totalSystemValue: number;
-    totalCountedValue: number;
-    valueDifference: number;
+    totalCountedValue: number | null;
+    valueDifference: number | null;
     itemsWithVariance: number;
+    hasAnyCounts: boolean;
   };
   outlets: Outlet[];
   items: ValuationItem[];
@@ -97,23 +98,48 @@ export default function StockValuationPage() {
               <div className="rounded-lg bg-purple-50 p-2"><DollarSign className="h-4 w-4 text-purple-600" /></div>
               <span className="text-sm text-gray-500">Counted Value</span>
             </div>
-            <p className="mt-2 text-2xl font-bold text-gray-900">RM {fmt(data.summary.totalCountedValue)}</p>
+            {data.summary.hasAnyCounts ? (
+              <p className="mt-2 text-2xl font-bold text-gray-900">RM {fmt(data.summary.totalCountedValue!)}</p>
+            ) : (
+              <p className="mt-2 text-lg font-medium text-gray-400">No counts yet</p>
+            )}
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <div className="flex items-center gap-2">
-              <div className={`rounded-lg p-2 ${data.summary.valueDifference < 0 ? "bg-red-50" : "bg-green-50"}`}>
-                {data.summary.valueDifference < 0
-                  ? <TrendingDown className="h-4 w-4 text-red-600" />
-                  : <TrendingUp className="h-4 w-4 text-green-600" />}
-              </div>
+              {data.summary.hasAnyCounts ? (
+                <div className={`rounded-lg p-2 ${data.summary.valueDifference! < 0 ? "bg-red-50" : "bg-green-50"}`}>
+                  {data.summary.valueDifference! < 0
+                    ? <TrendingDown className="h-4 w-4 text-red-600" />
+                    : <TrendingUp className="h-4 w-4 text-green-600" />}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-gray-50 p-2"><AlertTriangle className="h-4 w-4 text-gray-400" /></div>
+              )}
               <span className="text-sm text-gray-500">Variance</span>
             </div>
-            <p className={`mt-2 text-2xl font-bold ${data.summary.valueDifference < 0 ? "text-red-600" : "text-green-600"}`}>
-              {data.summary.valueDifference < 0 ? "-" : "+"}RM {fmt(Math.abs(data.summary.valueDifference))}
-            </p>
-            {data.summary.itemsWithVariance > 0 && (
-              <p className="mt-0.5 text-xs text-gray-500">{data.summary.itemsWithVariance} items with variance</p>
+            {data.summary.hasAnyCounts ? (
+              <>
+                <p className={`mt-2 text-2xl font-bold ${data.summary.valueDifference! < 0 ? "text-red-600" : "text-green-600"}`}>
+                  {data.summary.valueDifference! < 0 ? "-" : "+"}RM {fmt(Math.abs(data.summary.valueDifference!))}
+                </p>
+                {data.summary.itemsWithVariance > 0 && (
+                  <p className="mt-0.5 text-xs text-gray-500">{data.summary.itemsWithVariance} {data.summary.itemsWithVariance === 1 ? 'item' : 'items'} with variance</p>
+                )}
+              </>
+            ) : (
+              <p className="mt-2 text-lg font-medium text-gray-400">No counts yet</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* No counts banner */}
+      {data && !data.summary.hasAnyCounts && (
+        <div className="mt-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" />
+          <div>
+            <p className="text-sm font-medium text-amber-800">No stock counts recorded</p>
+            <p className="text-xs text-amber-600">Perform a stock count to see counted values and variance against system quantities.</p>
           </div>
         </div>
       )}

@@ -365,6 +365,27 @@ export default function ParLevelsPage() {
         </div>
       </div>
 
+      {/* Empty state banner — shown when no products have par levels configured */}
+      {!loading && products.length > 0 && productsWithoutParCount === products.length && (
+        <div className="mt-4 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+          <Sparkles className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-500" />
+          <div className="text-sm text-blue-800">
+            <p className="font-medium">No par levels configured yet</p>
+            <p className="mt-0.5 text-blue-600">
+              Use{" "}
+              <button
+                onClick={() => setShowRecalcSettings(true)}
+                className="font-medium underline underline-offset-2 hover:text-blue-800"
+              >
+                Smart Recalculate
+              </button>{" "}
+              to auto-set par levels based on your sales data, or click{" "}
+              <span className="font-medium">&lsquo;Set&rsquo;</span> on individual products to configure them manually.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
         <table className="w-full text-sm">

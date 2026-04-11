@@ -318,7 +318,7 @@ export default function CogsReportPage() {
           </div>
           {filteredItems.length > 0 && (
             <div className="border-t px-4 py-3 text-xs text-gray-500">
-              Showing {filteredItems.length} of {data.items.length} items
+              Showing {filteredItems.length} of {data.items.length} {data.items.length === 1 ? 'item' : 'items'}
             </div>
           )}
         </div>

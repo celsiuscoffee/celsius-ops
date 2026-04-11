@@ -461,7 +461,7 @@ export default function OrdersPage() {
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Purchase Orders</h2>
           <p className="mt-0.5 text-sm text-gray-500">
-            {orders.length} orders &middot; {pendingCount} active
+            {orders.length} {orders.length === 1 ? 'order' : 'orders'} &middot; {pendingCount} active
           </p>
         </div>
         <Link href="/inventory/orders/create">

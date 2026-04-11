@@ -405,7 +405,7 @@ export default function ReceivingsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{o.supplier}</p>
-                    <p className="text-xs text-gray-500">{o.orderNumber} &middot; {o.items} items{o.totalAmount > 0 ? ` · RM ${o.totalAmount.toFixed(2)}` : ""}</p>
+                    <p className="text-xs text-gray-500">{o.orderNumber} &middot; {o.items} {o.items === 1 ? 'item' : 'items'}{o.totalAmount > 0 ? ` · RM ${o.totalAmount.toFixed(2)}` : ""}</p>
                   </div>
                   <div className="text-right">
                     <Badge className={`text-[10px] ${o.status === "PARTIALLY_RECEIVED" ? "bg-amber-500" : o.isTransfer ? "bg-blue-500" : "bg-purple-500"}`}>
@@ -490,7 +490,7 @@ export default function ReceivingsPage() {
                       {rec.status}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-600">{rec.items.length} items</td>
+                  <td className="px-4 py-3 text-xs text-gray-600">{rec.items.length} {rec.items.length === 1 ? 'item' : 'items'}</td>
                   <td className="px-4 py-3">
                     {rec.photoCount > 0 ? (
                       <span className="flex items-center gap-1 text-xs text-gray-500"><Camera className="h-3 w-3" />{rec.photoCount}</span>

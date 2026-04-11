@@ -72,7 +72,7 @@ export default function GroupsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Item Groups</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{groups.length} item groups</p>
+          <p className="mt-0.5 text-sm text-gray-500">{groups.length} item {groups.length === 1 ? 'group' : 'groups'}</p>
         </div>
         <Button onClick={openAdd} className="bg-terracotta hover:bg-terracotta-dark">
           <Plus className="mr-1.5 h-4 w-4" />
@@ -92,7 +92,7 @@ export default function GroupsPage() {
               </div>
               <div>
                 <p className="font-medium text-gray-900">{group.name}</p>
-                <p className="text-xs text-gray-500">{group.productCount} items</p>
+                <p className="text-xs text-gray-500">{group.productCount} {group.productCount === 1 ? 'item' : 'items'}</p>
               </div>
             </div>
             <div className="flex items-center gap-1">

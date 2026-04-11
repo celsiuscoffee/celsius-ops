@@ -305,7 +305,7 @@ export default function PickupAnalyticsPage() {
           <h2 className="font-bold text-sm">Orders by Hour</h2>
           {!loading && peakHour.count > 0 && (
             <span className="text-xs text-muted-foreground">
-              Peak: <span className="font-semibold text-amber-600">{peakHour.label}</span> ({peakHour.count} orders)
+              Peak: <span className="font-semibold text-amber-600">{peakHour.label}</span> ({peakHour.count} {peakHour.count === 1 ? 'order' : 'orders'})
             </span>
           )}
         </div>

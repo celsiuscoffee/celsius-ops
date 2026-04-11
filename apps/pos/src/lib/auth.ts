@@ -144,7 +144,7 @@ export async function verifyPin(
     const match = await bcrypt.compare(trimmedPin, stored);
     return { match, needsRehash: false };
   }
-  const match = stored === trimmedPin;
+  const match = stored.trim() === trimmedPin;
   return { match, needsRehash: match };
 }
 

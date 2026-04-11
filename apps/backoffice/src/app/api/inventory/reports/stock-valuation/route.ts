@@ -121,19 +121,20 @@ export async function GET(req: NextRequest) {
   items.sort((a, b) => Math.abs(b.variance ?? 0) - Math.abs(a.variance ?? 0));
 
   // Summary
+  const hasAnyCounts = items.some((i) => i.lastCountedQty !== null);
   const totalSystemValue = items.reduce((s, i) => s + i.systemValue, 0);
-  const totalCountedValue = items
-    .filter((i) => i.countedValue !== null)
-    .reduce((s, i) => s + i.countedValue!, 0);
+  const countedItems = items.filter((i) => i.countedValue !== null);
+  const totalCountedValue = countedItems.reduce((s, i) => s + i.countedValue!, 0);
   const itemsWithVariance = items.filter((i) => i.variance !== null && i.variance !== 0);
 
   return NextResponse.json({
     summary: {
       totalProducts: items.length,
       totalSystemValue: Math.round(totalSystemValue * 100) / 100,
-      totalCountedValue: Math.round(totalCountedValue * 100) / 100,
-      valueDifference: Math.round((totalCountedValue - totalSystemValue) * 100) / 100,
+      totalCountedValue: hasAnyCounts ? Math.round(totalCountedValue * 100) / 100 : null,
+      valueDifference: hasAnyCounts ? Math.round((totalCountedValue - totalSystemValue) * 100) / 100 : null,
       itemsWithVariance: itemsWithVariance.length,
+      hasAnyCounts,
     },
     outlets,
     items,

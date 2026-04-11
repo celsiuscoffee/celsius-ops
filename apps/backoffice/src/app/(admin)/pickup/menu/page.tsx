@@ -84,14 +84,10 @@ export default function PickupMenu() {
 
   async function load() {
     setLoading(true);
-    const [prodRes, catRes] = await Promise.all([
-      adminFetch("/api/pickup/products"),
-      fetch("/api/storehub/products"),
-    ]);
-    const prods = await prodRes.json() as DbProduct[] | null;
-    const menu  = await catRes.json() as { categories: Category[] };
-    setProducts(Array.isArray(prods) ? prods : []);
-    setCategories(menu.categories ?? []);
+    const res = await adminFetch("/api/pickup/products");
+    const json = await res.json() as { products: DbProduct[]; categories: Category[] };
+    setProducts(Array.isArray(json.products) ? json.products : []);
+    setCategories(json.categories ?? []);
     setLoading(false);
   }
 
@@ -270,7 +266,7 @@ export default function PickupMenu() {
         <div>
           <h1 className="text-2xl font-bold text-[#160800]">Pickup Menu</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {products.length} items · {unavailableCount} unavailable
+            {products.length} {products.length === 1 ? 'item' : 'items'} · {unavailableCount} unavailable
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -290,7 +286,7 @@ export default function PickupMenu() {
               : syncResult
               ? <Check className="h-4 w-4 text-green-600" />
               : <CloudDownload className="h-4 w-4" />}
-            {syncing ? "Syncing..." : syncResult ? `Synced ${syncResult.products} products` : "Sync StoreHub"}
+            {syncing ? "Syncing..." : syncResult ? `Synced ${syncResult.products} ${syncResult.products === 1 ? 'product' : 'products'}` : "Sync StoreHub"}
           </button>
           <button
             onClick={openNew}
