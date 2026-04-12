@@ -134,44 +134,49 @@ export default function HomePage() {
 
   const loadData = useCallback(async (userProfile?: UserProfile | null) => {
     const today = getToday();
-    const me = userProfile || user;
+    let me = userProfile || user;
     if (!me) {
       try {
         const r = await fetch("/api/auth/me");
         const meData = await r.json();
-        if (meData.id) setUser(meData);
-        await loadData(meData);
-      } catch { setLoading(false); }
-      return;
+        if (meData.id) { setUser(meData); me = meData; }
+        else { setLoading(false); return; }
+      } catch { setLoading(false); return; }
     }
 
     const outletParam = me.outletId ? `&outletId=${me.outletId}` : "&mine=true";
 
-    try {
-      const clsRes = await fetch(`/api/checklists?date=${today}${outletParam}`);
-      const cls = await clsRes.json();
-      if (Array.isArray(cls)) {
-        setChecklists(cls);
-        if (cls.length === 0 && me.outletId) {
-          await fetch("/api/checklists/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ outletId: me.outletId, date: today }),
-          });
-          const cls2Res = await fetch(`/api/checklists?date=${today}${outletParam}`);
-          const cls2 = await cls2Res.json();
-          if (Array.isArray(cls2)) setChecklists(cls2);
-        }
-      }
-    } catch {}
+    // Fetch checklists + dashboard in parallel
+    const [clsRes, dashRes] = await Promise.all([
+      fetch(`/api/checklists?date=${today}${outletParam}`).catch(() => null),
+      me.outletId ? fetch(`/api/dashboard?outletId=${me.outletId}`).catch(() => null) : null,
+    ]);
 
-    if (me.outletId) {
+    // Process checklists
+    if (clsRes) {
       try {
-        const dashRes = await fetch(`/api/dashboard?outletId=${me.outletId}`);
-        if (dashRes.ok) {
-          const dash = await dashRes.json();
-          if (dash) setDashboard(dash);
+        const cls = await clsRes.json();
+        if (Array.isArray(cls)) {
+          setChecklists(cls);
+          if (cls.length === 0 && me.outletId) {
+            await fetch("/api/checklists/generate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ outletId: me.outletId, date: today }),
+            });
+            const cls2Res = await fetch(`/api/checklists?date=${today}${outletParam}`);
+            const cls2 = await cls2Res.json();
+            if (Array.isArray(cls2)) setChecklists(cls2);
+          }
         }
+      } catch {}
+    }
+
+    // Process dashboard
+    if (dashRes?.ok) {
+      try {
+        const dash = await dashRes.json();
+        if (dash) setDashboard(dash);
       } catch {}
     }
 
