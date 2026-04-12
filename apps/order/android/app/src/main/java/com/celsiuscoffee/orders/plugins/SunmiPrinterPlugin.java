@@ -16,9 +16,6 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import woyou.aidlservice.jiuiv5.IWoyouService;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-
 @CapacitorPlugin(name = "SunmiPrinter")
 public class SunmiPrinterPlugin extends Plugin {
 
@@ -66,49 +63,6 @@ public class SunmiPrinterPlugin extends Plugin {
         call.resolve(ret);
     }
 
-    // ---- ESC/POS helpers ----
-
-    private static final byte ESC = 0x1B;
-    private static final byte GS  = 0x1D;
-    private static final byte LF  = 0x0A;
-
-    /** ESC @ — initialize printer */
-    private byte[] cmdInit() {
-        return new byte[]{ ESC, '@' };
-    }
-
-    /** ESC a n — set alignment: 0=left, 1=center, 2=right */
-    private byte[] cmdAlign(int n) {
-        return new byte[]{ ESC, 'a', (byte) n };
-    }
-
-    /** GS ! n — set character size (width/height multiplier)
-     *  n = (widthMult << 4) | heightMult, where mult is 0-7 (0=1x, 1=2x, 2=3x, etc.)
-     */
-    private byte[] cmdCharSize(int widthMult, int heightMult) {
-        int n = ((widthMult & 0x07) << 4) | (heightMult & 0x07);
-        return new byte[]{ GS, '!', (byte) n };
-    }
-
-    /** ESC E n — bold on/off */
-    private byte[] cmdBold(boolean on) {
-        return new byte[]{ ESC, 'E', (byte)(on ? 1 : 0) };
-    }
-
-    /** Build raw bytes for a text line */
-    private byte[] textBytes(String text) {
-        try {
-            return text.getBytes("UTF-8");
-        } catch (Exception e) {
-            return text.getBytes();
-        }
-    }
-
-    /** Feed n lines */
-    private byte[] cmdFeedLines(int n) {
-        return new byte[]{ ESC, 'd', (byte) n };
-    }
-
     @PluginMethod
     public void printReceipt(PluginCall call) {
         if (!isConnected || printerService == null) {
@@ -126,108 +80,104 @@ public class SunmiPrinterPlugin extends Plugin {
         String subtotal = call.getString("subtotal", "");
         String payment = call.getString("payment", "");
 
-        String DASHES = "--------------------------------\n";
+        String DASHES = "--------------------------------";
 
         try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            Log.i(TAG, "Printing with AIDL methods, type=" + type + " order=#" + orderNumber);
 
             // Initialize printer
-            out.write(cmdInit());
+            printerService.printerInit(null);
 
             if (type.equals("kitchen")) {
                 // --- Kitchen Slip ---
-                // Header centered
-                out.write(cmdAlign(1));
-                out.write(cmdCharSize(0, 0));
-                out.write(cmdBold(true));
-                out.write(textBytes("KITCHEN ORDER\n"));
-                out.write(cmdBold(false));
-
-                out.write(cmdCharSize(0, 1));
-                out.write(textBytes("Celsius Coffee\n"));
-                out.write(cmdCharSize(0, 0));
-                out.write(textBytes(storeName + "\n"));
-                out.write(textBytes(DASHES));
+                printerService.setAlignment(1, null); // center
+                printerService.setFontSize(24, null);
+                printBold("KITCHEN ORDER");
+                printerService.setFontSize(32, null);
+                printLine("Celsius Coffee");
+                printerService.setFontSize(24, null);
+                printLine(storeName);
+                printLine(DASHES);
 
                 // Big order number
-                out.write(cmdCharSize(1, 1));
-                out.write(cmdBold(true));
-                out.write(textBytes("#" + orderNumber + "\n"));
-                out.write(cmdBold(false));
-                out.write(cmdCharSize(0, 0));
-                out.write(textBytes(time + "\n"));
-                out.write(textBytes(DASHES));
+                printerService.setFontSize(48, null);
+                printBold("#" + orderNumber);
+                printerService.setFontSize(24, null);
+                printLine(time);
+                printLine(DASHES);
 
                 // Items left-aligned
-                out.write(cmdAlign(0));
-                out.write(textBytes(items + "\n"));
+                printerService.setAlignment(0, null); // left
+                printerService.setFontSize(24, null);
+                printLine(items);
 
                 // Notes
                 if (notes != null && !notes.isEmpty()) {
-                    out.write(textBytes(DASHES));
-                    out.write(cmdBold(true));
-                    out.write(textBytes("NOTE: " + notes + "\n"));
-                    out.write(cmdBold(false));
+                    printLine(DASHES);
+                    printBold("NOTE: " + notes);
                 }
 
                 // Footer
-                out.write(cmdAlign(1));
-                out.write(textBytes(DASHES));
-                out.write(textBytes("SELF-PICKUP\n"));
+                printerService.setAlignment(1, null); // center
+                printLine(DASHES);
+                printLine("SELF-PICKUP");
 
             } else {
-                // --- Receipt ---
-                out.write(cmdAlign(1));
-                out.write(cmdCharSize(0, 1));
-                out.write(textBytes("Celsius Coffee\n"));
-                out.write(cmdCharSize(0, 0));
-                out.write(textBytes(storeName + "\n"));
-                out.write(textBytes(time + "\n"));
-                out.write(textBytes(DASHES));
+                // --- Customer Receipt ---
+                printerService.setAlignment(1, null); // center
+                printerService.setFontSize(32, null);
+                printLine("Celsius Coffee");
+                printerService.setFontSize(24, null);
+                printLine(storeName);
+                printLine(time);
+                printLine(DASHES);
 
-                out.write(cmdCharSize(1, 1));
-                out.write(cmdBold(true));
-                out.write(textBytes("#" + orderNumber + "\n"));
-                out.write(cmdBold(false));
-                out.write(cmdCharSize(0, 0));
-                out.write(textBytes(DASHES));
+                printerService.setFontSize(48, null);
+                printBold("#" + orderNumber);
+                printerService.setFontSize(24, null);
+                printLine(DASHES);
 
                 // Items left-aligned
-                out.write(cmdAlign(0));
-                out.write(textBytes(items + "\n"));
+                printerService.setAlignment(0, null); // left
+                printLine(items);
 
-                out.write(textBytes(DASHES));
-                out.write(textBytes("Subtotal          " + subtotal + "\n"));
-                out.write(textBytes(DASHES));
+                printLine(DASHES);
+                printLine("Subtotal          " + subtotal);
+                printLine(DASHES);
 
-                out.write(cmdCharSize(0, 1));
-                out.write(cmdBold(true));
-                out.write(textBytes("TOTAL  " + total + "\n"));
-                out.write(cmdBold(false));
-                out.write(cmdCharSize(0, 0));
-                out.write(textBytes("Payment: " + payment + "\n"));
+                printerService.setFontSize(32, null);
+                printBold("TOTAL  " + total);
+                printerService.setFontSize(24, null);
+                printLine("Payment: " + payment);
 
-                out.write(cmdAlign(1));
-                out.write(textBytes(DASHES));
-                out.write(textBytes("Thank you!\n"));
+                printerService.setAlignment(1, null); // center
+                printLine(DASHES);
+                printLine("Thank you!");
             }
 
             // Feed paper
-            out.write(cmdFeedLines(4));
+            printerService.lineWrap(4, null);
 
-            byte[] data = out.toByteArray();
-            Log.i(TAG, "Sending RAW ESC/POS data, " + data.length + " bytes, type=" + type + " order=#" + orderNumber);
-            printerService.sendRAWData(data, null);
-            Log.i(TAG, "RAW data sent successfully");
+            Log.i(TAG, "Print completed successfully");
             call.resolve();
 
         } catch (RemoteException e) {
             Log.e(TAG, "Print RemoteException", e);
             call.reject("Print error: " + e.getMessage());
-        } catch (IOException e) {
-            Log.e(TAG, "Print IOException", e);
-            call.reject("Print build error: " + e.getMessage());
         }
+    }
+
+    /** Print a line of text with newline */
+    private void printLine(String text) throws RemoteException {
+        printerService.printText(text + "\n", null);
+    }
+
+    /** Print bold text with newline, then turn bold off */
+    private void printBold(String text) throws RemoteException {
+        // Use sendRAWData for ESC E 1 (bold on) and ESC E 0 (bold off)
+        printerService.sendRAWData(new byte[]{0x1B, 'E', 1}, null);
+        printerService.printText(text + "\n", null);
+        printerService.sendRAWData(new byte[]{0x1B, 'E', 0}, null);
     }
 
     @Override
