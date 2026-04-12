@@ -41,7 +41,7 @@ const PALETTE = [
 
 export function CategoryTabs({ categories, active, onChange, layoutColors = {} }: Props) {
   return (
-    <div className="flex gap-1.5 overflow-x-auto bg-surface px-2 py-2 scrollbar-none">
+    <div className="flex gap-2 overflow-x-auto bg-surface px-2 py-2.5 scrollbar-none">
       {categories.map((cat, i) => {
         const isActive = active === cat.slug;
 
@@ -55,10 +55,10 @@ export function CategoryTabs({ categories, active, onChange, layoutColors = {} }
             key={cat.slug}
             onClick={() => onChange(cat.slug)}
             style={{ backgroundColor: color }}
-            className={`whitespace-nowrap rounded-lg px-4 py-2.5 text-[12px] font-semibold text-white transition-all min-h-[40px] ${
+            className={`whitespace-nowrap rounded-xl px-5 py-3 text-sm font-semibold text-white transition-all min-h-[48px] ${
               isActive
                 ? "ring-2 ring-white/50 scale-[1.02] shadow-lg"
-                : "opacity-75 hover:opacity-100"
+                : "opacity-70 hover:opacity-100"
             }`}
           >
             {cat.name}

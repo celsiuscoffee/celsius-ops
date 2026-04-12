@@ -5,23 +5,37 @@ import { createClient } from "@/lib/supabase-browser";
 
 const supabase = createClient();
 
+type Category = { id: string; name: string; slug: string; position: number; count: number };
+
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<{ name: string; count: number }[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.from("products").select("category").not("category", "is", null);
-      if (data) {
-        const counts: Record<string, number> = {};
-        for (const p of data) {
+      const [{ data: cats }, { data: products }] = await Promise.all([
+        supabase.from("categories").select("id, name, slug, position").order("position"),
+        supabase.from("products").select("category"),
+      ]);
+
+      // Count products per category slug
+      const counts: Record<string, number> = {};
+      if (products) {
+        for (const p of products) {
           const cat = p.category as string;
-          counts[cat] = (counts[cat] ?? 0) + 1;
+          if (cat) counts[cat] = (counts[cat] ?? 0) + 1;
         }
+      }
+
+      if (cats) {
         setCategories(
-          Object.entries(counts)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([name, count]) => ({ name, count }))
+          cats.map((c) => ({
+            id: c.id as string,
+            name: c.name as string,
+            slug: c.slug as string,
+            position: c.position as number,
+            count: counts[c.slug as string] ?? 0,
+          }))
         );
       }
       setLoading(false);
@@ -34,22 +48,21 @@ export default function CategoriesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Categories</h1>
-          <p className="mt-1 text-sm text-text-muted">{categories.length} categories from products</p>
+          <p className="mt-1 text-sm text-text-muted">{categories.length} categories</p>
         </div>
       </div>
-      <p className="mt-2 text-xs text-text-dim">Categories are derived from the product catalog. Edit product categories in the Products page.</p>
 
       {loading ? (
         <div className="mt-8 text-center text-sm text-text-muted">Loading...</div>
       ) : (
         <div className="mt-4 space-y-2">
-          {categories.map((cat, i) => (
-            <div key={cat.name} className="flex items-center justify-between rounded-xl border border-border bg-surface-raised px-4 py-3">
+          {categories.map((cat) => (
+            <div key={cat.id} className="flex items-center justify-between rounded-xl border border-border bg-surface-raised px-4 py-3">
               <div className="flex items-center gap-3">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface text-xs text-text-dim">{i + 1}</span>
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface text-xs text-text-dim">{cat.position}</span>
                 <div>
-                  <p className="text-sm font-medium capitalize">{cat.name.replace(/-/g, " ")}</p>
-                  <p className="text-[10px] text-text-dim font-mono">{cat.name}</p>
+                  <p className="text-sm font-medium">{cat.name}</p>
+                  <p className="text-[10px] text-text-dim font-mono">{cat.slug}</p>
                 </div>
               </div>
               <span className="rounded-full bg-surface px-2.5 py-0.5 text-xs text-text-muted">{cat.count} products</span>

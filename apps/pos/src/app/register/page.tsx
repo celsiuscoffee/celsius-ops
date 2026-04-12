@@ -449,12 +449,12 @@ export default function RegisterPage() {
       {/* LEFT */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <div className="flex items-center gap-1.5 border-b border-border bg-surface px-2 py-1.5">
-          <button onClick={() => setShowSidebar(true)} className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-surface-hover" title="Menu (M)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
+          <button onClick={() => setShowSidebar(true)} className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-surface-hover" title="Menu (M)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
-          <Image src="/images/celsius-logo-sm.jpg" alt="Celsius" width={28} height={28} className="rounded-lg" />
-          <Image src="/images/celsius-wordmark-white.png" alt="Celsius Coffee" width={80} height={18} className="hidden sm:block" />
+          <Image src="/images/celsius-logo-sm.jpg" alt="Celsius" width={32} height={32} className="rounded-lg" />
+          <Image src="/images/celsius-wordmark-white.png" alt="Celsius Coffee" width={90} height={20} className="hidden sm:block" />
           <div className="flex-1" />
 
           {activePage === "register" && <SearchBar value={search} onChange={setSearch} />}
@@ -463,7 +463,7 @@ export default function RegisterPage() {
           {pos.openOrders.length > 0 && (
             <button
               onClick={() => setActivePage(activePage === "orders" ? "register" : "orders")}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                 activePage === "orders" ? "bg-blue-500/20 text-blue-400" : "border border-border text-text-muted hover:bg-surface-hover"
               }`}
             >
@@ -474,20 +474,20 @@ export default function RegisterPage() {
 
           {/* Order type toggle */}
           {activePage === "register" && (
-            <div className="flex rounded-lg border border-border text-xs">
-              <button onClick={() => setOrderType("dine_in")} className={`rounded-l-lg px-3 py-1.5 font-medium transition-colors ${orderType === "dine_in" ? "bg-brand text-white" : "text-text-muted hover:bg-surface-hover"}`}>
+            <div className="flex rounded-lg border border-border text-sm">
+              <button onClick={() => setOrderType("dine_in")} className={`rounded-l-lg px-4 py-2 font-medium transition-colors ${orderType === "dine_in" ? "bg-brand text-white" : "text-text-muted hover:bg-surface-hover"}`}>
                 Dine-in
               </button>
-              <button onClick={() => setOrderType("takeaway")} className={`rounded-r-lg px-3 py-1.5 font-medium transition-colors ${orderType === "takeaway" ? "bg-brand text-white" : "text-text-muted hover:bg-surface-hover"}`}>
+              <button onClick={() => setOrderType("takeaway")} className={`rounded-r-lg px-4 py-2 font-medium transition-colors ${orderType === "takeaway" ? "bg-brand text-white" : "text-text-muted hover:bg-surface-hover"}`}>
                 Takeaway
               </button>
             </div>
           )}
 
           {/* Shift + Staff indicator */}
-          <div className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5">
-            <span className={`h-2 w-2 rounded-full ${pos.isShiftOpen ? "bg-success" : "bg-danger"}`} />
-            <span className="text-[10px] text-text-muted">{pos.staff?.name ?? "—"}</span>
+          <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
+            <span className={`h-2.5 w-2.5 rounded-full ${pos.isShiftOpen ? "bg-success" : "bg-danger"}`} />
+            <span className="text-xs text-text-muted">{pos.staff?.name ?? "—"}</span>
           </div>
         </div>
 
@@ -511,7 +511,7 @@ export default function RegisterPage() {
                   }
                 }}
                 cartCounts={cartCounts}
-                columns={(pos.branchSettings as any)?.grid_columns ?? 6}
+                columns={(pos.branchSettings as any)?.grid_columns ?? 5}
               />
             </div>
           </>
@@ -536,12 +536,12 @@ export default function RegisterPage() {
 
       {/* RIGHT: Order panel */}
       {activePage === "register" && (
-        <div className="flex w-[320px] min-w-[320px] flex-col border-l border-border bg-surface">
+        <div className="flex w-[360px] min-w-[360px] flex-col border-l border-border bg-surface">
           {/* Order header */}
-          <div className="flex items-center justify-between border-b border-border px-4 py-2">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div>
-              <h2 className="text-sm font-semibold">{editingOrderId ? "Edit Order" : "Current Order"}</h2>
-              <span className="text-[10px] text-text-muted">
+              <h2 className="text-base font-semibold">{editingOrderId ? "Edit Order" : "Current Order"}</h2>
+              <span className="text-xs text-text-muted">
                 {orderType === "dine_in" ? "Dine-in" : "Takeaway"}
                 {tableNumber && ` · Table ${tableNumber}`}
                 {customerPhone && ` · ${customerPhone}`}
@@ -549,41 +549,40 @@ export default function RegisterPage() {
               </span>
             </div>
             {cart.length > 0 && (
-              <button onClick={clearCart} className="text-[10px] font-medium text-danger hover:underline">Clear All</button>
+              <button onClick={clearCart} className="text-xs font-medium text-danger hover:underline">Clear All</button>
             )}
           </div>
 
-          {/* Order action bar (StoreHub-style) */}
+          {/* Order action bar */}
           <div className="flex border-b border-border">
             <button
               onClick={() => setShowCustomerLookup(!showCustomerLookup)}
-              className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] transition-colors ${customerPhone ? "text-brand" : "text-text-dim hover:text-text-muted"}`}
+              className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors ${customerPhone ? "text-brand" : "text-text-dim hover:text-text-muted"}`}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               <span>{customerPhone || "Customer"}</span>
             </button>
             {orderType === "dine_in" && (
               <button
                 onClick={() => setShowTablePicker(!showTablePicker)}
-                className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] transition-colors ${tableNumber ? "text-brand" : "text-text-dim hover:text-text-muted"}`}
+                className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors ${tableNumber ? "text-brand" : "text-text-dim hover:text-text-muted"}`}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
                 <span>{tableNumber ? `Table ${tableNumber}` : "Table"}</span>
               </button>
             )}
-            {/* Discount removed from action bar — tap item for item discount, tap subtotal for order discount */}
             <button
               onClick={() => setShowOrderNotes(!showOrderNotes)}
-              className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] transition-colors ${orderNotes ? "text-brand" : "text-text-dim hover:text-text-muted"}`}
+              className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors ${orderNotes ? "text-brand" : "text-text-dim hover:text-text-muted"}`}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               <span>Notes</span>
             </button>
           </div>
 
           {/* Customer lookup inline */}
           {showCustomerLookup && (
-            <div className="border-b border-border px-4 py-2">
+            <div className="border-b border-border px-4 py-3">
               <div className="flex gap-2">
                 <input
                   type="tel" placeholder="Customer phone (+60...)" value={customerPhone}
@@ -596,7 +595,7 @@ export default function RegisterPage() {
                       setMemberLoading(false);
                     }
                   }}
-                  className="h-8 flex-1 rounded-lg border border-border bg-surface-raised px-3 text-xs text-text outline-none placeholder:text-text-dim focus:border-brand"
+                  className="h-10 flex-1 rounded-lg border border-border bg-surface-raised px-3 text-sm text-text outline-none placeholder:text-text-dim focus:border-brand"
                   autoFocus
                 />
                 <button
@@ -609,61 +608,61 @@ export default function RegisterPage() {
                     }
                   }}
                   disabled={customerPhone.length < 10 || memberLoading}
-                  className="rounded-lg bg-brand px-3 text-[10px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                  className="rounded-lg bg-brand px-4 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
                 >
                   {memberLoading ? "..." : "Lookup"}
                 </button>
               </div>
               {/* Member info display */}
               {loyaltyMember && (
-                <div className="mt-2 rounded-lg bg-brand/10 p-2">
+                <div className="mt-2 rounded-lg bg-brand/10 p-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-semibold text-brand">{loyaltyMember.name ?? "Member"}</p>
-                      <p className="text-[10px] text-text-muted">{loyaltyMember.phone}</p>
+                      <p className="text-sm font-semibold text-brand">{loyaltyMember.name ?? "Member"}</p>
+                      <p className="text-xs text-text-muted">{loyaltyMember.phone}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-bold text-brand">{loyaltyMember.points_balance} pts</p>
-                      <p className="text-[10px] text-text-muted">{loyaltyMember.total_visits} visits</p>
+                      <p className="text-sm font-bold text-brand">{loyaltyMember.points_balance} pts</p>
+                      <p className="text-xs text-text-muted">{loyaltyMember.total_visits} visits</p>
                     </div>
                   </div>
                   {loyaltyMember.tags.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
+                    <div className="mt-2 flex flex-wrap gap-1.5">
                       {loyaltyMember.tags.map((tag) => (
-                        <span key={tag} className="rounded-full bg-brand/20 px-2 py-0.5 text-[9px] font-medium text-brand">{tag}</span>
+                        <span key={tag} className="rounded-full bg-brand/20 px-2.5 py-0.5 text-[11px] font-medium text-brand">{tag}</span>
                       ))}
                     </div>
                   )}
-                  <p className="mt-1 text-[9px] text-text-dim">
+                  <p className="mt-1.5 text-xs text-text-dim">
                     Total spent: RM {loyaltyMember.total_spent.toFixed(2)}
                   </p>
                   {loyaltyMember.points_balance > 0 && !rewardName && (
                     <button
                       onClick={() => setShowRewardPicker(true)}
-                      className="mt-1.5 w-full rounded-lg bg-brand py-1.5 text-[10px] font-semibold text-white hover:bg-brand-dark"
+                      className="mt-2 w-full rounded-lg bg-brand py-2.5 text-xs font-semibold text-white hover:bg-brand-dark"
                     >
                       Redeem Reward ({loyaltyMember.points_balance} pts)
                     </button>
                   )}
                   {rewardName && (
-                    <div className="mt-1.5 flex items-center justify-between rounded-lg bg-success/10 px-2 py-1">
-                      <span className="text-[10px] font-medium text-success">{rewardName}</span>
-                      <button onClick={() => { setRewardDiscount(0); setRewardName(null); setRewardRedemptionId(null); }} className="text-[10px] text-danger hover:underline">Remove</button>
+                    <div className="mt-2 flex items-center justify-between rounded-lg bg-success/10 px-3 py-2">
+                      <span className="text-xs font-medium text-success">{rewardName}</span>
+                      <button onClick={() => { setRewardDiscount(0); setRewardName(null); setRewardRedemptionId(null); }} className="text-xs text-danger hover:underline">Remove</button>
                     </div>
                   )}
                 </div>
               )}
               {loyaltyMember === null && customerPhone.length >= 10 && !memberLoading && (
-                <p className="mt-1 text-[10px] text-text-dim">Press Enter or Lookup to find member</p>
+                <p className="mt-1.5 text-xs text-text-dim">Press Enter or Lookup to find member</p>
               )}
             </div>
           )}
 
           {/* Table picker inline */}
           {showTablePicker && (
-            <div className="border-b border-border px-4 py-2">
-              <p className="mb-1.5 text-[10px] font-medium text-text-muted">Select Table</p>
-              <div className="grid grid-cols-5 gap-1.5">
+            <div className="border-b border-border px-4 py-3">
+              <p className="mb-2 text-xs font-medium text-text-muted">Select Table</p>
+              <div className="grid grid-cols-5 gap-2">
                 {Array.from({ length: 15 }, (_, i) => String(i + 1)).map((t) => {
                   const isOccupied = pos.openOrders.some((o) => o.table_number === t);
                   const isSelected = tableNumber === t;
@@ -672,7 +671,7 @@ export default function RegisterPage() {
                       key={t}
                       onClick={() => { setTableNumber(t); setShowTablePicker(false); }}
                       disabled={isOccupied && !isSelected}
-                      className={`rounded-lg py-1.5 text-xs font-medium transition-colors ${
+                      className={`rounded-lg py-2.5 text-sm font-medium transition-colors ${
                         isSelected ? "bg-brand text-white" : isOccupied ? "bg-danger/20 text-danger/50 cursor-not-allowed" : "border border-border hover:border-brand hover:bg-brand/10"
                       }`}
                     >
@@ -686,12 +685,12 @@ export default function RegisterPage() {
 
           {/* Order notes inline */}
           {showOrderNotes && (
-            <div className="border-b border-border px-4 py-2">
+            <div className="border-b border-border px-4 py-3">
               <textarea
                 placeholder="Order notes..." value={orderNotes}
                 onChange={(e) => setOrderNotes(e.target.value)}
                 rows={2}
-                className="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs text-text outline-none placeholder:text-text-dim focus:border-brand"
+                className="w-full rounded-lg border border-border bg-surface-raised px-3 py-2 text-sm text-text outline-none placeholder:text-text-dim focus:border-brand"
                 autoFocus
               />
             </div>
@@ -701,16 +700,16 @@ export default function RegisterPage() {
           <div className="flex-1 overflow-y-auto">
             {cart.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center text-text-muted">
-                <span className="text-2xl">🛒</span>
-                <p className="mt-2 text-xs">No items yet</p>
-                <p className="text-[10px] text-text-dim">Tap a product to add it</p>
+                <span className="text-3xl">🛒</span>
+                <p className="mt-2 text-sm">No items yet</p>
+                <p className="text-xs text-text-dim">Tap a product to add it</p>
               </div>
             ) : (
               <div className="divide-y divide-border">
                 {cart.map((item) => {
                   const isExpanded = expandedItemId === item.cartItemId;
                   return (
-                    <div key={item.cartItemId} className="px-4 py-2.5">
+                    <div key={item.cartItemId} className="px-4 py-3">
                       {/* Tap item row to expand */}
                       <button
                         className="flex w-full items-start justify-between gap-2 text-left"
@@ -721,41 +720,41 @@ export default function RegisterPage() {
                         }}
                       >
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate">{item.product.name}</p>
+                          <p className="text-sm font-medium truncate">{item.product.name}</p>
                           {item.selectedModifiers.length > 0 && (
-                            <p className="text-[10px] text-text-muted truncate">{item.selectedModifiers.map((m) => m.option.name).join(", ")}</p>
+                            <p className="text-xs text-text-muted truncate">{item.selectedModifiers.map((m) => m.option.name).join(", ")}</p>
                           )}
                         </div>
-                        <span className="text-xs font-semibold whitespace-nowrap">{displayRM(item.lineTotal)}</span>
+                        <span className="text-sm font-semibold whitespace-nowrap">{displayRM(item.lineTotal)}</span>
                       </button>
 
                       {/* Quantity + remove */}
-                      <div className="mt-1.5 flex items-center gap-1.5">
-                        <button onClick={() => updateQuantity(item.cartItemId, -1)} className="flex h-6 w-6 items-center justify-center rounded border border-border text-xs hover:bg-surface-hover">-</button>
-                        <span className="w-5 text-center text-xs font-medium">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.cartItemId, 1)} className="flex h-6 w-6 items-center justify-center rounded border border-border text-xs hover:bg-surface-hover">+</button>
+                      <div className="mt-2 flex items-center gap-2">
+                        <button onClick={() => updateQuantity(item.cartItemId, -1)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-sm font-medium hover:bg-surface-hover">-</button>
+                        <span className="w-6 text-center text-sm font-semibold">{item.quantity}</span>
+                        <button onClick={() => updateQuantity(item.cartItemId, 1)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-sm font-medium hover:bg-surface-hover">+</button>
                         <div className="flex-1" />
-                        <button onClick={() => removeItem(item.cartItemId)} className="text-[10px] text-text-dim hover:text-danger">Remove</button>
+                        <button onClick={() => removeItem(item.cartItemId)} className="text-xs text-text-dim hover:text-danger">Remove</button>
                       </div>
 
                       {/* Inline item discount (expanded) */}
                       {isExpanded && (
-                        <div className="mt-2 rounded-lg bg-surface-alt p-2">
-                          <p className="mb-1.5 text-[10px] font-medium text-text-muted">Item Discount</p>
-                          <div className="flex gap-1 mb-1.5">
+                        <div className="mt-2 rounded-lg bg-surface-alt p-3">
+                          <p className="mb-2 text-xs font-medium text-text-muted">Item Discount</p>
+                          <div className="flex gap-1.5 mb-2">
                             <button onClick={() => { setInlineDiscountType("percent"); setInlineDiscountValue(""); }}
-                              className={`flex-1 rounded py-1 text-[10px] font-medium ${inlineDiscountType === "percent" ? "bg-brand text-white" : "bg-surface text-text-muted"}`}>%</button>
+                              className={`flex-1 rounded-lg py-2 text-xs font-medium ${inlineDiscountType === "percent" ? "bg-brand text-white" : "bg-surface text-text-muted"}`}>%</button>
                             <button onClick={() => { setInlineDiscountType("fixed"); setInlineDiscountValue(""); }}
-                              className={`flex-1 rounded py-1 text-[10px] font-medium ${inlineDiscountType === "fixed" ? "bg-brand text-white" : "bg-surface text-text-muted"}`}>RM</button>
+                              className={`flex-1 rounded-lg py-2 text-xs font-medium ${inlineDiscountType === "fixed" ? "bg-brand text-white" : "bg-surface text-text-muted"}`}>RM</button>
                           </div>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1.5">
                             {inlineDiscountType === "percent"
                               ? [10, 20, 50, 100].map((pct) => (
                                   <button key={pct} onClick={() => setInlineDiscountValue(String(pct))}
-                                    className={`flex-1 rounded py-1 text-[10px] font-medium ${inlineDiscountValue === String(pct) ? "bg-brand/20 text-brand" : "bg-surface hover:bg-surface-hover"}`}>{pct}%</button>
+                                    className={`flex-1 rounded-lg py-2 text-xs font-medium ${inlineDiscountValue === String(pct) ? "bg-brand/20 text-brand" : "bg-surface hover:bg-surface-hover"}`}>{pct}%</button>
                                 ))
                               : <input type="number" step="0.01" value={inlineDiscountValue} onChange={(e) => setInlineDiscountValue(e.target.value)}
-                                  placeholder="RM" className="h-7 w-full rounded border border-border bg-surface px-2 text-[10px] text-text outline-none focus:border-brand" autoFocus />
+                                  placeholder="RM" className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text outline-none focus:border-brand" autoFocus />
                             }
                           </div>
                           {parseFloat(inlineDiscountValue) > 0 && (
@@ -773,7 +772,7 @@ export default function RegisterPage() {
                                 setExpandedItemId(null);
                                 setInlineDiscountValue("");
                               }}
-                              className="mt-1.5 w-full rounded bg-success/20 py-1 text-[10px] font-medium text-success hover:bg-success/30"
+                              className="mt-2 w-full rounded-lg bg-success/20 py-2 text-xs font-medium text-success hover:bg-success/30"
                             >
                               Apply -{inlineDiscountType === "percent" ? `${inlineDiscountValue}%` : `RM ${inlineDiscountValue}`}
                             </button>
@@ -799,7 +798,7 @@ export default function RegisterPage() {
               onRemoveManual={() => setAppliedManualPromo(null)}
             />
 
-            <div className="mb-2 space-y-0.5 text-xs">
+            <div className="mb-3 space-y-1 text-sm">
               {/* Tap subtotal to add order discount */}
               <button className="flex w-full justify-between hover:text-brand" onClick={() => { setShowOrderDiscount(!showOrderDiscount); setInlineDiscountValue(""); setInlineDiscountType("percent"); }}>
                 <span className="text-text-muted">Subtotal {cart.length > 0 && !discount ? "(tap to discount)" : ""}</span><span>{displayRM(subtotal)}</span>
@@ -821,21 +820,21 @@ export default function RegisterPage() {
 
               {/* Inline order discount */}
               {showOrderDiscount && cart.length > 0 && (
-                <div className="rounded-lg bg-surface-alt p-2 my-1">
-                  <div className="flex gap-1 mb-1.5">
+                <div className="rounded-lg bg-surface-alt p-3 my-1">
+                  <div className="flex gap-1.5 mb-2">
                     <button onClick={() => { setInlineDiscountType("percent"); setInlineDiscountValue(""); }}
-                      className={`flex-1 rounded py-1 text-[10px] font-medium ${inlineDiscountType === "percent" ? "bg-brand text-white" : "bg-surface text-text-muted"}`}>%</button>
+                      className={`flex-1 rounded-lg py-2 text-xs font-medium ${inlineDiscountType === "percent" ? "bg-brand text-white" : "bg-surface text-text-muted"}`}>%</button>
                     <button onClick={() => { setInlineDiscountType("fixed"); setInlineDiscountValue(""); }}
-                      className={`flex-1 rounded py-1 text-[10px] font-medium ${inlineDiscountType === "fixed" ? "bg-brand text-white" : "bg-surface text-text-muted"}`}>RM</button>
+                      className={`flex-1 rounded-lg py-2 text-xs font-medium ${inlineDiscountType === "fixed" ? "bg-brand text-white" : "bg-surface text-text-muted"}`}>RM</button>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1.5">
                     {inlineDiscountType === "percent"
                       ? [5, 10, 20, 50].map((pct) => (
                           <button key={pct} onClick={() => setInlineDiscountValue(String(pct))}
-                            className={`flex-1 rounded py-1 text-[10px] font-medium ${inlineDiscountValue === String(pct) ? "bg-brand/20 text-brand" : "bg-surface hover:bg-surface-hover"}`}>{pct}%</button>
+                            className={`flex-1 rounded-lg py-2 text-xs font-medium ${inlineDiscountValue === String(pct) ? "bg-brand/20 text-brand" : "bg-surface hover:bg-surface-hover"}`}>{pct}%</button>
                         ))
                       : <input type="number" step="0.01" value={inlineDiscountValue} onChange={(e) => setInlineDiscountValue(e.target.value)}
-                          placeholder="RM" className="h-7 w-full rounded border border-border bg-surface px-2 text-[10px] text-text outline-none focus:border-brand" autoFocus />
+                          placeholder="RM" className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text outline-none focus:border-brand" autoFocus />
                     }
                   </div>
                   {parseFloat(inlineDiscountValue) > 0 && (
@@ -845,18 +844,18 @@ export default function RegisterPage() {
                       setDiscount(Math.min(amt, subtotal));
                       setShowOrderDiscount(false);
                       setInlineDiscountValue("");
-                    }} className="mt-1.5 w-full rounded bg-success/20 py-1 text-[10px] font-medium text-success hover:bg-success/30">
+                    }} className="mt-2 w-full rounded-lg bg-success/20 py-2 text-xs font-medium text-success hover:bg-success/30">
                       Apply -{inlineDiscountType === "percent" ? `${inlineDiscountValue}%` : `RM ${inlineDiscountValue}`}
                     </button>
                   )}
                 </div>
               )}
 
-              <div className="flex justify-between text-sm font-bold pt-1 border-t border-border"><span>Total</span><span>{displayRM(total)}</span></div>
+              <div className="flex justify-between text-lg font-bold pt-2 border-t border-border"><span>Total</span><span>{displayRM(total)}</span></div>
             </div>
 
             {/* Pay first → then kitchen prints (for all order types) */}
-            <button disabled={cart.length === 0} onClick={() => handleOpenCheckout()} className="w-full rounded-xl bg-brand py-3.5 text-sm font-bold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50">
+            <button disabled={cart.length === 0} onClick={() => handleOpenCheckout()} className="w-full rounded-xl bg-brand py-4 text-base font-bold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50">
               {cart.length === 0 ? "Add items to charge" : `Charge ${displayRM(total)}`}
             </button>
           </div>
