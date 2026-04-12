@@ -5,11 +5,8 @@ export const metadata: Metadata = {
   title: "Celsius POS",
   description: "Celsius Coffee Point of Sale",
   icons: {
-    icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/images/celsius-logo-sm.jpg", type: "image/jpeg", sizes: "48x48" },
-    ],
-    apple: "/apple-touch-icon.png",
+    icon: "/icon.png",
+    apple: "/images/celsius-logo-sm.jpg",
   },
   manifest: "/manifest.json",
 };
