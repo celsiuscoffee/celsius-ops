@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   since.setDate(since.getDate() - lookbackDays);
 
   // ── Parallel data fetches ──────────────────────────────────────────
-  const [salesCount, salesByMenu, bom, supplierProducts, existingParLevels] = await Promise.all([
+  const [salesCount, salesByMenu, bom, supplierProducts, existingParLevels, productPackages] = await Promise.all([
     prisma.salesTransaction.count({
       where: { outletId, transactedAt: { gte: since } },
     }),
@@ -63,6 +63,11 @@ export async function POST(req: NextRequest) {
     prisma.parLevel.findMany({
       where: { outletId },
       select: { productId: true, parLevel: true, reorderPoint: true, maxLevel: true },
+    }),
+    // Get default package for each product (for rounding to whole packages)
+    prisma.productPackage.findMany({
+      select: { productId: true, conversionFactor: true, isDefault: true },
+      orderBy: { isDefault: "desc" },
     }),
   ]);
 
@@ -116,9 +121,22 @@ export async function POST(req: NextRequest) {
     usageByProduct[ingredient.productId].dailyUsage += dailyUsageFromMenu;
   }
 
-  // ── Existing par levels set (to detect manual overrides) ───────────
-  // We don't have a "manual" flag, so we always recalculate.
-  // If you want to preserve manual overrides, add an `isManual` column.
+  // ── Build package conversion map: productId → conversionFactor ─────
+  // Use default package, or first package if none is default
+  const packageMap: Record<string, number> = {};
+  for (const pkg of productPackages) {
+    // First package wins per product (sorted by isDefault desc)
+    if (!packageMap[pkg.productId]) {
+      packageMap[pkg.productId] = Number(pkg.conversionFactor);
+    }
+  }
+
+  /** Round a base-UOM value UP to the nearest whole package */
+  function roundToPackage(baseQty: number, productId: string): number {
+    const cf = packageMap[productId];
+    if (!cf || cf <= 0) return Math.ceil(baseQty);
+    return Math.ceil(baseQty / cf) * cf;
+  }
 
   // ── Calculate and upsert par levels ────────────────────────────────
   const results: { productId: string; name: string; dailyUsage: number; leadTime: number; reorderPoint: number; parLevel: number; maxLevel: number }[] = [];
@@ -128,9 +146,14 @@ export async function POST(req: NextRequest) {
       if (data.dailyUsage <= 0) return null;
 
       const leadTime = leadTimeMap[productId] || DEFAULT_LEAD_TIME_DAYS;
-      const reorderPoint = Math.ceil(data.dailyUsage * (leadTime + safetyDays));
-      const parLevel = Math.ceil(data.dailyUsage * (leadTime + safetyDays + coverageDays));
-      const maxLevel = Math.ceil(parLevel * MAX_LEVEL_MULTIPLIER);
+      // Calculate raw values in base UOM, then round up to whole packages
+      const rawReorder = data.dailyUsage * (leadTime + safetyDays);
+      const rawPar = data.dailyUsage * (leadTime + safetyDays + coverageDays);
+      const rawMax = rawPar * MAX_LEVEL_MULTIPLIER;
+
+      const reorderPoint = roundToPackage(rawReorder, productId);
+      const parLevel = roundToPackage(rawPar, productId);
+      const maxLevel = roundToPackage(rawMax, productId);
 
       results.push({
         productId,
