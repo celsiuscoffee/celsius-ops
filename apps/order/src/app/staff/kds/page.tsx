@@ -31,15 +31,21 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 function playChime() {
   try {
     const ctx  = new AudioContext();
-    const osc  = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain);
     gain.connect(ctx.destination);
-    osc.frequency.value = 660;
-    gain.gain.setValueAtTime(0.4, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 1);
+
+    // Three-tone ascending chime — lasts ~3 seconds
+    const notes = [660, 880, 1047]; // E5, A5, C6
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      osc.connect(gain);
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.3;
+      gain.gain.setValueAtTime(0.4, start);
+      gain.gain.exponentialRampToValueAtTime(0.01, start + 0.8);
+      osc.start(start);
+      osc.stop(start + 0.8);
+    });
   } catch { /* ignore */ }
 }
 
