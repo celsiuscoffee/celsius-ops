@@ -34,18 +34,20 @@ function playChime() {
     const gain = ctx.createGain();
     gain.connect(ctx.destination);
 
-    // Three-tone ascending chime — lasts ~3 seconds
-    const notes = [660, 880, 1047]; // E5, A5, C6
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      osc.connect(gain);
-      osc.frequency.value = freq;
-      const start = ctx.currentTime + i * 0.3;
-      gain.gain.setValueAtTime(0.4, start);
-      gain.gain.exponentialRampToValueAtTime(0.01, start + 0.8);
-      osc.start(start);
-      osc.stop(start + 0.8);
-    });
+    // Three-tone ascending chime, repeated 3 times
+    for (let rep = 0; rep < 3; rep++) {
+      const notes = [660, 880, 1047]; // E5, A5, C6
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        osc.connect(gain);
+        osc.frequency.value = freq;
+        const start = ctx.currentTime + rep * 1.2 + i * 0.3;
+        gain.gain.setValueAtTime(0.4, start);
+        gain.gain.exponentialRampToValueAtTime(0.01, start + 0.8);
+        osc.start(start);
+        osc.stop(start + 0.8);
+      });
+    }
   } catch { /* ignore */ }
 }
 
