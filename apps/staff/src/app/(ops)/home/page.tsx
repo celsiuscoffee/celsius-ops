@@ -24,11 +24,9 @@ export default async function HomePage() {
   const myt = new Date(Date.now() + 8 * 60 * 60 * 1000);
   const todayStart = new Date(Date.UTC(myt.getUTCFullYear(), myt.getUTCMonth(), myt.getUTCDate()));
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = prisma as any;
   // Fetch checklists + dashboard in parallel — use _count with filter to avoid fetching item rows
   const [checklists, lastCheck, sentOrders] = await Promise.all([
-    db.checklist.findMany({
+    prisma.checklist.findMany({
       where: {
         ...(outletId ? { outletId } : { assignedToId: session.id }),
         date: dateObj,
@@ -43,22 +41,21 @@ export default async function HomePage() {
     }),
     // Single stockCount query — latest one tells us both "done today?" and "last check time"
     outletId
-      ? db.stockCount.findFirst({
+      ? prisma.stockCount.findFirst({
           where: outletFilter,
           orderBy: { createdAt: "desc" },
           select: { createdAt: true },
         })
       : null,
     outletId
-      ? db.order.findMany({
+      ? prisma.order.findMany({
           where: { status: { in: ["SENT", "APPROVED", "AWAITING_DELIVERY"] }, ...outletFilter },
           select: { supplier: { select: { name: true } } },
         })
       : [],
   ]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const checklistData = (checklists as any[]).map(({ items, ...cl }: any) => {
+  const checklistData = checklists.map(({ items, ...cl }) => {
     const totalItems = cl._count.items;
     const completedItems = items.length;
     return {
@@ -78,7 +75,7 @@ export default async function HomePage() {
         stockCheckDone: lastCheck ? lastCheck.createdAt >= todayStart : false,
         lastCheckTime: lastCheck?.createdAt?.toISOString() ?? null,
         deliveriesExpected: sentOrders.length,
-        deliverySuppliers: (sentOrders as any[]).map((o: any) => o.supplier.name),
+        deliverySuppliers: sentOrders.map((o) => o.supplier.name),
       }
     : null;
 
