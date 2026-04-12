@@ -513,7 +513,7 @@ export default function StaffOrdersPage() {
       .eq("store_id", storeId)
       .in("status", ["preparing", "ready"])
       .then(({ data }) => {
-        if (data) data.forEach((o) => knownOrderIdsRef.current.add(o.id));
+        if (data) data.forEach((o: { id: string }) => knownOrderIdsRef.current.add(o.id));
       });
 
     return () => {
@@ -618,7 +618,7 @@ export default function StaffOrdersPage() {
           )}
           {connected
             ? <Wifi className="h-4 w-4 text-green-400" />
-            : <Wifi className="h-4 w-4 text-amber-400" title="Polling mode" />
+            : <Wifi className="h-4 w-4 text-amber-400" />
           }
         </div>
       </header>
