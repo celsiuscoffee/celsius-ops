@@ -400,15 +400,50 @@ export default function StaffOrdersPage() {
     if (data) setOrders(data as OrderWithItems[]);
   }, []);
 
+  // Track known order IDs for detecting new arrivals during polling
+  const knownOrderIdsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (!storeId) return;
     fetchOrders(storeId);
   }, [storeId, fetchOrders]);
 
-  // Realtime subscription
+  // Realtime subscription + polling fallback
   useEffect(() => {
     if (!storeId) return;
     const supabase = getSupabaseClient();
+    let realtimeConnected = false;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    // ── Polling fallback: fetches orders every 5s if realtime is down ──
+    function startPolling() {
+      if (pollTimer) return;
+      pollTimer = setInterval(async () => {
+        const { data } = await supabase
+          .from("orders")
+          .select("*, order_items(*)")
+          .eq("store_id", storeId)
+          .in("status", ["preparing", "ready"])
+          .order("created_at", { ascending: true });
+        if (!data) return;
+        const fresh = data as OrderWithItems[];
+        // Detect new orders that weren't in previous poll
+        const freshIds = new Set(fresh.map((o) => o.id));
+        for (const order of fresh) {
+          if (!knownOrderIdsRef.current.has(order.id)) {
+            // New order detected via polling
+            playChime();
+            if (autoPrintRef.current) setTimeout(() => doPrint(order.id, "kitchen", order), 400);
+          }
+        }
+        knownOrderIdsRef.current = freshIds;
+        setOrders(fresh);
+      }, 5000);
+    }
+
+    function stopPolling() {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
 
     const channel = supabase
       .channel(`staff-orders-${storeId}`)
@@ -419,6 +454,7 @@ export default function StaffOrdersPage() {
               .from("orders").select("*, order_items(*)").eq("id", (payload.new as { id: string }).id).single();
             const order = data as OrderWithItems | null;
             if (order && ["preparing", "ready"].includes(order.status)) {
+              knownOrderIdsRef.current.add(order.id);
               setOrders((prev) => [...prev, order]);
               playChime();
               if (autoPrintRef.current) setTimeout(() => doPrint(order.id, "kitchen", order), 400);
@@ -428,6 +464,7 @@ export default function StaffOrdersPage() {
           if (payload.eventType === "UPDATE") {
             const updated = payload.new as OrderRow;
             if (updated.status === "completed" || updated.status === "failed") {
+              knownOrderIdsRef.current.delete(updated.id);
               setOrders((prev) => prev.filter((o) => o.id !== updated.id));
             } else if (updated.status === "preparing") {
               // Payment confirmed → new order entering queue
@@ -438,6 +475,7 @@ export default function StaffOrdersPage() {
                 setOrders((prev) => {
                   const exists = prev.some((o) => o.id === order.id);
                   if (exists) return prev.map((o) => o.id === order.id ? { ...o, ...order } : o);
+                  knownOrderIdsRef.current.add(order.id);
                   playChime();
                   if (autoPrintRef.current) setTimeout(() => doPrint(order.id, "kitchen", order), 400);
                   return [...prev, order];
@@ -449,9 +487,31 @@ export default function StaffOrdersPage() {
           }
         }
       )
-      .subscribe((status) => setConnected(status === "SUBSCRIBED"));
+      .subscribe((status) => {
+        realtimeConnected = status === "SUBSCRIBED";
+        setConnected(realtimeConnected);
+        if (realtimeConnected) {
+          stopPolling();
+        } else {
+          // Realtime failed — start polling fallback
+          startPolling();
+        }
+      });
 
-    return () => { supabase.removeChannel(channel); };
+    // Also seed known IDs from initial fetch
+    supabase
+      .from("orders")
+      .select("id")
+      .eq("store_id", storeId)
+      .in("status", ["preparing", "ready"])
+      .then(({ data }) => {
+        if (data) data.forEach((o) => knownOrderIdsRef.current.add(o.id));
+      });
+
+    return () => {
+      stopPolling();
+      supabase.removeChannel(channel);
+    };
   }, [storeId]);
 
   async function handleAdvance(orderId: string, newStatus: "ready" | "completed") {
@@ -550,7 +610,7 @@ export default function StaffOrdersPage() {
           )}
           {connected
             ? <Wifi className="h-4 w-4 text-green-400" />
-            : <WifiOff className="h-4 w-4 text-red-400 animate-pulse" />
+            : <Wifi className="h-4 w-4 text-amber-400" title="Polling mode" />
           }
         </div>
       </header>
