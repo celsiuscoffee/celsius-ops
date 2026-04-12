@@ -400,10 +400,14 @@ export default function StaffOrdersPage() {
     if (data) setOrders(data as OrderWithItems[]);
   }, []);
 
-  useEffect(() => { fetchOrders(storeId); }, [storeId, fetchOrders]);
+  useEffect(() => {
+    if (!storeId) return;
+    fetchOrders(storeId);
+  }, [storeId, fetchOrders]);
 
   // Realtime subscription
   useEffect(() => {
+    if (!storeId) return;
     const supabase = getSupabaseClient();
 
     const channel = supabase
