@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import * as db from "./supabase-queries";
+import { setPrinterConfigs } from "./sunmi-printer";
 import type { CartItem } from "@/types/database";
 
 // ─── Types (matching Supabase table shapes) ────────────────
@@ -20,6 +21,10 @@ export type Staff = {
 export type Outlet = {
   id: string;
   name: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  phone: string | null;
   storehub_store_id: string | null;
 };
 
@@ -226,6 +231,15 @@ export function POSProvider({ children }: { children: ReactNode }) {
           setPopularProductIds(popular as string[]);
           setCustomLayouts(layouts as any[]);
 
+          // Load printer configs into cache for print routing
+          db.fetchPrinterConfigs(defaultOutlet.id).then((configs) => {
+            setPrinterConfigs(configs as any[], defaultOutlet.id);
+          }).catch(() => {});
+
+          // Initialize order sequence from existing orders
+          const maxSeq = await db.fetchMaxOrderSeq(defaultOutlet.id);
+          setOrderSeq(maxSeq + 1);
+
           // Check for active shift (parallel with state updates above)
           if (regs.length > 0) {
             const activeShift = await db.fetchActiveShift(defaultOutlet.id, regs[0].id);
@@ -362,9 +376,12 @@ export function POSProvider({ children }: { children: ReactNode }) {
   }) => {
     if (!outlet || !register || !currentShift || !staff) throw new Error("No active session");
 
+    // Get next order number from DB to avoid duplicates
+    const maxSeq = await db.fetchMaxOrderSeq(outlet.id);
+    const nextSeq = maxSeq + 1;
     const outletCode = outlet.name.substring(0, 3).toUpperCase();
-    const orderNumber = `CC-${outletCode}-${String(orderSeq).padStart(4, "0")}`;
-    setOrderSeq((s) => s + 1);
+    const orderNumber = `CC-${outletCode}-${String(nextSeq).padStart(4, "0")}`;
+    setOrderSeq(nextSeq + 1);
 
     // Create order
     const order = await db.createOrder({

@@ -256,8 +256,34 @@ export default function RegisterPage() {
         paymentMethod: "",
         status: "sent_to_kitchen",
       });
-      // Print kitchen dockets (one per station)
-      printKitchenDocket58mm(order, pos.outlet?.name ?? "Celsius Coffee");
+      // Print order slip + receipt together
+      const outletInfo = {
+        name: pos.outlet?.name ?? "Celsius Coffee",
+        address: pos.outlet?.address,
+        city: pos.outlet?.city,
+        state: pos.outlet?.state,
+        phone: pos.outlet?.phone,
+      };
+      const receiptConfig = {
+        showLogo: (pos.branchSettings as any)?.receipt_show_logo !== false,
+        qrUrl: (pos.branchSettings as any)?.receipt_qr_url || "",
+        qrLabel: (pos.branchSettings as any)?.receipt_qr_label || "",
+        promoEnabled: (pos.branchSettings as any)?.receipt_promo_enabled === true,
+        promoText: (pos.branchSettings as any)?.receipt_promo_text || "",
+        receiptFooter: (pos.branchSettings as any)?.receipt_footer || "",
+      };
+      setTimeout(async () => {
+        try {
+          await printKitchenDocket58mm(order, outletInfo);
+        } catch (e) {
+          console.error("[PRINT] Kitchen docket failed:", e);
+        }
+        try {
+          await printReceipt58mm(order, outletInfo, receiptConfig);
+        } catch (e) {
+          console.error("[PRINT] Receipt failed:", e);
+        }
+      }, 300);
       clearCart();
     } catch (err) {
       console.error("Send to kitchen failed:", err);
@@ -375,16 +401,38 @@ export default function RegisterPage() {
         status: "complete", orderNumber: order.order_number, paymentMethod,
       });
 
-      setShowReceipt(order as unknown as Record<string, unknown>);
       setShowCheckout(false);
       clearCart();
 
-      // Defer printing so React can commit state updates first.
-      const outletName = pos.outlet?.name ?? "Celsius Coffee";
-      setTimeout(() => {
-        try { printKitchenDocket58mm(order, outletName); } catch {}
-        try { printReceipt58mm(order, outletName); } catch {}
-      }, 500);
+      // Auto-print: kitchen docket(s) + customer receipt
+      const outletInfo = {
+        name: pos.outlet?.name ?? "Celsius Coffee",
+        address: pos.outlet?.address,
+        city: pos.outlet?.city,
+        state: pos.outlet?.state,
+        phone: pos.outlet?.phone,
+      };
+      const receiptConfig = {
+        showLogo: (pos.branchSettings as any)?.receipt_show_logo !== false,
+        qrUrl: (pos.branchSettings as any)?.receipt_qr_url || "",
+        qrLabel: (pos.branchSettings as any)?.receipt_qr_label || "",
+        promoEnabled: (pos.branchSettings as any)?.receipt_promo_enabled === true,
+        promoText: (pos.branchSettings as any)?.receipt_promo_text || "",
+        receiptFooter: (pos.branchSettings as any)?.receipt_footer || "",
+      };
+      setTimeout(async () => {
+        try {
+          await printKitchenDocket58mm(order, outletInfo);
+        } catch (e) {
+          console.error("[PRINT] Kitchen docket failed:", e);
+        }
+        try {
+          await printReceipt58mm(order, outletInfo, receiptConfig);
+        } catch (e) {
+          console.error("[PRINT] Receipt failed:", e);
+        }
+        setShowReceipt(order as unknown as Record<string, unknown>);
+      }, 300);
     } catch (err) {
       console.error("Order creation failed:", err);
       alert("Failed to create order. Please try again.");
@@ -451,7 +499,7 @@ export default function RegisterPage() {
         {/* Top bar */}
         <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
           <button onClick={() => setShowSidebar(true)} className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-surface-hover" title="Menu (M)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
           <Image src="/images/celsius-logo-sm.jpg" alt="Celsius" width={32} height={32} className="rounded-lg" />
           <Image src="/images/celsius-wordmark-white.png" alt="Celsius Coffee" width={90} height={20} className="hidden sm:block" />
@@ -487,7 +535,7 @@ export default function RegisterPage() {
           {/* Shift + Staff indicator */}
           <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
             <span className={`h-2.5 w-2.5 rounded-full ${pos.isShiftOpen ? "bg-success" : "bg-danger"}`} />
-            <span className="text-xs text-text-muted">{pos.staff?.name ?? "—"}</span>
+            <span className="text-sm text-text-muted">{pos.staff?.name ?? "—"}</span>
           </div>
         </div>
 
@@ -541,7 +589,7 @@ export default function RegisterPage() {
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div>
               <h2 className="text-base font-semibold">{editingOrderId ? "Edit Order" : "Current Order"}</h2>
-              <span className="text-xs text-text-muted">
+              <span className="text-sm text-text-muted">
                 {orderType === "dine_in" ? "Dine-in" : "Takeaway"}
                 {tableNumber && ` · Table ${tableNumber}`}
                 {customerPhone && ` · ${customerPhone}`}
@@ -557,25 +605,25 @@ export default function RegisterPage() {
           <div className="flex border-b border-border">
             <button
               onClick={() => setShowCustomerLookup(!showCustomerLookup)}
-              className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors ${customerPhone ? "text-brand" : "text-text-dim hover:text-text-muted"}`}
+              className={`flex flex-1 flex-col items-center gap-1 py-2 text-xs transition-colors ${customerPhone ? "text-brand" : "text-text-dim hover:text-text-muted"}`}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               <span>{customerPhone || "Customer"}</span>
             </button>
             {orderType === "dine_in" && (
               <button
                 onClick={() => setShowTablePicker(!showTablePicker)}
-                className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors ${tableNumber ? "text-brand" : "text-text-dim hover:text-text-muted"}`}
+                className={`flex flex-1 flex-col items-center gap-1 py-2 text-xs transition-colors ${tableNumber ? "text-brand" : "text-text-dim hover:text-text-muted"}`}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
                 <span>{tableNumber ? `Table ${tableNumber}` : "Table"}</span>
               </button>
             )}
             <button
               onClick={() => setShowOrderNotes(!showOrderNotes)}
-              className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors ${orderNotes ? "text-brand" : "text-text-dim hover:text-text-muted"}`}
+              className={`flex flex-1 flex-col items-center gap-1 py-2 text-xs transition-colors ${orderNotes ? "text-brand" : "text-text-dim hover:text-text-muted"}`}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               <span>Notes</span>
             </button>
           </div>
@@ -730,9 +778,9 @@ export default function RegisterPage() {
 
                       {/* Quantity + remove */}
                       <div className="mt-2 flex items-center gap-2">
-                        <button onClick={() => updateQuantity(item.cartItemId, -1)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-sm font-medium hover:bg-surface-hover">-</button>
+                        <button onClick={() => updateQuantity(item.cartItemId, -1)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-sm font-medium hover:bg-surface-hover">-</button>
                         <span className="w-6 text-center text-sm font-semibold">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.cartItemId, 1)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-sm font-medium hover:bg-surface-hover">+</button>
+                        <button onClick={() => updateQuantity(item.cartItemId, 1)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-sm font-medium hover:bg-surface-hover">+</button>
                         <div className="flex-1" />
                         <button onClick={() => removeItem(item.cartItemId)} className="text-xs text-text-dim hover:text-danger">Remove</button>
                       </div>
@@ -855,7 +903,7 @@ export default function RegisterPage() {
             </div>
 
             {/* Pay first → then kitchen prints (for all order types) */}
-            <button disabled={cart.length === 0} onClick={() => handleOpenCheckout()} className="w-full rounded-xl bg-brand py-4 text-base font-bold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50">
+            <button disabled={cart.length === 0} onClick={() => handleOpenCheckout()} className="w-full rounded-xl bg-brand py-3.5 text-base font-bold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50">
               {cart.length === 0 ? "Add items to charge" : `Charge ${displayRM(total)}`}
             </button>
           </div>
@@ -881,7 +929,13 @@ export default function RegisterPage() {
         onClose={() => setShowDiscount(false)}
       />}
       {showReceipt && <ReceiptView order={showReceipt as any} branchName={pos.outlet?.name ?? "Celsius Coffee"} branchAddress="" onClose={() => setShowReceipt(null)} onPrint={() => {
-            printReceipt58mm(showReceipt, pos.outlet?.name ?? "Celsius Coffee");
+            printReceipt58mm(showReceipt, {
+              name: pos.outlet?.name ?? "Celsius Coffee",
+              address: pos.outlet?.address,
+              city: pos.outlet?.city,
+              state: pos.outlet?.state,
+              phone: pos.outlet?.phone,
+            });
             setShowReceipt(null);
           }} />}
       {modifierProduct && <ModifierModal product={modifierProduct} onConfirm={(mods) => addToCart(modifierProduct, mods)} onClose={() => setModifierProduct(null)} />}

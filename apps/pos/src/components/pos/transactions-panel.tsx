@@ -112,7 +112,13 @@ export function TransactionsPanel({ onBack }: Props) {
             {selectedOrder.status === "completed" && (
               <div className="mt-4 flex gap-2">
                 <button
-                  onClick={() => printReceipt58mm(selectedOrder, pos.outlet?.name ?? "Celsius Coffee")}
+                  onClick={() => printReceipt58mm(selectedOrder, {
+                    name: pos.outlet?.name ?? "Celsius Coffee",
+                    address: pos.outlet?.address,
+                    city: pos.outlet?.city,
+                    state: pos.outlet?.state,
+                    phone: pos.outlet?.phone,
+                  })}
                   className="flex-1 rounded-lg border border-border py-2 text-sm font-medium hover:bg-surface-hover"
                 >
                   Print Receipt

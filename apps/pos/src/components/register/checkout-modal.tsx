@@ -15,11 +15,7 @@ type PaymentMethod = {
 
 const PAYMENT_METHODS: PaymentMethod[] = [
   { id: "qr_pay", label: "DuitNow QR", icon: "📲", provider: "revenue_monster" },
-  { id: "ewallet", label: "E-Wallet", icon: "📱", provider: "revenue_monster" },
   { id: "card_terminal", label: "Card (Terminal)", icon: "💳", provider: "revenue_monster" },
-  { id: "grabpay", label: "GrabPay", icon: "🟢", provider: "revenue_monster" },
-  { id: "tng", label: "Touch 'n Go", icon: "📱", provider: "revenue_monster" },
-  { id: "fpx", label: "FPX", icon: "🏦", provider: "revenue_monster" },
 ];
 
 // Map checkout method IDs to Revenue Monster terminal payment types

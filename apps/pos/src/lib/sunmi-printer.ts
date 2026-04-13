@@ -9,6 +9,7 @@
  */
 
 import SunmiPrinter, { isCapacitorNative } from "./sunmi-capacitor";
+import type { Outlet } from "./pos-context";
 
 // ─── SUNMI JS Bridge Detection (legacy WebView mode) ─────
 
