@@ -55,6 +55,8 @@ export default function InvoicesPage() {
   const [payForm, setPayForm] = useState({ paidVia: "", paymentRef: "" });
   const [paySaving, setPaySaving] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [payReceipts, setPayReceipts] = useState<string[]>([]);
+  const [payUploading, setPayUploading] = useState(false);
 
   // Edit invoice dialog
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -101,6 +103,7 @@ export default function InvoicesPage() {
     setPayingInvoice(inv);
     setPayingTargetStatus(targetStatus);
     setPayForm({ paidVia: "", paymentRef: "" });
+    setPayReceipts([]);
     setCopiedField(null);
   };
 
@@ -108,6 +111,26 @@ export default function InvoicesPage() {
     navigator.clipboard.writeText(text);
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const handlePayReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    setPayUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("folder", "invoices");
+        const res = await fetch("/api/inventory/upload", { method: "POST", body: formData });
+        if (res.ok) {
+          const data = await res.json();
+          setPayReceipts((prev) => [...prev, data.url]);
+        }
+      }
+    } catch { /* ignore */ }
+    setPayUploading(false);
+    e.target.value = "";
   };
 
   const submitPayment = async () => {
@@ -120,6 +143,7 @@ export default function InvoicesPage() {
         body: JSON.stringify({
           status: payingTargetStatus,
           ...(payForm.paymentRef ? { paymentRef: payForm.paymentRef } : {}),
+          ...(payReceipts.length > 0 ? { photos: [...(payingInvoice.photos || []), ...payReceipts] } : {}),
         }),
       });
       if (!res.ok) {
@@ -730,6 +754,41 @@ export default function InvoicesPage() {
                 onChange={(e) => setPayForm({ ...payForm, paymentRef: e.target.value })}
                 placeholder="e.g. Transfer ref, receipt no..."
               />
+            </div>
+
+            {/* Receipt upload */}
+            <div className="mt-3">
+              <label className="mb-1 block text-xs font-medium text-gray-600">Receipt / Proof of Payment</label>
+              {payReceipts.length > 0 && (
+                <div className="mb-2 grid grid-cols-3 gap-2">
+                  {payReceipts.map((url, i) => (
+                    <div key={i} className="group relative overflow-hidden rounded-lg border border-gray-200">
+                      {isPdf(url) ? (
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="flex h-20 w-full flex-col items-center justify-center bg-gray-50 text-gray-400 hover:text-blue-500">
+                          <FileDown className="h-5 w-5" />
+                          <span className="mt-0.5 text-[10px]">PDF</span>
+                        </a>
+                      ) : (
+                        <img src={url} alt={`Receipt ${i + 1}`} className="h-20 w-full object-cover" />
+                      )}
+                      <button
+                        onClick={() => setPayReceipts(payReceipts.filter((_, j) => j !== i))}
+                        className="absolute right-1 top-1 rounded-full bg-red-500 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-4 py-2.5 text-sm transition-colors hover:border-blue-400 hover:bg-blue-50/30 ${payUploading ? "opacity-50 pointer-events-none" : ""}`}>
+                {payUploading ? (
+                  <><Loader2 className="h-4 w-4 animate-spin text-blue-500" /> Uploading...</>
+                ) : (
+                  <><Upload className="h-4 w-4 text-gray-400" /> <span className="text-gray-500">Upload receipt (image or PDF)</span></>
+                )}
+                <input type="file" accept="image/*,.pdf,application/pdf" multiple className="hidden" onChange={handlePayReceiptUpload} />
+              </label>
             </div>
 
             <div className="mt-4 flex gap-2">
