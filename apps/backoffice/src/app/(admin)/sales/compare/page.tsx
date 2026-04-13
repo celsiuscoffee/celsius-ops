@@ -152,8 +152,8 @@ function getProjection(p: PeriodResult): { projected: number; projectedOrders: n
   if (daysElapsed >= totalDays) return null;
   if (daysElapsed === 0) return null;
 
-  // Use last 7 days' average if available (more accurate), else simple average
-  const daily = p.dailyTotals.filter((d) => d.date <= today && d.date >= p.from);
+  // Use last 7 completed days' average (exclude today since it's partial)
+  const daily = p.dailyTotals.filter((d) => d.date < today && d.date >= p.from);
   const last7 = daily.slice(-7);
   const daysRemaining = totalDays - daysElapsed;
   let method = "avg";
@@ -184,13 +184,14 @@ function getProjection(p: PeriodResult): { projected: number; projectedOrders: n
 
 const DOW_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-/** Compute average revenue/orders per day-of-week for a period */
+/** Compute average revenue/orders per day-of-week for a period (exclude today's partial data) */
 function getDowAverages(p: PeriodResult): { dow: string; avgRevenue: number; avgOrders: number; count: number }[] {
-  // Group daily totals by day of week (0=Mon .. 6=Sun)
+  const today = getMYTToday();
   const buckets: { revenue: number; orders: number; count: number }[] = Array.from({ length: 7 }, () => ({ revenue: 0, orders: 0, count: 0 }));
   for (const d of p.dailyTotals) {
+    if (d.date === today) continue; // Skip today — partial data skews averages
     const date = new Date(d.date + "T12:00:00+08:00");
-    let dow = date.getDay() - 1; // JS: 0=Sun, we want 0=Mon
+    let dow = date.getDay() - 1;
     if (dow < 0) dow = 6;
     buckets[dow].revenue += d.revenue;
     buckets[dow].orders += d.orders;
@@ -216,19 +217,29 @@ function getDailyWithMA(p: PeriodResult): { date: string; label: string; revenue
       const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
       const label = `${days[date.getDay()]} ${date.getDate()}`;
 
-      // 7-day trailing MA for total
+      // 7-day trailing MA — for today use previous 7 days (exclude partial today)
       let maRevenue: number | null = null;
       let maOrders: number | null = null;
-      if (i >= 6) {
+      const isToday = d.date === today;
+      if (isToday && i >= 7) {
+        // Today is partial — MA from 7 completed days before today
+        const window = arr.slice(i - 7, i);
+        maRevenue = Math.round((window.reduce((s, w) => s + w.revenue, 0) / 7) * 100) / 100;
+        maOrders = Math.round((window.reduce((s, w) => s + w.orders, 0) / 7) * 100) / 100;
+      } else if (!isToday && i >= 6) {
         const window = arr.slice(i - 6, i + 1);
         maRevenue = Math.round((window.reduce((s, w) => s + w.revenue, 0) / 7) * 100) / 100;
         maOrders = Math.round((window.reduce((s, w) => s + w.orders, 0) / 7) * 100) / 100;
       }
 
-      // Per-round MA
+      // Per-round MA — same logic: exclude today from its own MA
       const roundMAs: RoundMA[] = (d.rounds || []).map((r, ri) => {
         let ma: number | null = null;
-        if (i >= 6) {
+        if (isToday && i >= 7) {
+          const window = arr.slice(i - 7, i);
+          const sum = window.reduce((s, w) => s + (w.rounds?.[ri]?.revenue || 0), 0);
+          ma = Math.round((sum / 7) * 100) / 100;
+        } else if (!isToday && i >= 6) {
           const window = arr.slice(i - 6, i + 1);
           const sum = window.reduce((s, w) => s + (w.rounds?.[ri]?.revenue || 0), 0);
           ma = Math.round((sum / 7) * 100) / 100;
