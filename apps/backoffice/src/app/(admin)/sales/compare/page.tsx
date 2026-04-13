@@ -152,27 +152,32 @@ function getProjection(p: PeriodResult): { projected: number; projectedOrders: n
   if (daysElapsed >= totalDays) return null;
   if (daysElapsed === 0) return null;
 
-  // Use last 7 completed days' average (exclude today since it's partial)
-  const daily = p.dailyTotals.filter((d) => d.date < today && d.date >= p.from);
-  const last7 = daily.slice(-7);
-  const daysRemaining = totalDays - daysElapsed;
+  // Use only completed days (exclude today's partial data) as the base
+  const completedDays = p.dailyTotals.filter((d) => d.date < today && d.date >= p.from);
+  const completedCount = completedDays.length;
+  const completedRev = completedDays.reduce((s, d) => s + d.revenue, 0);
+  const completedOrd = completedDays.reduce((s, d) => s + d.orders, 0);
+  const daysRemaining = totalDays - completedCount; // today + future days
   let method = "avg";
 
+  // Use last 7 completed days' average if available
+  const last7 = completedDays.slice(-7);
   if (last7.length >= 3) {
     const l7Rev = last7.reduce((s, d) => s + d.revenue, 0) / last7.length;
     const l7Ord = last7.reduce((s, d) => s + d.orders, 0) / last7.length;
     method = `${last7.length}d MA`;
     return {
-      projected: Math.round((p.summary.revenue + l7Rev * daysRemaining) * 100) / 100,
-      projectedOrders: Math.round(p.summary.orders + l7Ord * daysRemaining),
+      projected: Math.round((completedRev + l7Rev * daysRemaining) * 100) / 100,
+      projectedOrders: Math.round(completedOrd + l7Ord * daysRemaining),
       daysElapsed,
       totalDays,
       method,
     };
   }
 
-  const dailyAvgRev = p.summary.revenue / daysElapsed;
-  const dailyAvgOrd = p.summary.orders / daysElapsed;
+  if (completedCount === 0) return null;
+  const dailyAvgRev = completedRev / completedCount;
+  const dailyAvgOrd = completedOrd / completedCount;
   return {
     projected: Math.round(dailyAvgRev * totalDays * 100) / 100,
     projectedOrders: Math.round(dailyAvgOrd * totalDays),
