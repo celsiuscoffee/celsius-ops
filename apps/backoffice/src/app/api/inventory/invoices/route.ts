@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
     invoiceNumber: inv.invoiceNumber,
     poNumber: inv.order?.orderNumber ?? "—",
     outlet: inv.outlet.name,
-    supplier: inv.supplier.name,
+    supplier: inv.supplier?.name ?? "—",
     amount: Number(inv.amount),
     status: inv.status,
     issueDate: inv.issueDate.toISOString().split("T")[0],
