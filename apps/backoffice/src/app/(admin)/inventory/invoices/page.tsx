@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
-import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign } from "lucide-react";
+import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign, Landmark, Copy, Check } from "lucide-react";
 
 const isPdf = (url: string) => /\.pdf($|\?)/i.test(url) || url.includes("/raw/");
 
@@ -25,6 +25,11 @@ type Invoice = {
   paymentType: string;
   claimedBy: string | null;
   notes: string | null;
+  paidAt: string | null;
+  paidVia: string | null;
+  paymentRef: string | null;
+  supplierBank: { bankName: string; accountNumber: string | null; accountName: string | null } | null;
+  transfer: { fromOutlet: string; toOutlet: string; items: { product: string; quantity: number }[] } | null;
 };
 
 type OutletOption = { id: string; name: string };
@@ -41,8 +46,15 @@ export default function InvoicesPage() {
   const [dueDateTo, setDueDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [viewingPhotos, setViewingPhotos] = useState<{ invoiceNumber: string; photos: string[] } | null>(null);
-  const [cardFilter, setCardFilter] = useState<"all" | "pending" | "overdue" | "paid" | "due_today" | null>(null);
+  const [cardFilter, setCardFilter] = useState<"all" | "pending" | "overdue" | "paid" | "due_today" | "payable" | null>(null);
   const [batchInitiating, setBatchInitiating] = useState(false);
+
+  // Payment dialog
+  const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
+  const [payingTargetStatus, setPayingTargetStatus] = useState<string>("");
+  const [payForm, setPayForm] = useState({ paidVia: "", paymentRef: "" });
+  const [paySaving, setPaySaving] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Edit invoice dialog
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -77,6 +89,7 @@ export default function InvoicesPage() {
         if (cardFilter === "pending") return inv.status === "PENDING";
         if (cardFilter === "overdue") return inv.status === "OVERDUE";
         if (cardFilter === "paid") return inv.status === "PAID";
+        if (cardFilter === "payable") return inv.status !== "PAID";
         if (cardFilter === "due_today") return inv.dueDate === today && inv.status !== "PAID";
         return true;
       })
@@ -84,7 +97,51 @@ export default function InvoicesPage() {
 
   const activeFilterCount = [outletFilter, dueDateFrom, dueDateTo].filter(Boolean).length;
 
-  const updateStatus = async (invoiceId: string, newStatus: string) => {
+  const openPayDialog = (inv: Invoice, targetStatus: string) => {
+    setPayingInvoice(inv);
+    setPayingTargetStatus(targetStatus);
+    setPayForm({ paidVia: "", paymentRef: "" });
+    setCopiedField(null);
+  };
+
+  const copyToClipboard = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const submitPayment = async () => {
+    if (!payingInvoice) return;
+    setPaySaving(true);
+    try {
+      const res = await fetch(`/api/inventory/invoices/${payingInvoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: payingTargetStatus,
+          ...(payForm.paymentRef ? { paymentRef: payForm.paymentRef } : {}),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Failed: ${err.error || res.statusText}`);
+        return;
+      }
+      setPayingInvoice(null);
+      await loadInvoices(undefined, { revalidate: true });
+    } catch {
+      alert("Network error");
+    } finally {
+      setPaySaving(false);
+    }
+  };
+
+  const updateStatus = async (invoiceId: string, newStatus: string, inv?: Invoice) => {
+    // Open payment dialog for INITIATED or PAID transitions
+    if (inv && (newStatus === "INITIATED" || newStatus === "PAID")) {
+      openPayDialog(inv, newStatus);
+      return;
+    }
     setUpdatingId(invoiceId);
     try {
       const res = await fetch(`/api/inventory/invoices/${invoiceId}`, {
@@ -180,6 +237,19 @@ export default function InvoicesPage() {
   const totalOverdue = allInvoices.filter((i) => i.status === "OVERDUE").reduce((a, i) => a + i.amount, 0);
   const totalPaid = allInvoices.filter((i) => i.status === "PAID").reduce((a, i) => a + i.amount, 0);
   const totalAll = allInvoices.reduce((a, i) => a + i.amount, 0);
+  const totalPayable = allInvoices.filter((i) => i.status !== "PAID").reduce((a, i) => a + i.amount, 0);
+  const payableCount = allInvoices.filter((i) => i.status !== "PAID").length;
+
+  const statusLabel = (status: string, paymentType: string) => {
+    if (paymentType === "STAFF_CLAIM") {
+      if (status === "INITIATED") return "approved";
+      if (status === "PAID") return "reimbursed";
+    }
+    if (paymentType === "INTERNAL_TRANSFER") {
+      if (status === "PAID") return "settled";
+    }
+    return status.toLowerCase();
+  };
 
   const statusColor = (status: string) => {
     switch (status) {
@@ -192,17 +262,19 @@ export default function InvoicesPage() {
     }
   };
 
-  const getActions = (status: string) => {
+  const getActions = (status: string, paymentType: string) => {
+    const isStaffClaim = paymentType === "STAFF_CLAIM";
+    const isTransfer = paymentType === "INTERNAL_TRANSFER";
     switch (status) {
       case "PENDING": return [
-        { status: "INITIATED", label: "Initiate Payment", color: "bg-blue-500 hover:bg-blue-600" },
+        { status: "INITIATED", label: isStaffClaim ? "Approve Claim" : isTransfer ? "Initiate Settlement" : "Initiate Payment", color: "bg-blue-500 hover:bg-blue-600" },
       ];
       case "INITIATED": return [
-        { status: "PAID", label: "Approve / Paid", color: "bg-green-500 hover:bg-green-600" },
+        { status: "PAID", label: isStaffClaim ? "Mark Reimbursed" : isTransfer ? "Mark Settled" : "Mark Paid", color: "bg-green-500 hover:bg-green-600" },
       ];
       case "OVERDUE": return [
-        { status: "INITIATED", label: "Initiate Payment", color: "bg-blue-500 hover:bg-blue-600" },
-        { status: "PAID", label: "Mark Paid", color: "bg-green-500 hover:bg-green-600" },
+        { status: "INITIATED", label: isStaffClaim ? "Approve Claim" : isTransfer ? "Initiate Settlement" : "Initiate Payment", color: "bg-blue-500 hover:bg-blue-600" },
+        { status: "PAID", label: isStaffClaim ? "Mark Reimbursed" : isTransfer ? "Mark Settled" : "Mark Paid", color: "bg-green-500 hover:bg-green-600" },
       ];
       case "PAID": return [];
       default: return [];
@@ -227,9 +299,10 @@ export default function InvoicesPage() {
       </div>
 
       {/* Summary cards — clickable to filter */}
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
         {([
           { key: "all" as const, label: "Total", amount: totalAll, count: allInvoices.length, color: "text-gray-900", border: "border-gray-300", ring: "ring-gray-200" },
+          { key: "payable" as const, label: "Payable", amount: totalPayable, count: payableCount, color: payableCount > 0 ? "text-orange-600" : "text-gray-400", border: "border-orange-400", ring: "ring-orange-100" },
           { key: "due_today" as const, label: "Due Today", amount: dueTodayAmount, count: dueTodayCount, color: dueTodayCount > 0 ? "text-blue-600" : "text-gray-400", border: "border-blue-400", ring: "ring-blue-100" },
           { key: "overdue" as const, label: "Overdue", amount: totalOverdue, count: allInvoices.filter((i) => i.status === "OVERDUE").length, color: "text-red-600", border: "border-red-400", ring: "ring-red-100" },
           { key: "paid" as const, label: "Paid", amount: totalPaid, count: allInvoices.filter((i) => i.status === "PAID").length, color: "text-green-600", border: "border-green-400", ring: "ring-green-100" },
@@ -242,6 +315,8 @@ export default function InvoicesPage() {
                 ? `${card.border} ring-2 ${card.ring} shadow-sm`
                 : card.key === "due_today" && card.count > 0
                   ? "border-blue-200 bg-blue-50/50 hover:border-blue-300"
+                  : card.key === "payable" && card.count > 0
+                  ? "border-orange-200 bg-orange-50/50 hover:border-orange-300"
                   : "border-gray-200 hover:border-gray-300"
             }`}
           >
@@ -249,7 +324,7 @@ export default function InvoicesPage() {
               <p className="text-xs text-gray-500">{card.label}</p>
               {card.count > 0 && card.key !== "all" && (
                 <span className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white ${
-                  card.key === "due_today" ? "bg-blue-500" : card.key === "overdue" ? "bg-red-500" : "bg-green-500"
+                  card.key === "payable" ? "bg-orange-500" : card.key === "due_today" ? "bg-blue-500" : card.key === "overdue" ? "bg-red-500" : "bg-green-500"
                 }`}>
                   {card.count}
                 </span>
@@ -277,7 +352,7 @@ export default function InvoicesPage() {
       {cardFilter && (
         <div className="mt-2 flex items-center gap-2">
           <span className="text-xs text-gray-500">
-            Showing: <span className="font-medium text-gray-700">{cardFilter === "due_today" ? "Due Today" : cardFilter === "all" ? "All" : cardFilter.charAt(0).toUpperCase() + cardFilter.slice(1)}</span>
+            Showing: <span className="font-medium text-gray-700">{cardFilter === "due_today" ? "Due Today" : cardFilter === "payable" ? "Payable" : cardFilter === "all" ? "All" : cardFilter.charAt(0).toUpperCase() + cardFilter.slice(1)}</span>
             {" "}({invoices.length} invoice{invoices.length !== 1 ? "s" : ""})
           </span>
           <button onClick={() => setCardFilter(null)} className="flex items-center gap-0.5 rounded-full border border-gray-200 px-2 py-0.5 text-[10px] text-gray-500 hover:bg-gray-50">
@@ -297,7 +372,7 @@ export default function InvoicesPage() {
           ))}
         </div>
         <div className="flex gap-1.5">
-          {([["all", "All Types"], ["supplier", "Supplier"], ["staff_claim", "Staff Claims"]] as const).map(([value, label]) => (
+          {([["all", "All Types"], ["supplier", "Supplier"], ["staff_claim", "Staff Claims"], ["transfer", "Transfers"]] as const).map(([value, label]) => (
             <button key={value} onClick={() => setTypeFilter(value)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${typeFilter === value ? "border-purple-400 bg-purple-50 text-purple-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>{label}</button>
           ))}
         </div>
@@ -396,16 +471,20 @@ export default function InvoicesPage() {
               </tr>
             )}
             {invoices.map((inv) => {
-              const actions = getActions(inv.status);
+              const actions = getActions(inv.status, inv.paymentType);
               return (
                 <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{inv.invoiceNumber}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    {inv.invoiceNumber}
+                    {inv.paymentType === "STAFF_CLAIM" && <span className="ml-1.5 rounded bg-purple-100 px-1 py-0.5 text-[9px] font-medium text-purple-600">CLAIM</span>}
+                    {inv.paymentType === "INTERNAL_TRANSFER" && <span className="ml-1.5 rounded bg-orange-100 px-1 py-0.5 text-[9px] font-medium text-orange-600">TRANSFER</span>}
+                  </td>
                   <td className="px-4 py-3"><code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{inv.poNumber}</code></td>
                   <td className="px-4 py-3 text-gray-600">{inv.supplier}</td>
                   <td className="px-4 py-3 text-xs text-gray-500">{inv.outlet}</td>
                   {typeFilter !== "supplier" && <td className="px-4 py-3 text-xs text-gray-500">{inv.claimedBy ?? "—"}</td>}
                   <td className="px-4 py-3">
-                    <Badge className={`text-[10px] ${statusColor(inv.status)}`}>{inv.status.toLowerCase()}</Badge>
+                    <Badge className={`text-[10px] ${statusColor(inv.status)}`}>{statusLabel(inv.status, inv.paymentType)}</Badge>
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{inv.issueDate}</td>
                   <td className="px-4 py-3 text-xs text-gray-500">{inv.dueDate ?? "—"}</td>
@@ -436,7 +515,7 @@ export default function InvoicesPage() {
                       {actions.map((a) => (
                         <button
                           key={a.status}
-                          onClick={() => updateStatus(inv.id, a.status)}
+                          onClick={() => updateStatus(inv.id, a.status, inv)}
                           disabled={updatingId === inv.id}
                           className={`rounded-md px-2 py-1 text-[10px] font-medium text-white ${a.color} disabled:opacity-50`}
                         >
@@ -545,6 +624,130 @@ export default function InvoicesPage() {
                 className="flex-1 rounded-md bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
               >
                 {editSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment dialog */}
+      {payingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setPayingInvoice(null)}>
+          <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-gray-900">
+                {payingInvoice.paymentType === "STAFF_CLAIM"
+                  ? payingTargetStatus === "INITIATED" ? "Approve Claim" : "Mark Reimbursed"
+                  : payingInvoice.paymentType === "INTERNAL_TRANSFER"
+                  ? payingTargetStatus === "INITIATED" ? "Initiate Settlement" : "Mark Settled"
+                  : payingTargetStatus === "INITIATED" ? "Initiate Payment" : "Mark Paid"}
+              </h3>
+              <button onClick={() => setPayingInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Invoice summary */}
+            <div className="rounded-lg bg-gray-50 px-3 py-2.5 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-gray-900">{payingInvoice.invoiceNumber}</span>
+                <span className="font-bold text-gray-900">RM {payingInvoice.amount.toFixed(2)}</span>
+              </div>
+              <p className="mt-0.5 text-xs text-gray-500">{payingInvoice.supplier} · {payingInvoice.outlet}</p>
+            </div>
+
+            {/* Transfer details */}
+            {payingInvoice.transfer && (
+              <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5">
+                <p className="text-xs font-medium text-orange-700">Stock Transfer</p>
+                <p className="mt-0.5 text-sm text-orange-900">{payingInvoice.transfer.fromOutlet} → {payingInvoice.transfer.toOutlet}</p>
+                <div className="mt-1.5 space-y-0.5">
+                  {payingInvoice.transfer.items.map((item, i) => (
+                    <p key={i} className="text-xs text-orange-700">{item.product} × {item.quantity}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Staff claim details */}
+            {payingInvoice.paymentType === "STAFF_CLAIM" && payingInvoice.claimedBy && (
+              <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2.5">
+                <p className="text-xs font-medium text-purple-700">Staff Claim</p>
+                <p className="mt-0.5 text-sm text-purple-900">Claimed by: {payingInvoice.claimedBy}</p>
+                {payingInvoice.notes && <p className="mt-1 text-xs text-purple-600">{payingInvoice.notes}</p>}
+              </div>
+            )}
+
+            {/* Bank details */}
+            {payingInvoice.supplierBank && (
+              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Landmark className="h-3.5 w-3.5 text-blue-600" />
+                  <p className="text-xs font-medium text-blue-700">Bank Details</p>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-blue-600">Bank</span>
+                    <span className="text-sm font-medium text-blue-900">{payingInvoice.supplierBank.bankName}</span>
+                  </div>
+                  {payingInvoice.supplierBank.accountNumber && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-blue-600">Account No.</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-sm font-medium text-blue-900">{payingInvoice.supplierBank.accountNumber}</span>
+                        <button
+                          onClick={() => copyToClipboard(payingInvoice.supplierBank!.accountNumber!, "accNo")}
+                          className="rounded p-0.5 text-blue-400 hover:bg-blue-100 hover:text-blue-600"
+                        >
+                          {copiedField === "accNo" ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {payingInvoice.supplierBank.accountName && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-blue-600">Account Name</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium text-blue-900">{payingInvoice.supplierBank.accountName}</span>
+                        <button
+                          onClick={() => copyToClipboard(payingInvoice.supplierBank!.accountName!, "accName")}
+                          className="rounded p-0.5 text-blue-400 hover:bg-blue-100 hover:text-blue-600"
+                        >
+                          {copiedField === "accName" ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Payment reference */}
+            <div className="mt-3">
+              <label className="mb-1 block text-xs font-medium text-gray-600">Payment Reference</label>
+              <Input
+                value={payForm.paymentRef}
+                onChange={(e) => setPayForm({ ...payForm, paymentRef: e.target.value })}
+                placeholder="e.g. Transfer ref, receipt no..."
+              />
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setPayingInvoice(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button
+                onClick={submitPayment}
+                disabled={paySaving}
+                className={`flex-1 rounded-md px-3 py-2 text-sm font-medium text-white disabled:opacity-50 ${
+                  payingTargetStatus === "PAID" ? "bg-green-500 hover:bg-green-600" : "bg-blue-500 hover:bg-blue-600"
+                }`}
+              >
+                {paySaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : (
+                  payingInvoice.paymentType === "STAFF_CLAIM"
+                    ? payingTargetStatus === "INITIATED" ? "Approve Claim" : "Mark Reimbursed"
+                    : payingInvoice.paymentType === "INTERNAL_TRANSFER"
+                    ? payingTargetStatus === "INITIATED" ? "Initiate Settlement" : "Confirm Settled"
+                    : payingTargetStatus === "INITIATED" ? "Confirm Initiate" : "Confirm Paid"
+                )}
               </button>
             </div>
           </div>
