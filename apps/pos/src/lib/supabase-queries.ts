@@ -233,34 +233,6 @@ export async function fetchOrdersByShift(shiftId: string) {
   return data ?? [];
 }
 
-export async function fetchMaxOrderSeq(outletId: string): Promise<number> {
-  const { data } = await supabase
-    .from("pos_orders")
-    .select("order_number")
-    .eq("outlet_id", outletId)
-    .order("created_at", { ascending: false })
-    .limit(1);
-  if (!data?.[0]?.order_number) return 0;
-  // Parse sequence from order_number format: CC-XXX-0001
-  const parts = data[0].order_number.split("-");
-  const seq = parseInt(parts[parts.length - 1], 10);
-  return isNaN(seq) ? 0 : seq;
-}
-
-export async function fetchPrinterConfigs(outletId: string) {
-  const { data, error } = await supabase
-    .from("pos_printer_config")
-    .select("*")
-    .eq("outlet_id", outletId)
-    .eq("is_enabled", true)
-    .order("created_at");
-  if (error) {
-    console.warn("[DB] Failed to load printer configs:", error.message);
-    return [];
-  }
-  return data ?? [];
-}
-
 export async function fetchOpenOrders(outletId: string) {
   const { data, error } = await supabase
     .from("pos_orders")
