@@ -323,7 +323,7 @@ function DashboardView() {
             <span className="text-2xl font-bold">{data?.overallAvgRating?.toFixed(1) ?? "–"}</span>
             <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
           </div>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">Google avg across outlets</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">{periodLabel}</p>
         </div>
         <div className="rounded-xl border border-border bg-white p-4">
           <div className="flex items-center gap-2 text-muted-foreground">

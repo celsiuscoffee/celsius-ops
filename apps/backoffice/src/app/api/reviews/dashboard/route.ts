@@ -61,12 +61,16 @@ export async function GET(request: NextRequest) {
       const data = await fetchGoogleReviews(settings.gbpAccountId, settings.gbpLocationName, 50);
       // Filter by date
       const filtered = data.reviews.filter((r) => new Date(r.createdAt) >= since);
+      // Period-based average rating
+      const periodAvg = filtered.length
+        ? filtered.reduce((sum, r) => sum + r.rating, 0) / filtered.length
+        : 0;
       return {
         outletId: outlet.id,
         outletName: outlet.name,
         reviews: filtered,
         connected: true,
-        averageRating: data.averageRating,
+        averageRating: periodAvg,
         totalReviewCount: data.totalReviewCount,
       };
     } catch {
@@ -124,10 +128,9 @@ export async function GET(request: NextRequest) {
     outletName: (f as { outlet: { name: string } }).outlet.name,
   }));
 
-  // Average rating across connected outlets
-  const connectedOutlets = outletSummaries.filter((o) => o.google.connected && o.google.averageRating > 0);
-  const overallAvgRating = connectedOutlets.length
-    ? connectedOutlets.reduce((sum, o) => sum + o.google.averageRating, 0) / connectedOutlets.length
+  // Average rating from all period reviews (not per-outlet average)
+  const overallAvgRating = allGoogleReviews.length
+    ? allGoogleReviews.reduce((sum, r) => sum + r.rating, 0) / allGoogleReviews.length
     : 0;
 
   return NextResponse.json({
