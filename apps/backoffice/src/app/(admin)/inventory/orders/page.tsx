@@ -150,9 +150,11 @@ export default function OrdersPage() {
   const [extracting, setExtracting] = useState(false);
   const [aiExtracted, setAiExtracted] = useState<Record<string, boolean>>({});
   const [confirmOnSave, setConfirmOnSave] = useState(false);
+  const [detectedSupplier, setDetectedSupplier] = useState<string | null>(null);
 
   const openEditDialog = (order: Order, confirmMode = false) => {
     setConfirmOnSave(confirmMode);
+    setDetectedSupplier(null);
     setEditOrder(order);
     setEditItems(order.items.map((i) => ({ ...i, removed: false, qtyStr: String(i.quantity), priceStr: i.unitPrice.toFixed(2) })));
     setEditDeliveryDate(order.deliveryDate ?? "");
@@ -169,13 +171,22 @@ export default function OrdersPage() {
   const extractInvoiceData = useCallback(async (urls: string[], supplierName?: string) => {
     setExtracting(true);
     try {
+      // Fetch full product catalog and supplier list for AI matching
+      const [productsRes, suppliersRes] = await Promise.all([
+        fetch("/api/inventory/products"),
+        fetch("/api/inventory/suppliers"),
+      ]);
+      const allProducts: { name: string; sku: string }[] = productsRes.ok ? await productsRes.json() : [];
+      const allSuppliers: { name: string }[] = suppliersRes.ok ? await suppliersRes.json() : [];
+
       const res = await fetch("/api/inventory/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           urls,
           context: supplierName ? `Supplier: ${supplierName}` : undefined,
-          productNames: editItems.map((i) => i.product),
+          productNames: allProducts.map((p) => `${p.name} (${p.sku})`),
+          supplierNames: allSuppliers.map((s) => s.name),
         }),
       });
       if (!res.ok) {
@@ -188,6 +199,12 @@ export default function OrdersPage() {
         return;
       }
       const filled: Record<string, boolean> = {};
+
+      // Supplier name — show detected supplier
+      if (data.supplierName) {
+        setDetectedSupplier(data.supplierName);
+        filled.supplier = true;
+      }
 
       // Invoice number — always override with AI data
       if (data.invoiceNumber) {
@@ -687,6 +704,16 @@ export default function OrdersPage() {
               {/* Supplier & Outlet info */}
               <div className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-500">
                 {editOrder.supplier} → {editOrder.outlet}
+                {detectedSupplier && detectedSupplier.toLowerCase() !== editOrder.supplier.toLowerCase() && (
+                  <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-700">
+                    AI detected: {detectedSupplier}
+                  </span>
+                )}
+                {detectedSupplier && detectedSupplier.toLowerCase() === editOrder.supplier.toLowerCase() && (
+                  <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-[9px] font-medium text-green-700">
+                    ✓ Supplier matched
+                  </span>
+                )}
               </div>
 
               {/* Invoice section — UPLOAD FIRST */}
@@ -852,7 +879,10 @@ export default function OrdersPage() {
                           <tr key={item.id} className="border-b border-gray-50">
                             <td className="px-3 py-2">
                               <p className="font-medium text-gray-900">{item.product}</p>
-                              <p className="text-[10px] text-gray-400">{item.sku}</p>
+                              <p className="text-[10px] text-gray-400">
+                                {item.sku}
+                                {item.notes === "Added from invoice" && <span className="ml-1 rounded bg-purple-100 px-1 py-0.5 text-[9px] font-medium text-purple-600">AI added</span>}
+                              </p>
                             </td>
                             <td className="px-3 py-2 text-gray-500">{item.uom || item.package}</td>
                             <td className="px-3 py-2">

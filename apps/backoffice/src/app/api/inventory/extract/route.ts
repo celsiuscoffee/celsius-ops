@@ -27,7 +27,7 @@ type ExtractedInvoice = {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { urls, context, productNames } = body as { urls: string[]; context?: string; productNames?: string[] };
+    const { urls, context, productNames, supplierNames } = body as { urls: string[]; context?: string; productNames?: string[]; supplierNames?: string[] };
 
     if (!urls?.length) {
       return NextResponse.json({ error: "No URLs provided" }, { status: 400 });
@@ -74,7 +74,8 @@ export async function POST(req: NextRequest) {
     contentBlocks.push({
       type: "text",
       text: `Extract invoice/receipt details from the uploaded document(s). ${context ? `Context: ${context}` : ""}
-${productNames?.length ? `\nKNOWN PRODUCT CATALOG (use these exact names when matching items on the invoice):\n${productNames.join("\n")}\n\nWhen extracting items, match each line item to the closest product name from the catalog above. Use the EXACT catalog name in the "name" field. If no close match exists, use the name as written on the invoice.` : ""}
+${supplierNames?.length ? `\nKNOWN SUPPLIERS:\n${supplierNames.join("\n")}\n\nMatch the supplier/vendor name on the invoice to one of these known suppliers. Use the EXACT supplier name from this list in the "supplierName" field.` : ""}
+${productNames?.length ? `\nKNOWN PRODUCT CATALOG (use these exact names when matching items on the invoice):\n${productNames.join("\n")}\n\nWhen extracting items, match each line item to the closest product name from the catalog above. Use the EXACT catalog name (without the SKU in brackets) in the "name" field. If no close match exists, use the name as written on the invoice.` : ""}
 
 Return a JSON object with these fields:
 - invoiceNumber: the invoice/receipt number (string or null)
