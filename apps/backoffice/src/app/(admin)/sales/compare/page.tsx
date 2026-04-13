@@ -244,6 +244,12 @@ function getWeekLabel(mondayStr: string): string {
 
 // ─── Presets ─────────────────────────────────────────────────────────────
 
+function subtractMonths(dateStr: string, months: number): string {
+  const d = new Date(dateStr + "T12:00:00+08:00");
+  d.setMonth(d.getMonth() - months);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
   const today = getMYTToday();
   const thisMonday = getMonday(today);
@@ -294,6 +300,22 @@ function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
         { id: uid(), from: thisMonthStart, to: getMonthEnd(today) },
         { id: uid(), from: lastMonthStart, to: lastMonthEnd },
       ],
+    },
+    {
+      label: "Last 3 Months",
+      slots: Array.from({ length: 3 }, (_, i) => {
+        const mStart = getMonthStart(subtractMonths(today, i));
+        const mEnd = i === 0 ? getMonthEnd(today) : getMonthEnd(mStart);
+        return { id: uid(), from: mStart, to: mEnd };
+      }),
+    },
+    {
+      label: "Last 6 Months",
+      slots: Array.from({ length: 6 }, (_, i) => {
+        const mStart = getMonthStart(subtractMonths(today, i));
+        const mEnd = i === 0 ? getMonthEnd(today) : getMonthEnd(mStart);
+        return { id: uid(), from: mStart, to: mEnd };
+      }),
     },
   ];
 }
