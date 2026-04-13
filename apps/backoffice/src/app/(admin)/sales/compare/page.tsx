@@ -493,10 +493,7 @@ export default function SalesComparePage() {
                       key={slot.id}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border shrink-0 ${PERIOD_BORDER[ci]} ${PERIOD_BG[ci]}`}
                     >
-                      <div
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: PERIOD_COLORS[ci] }}
-                      />
+                      <span className="text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center shrink-0 text-white" style={{ backgroundColor: PERIOD_COLORS[ci] }}>{i + 1}</span>
                       <span className={`text-xs font-medium whitespace-nowrap ${PERIOD_TEXT[ci]}`}>{label}</span>
                       <button
                         onClick={() => removeSlot(slot.id)}
@@ -713,11 +710,12 @@ export default function SalesComparePage() {
             <div className={`grid gap-3 ${data.periods.length <= 4 ? `grid-cols-2 sm:grid-cols-${Math.min(data.periods.length, 4)}` : "flex"}`} style={data.periods.length > 4 ? { display: "flex" } : undefined}>
               {data.periods.map((p, i) => {
                 const ci = i % PERIOD_COLORS.length;
-                const base = data.periods[0];
-                const isBase = i === 0;
                 const val = metric === "revenue" ? p.summary.revenue : metric === "orders" ? p.summary.orders : p.summary.aov;
-                const baseVal = metric === "revenue" ? base.summary.revenue : metric === "orders" ? base.summary.orders : base.summary.aov;
-                const change = !isBase ? pctChange(val, baseVal) : null;
+                // Compare against the next (older) period
+                const prev = i < data.periods.length - 1 ? data.periods[i + 1] : null;
+                const prevVal = prev ? (metric === "revenue" ? prev.summary.revenue : metric === "orders" ? prev.summary.orders : prev.summary.aov) : null;
+                const change = prevVal !== null ? pctChange(val, prevVal) : null;
+                const isLatest = i === 0;
                 const proj = getProjection(p);
                 const projVal = proj && metric === "revenue" ? proj.projected : proj && metric === "orders" ? proj.projectedOrders : null;
                 return (
@@ -726,12 +724,9 @@ export default function SalesComparePage() {
                     className={`bg-white rounded-xl border p-3 ${PERIOD_BORDER[ci]} ${data.periods.length > 4 ? "min-w-[160px] shrink-0" : ""}`}
                   >
                     <div className="flex items-center gap-1.5 mb-1.5">
-                      <div
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: PERIOD_COLORS[ci] }}
-                      />
+                      <span className="text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center shrink-0 text-white" style={{ backgroundColor: PERIOD_COLORS[ci] }}>{i + 1}</span>
                       <span className="text-[11px] font-medium text-gray-500 truncate">{p.label}</span>
-                      {isBase && <span className="text-[9px] bg-gray-100 text-gray-500 px-1 py-0.5 rounded shrink-0">Base</span>}
+                      {isLatest && <span className="text-[9px] bg-gray-100 text-gray-500 px-1 py-0.5 rounded shrink-0">Latest</span>}
                     </div>
                     <div className="text-lg font-bold text-gray-900 tabular-nums">
                       {metric === "revenue" || metric === "aov" ? fmtRM(val) : val.toLocaleString()}
