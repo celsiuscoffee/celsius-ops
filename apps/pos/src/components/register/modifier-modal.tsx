@@ -83,56 +83,56 @@ export function ModifierModal({ product, onConfirm, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="mx-4 w-full max-w-md rounded-2xl bg-surface-raised shadow-2xl">
+      <div className="mx-4 w-full max-w-lg rounded-2xl bg-surface-raised shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+        <div className="flex items-center justify-between border-b border-border px-6 py-5">
           <div>
-            <h3 className="text-lg font-semibold">{product.name}</h3>
-            <p className="text-sm text-text-muted">Base price: {displayRM(product.price)}</p>
+            <h3 className="text-xl font-bold">{product.name}</h3>
+            <p className="text-base text-text-muted">Base price: {displayRM(product.price)}</p>
           </div>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-hover">&times;</button>
+          <button onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full text-xl hover:bg-surface-hover">&times;</button>
         </div>
 
         {/* Modifier groups */}
-        <div className="max-h-[60vh] overflow-y-auto px-5 py-4">
+        <div className="max-h-[60vh] overflow-y-auto px-6 py-5">
           {product.modifiers.map((group) => {
             const multi = isMultiSelect(group);
             return (
-              <div key={group.group_name} className="mb-5 last:mb-0">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="text-sm font-semibold">{group.group_name}</span>
+              <div key={group.group_name} className="mb-6 last:mb-0">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="text-base font-bold">{group.group_name}</span>
                   {group.is_required && (
-                    <span className="rounded bg-brand/10 px-1.5 py-0.5 text-xs font-medium text-brand">Required</span>
+                    <span className="rounded-md bg-brand/10 px-2 py-1 text-sm font-semibold text-brand">Required</span>
                   )}
                   {multi && (
-                    <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-text-muted">
+                    <span className="rounded-md bg-surface px-2 py-1 text-xs font-medium text-text-muted">
                       Pick up to {group.max_select}
                     </span>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   {group.options.map((option) => {
                     const selected = isOptionSelected(group.group_name, option.name);
                     return (
                       <button
                         key={option.name}
                         onClick={() => toggleOption(group.group_name, option, multi, group.max_select)}
-                        className={`rounded-lg border px-3 py-2 text-sm transition-all ${
+                        className={`flex items-center justify-center gap-2 rounded-xl border-2 px-4 py-4 text-base font-semibold transition-all active:scale-[0.97] ${
                           selected
-                            ? "border-brand bg-brand/10 font-medium text-brand"
+                            ? "border-brand bg-brand/10 text-brand"
                             : "border-border hover:border-brand/50"
                         }`}
                       >
                         {multi && (
-                          <span className={`mr-1.5 inline-block h-3 w-3 rounded border text-center text-[8px] leading-3 ${
+                          <span className={`inline-flex h-5 w-5 items-center justify-center rounded border-2 text-xs ${
                             selected ? "border-brand bg-brand text-white" : "border-text-dim"
                           }`}>
                             {selected ? "✓" : ""}
                           </span>
                         )}
-                        {option.name}
+                        <span>{option.name}</span>
                         {option.price > 0 && (
-                          <span className="ml-1 text-xs text-text-muted">+{displayRM(option.price)}</span>
+                          <span className="text-sm text-text-muted">+{displayRM(option.price)}</span>
                         )}
                       </button>
                     );
@@ -144,11 +144,11 @@ export function ModifierModal({ product, onConfirm, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border px-5 py-4">
+        <div className="border-t border-border px-6 py-5">
           <button
             onClick={handleConfirm}
             disabled={!allRequiredMet}
-            className="w-full rounded-xl bg-brand py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-xl bg-brand py-4 text-lg font-bold text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
           >
             Add to Order &middot; {displayRM(totalPrice)}
           </button>
