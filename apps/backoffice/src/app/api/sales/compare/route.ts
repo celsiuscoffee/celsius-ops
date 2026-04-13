@@ -165,8 +165,14 @@ export async function GET(request: NextRequest) {
 
       // Daily totals
       const dailyMap: Record<string, { revenue: number; orders: number }> = {};
+      // Daily per-round totals
+      const dailyRoundMap: Record<string, Record<RoundKey, { revenue: number; orders: number }>> = {};
       for (const d of dates) {
         dailyMap[d] = { revenue: 0, orders: 0 };
+        dailyRoundMap[d] = {} as Record<RoundKey, { revenue: number; orders: number }>;
+        for (const r of ROUNDS) {
+          dailyRoundMap[d][r.key] = { revenue: 0, orders: 0 };
+        }
       }
 
       // Channel totals
@@ -188,6 +194,11 @@ export async function GET(request: NextRequest) {
           roundData[round].revenue += txn.total;
           roundData[round].orders += 1;
           addToChannel(roundData[round].channels, txn.channel, txn.total);
+
+          if (dailyRoundMap[txn.dateStr]?.[round]) {
+            dailyRoundMap[txn.dateStr][round].revenue += txn.total;
+            dailyRoundMap[txn.dateStr][round].orders += 1;
+          }
         }
       }
 
@@ -220,6 +231,11 @@ export async function GET(request: NextRequest) {
           date: d,
           revenue: Math.round((dailyMap[d]?.revenue || 0) * 100) / 100,
           orders: dailyMap[d]?.orders || 0,
+          rounds: ROUNDS.map((r) => ({
+            key: r.key,
+            revenue: Math.round((dailyRoundMap[d]?.[r.key]?.revenue || 0) * 100) / 100,
+            orders: dailyRoundMap[d]?.[r.key]?.orders || 0,
+          })),
         })),
       };
     });

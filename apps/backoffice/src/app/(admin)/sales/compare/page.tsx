@@ -46,7 +46,7 @@ type PeriodResult = {
     takeaway: { revenue: number; orders: number };
     delivery: { revenue: number; orders: number };
   };
-  dailyTotals: { date: string; revenue: number; orders: number }[];
+  dailyTotals: { date: string; revenue: number; orders: number; rounds: { key: string; revenue: number; orders: number }[] }[];
 };
 
 type CompareResponse = {
@@ -204,17 +204,19 @@ function getDowAverages(p: PeriodResult): { dow: string; avgRevenue: number; avg
   }));
 }
 
-/** Compute 7-day trailing moving average for daily totals */
-function getDailyWithMA(p: PeriodResult): { date: string; label: string; revenue: number; orders: number; maRevenue: number | null; maOrders: number | null }[] {
+type RoundMA = { key: string; value: number; ma: number | null };
+
+/** Compute 7-day trailing moving average for daily totals including per-round */
+function getDailyWithMA(p: PeriodResult): { date: string; label: string; revenue: number; orders: number; maRevenue: number | null; maOrders: number | null; roundMAs: RoundMA[] }[] {
   const today = getMYTToday();
   return p.dailyTotals
-    .filter((d) => d.date <= today) // Don't show future dates
+    .filter((d) => d.date <= today)
     .map((d, i, arr) => {
       const date = new Date(d.date + "T12:00:00+08:00");
       const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
       const label = `${days[date.getDay()]} ${date.getDate()}`;
 
-      // 7-day trailing MA
+      // 7-day trailing MA for total
       let maRevenue: number | null = null;
       let maOrders: number | null = null;
       if (i >= 6) {
@@ -222,7 +224,19 @@ function getDailyWithMA(p: PeriodResult): { date: string; label: string; revenue
         maRevenue = Math.round((window.reduce((s, w) => s + w.revenue, 0) / 7) * 100) / 100;
         maOrders = Math.round((window.reduce((s, w) => s + w.orders, 0) / 7) * 100) / 100;
       }
-      return { date: d.date, label, revenue: d.revenue, orders: d.orders, maRevenue, maOrders };
+
+      // Per-round MA
+      const roundMAs: RoundMA[] = (d.rounds || []).map((r, ri) => {
+        let ma: number | null = null;
+        if (i >= 6) {
+          const window = arr.slice(i - 6, i + 1);
+          const sum = window.reduce((s, w) => s + (w.rounds?.[ri]?.revenue || 0), 0);
+          ma = Math.round((sum / 7) * 100) / 100;
+        }
+        return { key: r.key, value: r.revenue, ma };
+      });
+
+      return { date: d.date, label, revenue: d.revenue, orders: d.orders, maRevenue, maOrders, roundMAs };
     });
 }
 
@@ -919,7 +933,7 @@ export default function SalesComparePage() {
             )}
           </div>
 
-          {/* Daily Breakdown with 7-day MA */}
+          {/* Daily Breakdown with 7-day MA by Round */}
           {data.periods.some((p) => p.dailyTotals.length > 1) && (
             <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden">
               <button
@@ -937,6 +951,7 @@ export default function SalesComparePage() {
                     const ci = i % PERIOD_COLORS.length;
                     const daily = getDailyWithMA(p);
                     if (daily.length <= 1) return null;
+                    const roundLabels = p.rounds.map((r) => r.label);
                     return (
                       <div key={i}>
                         <div className="flex items-center gap-1.5 mb-2">
@@ -944,13 +959,15 @@ export default function SalesComparePage() {
                           <span className="text-xs font-semibold" style={{ color: PERIOD_COLORS[ci] }}>{p.label}</span>
                         </div>
                         <div className="overflow-x-auto -mx-4 px-4">
-                          <table className="w-full text-xs" style={{ minWidth: 400 }}>
+                          <table className="w-full text-xs" style={{ minWidth: 600 + roundLabels.length * 80 }}>
                             <thead>
                               <tr className="border-b border-gray-100">
                                 <th className="text-left py-1.5 pr-3 font-medium text-gray-500 sticky left-0 bg-white z-10">Date</th>
-                                <th className="text-right py-1.5 px-2 font-medium text-gray-500">{metric === "revenue" ? "Revenue" : "Orders"}</th>
+                                <th className="text-right py-1.5 px-2 font-medium text-gray-700">Total</th>
                                 <th className="text-right py-1.5 px-2 font-medium text-blue-500">7d MA</th>
-                                <th className="text-right py-1.5 px-2 font-medium text-gray-400">vs MA</th>
+                                {roundLabels.map((rl) => (
+                                  <th key={rl} className="text-right py-1.5 px-1.5 font-medium text-gray-400 whitespace-nowrap">{rl}</th>
+                                ))}
                               </tr>
                             </thead>
                             <tbody>
@@ -960,16 +977,27 @@ export default function SalesComparePage() {
                                 const vsMa = ma !== null && ma > 0 ? pctChange(val, ma) : null;
                                 return (
                                   <tr key={d.date} className="border-b border-gray-50">
-                                    <td className="py-1.5 pr-3 font-medium text-gray-700 sticky left-0 bg-white z-10 whitespace-nowrap">{d.label}</td>
-                                    <td className="text-right py-1.5 px-2 text-gray-700 tabular-nums">
+                                    <td className="py-1.5 pr-3 font-medium text-gray-700 sticky left-0 bg-white z-10 whitespace-nowrap">
+                                      {d.label}
+                                      {vsMa && <span className={`ml-1.5 text-[10px] ${vsMa.color}`}>{vsMa.label}</span>}
+                                    </td>
+                                    <td className="text-right py-1.5 px-2 text-gray-700 tabular-nums font-medium">
                                       {metric === "revenue" ? fmtRM(val) : val}
                                     </td>
                                     <td className="text-right py-1.5 px-2 text-blue-600 tabular-nums">
                                       {ma !== null ? (metric === "revenue" ? fmtRM(ma) : Math.round(ma as number)) : <span className="text-gray-300">—</span>}
                                     </td>
-                                    <td className="text-right py-1.5 px-2 tabular-nums">
-                                      {vsMa ? <span className={vsMa.color}>{vsMa.label}</span> : <span className="text-gray-300">—</span>}
-                                    </td>
+                                    {d.roundMAs.map((rm) => {
+                                      const rv = metric === "revenue" ? rm.value : 0;
+                                      const rma = rm.ma;
+                                      const aboveMA = rma !== null && rma > 0 && rv > rma;
+                                      const belowMA = rma !== null && rma > 0 && rv < rma * 0.85;
+                                      return (
+                                        <td key={rm.key} className={`text-right py-1.5 px-1.5 tabular-nums whitespace-nowrap ${belowMA ? "text-red-500" : aboveMA ? "text-green-600" : "text-gray-500"}`}>
+                                          {metric === "revenue" ? fmtRM(rv) : rm.value}
+                                        </td>
+                                      );
+                                    })}
                                   </tr>
                                 );
                               })}
