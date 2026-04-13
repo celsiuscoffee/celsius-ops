@@ -267,6 +267,160 @@ function FeedbackCard({ fb, showOutlet }: { fb: Feedback & { outletName?: string
   );
 }
 
+// ─── GBP Post Modal ───────────────────────────────────────
+
+const POST_TYPE_LABELS: Record<string, string> = {
+  menu_highlight: "Menu Highlight",
+  ambiance: "Ambiance & Vibe",
+  promo: "Promo / Update",
+  behind_scenes: "Behind the Scenes",
+  community: "Community",
+  seasonal: "Seasonal",
+  tip: "Coffee Tip",
+};
+
+function GbpPostModal({
+  outletId,
+  outletName,
+  onClose,
+}: {
+  outletId: string;
+  outletName: string;
+  onClose: () => void;
+}) {
+  const [postType, setPostType] = useState("");
+  const [generatedText, setGeneratedText] = useState("");
+  const [editedText, setEditedText] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [posted, setPosted] = useState(false);
+
+  const generate = async (type?: string) => {
+    setGenerating(true);
+    setPosted(false);
+    try {
+      const res = await fetch("/api/reviews/auto-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outletId, postType: type || postType || undefined, mode: "preview" }),
+      });
+      const data = await res.json();
+      setGeneratedText(data.text);
+      setEditedText(data.text);
+      if (data.postType) setPostType(data.postType);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const publish = async () => {
+    setPosting(true);
+    try {
+      const res = await fetch("/api/reviews/auto-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outletId, customText: editedText, mode: "post" }),
+      });
+      if (res.ok) setPosted(true);
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold">GBP Update Post</h2>
+            <p className="text-sm text-muted-foreground">{outletName}</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Post type selector */}
+        <div className="mt-4">
+          <p className="text-xs font-medium text-muted-foreground mb-2">Post type (optional)</p>
+          <div className="flex flex-wrap gap-1.5">
+            {Object.entries(POST_TYPE_LABELS).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setPostType(key)}
+                className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                  postType === key
+                    ? "bg-brand-dark text-white"
+                    : "border border-border bg-white text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Generate button */}
+        {!generatedText && !generating && (
+          <button
+            onClick={() => generate()}
+            className="mt-4 w-full flex items-center justify-center gap-2 rounded-lg bg-terracotta px-4 py-2.5 text-sm font-medium text-white hover:bg-terracotta/90 transition-colors"
+          >
+            <Sparkles className="h-4 w-4" />
+            Generate Post
+          </button>
+        )}
+
+        {generating && (
+          <div className="mt-4 flex items-center justify-center gap-2 py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-terracotta" />
+            <span className="text-sm text-muted-foreground">Generating...</span>
+          </div>
+        )}
+
+        {/* Generated text editor */}
+        {generatedText && !generating && (
+          <div className="mt-4">
+            <textarea
+              value={editedText}
+              onChange={(e) => setEditedText(e.target.value)}
+              className="w-full rounded-lg border border-border bg-white p-3 text-sm outline-none focus:ring-2 focus:ring-ring/50 resize-none"
+              rows={5}
+              maxLength={1500}
+            />
+            <p className="mt-1 text-right text-[10px] text-muted-foreground">{editedText.length}/1500</p>
+
+            {posted ? (
+              <div className="mt-3 flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 p-3">
+                <Check className="h-4 w-4 text-green-600" />
+                <span className="text-sm font-medium text-green-700">Posted to Google Business Profile</span>
+              </div>
+            ) : (
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={publish}
+                  disabled={posting || !editedText.trim()}
+                  className="flex items-center gap-1.5 rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50 transition-colors"
+                >
+                  {posting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Post to GBP
+                </button>
+                <button
+                  onClick={() => generate()}
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Regenerate
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Auto-Reply Modal ──────────────────────────────────────
 
 type AutoReplyResult = {
@@ -781,6 +935,7 @@ function OutletView() {
   const [filterRating, setFilterRating] = useState<number | null>(null);
   const [showFilter, setShowFilter] = useState(false);
   const [showAutoReply, setShowAutoReply] = useState(false);
+  const [showGbpPost, setShowGbpPost] = useState(false);
 
   const { data: rawOutlets } = useFetch<Outlet[]>("/api/settings/outlets?status=ACTIVE");
   const outlets = rawOutlets ? sortOutlets(rawOutlets) : undefined;
@@ -827,13 +982,22 @@ function OutletView() {
           </select>
         )}
         {selectedOutletId && reviewsData?.connected && (
-          <button
-            onClick={() => setShowAutoReply(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta/90 transition-colors"
-          >
-            <Sparkles className="h-4 w-4" />
-            Auto-Reply
-          </button>
+          <>
+            <button
+              onClick={() => setShowAutoReply(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta/90 transition-colors"
+            >
+              <Sparkles className="h-4 w-4" />
+              Auto-Reply
+            </button>
+            <button
+              onClick={() => setShowGbpPost(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-brand-dark px-3 py-2 text-sm font-medium text-brand-dark hover:bg-brand-dark/5 transition-colors"
+            >
+              <Send className="h-4 w-4" />
+              GBP Post
+            </button>
+          </>
         )}
       </div>
 
@@ -844,6 +1008,15 @@ function OutletView() {
           outletName={selectedOutlet?.name ?? ""}
           onClose={() => setShowAutoReply(false)}
           onDone={() => mutateReviews()}
+        />
+      )}
+
+      {/* GBP Post modal */}
+      {showGbpPost && selectedOutletId && (
+        <GbpPostModal
+          outletId={selectedOutletId}
+          outletName={selectedOutlet?.name ?? ""}
+          onClose={() => setShowGbpPost(false)}
         />
       )}
 

@@ -148,6 +148,77 @@ export async function fetchGoogleReviews(
   };
 }
 
+export type GbpPost = {
+  name?: string;
+  summary: string;
+  callToAction?: {
+    actionType: "LEARN_MORE" | "BOOK" | "ORDER" | "SHOP" | "SIGN_UP" | "CALL";
+    url?: string;
+  };
+  topicType: "STANDARD" | "EVENT" | "OFFER";
+  state?: string;
+  createTime?: string;
+  updateTime?: string;
+};
+
+export async function createLocalPost(
+  accountId: string,
+  locationName: string,
+  summary: string,
+  callToAction?: { actionType: string; url: string },
+): Promise<GbpPost> {
+  const token = await getAccessToken();
+
+  const body: Record<string, unknown> = {
+    summary,
+    topicType: "STANDARD",
+  };
+  if (callToAction) {
+    body.callToAction = callToAction;
+  }
+
+  const res = await fetch(
+    `${GBP_BASE}/${accountId}/${locationName}/localPosts`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`GBP create post error ${res.status}: ${text}`);
+  }
+
+  return res.json();
+}
+
+export async function listLocalPosts(
+  accountId: string,
+  locationName: string,
+  pageSize = 10,
+): Promise<{ posts: GbpPost[]; nextPageToken?: string }> {
+  const token = await getAccessToken();
+  const params = new URLSearchParams({ pageSize: String(pageSize) });
+
+  const res = await fetch(
+    `${GBP_BASE}/${accountId}/${locationName}/localPosts?${params}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`GBP list posts error ${res.status}: ${text}`);
+  }
+
+  const data = await res.json();
+  return { posts: data.localPosts ?? [], nextPageToken: data.nextPageToken };
+}
+
 export async function replyToReview(
   accountId: string,
   locationName: string,
