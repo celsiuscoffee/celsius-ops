@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import {
   ArrowLeftRight,
   Plus,
@@ -234,31 +233,6 @@ export default function SalesComparePage() {
 
   const presets = getPresets();
 
-  // Chart data for rounds comparison
-  const roundChartData = data
-    ? data.periods[0]?.rounds.map((r, ri) => {
-        const entry: Record<string, string | number> = { round: r.label };
-        data.periods.forEach((p, pi) => {
-          const pr = p.rounds[ri];
-          if (metric === "revenue") entry[`p${pi}`] = pr?.revenue ?? 0;
-          else if (metric === "orders") entry[`p${pi}`] = pr?.orders ?? 0;
-          else entry[`p${pi}`] = pr?.aov ?? 0;
-        });
-        return entry;
-      })
-    : [];
-
-  // Channel chart data
-  const channelChartData = data
-    ? data.periods.map((p, pi) => ({
-        name: p.label,
-        dineIn: metric === "revenue" ? p.channels.dineIn.revenue : p.channels.dineIn.orders,
-        takeaway: metric === "revenue" ? p.channels.takeaway.revenue : p.channels.takeaway.orders,
-        delivery: metric === "revenue" ? p.channels.delivery.revenue : p.channels.delivery.orders,
-        color: PERIOD_COLORS[pi],
-      }))
-    : [];
-
   return (
     <div className="min-h-screen bg-[#f5f3f0] p-4 sm:p-6 space-y-5">
       {/* Header */}
@@ -477,7 +451,7 @@ export default function SalesComparePage() {
             })}
           </div>
 
-          {/* Revenue by Round — Bar Chart */}
+          {/* By Time Round */}
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <button
               onClick={() => setShowRounds(!showRounds)}
@@ -490,30 +464,7 @@ export default function SalesComparePage() {
             </button>
             {showRounds && (
               <>
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={roundChartData} barGap={2} barCategoryGap="20%">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="round" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip
-                        contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                        formatter={(value: number, name: string) => {
-                          const idx = parseInt(name.replace("p", ""));
-                          const label = data.periods[idx]?.label || name;
-                          const formatted = metric === "revenue" || metric === "aov" ? fmtRM(value) : value;
-                          return [formatted, label];
-                        }}
-                      />
-                      {data.periods.map((_, pi) => (
-                        <Bar key={pi} dataKey={`p${pi}`} fill={PERIOD_COLORS[pi]} radius={[3, 3, 0, 0]} />
-                      ))}
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Rounds Table */}
-                <div className="mt-4 overflow-x-auto">
+                <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-gray-100">
@@ -623,48 +574,6 @@ export default function SalesComparePage() {
             )}
           </div>
 
-          {/* Daily Trend (only for multi-day periods of same length) */}
-          {data.periods.length > 1 &&
-            data.periods[0].dailyTotals.length > 1 &&
-            data.periods.every((p) => p.dailyTotals.length === data.periods[0].dailyTotals.length) && (
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
-                <h2 className="text-sm font-semibold text-gray-900 mb-3">Daily Trend Overlay</h2>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={data.periods[0].dailyTotals.map((_, di) => {
-                        const entry: Record<string, string | number> = { day: `Day ${di + 1}` };
-                        data.periods.forEach((p, pi) => {
-                          const dt = p.dailyTotals[di];
-                          if (metric === "revenue") entry[`p${pi}`] = dt?.revenue ?? 0;
-                          else if (metric === "orders") entry[`p${pi}`] = dt?.orders ?? 0;
-                          else entry[`p${pi}`] = dt && dt.orders > 0 ? Math.round((dt.revenue / dt.orders) * 100) / 100 : 0;
-                        });
-                        return entry;
-                      })}
-                      barGap={2}
-                      barCategoryGap="20%"
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip
-                        contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                        formatter={(value: number, name: string) => {
-                          const idx = parseInt(name.replace("p", ""));
-                          const label = data.periods[idx]?.label || name;
-                          const formatted = metric === "revenue" || metric === "aov" ? fmtRM(value) : value;
-                          return [formatted, label];
-                        }}
-                      />
-                      {data.periods.map((_, pi) => (
-                        <Bar key={pi} dataKey={`p${pi}`} fill={PERIOD_COLORS[pi]} radius={[3, 3, 0, 0]} />
-                      ))}
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
         </>
       )}
     </div>
