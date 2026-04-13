@@ -272,6 +272,17 @@ export function formatReceipt(
 
 // ─── Kitchen Docket Formatter (80mm) ───────────────────────
 
+export interface DocketData {
+  station: string;
+  orderNumber: string;
+  orderType: string;
+  tableNumber: string;
+  queueNumber: string;
+  time: string;
+  items: string; // newline-separated item lines for native plugin
+  plainText: string; // full formatted text for fallback printing
+}
+
 export function formatKitchenDocket(
   order: {
     order_number: string;
@@ -289,39 +300,51 @@ export function formatKitchenDocket(
     }[];
   },
   station: string
-): string {
+): DocketData | null {
   const items = (order.pos_order_items ?? []).filter(
     (i) => !station || i.kitchen_station === station
   );
-  if (items.length === 0) return "";
+  if (items.length === 0) return null;
 
   const date = new Date(order.created_at);
-  const lines: string[] = [];
+  const stationName = (station || "KITCHEN").toUpperCase();
+  const orderType = order.order_type === "dine_in" ? "DINE-IN" : "TAKEAWAY";
+  const timeStr = date.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true });
 
-  lines.push(centerText(`** ${(station || "KITCHEN").toUpperCase()} **`));
+  // Build item lines (for native plugin)
+  const itemLines: string[] = [];
+  for (const item of items) {
+    itemLines.push(`${item.quantity}x ${item.product_name}`);
+    if (item.variant_name) itemLines.push(`   ${item.variant_name}`);
+    const mods = item.modifiers;
+    if (Array.isArray(mods) && mods.length > 0) {
+      const modNames = mods
+        .map((m: any) => m.option?.name ?? "")
+        .filter(Boolean);
+      if (modNames.length > 0) itemLines.push(`   ${modNames.join(", ")}`);
+    }
+    if (item.notes) itemLines.push(`   ** ${item.notes} **`);
+    itemLines.push("---");
+  }
+
+  // Build plain text fallback
+  const lines: string[] = [];
+  lines.push(centerText(`** ${stationName} **`));
   lines.push(divider("="));
   lines.push(twoColumn("Order:", order.order_number));
   lines.push(
     twoColumn(
-      order.order_type === "dine_in" ? "DINE-IN" : "TAKEAWAY",
+      orderType,
       order.order_type === "dine_in"
         ? `Table ${order.table_number ?? "-"}`
         : order.queue_number ?? "-"
     )
   );
-  lines.push(
-    twoColumn(
-      "Time:",
-      date.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })
-    )
-  );
+  lines.push(twoColumn("Time:", timeStr));
   lines.push(divider("="));
-
   for (const item of items) {
-    const qty = `${item.quantity}x`;
-    lines.push(`${qty} ${item.product_name}`);
+    lines.push(`${item.quantity}x ${item.product_name}`);
     if (item.variant_name) lines.push(`   ${item.variant_name}`);
-
     const mods = item.modifiers;
     if (Array.isArray(mods) && mods.length > 0) {
       const modNames = mods
@@ -332,12 +355,20 @@ export function formatKitchenDocket(
     if (item.notes) lines.push(`   ** ${item.notes} **`);
     lines.push(divider("-"));
   }
-
   lines.push(centerText("-- END --"));
   lines.push("");
   lines.push("");
 
-  return lines.join("\n");
+  return {
+    station: stationName,
+    orderNumber: order.order_number,
+    orderType,
+    tableNumber: order.table_number ?? "",
+    queueNumber: order.queue_number ?? "",
+    time: timeStr,
+    items: itemLines.join("\n"),
+    plainText: lines.join("\n"),
+  };
 }
 
 // ─── Print Dispatch ────────────────────────────────────────
@@ -362,6 +393,30 @@ async function printFormattedViaNative(opts: {
     return true;
   } catch (err) {
     console.error("[SUNMI/Native] Formatted print error:", err);
+    return false;
+  }
+}
+
+/**
+ * Print order docket via Capacitor native SUNMI plugin (bold station header, items)
+ */
+async function printDocketViaNative(docket: DocketData): Promise<boolean> {
+  if (!isCapacitorNative()) return false;
+  try {
+    const { connected } = await SunmiPrinter.isConnected();
+    if (!connected) return false;
+    await SunmiPrinter.printOrderDocket({
+      station: docket.station,
+      orderNumber: docket.orderNumber,
+      orderType: docket.orderType,
+      tableNumber: docket.tableNumber,
+      queueNumber: docket.queueNumber,
+      time: docket.time,
+      items: docket.items,
+    });
+    return true;
+  } catch (err) {
+    console.error("[SUNMI/Native] Docket print error:", err);
     return false;
   }
 }
@@ -440,7 +495,7 @@ export async function printReceipt58mm(
 }
 
 /**
- * Print kitchen docket — tries external printer → native → JS bridge → browser
+ * Print kitchen docket — tries native docket (LineApi) → external → plain native → JS bridge → browser
  */
 export async function printKitchenDocket58mm(
   order: any,
@@ -451,50 +506,35 @@ export async function printKitchenDocket58mm(
 
   // If no items have a station assigned, print all items under "Kitchen"
   if (stationSet.size === 0) {
-    const text = formatKitchenDocket(order, "");
-    if (text) {
-      if (await printViaNative(text)) return;
-      if (await printViaJSBridge(text)) return;
-      const printWindow = window.open("", "_blank", "width=400,height=400");
-      if (printWindow) {
-        printWindow.document.write(`
-          <html><head><title>Kitchen Docket</title>
-          <style>body{font-family:monospace;font-size:14px;font-weight:bold;width:80mm;margin:0;padding:4mm;white-space:pre-wrap;}
-          @media print{body{margin:0;padding:2mm;}}</style></head>
-          <body>${text}</body></html>
-        `);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-        setTimeout(() => printWindow.close(), 2000);
-      }
-    }
-    return;
+    stationSet.add("");
   }
 
   const stations = [...stationSet];
 
   for (const station of stations) {
-    const text = formatKitchenDocket(order, station);
-    if (!text) continue;
+    const docket = formatKitchenDocket(order, station);
+    if (!docket) continue;
 
-    // 1. External printer bridge (USB/network kitchen printers)
-    if (await printToExternalPrinter(station, text)) continue;
+    // 1. Native docket via LineApi (bold station header, structured items)
+    if (await printDocketViaNative(docket)) continue;
 
-    // 2. Capacitor native plugin
-    if (await printViaNative(text)) continue;
+    // 2. External printer bridge (USB/network kitchen printers)
+    if (await printToExternalPrinter(station || "kitchen", docket.plainText)) continue;
 
-    // 3. SUNMI JS Bridge
-    if (await printViaJSBridge(text)) continue;
+    // 3. Plain native ESC/POS
+    if (await printViaNative(docket.plainText)) continue;
 
-    // 4. Browser fallback
+    // 4. SUNMI JS Bridge
+    if (await printViaJSBridge(docket.plainText)) continue;
+
+    // 5. Browser fallback
     const printWindow = window.open("", "_blank", "width=400,height=400");
     if (!printWindow) continue;
     printWindow.document.write(`
-      <html><head><title>${station} Docket</title>
+      <html><head><title>${docket.station} Docket</title>
       <style>body{font-family:monospace;font-size:14px;font-weight:bold;width:80mm;margin:0;padding:4mm;white-space:pre-wrap;}
       @media print{body{margin:0;padding:2mm;}}</style></head>
-      <body>${text}</body></html>
+      <body>${docket.plainText}</body></html>
     `);
     printWindow.document.close();
     printWindow.focus();

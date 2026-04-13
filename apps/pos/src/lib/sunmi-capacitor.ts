@@ -27,6 +27,15 @@ export interface SunmiPrinterPlugin extends Plugin {
     qrLabel?: string;
     promoText?: string;
   }): Promise<void>;
+  printOrderDocket(options: {
+    station: string;
+    orderNumber: string;
+    orderType: string;
+    tableNumber?: string;
+    queueNumber?: string;
+    time: string;
+    items: string;
+  }): Promise<void>;
   getPrinterStatus(): Promise<{
     connected: boolean;
     status: string;
