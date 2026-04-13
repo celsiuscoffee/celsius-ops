@@ -17,7 +17,28 @@ export interface SunmiPrinterPlugin extends Plugin {
   lineWrap(options: { lines: number }): Promise<void>;
   cutPaper(): Promise<void>;
   printReceipt(options: { text: string }): Promise<void>;
-  getPrinterStatus(): Promise<{ status: number; label: string }>;
+  printLogo(): Promise<void>;
+  printFormattedReceipt(options: {
+    header: string;
+    body: string;
+    footer: string;
+  }): Promise<void>;
+  getPrinterStatus(): Promise<{
+    connected: boolean;
+    status: string;
+    name: string;
+    paper: string;
+  }>;
+  selfCheck(): Promise<{
+    connected: boolean;
+    sdkInitialized: boolean;
+    status: string;
+    name: string;
+    paper: string;
+    type: string;
+    hasCommandApi: boolean;
+    hasLineApi: boolean;
+  }>;
 }
 
 // Register the plugin — Capacitor automatically routes to native on Android

@@ -1,14 +1,15 @@
 /**
- * SUNMI D3 MINI Printer Integration
+ * SUNMI D3 MINI Printer Integration (80mm thermal printer)
  *
  * Printing architecture (priority order):
- * 1. Capacitor native plugin → SUNMI AIDL service (when running as Android app)
+ * 1. Capacitor native plugin → SUNMI PrinterX SDK (when running as Android app)
  * 2. SUNMI JS Bridge → window.sunmiInnerPrinter (when running in SUNMI WebView)
  * 3. External printer bridge → HTTP POST to localhost:8080 (USB/network printers)
  * 4. Browser print dialog → fallback for development
  */
 
 import SunmiPrinter, { isCapacitorNative } from "./sunmi-capacitor";
+import type { Outlet } from "./pos-context";
 
 // ─── SUNMI JS Bridge Detection (legacy WebView mode) ─────
 
@@ -23,7 +24,13 @@ declare global {
 interface SunmiJSBridge {
   sendRawData?: (base64data: string) => void;
   printText?: (text: string, callback?: unknown) => void;
-  printBarCode?: (data: string, symbology: number, height: number, width: number, callback?: unknown) => void;
+  printBarCode?: (
+    data: string,
+    symbology: number,
+    height: number,
+    width: number,
+    callback?: unknown
+  ) => void;
   printQRCode?: (data: string, size: number, callback?: unknown) => void;
   lineWrap?: (n: number, callback?: unknown) => void;
   cutPaper?: (callback?: unknown) => void;
@@ -34,16 +41,18 @@ interface SunmiJSBridge {
 }
 
 export function isSunmiDevice(): boolean {
-  return isCapacitorNative() || !!(window.sunmiInnerPrinter || window.PrinterManager);
+  return (
+    isCapacitorNative() || !!(window.sunmiInnerPrinter || window.PrinterManager)
+  );
 }
 
 function getSunmiJSBridge(): SunmiJSBridge | null {
   return window.sunmiInnerPrinter ?? window.PrinterManager ?? null;
 }
 
-// ─── ESC/POS Command Builder (58mm = 32 chars) ────────────
+// ─── ESC/POS Command Builder (80mm = 48 chars) ────────────
 
-const CHARS_PER_LINE = 32; // 58mm paper, standard font
+const CHARS_PER_LINE = 48; // 80mm paper, standard font (576 dots / 12 dots per char)
 
 function padRight(str: string, len: number): string {
   return str.substring(0, len).padEnd(len);
@@ -63,135 +72,209 @@ function twoColumn(left: string, right: string): string {
   return padRight(left, maxLeft) + " " + right;
 }
 
-// ─── Receipt Formatter (58mm) ──────────────────────────────
+// ─── Outlet Info ──────────────────────────────────────────
 
-export function formatReceipt(order: {
-  order_number: string;
-  order_type: string;
-  table_number?: string | null;
-  queue_number?: string | null;
-  subtotal: number;
-  service_charge: number;
-  discount_amount: number;
-  promo_discount?: number;
-  total: number;
-  created_at: string;
-  employee_id?: string;
-  pos_order_items?: {
-    product_name: string;
-    variant_name?: string | null;
-    quantity: number;
-    unit_price: number;
-    modifier_total: number;
-    item_total: number;
-    modifiers?: unknown;
-    notes?: string | null;
-  }[];
-  pos_order_payments?: {
-    payment_method: string;
-    amount: number;
-  }[];
-}, branchName: string): string {
+export interface OutletInfo {
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  phone?: string | null;
+}
+
+function formatOutletHeader(outlet: OutletInfo): string[] {
+  const lines: string[] = [];
+  lines.push(centerText(outlet.name));
+
+  // Build address line
+  const addressParts: string[] = [];
+  if (outlet.address) addressParts.push(outlet.address);
+  if (outlet.city) addressParts.push(outlet.city);
+  if (outlet.state) addressParts.push(outlet.state);
+  if (addressParts.length > 0) {
+    const fullAddr = addressParts.join(", ");
+    // Wrap long addresses across multiple centered lines
+    if (fullAddr.length > CHARS_PER_LINE) {
+      const mid = fullAddr.lastIndexOf(",", CHARS_PER_LINE - 1);
+      if (mid > 0) {
+        lines.push(centerText(fullAddr.substring(0, mid + 1).trim()));
+        lines.push(centerText(fullAddr.substring(mid + 1).trim()));
+      } else {
+        lines.push(centerText(fullAddr));
+      }
+    } else {
+      lines.push(centerText(fullAddr));
+    }
+  }
+
+  if (outlet.phone) {
+    lines.push(centerText(`Tel: ${outlet.phone}`));
+  }
+
+  return lines;
+}
+
+// ─── Receipt Formatter (80mm) ──────────────────────────────
+
+export function formatReceipt(
+  order: {
+    order_number: string;
+    order_type: string;
+    table_number?: string | null;
+    queue_number?: string | null;
+    subtotal: number;
+    service_charge: number;
+    discount_amount: number;
+    promo_discount?: number;
+    total: number;
+    created_at: string;
+    employee_id?: string;
+    pos_order_items?: {
+      product_name: string;
+      variant_name?: string | null;
+      quantity: number;
+      unit_price: number;
+      modifier_total: number;
+      item_total: number;
+      modifiers?: unknown;
+      notes?: string | null;
+    }[];
+    pos_order_payments?: {
+      payment_method: string;
+      amount: number;
+    }[];
+  },
+  outlet: OutletInfo
+): { header: string; body: string; footer: string } {
   const items = order.pos_order_items ?? [];
   const payments = order.pos_order_payments ?? [];
   const date = new Date(order.created_at);
   const rm = (sen: number) => `RM ${(sen / 100).toFixed(2)}`;
 
-  const lines: string[] = [];
+  // ─── Header (centered, printed with special formatting) ───
+  const headerLines = formatOutletHeader(outlet);
 
-  // Header
-  lines.push(centerText(branchName));
-  lines.push(centerText(""));
-  lines.push(divider("="));
-  lines.push(twoColumn("Order:", order.order_number));
-  lines.push(twoColumn("Date:", date.toLocaleDateString()));
-  lines.push(twoColumn("Time:", date.toLocaleTimeString()));
-  lines.push(twoColumn("Type:", order.order_type === "dine_in" ? "Dine-in" : "Takeaway"));
+  // ─── Body (left-aligned monospace) ────────────────────────
+  const bodyLines: string[] = [];
+
+  bodyLines.push(divider("="));
+  bodyLines.push(twoColumn("Order:", order.order_number));
+  bodyLines.push(
+    twoColumn("Date:", date.toLocaleDateString("en-MY", { day: "2-digit", month: "2-digit", year: "numeric" }))
+  );
+  bodyLines.push(
+    twoColumn("Time:", date.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true }))
+  );
+  bodyLines.push(
+    twoColumn(
+      "Type:",
+      order.order_type === "dine_in" ? "Dine-in" : "Takeaway"
+    )
+  );
 
   if (order.queue_number) {
-    lines.push(divider());
-    lines.push(centerText("QUEUE NUMBER"));
-    lines.push(centerText(`** ${order.queue_number} **`));
+    bodyLines.push(divider());
+    bodyLines.push(centerText("QUEUE NUMBER"));
+    bodyLines.push(centerText(`** ${order.queue_number} **`));
   }
   if (order.table_number) {
-    lines.push(twoColumn("Table:", order.table_number));
+    bodyLines.push(twoColumn("Table:", order.table_number));
   }
 
-  lines.push(divider("="));
+  bodyLines.push(divider("="));
 
   // Items
   for (const item of items) {
-    const qty = item.quantity > 1 ? `${item.quantity}x ` : "";
-    const name = `${qty}${item.product_name}`;
+    const qty = `${item.quantity}x`;
+    const name = item.product_name;
     const price = rm(item.item_total);
-    lines.push(twoColumn(name, price));
+    // Format: "2x Latte                     RM24.00"
+    const left = `${qty} ${name}`;
+    bodyLines.push(twoColumn(left, price));
 
     if (item.variant_name) {
-      lines.push(`  ${item.variant_name}`);
+      bodyLines.push(`   ${item.variant_name}`);
     }
 
-    // Modifiers
     const mods = item.modifiers;
     if (Array.isArray(mods) && mods.length > 0) {
-      const modNames = mods.map((m: any) => m.option?.name ?? m.group_name ?? "").filter(Boolean);
+      const modNames = mods
+        .map((m: any) => m.option?.name ?? m.group_name ?? "")
+        .filter(Boolean);
       if (modNames.length > 0) {
-        lines.push(`  ${modNames.join(", ")}`);
+        bodyLines.push(`   ${modNames.join(", ")}`);
       }
     }
 
     if (item.notes) {
-      lines.push(`  ** ${item.notes} **`);
+      bodyLines.push(`   ** ${item.notes} **`);
     }
   }
 
-  lines.push(divider());
+  bodyLines.push(divider());
 
   // Totals
-  lines.push(twoColumn("Subtotal", rm(order.subtotal)));
+  bodyLines.push(twoColumn("Subtotal", rm(order.subtotal)));
   if (order.service_charge > 0) {
-    lines.push(twoColumn("Service Charge", rm(order.service_charge)));
+    bodyLines.push(twoColumn("Service Charge", rm(order.service_charge)));
   }
   if (order.discount_amount > 0) {
-    lines.push(twoColumn("Discount", `-${rm(order.discount_amount)}`));
+    bodyLines.push(twoColumn("Discount", `-${rm(order.discount_amount)}`));
   }
   if ((order.promo_discount ?? 0) > 0) {
-    lines.push(twoColumn("Promo", `-${rm(order.promo_discount!)}`));
+    bodyLines.push(twoColumn("Promo", `-${rm(order.promo_discount!)}`));
   }
-  lines.push(divider());
-  lines.push(twoColumn("TOTAL", rm(order.total)));
-  lines.push(divider());
+  bodyLines.push(divider("="));
+  bodyLines.push(twoColumn("TOTAL", rm(order.total)));
+  bodyLines.push(divider("="));
 
   // Payment
   for (const p of payments) {
-    lines.push(twoColumn(p.payment_method, rm(p.amount)));
+    const method =
+      p.payment_method === "cash"
+        ? "Cash"
+        : p.payment_method === "card"
+          ? "Card"
+          : p.payment_method === "ewallet"
+            ? "E-Wallet"
+            : p.payment_method;
+    bodyLines.push(twoColumn(method, rm(p.amount)));
   }
 
-  lines.push("");
-  lines.push(centerText("Thank you!"));
-  lines.push(centerText("celsius.coffee"));
-  lines.push("");
-  lines.push("");
+  // ─── Footer (centered) ──────────────────────────────────
+  const footerLines: string[] = [];
+  footerLines.push("");
+  footerLines.push(centerText("Thank you for visiting!"));
+  footerLines.push(centerText("www.celsiuscoffee.com"));
+  footerLines.push("");
 
-  return lines.join("\n");
+  return {
+    header: headerLines.join("\n"),
+    body: bodyLines.join("\n"),
+    footer: footerLines.join("\n"),
+  };
 }
 
-// ─── Kitchen Docket Formatter (58mm) ───────────────────────
+// ─── Kitchen Docket Formatter (80mm) ───────────────────────
 
-export function formatKitchenDocket(order: {
-  order_number: string;
-  order_type: string;
-  table_number?: string | null;
-  queue_number?: string | null;
-  created_at: string;
-  pos_order_items?: {
-    product_name: string;
-    variant_name?: string | null;
-    quantity: number;
-    kitchen_station?: string | null;
-    modifiers?: unknown;
-    notes?: string | null;
-  }[];
-}, station: string): string {
+export function formatKitchenDocket(
+  order: {
+    order_number: string;
+    order_type: string;
+    table_number?: string | null;
+    queue_number?: string | null;
+    created_at: string;
+    pos_order_items?: {
+      product_name: string;
+      variant_name?: string | null;
+      quantity: number;
+      kitchen_station?: string | null;
+      modifiers?: unknown;
+      notes?: string | null;
+    }[];
+  },
+  station: string
+): string {
   const items = (order.pos_order_items ?? []).filter(
     (i) => !station || i.kitchen_station === station
   );
@@ -203,24 +286,35 @@ export function formatKitchenDocket(order: {
   lines.push(centerText(`** ${(station || "KITCHEN").toUpperCase()} **`));
   lines.push(divider("="));
   lines.push(twoColumn("Order:", order.order_number));
-  lines.push(twoColumn(
-    order.order_type === "dine_in" ? "DINE-IN" : "TAKEAWAY",
-    order.order_type === "dine_in" ? `Table ${order.table_number ?? "-"}` : (order.queue_number ?? "-")
-  ));
-  lines.push(twoColumn("Time:", date.toLocaleTimeString()));
+  lines.push(
+    twoColumn(
+      order.order_type === "dine_in" ? "DINE-IN" : "TAKEAWAY",
+      order.order_type === "dine_in"
+        ? `Table ${order.table_number ?? "-"}`
+        : order.queue_number ?? "-"
+    )
+  );
+  lines.push(
+    twoColumn(
+      "Time:",
+      date.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })
+    )
+  );
   lines.push(divider("="));
 
   for (const item of items) {
-    const qty = item.quantity > 1 ? `${item.quantity}x ` : "";
-    lines.push(`${qty}${item.product_name}`);
-    if (item.variant_name) lines.push(`  ${item.variant_name}`);
+    const qty = `${item.quantity}x`;
+    lines.push(`${qty} ${item.product_name}`);
+    if (item.variant_name) lines.push(`   ${item.variant_name}`);
 
     const mods = item.modifiers;
     if (Array.isArray(mods) && mods.length > 0) {
-      const modNames = mods.map((m: any) => m.option?.name ?? "").filter(Boolean);
-      if (modNames.length > 0) lines.push(`  ${modNames.join(", ")}`);
+      const modNames = mods
+        .map((m: any) => m.option?.name ?? "")
+        .filter(Boolean);
+      if (modNames.length > 0) lines.push(`   ${modNames.join(", ")}`);
     }
-    if (item.notes) lines.push(`  ** ${item.notes} **`);
+    if (item.notes) lines.push(`   ** ${item.notes} **`);
     lines.push(divider("-"));
   }
 
@@ -234,7 +328,27 @@ export function formatKitchenDocket(order: {
 // ─── Print Dispatch ────────────────────────────────────────
 
 /**
- * Print via Capacitor native SUNMI plugin (highest priority)
+ * Print formatted receipt via Capacitor native SUNMI plugin (with logo)
+ */
+async function printFormattedViaNative(
+  header: string,
+  body: string,
+  footer: string
+): Promise<boolean> {
+  if (!isCapacitorNative()) return false;
+  try {
+    const { connected } = await SunmiPrinter.isConnected();
+    if (!connected) return false;
+    await SunmiPrinter.printFormattedReceipt({ header, body, footer });
+    return true;
+  } catch (err) {
+    console.error("[SUNMI/Native] Formatted print error:", err);
+    return false;
+  }
+}
+
+/**
+ * Print plain text via Capacitor native SUNMI plugin
  */
 async function printViaNative(text: string): Promise<boolean> {
   if (!isCapacitorNative()) return false;
@@ -268,25 +382,36 @@ async function printViaJSBridge(text: string): Promise<boolean> {
 }
 
 /**
- * Print receipt — tries native → JS bridge → browser fallback
+ * Print receipt — tries native formatted (with logo) → plain native → JS bridge → browser
  */
-export async function printReceipt58mm(order: any, branchName: string) {
-  const text = formatReceipt(order, branchName);
+export async function printReceipt58mm(
+  order: any,
+  outlet: OutletInfo | string
+) {
+  // Backward compat: accept string (outlet name) or OutletInfo object
+  const outletInfo: OutletInfo =
+    typeof outlet === "string" ? { name: outlet } : outlet;
 
-  // 1. Capacitor native plugin (AIDL)
-  if (await printViaNative(text)) return;
+  const { header, body, footer } = formatReceipt(order, outletInfo);
 
-  // 2. SUNMI JS Bridge (WebView)
-  if (await printViaJSBridge(text)) return;
+  // 1. Native formatted (with logo + styled text)
+  if (await printFormattedViaNative(header, body, footer)) return;
 
-  // 3. Fallback: browser print dialog
-  const printWindow = window.open("", "_blank", "width=350,height=600");
+  // 2. Plain native (ESC/POS text only)
+  const plainText = header + "\n" + body + "\n" + footer;
+  if (await printViaNative(plainText)) return;
+
+  // 3. SUNMI JS Bridge (WebView)
+  if (await printViaJSBridge(plainText)) return;
+
+  // 4. Fallback: browser print dialog
+  const printWindow = window.open("", "_blank", "width=400,height=600");
   if (!printWindow) return;
   printWindow.document.write(`
     <html><head><title>Receipt</title>
-    <style>body{font-family:monospace;font-size:12px;width:58mm;margin:0;padding:4mm;white-space:pre-wrap;}
+    <style>body{font-family:monospace;font-size:12px;width:80mm;margin:0;padding:4mm;white-space:pre-wrap;}
     @media print{body{margin:0;padding:2mm;}}</style></head>
-    <body>${text}</body></html>
+    <body>${plainText}</body></html>
   `);
   printWindow.document.close();
   printWindow.focus();
@@ -297,7 +422,10 @@ export async function printReceipt58mm(order: any, branchName: string) {
 /**
  * Print kitchen docket — tries external printer → native → JS bridge → browser
  */
-export async function printKitchenDocket58mm(order: any, branchName: string) {
+export async function printKitchenDocket58mm(
+  order: any,
+  outlet: OutletInfo | string
+) {
   const items = order.pos_order_items ?? [];
   const stationSet = new Set(items.map((i: any) => i.kitchen_station).filter(Boolean)) as Set<string>;
 
@@ -307,11 +435,11 @@ export async function printKitchenDocket58mm(order: any, branchName: string) {
     if (text) {
       if (await printViaNative(text)) return;
       if (await printViaJSBridge(text)) return;
-      const printWindow = window.open("", "_blank", "width=350,height=400");
+      const printWindow = window.open("", "_blank", "width=400,height=400");
       if (printWindow) {
         printWindow.document.write(`
           <html><head><title>Kitchen Docket</title>
-          <style>body{font-family:monospace;font-size:14px;font-weight:bold;width:58mm;margin:0;padding:4mm;white-space:pre-wrap;}
+          <style>body{font-family:monospace;font-size:14px;font-weight:bold;width:80mm;margin:0;padding:4mm;white-space:pre-wrap;}
           @media print{body{margin:0;padding:2mm;}}</style></head>
           <body>${text}</body></html>
         `);
@@ -340,11 +468,11 @@ export async function printKitchenDocket58mm(order: any, branchName: string) {
     if (await printViaJSBridge(text)) continue;
 
     // 4. Browser fallback
-    const printWindow = window.open("", "_blank", "width=350,height=400");
+    const printWindow = window.open("", "_blank", "width=400,height=400");
     if (!printWindow) continue;
     printWindow.document.write(`
       <html><head><title>${station} Docket</title>
-      <style>body{font-family:monospace;font-size:14px;font-weight:bold;width:58mm;margin:0;padding:4mm;white-space:pre-wrap;}
+      <style>body{font-family:monospace;font-size:14px;font-weight:bold;width:80mm;margin:0;padding:4mm;white-space:pre-wrap;}
       @media print{body{margin:0;padding:2mm;}}</style></head>
       <body>${text}</body></html>
     `);
@@ -357,7 +485,10 @@ export async function printKitchenDocket58mm(order: any, branchName: string) {
 
 // ─── External Printer Bridge (for USB/Network kitchen printers) ───
 
-export async function printToExternalPrinter(station: string, text: string): Promise<boolean> {
+export async function printToExternalPrinter(
+  station: string,
+  text: string
+): Promise<boolean> {
   try {
     const res = await fetch("http://localhost:8080/print", {
       method: "POST",
@@ -366,7 +497,9 @@ export async function printToExternalPrinter(station: string, text: string): Pro
     });
     return res.ok;
   } catch {
-    console.warn(`[PRINT] External printer bridge not available for station: ${station}`);
+    console.warn(
+      `[PRINT] External printer bridge not available for station: ${station}`
+    );
     return false;
   }
 }

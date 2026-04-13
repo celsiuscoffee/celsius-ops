@@ -60,23 +60,31 @@ export function POSSettings() {
           { payment_method: "Cash", amount: 1500 },
         ],
       };
-      const branchName = outlet?.name ?? "Celsius Coffee";
-      const text = formatReceipt(testOrder, branchName);
+      const outletInfo = {
+        name: outlet?.name ?? "Celsius Coffee",
+        address: outlet?.address,
+        city: outlet?.city,
+        state: outlet?.state,
+        phone: outlet?.phone,
+      };
+      const { header, body, footer } = formatReceipt(testOrder, outletInfo);
 
       if (isCapacitorNative()) {
-        await SunmiPrinter.printReceipt({ text });
+        await SunmiPrinter.printFormattedReceipt({ header, body, footer });
         setTestResult("Printed (Native)");
       } else if (isSunmiDevice()) {
         const bridge = (window as any).sunmiInnerPrinter ?? (window as any).PrinterManager;
         bridge?.printerInit?.();
         bridge?.setFontSize?.(24);
-        bridge?.printText?.(text);
+        const plainText = header + "\n" + body + "\n" + footer;
+        bridge?.printText?.(plainText);
         bridge?.cutPaper?.();
         setTestResult("Printed (JS Bridge)");
       } else {
-        const w = window.open("", "_blank", "width=350,height=600");
+        const plainText = header + "\n" + body + "\n" + footer;
+        const w = window.open("", "_blank", "width=400,height=600");
         if (w) {
-          w.document.write(`<html><head><title>Test Print</title><style>body{font-family:monospace;font-size:12px;width:58mm;margin:0;padding:4mm;white-space:pre-wrap;}</style></head><body>${text}</body></html>`);
+          w.document.write(`<html><head><title>Test Print</title><style>body{font-family:monospace;font-size:12px;width:80mm;margin:0;padding:4mm;white-space:pre-wrap;}</style></head><body>${plainText}</body></html>`);
           w.document.close();
           w.focus();
           w.print();
