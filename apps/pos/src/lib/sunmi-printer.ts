@@ -545,15 +545,59 @@ export async function printKitchenDocket58mm(
 
 // ─── External Printer Bridge (for USB/Network kitchen printers) ───
 
+export interface PrinterConfig {
+  id: string;
+  name: string;
+  printer_type: "receipt" | "docket";
+  station: string | null;
+  connection_type: "network" | "usb" | "bluetooth" | "built_in";
+  ip_address: string | null;
+  port: number;
+  is_enabled: boolean;
+}
+
+// Cache printer configs to avoid DB hits on every print
+let _printerConfigCache: PrinterConfig[] = [];
+let _printerConfigOutletId = "";
+
+export function setPrinterConfigs(configs: PrinterConfig[], outletId: string) {
+  _printerConfigCache = configs;
+  _printerConfigOutletId = outletId;
+}
+
+export function getPrinterConfigForStation(station: string, type: "receipt" | "docket" = "docket"): PrinterConfig | null {
+  const stationLower = station.toLowerCase();
+  // Find a printer matching this station and type
+  return _printerConfigCache.find(
+    (p) =>
+      p.is_enabled &&
+      p.printer_type === type &&
+      (p.station?.toLowerCase() === stationLower || (!p.station && !station))
+  ) ?? null;
+}
+
 export async function printToExternalPrinter(
   station: string,
   text: string
 ): Promise<boolean> {
+  // Check if we have a configured printer for this station
+  const config = getPrinterConfigForStation(station, "docket");
+
+  // Build the request — include printer IP if configured
+  const payload: Record<string, unknown> = {
+    printer: station.toLowerCase(),
+    data: text,
+  };
+  if (config?.ip_address) {
+    payload.ip = config.ip_address;
+    payload.port = config.port || 9100;
+  }
+
   try {
     const res = await fetch("http://localhost:8080/print", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ printer: station.toLowerCase(), data: text }),
+      body: JSON.stringify(payload),
     });
     return res.ok;
   } catch {

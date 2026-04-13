@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import * as db from "./supabase-queries";
+import { setPrinterConfigs } from "./sunmi-printer";
 import type { CartItem } from "@/types/database";
 
 // ─── Types (matching Supabase table shapes) ────────────────
@@ -229,6 +230,11 @@ export function POSProvider({ children }: { children: ReactNode }) {
           setCategories(cats as string[]);
           setPopularProductIds(popular as string[]);
           setCustomLayouts(layouts as any[]);
+
+          // Load printer configs into cache for print routing
+          db.fetchPrinterConfigs(defaultOutlet.id).then((configs) => {
+            setPrinterConfigs(configs as any[], defaultOutlet.id);
+          }).catch(() => {});
 
           // Initialize order sequence from existing orders
           const maxSeq = await db.fetchMaxOrderSeq(defaultOutlet.id);

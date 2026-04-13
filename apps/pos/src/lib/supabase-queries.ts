@@ -247,6 +247,20 @@ export async function fetchMaxOrderSeq(outletId: string): Promise<number> {
   return isNaN(seq) ? 0 : seq;
 }
 
+export async function fetchPrinterConfigs(outletId: string) {
+  const { data, error } = await supabase
+    .from("pos_printer_config")
+    .select("*")
+    .eq("outlet_id", outletId)
+    .eq("is_enabled", true)
+    .order("created_at");
+  if (error) {
+    console.warn("[DB] Failed to load printer configs:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
 export async function fetchOpenOrders(outletId: string) {
   const { data, error } = await supabase
     .from("pos_orders")
