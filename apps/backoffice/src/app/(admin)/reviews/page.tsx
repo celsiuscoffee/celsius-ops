@@ -227,7 +227,7 @@ export default function ReviewsPage() {
   const [showFilter, setShowFilter] = useState(false);
 
   // Fetch outlets
-  const { data: outlets } = useFetch<Outlet[]>("/api/settings/outlets");
+  const { data: outlets } = useFetch<Outlet[]>("/api/settings/outlets?status=ACTIVE");
 
   // Auto-select first outlet
   const selectedOutletId = outletId || (outlets?.[0]?.id ?? "");

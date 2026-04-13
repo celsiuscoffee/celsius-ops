@@ -68,7 +68,7 @@ export default function ReviewSettingsPage() {
   const [feedbackFields, setFeedbackFields] = useState<FeedbackField[]>([]);
 
   // Fetch
-  const { data: outlets } = useFetch<Outlet[]>("/api/settings/outlets");
+  const { data: outlets } = useFetch<Outlet[]>("/api/settings/outlets?status=ACTIVE");
   const selectedOutletId = outletId || (outlets?.[0]?.id ?? "");
 
   const { data: settings, mutate: mutateSettings } = useFetch<ReviewSettingsData>(
