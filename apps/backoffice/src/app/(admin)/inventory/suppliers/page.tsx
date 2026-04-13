@@ -80,8 +80,8 @@ export default function SuppliersPage() {
   const filtered = suppliers.filter(
     (s) =>
       s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.code.toLowerCase().includes(search.toLowerCase()) ||
-      s.location.toLowerCase().includes(search.toLowerCase())
+      (s.code || "").toLowerCase().includes(search.toLowerCase()) ||
+      (s.location || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const openAdd = () => { setForm(emptyForm); setEditingId(null); setDialogOpen(true); };
