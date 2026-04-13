@@ -41,9 +41,9 @@ export async function GET(request: NextRequest) {
         return { from, to: to || from };
       });
 
-    if (periodPairs.length === 0 || periodPairs.length > 4) {
+    if (periodPairs.length === 0 || periodPairs.length > 8) {
       return NextResponse.json(
-        { error: "Provide 1-4 periods as from:to pairs separated by commas" },
+        { error: "Provide 1-8 periods as from:to pairs separated by commas" },
         { status: 400 },
       );
     }
