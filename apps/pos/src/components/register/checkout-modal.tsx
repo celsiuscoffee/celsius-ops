@@ -14,12 +14,8 @@ type PaymentMethod = {
 };
 
 const PAYMENT_METHODS: PaymentMethod[] = [
-  { id: "cash", label: "Cash", icon: "💵", provider: "manual" },
   { id: "qr_pay", label: "DuitNow QR", icon: "📲", provider: "revenue_monster" },
-  { id: "ewallet", label: "E-Wallet", icon: "📱", provider: "revenue_monster" },
   { id: "card_terminal", label: "Card (Terminal)", icon: "💳", provider: "revenue_monster" },
-  { id: "grabpay", label: "GrabPay", icon: "🟢", provider: "revenue_monster" },
-  { id: "tng", label: "Touch 'n Go", icon: "📱", provider: "revenue_monster" },
 ];
 
 // Map checkout method IDs to Revenue Monster terminal payment types
@@ -66,19 +62,7 @@ export function CheckoutModal({
   const [error, setError] = useState("");
 
   function handleSelectMethod(methodId: string) {
-    if (methodId === "cash") {
-      handleCashPay();
-    } else {
-      handleTerminalPay(methodId);
-    }
-  }
-
-  function handleCashPay() {
-    setSelectedMethod("cash");
-    setStep("success");
-    setTimeout(() => {
-      onComplete(orderNumber, queueNumber, "Cash");
-    }, 100);
+    handleTerminalPay(methodId);
   }
 
   async function handleTerminalPay(methodId: string) {
