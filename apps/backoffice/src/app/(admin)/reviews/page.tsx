@@ -14,6 +14,10 @@ import {
   TrendingUp,
   Store,
   Calendar,
+  Sparkles,
+  Check,
+  X,
+  Send,
 } from "lucide-react";
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
@@ -258,6 +262,248 @@ function FeedbackCard({ fb, showOutlet }: { fb: Feedback & { outletName?: string
             {fb.source}
           </span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Auto-Reply Modal ──────────────────────────────────────
+
+type AutoReplyResult = {
+  reviewId: string;
+  reviewer: string;
+  rating: number;
+  comment?: string;
+  reply: string;
+  posted: boolean;
+  needsApproval: boolean;
+  error?: string;
+};
+
+function AutoReplyModal({
+  outletId,
+  outletName,
+  onClose,
+  onDone,
+}: {
+  outletId: string;
+  outletName: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<AutoReplyResult[] | null>(null);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
+  const [posting, setPosting] = useState<Record<string, boolean>>({});
+  const [postedIds, setPostedIds] = useState<Set<string>>(new Set());
+
+  const runAutoReply = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/reviews/auto-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outletId, mode: "post" }),
+      });
+      const data = await res.json();
+      setResults(data.results ?? []);
+      // Mark auto-posted ones
+      const posted = new Set<string>();
+      for (const r of data.results ?? []) {
+        if (r.posted) posted.add(r.reviewId);
+      }
+      setPostedIds(posted);
+    } catch {
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const approveReply = async (result: AutoReplyResult, customReply?: string) => {
+    setPosting((p) => ({ ...p, [result.reviewId]: true }));
+    try {
+      await fetch("/api/reviews/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outletId, reviewId: result.reviewId, comment: customReply || result.reply }),
+      });
+      setPostedIds((prev) => new Set(prev).add(result.reviewId));
+      if (editingIdx !== null) {
+        // Update the reply text in results
+        setResults((prev) =>
+          prev?.map((r) => r.reviewId === result.reviewId ? { ...r, reply: customReply || r.reply } : r) ?? null,
+        );
+        setEditingIdx(null);
+      }
+    } finally {
+      setPosting((p) => ({ ...p, [result.reviewId]: false }));
+    }
+  };
+
+  const pendingApproval = results?.filter((r) => r.needsApproval && !postedIds.has(r.reviewId)) ?? [];
+  const autoPosted = results?.filter((r) => r.posted || (postedIds.has(r.reviewId) && !r.needsApproval)) ?? [];
+  const approvedByUser = results?.filter((r) => r.needsApproval && postedIds.has(r.reviewId)) ?? [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold">Auto-Reply Reviews</h2>
+            <p className="text-sm text-muted-foreground">{outletName}</p>
+          </div>
+          <button onClick={() => { onDone(); onClose(); }} className="rounded-lg p-2 hover:bg-muted">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {!results && !loading && (
+          <div className="mt-6 text-center">
+            <Sparkles className="mx-auto h-10 w-10 text-terracotta" />
+            <p className="mt-3 text-sm text-foreground font-medium">AI will reply to all unreplied Google reviews</p>
+            <ul className="mt-2 text-xs text-muted-foreground space-y-1">
+              <li>4-5 star reviews: auto-posted immediately</li>
+              <li>1-3 star reviews: drafted for your approval</li>
+            </ul>
+            <button
+              onClick={runAutoReply}
+              className="mt-4 rounded-lg bg-brand-dark px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-dark/90 transition-colors"
+            >
+              Run Auto-Reply
+            </button>
+          </div>
+        )}
+
+        {loading && (
+          <div className="mt-6 flex flex-col items-center gap-3 py-10">
+            <Loader2 className="h-8 w-8 animate-spin text-terracotta" />
+            <p className="text-sm text-muted-foreground">Generating replies with AI...</p>
+          </div>
+        )}
+
+        {results && !loading && (
+          <div className="mt-4 space-y-4">
+            {results.length === 0 && (
+              <div className="rounded-xl border border-border bg-muted/30 p-6 text-center">
+                <Check className="mx-auto h-8 w-8 text-green-500" />
+                <p className="mt-2 text-sm font-medium">All reviews already replied!</p>
+              </div>
+            )}
+
+            {/* Auto-posted good reviews */}
+            {autoPosted.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-2">
+                  Auto-posted ({autoPosted.length})
+                </p>
+                <div className="space-y-2">
+                  {autoPosted.map((r) => (
+                    <div key={r.reviewId} className="rounded-lg border border-green-200 bg-green-50 p-3">
+                      <div className="flex items-center gap-2">
+                        <StarRating rating={r.rating} size={12} />
+                        <span className="text-sm font-medium">{r.reviewer}</span>
+                        <Check className="ml-auto h-4 w-4 text-green-600" />
+                      </div>
+                      {r.comment && <p className="mt-1 text-xs text-muted-foreground">{r.comment}</p>}
+                      <p className="mt-2 text-xs text-green-800 bg-green-100 rounded p-2">{r.reply}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Approved by user */}
+            {approvedByUser.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-2">
+                  Approved & posted ({approvedByUser.length})
+                </p>
+                <div className="space-y-2">
+                  {approvedByUser.map((r) => (
+                    <div key={r.reviewId} className="rounded-lg border border-green-200 bg-green-50 p-3">
+                      <div className="flex items-center gap-2">
+                        <StarRating rating={r.rating} size={12} />
+                        <span className="text-sm font-medium">{r.reviewer}</span>
+                        <Check className="ml-auto h-4 w-4 text-green-600" />
+                      </div>
+                      {r.comment && <p className="mt-1 text-xs text-muted-foreground">{r.comment}</p>}
+                      <p className="mt-2 text-xs text-green-800 bg-green-100 rounded p-2">{r.reply}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pending approval (bad reviews) */}
+            {pendingApproval.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">
+                  Needs approval ({pendingApproval.length})
+                </p>
+                <div className="space-y-2">
+                  {pendingApproval.map((r, i) => (
+                    <div key={r.reviewId} className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <div className="flex items-center gap-2">
+                        <StarRating rating={r.rating} size={12} />
+                        <span className="text-sm font-medium">{r.reviewer}</span>
+                      </div>
+                      {r.comment && <p className="mt-1 text-xs text-muted-foreground">{r.comment}</p>}
+
+                      {editingIdx === i ? (
+                        <div className="mt-2">
+                          <textarea
+                            value={editText}
+                            onChange={(e) => setEditText(e.target.value)}
+                            className="w-full rounded-lg border border-border bg-white p-2 text-xs outline-none focus:ring-2 focus:ring-ring/50 resize-none"
+                            rows={4}
+                          />
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <button
+                              onClick={() => setEditingIdx(null)}
+                              className="text-xs text-muted-foreground hover:text-foreground"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => approveReply(r, editText)}
+                              disabled={posting[r.reviewId]}
+                              className="flex items-center gap-1 rounded-lg bg-brand-dark px-3 py-1 text-xs font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50"
+                            >
+                              {posting[r.reviewId] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                              Post edited reply
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="mt-2 text-xs text-amber-800 bg-amber-100 rounded p-2">{r.reply}</p>
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              onClick={() => approveReply(r)}
+                              disabled={posting[r.reviewId]}
+                              className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                            >
+                              {posting[r.reviewId] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                              Approve & post
+                            </button>
+                            <button
+                              onClick={() => { setEditingIdx(i); setEditText(r.reply); }}
+                              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -534,6 +780,7 @@ function OutletView() {
   const [search, setSearch] = useState("");
   const [filterRating, setFilterRating] = useState<number | null>(null);
   const [showFilter, setShowFilter] = useState(false);
+  const [showAutoReply, setShowAutoReply] = useState(false);
 
   const { data: rawOutlets } = useFetch<Outlet[]>("/api/settings/outlets?status=ACTIVE");
   const outlets = rawOutlets ? sortOutlets(rawOutlets) : undefined;
@@ -566,7 +813,7 @@ function OutletView() {
 
   return (
     <>
-      {/* Outlet selector */}
+      {/* Outlet selector + auto-reply */}
       <div className="mt-6 flex items-center gap-3">
         {outlets && outlets.length > 1 && (
           <select
@@ -579,7 +826,26 @@ function OutletView() {
             ))}
           </select>
         )}
+        {selectedOutletId && reviewsData?.connected && (
+          <button
+            onClick={() => setShowAutoReply(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta/90 transition-colors"
+          >
+            <Sparkles className="h-4 w-4" />
+            Auto-Reply
+          </button>
+        )}
       </div>
+
+      {/* Auto-reply modal */}
+      {showAutoReply && selectedOutletId && (
+        <AutoReplyModal
+          outletId={selectedOutletId}
+          outletName={selectedOutlet?.name ?? ""}
+          onClose={() => setShowAutoReply(false)}
+          onDone={() => mutateReviews()}
+        />
+      )}
 
       {/* Stats header */}
       <div className="mt-4 rounded-xl border border-border bg-white p-5">
