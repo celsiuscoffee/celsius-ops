@@ -91,7 +91,7 @@ type Order = {
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof Clock }> = {
   DRAFT: { label: "Draft", color: "bg-gray-400", icon: FileText },
   PENDING_APPROVAL: { label: "Pending Approval", color: "bg-amber-500", icon: Clock },
-  APPROVED: { label: "Approved", color: "bg-blue-500", icon: CheckCircle2 },
+  APPROVED: { label: "Confirmed", color: "bg-blue-500", icon: CheckCircle2 },
   SENT: { label: "Sent", color: "bg-green-500", icon: MessageCircle },
   AWAITING_DELIVERY: { label: "Awaiting Delivery", color: "bg-purple-500", icon: Truck },
   PARTIALLY_RECEIVED: { label: "Partially Received", color: "bg-amber-600", icon: AlertTriangle },
@@ -101,11 +101,11 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof
 
 const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof Clock; color: string }[]> = {
   DRAFT: [
-    { status: "PENDING_APPROVAL", label: "Submit for Approval", icon: Send, color: "bg-amber-500 hover:bg-amber-600" },
+    { status: "APPROVED", label: "Confirm Order", icon: CheckCircle2, color: "bg-blue-500 hover:bg-blue-600" },
     { status: "CANCELLED", label: "Cancel", icon: Ban, color: "bg-red-500 hover:bg-red-600" },
   ],
   PENDING_APPROVAL: [
-    { status: "APPROVED", label: "Approve", icon: ThumbsUp, color: "bg-blue-500 hover:bg-blue-600" },
+    { status: "APPROVED", label: "Confirm", icon: CheckCircle2, color: "bg-blue-500 hover:bg-blue-600" },
     { status: "CANCELLED", label: "Reject", icon: Ban, color: "bg-red-500 hover:bg-red-600" },
   ],
   APPROVED: [
