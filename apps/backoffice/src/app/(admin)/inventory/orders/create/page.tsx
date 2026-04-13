@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import {
   ArrowLeftRight,
   CheckCircle2,
   Zap,
+  X,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -172,6 +173,19 @@ export default function CreateOrderPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("");
+  const [supplierSearchText, setSupplierSearchText] = useState("");
+  const [supplierDropdownOpen, setSupplierDropdownOpen] = useState(false);
+  const supplierRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (supplierRef.current && !supplierRef.current.contains(e.target as Node)) {
+        setSupplierDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
   const [orderNotes, setOrderNotes] = useState("");
   const [createTab, setCreateTab] = useState<"smart" | "all" | "reorder">("smart");
   const [saving, setSaving] = useState(false);
@@ -224,9 +238,19 @@ export default function CreateOrderPage() {
       fetch("/api/inventory/orders").then((r) => r.json()),
     ]).then(([s, b, o]) => {
       setSuppliers(s);
-      setOutlets(b);
+      // Sort outlets: Putrajaya first, Nilai last
+      const sorted = [...b].sort((a: OutletOption, b: OutletOption) => {
+        const aName = a.name.toLowerCase();
+        const bName = b.name.toLowerCase();
+        if (aName.includes("putrajaya")) return -1;
+        if (bName.includes("putrajaya")) return 1;
+        if (aName.includes("nilai")) return 1;
+        if (bName.includes("nilai")) return -1;
+        return aName.localeCompare(bName);
+      });
+      setOutlets(sorted);
       setOrders(o);
-      const defaultOutlet = b[0]?.id ?? "";
+      const defaultOutlet = sorted[0]?.id ?? "";
       setSelectedOutletId(defaultOutlet);
       if (defaultOutlet) {
         loadStockLevels(defaultOutlet);
@@ -533,16 +557,44 @@ export default function CreateOrderPage() {
                   {outlets.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
-              <div>
+              <div className="relative" ref={supplierRef}>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Supplier</label>
-                <select
-                  value={supplierFilter}
-                  onChange={(e) => setSupplierFilter(e.target.value)}
-                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-                >
-                  <option value="">All Suppliers</option>
-                  {suppliers.filter((s) => s.products.length > 0).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search supplier..."
+                    value={supplierFilter ? (suppliers.find((s) => s.id === supplierFilter)?.name ?? supplierSearchText) : supplierSearchText}
+                    onChange={(e) => { setSupplierSearchText(e.target.value); setSupplierFilter(""); setSupplierDropdownOpen(true); }}
+                    onFocus={() => setSupplierDropdownOpen(true)}
+                    className="w-full rounded-md border border-gray-200 pl-9 pr-8 py-2 text-sm"
+                  />
+                  {(supplierFilter || supplierSearchText) && (
+                    <button onClick={() => { setSupplierFilter(""); setSupplierSearchText(""); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                {supplierDropdownOpen && (
+                  <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                    <button
+                      onClick={() => { setSupplierFilter(""); setSupplierSearchText(""); setSupplierDropdownOpen(false); }}
+                      className={`flex w-full items-center px-3 py-2 text-sm hover:bg-gray-50 ${!supplierFilter ? "font-medium text-terracotta" : "text-gray-700"}`}
+                    >
+                      All Suppliers
+                    </button>
+                    {suppliers.filter((s) => s.products.length > 0 && (!supplierSearchText || s.name.toLowerCase().includes(supplierSearchText.toLowerCase()))).map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => { setSupplierFilter(s.id); setSupplierSearchText(""); setSupplierDropdownOpen(false); }}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 ${supplierFilter === s.id ? "font-medium text-terracotta bg-terracotta/5" : "text-gray-700"}`}
+                      >
+                        <span>{s.name}</span>
+                        <span className="text-[10px] text-gray-400">{s.products.length} products</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Search Products</label>
