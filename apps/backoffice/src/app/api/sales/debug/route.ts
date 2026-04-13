@@ -77,6 +77,37 @@ export async function GET() {
         fieldSummary[k] = [...v];
       }
 
+      // Revenue audit — check for duplicates, total vs subTotal, refunds
+      const refIdMap = new Map<string, number>();
+      let totalSum = 0;
+      let subTotalSum = 0;
+      let negativeTotal: { refId: string; total: number; channel?: string }[] = [];
+      let zeroTotal: { refId: string; channel?: string }[] = [];
+      let totalVsSubTotalDiff = 0;
+      for (const txn of txns) {
+        const count = (refIdMap.get(txn.refId) || 0) + 1;
+        refIdMap.set(txn.refId, count);
+        totalSum += txn.total;
+        subTotalSum += txn.subTotal || 0;
+        totalVsSubTotalDiff += txn.total - (txn.subTotal || txn.total);
+        if (txn.total < 0) negativeTotal.push({ refId: txn.refId, total: txn.total, channel: txn.channel });
+        if (txn.total === 0) zeroTotal.push({ refId: txn.refId, channel: txn.channel });
+      }
+      const duplicateRefIds = [...refIdMap.entries()].filter(([, c]) => c > 1).map(([id, c]) => ({ refId: id, count: c }));
+
+      checks.revenueAudit = {
+        totalRevenue: Math.round(totalSum * 100) / 100,
+        subTotalRevenue: Math.round(subTotalSum * 100) / 100,
+        difference: Math.round(totalVsSubTotalDiff * 100) / 100,
+        differenceLabel: "total - subTotal (could be rounding/service charge)",
+        uniqueTransactions: refIdMap.size,
+        totalTransactions: txns.length,
+        duplicateRefIds: duplicateRefIds.length > 0 ? duplicateRefIds : "none",
+        negativeAmounts: negativeTotal.length > 0 ? negativeTotal : "none",
+        zeroAmounts: zeroTotal.length > 0 ? `${zeroTotal.length} transactions` : "none",
+        hasSubTotal: txns.length > 0 ? txns[0].subTotal !== undefined : "no txns",
+      };
+
       checks.storehubTest = {
         outlet: testOutlet.name,
         storehubId: testOutlet.storehubId,
