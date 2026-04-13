@@ -266,17 +266,23 @@ function FeedbackCard({ fb, showOutlet }: { fb: Feedback & { outletName?: string
 // ─── Dashboard View ────────────────────────────────────────
 
 function DashboardView() {
-  const [period, setPeriod] = useState<"day" | "week" | "month">("month");
+  const [period, setPeriod] = useState<"day" | "week" | "month" | "custom">("month");
   const [dashTab, setDashTab] = useState<"google" | "internal">("google");
   const [search, setSearch] = useState("");
   const [filterRating, setFilterRating] = useState<number | null>(null);
   const [showFilter, setShowFilter] = useState(false);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
-  const { data, isLoading } = useFetch<DashboardResponse>(
-    `/api/reviews/dashboard?period=${period}`,
-  );
+  const fetchUrl = period === "custom" && customFrom
+    ? `/api/reviews/dashboard?period=custom&from=${customFrom}${customTo ? `&to=${customTo}` : ""}`
+    : period !== "custom"
+      ? `/api/reviews/dashboard?period=${period}`
+      : null;
 
-  const periodLabel = period === "day" ? "Today" : period === "week" ? "Last 7 days" : "Last 30 days";
+  const { data, isLoading } = useFetch<DashboardResponse>(fetchUrl);
+
+  const periodLabel = period === "day" ? "Today" : period === "week" ? "Last 7 days" : period === "month" ? "Last 30 days" : customFrom ? `${customFrom} to ${customTo || "now"}` : "Custom";
 
   // Filter all reviews
   const filteredGoogleReviews = (data?.allGoogleReviews ?? []).filter((r) => {
@@ -294,10 +300,10 @@ function DashboardView() {
   return (
     <>
       {/* Period filter */}
-      <div className="mt-6 flex items-center gap-2">
+      <div className="mt-6 flex flex-wrap items-center gap-2">
         <Calendar className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm text-muted-foreground mr-1">Period:</span>
-        {(["day", "week", "month"] as const).map((p) => (
+        {(["day", "week", "month", "custom"] as const).map((p) => (
           <button
             key={p}
             onClick={() => setPeriod(p)}
@@ -307,9 +313,26 @@ function DashboardView() {
                 : "border border-border bg-white text-muted-foreground hover:bg-muted"
             }`}
           >
-            {p === "day" ? "Today" : p === "week" ? "7 Days" : "30 Days"}
+            {p === "day" ? "Today" : p === "week" ? "7 Days" : p === "month" ? "30 Days" : "Custom"}
           </button>
         ))}
+        {period === "custom" && (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="rounded-lg border border-border bg-white px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+            />
+            <span className="text-sm text-muted-foreground">to</span>
+            <input
+              type="date"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="rounded-lg border border-border bg-white px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+            />
+          </div>
+        )}
       </div>
 
       {/* Aggregated stats */}

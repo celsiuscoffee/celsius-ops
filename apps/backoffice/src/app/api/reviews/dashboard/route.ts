@@ -19,17 +19,23 @@ function outletSortKey(name: string): number {
   return 50; // default middle
 }
 
-// GET /api/reviews/dashboard?period=day|week|month
+// GET /api/reviews/dashboard?period=day|week|month|custom&from=YYYY-MM-DD&to=YYYY-MM-DD
 export async function GET(request: NextRequest) {
   const user = await getUserFromHeaders(request.headers);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const period = request.nextUrl.searchParams.get("period") || "month";
+  const fromParam = request.nextUrl.searchParams.get("from");
+  const toParam = request.nextUrl.searchParams.get("to");
 
   // Calculate date range
   const now = new Date();
   let since: Date;
-  if (period === "day") {
+  let until: Date | null = null;
+  if (period === "custom" && fromParam) {
+    since = new Date(fromParam + "T00:00:00");
+    until = toParam ? new Date(toParam + "T23:59:59.999") : null;
+  } else if (period === "day") {
     since = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   } else if (period === "week") {
     since = new Date(now);
@@ -60,7 +66,10 @@ export async function GET(request: NextRequest) {
     try {
       const data = await fetchGoogleReviews(settings.gbpAccountId, settings.gbpLocationName, 50);
       // Filter by date
-      const filtered = data.reviews.filter((r) => new Date(r.createdAt) >= since);
+      const filtered = data.reviews.filter((r) => {
+        const d = new Date(r.createdAt);
+        return d >= since && (!until || d <= until);
+      });
       // Period-based average rating
       const periodAvg = filtered.length
         ? filtered.reduce((sum, r) => sum + r.rating, 0) / filtered.length
@@ -80,7 +89,7 @@ export async function GET(request: NextRequest) {
 
   // Fetch internal feedback for all outlets in date range
   const feedbacks = await prisma.internalFeedback.findMany({
-    where: { createdAt: { gte: since } },
+    where: { createdAt: { gte: since, ...(until ? { lte: until } : {}) } },
     orderBy: { createdAt: "desc" },
     include: { outlet: { select: { id: true, name: true } } },
   });
