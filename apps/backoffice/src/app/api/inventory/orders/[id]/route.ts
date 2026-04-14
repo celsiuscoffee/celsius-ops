@@ -164,8 +164,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const order = await prisma.order.findUnique({ where: { id }, select: { status: true } });
     if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    if (!["DRAFT", "APPROVED", "CANCELLED"].includes(order.status)) {
-      return NextResponse.json({ error: "Only draft, confirmed, or cancelled orders can be deleted" }, { status: 400 });
+    if (!["DRAFT", "CANCELLED"].includes(order.status)) {
+      return NextResponse.json({ error: "Only draft or cancelled orders can be deleted" }, { status: 400 });
     }
 
     // Wrap delete operations in a transaction
