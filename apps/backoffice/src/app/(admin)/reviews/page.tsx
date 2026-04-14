@@ -8,9 +8,7 @@ import {
   MessageSquare,
   Loader2,
   ExternalLink,
-  ChevronRight,
   Settings,
-  BarChart3,
   TrendingUp,
   Store,
   Calendar,
@@ -35,14 +33,6 @@ type GoogleReview = {
   reply?: { comment: string; updatedAt: string };
 };
 
-type ReviewsResponse = {
-  reviews: GoogleReview[];
-  averageRating: number;
-  totalReviewCount: number;
-  connected: boolean;
-  nextPageToken?: string;
-};
-
 type Feedback = {
   id: string;
   rating: number;
@@ -51,11 +41,6 @@ type Feedback = {
   feedback: string | null;
   source: string;
   createdAt: string;
-};
-
-type FeedbackResponse = {
-  feedbacks: Feedback[];
-  stats: { total: number; star5: number; star4: number; star3: number; star2: number; star1: number };
 };
 
 type DashboardGoogleReview = GoogleReview & { outletName: string; outletId: string };
@@ -881,6 +866,7 @@ function DashboardView() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [showBatchReply, setShowBatchReply] = useState(false);
+  const [filterOutletId, setFilterOutletId] = useState<string | null>(null);
 
   const fetchUrl = period === "custom" && customFrom
     ? `/api/reviews/dashboard?period=custom&from=${customFrom}${customTo ? `&to=${customTo}` : ""}`
@@ -895,14 +881,15 @@ function DashboardView() {
   // Reviews tab: only 4-5 star Google reviews
   const filteredGoogleReviews = (data?.allGoogleReviews ?? []).filter((r) => {
     if (r.rating < 4) return false;
+    if (filterOutletId && r.outletId !== filterOutletId) return false;
     if (search && !r.reviewer.name.toLowerCase().includes(search.toLowerCase()) && !r.comment?.toLowerCase().includes(search.toLowerCase()) && !r.outletName.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterRating && r.rating !== filterRating) return false;
     return true;
   });
 
   // Feedback tab: 1-3 star Google reviews + internal QR feedback
-  const lowStarGoogleReviews = (data?.allGoogleReviews ?? []).filter((r) => r.rating <= 3);
-  const internalFeedbacks = data?.allFeedbacks ?? [];
+  const lowStarGoogleReviews = (data?.allGoogleReviews ?? []).filter((r) => r.rating <= 3 && (!filterOutletId || r.outletId === filterOutletId));
+  const internalFeedbacks = (data?.allFeedbacks ?? []).filter((f) => !filterOutletId || f.outletName === data?.outlets?.find((o) => o.outletId === filterOutletId)?.outletName);
 
   type FeedbackItem = { type: "google"; data: DashboardGoogleReview } | { type: "internal"; data: DashboardFeedback };
   const combinedFeedback: FeedbackItem[] = [
@@ -1004,7 +991,9 @@ function DashboardView() {
             <MessageSquare className="h-4 w-4" />
             <span className="text-xs font-medium">Feedback</span>
           </div>
-          <span className="mt-2 block text-2xl font-bold">{data?.totalFeedbacks ?? 0}</span>
+          <span className="mt-2 block text-2xl font-bold">
+            {((data?.allGoogleReviews ?? []).filter((r) => r.rating <= 3).length + (data?.allFeedbacks ?? []).length)}
+          </span>
           <p className="mt-0.5 text-[10px] text-muted-foreground">{periodLabel}</p>
         </div>
         <div className="rounded-xl border border-border bg-white p-4">
@@ -1017,10 +1006,18 @@ function DashboardView() {
         </div>
       </div>
 
-      {/* Per-outlet breakdown */}
+      {/* Per-outlet breakdown — clickable to filter */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {(data?.outlets ?? []).map((outlet) => (
-          <div key={outlet.outletId} className="rounded-xl border border-border bg-white p-4">
+          <button
+            key={outlet.outletId}
+            onClick={() => setFilterOutletId(filterOutletId === outlet.outletId ? null : outlet.outletId)}
+            className={`rounded-xl border p-4 text-left transition-colors ${
+              filterOutletId === outlet.outletId
+                ? "border-terracotta bg-terracotta/5 ring-1 ring-terracotta"
+                : "border-border bg-white hover:border-terracotta/40"
+            }`}
+          >
             <h3 className="text-sm font-semibold truncate">{outlet.outletName}</h3>
             <div className="mt-2 flex items-center gap-3 text-sm">
               <div>
@@ -1034,9 +1031,22 @@ function DashboardView() {
             {!outlet.google.connected && (
               <p className="mt-1 text-[10px] text-amber-600">GBP not connected</p>
             )}
-          </div>
+          </button>
         ))}
       </div>
+      {filterOutletId && (
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            Filtered: <span className="font-medium text-foreground">{data?.outlets?.find((o) => o.outletId === filterOutletId)?.outletName}</span>
+          </span>
+          <button
+            onClick={() => setFilterOutletId(null)}
+            className="rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Sub-tabs + toolbar */}
       <div className="mt-6 flex items-center justify-between">
@@ -1159,301 +1169,10 @@ function DashboardView() {
   );
 }
 
-// ─── Outlet sort: Putrajaya first, Nilai last ─────────────
-
-const OUTLET_ORDER: Record<string, number> = {
-  putrajaya: 0,
-  "shah alam": 1,
-  tamarind: 2,
-  nilai: 99,
-};
-
-function outletSortKey(name: string): number {
-  const lower = name.toLowerCase();
-  for (const [key, order] of Object.entries(OUTLET_ORDER)) {
-    if (lower.includes(key)) return order;
-  }
-  return 50;
-}
-
-function sortOutlets(list: Outlet[]): Outlet[] {
-  return [...list].sort((a, b) => outletSortKey(a.name) - outletSortKey(b.name));
-}
-
-// ─── Per-Outlet View (original) ────────────────────────────
-
-function OutletView() {
-  const [tab, setTab] = useState<"google" | "internal">("google");
-  const [outletId, setOutletId] = useState<string>("");
-  const [search, setSearch] = useState("");
-  const [filterRating, setFilterRating] = useState<number | null>(null);
-  const [showFilter, setShowFilter] = useState(false);
-  const [showAutoReply, setShowAutoReply] = useState(false);
-  const [showGbpPost, setShowGbpPost] = useState(false);
-
-  const { data: rawOutlets } = useFetch<Outlet[]>("/api/settings/outlets?status=ACTIVE");
-  const outlets = rawOutlets ? sortOutlets(rawOutlets) : undefined;
-  const selectedOutletId = outletId || (outlets?.[0]?.id ?? "");
-  const selectedOutlet = outlets?.find((o) => o.id === selectedOutletId);
-
-  const { data: reviewsData, mutate: mutateReviews } = useFetch<ReviewsResponse>(
-    selectedOutletId ? `/api/reviews?outletId=${selectedOutletId}` : null,
-  );
-  const { data: feedbackData } = useFetch<FeedbackResponse>(
-    selectedOutletId ? `/api/reviews/feedback?outletId=${selectedOutletId}` : null,
-  );
-
-  // Reviews tab: only 4-5 star Google reviews
-  const filteredReviews = (reviewsData?.reviews ?? []).filter((r) => {
-    if (r.rating < 4) return false;
-    if (search && !r.reviewer.name.toLowerCase().includes(search.toLowerCase()) && !r.comment?.toLowerCase().includes(search.toLowerCase())) return false;
-    if (filterRating && r.rating !== filterRating) return false;
-    return true;
-  });
-
-  // Feedback tab: 1-3 star Google reviews + internal QR feedback
-  const outletLowStarGoogle = (reviewsData?.reviews ?? []).filter((r) => r.rating <= 3);
-  type OutletFeedbackItem = { type: "google"; data: GoogleReview } | { type: "internal"; data: Feedback };
-  const outletCombinedFeedback: OutletFeedbackItem[] = [
-    ...outletLowStarGoogle.map((r) => ({ type: "google" as const, data: r })),
-    ...(feedbackData?.feedbacks ?? []).map((f) => ({ type: "internal" as const, data: f })),
-  ].sort((a, b) => new Date(b.data.createdAt).getTime() - new Date(a.data.createdAt).getTime());
-
-  const filteredOutletFeedback = outletCombinedFeedback.filter((item) => {
-    const s = search.toLowerCase();
-    if (item.type === "google") {
-      const r = item.data;
-      if (search && !r.reviewer.name.toLowerCase().includes(s) && !r.comment?.toLowerCase().includes(s)) return false;
-      if (filterRating && r.rating !== filterRating) return false;
-    } else {
-      const f = item.data;
-      if (search && !f.name?.toLowerCase().includes(s) && !f.feedback?.toLowerCase().includes(s)) return false;
-      if (filterRating && f.rating !== filterRating) return false;
-    }
-    return true;
-  });
-
-  const stats = feedbackData?.stats;
-  const fiveStarPct = reviewsData?.totalReviewCount
-    ? Math.round(((reviewsData.reviews.filter((r) => r.rating === 5).length) / reviewsData.reviews.length) * 100)
-    : 0;
-
-  return (
-    <>
-      {/* Outlet selector + auto-reply */}
-      <div className="mt-6 flex items-center gap-3">
-        {outlets && outlets.length > 1 && (
-          <select
-            value={selectedOutletId}
-            onChange={(e) => setOutletId(e.target.value)}
-            className="rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
-          >
-            {outlets.map((o) => (
-              <option key={o.id} value={o.id}>{o.name}</option>
-            ))}
-          </select>
-        )}
-        {selectedOutletId && reviewsData?.connected && (
-          <>
-            <button
-              onClick={() => setShowAutoReply(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta/90 transition-colors"
-            >
-              <Sparkles className="h-4 w-4" />
-              Auto-Reply
-            </button>
-            <button
-              onClick={() => setShowGbpPost(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-brand-dark px-3 py-2 text-sm font-medium text-brand-dark hover:bg-brand-dark/5 transition-colors"
-            >
-              <Send className="h-4 w-4" />
-              GBP Post
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* Auto-reply modal */}
-      {showAutoReply && selectedOutletId && (
-        <AutoReplyModal
-          outletId={selectedOutletId}
-          outletName={selectedOutlet?.name ?? ""}
-          onClose={() => setShowAutoReply(false)}
-          onDone={() => mutateReviews()}
-        />
-      )}
-
-      {/* GBP Post modal */}
-      {showGbpPost && selectedOutletId && (
-        <GbpPostModal
-          outletId={selectedOutletId}
-          outletName={selectedOutlet?.name ?? ""}
-          onClose={() => setShowGbpPost(false)}
-        />
-      )}
-
-      {/* Stats header */}
-      <div className="mt-4 rounded-xl border border-border bg-white p-5">
-        <h2 className="text-lg font-semibold">{selectedOutlet?.name ?? "Select outlet"}</h2>
-        {tab === "google" ? (
-          <div className="mt-2 flex items-center gap-6 text-sm">
-            <div>
-              <span className="text-2xl font-bold">{reviewsData?.averageRating?.toFixed(1) ?? "–"}</span>
-              <Star className="ml-1 inline h-4 w-4 fill-amber-400 text-amber-400" />
-              <p className="text-xs text-muted-foreground">Google review</p>
-            </div>
-            <div>
-              <span className="text-2xl font-bold">{reviewsData?.totalReviewCount ?? 0}</span>
-              <p className="text-xs text-muted-foreground">Total review</p>
-            </div>
-            <div>
-              <span className="text-2xl font-bold">{fiveStarPct}%</span>
-              <p className="text-xs text-muted-foreground">5-star review</p>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-2 flex items-center gap-4 text-sm flex-wrap">
-            <div>
-              <span className="text-2xl font-bold">{stats?.total ?? 0}</span>
-              <p className="text-xs text-muted-foreground">Total feedback</p>
-            </div>
-            {[5, 4, 3, 2, 1].map((s) => (
-              <div key={s}>
-                <span className="text-2xl font-bold">{stats?.[`star${s}` as keyof typeof stats] ?? 0}</span>
-                <p className="text-xs text-muted-foreground">{s}-star</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Tabs + toolbar */}
-      <div className="mt-4 flex items-center justify-between">
-        <div className="flex items-center gap-1 border-b border-border">
-          <button
-            onClick={() => setTab("google")}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              tab === "google" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Reviews ({filteredReviews.length})
-          </button>
-          <button
-            onClick={() => setTab("internal")}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              tab === "internal" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Feedback ({outletCombinedFeedback.length})
-          </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search..."
-              className="w-48 rounded-lg border border-border bg-white py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring/50"
-            />
-          </div>
-          <div className="relative">
-            <button
-              onClick={() => setShowFilter(!showFilter)}
-              className={`rounded-lg border p-2 transition-colors ${filterRating ? "border-terracotta bg-terracotta/10 text-terracotta" : "border-border bg-white text-muted-foreground hover:bg-muted"}`}
-            >
-              <Filter className="h-4 w-4" />
-            </button>
-            {showFilter && (
-              <div className="absolute right-0 top-10 z-20 w-48 rounded-xl border border-border bg-white p-3 shadow-lg">
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Filter by rating</p>
-                <div className="space-y-1">
-                  <button
-                    onClick={() => { setFilterRating(null); setShowFilter(false); }}
-                    className={`w-full rounded-md px-3 py-1.5 text-left text-sm ${!filterRating ? "bg-muted font-medium" : "hover:bg-muted"}`}
-                  >
-                    All ratings
-                  </button>
-                  {[5, 4, 3, 2, 1].map((r) => (
-                    <button
-                      key={r}
-                      onClick={() => { setFilterRating(r); setShowFilter(false); }}
-                      className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm ${filterRating === r ? "bg-muted font-medium" : "hover:bg-muted"}`}
-                    >
-                      <StarRating rating={r} size={12} />
-                      <span>{r} star</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="mt-4 space-y-3">
-        {tab === "google" ? (
-          <>
-            {!reviewsData?.connected && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-center">
-                <p className="text-sm font-medium text-amber-800">Google Business Profile not connected</p>
-                <p className="mt-1 text-xs text-amber-600">
-                  Go to{" "}
-                  <Link href="/reviews/settings" className="underline">Review settings</Link>
-                  {" "}to connect your Google Business page.
-                </p>
-              </div>
-            )}
-            {filteredReviews.length === 0 && reviewsData?.connected && (
-              <div className="rounded-xl border border-border bg-white p-10 text-center">
-                <Star className="mx-auto h-10 w-10 text-muted-foreground/30" />
-                <p className="mt-3 text-sm text-muted-foreground">No reviews found</p>
-              </div>
-            )}
-            {filteredReviews.map((r) => (
-              <ReviewCard
-                key={r.id}
-                review={r}
-                outletId={selectedOutletId}
-                onReplied={() => mutateReviews()}
-              />
-            ))}
-          </>
-        ) : (
-          <>
-            {filteredOutletFeedback.length === 0 ? (
-              <div className="rounded-xl border border-border bg-white p-10 text-center">
-                <MessageSquare className="mx-auto h-10 w-10 text-muted-foreground/30" />
-                <p className="mt-3 text-sm text-muted-foreground">No feedback yet</p>
-              </div>
-            ) : (
-              filteredOutletFeedback.map((item, idx) =>
-                item.type === "google" ? (
-                  <ReviewCard
-                    key={`g-${item.data.id}`}
-                    review={item.data}
-                    outletId={selectedOutletId}
-                    onReplied={() => mutateReviews()}
-                    badge="Google"
-                  />
-                ) : (
-                  <FeedbackCard key={`f-${item.data.id}`} fb={item.data} badge="QR" />
-                ),
-              )
-            )}
-          </>
-        )}
-      </div>
-    </>
-  );
-}
 
 // ─── Main Page ─────────────────────────────────────────────
 
 export default function ReviewsPage() {
-  const [view, setView] = useState<"dashboard" | "outlet">("dashboard");
-
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
       {/* Header */}
@@ -1463,27 +1182,6 @@ export default function ReviewsPage() {
           <p className="text-sm text-muted-foreground">Manage Google reviews & internal feedback</p>
         </div>
         <div className="flex items-center gap-3">
-          {/* View toggle */}
-          <div className="flex rounded-lg border border-border bg-white">
-            <button
-              onClick={() => setView("dashboard")}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors rounded-l-lg ${
-                view === "dashboard" ? "bg-brand-dark text-white" : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              <BarChart3 className="h-4 w-4" />
-              Dashboard
-            </button>
-            <button
-              onClick={() => setView("outlet")}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors rounded-r-lg ${
-                view === "outlet" ? "bg-brand-dark text-white" : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              <Store className="h-4 w-4" />
-              Per Outlet
-            </button>
-          </div>
           <Link
             href="/reviews/settings"
             className="flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
@@ -1494,7 +1192,7 @@ export default function ReviewsPage() {
         </div>
       </div>
 
-      {view === "dashboard" ? <DashboardView /> : <OutletView />}
+      <DashboardView />
     </div>
   );
 }
