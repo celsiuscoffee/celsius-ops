@@ -105,12 +105,13 @@ export async function POST(req: NextRequest) {
   // Handle packages array
   const { packages, suppliers: suppliersInput } = body as {
     packages?: { sku?: string; packageName: string; packageLabel: string; conversionFactor: number; isDefault?: boolean }[];
-    suppliers?: { supplierId?: string; supplierName?: string; phone?: string; price: number; productPackageId?: string }[];
+    suppliers?: { supplierId?: string; supplierName?: string; phone?: string; price: number; productPackageId?: string; packageIndex?: number }[];
   };
 
+  const createdPackageIds: string[] = [];
   if (packages && Array.isArray(packages)) {
     for (const pkg of packages) {
-      await prisma.productPackage.create({
+      const created = await prisma.productPackage.create({
         data: {
           productId: product.id,
           sku: pkg.sku || null,
@@ -120,6 +121,7 @@ export async function POST(req: NextRequest) {
           isDefault: pkg.isDefault ?? false,
         },
       });
+      createdPackageIds.push(created.id);
     }
   }
 
@@ -142,12 +144,18 @@ export async function POST(req: NextRequest) {
         supplierId = newSupplier.id;
       }
 
+      // Resolve packageIndex to actual package ID for newly created packages
+      let packageId = entry.productPackageId || null;
+      if (!packageId && entry.packageIndex !== undefined && createdPackageIds[entry.packageIndex]) {
+        packageId = createdPackageIds[entry.packageIndex];
+      }
+
       if (supplierId) {
         await prisma.supplierProduct.create({
           data: {
             supplierId,
             productId: product.id,
-            productPackageId: entry.productPackageId || null,
+            productPackageId: packageId,
             price: entry.price,
           },
         });

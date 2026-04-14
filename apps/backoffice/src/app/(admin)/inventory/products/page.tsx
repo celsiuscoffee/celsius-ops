@@ -140,7 +140,11 @@ export default function ProductsPage() {
             conversionFactor: parseFloat(p.conversionFactor) || 1,
             isDefault: p.isDefault,
           })),
-          suppliers: form.suppliers,
+          suppliers: form.suppliers.map((s) => ({
+            ...s,
+            productPackageId: s.productPackageId?.startsWith("new-") ? undefined : s.productPackageId,
+            packageIndex: s.productPackageId?.startsWith("new-") ? parseInt(s.productPackageId.replace("new-", "")) : undefined,
+          })),
         }),
       });
       if (!res.ok) { alert("Failed to save ingredient. Please try again."); return; }
@@ -222,7 +226,7 @@ export default function ProductsPage() {
       suppliers: [...prev.suppliers, {
         supplierId: selectedSupplierId,
         price: parseFloat(supplierPrice),
-        productPackageId: pkgId && !pkgId.startsWith("new-") ? pkgId : undefined,
+        productPackageId: pkgId || undefined,
       }],
     }));
     setSelectedSupplierId("");
@@ -839,7 +843,9 @@ export default function ProductsPage() {
                           : entry.supplierName ?? "New Supplier"}
                         {entry.productPackageId && (
                           <span className="ml-1.5 text-xs text-gray-400">
-                            ({form.packages.find((p) => p.id === entry.productPackageId)?.packageName || "Package"})
+                            ({form.packages.find((p, idx) => p.id === entry.productPackageId || `new-${idx}` === entry.productPackageId)?.packageLabel
+                              || form.packages.find((p, idx) => p.id === entry.productPackageId || `new-${idx}` === entry.productPackageId)?.packageName
+                              || "Package"})
                           </span>
                         )}
                       </span>
@@ -878,7 +884,7 @@ export default function ProductsPage() {
                       >
                         <option value="">Base ({form.baseUom})</option>
                         {form.packages.map((pkg, i) => (
-                          <option key={i} value={pkg.id || `new-${i}`}>{pkg.packageName}</option>
+                          <option key={i} value={pkg.id || `new-${i}`}>{pkg.packageLabel || pkg.packageName}</option>
                         ))}
                       </select>
                     </div>
