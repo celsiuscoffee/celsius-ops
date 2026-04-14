@@ -128,6 +128,7 @@ export async function POST(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  try {
   // Generate order number with PC- prefix
   const outletRecord = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId } });
   const count = await prisma.order.count({ where: { outletId, orderType: "PAY_AND_CLAIM" } });
@@ -289,4 +290,9 @@ export async function POST(req: NextRequest) {
     },
     { status: 201 },
   );
+  } catch (err) {
+    console.error("Pay & Claim POST error:", err);
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
