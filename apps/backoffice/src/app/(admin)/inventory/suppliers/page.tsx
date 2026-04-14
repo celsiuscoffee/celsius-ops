@@ -228,14 +228,14 @@ export default function SuppliersPage() {
   // Flatten products into SKU options (one entry per package)
   const allSkuOptions: SkuOption[] = productOptions.flatMap((p) =>
     p.packages.length > 0
-      ? p.packages.map((pkg) => ({
+      ? p.packages.map((pkg): SkuOption => ({
           productId: p.id,
           packageId: pkg.id,
           productName: p.name,
           sku: pkg.sku || p.sku,
           packageLabel: pkg.label || pkg.name,
         }))
-      : [{ productId: p.id, packageId: null, productName: p.name, sku: p.sku, packageLabel: p.baseUom }]
+      : [{ productId: p.id, packageId: null, productName: p.name, sku: p.sku, packageLabel: p.baseUom } as SkuOption]
   );
 
   // SKUs not yet linked to this supplier
