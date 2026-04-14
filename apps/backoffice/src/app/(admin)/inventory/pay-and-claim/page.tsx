@@ -60,6 +60,7 @@ type Claim = {
   supplierId: string;
   supplier: string;
   claimedBy: string | null;
+  claimedByBank: { bankName: string | null; bankAccountNumber: string | null; bankAccountName: string | null } | null;
   createdBy: string;
   totalAmount: number;
   notes: string | null;
@@ -160,6 +161,13 @@ export default function PayAndClaimPage() {
   const [quExtracting, setQuExtracting] = useState(false);
   const [quSubmitting, setQuSubmitting] = useState(false);
   const [quAiData, setQuAiData] = useState<Record<string, unknown>>({});
+
+  // Reimburse dialog state
+  const [reimburseDialogOpen, setReimburseDialogOpen] = useState(false);
+  const [reimburseClaim, setReimburseClaim] = useState<Claim | null>(null);
+  const [reimbursePaymentRef, setReimbursePaymentRef] = useState("");
+  const [reimbursePaymentVia, setReimbursePaymentVia] = useState("Bank Transfer");
+  const [reimburseSaving, setReimburseSaving] = useState(false);
 
   // Debounced search
   useEffect(() => {
@@ -430,14 +438,33 @@ export default function PayAndClaimPage() {
     setQuSubmitting(false);
   };
 
-  // Mark invoice as paid (reimbursed)
-  const handleReimburse = async (invoiceId: string) => {
-    await fetch(`/api/inventory/invoices/${invoiceId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "PAID" }),
-    });
-    mutate();
+  // Open reimburse dialog
+  const openReimburseDialog = (claim: Claim) => {
+    setReimburseClaim(claim);
+    setReimbursePaymentRef("");
+    setReimbursePaymentVia("Bank Transfer");
+    setReimburseDialogOpen(true);
+  };
+
+  // Mark invoice as paid (reimbursed) with payment details
+  const handleReimburse = async () => {
+    if (!reimburseClaim?.invoice) return;
+    setReimburseSaving(true);
+    try {
+      await fetch(`/api/inventory/invoices/${reimburseClaim.invoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "PAID",
+          paidVia: reimbursePaymentVia,
+          paymentRef: reimbursePaymentRef || undefined,
+        }),
+      });
+      setReimburseDialogOpen(false);
+      mutate();
+    } finally {
+      setReimburseSaving(false);
+    }
   };
 
   const TABS = [
@@ -668,7 +695,7 @@ export default function PayAndClaimPage() {
                               size="sm"
                               variant="outline"
                               className="h-6 text-[10px] px-2"
-                              onClick={(e) => { e.stopPropagation(); handleReimburse(c.invoice!.id); }}
+                              onClick={(e) => { e.stopPropagation(); openReimburseDialog(c); }}
                             >
                               <CheckCircle2 className="mr-1 h-3 w-3" /> Reimburse
                             </Button>
@@ -1187,6 +1214,98 @@ export default function PayAndClaimPage() {
             >
               {quSubmitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
               Submit Approved
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reimburse Dialog ── */}
+      <Dialog open={reimburseDialogOpen} onOpenChange={(open) => { if (!open) setReimburseDialogOpen(false); }}>
+        <DialogContent className="!max-w-md p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" /> Initiate Reimbursement
+            </DialogTitle>
+          </DialogHeader>
+
+          {reimburseClaim && (
+            <div className="space-y-4">
+              {/* Claim summary */}
+              <div className="rounded-lg border bg-gray-50 p-3 space-y-1.5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Claim</span>
+                  <span className="font-medium">{reimburseClaim.orderNumber}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Paid by</span>
+                  <span className="font-medium">{reimburseClaim.claimedBy || reimburseClaim.createdBy}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Amount</span>
+                  <span className="font-semibold text-lg text-[#C2714F]">RM {reimburseClaim.invoice?.amount.toFixed(2) || reimburseClaim.totalAmount.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Staff bank details */}
+              <div className="rounded-lg border p-3 space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Transfer To</p>
+                {reimburseClaim.claimedByBank?.bankAccountNumber ? (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Bank</span>
+                      <span className="font-medium">{reimburseClaim.claimedByBank.bankName || "—"}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Account No.</span>
+                      <span className="font-mono font-medium">{reimburseClaim.claimedByBank.bankAccountNumber}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Account Name</span>
+                      <span className="font-medium">{reimburseClaim.claimedByBank.bankAccountName || "—"}</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-amber-600">No bank details on file for this staff member.</p>
+                )}
+              </div>
+
+              {/* Payment details */}
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">Payment Method</label>
+                  <select
+                    value={reimbursePaymentVia}
+                    onChange={(e) => setReimbursePaymentVia(e.target.value)}
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                  >
+                    <option>Bank Transfer</option>
+                    <option>Cash</option>
+                    <option>E-Wallet</option>
+                    <option>Cheque</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">Payment Reference (optional)</label>
+                  <Input
+                    value={reimbursePaymentRef}
+                    onChange={(e) => setReimbursePaymentRef(e.target.value)}
+                    placeholder="e.g. transfer ref, cheque no."
+                    className="h-9 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setReimburseDialogOpen(false)}>Cancel</Button>
+            <Button
+              disabled={reimburseSaving}
+              onClick={handleReimburse}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {reimburseSaving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
+              Confirm Reimbursement
             </Button>
           </DialogFooter>
         </DialogContent>

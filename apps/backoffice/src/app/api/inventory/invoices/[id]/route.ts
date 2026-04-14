@@ -24,7 +24,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = await req.json();
-    const { status, invoiceNumber, dueDate, notes, amount, photos } = body;
+    const { status, invoiceNumber, dueDate, notes, amount, photos, paidVia, paymentRef } = body;
 
     const data: Record<string, unknown> = {};
     if (status !== undefined) data.status = status;
@@ -33,6 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (notes !== undefined) data.notes = notes;
     if (amount !== undefined) data.amount = amount;
     if (photos !== undefined) data.photos = photos;
+    if (paidVia !== undefined) data.paidVia = paidVia;
+    if (paymentRef !== undefined) data.paymentRef = paymentRef;
+    if (status === "PAID") data.paidAt = new Date();
 
     const invoice = await prisma.invoice.update({
       where: { id },

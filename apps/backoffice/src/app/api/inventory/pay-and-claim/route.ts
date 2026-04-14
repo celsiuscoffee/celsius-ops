@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
       outlet: { select: { name: true, code: true } },
       supplier: { select: { id: true, name: true } },
       createdBy: { select: { name: true } },
-      claimedBy: { select: { name: true } },
+      claimedBy: { select: { name: true, bankName: true, bankAccountNumber: true, bankAccountName: true } },
       items: {
         select: {
           id: true,
@@ -75,6 +75,11 @@ export async function GET(req: NextRequest) {
     supplierId: o.supplier?.id ?? null,
     supplier: o.supplier?.name ?? "Unknown",
     claimedBy: o.claimedBy?.name ?? null,
+    claimedByBank: o.claimedBy ? {
+      bankName: o.claimedBy.bankName ?? null,
+      bankAccountNumber: o.claimedBy.bankAccountNumber ?? null,
+      bankAccountName: o.claimedBy.bankAccountName ?? null,
+    } : null,
     createdBy: o.createdBy.name,
     totalAmount: Number(o.totalAmount),
     notes: o.notes,

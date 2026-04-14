@@ -107,6 +107,9 @@ model User {
   appAccess    String[]   @default([])
   moduleAccess Json?      @default("{}")
   permissions  String[]   @default([])
+  bankName          String?
+  bankAccountNumber String?
+  bankAccountName   String?
   lastLoginAt  DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
