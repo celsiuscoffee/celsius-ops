@@ -40,6 +40,7 @@ type PackageEntry = {
   packageLabel: string;
   conversionFactor: string;
   isDefault: boolean;
+  containsPackageId?: string | null;
 };
 
 type SupplierEntry = {
@@ -83,6 +84,8 @@ const PACKAGE_PRESETS = [
   { name: "Sleeve", label: "Sleeve", code: "SLV" },
   { name: "Roll", label: "Roll", code: "ROL" },
 ];
+
+const CONTAINER_TYPES = ["Carton", "Box", "Pack", "Tray"];
 
 const emptyForm: ProductForm = { name: "", sku: "", groupId: "", baseUom: "", storageArea: "", shelfLifeDays: "", checkFrequency: "MONTHLY", description: "", packages: [], suppliers: [] };
 
@@ -132,13 +135,15 @@ export default function ProductsPage() {
           description: form.description || null,
           checkFrequency: form.checkFrequency,
           itemType: "INGREDIENT",
-          packages: form.packages.filter((p) => p.packageName && p.conversionFactor).map((p) => ({
+          packages: form.packages.filter((p) => p.packageName && p.conversionFactor).map((p, _i, arr) => ({
             id: p.id || undefined,
             sku: p.sku || undefined,
             packageName: p.packageName,
             packageLabel: p.packageLabel || p.packageName,
             conversionFactor: parseFloat(p.conversionFactor) || 1,
             isDefault: p.isDefault,
+            containsPackageId: p.containsPackageId && !p.containsPackageId.startsWith("new-") ? p.containsPackageId : undefined,
+            containsPackageIndex: p.containsPackageId?.startsWith("new-") ? parseInt(p.containsPackageId.replace("new-", "")) : undefined,
           })),
           suppliers: form.suppliers.map((s) => ({
             ...s,
@@ -194,6 +199,7 @@ export default function ProductsPage() {
         packageLabel: pkg.label,
         conversionFactor: pkg.conversion.toString(),
         isDefault: pkg.isDefault,
+        containsPackageId: pkg.containsPackageId ?? null,
       })),
       suppliers: [],
     });
@@ -750,7 +756,7 @@ export default function ProductsPage() {
               )}
 
               {/* Add new package row */}
-              <div className="flex items-end gap-3">
+              <div className="flex flex-wrap items-end gap-3">
                 <div className="w-28">
                   <label className="text-xs text-gray-500">SKU</label>
                   <Input
@@ -774,11 +780,27 @@ export default function ProductsPage() {
                           skuEl.value = count === 0 ? `${form.sku}-${preset.code}` : `${form.sku}-${preset.code}${count + 1}`;
                         }
                       }
+                      // Show/hide contains dropdown
+                      const containsEl = document.getElementById("new-pkg-contains-wrap") as HTMLElement;
+                      if (containsEl) containsEl.style.display = CONTAINER_TYPES.includes(e.target.value) ? "" : "none";
                     }}
                   >
                     <option value="" disabled>Select...</option>
                     {PACKAGE_PRESETS.map((p) => (
                       <option key={p.name} value={p.name}>{p.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div id="new-pkg-contains-wrap" className="w-44" style={{ display: "none" }}>
+                  <label className="text-xs text-gray-500">Contains</label>
+                  <select
+                    id="new-pkg-contains"
+                    className="mt-1 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Select unit...</option>
+                    {form.packages.filter((p) => !p.containsPackageId && !CONTAINER_TYPES.includes(p.packageName.split("-")[0])).map((pkg, i) => (
+                      <option key={i} value={pkg.id || `new-${i}`}>{pkg.packageLabel || pkg.packageName}</option>
                     ))}
                   </select>
                 </div>
@@ -799,14 +821,25 @@ export default function ProductsPage() {
                     const skuEl = document.getElementById("new-pkg-sku") as HTMLInputElement;
                     const nameEl = document.getElementById("new-pkg-name") as HTMLSelectElement;
                     const convEl = document.getElementById("new-pkg-conv") as HTMLInputElement;
+                    const containsEl = document.getElementById("new-pkg-contains") as HTMLSelectElement;
+                    const containsWrap = document.getElementById("new-pkg-contains-wrap") as HTMLElement;
                     if (!nameEl.value || !convEl.value) return;
                     const typeName = nameEl.value;
+                    const isContainer = CONTAINER_TYPES.includes(typeName);
+                    const containsValue = isContainer ? (containsEl?.value || undefined) : undefined;
+                    if (isContainer && !containsValue) { alert("Please select which unit this package contains"); return; }
                     const preset = PACKAGE_PRESETS.find((p) => p.name === typeName);
                     setForm((prev) => {
                       const count = prev.packages.filter((p) => p.packageName.startsWith(typeName)).length;
                       const uniqueName = count === 0 ? typeName : `${typeName}-${count + 1}`;
                       const autoSku = skuEl.value || (form.sku && preset ? (count === 0 ? `${form.sku}-${preset.code}` : `${form.sku}-${preset.code}${count + 1}`) : "");
-                      const label = `${typeName} (${Number(convEl.value).toLocaleString()}${form.baseUom || ""})`;
+                      // For containers, show what's inside: "Carton (12x Bottle 1L)"
+                      const containedPkg = containsValue ? prev.packages.find((p, idx) => p.id === containsValue || `new-${idx}` === containsValue) : null;
+                      const containedConv = containedPkg ? Number(containedPkg.conversionFactor) : 1;
+                      const unitsInside = containedConv > 0 ? Math.round(Number(convEl.value) / containedConv) : 0;
+                      const label = isContainer && containedPkg
+                        ? `${typeName} (${unitsInside}x ${containedPkg.packageLabel || containedPkg.packageName})`
+                        : `${typeName} (${Number(convEl.value).toLocaleString()}${form.baseUom || ""})`;
                       return {
                         ...prev,
                         packages: [...prev.packages, {
@@ -815,12 +848,15 @@ export default function ProductsPage() {
                           packageLabel: label,
                           conversionFactor: convEl.value,
                           isDefault: prev.packages.length === 0,
+                          containsPackageId: containsValue || null,
                         }],
                       };
                     });
                     skuEl.value = "";
                     nameEl.value = "";
                     convEl.value = "";
+                    if (containsEl) containsEl.value = "";
+                    if (containsWrap) containsWrap.style.display = "none";
                   }}
                 >
                   Add

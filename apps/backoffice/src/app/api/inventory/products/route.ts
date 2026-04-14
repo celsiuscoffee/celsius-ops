@@ -106,12 +106,13 @@ export async function POST(req: NextRequest) {
 
   // Handle packages array
   const { packages, suppliers: suppliersInput } = body as {
-    packages?: { sku?: string; packageName: string; packageLabel: string; conversionFactor: number; isDefault?: boolean }[];
+    packages?: { sku?: string; packageName: string; packageLabel: string; conversionFactor: number; isDefault?: boolean; containsPackageId?: string; containsPackageIndex?: number }[];
     suppliers?: { supplierId?: string; supplierName?: string; phone?: string; price: number; productPackageId?: string; packageIndex?: number }[];
   };
 
   const createdPackageIds: string[] = [];
   if (packages && Array.isArray(packages)) {
+    // First pass: create all packages without containsPackageId
     for (const pkg of packages) {
       const created = await prisma.productPackage.create({
         data: {
@@ -121,9 +122,20 @@ export async function POST(req: NextRequest) {
           packageLabel: pkg.packageLabel,
           conversionFactor: pkg.conversionFactor,
           isDefault: pkg.isDefault ?? false,
+          containsPackageId: pkg.containsPackageId || null,
         },
       });
       createdPackageIds.push(created.id);
+    }
+    // Second pass: resolve containsPackageIndex references
+    for (let i = 0; i < packages.length; i++) {
+      const pkg = packages[i];
+      if (pkg.containsPackageIndex !== undefined && createdPackageIds[pkg.containsPackageIndex]) {
+        await prisma.productPackage.update({
+          where: { id: createdPackageIds[i] },
+          data: { containsPackageId: createdPackageIds[pkg.containsPackageIndex] },
+        });
+      }
     }
   }
 
