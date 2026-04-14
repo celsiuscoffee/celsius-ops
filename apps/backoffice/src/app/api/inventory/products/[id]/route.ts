@@ -54,32 +54,35 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // Upsert packages
       const createdPkgIds: string[] = [];
       for (const pkg of packages) {
+        const pkgData = {
+          sku: pkg.sku || null,
+          packageName: pkg.packageName,
+          packageLabel: pkg.packageLabel,
+          conversionFactor: pkg.conversionFactor,
+          isDefault: pkg.isDefault ?? false,
+          containsPackageId: pkg.containsPackageId || null,
+        };
         if (pkg.id) {
           await prisma.productPackage.update({
             where: { id: pkg.id },
-            data: {
-              sku: pkg.sku || null,
-              packageName: pkg.packageName,
-              packageLabel: pkg.packageLabel,
-              conversionFactor: pkg.conversionFactor,
-              isDefault: pkg.isDefault ?? false,
-              containsPackageId: pkg.containsPackageId || null,
-            },
+            data: pkgData,
           });
           createdPkgIds.push(pkg.id);
         } else {
-          const created = await prisma.productPackage.create({
-            data: {
-              productId: id,
-              sku: pkg.sku || null,
-              packageName: pkg.packageName,
-              packageLabel: pkg.packageLabel,
-              conversionFactor: pkg.conversionFactor,
-              isDefault: pkg.isDefault ?? false,
-              containsPackageId: pkg.containsPackageId || null,
-            },
-          });
-          createdPkgIds.push(created.id);
+          // Check if a package with this name already exists (e.g. couldn't be deleted due to references)
+          const existingByName = existingPackages.find((ep) => ep.packageName === pkg.packageName);
+          if (existingByName) {
+            await prisma.productPackage.update({
+              where: { id: existingByName.id },
+              data: pkgData,
+            });
+            createdPkgIds.push(existingByName.id);
+          } else {
+            const created = await prisma.productPackage.create({
+              data: { productId: id, ...pkgData },
+            });
+            createdPkgIds.push(created.id);
+          }
         }
       }
       // Resolve containsPackageIndex for new packages referencing other new packages
