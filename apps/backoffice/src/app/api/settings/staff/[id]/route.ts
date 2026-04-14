@@ -2,7 +2,22 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRole, AuthError } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
-import { hashPin } from "@celsius/auth";
+import { hashPin, verifyPin } from "@celsius/auth";
+
+/** Check if a plaintext PIN is already used by another active staff at the same outlet */
+async function checkDuplicatePin(pin: string, outletId: string | null, excludeUserId: string): Promise<string | null> {
+  if (!outletId) return null;
+  const others = await prisma.user.findMany({
+    where: { pin: { not: null }, status: "ACTIVE", outletId, id: { not: excludeUserId } },
+    select: { id: true, name: true, pin: true },
+  });
+  for (const u of others) {
+    if (!u.pin) continue;
+    const { match } = await verifyPin(pin, u.pin);
+    if (match) return u.name;
+  }
+  return null;
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -41,9 +56,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data.passwordHash = hashPassword(body.password);
   }
 
-  // PIN — hash before storing
+  // PIN — check for duplicates at same outlet, then hash
   if (body.pin !== undefined) {
-    data.pin = body.pin ? await hashPin(body.pin) : null;
+    if (body.pin) {
+      // Resolve outlet: use the new outletId if being changed, else fetch current
+      let resolvedOutletId = body.outletId;
+      if (resolvedOutletId === undefined) {
+        const existing = await prisma.user.findUnique({ where: { id }, select: { outletId: true } });
+        resolvedOutletId = existing?.outletId ?? null;
+      }
+      const dupName = await checkDuplicatePin(body.pin, resolvedOutletId, id);
+      if (dupName) {
+        return NextResponse.json({ error: `PIN already used by ${dupName} at this outlet` }, { status: 409 });
+      }
+      data.pin = await hashPin(body.pin);
+    } else {
+      data.pin = null;
+    }
   }
 
   try {

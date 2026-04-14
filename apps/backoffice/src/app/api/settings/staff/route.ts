@@ -2,7 +2,21 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders, requireRole, AuthError } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
-import { hashPin } from "@celsius/auth";
+import { hashPin, verifyPin } from "@celsius/auth";
+
+/** Check if a plaintext PIN is already used by another active staff at the same outlet */
+async function checkDuplicatePin(pin: string, outletId: string | null, excludeUserId?: string): Promise<string | null> {
+  if (!outletId) return null; // Can't check without outlet
+  const where: any = { pin: { not: null }, status: "ACTIVE", outletId };
+  if (excludeUserId) where.id = { not: excludeUserId };
+  const others = await prisma.user.findMany({ where, select: { id: true, name: true, pin: true } });
+  for (const u of others) {
+    if (!u.pin) continue;
+    const { match } = await verifyPin(pin, u.pin);
+    if (match) return u.name;
+  }
+  return null;
+}
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
@@ -80,6 +94,10 @@ export async function POST(req: NextRequest) {
     data.passwordHash = hashPassword(password);
   }
   if (pin) {
+    const dupName = await checkDuplicatePin(pin, outletId || null);
+    if (dupName) {
+      return NextResponse.json({ error: `PIN already used by ${dupName} at this outlet` }, { status: 409 });
+    }
     data.pin = await hashPin(pin);
   }
 
