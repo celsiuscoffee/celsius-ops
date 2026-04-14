@@ -182,8 +182,31 @@ export default function OrdersPage() {
         fetch("/api/inventory/products"),
         fetch("/api/inventory/suppliers"),
       ]);
-      const allProducts: { name: string; sku: string }[] = productsRes.ok ? await productsRes.json() : [];
+      const allProducts: { name: string; sku: string; packages: { label: string; conversion: number }[]; suppliers: { name: string; price: number; uom: string }[] }[] = productsRes.ok ? await productsRes.json() : [];
       const allSuppliers: { name: string }[] = suppliersRes.ok ? await suppliersRes.json() : [];
+
+      // Build rich product names including packaging and supplier pricing context
+      const productNames = allProducts.map((p) => {
+        let desc = `${p.name} (${p.sku})`;
+        if (p.packages?.length > 0) {
+          const pkgInfo = p.packages.map((pkg) => `${pkg.label} [×${pkg.conversion}]`).join(", ");
+          desc += ` — packages: ${pkgInfo}`;
+        }
+        // Include supplier pricing for the current supplier
+        const relevantPrices = supplierName
+          ? p.suppliers?.filter((s) => s.name.toLowerCase().includes(supplierName.toLowerCase()))
+          : p.suppliers;
+        if (relevantPrices?.length > 0) {
+          const priceInfo = relevantPrices.map((s) => `RM${s.price}/${s.uom}`).join(", ");
+          desc += ` — prices: ${priceInfo}`;
+        }
+        return desc;
+      });
+
+      // Include current order items for context
+      const orderItemsContext = editItems
+        .filter((i) => !i.removed)
+        .map((i) => `${i.product} | package: ${i.uom || i.package || "pcs"} | ordered qty: ${i.quantity} | unit price: RM${i.unitPrice}`);
 
       const res = await fetch("/api/inventory/extract", {
         method: "POST",
@@ -191,8 +214,9 @@ export default function OrdersPage() {
         body: JSON.stringify({
           urls,
           context: supplierName ? `Supplier: ${supplierName}` : undefined,
-          productNames: allProducts.map((p) => `${p.name} (${p.sku})`),
+          productNames,
           supplierNames: allSuppliers.map((s) => s.name),
+          orderItems: orderItemsContext,
         }),
       });
       if (!res.ok) {
@@ -282,7 +306,7 @@ export default function OrdersPage() {
     } finally {
       setExtracting(false);
     }
-  }, [editDeliveryDate]);
+  }, [editDeliveryDate, editItems]);
 
   const uploadFile = useCallback(async (file: File) => {
     setUploading(true);
