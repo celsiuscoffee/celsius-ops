@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, ArrowLeft } from "lucide-react";
 
 type LoginMode = "choose" | "username" | "pin";
+type OutletOption = { id: string; name: string };
 
 const PIN_LENGTH = 6;
 
@@ -18,6 +19,25 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [outlets, setOutlets] = useState<OutletOption[]>([]);
+  const [outletId, setOutletId] = useState("");
+
+  // Fetch outlets on mount
+  useEffect(() => {
+    fetch("/api/outlets")
+      .then((r) => r.json())
+      .then((data) => {
+        const list: OutletOption[] = data.outlets || data || [];
+        setOutlets(list);
+        const saved = localStorage.getItem("staff_outlet_id");
+        if (saved && list.some((o) => o.id === saved)) {
+          setOutletId(saved);
+        } else if (list.length === 1) {
+          setOutletId(list[0].id);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (mode === "pin") setTimeout(() => pinRefs.current[0]?.focus(), 100);
@@ -64,13 +84,19 @@ export default function LoginPage() {
   };
 
   const submitPin = async (code: string) => {
+    if (!outletId) {
+      setError("Select outlet first");
+      setPin(Array(PIN_LENGTH).fill(""));
+      pinRefs.current[0]?.focus();
+      return;
+    }
     setLoading(true);
     setError("");
     try {
       const res = await fetch("/api/auth/pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: code }),
+        body: JSON.stringify({ pin: code, outletId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -79,6 +105,7 @@ export default function LoginPage() {
         pinRefs.current[0]?.focus();
         return;
       }
+      localStorage.setItem("staff_outlet_id", outletId);
       window.location.href = "/checklists";
     } catch { setError("Connection error. Please try again."); }
     finally { setLoading(false); }
@@ -146,6 +173,16 @@ export default function LoginPage() {
             <button onClick={goBack} className="flex items-center gap-1 text-xs text-white/50 hover:text-white/70">
               <ArrowLeft className="h-3 w-3" />Back
             </button>
+            <select
+              value={outletId}
+              onChange={(e) => setOutletId(e.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-terracotta"
+            >
+              <option value="" disabled>Select Outlet</option>
+              {outlets.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
             <div className="flex justify-center gap-2">
               {pin.map((digit, i) => (
                 <input key={i} ref={(el) => { pinRefs.current[i] = el; }} type="password" inputMode="numeric" maxLength={1} value={digit}

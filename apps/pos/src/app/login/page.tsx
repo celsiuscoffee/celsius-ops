@@ -1,12 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
+
+type OutletOption = { id: string; name: string };
 
 export default function LoginPage() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [outlets, setOutlets] = useState<OutletOption[]>([]);
+  const [outletId, setOutletId] = useState("");
+
+  // Fetch outlets on mount
+  useEffect(() => {
+    fetch("/api/outlets")
+      .then((r) => r.json())
+      .then((data) => {
+        const list: OutletOption[] = data.outlets || data || [];
+        setOutlets(list);
+        // Auto-select if saved in localStorage
+        const saved = localStorage.getItem("pos_outlet_id");
+        if (saved && list.some((o) => o.id === saved)) {
+          setOutletId(saved);
+        } else if (list.length === 1) {
+          setOutletId(list[0].id);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   function handleDigit(digit: string) {
     if (pin.length < 6) {
@@ -20,6 +42,12 @@ export default function LoginPage() {
   function handleClear() { setPin(""); setError(""); }
 
   async function handleLogin(code: string) {
+    if (!outletId) {
+      setError("Select outlet first");
+      setTimeout(() => { setPin(""); setError(""); }, 1000);
+      return;
+    }
+
     setLoading(true);
     setError("");
 
@@ -27,12 +55,13 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: code }),
+        body: JSON.stringify({ pin: code, outletId }),
       });
 
       if (res.ok) {
         const staff = await res.json();
         sessionStorage.setItem("pos_staff", JSON.stringify(staff));
+        localStorage.setItem("pos_outlet_id", outletId);
         window.location.href = "/register";
         return;
       }
@@ -50,11 +79,25 @@ export default function LoginPage() {
 
   return (
     <div className="pos-screen flex min-h-screen items-center justify-center bg-surface">
-      <div className="flex flex-col items-center gap-10">
-        <div className="flex flex-col items-center gap-4">
+      <div className="flex flex-col items-center gap-8">
+        <div className="flex flex-col items-center gap-3">
           <Image src="/images/celsius-logo-sm.jpg" alt="Celsius Coffee" width={100} height={100} className="rounded-2xl" priority />
           <Image src="/images/celsius-wordmark-white.png" alt="Celsius Coffee" width={220} height={48} className="opacity-90" priority />
-          <p className="text-lg text-text-muted">Enter your 6-digit PIN</p>
+          <p className="text-lg text-text-muted">Staff Login</p>
+        </div>
+
+        {/* Outlet Selector */}
+        <div className="w-72">
+          <select
+            value={outletId}
+            onChange={(e) => setOutletId(e.target.value)}
+            className="w-full rounded-xl bg-surface-raised px-4 py-3 text-base text-text border border-border-light focus:border-brand focus:outline-none appearance-none"
+          >
+            <option value="" disabled>Select Outlet</option>
+            {outlets.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
         </div>
 
         <div className="flex gap-4">

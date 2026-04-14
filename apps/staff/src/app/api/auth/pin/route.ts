@@ -14,44 +14,51 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { pin } = await req.json();
+  const { pin, outletId } = await req.json();
 
   if (!pin || pin.length < 4) {
     return NextResponse.json({ error: "PIN required (minimum 4 digits)" }, { status: 400 });
   }
 
-  // Fetch all active users who have a PIN set
+  // Scope to outlet if provided — prevents cross-outlet PIN collisions
+  const where: any = { pin: { not: null }, status: "ACTIVE" };
+  if (outletId) where.outletId = outletId;
+
   const users = await prisma.user.findMany({
-    where: {
-      pin: { not: null },
-      status: "ACTIVE",
-    },
+    where,
     include: { outlet: { select: { name: true } } },
   });
 
-  // Verify PIN against each user's hash (supports bcrypt + legacy plaintext)
-  let matchedUser: (typeof users)[number] | null = null;
+  // Find ALL matches to detect duplicates
+  const matches: (typeof users)[number][] = [];
   for (const u of users) {
-    // Filter for users with staff app access (OWNER/ADMIN bypass)
     if (u.role !== "OWNER" && u.role !== "ADMIN" && !u.appAccess.includes("ops")) continue;
-
     const { match, needsRehash } = await verifyPin(pin, u.pin);
     if (match) {
-      matchedUser = u;
-      // Migrate plaintext PIN to bcrypt hash
       if (needsRehash) {
         await prisma.user.update({
           where: { id: u.id },
           data: { pin: await hashPin(pin) },
         });
       }
-      break;
+      matches.push(u);
     }
   }
 
-  if (!matchedUser) {
+  if (matches.length === 0) {
     return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
   }
+
+  if (matches.length > 1) {
+    const names = matches.map((u) => u.name).join(", ");
+    console.warn(`[AUTH] Duplicate PIN detected for: ${names}`);
+    return NextResponse.json(
+      { error: `Duplicate PIN — contact manager (${names})` },
+      { status: 409 },
+    );
+  }
+
+  const matchedUser = matches[0];
 
   await createSession({
     id: matchedUser.id,
