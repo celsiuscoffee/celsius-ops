@@ -9,11 +9,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = await req.json();
-    const { name, sku, groupId, baseUom, storageArea, shelfLifeDays, description, checkFrequency, itemType, packages } = body as {
+    const { name, sku, groupId, baseUom, storageArea, shelfLifeDays, description, checkFrequency, itemType, packages, suppliers } = body as {
       name?: string; sku?: string; groupId?: string; baseUom?: string;
       storageArea?: string; shelfLifeDays?: string; description?: string;
       checkFrequency?: string; itemType?: string;
       packages?: { id?: string; sku?: string; packageName: string; packageLabel: string; conversionFactor: number; isDefault?: boolean; containsPackageId?: string | null; containsPackageIndex?: number }[];
+      suppliers?: { supplierId?: string; supplierName?: string; phone?: string; price: number; productPackageId?: string; packageIndex?: number }[];
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -89,6 +90,68 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             where: { id: createdPkgIds[i] },
             data: { containsPackageId: createdPkgIds[pkg.containsPackageIndex] },
           });
+        }
+      }
+    }
+
+    // Handle suppliers: sync supplier-product links
+    if (suppliers && Array.isArray(suppliers)) {
+      // Get existing supplier links (exclude ADHOC — managed separately)
+      const adhocSupplier = await prisma.supplier.findFirst({ where: { supplierCode: "ADHOC" } });
+      const existing = await prisma.supplierProduct.findMany({
+        where: { productId: id, ...(adhocSupplier ? { supplierId: { not: adhocSupplier.id } } : {}) },
+      });
+
+      // Delete removed supplier links
+      const incomingSupplierIds = new Set(
+        suppliers.filter((s) => s.supplierId).map((s) => `${s.supplierId}-${s.productPackageId || ""}`)
+      );
+      for (const ex of existing) {
+        if (!incomingSupplierIds.has(`${ex.supplierId}-${ex.productPackageId || ""}`)) {
+          await prisma.supplierProduct.delete({ where: { id: ex.id } });
+        }
+      }
+
+      // Resolve package IDs created in packages step above
+      const createdPkgIds = packages ? await prisma.productPackage.findMany({
+        where: { productId: id },
+        select: { id: true },
+      }).then((pkgs) => pkgs.map((p) => p.id)) : [];
+
+      // Upsert supplier links
+      for (const entry of suppliers) {
+        let supplierId = entry.supplierId;
+
+        // Create new supplier if needed
+        if (!supplierId && entry.supplierName) {
+          const count = await prisma.supplier.count();
+          const supplierCode = `SUP-${String(count + 1).padStart(4, "0")}`;
+          const newSupplier = await prisma.supplier.create({
+            data: { name: entry.supplierName, supplierCode, phone: entry.phone || null, status: "ACTIVE" },
+          });
+          supplierId = newSupplier.id;
+        }
+
+        // Resolve packageIndex to actual package ID
+        let packageId = entry.productPackageId || null;
+        if (!packageId && entry.packageIndex !== undefined && createdPkgIds[entry.packageIndex]) {
+          packageId = createdPkgIds[entry.packageIndex];
+        }
+
+        if (supplierId) {
+          const existingLink = await prisma.supplierProduct.findFirst({
+            where: { supplierId, productId: id, productPackageId: packageId },
+          });
+          if (existingLink) {
+            await prisma.supplierProduct.update({
+              where: { id: existingLink.id },
+              data: { price: entry.price },
+            });
+          } else {
+            await prisma.supplierProduct.create({
+              data: { supplierId, productId: id, productPackageId: packageId, price: entry.price },
+            });
+          }
         }
       }
     }
