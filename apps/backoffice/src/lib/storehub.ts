@@ -22,6 +22,8 @@ function getAuthHeader(): string {
   return `Basic ${encoded}`;
 }
 
+const API_TIMEOUT_MS = 15_000; // 15s timeout per API call
+
 async function apiFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
   const url = new URL(path, BASE_URL);
   if (params) {
@@ -30,20 +32,33 @@ async function apiFetch<T>(path: string, params?: Record<string, string>): Promi
     }
   }
 
-  const res = await fetch(url.toString(), {
-    headers: {
-      Authorization: getAuthHeader(),
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`StoreHub API ${res.status}: ${text}`);
+  try {
+    const res = await fetch(url.toString(), {
+      headers: {
+        Authorization: getAuthHeader(),
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`StoreHub API ${res.status}: ${text}`);
+    }
+
+    return res.json() as Promise<T>;
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`StoreHub API timeout after ${API_TIMEOUT_MS / 1000}s: ${path}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return res.json() as Promise<T>;
 }
 
 function sleep(ms: number) {

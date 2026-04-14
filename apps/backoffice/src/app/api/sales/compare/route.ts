@@ -102,50 +102,62 @@ export async function GET(request: NextRequest) {
     const periodBuckets: { from: string; to: string; txns: { total: number; hour: number; dateStr: string; channel: "dine_in" | "takeaway" | "delivery" }[] }[] =
       periodPairs.map((pp) => ({ from: pp.from, to: pp.to, txns: [] }));
 
-    for (const outlet of outlets) {
-      if (!outlet.storehubId) continue;
-
-      try {
-        if (shouldMerge) {
-          // One wide fetch per outlet, split into buckets
-          const from = new Date(globalFrom + "T00:00:00+08:00");
-          const to = new Date(globalTo + "T23:59:59+08:00");
-          const txns = await getTransactions(outlet.storehubId, from, to);
-
-          for (const txn of txns) {
-            const ts = txn.transactionTime || txn.completedAt || txn.createdAt;
-            if (!ts) continue;
-            const dateStr = getMYTDateStr(ts);
-            const hour = getMYTHour(ts);
-            const channel = classifyChannel(txn);
-
+    // Fetch all outlets in parallel
+    const outletResults = await Promise.allSettled(
+      outlets
+        .filter((o) => o.storehubId)
+        .map(async (outlet) => {
+          if (shouldMerge) {
+            const from = new Date(globalFrom + "T00:00:00+08:00");
+            const to = new Date(globalTo + "T23:59:59+08:00");
+            const txns = await getTransactions(outlet.storehubId!, from, to);
+            return { outlet, txns, mode: "merge" as const };
+          } else {
+            const allTxns: { txn: any; bucket: (typeof periodBuckets)[number] }[] = [];
             for (const bucket of periodBuckets) {
-              if (dateStr >= bucket.from && dateStr <= bucket.to) {
-                bucket.txns.push({ total: txn.total, hour, dateStr, channel });
-              }
+              const from = new Date(bucket.from + "T00:00:00+08:00");
+              const to = new Date(bucket.to + "T23:59:59+08:00");
+              const txns = await getTransactions(outlet.storehubId!, from, to);
+              for (const txn of txns) allTxns.push({ txn, bucket });
             }
+            return { outlet, txns: allTxns, mode: "split" as const };
           }
-        } else {
-          // Separate fetch per period
-          for (const bucket of periodBuckets) {
-            const from = new Date(bucket.from + "T00:00:00+08:00");
-            const to = new Date(bucket.to + "T23:59:59+08:00");
-            const txns = await getTransactions(outlet.storehubId, from, to);
+        }),
+    );
 
-            for (const txn of txns) {
-              const ts = txn.transactionTime || txn.completedAt || txn.createdAt;
-              if (!ts) continue;
-              const dateStr = getMYTDateStr(ts);
-              const hour = getMYTHour(ts);
-              const channel = classifyChannel(txn);
+    for (const result of outletResults) {
+      if (result.status === "rejected") {
+        const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        console.error(`[sales/compare] Failed for outlet:`, msg);
+        warnings.push(msg);
+        continue;
+      }
+
+      const { txns, mode } = result.value;
+
+      if (mode === "merge") {
+        for (const txn of txns as any[]) {
+          const ts = txn.transactionTime || txn.completedAt || txn.createdAt;
+          if (!ts) continue;
+          const dateStr = getMYTDateStr(ts);
+          const hour = getMYTHour(ts);
+          const channel = classifyChannel(txn);
+
+          for (const bucket of periodBuckets) {
+            if (dateStr >= bucket.from && dateStr <= bucket.to) {
               bucket.txns.push({ total: txn.total, hour, dateStr, channel });
             }
           }
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[sales/compare] Failed for outlet ${outlet.name}:`, msg);
-        warnings.push(`${outlet.name}: ${msg}`);
+      } else {
+        for (const { txn, bucket } of txns as { txn: any; bucket: (typeof periodBuckets)[number] }[]) {
+          const ts = txn.transactionTime || txn.completedAt || txn.createdAt;
+          if (!ts) continue;
+          const dateStr = getMYTDateStr(ts);
+          const hour = getMYTHour(ts);
+          const channel = classifyChannel(txn);
+          bucket.txns.push({ total: txn.total, hour, dateStr, channel });
+        }
       }
     }
 

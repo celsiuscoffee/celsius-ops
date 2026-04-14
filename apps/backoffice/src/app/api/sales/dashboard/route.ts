@@ -121,42 +121,52 @@ export async function GET(request: NextRequest) {
     let prevDeliveryQROrders = 0;
     const channelBreakdown: Record<string, { count: number; revenue: number }> = {};
 
-    for (const outlet of outlets) {
-      if (!outlet.storehubId) continue;
-      try {
-        // Fetch both current and previous period in one wider range
-        const from = new Date(prevFromDate + "T00:00:00+08:00");
-        const to = new Date(toDate + "T23:59:59+08:00");
-        const txns = await getTransactions(outlet.storehubId, from, to);
-        for (const txn of txns) {
-          const ts = txn.transactionTime || txn.completedAt || txn.createdAt;
-          if (!ts) continue;
-          const dateStr = getMYTDateStr(ts);
+    // Fetch all outlets in parallel — each uses a different storeId
+    const from = new Date(prevFromDate + "T00:00:00+08:00");
+    const to = new Date(toDate + "T23:59:59+08:00");
 
-          // Track channel breakdown
-          const ch = txn.channel || "(direct)";
-          if (!channelBreakdown[ch]) channelBreakdown[ch] = { count: 0, revenue: 0 };
-          channelBreakdown[ch].count++;
-          channelBreakdown[ch].revenue = Math.round((channelBreakdown[ch].revenue + txn.total) * 100) / 100;
+    const outletResults = await Promise.allSettled(
+      outlets
+        .filter((o) => o.storehubId)
+        .map(async (outlet) => {
+          const txns = await getTransactions(outlet.storehubId!, from, to);
+          return { outlet, txns };
+        }),
+    );
 
-          if (dateStr >= fromDate && dateStr <= toDate) {
-            allTxns.push({ txn, outletId: outlet.id });
-            if (isDeliveryOrQR(txn)) {
-              deliveryQRRevenue += txn.total;
-              deliveryQROrders++;
-            }
-          } else if (dateStr >= prevFromDate && dateStr <= prevToDate) {
-            prevTxns.push(txn);
-            if (isDeliveryOrQR(txn)) {
-              prevDeliveryQRRevenue += txn.total;
-              prevDeliveryQROrders++;
-            }
+    for (const result of outletResults) {
+      if (result.status === "rejected") {
+        const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        console.error(`[sales/dashboard] Failed to fetch outlet:`, msg);
+        warnings.push(msg);
+        continue;
+      }
+
+      const { outlet, txns } = result.value;
+      for (const txn of txns) {
+        const ts = txn.transactionTime || txn.completedAt || txn.createdAt;
+        if (!ts) continue;
+        const dateStr = getMYTDateStr(ts);
+
+        // Track channel breakdown
+        const ch = txn.channel || "(direct)";
+        if (!channelBreakdown[ch]) channelBreakdown[ch] = { count: 0, revenue: 0 };
+        channelBreakdown[ch].count++;
+        channelBreakdown[ch].revenue = Math.round((channelBreakdown[ch].revenue + txn.total) * 100) / 100;
+
+        if (dateStr >= fromDate && dateStr <= toDate) {
+          allTxns.push({ txn, outletId: outlet.id });
+          if (isDeliveryOrQR(txn)) {
+            deliveryQRRevenue += txn.total;
+            deliveryQROrders++;
+          }
+        } else if (dateStr >= prevFromDate && dateStr <= prevToDate) {
+          prevTxns.push(txn);
+          if (isDeliveryOrQR(txn)) {
+            prevDeliveryQRRevenue += txn.total;
+            prevDeliveryQROrders++;
           }
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[sales/dashboard] Failed to fetch for outlet ${outlet.name}:`, msg);
-        warnings.push(`${outlet.name}: ${msg}`);
       }
     }
 
