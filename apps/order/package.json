@@ -17,6 +17,7 @@
     "@celsius/db": "*",
     "@celsius/shared": "*",
     "@celsius/ui": "*",
+    "@sentry/nextjs": "^10.48.0",
     "@stripe/react-stripe-js": "^6.1.0",
     "@stripe/stripe-js": "^9.0.1",
     "@supabase/supabase-js": "^2.100.1",
