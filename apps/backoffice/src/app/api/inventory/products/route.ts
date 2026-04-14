@@ -40,6 +40,8 @@ export async function GET(req: NextRequest) {
       },
       supplierProducts: {
         select: {
+          supplierId: true,
+          productPackageId: true,
           price: true,
           supplier: { select: { name: true } },
           productPackage: { select: { packageLabel: true } },
@@ -74,9 +76,11 @@ export async function GET(req: NextRequest) {
       containsPackageId: pkg.containsPackageId ?? null,
     })),
     suppliers: p.supplierProducts.map((sp) => ({
+      supplierId: sp.supplierId,
       name: sp.supplier.name,
       price: Number(sp.price),
       uom: sp.productPackage?.packageLabel ?? p.baseUom,
+      productPackageId: sp.productPackageId ?? null,
     })),
   }));
 

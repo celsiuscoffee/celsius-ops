@@ -26,7 +26,7 @@ type Product = {
   description: string;
   checkFrequency: string;
   packages: { id: string; sku: string; name: string; uom: string; label: string; conversion: number; isDefault: boolean; containsPackageId: string | null }[];
-  suppliers: { name: string; price: number; uom: string }[];
+  suppliers: { supplierId: string; name: string; price: number; uom: string; productPackageId: string | null }[];
 };
 
 type GroupOption = { id: string; name: string };
@@ -214,7 +214,13 @@ export default function ProductsPage() {
         isDefault: pkg.isDefault,
         containsPackageId: pkg.containsPackageId ?? null,
       })),
-      suppliers: [],
+      suppliers: product.suppliers
+        .filter((s) => s.name !== "ADHOC SUPPLIER")
+        .map((s) => ({
+          supplierId: s.supplierId,
+          price: s.price,
+          productPackageId: s.productPackageId || undefined,
+        })),
     });
     setEditingId(product.id);
     resetSupplierForm();
@@ -622,11 +628,11 @@ export default function ProductsPage() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditingId(null); setForm(emptyForm); resetSupplierForm(); } }}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="text-lg">{editingId ? "Edit Ingredient" : "Add Ingredient"}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-5 py-3">
+          <div className="grid gap-5 py-3 overflow-y-auto flex-1 min-h-0">
             {/* Basic Info */}
             <div className="rounded-lg border border-gray-200 bg-gray-50/30 p-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Basic Info</p>
@@ -1080,7 +1086,8 @@ export default function ProductsPage() {
                 </div>
               )}
             </div>
-
+          </div>
+          <div className="flex-shrink-0 border-t pt-4">
             <Button onClick={handleSubmit} disabled={saving || !form.name || !form.sku || !form.groupId} className="h-11 w-full bg-terracotta text-base hover:bg-terracotta-dark disabled:opacity-50">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
               {editingId ? "Save Changes" : "Add Ingredient"}
