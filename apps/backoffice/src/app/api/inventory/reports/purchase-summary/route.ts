@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
   >();
 
   for (const order of orders) {
-    const sid = order.supplierId;
+    const sid = order.supplierId ?? "unknown";
     if (!supplierMap.has(sid)) {
       supplierMap.set(sid, {
         supplierId: sid,
