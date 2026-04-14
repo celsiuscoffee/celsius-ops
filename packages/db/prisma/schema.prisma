@@ -252,6 +252,7 @@ model Supplier {
   bankName          String?
   bankAccountNumber String?
   bankAccountName   String?
+  telegramChatId    String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
