@@ -323,8 +323,8 @@ model Order {
   orderType    OrderType   @default(PURCHASE_ORDER)
   outletId     String
   outlet       Outlet      @relation(fields: [outletId], references: [id])
-  supplierId   String
-  supplier     Supplier    @relation(fields: [supplierId], references: [id])
+  supplierId   String?
+  supplier     Supplier?   @relation(fields: [supplierId], references: [id])
   status       OrderStatus @default(DRAFT)
   totalAmount  Decimal     @default(0)
   notes        String?
