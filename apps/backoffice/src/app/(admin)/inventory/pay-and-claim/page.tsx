@@ -314,6 +314,9 @@ export default function PayAndClaimPage() {
 
   const reviewPhotos = reviewClaim?.invoice?.photos ?? [];
 
+  // Fix Cloudinary raw URLs for image display
+  const toImageUrl = (url: string) => url.replace("/raw/upload/", "/image/upload/");
+
   const handleReviewAction = async (action: "approve" | "reject" | "save") => {
     if (!reviewClaim) return;
     setRvSaving(true);
@@ -792,13 +795,13 @@ export default function PayAndClaimPage() {
                   </div>
                 ) : (
                   <a
-                    href={reviewPhotos[rvPhotoIdx]}
+                    href={toImageUrl(reviewPhotos[rvPhotoIdx])}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="relative group"
                   >
                     <img
-                      src={reviewPhotos[rvPhotoIdx]}
+                      src={toImageUrl(reviewPhotos[rvPhotoIdx])}
                       alt="Receipt"
                       className="max-w-full max-h-full object-contain rounded"
                     />
@@ -841,7 +844,7 @@ export default function PayAndClaimPage() {
                           <FileText className="h-4 w-4 text-gray-400" />
                         </div>
                       ) : (
-                        <img src={url} alt="" className="w-full h-full object-cover" />
+                        <img src={toImageUrl(url)} alt="" className="w-full h-full object-cover" />
                       )}
                     </button>
                   ))}
