@@ -76,8 +76,12 @@ export async function PATCH(
       const invUpdate: Record<string, unknown> = {};
       if (supplierId) invUpdate.supplierId = supplierId;
       if (notes !== undefined) invUpdate.notes = notes;
-      if (amount !== undefined) invUpdate.amount = amount;
       if (invoiceNumber) invUpdate.invoiceNumber = invoiceNumber;
+      // Sync invoice amount with order total (items total takes precedence)
+      const finalAmount = items?.length
+        ? items.reduce((sum: number, i: { quantity: number; unitPrice: number }) => sum + i.quantity * i.unitPrice, 0)
+        : amount;
+      if (finalAmount !== undefined) invUpdate.amount = finalAmount;
       if (Object.keys(invUpdate).length > 0) {
         await prisma.invoice.update({ where: { id: order.invoices[0].id }, data: invUpdate });
       }

@@ -696,14 +696,24 @@ export default function PayAndClaimPage() {
                             </Button>
                           )}
                           {c.invoice && c.invoice.status !== "PAID" && c.status !== "DRAFT" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 text-[10px] px-2"
-                              onClick={(e) => { e.stopPropagation(); openReimburseDialog(c); }}
-                            >
-                              <CheckCircle2 className="mr-1 h-3 w-3" /> Reimburse
-                            </Button>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2"
+                                onClick={(e) => { e.stopPropagation(); openReview(c); }}
+                              >
+                                <Eye className="mr-1 h-3 w-3" /> Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2"
+                                onClick={(e) => { e.stopPropagation(); openReimburseDialog(c); }}
+                              >
+                                <CheckCircle2 className="mr-1 h-3 w-3" /> Reimburse
+                              </Button>
+                            </>
                           )}
                         </div>
                       </td>
