@@ -28,7 +28,7 @@ type ExtractedInvoice = {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { urls, context, productNames, supplierNames } = body as { urls: string[]; context?: string; productNames?: string[]; supplierNames?: string[] };
+    const { urls, context, productNames, supplierNames, orderItems } = body as { urls: string[]; context?: string; productNames?: string[]; supplierNames?: string[]; orderItems?: string[] };
 
     if (!urls?.length) {
       return NextResponse.json({ error: "No URLs provided" }, { status: 400 });
@@ -81,6 +81,17 @@ ${productNames?.length ? `\nKNOWN PRODUCT CATALOG (use these exact names when ma
 2. Use the EXACT catalog name (without the SKU in brackets) in the "name" field.
 3. ONLY include items that match a product in the catalog. Do NOT include items that have no catalog match.
 4. Delivery charges, shipping fees, service charges, discounts, and similar non-product charges should NOT be in the items array — put them in "deliveryCharge" or "notes" instead.` : ""}
+${orderItems?.length ? `\nCURRENT ORDER ITEMS (these are what was ordered — use this to understand the expected packaging and pricing):
+${orderItems.join("\n")}
+
+PACKAGING & PRICING LOGIC:
+- Suppliers may invoice using different packaging units than what the order uses (e.g. invoice says "carton" but order tracks per "bottle").
+- The product catalog above shows available packages with conversion factors [×N] and known prices per package.
+- Use the ORDER ITEMS above to determine the correct unit price and quantity to return.
+- If the invoice unit price matches a DIFFERENT package than what the order uses, convert accordingly:
+  Example: Order is per "bottle" at RM14.08. Invoice shows 6x at RM84.46/carton. Carton [×6] means 6 bottles per carton. Return: quantity=36 (6 cartons × 6 bottles), unitPrice=14.08 (per bottle).
+- If the invoice unit price matches the order's unit price, use it directly without conversion.
+- Always return quantity and unitPrice in the SAME unit as the order item's package.` : ""}
 
 Return a JSON object with these fields:
 - invoiceNumber: the invoice/receipt number (string or null)

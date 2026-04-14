@@ -170,6 +170,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
     // Wrap delete operations in a transaction
     await prisma.$transaction(async (tx) => {
+      // Delete linked invoices (only unpaid ones)
+      await tx.invoice.deleteMany({ where: { orderId: id, status: { in: ["DRAFT", "PENDING"] } } });
       await tx.orderItem.deleteMany({ where: { orderId: id } });
       await tx.order.delete({ where: { id } });
     });

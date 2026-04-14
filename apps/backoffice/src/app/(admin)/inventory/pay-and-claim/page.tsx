@@ -190,9 +190,9 @@ export default function PayAndClaimPage() {
   const pendingAmount = pendingClaims.reduce((s, c) => s + c.totalAmount, 0);
   const reimbursedAmount = reimbursedClaims.reduce((s, c) => s + c.totalAmount, 0);
 
-  // Load options
-  const loadOptions = async () => {
-    if (optionsLoaded || loadingOptions) return;
+  // Load options — returns suppliers list for immediate use
+  const loadOptions = async (): Promise<SupplierOption[]> => {
+    if (optionsLoaded || loadingOptions) return suppliers;
     setLoadingOptions(true);
     try {
       const [o, s, st] = await Promise.all([
@@ -204,14 +204,17 @@ export default function PayAndClaimPage() {
       setSuppliers(s);
       setStaff(Array.isArray(st) ? st : st.staff ?? []);
       setOptionsLoaded(true);
+      setLoadingOptions(false);
+      return s;
     } catch { /* ignore */ }
     setLoadingOptions(false);
+    return suppliers;
   };
 
   // ── Review Dialog ───────────────────────────────────────────────────────
 
   const openReview = async (claim: Claim) => {
-    await loadOptions();
+    const loadedSuppliers = await loadOptions();
     setReviewClaim(claim);
 
     // Parse AI hints from notes if JSON
@@ -237,7 +240,9 @@ export default function PayAndClaimPage() {
 
     setRvAiHints(aiHints);
     setRvAiFields(aiFields);
-    setRvSupplierId(claim.supplierId ?? "");
+    // Default to ADHOC supplier for pay & claim
+    const adhocSupplier = loadedSuppliers.find((s) => s.name === "Ad-hoc Purchase");
+    setRvSupplierId(claim.supplierId || adhocSupplier?.id || "");
     setRvStaffId("");
     setRvAmount(claim.totalAmount > 0 ? claim.totalAmount.toString() : (aiHints.totalAmount || ""));
     setRvDate(aiHints.issueDate || new Date(claim.createdAt).toISOString().split("T")[0]);
@@ -877,7 +882,7 @@ export default function PayAndClaimPage() {
                           <option value="">Select supplier</option>
                           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
-                        {rvAiHints.supplierName && !rvSupplierId && (
+                        {rvAiHints.supplierName && rvAiHints.supplierName !== "Ad-hoc Purchase" && (
                           <p className="text-[10px] text-purple-500 mt-1">
                             <Sparkles className="h-2.5 w-2.5 inline mr-0.5" />
                             Detected: &quot;{rvAiHints.supplierName}&quot;
@@ -1040,8 +1045,6 @@ export default function PayAndClaimPage() {
                             <span className="font-mono">RM {rvCartTotal.toFixed(2)}</span>
                           </div>
                         </div>
-                      ) : !rvSupplierId ? (
-                        <p className="text-xs text-gray-400 italic">Select a supplier first to add products</p>
                       ) : null}
                     </div>
                   </>

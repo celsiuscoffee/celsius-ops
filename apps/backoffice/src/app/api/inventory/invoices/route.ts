@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { orderId, outletId, supplierId, amount, invoiceNumber, dueDate, photos } = body;
+    const { orderId, outletId, supplierId, amount, invoiceNumber, issueDate, dueDate, photos } = body;
 
     if (!outletId || !supplierId) {
       return NextResponse.json({ error: "outletId and supplierId are required" }, { status: 400 });
@@ -142,6 +142,7 @@ export async function POST(req: NextRequest) {
         supplierId,
         amount: amount ?? 0,
         status: "PENDING",
+        issueDate: issueDate ? new Date(issueDate) : new Date(),
         dueDate: dueDate ? new Date(dueDate) : null,
         photos: photos || [],
       },

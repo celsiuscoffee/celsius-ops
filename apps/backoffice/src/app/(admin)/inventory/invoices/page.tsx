@@ -60,7 +60,7 @@ export default function InvoicesPage() {
 
   // Edit invoice dialog
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
-  const [editForm, setEditForm] = useState({ invoiceNumber: "", dueDate: "", notes: "", amount: "" });
+  const [editForm, setEditForm] = useState({ invoiceNumber: "", issueDate: "", dueDate: "", notes: "", amount: "" });
   const [editPhotos, setEditPhotos] = useState<string[]>([]);
   const [editSaving, setEditSaving] = useState(false);
   const [editUploading, setEditUploading] = useState(false);
@@ -190,6 +190,7 @@ export default function InvoicesPage() {
     setEditingInvoice(inv);
     setEditForm({
       invoiceNumber: inv.invoiceNumber,
+      issueDate: inv.issueDate,
       dueDate: inv.dueDate ?? "",
       notes: inv.notes ?? "",
       amount: inv.amount.toFixed(2),
@@ -226,6 +227,7 @@ export default function InvoicesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           invoiceNumber: editForm.invoiceNumber,
+          issueDate: editForm.issueDate || null,
           dueDate: editForm.dueDate || null,
           notes: editForm.notes || null,
           amount: parseFloat(editForm.amount) || editingInvoice.amount,
@@ -589,14 +591,25 @@ export default function InvoicesPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Due Date</label>
-                <input
-                  type="date"
-                  value={editForm.dueDate}
-                  onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
-                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Invoice Date</label>
+                  <input
+                    type="date"
+                    value={editForm.issueDate}
+                    onChange={(e) => setEditForm({ ...editForm, issueDate: e.target.value })}
+                    className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Due Date</label>
+                  <input
+                    type="date"
+                    value={editForm.dueDate}
+                    onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
+                    className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                </div>
               </div>
 
               <div>

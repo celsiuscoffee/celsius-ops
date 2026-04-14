@@ -60,6 +60,7 @@ type OrderInvoice = {
   invoiceNumber: string;
   amount: number;
   status: string;
+  issueDate: string;
   dueDate: string | null;
   photoCount: number;
 };
@@ -107,9 +108,7 @@ const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof
     { status: "APPROVED", label: "Confirm", icon: CheckCircle2, color: "bg-blue-500 hover:bg-blue-600" },
     { status: "CANCELLED", label: "Reject", icon: Ban, color: "bg-red-500 hover:bg-red-600" },
   ],
-  APPROVED: [
-    { status: "SENT", label: "Mark as Sent", icon: Send, color: "bg-green-500 hover:bg-green-600" },
-  ],
+  APPROVED: [],
   SENT: [],
   AWAITING_DELIVERY: [],
   PARTIALLY_RECEIVED: [],
@@ -139,6 +138,7 @@ export default function OrdersPage() {
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   const [editDeliveryDate, setEditDeliveryDate] = useState("");
   const [editInvoiceNumber, setEditInvoiceNumber] = useState("");
+  const [editInvoiceIssueDate, setEditInvoiceIssueDate] = useState("");
   const [editInvoiceDueDate, setEditInvoiceDueDate] = useState("");
   type InvoiceFile = { url: string; type: "image" | "pdf"; name: string };
   const [editInvoiceFiles, setEditInvoiceFiles] = useState<InvoiceFile[]>([]);
@@ -162,6 +162,7 @@ export default function OrdersPage() {
     setEditItems(order.items.map((i) => ({ ...i, removed: false, qtyStr: String(i.quantity), priceStr: i.unitPrice.toFixed(2) })));
     setEditDeliveryDate(order.deliveryDate ?? "");
     setEditInvoiceNumber(order.invoice?.invoiceNumber ?? "");
+    setEditInvoiceIssueDate(order.invoice?.issueDate ?? "");
     setEditInvoiceDueDate(order.invoice?.dueDate ?? "");
     setEditInvoiceFiles([]);
     setAiExtracted({});
@@ -179,8 +180,31 @@ export default function OrdersPage() {
         fetch("/api/inventory/products"),
         fetch("/api/inventory/suppliers"),
       ]);
-      const allProducts: { name: string; sku: string }[] = productsRes.ok ? await productsRes.json() : [];
+      const allProducts: { name: string; sku: string; packages: { label: string; conversion: number }[]; suppliers: { name: string; price: number; uom: string }[] }[] = productsRes.ok ? await productsRes.json() : [];
       const allSuppliers: { name: string }[] = suppliersRes.ok ? await suppliersRes.json() : [];
+
+      // Build rich product names including packaging and supplier pricing context
+      const productNames = allProducts.map((p) => {
+        let desc = `${p.name} (${p.sku})`;
+        if (p.packages?.length > 0) {
+          const pkgInfo = p.packages.map((pkg) => `${pkg.label} [×${pkg.conversion}]`).join(", ");
+          desc += ` — packages: ${pkgInfo}`;
+        }
+        // Include supplier pricing for the current supplier
+        const relevantPrices = supplierName
+          ? p.suppliers?.filter((s) => s.name.toLowerCase().includes(supplierName.toLowerCase()))
+          : p.suppliers;
+        if (relevantPrices?.length > 0) {
+          const priceInfo = relevantPrices.map((s) => `RM${s.price}/${s.uom}`).join(", ");
+          desc += ` — prices: ${priceInfo}`;
+        }
+        return desc;
+      });
+
+      // Include current order items for context
+      const orderItemsContext = editItems
+        .filter((i) => !i.removed)
+        .map((i) => `${i.product} | package: ${i.uom || i.package || "pcs"} | ordered qty: ${i.quantity} | unit price: RM${i.unitPrice}`);
 
       const res = await fetch("/api/inventory/extract", {
         method: "POST",
@@ -188,8 +212,9 @@ export default function OrdersPage() {
         body: JSON.stringify({
           urls,
           context: supplierName ? `Supplier: ${supplierName}` : undefined,
-          productNames: allProducts.map((p) => `${p.name} (${p.sku})`),
+          productNames,
           supplierNames: allSuppliers.map((s) => s.name),
+          orderItems: orderItemsContext,
         }),
       });
       if (!res.ok) {
@@ -213,6 +238,12 @@ export default function OrdersPage() {
       if (data.invoiceNumber) {
         setEditInvoiceNumber(data.invoiceNumber);
         filled.invoiceNumber = true;
+      }
+
+      // Issue date — always override with AI data
+      if (data.issueDate) {
+        setEditInvoiceIssueDate(data.issueDate);
+        filled.issueDate = true;
       }
 
       // Due date — always override with AI data
@@ -273,7 +304,7 @@ export default function OrdersPage() {
     } finally {
       setExtracting(false);
     }
-  }, [editDeliveryDate]);
+  }, [editDeliveryDate, editItems]);
 
   const uploadFile = useCallback(async (file: File) => {
     setUploading(true);
@@ -369,6 +400,9 @@ export default function OrdersPage() {
         if (editInvoiceNumber !== (editOrder.invoice.invoiceNumber ?? "")) {
           invoicePayload.invoiceNumber = editInvoiceNumber || null;
         }
+        if (editInvoiceIssueDate !== (editOrder.invoice.issueDate ?? "")) {
+          invoicePayload.issueDate = editInvoiceIssueDate || null;
+        }
         if (editInvoiceDueDate !== (editOrder.invoice.dueDate ?? "")) {
           invoicePayload.dueDate = editInvoiceDueDate || null;
         }
@@ -388,7 +422,7 @@ export default function OrdersPage() {
             body: JSON.stringify(invoicePayload),
           });
         }
-      } else if (editInvoiceNumber || editInvoiceDueDate || editInvoiceFiles.length > 0) {
+      } else if (editInvoiceNumber || editInvoiceIssueDate || editInvoiceDueDate || editInvoiceFiles.length > 0) {
         const detailRes = await fetch(`/api/inventory/orders/${editOrder.id}`);
         if (detailRes.ok) {
           const detail = await detailRes.json();
@@ -401,6 +435,7 @@ export default function OrdersPage() {
               supplierId: detail.supplierId,
               amount: invoiceAmount,
               invoiceNumber: editInvoiceNumber || null,
+              issueDate: editInvoiceIssueDate || null,
               dueDate: editInvoiceDueDate || null,
               photos: editInvoiceFiles.map((f) => f.url),
             }),
@@ -615,6 +650,11 @@ export default function OrdersPage() {
                             <Pencil className="h-3 w-3" />
                           </button>
                         )}
+                        {order.status === "APPROVED" && (
+                          <button onClick={() => { if (confirm("Cancel this order?")) updateStatus(order.id, "CANCELLED"); }} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50" title="Cancel Order">
+                            Cancel
+                          </button>
+                        )}
                         {["DRAFT", "CANCELLED"].includes(order.status) && (
                           <button onClick={() => deleteOrder(order.id)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50" title="Delete">
                             <Trash2 className="h-3 w-3" />
@@ -812,6 +852,20 @@ export default function OrdersPage() {
                       className={aiExtracted.invoiceNumber ? "border-purple-300 bg-purple-50/30" : ""}
                     />
                   </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                      <CalendarDays className="h-3.5 w-3.5" /> Invoice Date
+                      {aiExtracted.issueDate && <span className="ml-1 rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                    </label>
+                    <Input
+                      type="date"
+                      value={editInvoiceIssueDate}
+                      onChange={(e) => { setEditInvoiceIssueDate(e.target.value); setAiExtracted((p) => { const n = { ...p }; delete n.issueDate; return n; }); }}
+                      className={aiExtracted.issueDate ? "border-purple-300 bg-purple-50/30" : ""}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
                       <CalendarDays className="h-3.5 w-3.5" /> Invoice Due Date

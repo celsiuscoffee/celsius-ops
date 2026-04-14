@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
         },
       },
       invoices: {
-        select: { id: true, invoiceNumber: true, amount: true, status: true, dueDate: true, photos: true },
+        select: { id: true, invoiceNumber: true, amount: true, status: true, issueDate: true, dueDate: true, photos: true },
         orderBy: { createdAt: "desc" as const },
         take: 1,
       },
@@ -102,6 +102,7 @@ export async function GET(req: NextRequest) {
           invoiceNumber: o.invoices[0].invoiceNumber,
           amount: Number(o.invoices[0].amount),
           status: o.invoices[0].status,
+          issueDate: o.invoices[0].issueDate.toISOString().split("T")[0],
           dueDate: o.invoices[0].dueDate?.toISOString().split("T")[0] ?? null,
           photoCount: o.invoices[0].photos.length,
         }

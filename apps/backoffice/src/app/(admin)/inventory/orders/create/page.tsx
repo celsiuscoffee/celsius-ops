@@ -459,19 +459,22 @@ export default function CreateOrderPage() {
 
   // ── Cart helpers ────────────────────────────────────────────────────────
 
-  const isInCart = (productId: string, supplierId: string) =>
-    cart.some((c) => c.productId === productId && c.supplierId === supplierId);
+  const cartMatch = (c: CartItem, productId: string, supplierId: string, packageId?: string | null) =>
+    c.productId === productId && c.supplierId === supplierId && c.productPackageId === (packageId ?? null);
+
+  const isInCart = (productId: string, supplierId: string, packageId?: string | null) =>
+    cart.some((c) => cartMatch(c, productId, supplierId, packageId));
 
   const addToCart = (item: CartItem) => {
-    if (isInCart(item.productId, item.supplierId)) return;
+    if (isInCart(item.productId, item.supplierId, item.productPackageId)) return;
     setCart((prev) => [...prev, item]);
   };
 
-  const updateCartQty = (productId: string, supplierId: string, delta: number) => {
+  const updateCartQty = (productId: string, supplierId: string, packageId: string | null, delta: number) => {
     setCart((prev) =>
       prev
         .map((c) =>
-          c.productId === productId && c.supplierId === supplierId
+          cartMatch(c, productId, supplierId, packageId)
             ? { ...c, quantity: Math.max(0, c.quantity + delta) }
             : c
         )
@@ -479,8 +482,8 @@ export default function CreateOrderPage() {
     );
   };
 
-  const removeFromCart = (productId: string, supplierId: string) => {
-    setCart((prev) => prev.filter((c) => !(c.productId === productId && c.supplierId === supplierId)));
+  const removeFromCart = (productId: string, supplierId: string, packageId: string | null) => {
+    setCart((prev) => prev.filter((c) => !cartMatch(c, productId, supplierId, packageId)));
   };
 
   const cartTotal = cart.reduce((s, c) => s + c.quantity * c.unitPrice, 0);
@@ -525,8 +528,8 @@ export default function CreateOrderPage() {
       })
       .filter((x): x is CartItem => x !== null);
     setCart((prev) => {
-      const existing = new Set(prev.map((c) => `${c.productId}-${c.supplierId}`));
-      return [...prev, ...newItems.filter((n) => !existing.has(`${n.productId}-${n.supplierId}`))];
+      const existing = new Set(prev.map((c) => `${c.productId}-${c.supplierId}-${c.productPackageId}`));
+      return [...prev, ...newItems.filter((n) => !existing.has(`${n.productId}-${n.supplierId}-${n.productPackageId}`))];
     });
   };
 
@@ -783,7 +786,7 @@ export default function CreateOrderPage() {
                               const newItems: CartItem[] = [];
                               for (const item of needsOrdering) {
                                 if (!item.supplier || !item.supplierProduct) continue;
-                                if (isInCart(item.productId, item.supplier.id)) continue;
+                                if (isInCart(item.productId, item.supplier.id, item.supplierProduct.packageId)) continue;
                                 const pkgQty = Math.max(1, Math.ceil((item.suggestedOrderQty || 1) / (item.supplierProduct.conversionFactor || 1)));
                                 newItems.push({
                                   productId: item.productId,
@@ -859,8 +862,8 @@ export default function CreateOrderPage() {
                         {needsOrdering.map((item) => {
                           const pct = item.parLevel > 0 ? Math.min(100, Math.round((item.currentQty / item.parLevel) * 100)) : 0;
                           const barColor = item.status === "critical" ? "bg-red-500" : "bg-amber-500";
-                          const inCartAlready = item.supplier && isInCart(item.productId, item.supplier.id);
-                          const cartItem = item.supplier ? cart.find((c) => c.productId === item.productId && c.supplierId === item.supplier!.id) : null;
+                          const inCartAlready = item.supplier && item.supplierProduct && isInCart(item.productId, item.supplier.id, item.supplierProduct.packageId);
+                          const cartItem = item.supplier && item.supplierProduct ? cart.find((c) => cartMatch(c, item.productId, item.supplier!.id, item.supplierProduct!.packageId)) : null;
                           const pkgQty = item.supplierProduct ? Math.max(1, Math.ceil((item.suggestedOrderQty || 1) / (item.supplierProduct.conversionFactor || 1))) : 1;
                           const tf = item.transferOption;
 
@@ -902,9 +905,9 @@ export default function CreateOrderPage() {
                                   {/* Cart controls */}
                                   {inCartAlready && cartItem ? (
                                     <div className="flex items-center gap-2">
-                                      <button onClick={() => updateCartQty(item.productId, item.supplier!.id, -1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200"><Minus className="h-3.5 w-3.5" /></button>
+                                      <button onClick={() => updateCartQty(item.productId, item.supplier!.id, item.supplierProduct!.packageId, -1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200"><Minus className="h-3.5 w-3.5" /></button>
                                       <span className="min-w-[2rem] text-center text-sm font-bold">{cartItem.quantity}</span>
-                                      <button onClick={() => updateCartQty(item.productId, item.supplier!.id, 1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-terracotta/10 text-terracotta-dark hover:bg-terracotta/20"><Plus className="h-3.5 w-3.5" /></button>
+                                      <button onClick={() => updateCartQty(item.productId, item.supplier!.id, item.supplierProduct!.packageId, 1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-terracotta/10 text-terracotta-dark hover:bg-terracotta/20"><Plus className="h-3.5 w-3.5" /></button>
                                     </div>
                                   ) : item.supplier && item.supplierProduct ? (
                                     <Button size="sm" className={`h-8 text-xs ${item.status === "critical" ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700"}`}
@@ -980,19 +983,19 @@ export default function CreateOrderPage() {
                     </div>
                     <div className="space-y-1.5">
                       {supplier.products.map((product) => {
-                        const inCart = isInCart(product.id, supplier.id);
-                        const cartItem = cart.find((c) => c.productId === product.id && c.supplierId === supplier.id);
+                        const inCart = isInCart(product.id, supplier.id, product.packageId);
+                        const cartItem = cart.find((c) => cartMatch(c, product.id, supplier.id, product.packageId));
                         return (
-                          <Card key={`${supplier.id}-${product.id}`} className="flex items-center justify-between px-4 py-3">
+                          <Card key={`${supplier.id}-${product.id}-${product.packageId}`} className="flex items-center justify-between px-4 py-3">
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-medium text-gray-900">{product.name}</p>
                               <p className="text-xs text-gray-500">{product.sku} &middot; {product.packageLabel} &middot; RM {product.price.toFixed(2)}</p>
                             </div>
                             {inCart ? (
                               <div className="flex items-center gap-2">
-                                <button onClick={() => updateCartQty(product.id, supplier.id, -1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200"><Minus className="h-3.5 w-3.5" /></button>
+                                <button onClick={() => updateCartQty(product.id, supplier.id, product.packageId, -1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200"><Minus className="h-3.5 w-3.5" /></button>
                                 <span className="min-w-[2rem] text-center text-sm font-bold">{cartItem?.quantity}</span>
-                                <button onClick={() => updateCartQty(product.id, supplier.id, 1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-terracotta/10 text-terracotta-dark hover:bg-terracotta/20"><Plus className="h-3.5 w-3.5" /></button>
+                                <button onClick={() => updateCartQty(product.id, supplier.id, product.packageId, 1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-terracotta/10 text-terracotta-dark hover:bg-terracotta/20"><Plus className="h-3.5 w-3.5" /></button>
                               </div>
                             ) : (
                               <Button size="sm" variant="outline" className="h-8 text-xs"
@@ -1095,14 +1098,14 @@ export default function CreateOrderPage() {
 
                           <div className="space-y-1.5">
                             {group.items.map((item) => (
-                              <div key={`${item.productId}-${item.supplierId}`} className="text-xs">
+                              <div key={`${item.productId}-${item.supplierId}-${item.productPackageId}`} className="text-xs">
                                 <div className="flex items-center justify-between">
                                   <p className="truncate text-gray-700 font-medium flex-1 min-w-0">{item.name}</p>
-                                  <button onClick={() => removeFromCart(item.productId, item.supplierId)} className="text-red-400 hover:text-red-600 ml-1"><Trash2 className="h-3 w-3" /></button>
+                                  <button onClick={() => removeFromCart(item.productId, item.supplierId, item.productPackageId)} className="text-red-400 hover:text-red-600 ml-1"><Trash2 className="h-3 w-3" /></button>
                                 </div>
                                 <div className="flex items-center justify-between mt-1">
                                   <div className="flex items-center gap-1.5">
-                                    <button onClick={() => updateCartQty(item.productId, item.supplierId, -1)} className="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-gray-600 hover:bg-gray-200"><Minus className="h-3 w-3" /></button>
+                                    <button onClick={() => updateCartQty(item.productId, item.supplierId, item.productPackageId, -1)} className="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-gray-600 hover:bg-gray-200"><Minus className="h-3 w-3" /></button>
                                     <input
                                       type="number"
                                       min="1"
@@ -1111,10 +1114,10 @@ export default function CreateOrderPage() {
                                       onChange={(e) => {
                                         const val = parseInt(e.target.value) || 0;
                                         const delta = val - item.quantity;
-                                        if (delta !== 0) updateCartQty(item.productId, item.supplierId, delta);
+                                        if (delta !== 0) updateCartQty(item.productId, item.supplierId, item.productPackageId, delta);
                                       }}
                                     />
-                                    <button onClick={() => updateCartQty(item.productId, item.supplierId, 1)} className="flex h-6 w-6 items-center justify-center rounded bg-terracotta/10 text-terracotta-dark hover:bg-terracotta/20"><Plus className="h-3 w-3" /></button>
+                                    <button onClick={() => updateCartQty(item.productId, item.supplierId, item.productPackageId, 1)} className="flex h-6 w-6 items-center justify-center rounded bg-terracotta/10 text-terracotta-dark hover:bg-terracotta/20"><Plus className="h-3 w-3" /></button>
                                     <span className="text-[10px] text-gray-400">{item.packageLabel}</span>
                                   </div>
                                   <span className="font-medium text-gray-900">RM {(item.quantity * item.unitPrice).toFixed(2)}</span>

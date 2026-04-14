@@ -177,5 +177,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Auto-link to ADHOC supplier so product is available for pay & claim
+  const adhocSupplier = await prisma.supplier.findFirst({ where: { supplierCode: "ADHOC" } });
+  if (adhocSupplier) {
+    await prisma.supplierProduct.create({
+      data: {
+        supplierId: adhocSupplier.id,
+        productId: product.id,
+        price: 0,
+      },
+    }).catch(() => { /* already linked */ });
+  }
+
   return NextResponse.json(product, { status: 201 });
 }
