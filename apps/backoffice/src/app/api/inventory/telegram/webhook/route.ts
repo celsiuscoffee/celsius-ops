@@ -132,12 +132,21 @@ type InvoiceData = {
   amount: number | null;
   supplierName: string | null;
   date: string | null;
-  items: { name: string; quantity: number; unitPrice: number; totalPrice: number }[];
+  items: { name: string; quantity: number; unitPrice: number; totalPrice: number; matchedProduct?: string }[];
 };
 
 type ClassifiedDoc = PopData | InvoiceData | null;
 
 async function classifyAndExtract(url: string, isPdf: boolean): Promise<ClassifiedDoc> {
+  // Fetch product + supplier catalogs for invoice matching
+  const [products, suppliers] = await Promise.all([
+    prisma.product.findMany({ where: { isActive: true }, select: { id: true, name: true, sku: true } }),
+    prisma.supplier.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
+  ]);
+
+  const productCatalog = products.map((p) => `${p.name}${p.sku ? ` [${p.sku}]` : ""}`).join("\n");
+  const supplierList = suppliers.map((s) => s.name).join("\n");
+
   const contentBlocks: Anthropic.ContentBlockParam[] = [];
 
   if (isPdf) {
@@ -171,14 +180,25 @@ For POP, return:
   "recipientAccount": "<string or null>"
 }
 
-For INVOICE, return:
+For INVOICE, use the product catalog and supplier list below to match items and supplier name.
+
+KNOWN SUPPLIERS:
+${supplierList}
+
+KNOWN PRODUCT CATALOG:
+${productCatalog}
+
+Match each invoice line item to the closest product from the catalog. Use the exact catalog name (without SKU in brackets) in "matchedProduct". If no match, leave matchedProduct as null.
+Match the supplier/vendor name to one of the known suppliers. Use the exact supplier name from the list.
+
+Return:
 {
   "documentType": "INVOICE",
   "invoiceNumber": "<string or null>",
   "amount": <number or null — the total amount>,
-  "supplierName": "<string or null>",
+  "supplierName": "<exact name from known suppliers or null>",
   "date": "<YYYY-MM-DD or null>",
-  "items": [{ "name": "<string>", "quantity": <number>, "unitPrice": <number>, "totalPrice": <number> }]
+  "items": [{ "name": "<item name on invoice>", "matchedProduct": "<exact catalog name or null>", "quantity": <number>, "unitPrice": <number>, "totalPrice": <number> }]
 }
 
 Return ONLY the JSON object, no markdown, no explanation.`,
@@ -186,7 +206,7 @@ Return ONLY the JSON object, no markdown, no explanation.`,
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 1500,
+    max_tokens: 2000,
     messages: [{ role: "user", content: contentBlocks }],
   });
 
