@@ -583,7 +583,7 @@ export default function StockCheckPage() {
           </div>
 
           {/* Keypad grid */}
-          <div className="border-t border-gray-200 bg-gray-50 px-4 pb-6 pt-3">
+          <div className="border-t border-gray-200 bg-gray-50 px-4 pb-24 pt-3">
             <div className="mx-auto grid max-w-xs grid-cols-3 gap-2">
               {["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "backspace"].map((key) => (
                 <button

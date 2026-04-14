@@ -228,8 +228,6 @@ model ProductPackage {
   receivingItems   ReceivingItem[]
   transferItems    StockTransferItem[]
   stockBalances    StockBalance[]
-
-  @@unique([productId, packageName])
 }
 
 // ─── SUPPLIERS ──────────────────────────────────────────────

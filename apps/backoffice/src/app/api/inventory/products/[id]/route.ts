@@ -62,10 +62,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           isDefault: pkg.isDefault ?? false,
           containsPackageId: pkg.containsPackageId || null,
         };
-        // Try to find existing record: by ID first, then by packageName
-        const existingPkg = pkg.id
-          ? (existingPackages.find((ep) => ep.id === pkg.id) ?? existingPackages.find((ep) => ep.packageName === pkg.packageName))
-          : existingPackages.find((ep) => ep.packageName === pkg.packageName);
+        // Try to find existing record by ID (if provided and exists in DB)
+        const existingPkg = pkg.id ? existingPackages.find((ep) => ep.id === pkg.id) : null;
 
         if (existingPkg) {
           await prisma.productPackage.update({
