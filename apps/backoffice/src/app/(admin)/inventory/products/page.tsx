@@ -825,6 +825,8 @@ export default function ProductsPage() {
                     const containsWrap = document.getElementById("new-pkg-contains-wrap") as HTMLElement;
                     if (!nameEl.value || !convEl.value) return;
                     const typeName = nameEl.value;
+                    const skuValue = skuEl.value;
+                    const convValue = convEl.value;
                     const isContainer = CONTAINER_TYPES.includes(typeName);
                     const containsValue = isContainer ? (containsEl?.value || undefined) : undefined;
                     if (isContainer && !containsValue) { alert("Please select which unit this package contains"); return; }
@@ -832,14 +834,14 @@ export default function ProductsPage() {
                     setForm((prev) => {
                       const count = prev.packages.filter((p) => p.packageName.startsWith(typeName)).length;
                       const uniqueName = count === 0 ? typeName : `${typeName}-${count + 1}`;
-                      const autoSku = skuEl.value || (form.sku && preset ? (count === 0 ? `${form.sku}-${preset.code}` : `${form.sku}-${preset.code}${count + 1}`) : "");
+                      const autoSku = skuValue || (form.sku && preset ? (count === 0 ? `${form.sku}-${preset.code}` : `${form.sku}-${preset.code}${count + 1}`) : "");
                       // For containers, show what's inside: "Carton (12x Bottle 1L)"
                       const containedPkg = containsValue ? prev.packages.find((p, idx) => p.id === containsValue || `new-${idx}` === containsValue) : null;
                       const containedConv = containedPkg ? Number(containedPkg.conversionFactor) : 1;
-                      const unitsInside = containedConv > 0 ? Math.round(Number(convEl.value) / containedConv) : 0;
+                      const unitsInside = containedConv > 0 ? Math.round(Number(convValue) / containedConv) : 0;
                       const label = isContainer && containedPkg
                         ? `${typeName} (${unitsInside}x ${containedPkg.packageLabel || containedPkg.packageName})`
-                        : `${typeName} (${Number(convEl.value).toLocaleString()}${form.baseUom || ""})`;
+                        : `${typeName} (${Number(convValue).toLocaleString()}${form.baseUom || ""})`;
 
                       return {
                         ...prev,
@@ -847,7 +849,7 @@ export default function ProductsPage() {
                           sku: autoSku,
                           packageName: uniqueName,
                           packageLabel: label,
-                          conversionFactor: convEl.value,
+                          conversionFactor: convValue,
                           isDefault: prev.packages.length === 0,
                           containsPackageId: containsValue || null,
                         }],
