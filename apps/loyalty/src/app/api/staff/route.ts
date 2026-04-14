@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { centralDb } from '@/lib/central-db';
+import { supabaseAdmin } from '@/lib/supabase';
 import { requireAuth } from '@/lib/auth';
 
-// GET /api/staff — fetch staff with loyalty access from central DB (read-only)
+// GET /api/staff — fetch staff with loyalty access (single DB)
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
 
   try {
-    if (!centralDb) {
-      return NextResponse.json({ error: 'Central database not configured' }, { status: 500 });
-    }
-
     // Fetch active users with loyalty in appAccess
-    const { data: users, error } = await centralDb
+    const { data: users, error } = await supabaseAdmin
       .from('User')
       .select('id, name, email, phone, role, outletId, outletIds, appAccess, status, createdAt')
       .eq('status', 'ACTIVE')
@@ -24,8 +20,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Fetch outlets from central DB to resolve names
-    const { data: outlets } = await centralDb
+    // Fetch outlets to resolve names
+    const { data: outlets } = await supabaseAdmin
       .from('Outlet')
       .select('id, name, loyaltyOutletId')
       .eq('status', 'ACTIVE');

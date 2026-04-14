@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { centralDb } from '@/lib/central-db';
+import { supabaseAdmin } from '@/lib/supabase';
 import { createToken, setAuthCookie } from '@/lib/auth';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { verifyPin, hashPin } from '@celsius/auth';
 
-// POST /api/staff/verify-pin — verify staff PIN against central DB
+// POST /api/staff/verify-pin — verify staff PIN
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -14,14 +14,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'outlet_id and pin are required' },
         { status: 400 }
-      );
-    }
-
-    if (!centralDb) {
-      console.error('[verify-pin] Central database not configured');
-      return NextResponse.json(
-        { error: 'Central database not configured' },
-        { status: 500 }
       );
     }
 
@@ -35,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Find central outlet(s) that map to this loyalty outlet ID
-    const { data: outlets, error: outletError } = await centralDb
+    const { data: outlets, error: outletError } = await supabaseAdmin
       .from('Outlet')
       .select('id, name')
       .eq('loyaltyOutletId', outlet_id)
@@ -54,7 +46,7 @@ export async function POST(request: NextRequest) {
     const centralOutletIds = outlets.map((o: { id: string }) => o.id);
 
     // Fetch active users with loyalty access and a PIN set
-    const { data: users, error: userError } = await centralDb
+    const { data: users, error: userError } = await supabaseAdmin
       .from('User')
       .select('id, name, email, role, pin, outletId, outletIds, appAccess')
       .eq('status', 'ACTIVE')
@@ -88,9 +80,9 @@ export async function POST(request: NextRequest) {
       const { match, needsRehash } = await verifyPin(pin, user.pin as string);
       if (match) {
         // Progressive rehash: upgrade plaintext PINs to bcrypt
-        if (needsRehash && centralDb) {
+        if (needsRehash && supabaseAdmin) {
           const hashed = await hashPin(pin);
-          await centralDb
+          await supabaseAdmin
             .from('User')
             .update({ pin: hashed })
             .eq('id', user.id);

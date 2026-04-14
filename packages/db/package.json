@@ -6,7 +6,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "generate": "prisma generate",
-    "push": "prisma db push",
+    "push": "echo '⚠️  prisma db push is DISABLED — it drops non-Prisma tables. Use: npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --script | and apply changes manually via Supabase MCP' && exit 1",
     "studio": "prisma studio",
     "seed": "tsx seed.ts"
   },

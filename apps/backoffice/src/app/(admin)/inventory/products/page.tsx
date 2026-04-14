@@ -215,7 +215,7 @@ export default function ProductsPage() {
         containsPackageId: pkg.containsPackageId ?? null,
       })),
       suppliers: product.suppliers
-        .filter((s) => s.name !== "ADHOC SUPPLIER")
+        .filter((s) => s.name !== "Ad-hoc Purchase")
         .map((s) => ({
           supplierId: s.supplierId,
           price: s.price,
@@ -280,7 +280,7 @@ export default function ProductsPage() {
   };
 
   const filteredSupplierOptions = supplierOptions.filter((s) =>
-    s.name.toLowerCase().includes(supplierSearchTerm.toLowerCase())
+    s.name.toLowerCase().includes(supplierSearchTerm.toLowerCase()) && s.name !== "Ad-hoc Purchase"
   );
 
   // Bulk selection helpers
@@ -498,10 +498,10 @@ export default function ProductsPage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
-                    {product.suppliers.map((s, i) => (
+                    {product.suppliers.filter((s) => s.name !== "Ad-hoc Purchase").map((s, i) => (
                       <span key={i} className="text-xs text-gray-500">{s.name} (RM{s.price.toFixed(2)})</span>
                     ))}
-                    {product.suppliers.length === 0 && <span className="text-xs text-gray-300">—</span>}
+                    {product.suppliers.filter((s) => s.name !== "Ad-hoc Purchase").length === 0 && <span className="text-xs text-gray-300">—</span>}
                   </div>
                 </td>
                 <td className="px-4 py-3">
