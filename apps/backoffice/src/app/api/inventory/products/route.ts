@@ -145,17 +145,25 @@ export async function POST(req: NextRequest) {
       let supplierId = entry.supplierId;
 
       if (!supplierId && entry.supplierName) {
-        const count = await prisma.supplier.count();
-        const supplierCode = `SUP-${String(count + 1).padStart(4, "0")}`;
-        const newSupplier = await prisma.supplier.create({
-          data: {
-            name: entry.supplierName,
-            supplierCode,
-            phone: entry.phone || null,
-            status: "ACTIVE",
-          },
+        // Check if supplier already exists to avoid duplicates
+        const existing = await prisma.supplier.findFirst({
+          where: { name: { equals: entry.supplierName, mode: "insensitive" } },
         });
-        supplierId = newSupplier.id;
+        if (existing) {
+          supplierId = existing.id;
+        } else {
+          const count = await prisma.supplier.count();
+          const supplierCode = `SUP-${String(count + 1).padStart(4, "0")}`;
+          const newSupplier = await prisma.supplier.create({
+            data: {
+              name: entry.supplierName,
+              supplierCode,
+              phone: entry.phone || null,
+              status: "ACTIVE",
+            },
+          });
+          supplierId = newSupplier.id;
+        }
       }
 
       // Resolve packageIndex to actual package ID for newly created packages

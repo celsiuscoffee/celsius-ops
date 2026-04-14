@@ -122,14 +122,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       for (const entry of suppliers) {
         let supplierId = entry.supplierId;
 
-        // Create new supplier if needed
+        // Create new supplier if needed (check existing first to avoid duplicates)
         if (!supplierId && entry.supplierName) {
-          const count = await prisma.supplier.count();
-          const supplierCode = `SUP-${String(count + 1).padStart(4, "0")}`;
-          const newSupplier = await prisma.supplier.create({
-            data: { name: entry.supplierName, supplierCode, phone: entry.phone || null, status: "ACTIVE" },
+          const existing = await prisma.supplier.findFirst({
+            where: { name: { equals: entry.supplierName, mode: "insensitive" } },
           });
-          supplierId = newSupplier.id;
+          if (existing) {
+            supplierId = existing.id;
+          } else {
+            const count = await prisma.supplier.count();
+            const supplierCode = `SUP-${String(count + 1).padStart(4, "0")}`;
+            const newSupplier = await prisma.supplier.create({
+              data: { name: entry.supplierName, supplierCode, phone: entry.phone || null, status: "ACTIVE" },
+            });
+            supplierId = newSupplier.id;
+          }
         }
 
         // Resolve packageIndex to actual package ID
