@@ -972,7 +972,7 @@ export default function ProductsPage() {
                       onFocus={() => setSupplierDropdownOpen(true)}
                     />
                     {supplierDropdownOpen && filteredSupplierOptions.length > 0 && (
-                      <div className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-white shadow-lg">
+                      <div className="absolute bottom-full z-50 mb-1 max-h-48 w-full overflow-auto rounded-md border bg-white shadow-lg">
                         {filteredSupplierOptions.map((s) => (
                           <button
                             key={s.id}
