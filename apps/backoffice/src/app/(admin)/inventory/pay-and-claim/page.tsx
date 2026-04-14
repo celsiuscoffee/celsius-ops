@@ -156,6 +156,7 @@ export default function PayAndClaimPage() {
   const [quStaffId, setQuStaffId] = useState("");
   const [quNotes, setQuNotes] = useState("");
   const [quUploading, setQuUploading] = useState(false);
+  const [quDragging, setQuDragging] = useState(false);
   const [quExtracting, setQuExtracting] = useState(false);
   const [quSubmitting, setQuSubmitting] = useState(false);
   const [quAiData, setQuAiData] = useState<Record<string, unknown>>({});
@@ -347,13 +348,13 @@ export default function PayAndClaimPage() {
     setQuickUploadOpen(true);
   };
 
-  const handleQuickPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files?.length) return;
+  const processQuickUploadFiles = async (files: File[]) => {
+    const valid = files.filter((f) => f.type.startsWith("image/") || f.type === "application/pdf");
+    if (!valid.length) return;
     setQuUploading(true);
     const newUrls: string[] = [];
     try {
-      for (const file of Array.from(files)) {
+      for (const file of valid) {
         const formData = new FormData();
         formData.append("file", file);
         const res = await fetch("/api/inventory/upload", { method: "POST", body: formData });
@@ -365,7 +366,6 @@ export default function PayAndClaimPage() {
       }
     } catch { /* ignore */ }
     setQuUploading(false);
-    e.target.value = "";
 
     // AI extraction
     if (newUrls.length > 0) {
@@ -383,6 +383,20 @@ export default function PayAndClaimPage() {
       } catch { /* ignore */ }
       setQuExtracting(false);
     }
+  };
+
+  const handleQuickPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    await processQuickUploadFiles(Array.from(files));
+    e.target.value = "";
+  };
+
+  const handleQuickDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setQuDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) await processQuickUploadFiles(files);
   };
 
   const handleQuickSubmit = async (asDraft: boolean) => {
@@ -1054,9 +1068,25 @@ export default function PayAndClaimPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Photo upload */}
-            <div className="rounded-lg border-2 border-dashed border-gray-200 p-4">
+            {/* Photo upload with drag & drop */}
+            <div
+              className={`rounded-lg border-2 border-dashed p-4 transition-colors ${
+                quDragging ? "border-[#C2714F] bg-orange-50" : "border-gray-200"
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setQuDragging(true); }}
+              onDragEnter={(e) => { e.preventDefault(); setQuDragging(true); }}
+              onDragLeave={(e) => { e.preventDefault(); if (!e.currentTarget.contains(e.relatedTarget as Node)) setQuDragging(false); }}
+              onDrop={handleQuickDrop}
+            >
               <p className="text-xs font-medium text-gray-600 mb-2">Upload receipt photo(s)</p>
+              {quPhotos.length === 0 && !quUploading ? (
+                <label className="flex flex-col items-center justify-center py-8 cursor-pointer">
+                  <Upload className="h-8 w-8 text-gray-300 mb-2" />
+                  <span className="text-sm text-gray-400">{quDragging ? "Drop files here" : "Drag & drop or click to upload"}</span>
+                  <span className="text-[10px] text-gray-300 mt-1">Images or PDFs</span>
+                  <input type="file" accept="image/*,.pdf" multiple onChange={handleQuickPhotoUpload} className="hidden" />
+                </label>
+              ) : (
               <div className="flex flex-wrap gap-2">
                 {quPhotos.map((url, i) => (
                   <div key={i} className="relative w-20 h-20 rounded-lg border overflow-hidden group">
@@ -1082,6 +1112,7 @@ export default function PayAndClaimPage() {
                   <input type="file" accept="image/*,.pdf" multiple onChange={handleQuickPhotoUpload} className="hidden" />
                 </label>
               </div>
+              )}
 
               {quExtracting && (
                 <div className="mt-3 flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
