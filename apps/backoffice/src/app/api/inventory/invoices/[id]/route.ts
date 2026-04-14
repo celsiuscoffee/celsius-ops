@@ -24,11 +24,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = await req.json();
-    const { status, invoiceNumber, dueDate, notes, amount, photos, paidVia, paymentRef } = body;
+    const { status, invoiceNumber, issueDate, dueDate, notes, amount, photos, paidVia, paymentRef } = body;
 
     const data: Record<string, unknown> = {};
     if (status !== undefined) data.status = status;
     if (invoiceNumber !== undefined) data.invoiceNumber = invoiceNumber;
+    if (issueDate !== undefined) data.issueDate = issueDate ? new Date(issueDate) : new Date();
     if (dueDate !== undefined) data.dueDate = dueDate ? new Date(dueDate) : null;
     if (notes !== undefined) data.notes = notes;
     if (amount !== undefined) data.amount = amount;

@@ -60,6 +60,7 @@ type OrderInvoice = {
   invoiceNumber: string;
   amount: number;
   status: string;
+  issueDate: string;
   dueDate: string | null;
   photoCount: number;
 };
@@ -139,6 +140,7 @@ export default function OrdersPage() {
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   const [editDeliveryDate, setEditDeliveryDate] = useState("");
   const [editInvoiceNumber, setEditInvoiceNumber] = useState("");
+  const [editInvoiceIssueDate, setEditInvoiceIssueDate] = useState("");
   const [editInvoiceDueDate, setEditInvoiceDueDate] = useState("");
   type InvoiceFile = { url: string; type: "image" | "pdf"; name: string };
   const [editInvoiceFiles, setEditInvoiceFiles] = useState<InvoiceFile[]>([]);
@@ -162,6 +164,7 @@ export default function OrdersPage() {
     setEditItems(order.items.map((i) => ({ ...i, removed: false, qtyStr: String(i.quantity), priceStr: i.unitPrice.toFixed(2) })));
     setEditDeliveryDate(order.deliveryDate ?? "");
     setEditInvoiceNumber(order.invoice?.invoiceNumber ?? "");
+    setEditInvoiceIssueDate(order.invoice?.issueDate ?? "");
     setEditInvoiceDueDate(order.invoice?.dueDate ?? "");
     setEditInvoiceFiles([]);
     setAiExtracted({});
@@ -213,6 +216,12 @@ export default function OrdersPage() {
       if (data.invoiceNumber) {
         setEditInvoiceNumber(data.invoiceNumber);
         filled.invoiceNumber = true;
+      }
+
+      // Issue date — always override with AI data
+      if (data.issueDate) {
+        setEditInvoiceIssueDate(data.issueDate);
+        filled.issueDate = true;
       }
 
       // Due date — always override with AI data
@@ -369,6 +378,9 @@ export default function OrdersPage() {
         if (editInvoiceNumber !== (editOrder.invoice.invoiceNumber ?? "")) {
           invoicePayload.invoiceNumber = editInvoiceNumber || null;
         }
+        if (editInvoiceIssueDate !== (editOrder.invoice.issueDate ?? "")) {
+          invoicePayload.issueDate = editInvoiceIssueDate || null;
+        }
         if (editInvoiceDueDate !== (editOrder.invoice.dueDate ?? "")) {
           invoicePayload.dueDate = editInvoiceDueDate || null;
         }
@@ -388,7 +400,7 @@ export default function OrdersPage() {
             body: JSON.stringify(invoicePayload),
           });
         }
-      } else if (editInvoiceNumber || editInvoiceDueDate || editInvoiceFiles.length > 0) {
+      } else if (editInvoiceNumber || editInvoiceIssueDate || editInvoiceDueDate || editInvoiceFiles.length > 0) {
         const detailRes = await fetch(`/api/inventory/orders/${editOrder.id}`);
         if (detailRes.ok) {
           const detail = await detailRes.json();
@@ -401,6 +413,7 @@ export default function OrdersPage() {
               supplierId: detail.supplierId,
               amount: invoiceAmount,
               invoiceNumber: editInvoiceNumber || null,
+              issueDate: editInvoiceIssueDate || null,
               dueDate: editInvoiceDueDate || null,
               photos: editInvoiceFiles.map((f) => f.url),
             }),
@@ -812,6 +825,20 @@ export default function OrdersPage() {
                       className={aiExtracted.invoiceNumber ? "border-purple-300 bg-purple-50/30" : ""}
                     />
                   </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                      <CalendarDays className="h-3.5 w-3.5" /> Invoice Date
+                      {aiExtracted.issueDate && <span className="ml-1 rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                    </label>
+                    <Input
+                      type="date"
+                      value={editInvoiceIssueDate}
+                      onChange={(e) => { setEditInvoiceIssueDate(e.target.value); setAiExtracted((p) => { const n = { ...p }; delete n.issueDate; return n; }); }}
+                      className={aiExtracted.issueDate ? "border-purple-300 bg-purple-50/30" : ""}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
                       <CalendarDays className="h-3.5 w-3.5" /> Invoice Due Date
