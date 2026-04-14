@@ -259,19 +259,24 @@ function SidebarSection({
 
       {expanded && (
         <div className="mt-1 ml-3 border-l border-white/10 pl-3">
-          {section.items && section.items.filter((item) => canAccess(user, item.moduleKey)).map((item) => (
-            <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
-          ))}
+          {section.items && (() => {
+            const visible = section.items.filter((item) => canAccess(user, item.moduleKey));
+            const hrefs = visible.map((i) => i.href);
+            return visible.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} siblingHrefs={hrefs} />
+            ));
+          })()}
           {section.subgroups && section.subgroups.map((sg) => {
             const visibleItems = sg.items.filter((item) => canAccess(user, item.moduleKey));
             if (visibleItems.length === 0) return null;
+            const hrefs = visibleItems.map((i) => i.href);
             return (
               <div key={sg.label} className="mb-2">
                 <p className="mb-1 mt-3 px-3 text-[10px] font-semibold uppercase tracking-wider text-white/30">
                   {sg.label}
                 </p>
                 {visibleItems.map((item) => (
-                  <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
+                  <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} siblingHrefs={hrefs} />
                 ))}
               </div>
             );
@@ -286,12 +291,20 @@ function NavLink({
   item,
   pathname,
   onNavigate,
+  siblingHrefs,
 }: {
   item: NavItem;
   pathname: string;
   onNavigate?: () => void;
+  siblingHrefs?: string[];
 }) {
-  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+  // Exact match always wins. For prefix match, only activate if no sibling has a more specific match.
+  const exact = pathname === item.href;
+  const prefix = !exact && pathname.startsWith(item.href + "/");
+  const siblingHasBetterMatch = prefix && siblingHrefs?.some(
+    (h) => h !== item.href && h.length > item.href.length && (pathname === h || pathname.startsWith(h + "/"))
+  );
+  const isActive = exact || (prefix && !siblingHasBetterMatch);
   return (
     <Link
       href={item.href}
