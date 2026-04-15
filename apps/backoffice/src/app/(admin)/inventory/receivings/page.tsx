@@ -563,20 +563,25 @@ export default function ReceivingsPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Select Purchase Order or Transfer</label>
-              <select
-                value={selectedOrderId}
-                onChange={(e) => selectOrder(e.target.value)}
-                disabled={!!selectedOrderId}
-                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-700"
-              >
-                <option value="">Select a PO or Transfer...</option>
-                {pendingOrders.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.orderNumber} — {o.supplier} ({o.outlet})
-                  </option>
-                ))}
-              </select>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Purchase Order</label>
+              {selectedOrderId ? (
+                <div className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                  {pendingOrders.find((o) => o.id === selectedOrderId)?.orderNumber} — {pendingOrders.find((o) => o.id === selectedOrderId)?.supplier} ({pendingOrders.find((o) => o.id === selectedOrderId)?.outlet})
+                </div>
+              ) : (
+                <select
+                  value={selectedOrderId}
+                  onChange={(e) => selectOrder(e.target.value)}
+                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                >
+                  <option value="">Select a PO or Transfer...</option>
+                  {pendingOrders.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.orderNumber} — {o.supplier} ({o.outlet})
+                    </option>
+                  ))}
+                </select>
+              )}
               {pendingOrders.length === 0 && (
                 <p className="mt-1 text-xs text-gray-400">No pending orders or transfers to receive.</p>
               )}
