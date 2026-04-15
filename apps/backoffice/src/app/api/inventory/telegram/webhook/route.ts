@@ -233,54 +233,99 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
   }
 
   const amount = pop.amount;
+  const invoiceInclude = {
+    supplier: { select: { id: true, name: true, telegramChatId: true, bankAccountNumber: true, bankName: true } },
+    outlet: { select: { name: true, code: true } },
+    order: { select: { orderNumber: true } },
+  };
 
-  // Find unpaid invoices — exact amount match first
+  // 1. Try matching by supplier bank account first (most precise)
+  if (pop.recipientAccount) {
+    const accountDigits = pop.recipientAccount.replace(/\D/g, "");
+    const supplierByBank = await prisma.supplier.findFirst({
+      where: { bankAccountNumber: { contains: accountDigits }, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (supplierByBank) {
+      const bankMatched = await prisma.invoice.findMany({
+        where: {
+          status: { in: ["PENDING", "INITIATED", "OVERDUE"] },
+          supplierId: supplierByBank.id,
+          amount: { gte: amount - 0.5, lte: amount + 0.5 },
+        },
+        include: invoiceInclude,
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      });
+      if (bankMatched.length > 0) {
+        return await resolvePop(chatId, msgId, photoUrl, pop, amount, bankMatched);
+      }
+    }
+  }
+
+  // 2. Find unpaid invoices — exact amount match
   let candidates = await prisma.invoice.findMany({
     where: {
       status: { in: ["PENDING", "INITIATED", "OVERDUE"] },
       amount: { equals: amount },
     },
-    include: { supplier: { select: { id: true, name: true, telegramChatId: true } }, outlet: { select: { name: true } }, order: { select: { orderNumber: true } } },
+    include: invoiceInclude,
     orderBy: { createdAt: "desc" },
     take: 10,
   });
 
-  // If no exact match, try ±RM 0.50 tolerance
+  // 3. If no exact match, try ±RM 0.50 tolerance
   if (candidates.length === 0) {
     candidates = await prisma.invoice.findMany({
       where: {
         status: { in: ["PENDING", "INITIATED", "OVERDUE"] },
         amount: { gte: amount - 0.5, lte: amount + 0.5 },
       },
-      include: { supplier: { select: { id: true, name: true, telegramChatId: true } }, outlet: { select: { name: true } }, order: { select: { orderNumber: true } } },
+      include: invoiceInclude,
       orderBy: { createdAt: "desc" },
       take: 10,
     });
   }
 
-  // If recipient name/account available, narrow down
-  if (candidates.length > 1 && pop.recipientAccount) {
-    const narrowed = candidates.filter(
-      (inv) => inv.supplier?.name?.toLowerCase().includes(pop.recipientName?.toLowerCase() ?? ""),
-    );
-    if (narrowed.length > 0) candidates = narrowed;
+  // 4. Narrow by recipient name/bank if multiple matches
+  if (candidates.length > 1 && (pop.recipientName || pop.recipientAccount)) {
+    let narrowed = candidates;
+    if (pop.recipientAccount) {
+      const digits = pop.recipientAccount.replace(/\D/g, "");
+      const byAccount = candidates.filter((inv) => inv.supplier?.bankAccountNumber?.replace(/\D/g, "") === digits);
+      if (byAccount.length > 0) narrowed = byAccount;
+    }
+    if (narrowed.length > 1 && pop.recipientName) {
+      const byName = narrowed.filter((inv) =>
+        inv.supplier?.name?.toLowerCase().includes(pop.recipientName!.toLowerCase()),
+      );
+      if (byName.length > 0) narrowed = byName;
+    }
+    candidates = narrowed;
   }
 
+  return await resolvePop(chatId, msgId, photoUrl, pop, amount, candidates);
+}
+
+async function resolvePop(
+  chatId: number, msgId: number, photoUrl: string, pop: PopData, amount: number,
+  candidates: Awaited<ReturnType<typeof prisma.invoice.findMany>>,
+) {
   if (candidates.length === 0) {
-    await sendMessage(chatId, `💳 POP received — RM ${amount.toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\n\n❌ No matching unpaid invoice found.`, msgId);
+    await sendMessage(chatId, `💳 POP received — RM ${amount.toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\nRecipient: ${pop.recipientName ?? "–"}\nAccount: ${pop.recipientAccount ?? "–"}\n\n❌ No matching unpaid invoice found.`, msgId);
     return;
   }
 
   if (candidates.length > 1) {
     const list = candidates
-      .map((inv) => `• ${inv.invoiceNumber} — ${inv.supplier?.name ?? "?"} — RM ${Number(inv.amount).toFixed(2)}`)
+      .map((inv: any) => `• ${inv.invoiceNumber} — ${inv.supplier?.name ?? "?"} [${inv.outlet?.code ?? "?"}] — RM ${Number(inv.amount).toFixed(2)}`)
       .join("\n");
     await sendMessage(chatId, `💳 POP received — RM ${amount.toFixed(2)}\n\n⚠️ Multiple matching invoices:\n${list}\n\nPlease specify which invoice.`, msgId);
     return;
   }
 
   // Single match — mark as PAID
-  const invoice = candidates[0];
+  const invoice = candidates[0] as any;
   const result = await prisma.invoice.updateMany({
     where: { id: invoice.id, status: { in: ["PENDING", "INITIATED", "OVERDUE"] } },
     data: {
@@ -302,14 +347,17 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
     await prisma.order.update({
       where: { id: invoice.orderId },
       data: { photos: { push: photoUrl } },
-    }).catch((e) => console.error("[telegram] Failed to attach POP to order:", e));
+    }).catch((e: unknown) => console.error("[telegram] Failed to attach POP to order:", e));
   }
 
   const supplierName = invoice.supplier?.name ?? "Unknown";
+  const outletName = invoice.outlet?.name ?? "";
+  const outletCode = invoice.outlet?.code ?? "";
   const poRef = invoice.order?.orderNumber ? `\nPO: ${invoice.order.orderNumber}` : "";
+  const outletRef = outletName ? `\nOutlet: ${outletName}${outletCode ? ` (${outletCode})` : ""}` : "";
   await sendMessage(
     chatId,
-    `✅ <b>Payment matched</b>\n\nInvoice: ${invoice.invoiceNumber}${poRef}\nSupplier: ${supplierName}\nAmount: RM ${Number(invoice.amount).toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\n\nMarked as <b>PAID</b>.\n📎 Uploaded to PO + Invoice`,
+    `✅ <b>Payment matched</b>\n\nInvoice: ${invoice.invoiceNumber}${poRef}${outletRef}\nSupplier: ${supplierName}\nAmount: RM ${Number(invoice.amount).toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\n\nMarked as <b>PAID</b>.\n📎 Uploaded to PO + Invoice`,
     msgId,
   );
 
