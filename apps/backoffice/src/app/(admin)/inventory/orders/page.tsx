@@ -1024,8 +1024,8 @@ export default function OrdersPage() {
 
               {/* old invoice section removed — now at top */}
             </div>
-            </div>{/* end form */}
-          </div>{/* end flex */}
+            </div>
+          </div>
           )}
 
           <DialogFooter className="flex gap-2">
