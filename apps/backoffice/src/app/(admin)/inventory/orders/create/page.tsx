@@ -303,6 +303,7 @@ export default function CreateOrderPage() {
   const [productSearch, setProductSearch] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("");
   const [orderNotes, setOrderNotes] = useState("");
+  const [deliveryDates, setDeliveryDates] = useState<Record<string, string>>({});
   const [createTab, setCreateTab] = useState<"smart" | "all" | "reorder">("smart");
   const [saving, setSaving] = useState(false);
 
@@ -386,6 +387,10 @@ export default function CreateOrderPage() {
         setEditingDraftId(draft.id);
         if (draft.outletId) setSelectedOutletId(draft.outletId);
         if (draft.notes) setOrderNotes(draft.notes);
+        if (draft.deliveryDate) {
+          const dd = new Date(draft.deliveryDate).toISOString().split("T")[0];
+          setDeliveryDates((prev) => ({ ...prev, [draft.supplierId]: dd }));
+        }
         // Map draft items to cart items using supplier data
         const supplier = suppliers.find((s) => s.id === draft.supplierId);
         if (!supplier) return;
@@ -575,14 +580,14 @@ export default function CreateOrderPage() {
     const group = cartBySupplier[supplier];
     if (!group) return;
     const outlet = outlets.find((b) => b.id === selectedOutletId);
-    const deliveryDate = getDeliveryDate(group.supplierId);
+    const deliveryDate = deliveryDates[group.supplierId] || null;
     const today = new Date().toLocaleDateString("en-MY", { day: "2-digit", month: "2-digit", year: "numeric" });
     let message = `📋 *Order from Celsius Coffee*\n`;
     message += `Outlet: ${outlet?.name || "—"}\nDate: ${today}\n\n`;
     group.items.forEach((item, i) => {
       message += `${i + 1}. ${item.name} — ${item.quantity} ${item.packageLabel}\n`;
     });
-    message += `\nDelivery: ${formatDeliveryDate(deliveryDate)}`;
+    if (deliveryDate) message += `\nDelivery: ${formatDeliveryDate(deliveryDate)}`;
     if (orderNotes) message += `\nNotes: ${orderNotes}`;
     message += `\n\nThank you! 🙏`;
     setWhatsappDialog({ open: true, supplier, supplierId: group.supplierId, message, phone: group.phone, items: group.items });
@@ -593,7 +598,7 @@ export default function CreateOrderPage() {
     try {
       const group = cartBySupplier[whatsappDialog.supplier];
       if (!group) return;
-      const deliveryDate = getDeliveryDate(group.supplierId);
+      const deliveryDate = deliveryDates[group.supplierId] || null;
 
       let orderId = editingDraftId;
 
@@ -661,7 +666,7 @@ export default function CreateOrderPage() {
         await fetch(`/api/inventory/orders/${editingDraftId}`, { method: "DELETE" });
       }
       for (const [, group] of entries) {
-        const deliveryDate = getDeliveryDate(group.supplierId);
+        const deliveryDate = deliveryDates[group.supplierId] || null;
         const res = await fetch("/api/inventory/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1137,7 +1142,6 @@ export default function CreateOrderPage() {
                   <div className="max-h-[50vh] overflow-y-auto space-y-4">
                     {Object.entries(cartBySupplier).map(([supplier, group]) => {
                       const supplierData = suppliers.find((s) => s.id === group.supplierId);
-                      const deliveryDate = getDeliveryDate(group.supplierId);
                       const supplierTotal = group.items.reduce((s, c) => s + c.quantity * c.unitPrice, 0);
 
                       return (
@@ -1147,13 +1151,16 @@ export default function CreateOrderPage() {
                             <p className="text-xs font-bold text-gray-900">RM {supplierTotal.toFixed(2)}</p>
                           </div>
 
-                          {/* Expected delivery */}
+                          {/* Delivery date (optional) */}
                           <div className="mb-2 flex items-center gap-1.5 rounded-md bg-blue-50 px-2 py-1.5">
                             <Truck className="h-3 w-3 text-blue-500" />
-                            <span className="text-[11px] text-blue-700">
-                              Expected delivery: <strong>{formatDeliveryDate(deliveryDate)}</strong>
-                              {supplierData && <span className="text-blue-500"> ({supplierData.leadTimeDays}d lead time)</span>}
-                            </span>
+                            <span className="text-[11px] text-blue-700">Delivery:</span>
+                            <input
+                              type="date"
+                              className="rounded border border-blue-200 bg-white px-1.5 py-0.5 text-[11px] text-blue-700 focus:border-blue-400 focus:outline-none"
+                              value={deliveryDates[group.supplierId] || ""}
+                              onChange={(e) => setDeliveryDates((prev) => ({ ...prev, [group.supplierId]: e.target.value }))}
+                            />
                           </div>
 
                           <div className="space-y-1.5">
