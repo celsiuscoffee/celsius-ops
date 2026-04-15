@@ -629,15 +629,10 @@ export default function OrdersPage() {
                             {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm Order"}
                           </button>
                         )}
-                        {order.status === "DRAFT" && (
+                        {["DRAFT", "PENDING_APPROVAL", "SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(order.status) && (
                           <Link href={`/inventory/orders/${order.id}`} className="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50" title="Edit PO">
                             <Pencil className="h-3 w-3" />
                           </Link>
-                        )}
-                        {["PENDING_APPROVAL", "SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(order.status) && (
-                          <button onClick={() => openEditDialog(order)} className="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50" title="Edit Order">
-                            <Pencil className="h-3 w-3" />
-                          </button>
                         )}
                         {order.status === "APPROVED" && (
                           <button onClick={() => { if (confirm("Cancel this order?")) updateStatus(order.id, "CANCELLED"); }} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50" title="Cancel Order">
