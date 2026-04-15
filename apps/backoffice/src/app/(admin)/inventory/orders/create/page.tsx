@@ -1013,7 +1013,7 @@ export default function CreateOrderPage() {
                                           data: {
                                             fromOutletId: tf.fromOutletId,
                                             toOutletId: selectedOutletId,
-                                            items: [{ productId: item.productId, productPackageId: tf.productPackageId || null, quantity: tf.transferQty }],
+                                            items: [{ productId: item.productId, quantity: tf.transferQty }],
                                           },
                                         }),
                                       });
