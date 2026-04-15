@@ -173,7 +173,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
 
         // Resolve packageIndex to actual package ID
-        let packageId = entry.productPackageId || null;
+        let packageId = entry.productPackageId?.startsWith("new-") ? null : entry.productPackageId || null;
         if (!packageId && entry.packageIndex !== undefined && createdPkgIds[entry.packageIndex]) {
           packageId = createdPkgIds[entry.packageIndex];
         }

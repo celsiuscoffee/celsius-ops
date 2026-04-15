@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Resolve packageIndex to actual package ID for newly created packages
-      let packageId = entry.productPackageId || null;
+      let packageId = entry.productPackageId?.startsWith("new-") ? null : entry.productPackageId || null;
       if (!packageId && entry.packageIndex !== undefined && createdPackageIds[entry.packageIndex]) {
         packageId = createdPackageIds[entry.packageIndex];
       }
