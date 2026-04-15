@@ -21,8 +21,9 @@ export async function GET(req: NextRequest) {
   else if (type === "staff_claim") where.paymentType = "STAFF_CLAIM";
   else if (type === "transfer") where.paymentType = "INTERNAL_TRANSFER";
 
-  const outletId = req.nextUrl.searchParams.get("outlet") || "";
-  if (outletId) where.outletId = outletId;
+  const outletIds = req.nextUrl.searchParams.getAll("outlet").filter(Boolean);
+  if (outletIds.length === 1) where.outletId = outletIds[0];
+  else if (outletIds.length > 1) where.outletId = { in: outletIds };
 
   const dueDateFrom = req.nextUrl.searchParams.get("dueDateFrom") || "";
   const dueDateTo = req.nextUrl.searchParams.get("dueDateTo") || "";

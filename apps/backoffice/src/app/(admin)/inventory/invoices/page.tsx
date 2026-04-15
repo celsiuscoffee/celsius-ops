@@ -45,7 +45,8 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [outletFilter, setOutletFilter] = useState("");
+  const [outletFilter, setOutletFilter] = useState<string[]>([]);
+  const [bankFilter, setBankFilter] = useState<"all" | "maybank" | "non-maybank">("all");
   const [dueDateFrom, setDueDateFrom] = useState("");
   const [dueDateTo, setDueDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -76,7 +77,7 @@ export default function InvoicesPage() {
 
   const params = new URLSearchParams({ tab, type: typeFilter });
   if (debouncedSearch) params.set("search", debouncedSearch);
-  if (outletFilter) params.set("outlet", outletFilter);
+  outletFilter.forEach((id) => params.append("outlet", id));
   if (dueDateFrom) params.set("dueDateFrom", dueDateFrom);
   if (dueDateTo) params.set("dueDateTo", dueDateTo);
 
@@ -89,19 +90,21 @@ export default function InvoicesPage() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Apply card filter on top of API results
-  const invoices = cardFilter
-    ? allInvoices.filter((inv) => {
-        if (cardFilter === "pending") return inv.status === "PENDING";
-        if (cardFilter === "overdue") return inv.status === "OVERDUE";
-        if (cardFilter === "paid") return inv.status === "PAID";
-        if (cardFilter === "payable") return inv.status !== "PAID";
-        if (cardFilter === "due_today") return inv.dueDate === today && inv.status !== "PAID";
-        return true;
-      })
-    : allInvoices;
+  // Apply card filter + bank filter on top of API results
+  const invoices = allInvoices.filter((inv) => {
+    if (cardFilter) {
+      if (cardFilter === "pending" && inv.status !== "PENDING") return false;
+      if (cardFilter === "overdue" && inv.status !== "OVERDUE") return false;
+      if (cardFilter === "paid" && inv.status !== "PAID") return false;
+      if (cardFilter === "payable" && inv.status === "PAID") return false;
+      if (cardFilter === "due_today" && (inv.dueDate !== today || inv.status === "PAID")) return false;
+    }
+    if (bankFilter === "maybank" && !inv.supplierBank?.bankName?.toLowerCase().includes("maybank")) return false;
+    if (bankFilter === "non-maybank" && inv.supplierBank?.bankName?.toLowerCase().includes("maybank")) return false;
+    return true;
+  });
 
-  const activeFilterCount = [outletFilter, dueDateFrom, dueDateTo].filter(Boolean).length;
+  const activeFilterCount = [outletFilter.length > 0, bankFilter !== "all", dueDateFrom, dueDateTo].filter(Boolean).length;
 
   const openPayDialog = (inv: Invoice, targetStatus: string) => {
     setPayingInvoice(inv);
@@ -428,45 +431,92 @@ export default function InvoicesPage() {
 
       {/* Expanded filter panel */}
       {showFilters && (
-        <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/30 p-3">
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="min-w-[180px]">
-              <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
-                <Building2 className="h-3 w-3" /> Outlet
+        <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/30 p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Outlets — multi-select */}
+            <div>
+              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+                <Building2 className="h-3 w-3" /> Outlets
+                {outletFilter.length > 0 && (
+                  <button onClick={() => setOutletFilter([])} className="ml-auto text-[10px] text-blue-500 hover:underline">Clear</button>
+                )}
               </label>
-              <select
-                value={outletFilter}
-                onChange={(e) => setOutletFilter(e.target.value)}
-                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
-              >
-                <option value="">All Outlets</option>
+              <div className="max-h-[140px] overflow-y-auto rounded-md border border-gray-200 bg-white p-1.5 space-y-0.5">
                 {outletOptions.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
+                  <label key={o.id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={outletFilter.includes(o.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) setOutletFilter((prev) => [...prev, o.id]);
+                        else setOutletFilter((prev) => prev.filter((id) => id !== o.id));
+                      }}
+                      className="rounded border-gray-300 text-blue-500 focus:ring-blue-400 h-3.5 w-3.5"
+                    />
+                    {o.name}
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
-            <div className="min-w-[150px]">
-              <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
-                <CalendarDays className="h-3 w-3" /> Due From
+
+            {/* Bank filter */}
+            <div>
+              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+                <Landmark className="h-3 w-3" /> Bank
               </label>
-              <input
-                type="date"
-                value={dueDateFrom}
-                onChange={(e) => setDueDateFrom(e.target.value)}
-                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
-              />
+              <div className="flex flex-col gap-1 rounded-md border border-gray-200 bg-white p-1.5">
+                {([["all", "All Banks"], ["maybank", "Maybank"], ["non-maybank", "Non-Maybank"]] as const).map(([val, label]) => (
+                  <label key={val} className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="bankFilter"
+                      checked={bankFilter === val}
+                      onChange={() => setBankFilter(val)}
+                      className="text-blue-500 focus:ring-blue-400 h-3.5 w-3.5"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
             </div>
-            <div className="min-w-[150px]">
-              <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-600">
-                <CalendarDays className="h-3 w-3" /> Due To
-              </label>
-              <input
-                type="date"
-                value={dueDateTo}
-                onChange={(e) => setDueDateTo(e.target.value)}
-                min={dueDateFrom || undefined}
-                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
-              />
+
+            {/* Due date range */}
+            <div className="space-y-2">
+              <div>
+                <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+                  <CalendarDays className="h-3 w-3" /> Due From
+                </label>
+                <input
+                  type="date"
+                  value={dueDateFrom}
+                  onChange={(e) => setDueDateFrom(e.target.value)}
+                  className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+                  <CalendarDays className="h-3 w-3" /> Due To
+                </label>
+                <input
+                  type="date"
+                  value={dueDateTo}
+                  onChange={(e) => setDueDateTo(e.target.value)}
+                  min={dueDateFrom || undefined}
+                  className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+            </div>
+
+            {/* Clear all */}
+            <div className="flex items-end">
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={() => { setOutletFilter([]); setBankFilter("all"); setDueDateFrom(""); setDueDateTo(""); }}
+                  className="flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
+                >
+                  <X className="h-3 w-3" /> Clear All Filters
+                </button>
+              )}
             </div>
           </div>
         </div>
