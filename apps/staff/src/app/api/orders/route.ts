@@ -4,6 +4,7 @@ import { getUserFromHeaders } from "@/lib/auth";
 import { logActivity } from "@/lib/activity-log";
 
 export async function GET(req: NextRequest) {
+  const session = await getUserFromHeaders(req.headers);
   const url = new URL(req.url);
   const search = url.searchParams.get("search")?.trim() ?? "";
   const status = url.searchParams.get("status") ?? "";
@@ -12,6 +13,10 @@ export async function GET(req: NextRequest) {
   const skip = (page - 1) * limit;
 
   const where: Record<string, unknown> = {};
+  // Staff only see orders for their outlet
+  if (session?.outletId) {
+    where.outletId = session.outletId;
+  }
   if (search) {
     where.OR = [
       { orderNumber: { contains: search, mode: "insensitive" } },

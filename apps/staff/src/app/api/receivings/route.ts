@@ -5,10 +5,11 @@ import { getSession } from "@/lib/auth";
 import { logActivity } from "@/lib/activity-log";
 
 export async function GET(req: NextRequest) {
+  const session = await getSession();
   const { searchParams } = new URL(req.url);
   const limit = Math.min(Number(searchParams.get("limit")) || 50, 200);
   const offset = Number(searchParams.get("offset")) || 0;
-  const outletId = searchParams.get("outletId");
+  const outletId = searchParams.get("outletId") || session?.outletId || null;
 
   const where = outletId ? { outletId } : {};
 
