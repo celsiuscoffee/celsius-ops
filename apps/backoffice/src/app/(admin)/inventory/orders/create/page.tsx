@@ -603,11 +603,13 @@ export default function CreateOrderPage() {
   };
 
   const submitAsDraft = async () => {
+    const entries = Object.entries(cartBySupplier);
+    if (entries.length === 0) return;
     setSaving(true);
     try {
-      for (const [, group] of Object.entries(cartBySupplier)) {
+      for (const [, group] of entries) {
         const deliveryDate = getDeliveryDate(group.supplierId);
-        await fetch("/api/inventory/orders", {
+        const res = await fetch("/api/inventory/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -623,6 +625,11 @@ export default function CreateOrderPage() {
             })),
           }),
         });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(`Failed to save draft: ${err.error || res.statusText}`);
+          return;
+        }
       }
       router.push("/inventory/orders");
     } finally {
