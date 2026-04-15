@@ -340,6 +340,43 @@ export async function syncProductsFromStoreHub(
   }
 }
 
+// ─── Points Log (Admin) ─────────────────────────────
+export interface PointTransactionWithDetails {
+  id: string;
+  member_id: string;
+  brand_id: string;
+  outlet_id: string | null;
+  type: "earn" | "redeem" | "bonus" | "expire" | "adjust";
+  points: number;
+  balance_after: number;
+  description: string;
+  reference_id: string | null;
+  multiplier: number;
+  created_at: string;
+  created_by: string | null;
+  members: { name: string | null; phone: string } | null;
+  outlets: { name: string } | null;
+}
+
+export async function fetchPointsLog(
+  brandId: string = "brand-celsius",
+  type: string = "all",
+): Promise<PointTransactionWithDetails[]> {
+  try {
+    const params = new URLSearchParams({ brand_id: brandId });
+    if (type !== "all") params.set("type", type);
+    const res = await fetch(`/api/admin/points-log?${params.toString()}`, {
+      credentials: "include",
+    });
+    await handleAuthResponse(res);
+    if (!res.ok) return [];
+    return res.json();
+  } catch (err) {
+    if (err instanceof SessionExpiredError) throw err;
+    return [];
+  }
+}
+
 // ─── Staff ───────────────────────────────────────────
 export async function verifyStaffPin(
   outletId: string,

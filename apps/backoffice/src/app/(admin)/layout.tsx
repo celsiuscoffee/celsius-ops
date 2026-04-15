@@ -53,6 +53,7 @@ import {
   CalendarClock,
   Brain,
   MessageCircle,
+  Coins,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PullToRefresh } from "@/components/pull-to-refresh";
@@ -160,6 +161,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Dashboard", href: "/loyalty/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "loyalty:dashboard" },
       { label: "Members", href: "/loyalty/members", icon: <Heart className={ICON_SIZE} />, moduleKey: "loyalty:members" },
       { label: "Rewards", href: "/loyalty/rewards", icon: <Star className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
+      { label: "Points Log", href: "/loyalty/points-log", icon: <Coins className={ICON_SIZE} />, moduleKey: "loyalty:redemptions" },
       { label: "Redemptions", href: "/loyalty/redemptions", icon: <TicketPercent className={ICON_SIZE} />, moduleKey: "loyalty:redemptions" },
       { label: "Campaigns", href: "/loyalty/campaigns", icon: <Megaphone className={ICON_SIZE} />, moduleKey: "loyalty:campaigns" },
       { label: "Engage", href: "/loyalty/engage", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
