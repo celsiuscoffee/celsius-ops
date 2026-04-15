@@ -8,6 +8,8 @@ import { useFetch } from "@/lib/use-fetch";
 import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign, Landmark, Copy, Check } from "lucide-react";
 
 const isPdf = (url: string) => /\.pdf($|\?)/i.test(url);
+// Fix Cloudinary raw URLs to image URLs so they render as images
+const fixImageUrl = (url: string) => isPdf(url) ? url : url.replace("/raw/upload/", "/image/upload/");
 
 type Invoice = {
   id: string;
@@ -630,7 +632,7 @@ export default function InvoicesPage() {
                             <span className="mt-1 text-[10px]">PDF</span>
                           </a>
                         ) : (
-                          <img src={url} alt={`Photo ${i + 1}`} className="h-24 w-full object-cover" />
+                          <img src={fixImageUrl(url)} alt={`Photo ${i + 1}`} className="h-24 w-full object-cover" />
                         )}
                         <button
                           onClick={() => setEditPhotos(editPhotos.filter((_, j) => j !== i))}
@@ -785,7 +787,7 @@ export default function InvoicesPage() {
                           <span className="mt-0.5 text-[10px]">PDF</span>
                         </a>
                       ) : (
-                        <img src={url} alt={`Receipt ${i + 1}`} className="h-20 w-full object-cover" />
+                        <img src={fixImageUrl(url)} alt={`Receipt ${i + 1}`} className="h-20 w-full object-cover" />
                       )}
                       <button
                         onClick={() => setPayReceipts(payReceipts.filter((_, j) => j !== i))}
@@ -855,7 +857,7 @@ export default function InvoicesPage() {
                   </div>
                 ) : (
                   <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="group relative block overflow-hidden rounded-lg border border-gray-200 hover:border-blue-300">
-                    <img src={url} alt={`Invoice photo ${i + 1}`} className="h-auto w-full object-contain" />
+                    <img src={fixImageUrl(url)} alt={`Invoice photo ${i + 1}`} className="h-auto w-full object-contain" />
                     <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
                       <ZoomIn className="h-6 w-6 text-white drop-shadow-md" />
                     </div>
