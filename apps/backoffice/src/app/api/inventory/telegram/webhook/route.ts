@@ -111,7 +111,16 @@ async function processMessage(message: TelegramMessage) {
     await sendMessage(chatId, `📄 Batch POP detected — ${payments.length} payments found. Processing...`, msgId);
     for (const payment of payments) {
       const popData: PopData = { documentType: "POP", ...payment };
-      await handlePop(chatId, msgId, cloudinaryUrl, popData);
+      // For multi-page PDFs, generate per-page URL using Cloudinary pg_N transformation
+      let pageUrl = cloudinaryUrl;
+      if (isPdf && (payment as any).pageNumber) {
+        // Convert raw PDF URL to image URL with page extraction
+        // e.g. /raw/upload/v123/folder/file → /image/upload/pg_1/v123/folder/file.jpg
+        pageUrl = cloudinaryUrl
+          .replace("/raw/upload/", `/image/upload/pg_${(payment as any).pageNumber}/`)
+          + ".jpg";
+      }
+      await handlePop(chatId, msgId, pageUrl, popData);
     }
   } else if (extracted.documentType === "POP") {
     await handlePop(chatId, msgId, cloudinaryUrl, extracted);
@@ -213,6 +222,7 @@ For MULTIPLE POPs in one document (batch payment / multi-page), return:
   "documentType": "MULTI_POP",
   "payments": [
     {
+      "pageNumber": <which page this payment appears on, 1-indexed>,
       "amount": <number or null>,
       "referenceNumber": "<string or null>",
       "description": "<payment description/remarks or null>",
