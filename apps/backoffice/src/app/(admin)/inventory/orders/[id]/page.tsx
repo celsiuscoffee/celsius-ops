@@ -193,7 +193,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           {isDraft && (
             <Button onClick={() => saveOrder(true)} disabled={saving} className="bg-blue-500 hover:bg-blue-600">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
-              Confirm &amp; Send
+              Confirm Request
             </Button>
           )}
         </div>

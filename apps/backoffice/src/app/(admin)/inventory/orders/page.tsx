@@ -101,12 +101,16 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof
 };
 
 const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof Clock; color: string }[]> = {
-  DRAFT: [],
+  DRAFT: [
+    { status: "APPROVED", label: "Confirm Request", icon: CheckCircle2, color: "bg-blue-500 hover:bg-blue-600" },
+  ],
   PENDING_APPROVAL: [
     { status: "APPROVED", label: "Confirm", icon: CheckCircle2, color: "bg-blue-500 hover:bg-blue-600" },
     { status: "CANCELLED", label: "Reject", icon: Ban, color: "bg-red-500 hover:bg-red-600" },
   ],
-  APPROVED: [],
+  APPROVED: [
+    { status: "SENT", label: "Mark as Sent", icon: Send, color: "bg-green-500 hover:bg-green-600" },
+  ],
   SENT: [],
   AWAITING_DELIVERY: [],
   PARTIALLY_RECEIVED: [],
