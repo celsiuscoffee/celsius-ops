@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   ArrowLeft,
   Loader2,
@@ -13,15 +14,16 @@ import {
   Pencil,
   X,
   Plus,
-  Trash2,
   Save,
+  MessageCircle,
+  Send,
 } from "lucide-react";
 
 type OrderItem = {
   id: string;
   productId: string;
-  product: { name: string; sku: string };
-  productPackage: { label: string } | null;
+  product: { name: string; sku: string; baseUom?: string };
+  productPackage: { label: string; packageLabel?: string; packageName?: string } | null;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -36,7 +38,7 @@ type OrderDetail = {
   notes: string | null;
   deliveryDate: string | null;
   outlet: { id: string; name: string };
-  supplier: { id: string; name: string } | null;
+  supplier: { id: string; name: string; phone?: string | null } | null;
   items: OrderItem[];
   createdAt: string;
 };
@@ -51,6 +53,14 @@ type EditItem = {
   removed: boolean;
 };
 
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  DRAFT: { label: "Draft", color: "bg-gray-400" },
+  APPROVED: { label: "Confirmed", color: "bg-blue-500" },
+  SENT: { label: "Sent", color: "bg-green-500" },
+  AWAITING_DELIVERY: { label: "Awaiting Delivery", color: "bg-purple-500" },
+  COMPLETED: { label: "Completed", color: "bg-gray-500" },
+};
+
 export default function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -61,9 +71,8 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
 
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   const [deliveryDate, setDeliveryDate] = useState("");
-  const [notes, setNotes] = useState("");
 
-  useEffect(() => {
+  const loadOrder = useCallback(() => {
     fetch(`/api/inventory/orders/${id}`)
       .then((r) => {
         if (!r.ok) throw new Error("Not found");
@@ -76,18 +85,19 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
             id: i.id,
             product: i.product.name,
             sku: i.product.sku,
-            packageLabel: i.productPackage?.label ?? "pcs",
+            packageLabel: i.productPackage?.packageLabel ?? i.productPackage?.label ?? "pcs",
             qtyStr: String(Number(i.quantity)),
             priceStr: Number(i.unitPrice).toFixed(2),
             removed: false,
           }))
         );
         setDeliveryDate(data.deliveryDate ? data.deliveryDate.split("T")[0] : "");
-        setNotes(data.notes ?? "");
       })
       .catch(() => setError("Order not found"))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => { loadOrder(); }, [loadOrder]);
 
   const total = editItems
     .filter((i) => !i.removed)
@@ -97,7 +107,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     if (!order) return;
     setSaving(true);
     try {
-      // Build item changes
       const itemChanges = editItems
         .filter((i) => {
           if (i.removed) return true;
@@ -133,12 +142,39 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "APPROVED" }),
         });
+        // Reload to show updated status with WhatsApp button
+        loadOrder();
+      } else {
+        router.push("/inventory/orders");
       }
+    } finally {
+      setSaving(false);
+    }
+  };
 
+  const markAsSent = async () => {
+    if (!order) return;
+    setSaving(true);
+    try {
+      await fetch(`/api/inventory/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "SENT" }),
+      });
       router.push("/inventory/orders");
     } finally {
       setSaving(false);
     }
+  };
+
+  const buildWhatsAppUrl = () => {
+    if (!order?.supplier?.phone) return "";
+    const items = editItems
+      .filter((i) => !i.removed)
+      .map((i) => `• ${i.product} (${i.packageLabel}) × ${i.qtyStr}`).join("\n");
+    const msg = `Hi, this is Celsius Coffee.\n\nPO: ${order.orderNumber}\nOutlet: ${order.outlet.name}\n${deliveryDate ? `Delivery: ${deliveryDate}\n` : ""}\nOrder:\n${items}\n\nTotal: RM ${total.toFixed(2)}\n\nThank you!`;
+    const phone = order.supplier.phone.replace(/[^0-9]/g, "");
+    return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
   };
 
   if (loading) {
@@ -161,6 +197,8 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   }
 
   const isDraft = order.status === "DRAFT";
+  const isApproved = order.status === "APPROVED";
+  const statusConfig = STATUS_LABELS[order.status];
 
   return (
     <div className="p-6">
@@ -174,8 +212,8 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <Pencil className="h-4 w-4 text-gray-400" />
               <h2 className="text-xl font-semibold text-gray-900">{order.orderNumber}</h2>
+              {statusConfig && <Badge className={`text-xs ${statusConfig.color}`}>{statusConfig.label}</Badge>}
             </div>
             <p className="text-sm text-gray-500">
               {order.supplier?.name ?? "No supplier"} &rarr; {order.outlet.name}
@@ -184,16 +222,32 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => router.push("/inventory/orders")} disabled={saving}>
-            Cancel
+            Back
           </Button>
-          <Button onClick={() => saveOrder(false)} disabled={saving} className="bg-terracotta hover:bg-terracotta-dark">
-            {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
-            Save Changes
-          </Button>
+          {(isDraft || isApproved) && (
+            <Button onClick={() => saveOrder(false)} disabled={saving} className="bg-terracotta hover:bg-terracotta-dark">
+              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
+              Save Changes
+            </Button>
+          )}
           {isDraft && (
             <Button onClick={() => saveOrder(true)} disabled={saving} className="bg-blue-500 hover:bg-blue-600">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
               Confirm Request
+            </Button>
+          )}
+          {isApproved && order.supplier?.phone && (
+            <a href={buildWhatsAppUrl()} target="_blank" rel="noopener noreferrer">
+              <Button className="bg-green-500 hover:bg-green-600">
+                <MessageCircle className="mr-1.5 h-4 w-4" />
+                WhatsApp Supplier
+              </Button>
+            </a>
+          )}
+          {isApproved && (
+            <Button onClick={markAsSent} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
+              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+              Mark as Sent
             </Button>
           )}
         </div>
@@ -210,6 +264,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
             value={deliveryDate}
             onChange={(e) => setDeliveryDate(e.target.value)}
             className="max-w-xs"
+            disabled={!isDraft && !isApproved}
           />
         </div>
 
@@ -226,7 +281,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                 <th className="px-4 py-2 text-right font-medium text-gray-500 w-24">Qty</th>
                 <th className="px-4 py-2 text-right font-medium text-gray-500 w-28">Unit Price</th>
                 <th className="px-4 py-2 text-right font-medium text-gray-500 w-28">Total</th>
-                <th className="px-4 py-2 w-10"></th>
+                {(isDraft || isApproved) && <th className="px-4 py-2 w-10"></th>}
               </tr>
             </thead>
             <tbody>
@@ -262,60 +317,70 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                     </td>
                     <td className="px-4 py-2.5 text-gray-500 text-xs">{item.packageLabel}</td>
                     <td className="px-4 py-2.5">
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        className="w-full rounded border border-gray-200 px-2 py-1.5 text-right text-sm focus:border-terracotta focus:outline-none"
-                        value={item.qtyStr}
-                        onChange={(e) =>
-                          setEditItems((prev) =>
-                            prev.map((p, i) => (i === idx ? { ...p, qtyStr: e.target.value } : p))
-                          )
-                        }
-                      />
+                      {isDraft || isApproved ? (
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="w-full rounded border border-gray-200 px-2 py-1.5 text-right text-sm focus:border-terracotta focus:outline-none"
+                          value={item.qtyStr}
+                          onChange={(e) =>
+                            setEditItems((prev) =>
+                              prev.map((p, i) => (i === idx ? { ...p, qtyStr: e.target.value } : p))
+                            )
+                          }
+                        />
+                      ) : (
+                        <p className="text-right text-sm text-gray-900">{item.qtyStr}</p>
+                      )}
                     </td>
                     <td className="px-4 py-2.5">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="w-full rounded border border-gray-200 px-2 py-1.5 text-right text-sm focus:border-terracotta focus:outline-none"
-                        value={item.priceStr}
-                        onChange={(e) =>
-                          setEditItems((prev) =>
-                            prev.map((p, i) => (i === idx ? { ...p, priceStr: e.target.value } : p))
-                          )
-                        }
-                      />
+                      {isDraft || isApproved ? (
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="w-full rounded border border-gray-200 px-2 py-1.5 text-right text-sm focus:border-terracotta focus:outline-none"
+                          value={item.priceStr}
+                          onChange={(e) =>
+                            setEditItems((prev) =>
+                              prev.map((p, i) => (i === idx ? { ...p, priceStr: e.target.value } : p))
+                            )
+                          }
+                        />
+                      ) : (
+                        <p className="text-right text-sm text-gray-900">{item.priceStr}</p>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-right font-medium text-gray-900">
                       RM {lineTotal.toFixed(2)}
                     </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <button
-                        onClick={() =>
-                          setEditItems((prev) =>
-                            prev.map((p, i) => (i === idx ? { ...p, removed: true } : p))
-                          )
-                        }
-                        className="text-red-400 hover:text-red-600"
-                        title="Remove"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
+                    {(isDraft || isApproved) && (
+                      <td className="px-4 py-2.5 text-center">
+                        <button
+                          onClick={() =>
+                            setEditItems((prev) =>
+                              prev.map((p, i) => (i === idx ? { ...p, removed: true } : p))
+                            )
+                          }
+                          className="text-red-400 hover:text-red-600"
+                          title="Remove"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
               <tr className="border-t-2 border-gray-200 bg-gray-50">
-                <td colSpan={4} className="px-4 py-2.5 text-right font-semibold text-gray-700">
+                <td colSpan={isDraft || isApproved ? 4 : 4} className="px-4 py-2.5 text-right font-semibold text-gray-700">
                   Total
                 </td>
                 <td className="px-4 py-2.5 text-right font-bold text-gray-900">
                   RM {total.toFixed(2)}
                 </td>
-                <td></td>
+                {(isDraft || isApproved) && <td></td>}
               </tr>
             </tbody>
           </table>
