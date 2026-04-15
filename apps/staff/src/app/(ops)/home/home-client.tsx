@@ -97,6 +97,11 @@ export function HomeClient({
   const [dashboard, setDashboard] = useState(initialDashboard);
   const [showDone, setShowDone] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [stockSchedule, setStockSchedule] = useState<{ weeklyDays: number[]; endOfMonthDays: number[] }>({ weeklyDays: [0, 2, 4], endOfMonthDays: [28, 29, 30, 31] });
+
+  useEffect(() => {
+    fetch("/api/settings/stock-count").then((r) => r.ok ? r.json() : null).then((s) => { if (s) setStockSchedule(s); }).catch(() => {});
+  }, []);
 
   // Pull-to-refresh state
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -192,12 +197,11 @@ export function HomeClient({
     }
 
     if (dashboard) {
-      // Stock count schedule: Tue(2), Thu(4), Sun(0) = Regular Count, End of Month = Full Count
-      const dayOfWeek = now.getDay(); // 0=Sun, 2=Tue, 4=Thu
-      const isCountDay = [0, 2, 4].includes(dayOfWeek);
-      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      // Stock count schedule from settings
+      const dayOfWeek = now.getDay();
+      const isCountDay = stockSchedule.weeklyDays.includes(dayOfWeek);
       const dayOfMonth = now.getDate();
-      const isEndOfMonth = dayOfMonth >= daysInMonth - 2; // last 3 days
+      const isEndOfMonth = stockSchedule.endOfMonthDays.includes(dayOfMonth);
 
       const countLabel = isEndOfMonth
         ? "Full Stock Count (End of Month)"
@@ -235,7 +239,7 @@ export function HomeClient({
 
     list.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
     return list;
-  }, [checklists, dashboard, now, hour]);
+  }, [checklists, dashboard, now, hour, stockSchedule]);
 
   const pendingTasks = tasks.filter((t) => t.priority !== "done");
   const doneTasks = tasks.filter((t) => t.priority === "done");

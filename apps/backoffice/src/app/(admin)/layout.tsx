@@ -200,6 +200,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Staff & Access", href: "/settings/staff", icon: <UserCog className={ICON_SIZE} />, moduleKey: "settings:staff" },
       { label: "Approval Rules", href: "/settings/rules", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "settings:rules" },
       { label: "Integrations", href: "/settings/integrations", icon: <Plug className={ICON_SIZE} />, moduleKey: "settings:integrations" },
+      { label: "Stock Count", href: "/settings/stock-count", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "settings:stock-count" },
       { label: "System", href: "/settings/system", icon: <Wrench className={ICON_SIZE} />, moduleKey: "settings:system" },
     ],
   },

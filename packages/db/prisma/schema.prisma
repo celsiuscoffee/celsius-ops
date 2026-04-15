@@ -9,6 +9,13 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// ─── APP CONFIG ────────────────────────────────────────────
+model AppConfig {
+  key       String   @id
+  value     Json     @default("{}")
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
 // ─── OUTLETS ────────────────────────────────────────────────
 
 model Outlet {
