@@ -538,7 +538,6 @@ export default function InvoicesPage() {
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
-                      )}
                       {actions.map((a) => (
                         <button
                           key={a.status}
