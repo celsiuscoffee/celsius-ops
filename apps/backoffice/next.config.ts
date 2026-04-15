@@ -6,7 +6,9 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "res.cloudinary.com" },
     ],
   },
-  // Force rebuild
+  turbopack: {
+    root: "../..",
+  },
 };
 
 export default nextConfig;
