@@ -350,7 +350,7 @@ export default function CreateOrderPage() {
       fetch("/api/settings/outlets?status=ACTIVE").then((r) => r.json()),
       fetch("/api/inventory/orders").then((r) => r.json()),
     ]).then(([s, b, o]) => {
-      setSuppliers(s);
+      setSuppliers(s.filter((sup: SupplierOption) => sup.name !== "Ad-hoc Purchase"));
       // Sort outlets: Putrajaya first, Nilai last
       const sorted = [...b].sort((a: OutletOption, b: OutletOption) => {
         const aName = a.name.toLowerCase();
