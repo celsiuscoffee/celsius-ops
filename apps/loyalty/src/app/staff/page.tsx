@@ -105,6 +105,24 @@ export default function PortalPage() {
         if (!res.ok) return;
         const { minutesSince } = await res.json();
         if (minutesSince !== null && minutesSince >= INACTIVITY_MINUTES) {
+          // Play alarm sound
+          try {
+            const ctx = new AudioContext();
+            const playBeep = (freq: number, start: number, dur: number) => {
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.frequency.value = freq;
+              gain.gain.value = 0.3;
+              osc.start(ctx.currentTime + start);
+              osc.stop(ctx.currentTime + start + dur);
+            };
+            // 3 beeps
+            playBeep(880, 0, 0.15);
+            playBeep(880, 0.25, 0.15);
+            playBeep(1100, 0.5, 0.3);
+          } catch {}
           new Notification("Loyalty Reminder", {
             body: `No points awarded in ${minutesSince} minutes. Remember to ask customers for their phone number!`,
             icon: "/icon.png",
