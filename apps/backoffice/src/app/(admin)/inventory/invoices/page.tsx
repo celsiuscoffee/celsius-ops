@@ -63,6 +63,9 @@ export default function InvoicesPage() {
   const [payReceipts, setPayReceipts] = useState<string[]>([]);
   const [payUploading, setPayUploading] = useState(false);
 
+  // Send POP shortlink
+  const [sendingPopId, setSendingPopId] = useState<string | null>(null);
+
   // Edit invoice dialog
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [editForm, setEditForm] = useState({ invoiceNumber: "", issueDate: "", dueDate: "", notes: "", amount: "" });
@@ -610,15 +613,37 @@ export default function InvoicesPage() {
                         <div className="flex items-center gap-1.5">
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                           {inv.supplierPhone && inv.photos.length > 0 && (
-                            <a
-                              href={`https://wa.me/${inv.supplierPhone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hi, payment has been made for invoice ${inv.invoiceNumber} — RM ${inv.amount.toFixed(2)}.\nRef: ${inv.paymentRef ?? "N/A"}\n\nReceipt: ${inv.popShortLink ?? inv.photos[inv.photos.length - 1] ?? ""}\n\nThank you.`)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 hover:bg-green-100 border border-green-200 transition-colors"
+                            <button
+                              disabled={sendingPopId === inv.id}
+                              onClick={async () => {
+                                setSendingPopId(inv.id);
+                                try {
+                                  let receiptUrl = inv.popShortLink;
+                                  if (!receiptUrl) {
+                                    const res = await fetch(`/api/inventory/invoices/${inv.id}/shortlink`, { method: "POST" });
+                                    const data = await res.json();
+                                    if (data.shortLink) {
+                                      receiptUrl = data.shortLink;
+                                      inv.popShortLink = data.shortLink;
+                                    } else {
+                                      receiptUrl = inv.photos[inv.photos.length - 1];
+                                    }
+                                  }
+                                  const msg = `Hi, payment has been made for invoice ${inv.invoiceNumber} — RM ${inv.amount.toFixed(2)}.\nRef: ${inv.paymentRef ?? "N/A"}\n\nReceipt: ${receiptUrl}\n\nThank you.`;
+                                  window.open(`https://wa.me/${inv.supplierPhone!.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`, "_blank");
+                                } catch {
+                                  const fallback = inv.photos[inv.photos.length - 1];
+                                  const msg = `Hi, payment has been made for invoice ${inv.invoiceNumber} — RM ${inv.amount.toFixed(2)}.\nRef: ${inv.paymentRef ?? "N/A"}\n\nReceipt: ${fallback}\n\nThank you.`;
+                                  window.open(`https://wa.me/${inv.supplierPhone!.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`, "_blank");
+                                } finally {
+                                  setSendingPopId(null);
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 hover:bg-green-100 border border-green-200 transition-colors disabled:opacity-50"
                               title={`WhatsApp ${inv.supplier}`}
                             >
-                              Send POP
-                            </a>
+                              {sendingPopId === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Send POP"}
+                            </button>
                           )}
                         </div>
                       )}
