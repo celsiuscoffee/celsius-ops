@@ -101,9 +101,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof
 };
 
 const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof Clock; color: string }[]> = {
-  DRAFT: [
-    { status: "APPROVED", label: "Confirm Order", icon: CheckCircle2, color: "bg-blue-500 hover:bg-blue-600" },
-  ],
+  DRAFT: [],
   PENDING_APPROVAL: [
     { status: "APPROVED", label: "Confirm", icon: CheckCircle2, color: "bg-blue-500 hover:bg-blue-600" },
     { status: "CANCELLED", label: "Reject", icon: Ban, color: "bg-red-500 hover:bg-red-600" },
@@ -443,16 +441,6 @@ export default function OrdersPage() {
         }
       }
 
-      // Confirm order (DRAFT → APPROVED) if triggered from "Confirm Order" button
-      if (confirmOnSave && editOrder.status === "DRAFT") {
-        await fetch(`/api/inventory/orders/${editOrder.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "APPROVED" }),
-        });
-      }
-
-      setConfirmOnSave(false);
       setEditOrder(null);
       loadOrders();
     } finally {
@@ -631,11 +619,7 @@ export default function OrdersPage() {
                       <div className="flex items-center gap-1">
                         {actions.map((a) => (
                           <button key={a.status} onClick={() => {
-                            if (a.status === "APPROVED" && order.status === "DRAFT") {
-                              openEditDialog(order, true);
-                            } else {
-                              updateStatus(order.id, a.status);
-                            }
+                            updateStatus(order.id, a.status);
                           }} disabled={updatingId === order.id} className={`rounded-md px-2 py-1 text-[10px] font-medium text-white ${a.color} disabled:opacity-50`} title={a.label}>
                             {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : a.label}
                           </button>
@@ -645,7 +629,12 @@ export default function OrdersPage() {
                             {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm Order"}
                           </button>
                         )}
-                        {["DRAFT", "PENDING_APPROVAL", "SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(order.status) && (
+                        {order.status === "DRAFT" && (
+                          <Link href={`/inventory/orders/${order.id}`} className="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50" title="Edit PO">
+                            <Pencil className="h-3 w-3" />
+                          </Link>
+                        )}
+                        {["PENDING_APPROVAL", "SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(order.status) && (
                           <button onClick={() => openEditDialog(order)} className="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50" title="Edit Order">
                             <Pencil className="h-3 w-3" />
                           </button>
