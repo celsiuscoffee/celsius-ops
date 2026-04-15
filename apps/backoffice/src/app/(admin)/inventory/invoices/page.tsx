@@ -779,7 +779,8 @@ export default function InvoicesPage() {
               </div>
             )}
 
-            {/* Payment reference */}
+            {/* Payment reference — only for Mark Paid */}
+            {payingTargetStatus === "PAID" && (
             <div className="mt-3">
               <label className="mb-1 block text-xs font-medium text-gray-600">Payment Reference</label>
               <Input
@@ -788,8 +789,10 @@ export default function InvoicesPage() {
                 placeholder="e.g. Transfer ref, receipt no..."
               />
             </div>
+            )}
 
-            {/* Receipt upload */}
+            {/* Receipt upload — only for Mark Paid */}
+            {payingTargetStatus === "PAID" && (
             <div className="mt-3">
               <label className="mb-1 block text-xs font-medium text-gray-600">Receipt / Proof of Payment</label>
               {payReceipts.length > 0 && (
@@ -823,6 +826,7 @@ export default function InvoicesPage() {
                 <input type="file" accept="image/*,.pdf,application/pdf" multiple className="hidden" onChange={handlePayReceiptUpload} />
               </label>
             </div>
+            )}
 
             <div className="mt-4 flex gap-2">
               <button onClick={() => setPayingInvoice(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
