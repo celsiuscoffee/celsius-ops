@@ -20,12 +20,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "PIN required (minimum 4 digits)" }, { status: 400 });
   }
 
-  // Scope to outlet if provided — prevents cross-outlet PIN collisions
-  const where: any = { pin: { not: null }, status: "ACTIVE" };
-  if (outletId) where.outletId = outletId;
-
+  // Find users with PINs — OWNER/ADMIN can log in to any outlet,
+  // STAFF are scoped to their assigned outlet to prevent collisions
   const users = await prisma.user.findMany({
-    where,
+    where: { pin: { not: null }, status: "ACTIVE" },
     include: { outlet: { select: { name: true } } },
   });
 
@@ -33,6 +31,8 @@ export async function POST(req: NextRequest) {
   const matches: (typeof users)[number][] = [];
   for (const u of users) {
     if (u.role !== "OWNER" && u.role !== "ADMIN" && !u.appAccess.includes("ops")) continue;
+    // Staff must belong to the selected outlet; owners/admins can access any
+    if (outletId && u.role !== "OWNER" && u.role !== "ADMIN" && u.outletId !== outletId) continue;
     const { match, needsRehash } = await verifyPin(pin, u.pin);
     if (match) {
       if (needsRehash) {
@@ -60,12 +60,17 @@ export async function POST(req: NextRequest) {
 
   const matchedUser = matches[0];
 
+  // Use the selected outlet for the session (allows owners to operate any outlet)
+  const selectedOutlet = outletId
+    ? await prisma.outlet.findUnique({ where: { id: outletId }, select: { name: true } })
+    : matchedUser.outlet;
+
   await createSession({
     id: matchedUser.id,
     name: matchedUser.name,
     role: matchedUser.role,
-    outletId: matchedUser.outletId,
-    outletName: matchedUser.outlet?.name ?? null,
+    outletId: outletId || matchedUser.outletId,
+    outletName: selectedOutlet?.name ?? matchedUser.outlet?.name ?? null,
   });
 
   return NextResponse.json({
