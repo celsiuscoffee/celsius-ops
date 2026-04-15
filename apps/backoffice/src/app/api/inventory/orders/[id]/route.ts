@@ -120,32 +120,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         console.error("[orders/[id] PATCH] Invoice auto-create failed:", e);
       }
 
-      try {
-        // Check if receiving already exists for this order
-        const existingReceiving = await prisma.receiving.findFirst({ where: { orderId: id } });
-        if (!existingReceiving && caller) {
-          await prisma.receiving.create({
-            data: {
-              orderId: id,
-              outletId: order.outletId,
-              supplierId: order.supplierId,
-              receivedById: caller.id,
-              status: "COMPLETE",
-              invoicePhotos: invoicePhotos || [],
-              items: {
-                create: order.items.map((i) => ({
-                  productId: i.productId,
-                  productPackageId: i.productPackageId || null,
-                  orderedQty: i.quantity,
-                  receivedQty: i.quantity,
-                })),
-              },
-            },
-          });
-        }
-      } catch (e) {
-        console.error("[orders/[id] PATCH] Receiving auto-create failed:", e);
-      }
+      // Receiving is created by staff when they actually receive the delivery
+      // — not auto-created on Confirm Order
     }
 
     return NextResponse.json(order);
