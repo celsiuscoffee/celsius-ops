@@ -538,6 +538,26 @@ export default function InvoicesPage() {
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
+                      {["DRAFT", "PENDING"].includes(inv.status) && (
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Delete invoice ${inv.invoiceNumber}?`)) return;
+                            setUpdatingId(inv.id);
+                            try {
+                              const res = await fetch(`/api/inventory/invoices/${inv.id}`, { method: "DELETE" });
+                              if (res.ok) loadInvoices(undefined, { revalidate: true });
+                              else alert("Failed to delete invoice");
+                            } finally {
+                              setUpdatingId(null);
+                            }
+                          }}
+                          disabled={updatingId === inv.id}
+                          className="rounded-md p-1 text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                          title="Delete invoice"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       {actions.map((a) => (
                         <button
                           key={a.status}

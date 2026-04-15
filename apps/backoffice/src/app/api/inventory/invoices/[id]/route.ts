@@ -50,3 +50,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const caller = await getUserFromHeaders(req.headers);
+  if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    const { id } = await params;
+    const invoice = await prisma.invoice.findUnique({ where: { id }, select: { id: true, status: true } });
+    if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    if (!["DRAFT", "PENDING"].includes(invoice.status)) {
+      return NextResponse.json({ error: "Only draft or pending invoices can be deleted" }, { status: 400 });
+    }
+
+    await prisma.invoice.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[invoices/[id] DELETE]", err);
+    return NextResponse.json({ error: "Failed to delete invoice" }, { status: 500 });
+  }
+}
