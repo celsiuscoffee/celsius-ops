@@ -30,7 +30,7 @@ function isEligibleToRedeem(pointsBalance: number, lowestRewardPoints: number) {
 
 // ─── Advanced filter types ──────────────────────────────
 type FilterField = "total_spent" | "last_visit" | "points_balance" | "total_visits" | "joined_date" | "tag" | "sms_received";
-type FilterOp = ">" | "<" | "=" | ">=" | "<=";
+type FilterOp = ">" | "<" | "=" | ">=" | "<=" | "!=";
 
 interface MemberFilter {
   field: FilterField;
@@ -373,9 +373,13 @@ export default function MembersPage() {
           const memberTags = m.tags || [];
           if (f.op === "=" && !memberTags.some((t) => t.toLowerCase() === f.value.toLowerCase())) return false;
         }
-        if (f.field === "sms_received") {
-          if (smsRecipientPhones.size > 0 && !smsRecipientPhones.has(m.phone)) return false;
-          if (smsRecipientPhones.size === 0 && f.value) return false;
+        if (f.field === "sms_received" && f.value) {
+          if (f.op === "!=") {
+            if (smsRecipientPhones.size > 0 && smsRecipientPhones.has(m.phone)) return false;
+          } else {
+            if (smsRecipientPhones.size > 0 && !smsRecipientPhones.has(m.phone)) return false;
+            if (smsRecipientPhones.size === 0) return false;
+          }
         }
       }
 
@@ -1011,13 +1015,17 @@ export default function MembersPage() {
                     <option key={k} value={k}>{v}</option>
                   ))}
                 </select>
-                {filter.field !== "sms_received" && (
                 <select
                   value={filter.op}
                   onChange={(e) => updateFilter(idx, "op", e.target.value)}
                   className="rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200 w-20"
                 >
-                  {filter.field === "tag" ? (
+                  {filter.field === "sms_received" ? (
+                    <>
+                      <option value="=">is</option>
+                      <option value="!=">not</option>
+                    </>
+                  ) : filter.field === "tag" ? (
                     <option value="=">=</option>
                   ) : (
                     Object.entries(filterOpLabels).map(([k, v]) => (
@@ -1025,7 +1033,6 @@ export default function MembersPage() {
                     ))
                   )}
                 </select>
-                )}
                 {filter.field === "sms_received" ? (
                   <select
                     value={filter.value}

@@ -142,7 +142,7 @@ type FilterField =
   | "last_visit"
   | "joined_date"
   | "sms_received";
-type FilterOp = ">" | "<" | "=" | "within";
+type FilterOp = ">" | "<" | "=" | "within" | "!=";
 
 interface CustomFilter {
   field: FilterField;
@@ -382,9 +382,13 @@ export default function NotificationsPage() {
               if (f.op === ">" && !(joined > target)) return false;
               if (f.op === "<" && !(joined < target)) return false;
             }
-            if (f.field === "sms_received") {
-              if (smsRecipientPhones.size > 0 && !smsRecipientPhones.has(m.phone)) return false;
-              if (smsRecipientPhones.size === 0 && f.value) return false;
+            if (f.field === "sms_received" && f.value) {
+              if (f.op === "!=") {
+                if (smsRecipientPhones.size > 0 && smsRecipientPhones.has(m.phone)) return false;
+              } else {
+                if (smsRecipientPhones.size > 0 && !smsRecipientPhones.has(m.phone)) return false;
+                if (smsRecipientPhones.size === 0) return false;
+              }
             }
           }
           return true;
@@ -1175,8 +1179,7 @@ export default function NotificationsPage() {
                             ))}
                           </select>
 
-                          {/* Operator (hidden for SMS received) */}
-                          {filter.field !== "sms_received" && (
+                          {/* Operator */}
                           <select
                             value={filter.op}
                             onChange={(e) =>
@@ -1184,7 +1187,12 @@ export default function NotificationsPage() {
                             }
                             className="w-20 appearance-none rounded-md border border-gray-300 px-2 py-1.5 text-center text-xs focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
                           >
-                            {isDateField(filter.field as FilterField) ? (
+                            {filter.field === "sms_received" ? (
+                              <>
+                                <option value="=">is</option>
+                                <option value="!=">not</option>
+                              </>
+                            ) : isDateField(filter.field as FilterField) ? (
                               <option value="within">within</option>
                             ) : (
                               <>
@@ -1194,7 +1202,6 @@ export default function NotificationsPage() {
                               </>
                             )}
                           </select>
-                          )}
 
                           {/* Value */}
                           {filter.field === "sms_received" ? (
