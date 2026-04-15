@@ -472,10 +472,10 @@ export default function PerishablesPage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
-                    {product.suppliers.map((s, i) => (
+                    {product.suppliers.filter((s) => s.name !== "Ad-hoc Purchase").map((s, i) => (
                       <span key={i} className="text-xs text-gray-500">{s.name} (RM{s.price.toFixed(2)})</span>
                     ))}
-                    {product.suppliers.length === 0 && <span className="text-xs text-gray-300">—</span>}
+                    {product.suppliers.filter((s) => s.name !== "Ad-hoc Purchase").length === 0 && <span className="text-xs text-gray-300">—</span>}
                   </div>
                 </td>
                 <td className="px-4 py-3">
@@ -940,7 +940,7 @@ export default function PerishablesPage() {
                       onChange={(e) => setSelectedSupplierId(e.target.value)}
                     >
                       <option value="">Select supplier...</option>
-                      {supplierOptions.map((s) => (
+                      {supplierOptions.filter((s) => s.name !== "Ad-hoc Purchase").map((s) => (
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </select>
