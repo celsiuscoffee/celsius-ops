@@ -54,7 +54,8 @@ type SegmentData = {
   active_this_period: number;
   repeat: number;
   frequent: number;
-  high_ltv: number;
+  ltv: number;
+  ltv_projected_months: number;
   churned: number;
   avg_spend: number;
   total_spend: number;
@@ -670,18 +671,18 @@ export default function LoyaltyDashboard() {
                   </p>
                 </div>
 
-                {/* High LTV */}
+                {/* LTV */}
                 <div className="rounded-lg border border-amber-100 bg-amber-50/50 p-4">
                   <div className="flex items-center gap-1.5 mb-2">
                     <Crown className="h-4 w-4 text-amber-500" />
-                    <p className="text-xs font-medium text-gray-600">High LTV</p>
+                    <p className="text-xs font-medium text-gray-600">Avg LTV</p>
                   </div>
                   <p className="text-2xl font-bold font-sans text-gray-900">
-                    {segments.high_ltv.toLocaleString()}
+                    RM {segments.ltv.toLocaleString()}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    <span className="font-sans font-semibold text-amber-600">{pct(segments.high_ltv)}%</span>{" "}
-                    of active · &gt;RM {Math.round(segments.avg_spend).toLocaleString()} avg
+                    projected over{" "}
+                    <span className="font-sans font-semibold text-amber-600">{segments.ltv_projected_months} months</span>
                   </p>
                 </div>
 
@@ -706,6 +707,7 @@ export default function LoyaltyDashboard() {
                 <div className="flex items-center gap-4 text-xs text-gray-500">
                   <span>Total spend: <span className="font-sans font-semibold text-gray-700">RM {segments.total_spend.toLocaleString()}</span></span>
                   <span>Avg/customer: <span className="font-sans font-semibold text-gray-700">RM {segments.avg_spend.toLocaleString()}</span></span>
+                  <span>LTV: <span className="font-sans font-semibold text-amber-600">RM {segments.ltv.toLocaleString()}</span></span>
                 </div>
                 {segLoading && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
               </div>
