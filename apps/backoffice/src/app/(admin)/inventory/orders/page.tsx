@@ -728,7 +728,7 @@ export default function OrdersPage() {
 
       {/* Edit Order Dialog */}
       <Dialog open={!!editOrder} onOpenChange={(open) => !open && setEditOrder(null)}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className={`max-h-[90vh] overflow-y-auto ${editOrder?.invoice && editOrder.invoice.photos.length > 0 ? "sm:max-w-5xl" : "sm:max-w-2xl"}`}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {confirmOnSave ? <CheckCircle2 className="h-4 w-4 text-blue-500" /> : <Pencil className="h-4 w-4" />}
@@ -737,7 +737,30 @@ export default function OrdersPage() {
           </DialogHeader>
 
           {editOrder && (
-            <div className="space-y-4">
+            <div className={`flex gap-4 ${editOrder.invoice && editOrder.invoice.photos.length > 0 ? "" : ""}`}>
+              {/* Left: Invoice image preview */}
+              {editOrder.invoice && editOrder.invoice.photos.length > 0 && (
+                <div className="hidden sm:flex w-[40%] shrink-0 flex-col rounded-lg bg-gray-900 overflow-hidden">
+                  <div className="p-3 border-b border-gray-700">
+                    <p className="text-xs text-gray-400 font-medium">Invoice / Receipt</p>
+                  </div>
+                  <div className="flex-1 flex items-center justify-center p-3 min-h-[400px]">
+                    <a href={editOrder.invoice.photos[0].replace("/raw/upload/", "/image/upload/")} target="_blank" rel="noopener noreferrer" className="group relative">
+                      <img
+                        src={editOrder.invoice.photos[0].replace("/raw/upload/", "/image/upload/")}
+                        alt="Invoice"
+                        className="max-w-full max-h-[60vh] object-contain rounded"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 rounded transition-opacity">
+                        <span className="text-white text-xs font-medium bg-black/50 px-2 py-1 rounded">Open full size</span>
+                      </div>
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {/* Right: Form */}
+              <div className="flex-1 space-y-4">
               {/* Supplier & Outlet info */}
               <div className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-500">
                 {editOrder.supplier} → {editOrder.outlet}
@@ -820,20 +843,6 @@ export default function OrdersPage() {
                     </div>
                   )}
                 </div>
-
-                {/* Existing invoice photos preview */}
-                {editOrder.invoice && editOrder.invoice.photos.length > 0 && editInvoiceFiles.length === 0 && (
-                  <div className="mb-3">
-                    <label className="mb-1 block text-xs font-medium text-gray-500">Uploaded Invoice</label>
-                    <div className="flex flex-wrap gap-2">
-                      {editOrder.invoice.photos.map((url, i) => (
-                        <a key={i} href={url.replace("/raw/upload/", "/image/upload/")} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-gray-200 overflow-hidden hover:border-blue-300">
-                          <img src={url.replace("/raw/upload/", "/image/upload/")} alt={`Invoice ${i + 1}`} className="h-32 w-auto object-contain" />
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 {/* AI extraction status */}
                 {extracting && (
@@ -1015,6 +1024,8 @@ export default function OrdersPage() {
 
               {/* old invoice section removed — now at top */}
             </div>
+            </div>{/* end form */}
+          </div>{/* end flex */}
           )}
 
           <DialogFooter className="flex gap-2">
