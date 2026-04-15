@@ -79,7 +79,7 @@ export default function PortalPage() {
   const currentOutlet = outlets.find((o) => o.id === outletId) || outlets[0];
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>("default");
   const inactivityRef = useRef<NodeJS.Timeout | null>(null);
-  const INACTIVITY_MINUTES = 60; // remind after 60 mins of no loyalty activity
+  const INACTIVITY_MINUTES = 1; // TESTING: 1 min (change back to 60 for production)
 
   // ─── Push notification for loyalty inactivity ───────────
   useEffect(() => {
