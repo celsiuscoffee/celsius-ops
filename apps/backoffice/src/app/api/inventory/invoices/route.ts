@@ -17,8 +17,9 @@ export async function GET(req: NextRequest) {
   if (tab === "unpaid") where.status = { in: UNPAID_STATUSES };
   else if (tab === "paid") where.status = "PAID";
 
-  if (type === "supplier") where.paymentType = { not: "STAFF_CLAIM" };
+  if (type === "supplier") where.paymentType = "SUPPLIER";
   else if (type === "staff_claim") where.paymentType = "STAFF_CLAIM";
+  else if (type === "transfer") where.paymentType = "INTERNAL_TRANSFER";
 
   const outletId = req.nextUrl.searchParams.get("outlet") || "";
   if (outletId) where.outletId = outletId;
