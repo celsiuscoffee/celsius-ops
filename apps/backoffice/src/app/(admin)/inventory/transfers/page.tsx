@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import {
   ArrowLeftRight, Loader2, Search, ArrowRight,
   CheckCircle2, Package, Eye, Truck, Plus, X, Ban, Trash2,
-  Clock, ShieldCheck, Send, PackageCheck,
+  Clock, ShieldCheck, Send, PackageCheck, Sparkles, Zap,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -102,6 +102,13 @@ export default function TransfersPage() {
   const [stockBalances, setStockBalances] = useState<Record<string, number>>({}); // from outlet: productId → base qty
   const [toStockBalances, setToStockBalances] = useState<Record<string, number>>({}); // to outlet: productId → base qty
 
+  // Smart Transfer state
+  type AITransfer = { fromOutletId: string; fromOutletName: string; toOutletId: string; toOutletName: string; items: { productId: string; productName: string; productSku: string; packageName: string; productPackageId: string | null; quantity: number; fromStock: number; toStock: number }[]; reason: string };
+  const [aiTransfers, setAiTransfers] = useState<AITransfer[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiCreating, setAiCreating] = useState(false);
+
   const reload = useCallback(() => {
     fetch("/api/inventory/transfers")
       .then((r) => r.json())
@@ -141,6 +148,78 @@ export default function TransfersPage() {
       }
     } catch { /* ignore */ }
   }, []);
+
+  const loadSmartTransfers = async () => {
+    setAiLoading(true);
+    setAiOpen(true);
+    try {
+      const res = await fetch("/api/inventory/ai-decisions");
+      if (res.ok) {
+        const data = await res.json();
+        setAiTransfers(data.transfers || []);
+      }
+    } catch { /* ignore */ }
+    finally { setAiLoading(false); }
+  };
+
+  const createAllSmartTransfers = async () => {
+    if (aiTransfers.length === 0) return;
+    setAiCreating(true);
+    try {
+      const res = await fetch("/api/inventory/ai-decisions/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "all_transfers",
+          data: {
+            transfers: aiTransfers.map((t) => ({
+              fromOutletId: t.fromOutletId,
+              toOutletId: t.toOutletId,
+              items: t.items.map((i) => ({
+                productId: i.productId,
+                productPackageId: i.productPackageId,
+                quantity: i.quantity,
+              })),
+            })),
+          },
+        }),
+      });
+      if (res.ok) {
+        setAiOpen(false);
+        setAiTransfers([]);
+        reload();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Failed to create transfers");
+      }
+    } finally { setAiCreating(false); }
+  };
+
+  const createSingleSmartTransfer = async (transfer: AITransfer) => {
+    setAiCreating(true);
+    try {
+      const res = await fetch("/api/inventory/ai-decisions/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "transfer",
+          data: {
+            fromOutletId: transfer.fromOutletId,
+            toOutletId: transfer.toOutletId,
+            items: transfer.items.map((i) => ({
+              productId: i.productId,
+              productPackageId: i.productPackageId,
+              quantity: i.quantity,
+            })),
+          },
+        }),
+      });
+      if (res.ok) {
+        setAiTransfers((prev) => prev.filter((t) => t !== transfer));
+        reload();
+      }
+    } finally { setAiCreating(false); }
+  };
 
   const openCreate = () => {
     setCreateOpen(true);
@@ -388,9 +467,14 @@ export default function TransfersPage() {
             {stats.total} transfers — {stats.draft} draft, {stats.pendingApproval} pending approval, {stats.inTransit} in transit, {stats.received} received
           </p>
         </div>
-        <Button onClick={openCreate} className="bg-terracotta hover:bg-terracotta-dark">
-          <Plus className="mr-1.5 h-4 w-4" />New Transfer
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={loadSmartTransfers} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
+            <Sparkles className="mr-1.5 h-4 w-4" />Smart Transfer
+          </Button>
+          <Button onClick={openCreate} className="bg-terracotta hover:bg-terracotta-dark">
+            <Plus className="mr-1.5 h-4 w-4" />New Transfer
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -643,6 +727,69 @@ export default function TransfersPage() {
       </Dialog>
 
       {/* Reject Dialog */}
+      {/* Smart Transfer Dialog */}
+      <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-blue-500" />
+              Smart Transfer Recommendations
+            </DialogTitle>
+          </DialogHeader>
+          {aiLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+              <span className="ml-2 text-sm text-gray-500">Analyzing stock levels across outlets...</span>
+            </div>
+          ) : aiTransfers.length === 0 ? (
+            <div className="py-12 text-center">
+              <CheckCircle2 className="mx-auto h-8 w-8 text-green-400" />
+              <p className="mt-2 text-sm text-gray-500">All outlets are balanced. No transfers needed.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-500">{aiTransfers.length} transfer{aiTransfers.length !== 1 ? "s" : ""} recommended based on stock imbalances</p>
+              {aiTransfers.map((t, idx) => (
+                <div key={idx} className="rounded-lg border border-blue-100 bg-blue-50/30 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <span>{t.fromOutletName}</span>
+                      <ArrowRight className="h-3.5 w-3.5 text-blue-500" />
+                      <span>{t.toOutletName}</span>
+                    </div>
+                    <button
+                      onClick={() => createSingleSmartTransfer(t)}
+                      disabled={aiCreating}
+                      className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {aiCreating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Create Draft"}
+                    </button>
+                  </div>
+                  <p className="text-xs text-blue-600 mb-2">{t.reason}</p>
+                  <div className="space-y-1">
+                    {t.items.map((item, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-700">{item.productName} <span className="text-gray-400">({item.productSku})</span></span>
+                        <span className="font-medium text-gray-900">{item.quantity} {item.packageName}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {aiTransfers.length > 0 && (
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAiOpen(false)}>Close</Button>
+              <Button onClick={createAllSmartTransfers} disabled={aiCreating} className="bg-blue-600 hover:bg-blue-700">
+                {aiCreating ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Zap className="mr-1.5 h-4 w-4" />}
+                Create All ({aiTransfers.length}) Drafts
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>

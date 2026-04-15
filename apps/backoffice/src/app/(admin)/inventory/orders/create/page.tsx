@@ -1004,7 +1004,22 @@ export default function CreateOrderPage() {
                                     </div>
                                   </div>
                                   <button
-                                    onClick={() => router.push(`/inventory/transfers?from=${tf.fromOutletId}&to=${selectedOutletId}`)}
+                                    onClick={async () => {
+                                      const res = await fetch("/api/inventory/ai-decisions/execute", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          action: "transfer",
+                                          data: {
+                                            fromOutletId: tf.fromOutletId,
+                                            toOutletId: selectedOutletId,
+                                            items: [{ productId: item.productId, productPackageId: tf.productPackageId || null, quantity: tf.transferQty }],
+                                          },
+                                        }),
+                                      });
+                                      if (res.ok) alert(`Transfer created from ${tf.fromOutletName}`);
+                                      else alert("Failed to create transfer");
+                                    }}
                                     className="shrink-0 rounded-md bg-blue-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-blue-700 transition-colors"
                                   >
                                     Transfer
