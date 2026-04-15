@@ -113,60 +113,73 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { outletId, supplierId, items, notes, deliveryDate } = body;
-
-  const outlet = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId } });
-  const count = await prisma.order.count({ where: { outletId } });
-  const orderNumber = `CC-${outlet.code}-${String(count + 1).padStart(4, "0")}`;
-
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const totalAmount = items.reduce(
-    (sum: number, i: { quantity: number; unitPrice: number }) => sum + i.quantity * i.unitPrice,
-    0,
-  );
+  try {
+    const body = await req.json();
+    const { outletId, supplierId, items, notes, deliveryDate } = body;
 
-  const order = await prisma.order.create({
-    data: {
-      orderNumber,
-      outletId,
-      supplierId,
-      status: "DRAFT",
-      totalAmount,
-      notes: notes || null,
-      deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
-      createdById: caller.id,
-      items: {
-        create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number; notes?: string }) => ({
-          productId: i.productId,
-          productPackageId: i.productPackageId || null,
-          quantity: i.quantity,
-          unitPrice: i.unitPrice,
-          totalPrice: i.quantity * i.unitPrice,
-          notes: i.notes || null,
-        })),
-      },
-    },
-    select: {
-      id: true,
-      orderNumber: true,
-      status: true,
-      totalAmount: true,
-      outlet: { select: { name: true } },
-      supplier: { select: { name: true } },
-      items: {
-        select: {
-          product: { select: { name: true } },
-          productPackage: { select: { packageLabel: true } },
-          quantity: true,
-          unitPrice: true,
-          totalPrice: true,
+    const outlet = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId } });
+
+    // Use max order number to avoid collisions from deleted orders
+    const lastOrder = await prisma.order.findFirst({
+      where: { outletId },
+      orderBy: { orderNumber: "desc" },
+      select: { orderNumber: true },
+    });
+    const lastNum = lastOrder ? parseInt(lastOrder.orderNumber.split("-").pop() || "0") : 0;
+    const orderNumber = `CC-${outlet.code}-${String(lastNum + 1).padStart(4, "0")}`;
+
+    const totalAmount = items.reduce(
+      (sum: number, i: { quantity: number; unitPrice: number }) => sum + i.quantity * i.unitPrice,
+      0,
+    );
+
+    const order = await prisma.order.create({
+      data: {
+        orderNumber,
+        outletId,
+        supplierId,
+        status: "DRAFT",
+        totalAmount,
+        notes: notes || null,
+        deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
+        createdById: caller.id,
+        items: {
+          create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number; notes?: string }) => ({
+            productId: i.productId,
+            productPackageId: i.productPackageId || null,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+            totalPrice: i.quantity * i.unitPrice,
+            notes: i.notes || null,
+          })),
         },
       },
-    },
-  });
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        totalAmount: true,
+        outlet: { select: { name: true } },
+        supplier: { select: { name: true } },
+        items: {
+          select: {
+            product: { select: { name: true } },
+            productPackage: { select: { packageLabel: true } },
+            quantity: true,
+            unitPrice: true,
+            totalPrice: true,
+          },
+        },
+      },
+    });
 
-  return NextResponse.json(order, { status: 201 });
+    return NextResponse.json(order, { status: 201 });
+  } catch (err) {
+    console.error("[orders POST]", err);
+    const message = err instanceof Error ? err.message : "Failed to create order";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

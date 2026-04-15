@@ -746,7 +746,7 @@ export default function PerishablesPage() {
                     {/* Add UOM */}
                     <div className="mb-4 flex flex-wrap items-end gap-3">
                       <div className="w-36">
-                        <label className="text-xs text-gray-500">Type</label>
+                        <label className="text-xs text-gray-500">Package Type</label>
                         <select
                           value={newPkgType}
                           onChange={(e) => setNewPkgType(e.target.value)}
@@ -757,7 +757,7 @@ export default function PerishablesPage() {
                         </select>
                       </div>
                       <div className="w-24">
-                        <label className="text-xs text-gray-500">Size</label>
+                        <label className="text-xs text-gray-500">= {form.baseUom || "pcs"}</label>
                         <Input
                           type="number"
                           placeholder="e.g. 50"
@@ -766,7 +766,6 @@ export default function PerishablesPage() {
                           onChange={(e) => setNewPkgConv(e.target.value)}
                         />
                       </div>
-                      <span className="pb-2 text-sm text-gray-400">{form.baseUom || "pcs"}</span>
                       <Button
                         type="button"
                         variant="outline"
@@ -778,7 +777,6 @@ export default function PerishablesPage() {
                           const preset = PACKAGE_PRESETS.find((p) => p.name === newPkgType);
                           const code = preset?.code || newPkgType.slice(0, 3).toUpperCase();
                           setForm((prev) => {
-                            const label = `${size.toLocaleString()}${form.baseUom || ""} ${newPkgType}`;
                             const count = prev.packages.filter((p) => p.packageName.toLowerCase().includes(newPkgType.toLowerCase())).length;
                             const autoSku = form.sku ? `${form.sku}-${code}${count > 0 ? count + 1 : ""}` : "";
                             return {
@@ -786,7 +784,7 @@ export default function PerishablesPage() {
                               packages: [...prev.packages, {
                                 sku: autoSku,
                                 packageName: newPkgType,
-                                packageLabel: label,
+                                packageLabel: newPkgType,
                                 conversionFactor: String(size),
                                 isDefault: prev.packages.length === 0,
                                 containsPackageId: null,
