@@ -646,7 +646,12 @@ export default function OrdersPage() {
                             {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm Order"}
                           </button>
                         )}
-                        {["DRAFT", "PENDING_APPROVAL", "SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(order.status) && (
+                        {order.status === "DRAFT" && (
+                          <Link href={`/inventory/orders/create?draft=${order.id}`} className="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50" title="Edit Draft">
+                            <Pencil className="h-3 w-3" />
+                          </Link>
+                        )}
+                        {["PENDING_APPROVAL", "SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(order.status) && (
                           <Link href={`/inventory/orders/${order.id}`} className="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50" title="Edit PO">
                             <Pencil className="h-3 w-3" />
                           </Link>

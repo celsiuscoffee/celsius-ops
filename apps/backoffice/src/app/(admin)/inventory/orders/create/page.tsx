@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -285,6 +285,8 @@ function SupplierCombobox({
 
 export default function CreateOrderPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const draftId = searchParams.get("draft");
 
   // Data
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -297,6 +299,7 @@ export default function CreateOrderPage() {
 
   // Order
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("");
   const [orderNotes, setOrderNotes] = useState("");
@@ -372,6 +375,39 @@ export default function CreateOrderPage() {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [loadStockLevels, loadAIRecommendations]);
+
+  // Load draft order into cart when ?draft=<id> is present
+  useEffect(() => {
+    if (!draftId || suppliers.length === 0) return;
+    fetch(`/api/inventory/orders/${draftId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((draft) => {
+        if (!draft || draft.status !== "DRAFT") return;
+        setEditingDraftId(draft.id);
+        if (draft.outletId) setSelectedOutletId(draft.outletId);
+        if (draft.notes) setOrderNotes(draft.notes);
+        // Map draft items to cart items using supplier data
+        const supplier = suppliers.find((s) => s.id === draft.supplierId);
+        if (!supplier) return;
+        const cartItems: CartItem[] = draft.items.map((item: { productId: string; quantity: number; unitPrice: number; product: { name: string; sku: string; baseUom?: string }; productPackage: { packageLabel?: string; packageName?: string; id?: string } | null }) => {
+          const sp = supplier.products.find((p) => p.id === item.productId);
+          return {
+            productId: item.productId,
+            name: item.product.name,
+            sku: item.product.sku,
+            supplier: supplier.name,
+            supplierId: supplier.id,
+            supplierPhone: supplier.phone,
+            packageLabel: item.productPackage?.packageLabel ?? item.productPackage?.packageName ?? item.product.baseUom ?? "pcs",
+            quantity: Number(item.quantity),
+            unitPrice: Number(item.unitPrice),
+            productPackageId: sp?.packageId ?? null,
+          };
+        });
+        setCart(cartItems);
+      })
+      .catch(() => {});
+  }, [draftId, suppliers]);
 
   const handleOutletChange = (outletId: string) => {
     setSelectedOutletId(outletId);
@@ -559,30 +595,43 @@ export default function CreateOrderPage() {
       if (!group) return;
       const deliveryDate = getDeliveryDate(group.supplierId);
 
-      const orderRes = await fetch("/api/inventory/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          outletId: selectedOutletId,
-          supplierId: whatsappDialog.supplierId,
-          items: group.items.map((item) => ({
-            productId: item.productId,
-            productPackageId: item.productPackageId || undefined,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-          })),
-          notes: orderNotes || null,
-          deliveryDate,
-        }),
-      });
+      let orderId = editingDraftId;
 
-      if (orderRes.ok) {
-        const order = await orderRes.json();
-        await fetch(`/api/inventory/orders/${order.id}`, {
+      if (editingDraftId) {
+        // Update existing draft then mark as SENT
+        await fetch(`/api/inventory/orders/${editingDraftId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "SENT" }),
         });
+      } else {
+        // Create new order
+        const orderRes = await fetch("/api/inventory/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            outletId: selectedOutletId,
+            supplierId: whatsappDialog.supplierId,
+            items: group.items.map((item) => ({
+              productId: item.productId,
+              productPackageId: item.productPackageId || undefined,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+            })),
+            notes: orderNotes || null,
+            deliveryDate,
+          }),
+        });
+
+        if (orderRes.ok) {
+          const order = await orderRes.json();
+          orderId = order.id;
+          await fetch(`/api/inventory/orders/${order.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "SENT" }),
+          });
+        }
       }
 
       const phone = whatsappDialog.phone.replace(/\+/g, "");
@@ -607,6 +656,10 @@ export default function CreateOrderPage() {
     if (entries.length === 0) return;
     setSaving(true);
     try {
+      // If editing an existing draft, delete it first then recreate
+      if (editingDraftId) {
+        await fetch(`/api/inventory/orders/${editingDraftId}`, { method: "DELETE" });
+      }
       for (const [, group] of entries) {
         const deliveryDate = getDeliveryDate(group.supplierId);
         const res = await fetch("/api/inventory/orders", {
