@@ -80,6 +80,18 @@ export async function POST(req: NextRequest) {
 
   let receivingStatus = status || "COMPLETE";
   if (orderId) {
+    // Enforce Confirm Order flow — only allow receiving for AWAITING_DELIVERY orders
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { status: true },
+    });
+    if (order && !["AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(order.status)) {
+      return NextResponse.json(
+        { error: "Order must be confirmed before receiving. Ask backoffice to Confirm Order first." },
+        { status: 400 },
+      );
+    }
+
     const hasShort = items.some(
       (i: { orderedQty?: number; receivedQty: number }) =>
         i.orderedQty !== undefined && i.receivedQty < i.orderedQty,
@@ -132,30 +144,6 @@ export async function POST(req: NextRequest) {
       const newStatus = totalReceived >= totalOrdered ? "COMPLETED" : "PARTIALLY_RECEIVED";
       await prisma.order.update({ where: { id: orderId }, data: { status: newStatus } });
     }
-  }
-
-  // Auto-create invoice from receiving
-  try {
-    const invCount = await prisma.invoice.count();
-    const invoiceNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
-    const totalAmount = orderId
-      ? (await prisma.order.findUnique({ where: { id: orderId }, select: { totalAmount: true } }))?.totalAmount ?? 0
-      : items.reduce((s: number, i: { receivedQty: number; unitPrice?: number }) => s + (i.receivedQty * (i.unitPrice ?? 0)), 0);
-
-    await prisma.invoice.create({
-      data: {
-        invoiceNumber,
-        orderId: orderId || null,
-        outletId,
-        supplierId,
-        amount: totalAmount,
-        status: "PENDING",
-        photos: invoicePhotos || [],
-        notes: notes ? `From receiving: ${notes}` : null,
-      },
-    });
-  } catch {
-    // Invoice creation is non-critical — don't fail the receiving
   }
 
   await logActivity({
