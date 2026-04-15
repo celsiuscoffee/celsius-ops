@@ -644,7 +644,7 @@ export default function OrdersPage() {
                             <Pencil className="h-3 w-3" />
                           </Link>
                         )}
-                        {order.status === "AWAITING_DELIVERY" && (
+                        {["SENT", "APPROVED", "AWAITING_DELIVERY"].includes(order.status) && (
                           <button onClick={() => { if (confirm("Cancel this order?")) updateStatus(order.id, "CANCELLED"); }} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50" title="Cancel Order">
                             Cancel
                           </button>
