@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     }),
     // Sent orders (awaiting delivery)
     prisma.order.findMany({
-      where: { status: { in: ["SENT", "APPROVED", "AWAITING_DELIVERY"] }, ...outletFilter },
+      where: { status: { in: ["SENT", "AWAITING_DELIVERY"] }, ...outletFilter },
       select: { supplier: { select: { name: true } } },
     }),
     // Today's stock check

@@ -356,7 +356,6 @@ enum OrderType {
 enum OrderStatus {
   DRAFT
   PENDING_APPROVAL
-  APPROVED
   SENT
   CONFIRMED
   AWAITING_DELIVERY

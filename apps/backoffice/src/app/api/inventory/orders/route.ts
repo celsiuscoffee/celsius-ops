@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const tab = req.nextUrl.searchParams.get("tab") || "active";
   const search = req.nextUrl.searchParams.get("search") || "";
 
-  const ACTIVE_STATUSES = ["DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
+  const ACTIVE_STATUSES = ["DRAFT", "PENDING_APPROVAL", "SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
   const COMPLETED_STATUSES = ["COMPLETED", "CANCELLED"];
 
   const where: Record<string, unknown> = { orderType: "PURCHASE_ORDER" };

@@ -47,7 +47,6 @@ export type AdjustmentReason = (typeof ADJUSTMENT_REASONS)[number];
 export const ORDER_STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft",
   PENDING_APPROVAL: "Pending Approval",
-  APPROVED: "Approved",
   SENT: "Sent to Supplier",
   AWAITING_DELIVERY: "Awaiting Delivery",
   PARTIALLY_RECEIVED: "Partially Received",

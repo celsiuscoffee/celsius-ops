@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   // Auto-reconcile: fix PO statuses where receivings exist but order is still "awaiting"
   try {
     const staleOrders = await prisma.order.findMany({
-      where: { status: { in: ["SENT", "APPROVED", "AWAITING_DELIVERY"] } },
+      where: { status: { in: ["SENT", "AWAITING_DELIVERY"] } },
       select: { id: true, items: { select: { quantity: true } } },
     });
     for (const order of staleOrders) {
