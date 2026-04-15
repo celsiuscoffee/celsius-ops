@@ -105,7 +105,14 @@ async function processMessage(message: TelegramMessage) {
   console.log("[telegram] Classified as:", extracted.documentType, JSON.stringify(extracted));
 
   // 5. Route to matching logic
-  if (extracted.documentType === "POP") {
+  if (extracted.documentType === "MULTI_POP") {
+    const payments = extracted.payments;
+    await sendMessage(chatId, `📄 Batch POP detected — ${payments.length} payments found. Processing...`, msgId);
+    for (const payment of payments) {
+      const popData: PopData = { documentType: "POP", ...payment };
+      await handlePop(chatId, msgId, cloudinaryUrl, popData);
+    }
+  } else if (extracted.documentType === "POP") {
     await handlePop(chatId, msgId, cloudinaryUrl, extracted);
   } else if (extracted.documentType === "INVOICE") {
     await handleInvoice(chatId, msgId, cloudinaryUrl, extracted);
@@ -137,7 +144,12 @@ type InvoiceData = {
   items: { name: string; quantity: number; unitPrice: number; totalPrice: number; matchedProduct?: string }[];
 };
 
-type ClassifiedDoc = PopData | InvoiceData | null;
+type MultiPopData = {
+  documentType: "MULTI_POP";
+  payments: Omit<PopData, "documentType">[];
+};
+
+type ClassifiedDoc = PopData | InvoiceData | MultiPopData | null;
 
 async function classifyAndExtract(url: string, isPdf: boolean): Promise<ClassifiedDoc> {
   // Fetch product + supplier catalogs + unpaid invoices for matching
@@ -174,6 +186,7 @@ async function classifyAndExtract(url: string, isPdf: boolean): Promise<Classifi
     type: "text",
     text: `Classify this document as one of:
 - "POP" — a bank transfer proof of payment / transaction receipt (e.g. Maybank, CIMB, RHB transfer confirmation showing amount, reference, recipient)
+- "MULTI_POP" — a PDF with MULTIPLE payment receipts / transfer confirmations (e.g. a batch payment report with several transfers)
 - "INVOICE" — a supplier invoice, delivery order, receipt, or bill
 
 Then extract the relevant fields.
@@ -181,9 +194,7 @@ Then extract the relevant fields.
 UNPAID INVOICES (for matching POP):
 ${invoiceList}
 
-For POP, extract all payment details and try to match the recipient to an invoice above using the recipient name/account/amount.
-
-Return:
+For a SINGLE POP (one payment), return:
 {
   "documentType": "POP",
   "amount": <number or null>,
@@ -194,6 +205,23 @@ Return:
   "recipientName": "<string or null>",
   "recipientBank": "<string or null>",
   "recipientAccount": "<string or null>"
+}
+
+For MULTIPLE POPs in one document (batch payment / multi-page), return:
+{
+  "documentType": "MULTI_POP",
+  "payments": [
+    {
+      "amount": <number or null>,
+      "referenceNumber": "<string or null>",
+      "description": "<payment description/remarks or null>",
+      "invoiceReference": "<matched invoice number from list above or null>",
+      "date": "<YYYY-MM-DD or null>",
+      "recipientName": "<string or null>",
+      "recipientBank": "<string or null>",
+      "recipientAccount": "<string or null>"
+    }
+  ]
 }
 
 For INVOICE, use the product catalog and supplier list below to match items and supplier name.
@@ -222,7 +250,7 @@ Return ONLY the JSON object, no markdown, no explanation.`,
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 2000,
+    max_tokens: 4000,
     messages: [{ role: "user", content: contentBlocks }],
   });
 

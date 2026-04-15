@@ -28,6 +28,7 @@ type Invoice = {
   paidAt: string | null;
   paidVia: string | null;
   paymentRef: string | null;
+  supplierPhone: string | null;
   supplierBank: { bankName: string; accountNumber: string | null; accountName: string | null } | null;
   transfer: { fromOutlet: string; toOutlet: string; items: { product: string; quantity: number }[] } | null;
 };
@@ -553,7 +554,20 @@ export default function InvoicesPage() {
                         </button>
                       ))}
                       {actions.length === 0 && inv.status === "PAID" && (
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          {inv.supplierPhone && inv.photos.length > 0 && (
+                            <a
+                              href={`https://wa.me/${inv.supplierPhone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hi, payment has been made for invoice ${inv.invoiceNumber} — RM ${inv.amount.toFixed(2)}.\nRef: ${inv.paymentRef ?? "N/A"}\n\nThank you.`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 hover:bg-green-100 border border-green-200 transition-colors"
+                              title={`WhatsApp ${inv.supplier}`}
+                            >
+                              Send POP
+                            </a>
+                          )}
+                        </div>
                       )}
                     </div>
                   </td>
