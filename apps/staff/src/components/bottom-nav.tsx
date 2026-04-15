@@ -2,19 +2,35 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, ClipboardCheck, Package, User } from "lucide-react";
+import { Home, ClipboardCheck, Package, User, ClipboardList } from "lucide-react";
+import { useFetch } from "@/lib/use-fetch";
 
 type Tab = { href: string; label: string; icon: typeof Home };
+type UserProfile = { id: string; name: string; role: string; moduleAccess?: Record<string, boolean> };
 
-const tabs: Tab[] = [
+const baseTabs: Tab[] = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
   { href: "/inventory", label: "Inventory", icon: Package },
   { href: "/profile", label: "Profile", icon: User },
 ];
 
+const auditTab: Tab = { href: "/audit", label: "Audit", icon: ClipboardList };
+
 export function BottomNav() {
   const pathname = usePathname();
+  const { data: me } = useFetch<UserProfile>("/api/auth/me");
+
+  // Show audit tab if user has audit access in moduleAccess or is OWNER/ADMIN
+  const ma = me?.moduleAccess as Record<string, unknown> | undefined;
+  const hasAuditAccess =
+    me?.role === "OWNER" ||
+    me?.role === "ADMIN" ||
+    (ma && (ma.audit === true || Array.isArray(ma.audit)));
+
+  const tabs = hasAuditAccess
+    ? [baseTabs[0], baseTabs[1], auditTab, baseTabs[2], baseTabs[3]]
+    : baseTabs;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">

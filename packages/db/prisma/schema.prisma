@@ -94,6 +94,7 @@ model Outlet {
   sopSchedules      SopSchedule[]
   reviewSettings    ReviewSettings?
   internalFeedbacks InternalFeedback[]
+  auditReports      AuditReport[]
 }
 
 enum OutletType {
@@ -147,6 +148,8 @@ model User {
   transfersReceived  StockTransfer[] @relation("TransferReceivedBy")
   transfersRejected  StockTransfer[] @relation("TransferRejectedBy")
   activityLogs       ActivityLog[]
+  auditTemplatesCreated AuditTemplate[] @relation("AuditTemplateCreatedBy")
+  auditReports          AuditReport[]   @relation("AuditReportAuditor")
 }
 
 enum UserRole {
@@ -926,6 +929,93 @@ enum ScheduleRecurrence {
   SHIFT           // Once per shift (current behavior)
   SPECIFIC_TIMES  // At specific times: ["08:00","12:00","16:00"]
   HOURLY          // Every hour during operating hours
+}
+
+// ─── AUDIT TEMPLATES & REPORTS ─────────────────────────────
+
+model AuditTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  roleType    String   // "barista_head", "chef_head", "area_manager"
+  isActive    Boolean  @default(true)
+  version     Int      @default(1)
+  createdById String
+  createdBy   User     @relation("AuditTemplateCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sections AuditSection[]
+  reports  AuditReport[]
+
+  @@index([roleType])
+  @@index([isActive])
+}
+
+model AuditSection {
+  id         String        @id @default(uuid())
+  templateId String
+  template   AuditTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name       String
+  sortOrder  Int           @default(0)
+
+  items AuditSectionItem[]
+
+  @@index([templateId])
+}
+
+model AuditSectionItem {
+  id            String       @id @default(uuid())
+  sectionId     String
+  section       AuditSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  photoRequired Boolean      @default(false)
+  ratingType    String       @default("pass_fail") // "pass_fail", "rating_5", "rating_3"
+  sortOrder     Int          @default(0)
+
+  @@index([sectionId])
+}
+
+model AuditReport {
+  id           String        @id @default(uuid())
+  templateId   String
+  template     AuditTemplate @relation(fields: [templateId], references: [id])
+  outletId     String
+  outlet       Outlet        @relation(fields: [outletId], references: [id])
+  auditorId    String
+  auditor      User          @relation("AuditReportAuditor", fields: [auditorId], references: [id])
+  date         DateTime      @db.Date
+  status       String        @default("IN_PROGRESS") // "IN_PROGRESS", "COMPLETED"
+  overallScore Decimal?
+  overallNotes String?
+  completedAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  items AuditReportItem[]
+
+  @@index([outletId, date])
+  @@index([auditorId, date])
+  @@index([templateId])
+  @@index([status])
+}
+
+model AuditReportItem {
+  id        String      @id @default(uuid())
+  reportId  String
+  report    AuditReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  sectionName String
+  itemTitle   String
+  sortOrder   Int         @default(0)
+  photoRequired Boolean   @default(false)
+  ratingType    String    @default("pass_fail")
+  // Response
+  rating    Int?         // pass_fail: 1=pass,0=fail; rating_5: 1-5; rating_3: 1-3
+  notes     String?
+  photos    String[]     @default([])
+
+  @@index([reportId])
 }
 
 // ─── REVIEWS ───────────────────────────────────────────────
