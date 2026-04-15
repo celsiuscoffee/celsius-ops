@@ -106,7 +106,7 @@ export default function PortalPage() {
         if (!res.ok) return;
         const { minutesSince } = await res.json();
         if (minutesSince !== null && minutesSince >= INACTIVITY_MINUTES) {
-          // Play alarm sound
+          // Play alarm sound — 3 rounds of beeps, max volume
           try {
             const ctx = new AudioContext();
             const playBeep = (freq: number, start: number, dur: number) => {
@@ -115,14 +115,23 @@ export default function PortalPage() {
               osc.connect(gain);
               gain.connect(ctx.destination);
               osc.frequency.value = freq;
-              gain.gain.value = 0.3;
+              osc.type = "square";
+              gain.gain.value = 1.0;
               osc.start(ctx.currentTime + start);
               osc.stop(ctx.currentTime + start + dur);
             };
-            // 3 beeps
-            playBeep(880, 0, 0.15);
-            playBeep(880, 0.25, 0.15);
-            playBeep(1100, 0.5, 0.3);
+            // Round 1
+            playBeep(880, 0, 0.2);
+            playBeep(880, 0.3, 0.2);
+            playBeep(1100, 0.6, 0.4);
+            // Round 2
+            playBeep(880, 1.5, 0.2);
+            playBeep(880, 1.8, 0.2);
+            playBeep(1100, 2.1, 0.4);
+            // Round 3
+            playBeep(880, 3.0, 0.2);
+            playBeep(880, 3.3, 0.2);
+            playBeep(1100, 3.6, 0.4);
           } catch {}
           new Notification("Loyalty Reminder", {
             body: `No points awarded in ${minutesSince} minutes. Remember to ask customers for their phone number!`,
