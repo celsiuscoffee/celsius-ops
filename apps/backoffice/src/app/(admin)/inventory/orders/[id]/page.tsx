@@ -188,7 +188,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           </Button>
           <Button onClick={() => saveOrder(false)} disabled={saving} className="bg-terracotta hover:bg-terracotta-dark">
             {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
-            Save Draft
+            Save Changes
           </Button>
           {isDraft && (
             <Button onClick={() => saveOrder(true)} disabled={saving} className="bg-blue-500 hover:bg-blue-600">

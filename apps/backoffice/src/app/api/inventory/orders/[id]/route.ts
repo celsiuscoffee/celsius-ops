@@ -25,7 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = await req.json();
-    const { status, totalAmount, deliveryDate, items, invoiceNumber: bodyInvoiceNumber, invoiceDueDate, invoicePhotos } = body;
+    const { status, totalAmount, deliveryDate, items, invoicePhotos } = body;
 
     const data: Record<string, unknown> = {};
 
@@ -95,32 +95,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
     });
 
-    // Auto-create invoice + receiving when order is confirmed (AWAITING_DELIVERY)
+    // Auto-create receiving when order is confirmed (AWAITING_DELIVERY)
     if (status === "AWAITING_DELIVERY") {
       const caller = await getUserFromHeaders(req.headers);
-
-      try {
-        // Check if invoice already exists for this order
-        const existingInvoice = await prisma.invoice.findFirst({ where: { orderId: id } });
-        if (!existingInvoice) {
-          const invCount = await prisma.invoice.count();
-          const invoiceNumber = bodyInvoiceNumber || `INV-${String(invCount + 1).padStart(4, "0")}`;
-          await prisma.invoice.create({
-            data: {
-              invoiceNumber,
-              orderId: id,
-              outletId: order.outletId,
-              supplierId: order.supplierId,
-              amount: order.totalAmount,
-              status: "PENDING",
-              dueDate: invoiceDueDate ? new Date(invoiceDueDate) : null,
-              photos: invoicePhotos || [],
-            },
-          });
-        }
-      } catch (e) {
-        console.error("[orders/[id] PATCH] Invoice auto-create failed:", e);
-      }
 
       try {
         // Check if receiving already exists for this order
