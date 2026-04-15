@@ -573,7 +573,7 @@ export default function StockCheckPage() {
           {/* Display */}
           <div className="flex flex-1 flex-col items-center justify-center px-6">
             <div className="text-center">
-              <p className="text-6xl font-bold tabular-nums text-gray-900">
+              <p className={`text-6xl font-bold tabular-nums ${keypadValue ? "text-gray-900" : "text-gray-300"}`}>
                 {keypadValue || "0"}
               </p>
               <p className="mt-2 text-sm text-gray-400">
