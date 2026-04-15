@@ -92,6 +92,7 @@ type Order = {
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof Clock }> = {
   DRAFT: { label: "Draft", color: "bg-gray-400", icon: FileText },
   PENDING_APPROVAL: { label: "Pending Approval", color: "bg-amber-500", icon: Clock },
+  APPROVED: { label: "Confirmed", color: "bg-blue-500", icon: CheckCircle2 },
   SENT: { label: "Sent", color: "bg-green-500", icon: MessageCircle },
   AWAITING_DELIVERY: { label: "Awaiting Delivery", color: "bg-purple-500", icon: Truck },
   PARTIALLY_RECEIVED: { label: "Partially Received", color: "bg-amber-600", icon: AlertTriangle },
@@ -101,11 +102,14 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof
 
 const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof Clock; color: string }[]> = {
   DRAFT: [
-    { status: "SENT", label: "Send to Supplier", icon: Send, color: "bg-green-500 hover:bg-green-600" },
+    { status: "APPROVED", label: "Confirm Request", icon: CheckCircle2, color: "bg-blue-500 hover:bg-blue-600" },
   ],
   PENDING_APPROVAL: [
-    { status: "SENT", label: "Confirm & Send", icon: Send, color: "bg-green-500 hover:bg-green-600" },
+    { status: "APPROVED", label: "Confirm", icon: CheckCircle2, color: "bg-blue-500 hover:bg-blue-600" },
     { status: "CANCELLED", label: "Reject", icon: Ban, color: "bg-red-500 hover:bg-red-600" },
+  ],
+  APPROVED: [
+    { status: "SENT", label: "Mark as Sent", icon: Send, color: "bg-green-500 hover:bg-green-600" },
   ],
   SENT: [],
   AWAITING_DELIVERY: [],
@@ -492,7 +496,7 @@ export default function OrdersPage() {
   // ── Computed from API-filtered results ───────────────────────────────────
 
   const totalValue = orders.reduce((a, o) => a + o.totalAmount, 0);
-  const pendingCount = orders.filter((o) => ["DRAFT", "PENDING_APPROVAL", "SENT", "AWAITING_DELIVERY"].includes(o.status)).length;
+  const pendingCount = orders.filter((o) => ["DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT", "AWAITING_DELIVERY"].includes(o.status)).length;
 
   // ── Render ──────────────────────────────────────────────────────────────
 
@@ -615,7 +619,7 @@ export default function OrdersPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-gray-900">{order.supplier}</span>
-                        {order.supplierPhone && ["SENT", "AWAITING_DELIVERY"].includes(order.status) && (
+                        {order.supplierPhone && ["APPROVED", "SENT", "AWAITING_DELIVERY"].includes(order.status) && (
                           <a href={buildWhatsAppUrl(order)} target="_blank" onClick={(e) => e.stopPropagation()} className="text-green-600 hover:text-green-700" title="Send via WhatsApp">
                             <MessageCircle className="h-3.5 w-3.5" />
                           </a>
@@ -651,6 +655,11 @@ export default function OrdersPage() {
                           <Link href={`/inventory/orders/${order.id}`} className="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50" title="Edit PO">
                             <Pencil className="h-3 w-3" />
                           </Link>
+                        )}
+                        {order.status === "APPROVED" && (
+                          <button onClick={() => { if (confirm("Cancel this order?")) updateStatus(order.id, "CANCELLED"); }} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50" title="Cancel Order">
+                            Cancel
+                          </button>
                         )}
                         {["DRAFT", "CANCELLED"].includes(order.status) && (
                           <button onClick={() => deleteOrder(order.id)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50" title="Delete">

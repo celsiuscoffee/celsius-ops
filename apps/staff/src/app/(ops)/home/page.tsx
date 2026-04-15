@@ -49,7 +49,7 @@ export default async function HomePage() {
       : null,
     outletId
       ? prisma.order.findMany({
-          where: { status: { in: ["SENT", "AWAITING_DELIVERY"] }, ...outletFilter },
+          where: { status: { in: ["SENT", "APPROVED", "AWAITING_DELIVERY"] }, ...outletFilter },
           select: { supplier: { select: { name: true } } },
         })
       : [],

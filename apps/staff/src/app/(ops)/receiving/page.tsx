@@ -76,7 +76,7 @@ interface UserSession {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-const PENDING_STATUSES = ["SENT", "AWAITING_DELIVERY"];
+const PENDING_STATUSES = ["SENT", "APPROVED", "AWAITING_DELIVERY"];
 
 function isPerishable(name: string): boolean {
   const lower = name.toLowerCase();

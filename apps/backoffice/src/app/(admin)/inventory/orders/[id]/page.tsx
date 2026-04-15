@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   Loader2,
   Truck,
+  CheckCircle2,
   Pencil,
   X,
   Plus,
@@ -54,6 +55,7 @@ type EditItem = {
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   DRAFT: { label: "Draft", color: "bg-gray-400" },
+  APPROVED: { label: "Confirmed", color: "bg-blue-500" },
   SENT: { label: "Sent", color: "bg-green-500" },
   AWAITING_DELIVERY: { label: "Awaiting Delivery", color: "bg-purple-500" },
   COMPLETED: { label: "Completed", color: "bg-gray-500" },
@@ -138,12 +140,28 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         await fetch(`/api/inventory/orders/${order.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "SENT" }),
+          body: JSON.stringify({ status: "APPROVED" }),
         });
-        router.push("/inventory/orders");
+        // Reload to show updated status with WhatsApp button
+        loadOrder();
       } else {
         router.push("/inventory/orders");
       }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const markAsSent = async () => {
+    if (!order) return;
+    setSaving(true);
+    try {
+      await fetch(`/api/inventory/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "SENT" }),
+      });
+      router.push("/inventory/orders");
     } finally {
       setSaving(false);
     }
@@ -179,7 +197,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   }
 
   const isDraft = order.status === "DRAFT";
-  const isSent = order.status === "SENT";
+  const isApproved = order.status === "APPROVED";
   const statusConfig = STATUS_LABELS[order.status];
 
   return (
@@ -206,25 +224,31 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           <Button variant="outline" onClick={() => router.push("/inventory/orders")} disabled={saving}>
             Back
           </Button>
-          {isDraft && (
+          {(isDraft || isApproved) && (
             <Button onClick={() => saveOrder(false)} disabled={saving} className="bg-terracotta hover:bg-terracotta-dark">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
               Save Changes
             </Button>
           )}
           {isDraft && (
-            <Button onClick={() => saveOrder(true)} disabled={saving} className="bg-green-500 hover:bg-green-600">
-              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
-              Send to Supplier
+            <Button onClick={() => saveOrder(true)} disabled={saving} className="bg-blue-500 hover:bg-blue-600">
+              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
+              Confirm Request
             </Button>
           )}
-          {isSent && order.supplier?.phone && (
+          {isApproved && order.supplier?.phone && (
             <a href={buildWhatsAppUrl()} target="_blank" rel="noopener noreferrer">
               <Button className="bg-green-500 hover:bg-green-600">
                 <MessageCircle className="mr-1.5 h-4 w-4" />
                 WhatsApp Supplier
               </Button>
             </a>
+          )}
+          {isApproved && (
+            <Button onClick={markAsSent} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
+              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+              Mark as Sent
+            </Button>
           )}
         </div>
       </div>
@@ -240,7 +264,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
             value={deliveryDate}
             onChange={(e) => setDeliveryDate(e.target.value)}
             className="max-w-xs"
-            disabled={!isDraft && !isSent}
+            disabled={!isDraft && !isApproved}
           />
         </div>
 
@@ -257,7 +281,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                 <th className="px-4 py-2 text-right font-medium text-gray-500 w-24">Qty</th>
                 <th className="px-4 py-2 text-right font-medium text-gray-500 w-28">Unit Price</th>
                 <th className="px-4 py-2 text-right font-medium text-gray-500 w-28">Total</th>
-                {(isDraft || isSent) && <th className="px-4 py-2 w-10"></th>}
+                {(isDraft || isApproved) && <th className="px-4 py-2 w-10"></th>}
               </tr>
             </thead>
             <tbody>
@@ -293,7 +317,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                     </td>
                     <td className="px-4 py-2.5 text-gray-500 text-xs">{item.packageLabel}</td>
                     <td className="px-4 py-2.5">
-                      {isDraft || isSent ? (
+                      {isDraft || isApproved ? (
                         <input
                           type="number"
                           min="0"
@@ -311,7 +335,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                       )}
                     </td>
                     <td className="px-4 py-2.5">
-                      {isDraft || isSent ? (
+                      {isDraft || isApproved ? (
                         <input
                           type="number"
                           min="0"
@@ -331,7 +355,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                     <td className="px-4 py-2.5 text-right font-medium text-gray-900">
                       RM {lineTotal.toFixed(2)}
                     </td>
-                    {(isDraft || isSent) && (
+                    {(isDraft || isApproved) && (
                       <td className="px-4 py-2.5 text-center">
                         <button
                           onClick={() =>
@@ -350,13 +374,13 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                 );
               })}
               <tr className="border-t-2 border-gray-200 bg-gray-50">
-                <td colSpan={isDraft || isSent ? 4 : 4} className="px-4 py-2.5 text-right font-semibold text-gray-700">
+                <td colSpan={isDraft || isApproved ? 4 : 4} className="px-4 py-2.5 text-right font-semibold text-gray-700">
                   Total
                 </td>
                 <td className="px-4 py-2.5 text-right font-bold text-gray-900">
                   RM {total.toFixed(2)}
                 </td>
-                {(isDraft || isSent) && <td></td>}
+                {(isDraft || isApproved) && <td></td>}
               </tr>
             </tbody>
           </table>

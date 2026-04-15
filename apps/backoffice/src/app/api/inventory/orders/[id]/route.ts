@@ -33,6 +33,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (status) {
       data.status = status;
 
+      if (status === "APPROVED") {
+        const caller = await getUserFromHeaders(req.headers);
+        if (!caller) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        data.approvedById = caller.id;
+        data.approvedAt = new Date();
+      }
+
       if (status === "SENT") {
         data.sentAt = new Date();
       }

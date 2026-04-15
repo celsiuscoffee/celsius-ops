@@ -105,7 +105,7 @@ export default function ReceivingsPage() {
 
   const loading = recLoading || ordLoading || tfrLoading;
 
-  const AWAITING_STATUSES = ["SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
+  const AWAITING_STATUSES = ["SENT", "APPROVED", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
   const awaitingFromOrders: AwaitingOrder[] = rawActiveOrders
     .filter((o) => AWAITING_STATUSES.includes(o.status))
     .map((o) => ({
@@ -164,7 +164,7 @@ export default function ReceivingsPage() {
 
     const pendingFromOrders: PendingOrder[] = orders
       .filter((o: { status: string }) =>
-        ["SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(o.status),
+        ["SENT", "AWAITING_DELIVERY", "APPROVED", "PARTIALLY_RECEIVED"].includes(o.status),
       )
       .map((o: { id: string; orderNumber: string; outlet: string; outletId: string; outletCode: string; supplierId: string; supplier: string; supplierPhone: string; items: { id: string; productId: string; product: string; sku: string; package: string; quantity: number; productPackageId?: string }[] }) => ({
         id: o.id,
