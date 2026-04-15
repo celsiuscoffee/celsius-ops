@@ -122,59 +122,69 @@ export async function POST(req: NextRequest) {
 
     const outlet = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId } });
 
-    // Use max order number to avoid collisions from deleted orders
-    const lastOrder = await prisma.order.findFirst({
-      where: { outletId },
-      orderBy: { orderNumber: "desc" },
-      select: { orderNumber: true },
-    });
-    const lastNum = lastOrder ? parseInt(lastOrder.orderNumber.split("-").pop() || "0") : 0;
-    const orderNumber = `CC-${outlet.code}-${String(lastNum + 1).padStart(4, "0")}`;
-
     const totalAmount = items.reduce(
       (sum: number, i: { quantity: number; unitPrice: number }) => sum + i.quantity * i.unitPrice,
       0,
     );
 
-    const order = await prisma.order.create({
-      data: {
-        orderNumber,
-        outletId,
-        supplierId,
-        status: "DRAFT",
-        totalAmount,
-        notes: notes || null,
-        deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
-        createdById: caller.id,
-        items: {
-          create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number; notes?: string }) => ({
-            productId: i.productId,
-            productPackageId: i.productPackageId || null,
-            quantity: i.quantity,
-            unitPrice: i.unitPrice,
-            totalPrice: i.quantity * i.unitPrice,
-            notes: i.notes || null,
-          })),
-        },
-      },
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        totalAmount: true,
-        outlet: { select: { name: true } },
-        supplier: { select: { name: true } },
-        items: {
-          select: {
-            product: { select: { name: true } },
-            productPackage: { select: { packageLabel: true } },
-            quantity: true,
-            unitPrice: true,
-            totalPrice: true,
+    // Retry loop to handle orderNumber collisions
+    let order;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const maxResult = await prisma.order.aggregate({
+        where: { orderNumber: { startsWith: `CC-${outlet.code}-` } },
+        _max: { orderNumber: true },
+      });
+      const lastNum = maxResult._max.orderNumber
+        ? parseInt(maxResult._max.orderNumber.split("-").pop() || "0")
+        : 0;
+      const orderNumber = `CC-${outlet.code}-${String(lastNum + 1 + attempt).padStart(4, "0")}`;
+
+      try {
+        order = await prisma.order.create({
+          data: {
+            orderNumber,
+            outletId,
+            supplierId,
+            status: "DRAFT",
+            totalAmount,
+            notes: notes || null,
+            deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
+            createdById: caller.id,
+            items: {
+              create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number; notes?: string }) => ({
+                productId: i.productId,
+                productPackageId: i.productPackageId || null,
+                quantity: i.quantity,
+                unitPrice: i.unitPrice,
+                totalPrice: i.quantity * i.unitPrice,
+                notes: i.notes || null,
+              })),
+            },
           },
-        },
-      },
-    });
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            totalAmount: true,
+            outlet: { select: { name: true } },
+            supplier: { select: { name: true } },
+            items: {
+              select: {
+                product: { select: { name: true } },
+                productPackage: { select: { packageLabel: true } },
+                quantity: true,
+                unitPrice: true,
+                totalPrice: true,
+              },
+            },
+          },
+        });
+        break;
+      } catch (e: unknown) {
+        const isUniqueViolation = e instanceof Error && e.message.includes("Unique constraint");
+        if (!isUniqueViolation || attempt === 4) throw e;
+      }
+    }
 
     return NextResponse.json(order, { status: 201 });
   } catch (err) {

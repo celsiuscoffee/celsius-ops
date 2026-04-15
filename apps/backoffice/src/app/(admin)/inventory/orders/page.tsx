@@ -101,16 +101,9 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof
 };
 
 const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof Clock; color: string }[]> = {
-  DRAFT: [
-    { status: "APPROVED", label: "Confirm Request", icon: CheckCircle2, color: "bg-blue-500 hover:bg-blue-600" },
-  ],
-  PENDING_APPROVAL: [
-    { status: "APPROVED", label: "Confirm", icon: CheckCircle2, color: "bg-blue-500 hover:bg-blue-600" },
-    { status: "CANCELLED", label: "Reject", icon: Ban, color: "bg-red-500 hover:bg-red-600" },
-  ],
-  APPROVED: [
-    { status: "SENT", label: "Mark as Sent", icon: Send, color: "bg-green-500 hover:bg-green-600" },
-  ],
+  DRAFT: [],
+  PENDING_APPROVAL: [],
+  APPROVED: [],
   SENT: [],
   AWAITING_DELIVERY: [],
   PARTIALLY_RECEIVED: [],
@@ -641,7 +634,7 @@ export default function OrdersPage() {
                             {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : a.label}
                           </button>
                         ))}
-                        {order.status === "SENT" && (
+                        {["SENT", "APPROVED"].includes(order.status) && (
                           <button onClick={() => openEditDialog(order)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-purple-500 hover:bg-purple-600 disabled:opacity-50" title="Confirm Order">
                             {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm Order"}
                           </button>
@@ -656,7 +649,7 @@ export default function OrdersPage() {
                             <Pencil className="h-3 w-3" />
                           </Link>
                         )}
-                        {order.status === "APPROVED" && (
+                        {["APPROVED", "SENT"].includes(order.status) && (
                           <button onClick={() => { if (confirm("Cancel this order?")) updateStatus(order.id, "CANCELLED"); }} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50" title="Cancel Order">
                             Cancel
                           </button>
@@ -1015,7 +1008,7 @@ export default function OrdersPage() {
               {editSaving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
               {confirmOnSave ? "Confirm Order" : "Save Changes"}
             </Button>
-            {editOrder?.status === "SENT" && (
+            {editOrder && ["SENT", "APPROVED"].includes(editOrder.status) && (
               <Button
                 disabled={editSaving || uploading}
                 className="bg-purple-500 hover:bg-purple-600"
