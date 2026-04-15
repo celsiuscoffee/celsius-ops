@@ -95,9 +95,30 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
     });
 
-    // Auto-create receiving when order is confirmed (AWAITING_DELIVERY)
+    // Auto-create invoice + receiving when order is confirmed (AWAITING_DELIVERY)
     if (status === "AWAITING_DELIVERY") {
       const caller = await getUserFromHeaders(req.headers);
+
+      try {
+        // Ensure invoice exists — saveEdit() usually creates it, but guard against edge cases
+        const existingInvoice = await prisma.invoice.findFirst({ where: { orderId: id } });
+        if (!existingInvoice) {
+          const invCount = await prisma.invoice.count();
+          await prisma.invoice.create({
+            data: {
+              invoiceNumber: `INV-${String(invCount + 1).padStart(4, "0")}`,
+              orderId: id,
+              outletId: order.outletId,
+              supplierId: order.supplierId,
+              amount: order.totalAmount,
+              status: "PENDING",
+              photos: invoicePhotos || [],
+            },
+          });
+        }
+      } catch (e) {
+        console.error("[orders/[id] PATCH] Invoice auto-create failed:", e);
+      }
 
       try {
         // Check if receiving already exists for this order
