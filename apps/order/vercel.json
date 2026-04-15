@@ -1,5 +1,6 @@
 {
   "regions": ["sin1"],
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- . ../../packages/",
   "crons": [
     {
       "path": "/api/cron/sync-menu",
