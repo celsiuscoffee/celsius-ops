@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
 import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign, Landmark, Copy, Check } from "lucide-react";
 
-const isPdf = (url: string) => /\.pdf($|\?)/i.test(url) || url.includes("/raw/");
+const isPdf = (url: string) => /\.pdf($|\?)/i.test(url);
 
 type Invoice = {
   id: string;
