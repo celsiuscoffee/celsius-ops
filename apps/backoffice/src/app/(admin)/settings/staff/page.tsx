@@ -83,6 +83,7 @@ const APP_MODULES: Record<string, { label: string; key: string }[]> = {
     { label: "SOPs", key: "sops" },
     { label: "Categories", key: "categories" },
     { label: "Checklists", key: "checklists" },
+    { label: "Audit", key: "audit" },
     { label: "Dashboard", key: "dashboard" },
   ],
 };

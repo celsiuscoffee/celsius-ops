@@ -22,11 +22,16 @@ export function BottomNav() {
   const { data: me } = useFetch<UserProfile>("/api/auth/me");
 
   // Show audit tab if user has audit access in moduleAccess or is OWNER/ADMIN
+  // moduleAccess format: { ops: ["audit", "sops", ...] } or { audit: true }
   const ma = me?.moduleAccess as Record<string, unknown> | undefined;
   const hasAuditAccess =
     me?.role === "OWNER" ||
     me?.role === "ADMIN" ||
-    (ma && (ma.audit === true || Array.isArray(ma.audit)));
+    (ma && (
+      ma.audit === true ||
+      Array.isArray(ma.audit) ||
+      (Array.isArray(ma.ops) && (ma.ops as string[]).includes("audit"))
+    ));
 
   const tabs = hasAuditAccess
     ? [baseTabs[0], baseTabs[1], auditTab, baseTabs[2], baseTabs[3]]
