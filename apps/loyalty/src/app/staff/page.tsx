@@ -77,6 +77,66 @@ export default function PortalPage() {
   const [sessionExpiredMsg, setSessionExpiredMsg] = useState(false);
   const brand = { id: "brand-celsius", name: "Celsius Coffee", points_per_rm: 1 };
   const currentOutlet = outlets.find((o) => o.id === outletId) || outlets[0];
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>("default");
+  const inactivityRef = useRef<NodeJS.Timeout | null>(null);
+  const INACTIVITY_MINUTES = 60; // remind after 60 mins of no loyalty activity
+
+  // ─── Push notification for loyalty inactivity ───────────
+  useEffect(() => {
+    if (typeof Notification !== "undefined") {
+      setNotifPermission(Notification.permission);
+    }
+  }, []);
+
+  const requestNotifPermission = useCallback(async () => {
+    if (typeof Notification === "undefined") return;
+    const perm = await Notification.requestPermission();
+    setNotifPermission(perm);
+  }, []);
+
+  // Check activity every 15 mins when logged in
+  useEffect(() => {
+    if (screen !== "phone" && screen !== "staff" && screen !== "success") return;
+    if (!outletId || notifPermission !== "granted") return;
+
+    const checkActivity = async () => {
+      try {
+        const res = await fetch(`/api/points/activity?outletId=${outletId}`);
+        if (!res.ok) return;
+        const { minutesSince } = await res.json();
+        if (minutesSince !== null && minutesSince >= INACTIVITY_MINUTES) {
+          // Play alarm sound
+          try {
+            const ctx = new AudioContext();
+            const playBeep = (freq: number, start: number, dur: number) => {
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.frequency.value = freq;
+              gain.gain.value = 0.3;
+              osc.start(ctx.currentTime + start);
+              osc.stop(ctx.currentTime + start + dur);
+            };
+            // 3 beeps
+            playBeep(880, 0, 0.15);
+            playBeep(880, 0.25, 0.15);
+            playBeep(1100, 0.5, 0.3);
+          } catch {}
+          new Notification("Loyalty Reminder", {
+            body: `No points awarded in ${minutesSince} minutes. Remember to ask customers for their phone number!`,
+            icon: "/icon.png",
+            tag: "loyalty-reminder",
+            requireInteraction: true,
+          });
+        }
+      } catch {}
+    };
+
+    checkActivity();
+    inactivityRef.current = setInterval(checkActivity, 15 * 60 * 1000);
+    return () => { if (inactivityRef.current) clearInterval(inactivityRef.current); };
+  }, [screen, outletId, notifPermission]);
 
   // ─── Session expiry helpers ─────────────────────────────
   const handleSessionExpired = useCallback(() => {
@@ -760,6 +820,18 @@ export default function PortalPage() {
             />
           </div>
         </div>
+
+        {/* Notification permission prompt */}
+        {notifPermission === "default" && (
+          <div className="w-full bg-neutral-900 px-6 pb-2">
+            <button
+              onClick={requestNotifPermission}
+              className="mx-auto flex max-w-md items-center gap-2 rounded-lg bg-amber-900/30 border border-amber-700/30 px-3 py-2 text-xs text-amber-400 w-full justify-center"
+            >
+              <span>🔔</span> Enable reminder notifications
+            </button>
+          </div>
+        )}
 
         {/* Location, staff & logout */}
         <div className="w-full bg-neutral-900 px-6 pb-2">
