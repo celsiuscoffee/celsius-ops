@@ -29,7 +29,7 @@ function isEligibleToRedeem(pointsBalance: number, lowestRewardPoints: number) {
 }
 
 // ─── Advanced filter types ──────────────────────────────
-type FilterField = "total_spent" | "last_visit" | "points_balance" | "total_visits" | "joined_date" | "tag";
+type FilterField = "total_spent" | "last_visit" | "points_balance" | "total_visits" | "joined_date" | "tag" | "sms_received";
 type FilterOp = ">" | "<" | "=" | ">=" | "<=";
 
 interface MemberFilter {
@@ -45,6 +45,7 @@ const filterFieldLabels: Record<FilterField, string> = {
   total_visits: "Total visits",
   joined_date: "Joined date",
   tag: "Tag",
+  sms_received: "SMS received",
 };
 
 const filterOpLabels: Record<FilterOp, string> = {
@@ -116,6 +117,10 @@ export default function MembersPage() {
   // Outlet filter
   const [outlets, setOutlets] = useState<{ id: string; name: string }[]>([]);
   const [outletFilter, setOutletFilter] = useState<string>("");
+
+  // SMS filter
+  const [smsMessages, setSmsMessages] = useState<{ message: string; display: string; sent_count: number; last_sent_at: string }[]>([]);
+  const [smsRecipientIds, setSmsRecipientIds] = useState<Set<string>>(new Set());
 
   // Are we in client-side filter mode?
   const useClientMode = allLoaded && (filters.length > 0 || tagFilter !== "" || segment !== "all" || outletFilter !== "");
@@ -219,6 +224,12 @@ export default function MembersPage() {
       }
     });
 
+    // Fetch SMS messages for filter dropdown
+    fetch("/api/loyalty/sms/messages?brand_id=brand-celsius", { credentials: "include" })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => { if (Array.isArray(data)) setSmsMessages(data); })
+      .catch(() => {});
+
     // Fast initial page load
     fetchMembersPage("brand-celsius", 0, 50).then((res) => {
       setServerMembers(res.members.map(mapMember));
@@ -261,6 +272,19 @@ export default function MembersPage() {
       document.removeEventListener("click", handleClick);
     };
   }, [openMenu]);
+
+  // ─── Fetch SMS recipients when sms_received filter changes ───
+  const activeSmsFilter = filters.find((f) => f.field === "sms_received" && f.value);
+  useEffect(() => {
+    if (!activeSmsFilter?.value) {
+      setSmsRecipientIds(new Set());
+      return;
+    }
+    fetch(`/api/loyalty/sms/recipients?brand_id=brand-celsius&message=${encodeURIComponent(activeSmsFilter.value)}`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : { member_ids: [] })
+      .then((data) => setSmsRecipientIds(new Set(data.member_ids || [])))
+      .catch(() => setSmsRecipientIds(new Set()));
+  }, [activeSmsFilter?.value]);
 
   // ─── All unique tags ────────────────────────────────
   const allTags = useMemo(() => {
@@ -349,6 +373,10 @@ export default function MembersPage() {
           const memberTags = m.tags || [];
           if (f.op === "=" && !memberTags.some((t) => t.toLowerCase() === f.value.toLowerCase())) return false;
         }
+        if (f.field === "sms_received") {
+          if (smsRecipientIds.size > 0 && !smsRecipientIds.has(m.id)) return false;
+          if (smsRecipientIds.size === 0 && f.value) return false; // still loading or no recipients
+        }
       }
 
       // tag filter (from tag click)
@@ -364,7 +392,7 @@ export default function MembersPage() {
 
       return true;
     });
-  }, [segment, search, allMembers, lowestRewardPoints, filters, tagFilter, outletFilter]);
+  }, [segment, search, allMembers, lowestRewardPoints, filters, tagFilter, outletFilter, smsRecipientIds]);
 
   // Reset page when filters change
   useEffect(() => { setCurrentPage(0); }, [segment, search, filters, tagFilter, outletFilter, pageSize]);
@@ -875,7 +903,7 @@ export default function MembersPage() {
               key={i}
               className="inline-flex items-center gap-1 rounded-full border border-[#C2452D]/30 bg-[#C2452D]/5 px-3 py-1.5 text-xs font-medium text-[#C2452D]"
             >
-              {filterFieldLabels[f.field]} {f.op} {f.field === "tag" ? `"${f.value}"` : f.value}
+              {filterFieldLabels[f.field]} {f.op} {f.field === "tag" ? `"${f.value}"` : f.field === "sms_received" ? `"${(smsMessages.find((s) => s.message === f.value)?.display || f.value).slice(0, 30)}..."` : f.value}
               <button onClick={() => removeFilter(i)} className="ml-0.5 hover:text-red-700"><X className="h-3 w-3" /></button>
             </span>
           ))}
@@ -988,7 +1016,7 @@ export default function MembersPage() {
                   onChange={(e) => updateFilter(idx, "op", e.target.value)}
                   className="rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200 w-20"
                 >
-                  {filter.field === "tag" ? (
+                  {filter.field === "tag" || filter.field === "sms_received" ? (
                     <option value="=">=</option>
                   ) : (
                     Object.entries(filterOpLabels).map(([k, v]) => (
@@ -1003,6 +1031,19 @@ export default function MembersPage() {
                     onChange={(e) => updateFilter(idx, "value", e.target.value)}
                     className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
                   />
+                ) : filter.field === "sms_received" ? (
+                  <select
+                    value={filter.value}
+                    onChange={(e) => updateFilter(idx, "value", e.target.value)}
+                    className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
+                  >
+                    <option value="">Select SMS message</option>
+                    {smsMessages.map((s) => (
+                      <option key={s.message} value={s.message}>
+                        {s.display.length > 50 ? s.display.slice(0, 50) + "..." : s.display} ({s.sent_count} sent)
+                      </option>
+                    ))}
+                  </select>
                 ) : filter.field === "tag" ? (
                   <select
                     value={filter.value}

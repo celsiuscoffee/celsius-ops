@@ -140,7 +140,8 @@ type FilterField =
   | "total_visits"
   | "total_spend"
   | "last_visit"
-  | "joined_date";
+  | "joined_date"
+  | "sms_received";
 type FilterOp = ">" | "<" | "=" | "within";
 
 interface CustomFilter {
@@ -155,6 +156,7 @@ const filterFieldLabels: Record<FilterField, string> = {
   total_spend: "Total spend",
   last_visit: "Last visit",
   joined_date: "Joined date",
+  sms_received: "SMS received",
 };
 
 const variables = [
@@ -267,6 +269,10 @@ export default function NotificationsPage() {
   const [smsSentThisMonth, setSmsSentThisMonth] = useState(0);
   const [smsLogs, setSmsLogs] = useState<{ id: string; phone: string; message: string; status: string; created_at: string }[]>([]);
   const [showSmsLog, setShowSmsLog] = useState(false);
+
+  // SMS filter for custom audience
+  const [smsMessages, setSmsMessages] = useState<{ message: string; display: string; sent_count: number; last_sent_at: string }[]>([]);
+  const [smsRecipientIds, setSmsRecipientIds] = useState<Set<string>>(new Set());
   const [smsSending, setSmsSending] = useState(false);
   const [allMembers, setAllMembers] = useState<MemberWithBrand[]>([]);
 
@@ -301,7 +307,25 @@ export default function NotificationsPage() {
       })
       .catch(() => { setMessagesLoading(false); });
     fetchMembers("brand-celsius", { all: true }).then(setAllMembers);
+    // Fetch SMS messages for filter dropdown
+    fetch("/api/loyalty/sms/messages?brand_id=brand-celsius", { credentials: "include" })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => { if (Array.isArray(data)) setSmsMessages(data); })
+      .catch(() => {});
   }, []);
+
+  // Fetch SMS recipients when sms_received filter changes
+  const activeSmsFilter = customFilters.find((f) => f.field === "sms_received" && f.value);
+  useEffect(() => {
+    if (!activeSmsFilter?.value) {
+      setSmsRecipientIds(new Set());
+      return;
+    }
+    fetch(`/api/loyalty/sms/recipients?brand_id=brand-celsius&message=${encodeURIComponent(activeSmsFilter.value)}`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : { member_ids: [] })
+      .then((data) => setSmsRecipientIds(new Set(data.member_ids || [])))
+      .catch(() => setSmsRecipientIds(new Set()));
+  }, [activeSmsFilter?.value]);
 
   // Get target phones based on audience
   function getTargetPhones(): string[] {
@@ -357,6 +381,10 @@ export default function NotificationsPage() {
               const target = new Date(f.value).getTime();
               if (f.op === ">" && !(joined > target)) return false;
               if (f.op === "<" && !(joined < target)) return false;
+            }
+            if (f.field === "sms_received") {
+              if (smsRecipientIds.size > 0 && !smsRecipientIds.has(m.id)) return false;
+              if (smsRecipientIds.size === 0 && f.value) return false;
             }
           }
           return true;
@@ -1155,7 +1183,9 @@ export default function NotificationsPage() {
                             }
                             className="w-20 appearance-none rounded-md border border-gray-300 px-2 py-1.5 text-center text-xs focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
                           >
-                            {isDateField(filter.field as FilterField) ? (
+                            {filter.field === "sms_received" ? (
+                              <option value="=">=</option>
+                            ) : isDateField(filter.field as FilterField) ? (
                               <option value="within">within</option>
                             ) : (
                               <>
@@ -1167,6 +1197,22 @@ export default function NotificationsPage() {
                           </select>
 
                           {/* Value */}
+                          {filter.field === "sms_received" ? (
+                          <select
+                            value={filter.value}
+                            onChange={(e) =>
+                              updateFilter(idx, "value", e.target.value)
+                            }
+                            className="flex-1 appearance-none rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                          >
+                            <option value="">Select SMS message</option>
+                            {smsMessages.map((s) => (
+                              <option key={s.message} value={s.message}>
+                                {s.display.length > 50 ? s.display.slice(0, 50) + "..." : s.display} ({s.sent_count} sent)
+                              </option>
+                            ))}
+                          </select>
+                          ) : (
                           <div className="relative flex-1">
                             <input
                               value={filter.value}
@@ -1187,6 +1233,7 @@ export default function NotificationsPage() {
                               </span>
                             )}
                           </div>
+                          )}
 
                           {/* Remove */}
                           {customFilters.length > 1 && (
