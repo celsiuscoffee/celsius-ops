@@ -65,6 +65,7 @@ type ProductForm = {
 type StorageAreaOption = { id: string; name: string; slug: string };
 
 const PACKAGE_PRESETS = [
+  { name: "Piece", label: "Piece (pcs)", code: "PCS" },
   { name: "Carton", label: "Carton", code: "CTN" },
   { name: "Bottle", label: "Bottle", code: "BTL" },
   { name: "Pack", label: "Pack", code: "PCK" },
