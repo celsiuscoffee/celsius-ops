@@ -164,7 +164,7 @@ export default function ReceivingsPage() {
 
     const pendingFromOrders: PendingOrder[] = orders
       .filter((o: { status: string }) =>
-        ["SENT", "AWAITING_DELIVERY", "APPROVED", "PARTIALLY_RECEIVED"].includes(o.status),
+        ["AWAITING_DELIVERY", "PARTIALLY_RECEIVED"].includes(o.status),
       )
       .map((o: { id: string; orderNumber: string; outlet: string; outletId: string; outletCode: string; supplierId: string; supplier: string; supplierPhone: string; items: { id: string; productId: string; product: string; sku: string; package: string; quantity: number; productPackageId?: string }[] }) => ({
         id: o.id,
@@ -567,7 +567,8 @@ export default function ReceivingsPage() {
               <select
                 value={selectedOrderId}
                 onChange={(e) => selectOrder(e.target.value)}
-                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                disabled={!!selectedOrderId}
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-700"
               >
                 <option value="">Select a PO or Transfer...</option>
                 {pendingOrders.map((o) => (
