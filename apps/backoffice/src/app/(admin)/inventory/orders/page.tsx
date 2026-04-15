@@ -63,6 +63,7 @@ type OrderInvoice = {
   issueDate: string;
   dueDate: string | null;
   photoCount: number;
+  photos: string[];
 };
 
 type Order = {
@@ -819,6 +820,20 @@ export default function OrdersPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Existing invoice photos preview */}
+                {editOrder.invoice && editOrder.invoice.photos.length > 0 && editInvoiceFiles.length === 0 && (
+                  <div className="mb-3">
+                    <label className="mb-1 block text-xs font-medium text-gray-500">Uploaded Invoice</label>
+                    <div className="flex flex-wrap gap-2">
+                      {editOrder.invoice.photos.map((url, i) => (
+                        <a key={i} href={url.replace("/raw/upload/", "/image/upload/")} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-gray-200 overflow-hidden hover:border-blue-300">
+                          <img src={url.replace("/raw/upload/", "/image/upload/")} alt={`Invoice ${i + 1}`} className="h-32 w-auto object-contain" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* AI extraction status */}
                 {extracting && (

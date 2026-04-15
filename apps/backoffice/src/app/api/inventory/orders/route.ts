@@ -105,6 +105,7 @@ export async function GET(req: NextRequest) {
           issueDate: o.invoices[0].issueDate.toISOString().split("T")[0],
           dueDate: o.invoices[0].dueDate?.toISOString().split("T")[0] ?? null,
           photoCount: o.invoices[0].photos.length,
+          photos: o.invoices[0].photos,
         }
       : null,
   }));
