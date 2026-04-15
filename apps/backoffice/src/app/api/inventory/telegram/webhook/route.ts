@@ -240,7 +240,7 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
       status: { in: ["PENDING", "INITIATED", "OVERDUE"] },
       amount: { equals: amount },
     },
-    include: { supplier: { select: { id: true, name: true, telegramChatId: true } }, outlet: { select: { name: true } } },
+    include: { supplier: { select: { id: true, name: true, telegramChatId: true } }, outlet: { select: { name: true } }, order: { select: { orderNumber: true } } },
     orderBy: { createdAt: "desc" },
     take: 10,
   });
@@ -252,7 +252,7 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
         status: { in: ["PENDING", "INITIATED", "OVERDUE"] },
         amount: { gte: amount - 0.5, lte: amount + 0.5 },
       },
-      include: { supplier: { select: { id: true, name: true, telegramChatId: true } }, outlet: { select: { name: true } } },
+      include: { supplier: { select: { id: true, name: true, telegramChatId: true } }, outlet: { select: { name: true } }, order: { select: { orderNumber: true } } },
       orderBy: { createdAt: "desc" },
       take: 10,
     });
@@ -297,10 +297,19 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
     return;
   }
 
+  // Also attach POP photo to the linked PO (Order)
+  if (invoice.orderId) {
+    await prisma.order.update({
+      where: { id: invoice.orderId },
+      data: { photos: { push: photoUrl } },
+    }).catch((e) => console.error("[telegram] Failed to attach POP to order:", e));
+  }
+
   const supplierName = invoice.supplier?.name ?? "Unknown";
+  const poRef = invoice.order?.orderNumber ? `\nPO: ${invoice.order.orderNumber}` : "";
   await sendMessage(
     chatId,
-    `✅ <b>Payment matched</b>\n\nInvoice: ${invoice.invoiceNumber}\nSupplier: ${supplierName}\nAmount: RM ${Number(invoice.amount).toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\n\nMarked as <b>PAID</b>.`,
+    `✅ <b>Payment matched</b>\n\nInvoice: ${invoice.invoiceNumber}${poRef}\nSupplier: ${supplierName}\nAmount: RM ${Number(invoice.amount).toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\n\nMarked as <b>PAID</b>.\n📎 Uploaded to PO + Invoice`,
     msgId,
   );
 
@@ -383,6 +392,12 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
   const order = matchingOrders[0];
   const existingInvoice = order.invoices[0];
 
+  // Also attach invoice photo to the PO (Order)
+  await prisma.order.update({
+    where: { id: order.id },
+    data: { photos: { push: photoUrl } },
+  }).catch((e) => console.error("[telegram] Failed to attach invoice photo to order:", e));
+
   if (existingInvoice) {
     // Update existing invoice — add photo
     await prisma.invoice.update({
@@ -395,7 +410,7 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
 
     await sendMessage(
       chatId,
-      `✅ <b>Invoice photo added</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nAmount: RM ${Number(order.totalAmount).toFixed(2)}\nInvoice #: ${inv.invoiceNumber ?? existingInvoice.id.slice(0, 8)}`,
+      `✅ <b>Invoice photo added</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nAmount: RM ${Number(order.totalAmount).toFixed(2)}\nInvoice #: ${inv.invoiceNumber ?? existingInvoice.id.slice(0, 8)}\n\n📎 Uploaded to PO + Invoice`,
       msgId,
     );
   } else {
@@ -419,7 +434,7 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
 
     await sendMessage(
       chatId,
-      `✅ <b>Invoice created</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nInvoice: ${invoiceNumber}\nAmount: RM ${(amount ?? Number(order.totalAmount)).toFixed(2)}`,
+      `✅ <b>Invoice created</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nInvoice: ${invoiceNumber}\nAmount: RM ${(amount ?? Number(order.totalAmount)).toFixed(2)}\n\n📎 Uploaded to PO + Invoice`,
       msgId,
     );
   }

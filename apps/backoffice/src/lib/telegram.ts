@@ -50,6 +50,19 @@ export async function sendPhoto(chatId: number, photoUrl: string, caption?: stri
   });
 }
 
+export async function sendDocument(chatId: number, documentUrl: string, caption?: string) {
+  await fetch(`${API}/sendDocument`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      document: documentUrl,
+      caption,
+      parse_mode: "HTML",
+    }),
+  });
+}
+
 export async function getFileUrl(fileId: string): Promise<string> {
   const res = await fetch(`${API}/getFile?file_id=${fileId}`);
   const data = await res.json();

@@ -330,6 +330,7 @@ model Order {
   status       OrderStatus @default(DRAFT)
   totalAmount  Decimal     @default(0)
   notes        String?
+  photos       String[]    @default([])
   deliveryDate DateTime?
   createdById  String
   createdBy    User        @relation("OrderCreatedBy", fields: [createdById], references: [id])

@@ -76,6 +76,7 @@ type Order = {
   status: string;
   totalAmount: number;
   notes: string | null;
+  photos: string[];
   deliveryDate: string | null;
   createdBy: string;
   approvedBy: string | null;
@@ -704,6 +705,24 @@ export default function OrdersPage() {
                         </table>
                         {order.notes && <p className="mt-2 text-xs text-gray-500">Notes: {order.notes}</p>}
                         {order.receivingCount > 0 && <p className="mt-2 text-xs text-green-600">{order.receivingCount} receiving record(s) linked</p>}
+                        {order.photos && order.photos.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-xs text-gray-500 mb-1">Attached documents ({order.photos.length})</p>
+                            <div className="flex gap-2 flex-wrap">
+                              {order.photos.map((url, i) => (
+                                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="relative h-16 w-16 rounded-md overflow-hidden border border-gray-200 hover:border-blue-400 transition-colors">
+                                  {url.endsWith(".pdf") ? (
+                                    <div className="h-full w-full flex items-center justify-center bg-gray-50">
+                                      <FileText className="h-6 w-6 text-red-400" />
+                                    </div>
+                                  ) : (
+                                    <Image src={url} alt={`Doc ${i + 1}`} fill className="object-cover" sizes="64px" />
+                                  )}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {order.invoice && (
                           <div className="mt-2 flex items-center gap-3 rounded-md bg-white px-3 py-2 border border-gray-200">
                             <Receipt className="h-4 w-4 text-gray-400" />
