@@ -444,29 +444,76 @@ export default function PayAndClaimPage() {
     } catch { /* ignore */ }
     setQuUploading(false);
 
-    // AI extraction
+    // AI extraction — send supplier names + product catalog for matching
     if (newUrls.length > 0) {
       setQuExtracting(true);
       try {
+        const supplierNames = suppliers.map((s) => s.name);
+        // Build product catalog from all suppliers
+        const productNames = suppliers.flatMap((s) =>
+          (s.products ?? []).map((p) => `${p.name} [${p.sku}] (${p.packageLabel}) RM${p.price.toFixed(2)}`)
+        );
+
         const res = await fetch("/api/inventory/extract", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ urls: newUrls, context: "Staff pay & claim receipt. Extract supplier name, total amount, purchase date, and invoice number." }),
+          body: JSON.stringify({
+            urls: newUrls,
+            context: "Staff pay & claim receipt/invoice. Extract supplier name, total amount, purchase date, invoice number, line items, and delivery/shipping charges.",
+            supplierNames,
+            productNames: productNames.length > 0 ? productNames : undefined,
+          }),
         });
         if (res.ok) {
           const data = await res.json();
           setQuAiData(data);
+
           // Auto-populate fields from AI
-          if (data.totalAmount) setQuAmount(String(data.totalAmount));
+          const total = data.amount ?? data.totalAmount;
+          if (total) setQuAmount(String(total));
           if (data.issueDate) setQuDate(data.issueDate);
           if (data.invoiceNumber) setQuInvoiceNum(data.invoiceNumber);
+
+          // Auto-select supplier
           if (data.supplierName) {
             const aiName = data.supplierName.toLowerCase();
             const match = suppliers.find((s) => {
               const dbName = s.name.toLowerCase();
-              return dbName.includes(aiName) || aiName.includes(dbName);
+              return dbName.includes(aiName) || aiName.includes(dbName) || dbName === aiName;
             });
-            if (match) setQuSupplierId(match.id);
+            if (match) {
+              setQuSupplierId(match.id);
+
+              // Auto-populate cart from extracted items
+              if (data.items?.length > 0 && match.products?.length > 0) {
+                const cartItems: CartItem[] = [];
+                for (const item of data.items) {
+                  // Match extracted item to supplier product
+                  const itemName = (item.name || "").toLowerCase();
+                  const product = match.products.find((p) => {
+                    const pName = p.name.toLowerCase();
+                    return pName === itemName || pName.includes(itemName) || itemName.includes(pName);
+                  });
+                  if (product) {
+                    cartItems.push({
+                      productId: product.id,
+                      productPackageId: product.packageId || null,
+                      name: product.name,
+                      sku: product.sku,
+                      packageLabel: product.packageLabel,
+                      quantity: item.quantity || 1,
+                      unitPrice: item.unitPrice || product.price,
+                    });
+                  }
+                }
+                if (cartItems.length > 0) setQuCart(cartItems);
+              }
+            }
+          }
+
+          // Auto-add delivery charge as a note if present
+          if (data.deliveryCharge && data.deliveryCharge > 0) {
+            setQuNotes((prev) => prev ? `${prev} | Delivery: RM${data.deliveryCharge.toFixed(2)}` : `Delivery: RM${data.deliveryCharge.toFixed(2)}`);
           }
         }
       } catch { /* ignore */ }
