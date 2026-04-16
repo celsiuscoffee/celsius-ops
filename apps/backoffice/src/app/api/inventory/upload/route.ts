@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { v2 as cloudinary } from "cloudinary";
+import { createClient } from "@supabase/supabase-js";
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
-  api_key: process.env.CLOUDINARY_API_KEY!,
-  api_secret: process.env.CLOUDINARY_API_SECRET!,
-});
+const supabaseUrl = process.env.NEXT_PUBLIC_LOYALTY_SUPABASE_URL || "";
+const supabaseKey = process.env.LOYALTY_SUPABASE_SERVICE_ROLE_KEY || "";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,22 +14,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-      return NextResponse.json({ error: "Cloudinary not configured" }, { status: 500 });
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ error: "Storage not configured" }, { status: 500 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const base64 = `data:${file.type};base64,${buffer.toString("base64")}`;
-    const isPdf = file.type === "application/pdf";
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const result = await cloudinary.uploader.upload(base64, {
-      folder: `celsius-coffee/${folder}`,
-      resource_type: isPdf ? "raw" : "image",
-      ...(isPdf ? {} : { transformation: [{ quality: "auto", fetch_format: "auto" }] }),
-    });
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const isPdf = file.type === "application/pdf";
+    const ext = isPdf ? "pdf" : file.name.split(".").pop() || "jpg";
+    const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+    // Ensure bucket exists
+    const bucketName = "invoices";
+    const { data: buckets } = await supabase.storage.listBuckets();
+    if (!buckets?.find((b) => b.name === bucketName)) {
+      await supabase.storage.createBucket(bucketName, { public: true });
+    }
+
+    const { error: uploadError } = await supabase.storage
+      .from(bucketName)
+      .upload(fileName, buffer, {
+        contentType: file.type || (isPdf ? "application/pdf" : "image/jpeg"),
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error("[upload] Supabase error:", uploadError.message);
+      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    }
+
+    const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
 
     return NextResponse.json({
-      url: result.secure_url,
+      url: urlData.publicUrl,
       type: isPdf ? "pdf" : "image",
       name: file.name,
     });
