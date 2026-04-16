@@ -149,9 +149,11 @@ export async function GET(request: NextRequest) {
       roundStats30[r.key] = { revenue: 0, orders: 0, days: new Set() };
     }
 
-    // 2. Product performance
+    // 2. Product performance (global + per-round)
     type ProductStats = { name: string; revenue: number; quantity: number; orders: number };
     const productStats: Record<string, ProductStats> = {};
+    const productStatsByRound: Record<string, Record<string, ProductStats>> = {};
+    for (const r of ROUNDS) productStatsByRound[r.key] = {};
 
     // 3. Channel breakdown
     const channelStats = { dine_in: { revenue: 0, orders: 0 }, takeaway: { revenue: 0, orders: 0 }, delivery: { revenue: 0, orders: 0 } };
@@ -191,13 +193,24 @@ export async function GET(request: NextRequest) {
 
       // Products
       for (const item of txn.items || []) {
+        if (!item?.name) continue;
         const key = item.name.toLowerCase().trim();
+        if (!key) continue;
         if (!productStats[key]) {
           productStats[key] = { name: item.name, revenue: 0, quantity: 0, orders: 0 };
         }
         productStats[key].revenue += item.total;
         productStats[key].quantity += item.quantity;
         productStats[key].orders += 1;
+
+        // Per-round product stats
+        if (round) {
+          const rMap = productStatsByRound[round];
+          if (!rMap[key]) rMap[key] = { name: item.name, revenue: 0, quantity: 0, orders: 0 };
+          rMap[key].revenue += item.total;
+          rMap[key].quantity += item.quantity;
+          rMap[key].orders += 1;
+        }
       }
     }
 
@@ -299,6 +312,15 @@ ${topProducts.map((p, i) => `${i + 1}. ${p.name}: RM${p.revenue} (${p.quantity} 
 
 LOWEST PERFORMING PRODUCTS (min 5 orders):
 ${bottomProducts.map((p) => `- ${p.name}: RM${p.revenue} (${p.quantity} units)`).join("\n")}
+
+TOP 5 PRODUCTS PER ROUND (to guide round-specific promotions):
+${ROUNDS.map((r) => {
+  const top = Object.values(productStatsByRound[r.key])
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+  if (top.length === 0) return `${r.label}: (no sales)`;
+  return `${r.label}: ${top.map((p) => `${p.name} (RM${Math.round(p.revenue)}, ${p.quantity}u)`).join(", ")}`;
+}).join("\n")}
 
 Please provide your analysis as a JSON array of recommendation objects. Each recommendation should have:
 - "type": one of "opportunity", "warning", "insight", "action"
