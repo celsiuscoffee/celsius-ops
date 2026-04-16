@@ -409,13 +409,13 @@ export default function PayAndClaimPage() {
   // ── Quick Upload ────────────────────────────────────────────────────────
 
   const openQuickUpload = async () => {
-    await loadOptions();
+    const loadedSuppliers = await loadOptions();
     setQuPhotos([]);
     setQuOutletId(outlets[0]?.id ?? "");
     setQuStaffId(currentUserId);
     setQuNotes("");
     setQuAiData({});
-    const adhoc = suppliers.find((s) => s.name === "Ad-hoc Purchase");
+    const adhoc = loadedSuppliers.find((s) => s.name === "Ad-hoc Purchase");
     setQuSupplierId(adhoc?.id || "");
     setQuAmount("");
     setQuDate(new Date().toISOString().split("T")[0]);
