@@ -34,7 +34,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data || []);
+    // Fetch outlet names by loyaltyOutletId and merge (PostgREST can't auto-join
+    // to the `outlets` view after consolidation, so do it manually).
+    const outletIds = Array.from(
+      new Set((data || []).map((t) => t.outlet_id).filter(Boolean)),
+    );
+
+    let outletMap: Record<string, { id: string; name: string }> = {};
+    if (outletIds.length > 0) {
+      const { data: outletsData } = await supabaseAdmin
+        .from('Outlet')
+        .select('loyaltyOutletId, name')
+        .in('loyaltyOutletId', outletIds);
+
+      outletMap = (outletsData || []).reduce(
+        (acc, o) => {
+          if (o.loyaltyOutletId) acc[o.loyaltyOutletId] = { id: o.loyaltyOutletId, name: o.name };
+          return acc;
+        },
+        {} as Record<string, { id: string; name: string }>,
+      );
+    }
+
+    const merged = (data || []).map((t) => ({
+      ...t,
+      outlets: t.outlet_id ? outletMap[t.outlet_id] ?? null : null,
+    }));
+
+    return NextResponse.json(merged);
   } catch (err) {
     return NextResponse.json(
       { error: 'Internal server error' },
