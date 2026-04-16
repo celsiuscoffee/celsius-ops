@@ -1195,7 +1195,7 @@ export default function PayAndClaimPage() {
                     <input type="file" accept="image/*,.pdf" multiple onChange={handleQuickPhotoUpload} className="hidden" />
                   </label>
                 ) : isPdf(quPhotos[quPhotoIdx]) ? (
-                  <iframe src={{quPhotos[quPhotoIdx]}} className="w-full h-full rounded" title="Receipt PDF" />
+                  <iframe src={quPhotos[quPhotoIdx]} className="w-full h-full rounded" title="Receipt PDF" />
                 ) : (
                   <img src={toImageUrl(quPhotos[quPhotoIdx])} alt="Receipt" className="max-w-full max-h-full object-contain rounded" />
                 )}
