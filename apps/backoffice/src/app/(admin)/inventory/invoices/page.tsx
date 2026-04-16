@@ -7,7 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
 import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign, Landmark, Copy, Check } from "lucide-react";
 
-const isPdf = (url: string) => /\.pdf($|\?)/i.test(url);
+// Cloudinary raw uploads without extensions are typically PDFs/docs from the upload flow
+const isPdf = (url: string) => {
+  if (/\.pdf($|\?)/i.test(url)) return true;
+  // Raw upload without a recognizable image extension — treat as PDF/document
+  if (url.includes("/raw/upload/") && !/\.(jpg|jpeg|png|gif|webp|svg|bmp)($|\?)/i.test(url)) return true;
+  return false;
+};
 // Fix Cloudinary raw URLs to image URLs so they render as images
 const fixImageUrl = (url: string) => isPdf(url) ? url : url.replace("/raw/upload/", "/image/upload/");
 
