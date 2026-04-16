@@ -75,6 +75,9 @@ export async function GET(req: NextRequest) {
       paidVia: true,
       paymentRef: true,
       popShortLink: true,
+      depositAmount: true,
+      depositPaidAt: true,
+      depositRef: true,
     },
     orderBy: { issueDate: "desc" },
   });
