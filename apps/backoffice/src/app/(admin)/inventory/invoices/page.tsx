@@ -7,15 +7,34 @@ import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
 import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign, Landmark, Copy, Check } from "lucide-react";
 
-// Cloudinary raw uploads without extensions are typically PDFs/docs from the upload flow
-const isPdf = (url: string) => {
-  if (/\.pdf($|\?)/i.test(url)) return true;
-  // Raw upload without a recognizable image extension — treat as PDF/document
-  if (url.includes("/raw/upload/") && !/\.(jpg|jpeg|png|gif|webp|svg|bmp)($|\?)/i.test(url)) return true;
-  return false;
-};
-// Fix Cloudinary raw URLs to image URLs so they render as images
-const fixImageUrl = (url: string) => isPdf(url) ? url : url.replace("/raw/upload/", "/image/upload/");
+const isPdf = (url: string) => /\.pdf($|\?)/i.test(url);
+const fixImageUrl = (url: string) => url.replace("/raw/upload/", "/image/upload/");
+
+/** Try to render as image; if it fails (e.g. raw PDF without extension), fall back to iframe */
+function SmartPhoto({ url, alt }: { url: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  // For Cloudinary raw URLs, try image delivery path
+  const imgUrl = url.replace("/raw/upload/", "/image/upload/");
+  if (failed || isPdf(url)) {
+    return (
+      <div className="overflow-hidden rounded-lg border border-gray-200">
+        <iframe src={url} className="h-[70vh] w-full" title={alt} />
+        <div className="flex items-center justify-between border-t bg-gray-50 px-3 py-1.5">
+          <span className="flex items-center gap-1.5 text-xs text-gray-500"><FileDown className="h-3.5 w-3.5" />Document</span>
+          <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-blue-600 hover:text-blue-700">Open in new tab &rarr;</a>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="group relative block overflow-hidden rounded-lg border border-gray-200 hover:border-blue-300">
+      <img src={imgUrl} alt={alt} className="h-auto w-full object-contain" onError={() => setFailed(true)} />
+      <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
+        <ZoomIn className="h-6 w-6 text-white drop-shadow-md" />
+      </div>
+    </a>
+  );
+}
 
 type Invoice = {
   id: string;
@@ -942,24 +961,9 @@ export default function InvoicesPage() {
               </button>
             </div>
             <div className="flex flex-col gap-3">
-              {viewingPhotos.photos.map((url, i) =>
-                isPdf(url) ? (
-                  <div key={i} className="overflow-hidden rounded-lg border border-gray-200">
-                    <iframe src={url} className="h-[70vh] w-full" title={`PDF ${i + 1}`} />
-                    <div className="flex items-center justify-between border-t bg-gray-50 px-3 py-1.5">
-                      <span className="flex items-center gap-1.5 text-xs text-gray-500"><FileDown className="h-3.5 w-3.5" />PDF Document</span>
-                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-blue-600 hover:text-blue-700">Open in new tab &rarr;</a>
-                    </div>
-                  </div>
-                ) : (
-                  <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="group relative block overflow-hidden rounded-lg border border-gray-200 hover:border-blue-300">
-                    <img src={fixImageUrl(url)} alt={`Invoice photo ${i + 1}`} className="h-auto w-full object-contain" />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
-                      <ZoomIn className="h-6 w-6 text-white drop-shadow-md" />
-                    </div>
-                  </a>
-                ),
-              )}
+              {viewingPhotos.photos.map((url, i) => (
+                <SmartPhoto key={i} url={url} alt={`Invoice photo ${i + 1}`} />
+              ))}
             </div>
           </div>
         </div>
