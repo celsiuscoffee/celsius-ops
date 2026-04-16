@@ -1,0 +1,139 @@
+// HR System Types — matches Supabase hr_* tables
+
+export type EmployeeProfile = {
+  id: string;
+  user_id: string;
+  ic_number: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+  nationality: string;
+  join_date: string;
+  probation_end_date: string | null;
+  employment_type: "full_time" | "part_time" | "contract" | "intern";
+  position: string | null;
+  basic_salary: number;
+  hourly_rate: number | null;
+  epf_number: string | null;
+  socso_number: string | null;
+  eis_number: string | null;
+  tax_number: string | null;
+  epf_employee_rate: number;
+  epf_employer_rate: number;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GeofenceZone = {
+  id: string;
+  outlet_id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radius_meters: number;
+  is_active: boolean;
+};
+
+export type AttendanceLog = {
+  id: string;
+  user_id: string;
+  outlet_id: string;
+  clock_in: string;
+  clock_out: string | null;
+  clock_in_lat: number | null;
+  clock_in_lng: number | null;
+  clock_out_lat: number | null;
+  clock_out_lng: number | null;
+  clock_in_method: "app" | "manual" | "pos";
+  clock_out_method: "app" | "manual" | "pos" | null;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  ai_status: "pending" | "approved" | "flagged" | "reviewed";
+  ai_flags: string[];
+  ai_processed_at: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
+  final_status: "approved" | "rejected" | "adjusted" | null;
+  total_hours: number | null;
+  regular_hours: number | null;
+  overtime_hours: number | null;
+  overtime_type: string | null;
+  created_at: string;
+};
+
+export type Schedule = {
+  id: string;
+  outlet_id: string;
+  week_start: string;
+  week_end: string;
+  status: "draft" | "ai_generated" | "published" | "archived";
+  generated_by: string;
+  ai_notes: string | null;
+  total_labor_hours: number | null;
+  estimated_labor_cost: number | null;
+  published_by: string | null;
+  published_at: string | null;
+};
+
+export type ScheduleShift = {
+  id: string;
+  schedule_id: string;
+  user_id: string;
+  shift_date: string;
+  start_time: string;
+  end_time: string;
+  role_type: string | null;
+  break_minutes: number;
+  notes: string | null;
+  is_ai_assigned: boolean;
+};
+
+export type LeaveBalance = {
+  id: string;
+  user_id: string;
+  year: number;
+  leave_type: string;
+  entitled_days: number;
+  used_days: number;
+  pending_days: number;
+  carried_forward: number;
+};
+
+export type LeaveRequest = {
+  id: string;
+  user_id: string;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  total_days: number;
+  reason: string | null;
+  attachment_url: string | null;
+  status: "pending" | "ai_approved" | "ai_escalated" | "approved" | "rejected" | "cancelled";
+  ai_decision: string | null;
+  ai_reason: string | null;
+  ai_processed_at: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AgentRun = {
+  id: string;
+  agent_type: "scheduler" | "attendance_processor" | "leave_manager" | "payroll_calculator";
+  triggered_by: "cron" | "manual" | "event";
+  triggered_by_user_id: string | null;
+  status: "running" | "completed" | "failed";
+  input_summary: Record<string, unknown> | null;
+  output_summary: Record<string, unknown> | null;
+  items_processed: number;
+  items_flagged: number;
+  items_auto_approved: number;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+};
