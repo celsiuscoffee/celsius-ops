@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   ClipboardCheck, Loader2, CheckCircle2, Clock, Plus, ChevronRight, Building2,
+  Sparkles, AlertTriangle, AlertCircle, Info,
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
@@ -23,6 +24,25 @@ type AuditSummary = {
   outlet: { id: string; name: string; code: string };
   totalItems: number; completedItems: number; progress: number;
 };
+type Insight = {
+  severity: "high" | "medium" | "low";
+  finding: string;
+  action: string;
+  category: string;
+};
+type InsightsResponse = {
+  focus: string;
+  summary: string;
+  insights: Insight[];
+  basedOnAudits: number;
+  lastAuditDate: string | null;
+};
+
+const SEVERITY_CONFIG = {
+  high: { icon: AlertCircle, color: "text-red-600", bg: "bg-red-50", border: "border-red-200", label: "High priority" },
+  medium: { icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200", label: "Watch" },
+  low: { icon: Info, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-200", label: "Note" },
+} as const;
 
 export default function AuditPage() {
   const router = useRouter();
@@ -30,11 +50,15 @@ export default function AuditPage() {
   const { data: audits, isLoading, mutate } = useFetch<AuditSummary[]>("/api/audits");
   const { data: templates } = useFetch<Template[]>("/api/audits/templates");
   const { data: outlets } = useFetch<Outlet[]>("/api/audits/outlets");
+  const { data: insights, isLoading: insightsLoading } = useFetch<InsightsResponse>(
+    me?.outletId ? `/api/audits/insights?outletId=${me.outletId}` : null,
+  );
 
   const [showNew, setShowNew] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [selectedOutlet, setSelectedOutlet] = useState("");
   const [creating, setCreating] = useState(false);
+  const [insightsExpanded, setInsightsExpanded] = useState(true);
 
   const inProgress = audits?.filter((a) => a.status === "IN_PROGRESS") ?? [];
   const completed = audits?.filter((a) => a.status === "COMPLETED") ?? [];
@@ -75,6 +99,75 @@ export default function AuditPage() {
           <Plus className="mr-1 h-3.5 w-3.5" /> New Audit
         </Button>
       </div>
+
+      {/* AI Coach — Today's Focus */}
+      {(insightsLoading || (insights && insights.insights.length > 0)) && (
+        <Card className="p-3 border-terracotta/20 bg-gradient-to-br from-terracotta/5 to-transparent">
+          <button
+            onClick={() => setInsightsExpanded((v) => !v)}
+            className="flex w-full items-center gap-2 text-left"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-terracotta/10">
+              <Sparkles className="h-4 w-4 text-terracotta" />
+            </div>
+            <div className="flex-1 min-w-0">
+              {insightsLoading ? (
+                <>
+                  <p className="text-xs font-semibold text-gray-900">AI Coach analyzing...</p>
+                  <p className="text-[10px] text-gray-400">Reviewing your recent audits</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-semibold text-gray-900">{insights?.focus}</p>
+                  <p className="text-[10px] text-gray-500 truncate">{insights?.summary}</p>
+                </>
+              )}
+            </div>
+            {insightsLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-terracotta shrink-0" />
+            ) : (
+              <ChevronRight className={`h-4 w-4 text-gray-400 shrink-0 transition-transform ${insightsExpanded ? "rotate-90" : ""}`} />
+            )}
+          </button>
+
+          {insightsExpanded && insights && insights.insights.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {insights.insights.map((insight, idx) => {
+                const cfg = SEVERITY_CONFIG[insight.severity];
+                const Icon = cfg.icon;
+                return (
+                  <div
+                    key={idx}
+                    className={`rounded-lg border ${cfg.border} ${cfg.bg} p-2.5`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <Icon className={`h-4 w-4 ${cfg.color} shrink-0 mt-0.5`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className={`text-[9px] font-bold uppercase tracking-wider ${cfg.color}`}>
+                            {cfg.label}
+                          </span>
+                          <span className="text-[9px] text-gray-400">·</span>
+                          <span className="text-[10px] text-gray-500">{insight.category}</span>
+                        </div>
+                        <p className="text-xs text-gray-800 leading-snug">{insight.finding}</p>
+                        <p className="text-[11px] text-gray-600 mt-1.5 leading-snug">
+                          <span className="font-semibold">→</span> {insight.action}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {insights.basedOnAudits > 0 && (
+                <p className="text-[10px] text-gray-400 text-center pt-1">
+                  Based on {insights.basedOnAudits} audit{insights.basedOnAudits > 1 ? "s" : ""} in the last 30 days
+                </p>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* New Audit Form */}
       {showNew && (
