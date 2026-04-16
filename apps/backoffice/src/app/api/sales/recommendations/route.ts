@@ -298,7 +298,7 @@ ${roundSummary.map((r) => `${r.round} (${r.timeRange}): Per-outlet target Wkd RM
 DAILY TREND (Last 7 days):
 ${dailyTrend.map((d) => `${d.date}: RM${d.revenue} (${d.orders} orders)`).join("\n")}
 
-TOP PRODUCTS PER ROUND (CONTEXT ONLY — use to sharpen timing/channel/AOV insights, NOT to recommend menu changes):
+TOP PRODUCTS PER ROUND (use these real product names in your recommendations):
 ${ROUNDS.map((r) => {
   const top = Object.values(productStatsByRound[r.key])
     .sort((a, b) => b.revenue - a.revenue)
@@ -307,20 +307,21 @@ ${ROUNDS.map((r) => {
   return `${r.label}: ${top.map((p) => `${p.name} (${p.quantity}u, RM${Math.round(p.revenue)})`).join(" | ")}`;
 }).join("\n")}
 
-(You now have product data for context. HARD RULE: do NOT recommend menu changes, new items, combos, upsells, or discontinuations. Use product context only to explain WHY a round or channel or AOV is behaving a certain way — e.g. "Evening AOV drops because 70% of orders are single drinks" or "Dinner's top item runs out by 8PM — kitchen prep issue." Recommendations must still be in the scope of timing, staffing, channel, promotion window, or AOV lever.)
-
 Return a JSON array of 3-5 SHARP, SPECIFIC recommendations. Each object:
 - "type": "opportunity" | "warning" | "insight" | "action"
-- "title": concrete and number-driven, max 60 chars (e.g. "Dinner at 67% — 33% gap = ~RM400/day lost")
-- "description": 1 sentence. Quote the actual number from the data and prescribe ONE concrete action tied to timing, staffing, channel, promotion window, or AOV lever. NO menu/product/combo/upsell suggestions.
+- "title": concrete and number-driven, max 60 chars
+- "description": 1-2 sentences. MUST cite specific numbers AND specific product names from the data above when relevant. Prescribe ONE concrete action.
 - "impact": "high" | "medium" | "low"
-- "category": "round_performance" | "aov" | "channel" | "trend"
+- "category": "round_performance" | "product_mix" | "aov" | "channel" | "trend"
 
-Rules:
-- Skip menu/product/combo/upsell recommendations entirely — that's out of scope.
-- Every recommendation must cite a specific number from the data above.
-- Prefer fewer, sharper insights over a long list of broad ones.
-- If a round is above target, do not recommend anything for it unless it's a real insight (e.g. "Supper at 150% — consider extending hours on weekends").
+Specificity rules (this is what makes insights useful, not generic):
+- Bad (too broad): "Implement breakfast combos to boost morning sales"
+- Good (specific): "Breakfast top seller is Flat White (45u/day, RM720). Bundle with Butter Croissant (currently 18u/day at breakfast) as 'Morning Set RM18' — lifts AOV from RM16 to RM18"
+- Bad: "Promote dinner items"
+- Good: "Dinner at 67% of target. Your top dinner item Iced Latte sells 32u at dinner vs 60u at lunch — run a 'Latte Hour' 7-9PM promo on it"
+- Every recommendation must name a specific product OR cite a specific number. No abstractions.
+- Prefer fewer sharp recs over many broad ones.
+- If a round is above target, skip it unless there's a specific scaling insight.
 
 Return ONLY valid JSON array, no markdown or explanation.`;
 
