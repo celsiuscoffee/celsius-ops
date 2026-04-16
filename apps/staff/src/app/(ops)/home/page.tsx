@@ -48,6 +48,7 @@ export default async function HomePage() {
 
   const canSeeChecklists = hasModule(session.role, moduleAccess, "ops:checklists");
   const canSeeInventory = hasModule(session.role, moduleAccess, "inventory");
+  const canSeeAudit = hasModule(session.role, moduleAccess, "ops:audit");
 
   const dateObj = getToday();
   const outletId = session.outletId ?? undefined;
@@ -57,7 +58,7 @@ export default async function HomePage() {
   const todayStart = new Date(Date.UTC(myt.getUTCFullYear(), myt.getUTCMonth(), myt.getUTCDate()));
 
   // Fetch checklists + dashboard in parallel — only fetch what user has access to
-  const [checklists, lastCheck, sentOrders] = await Promise.all([
+  const [checklists, lastCheck, sentOrders, teamChecklists, recentAudits, myAuditsToday] = await Promise.all([
     canSeeChecklists
       ? prisma.checklist.findMany({
           where: {
@@ -87,6 +88,33 @@ export default async function HomePage() {
           select: { supplier: { select: { name: true } } },
         })
       : [],
+    // Team checklists summary for managers — total/done across all staff at this outlet
+    canSeeAudit && outletId
+      ? prisma.checklist.findMany({
+          where: { outletId, date: dateObj },
+          select: { status: true },
+        })
+      : [],
+    // Recent audits at this outlet (last 3 completed)
+    canSeeAudit && outletId
+      ? prisma.auditReport.findMany({
+          where: { outletId, status: "COMPLETED" },
+          orderBy: { completedAt: "desc" },
+          take: 3,
+          select: {
+            id: true, completedAt: true, overallScore: true,
+            template: { select: { name: true } },
+            auditor: { select: { name: true } },
+          },
+        })
+      : [],
+    // Has the manager started/completed an audit today?
+    canSeeAudit && outletId
+      ? prisma.auditReport.findMany({
+          where: { auditorId: session.id, date: dateObj },
+          select: { id: true, status: true },
+        })
+      : [],
   ]);
 
   const checklistData = checklists.map(({ items, ...cl }) => {
@@ -113,6 +141,23 @@ export default async function HomePage() {
       }
     : null;
 
+  // Manager view data (only populated if user has ops:audit)
+  const managerData = canSeeAudit
+    ? {
+        auditDoneToday: myAuditsToday.some((a) => a.status === "COMPLETED"),
+        auditInProgress: myAuditsToday.find((a) => a.status === "IN_PROGRESS")?.id ?? null,
+        teamChecklistsTotal: teamChecklists.length,
+        teamChecklistsDone: teamChecklists.filter((c) => c.status === "COMPLETED").length,
+        recentAudits: recentAudits.map((a) => ({
+          id: a.id,
+          template: a.template.name,
+          auditor: a.auditor.name,
+          score: a.overallScore ? Number(a.overallScore) : null,
+          completedAt: a.completedAt?.toISOString() ?? null,
+        })),
+      }
+    : null;
+
   return (
     <HomeClient
       user={{
@@ -125,6 +170,7 @@ export default async function HomePage() {
       initialChecklists={checklistData}
       initialDashboard={dashboardData}
       showQuickActions={canSeeInventory}
+      managerData={managerData}
     />
   );
 }

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import {
   ClipboardCheck,
+  ClipboardList,
   Package,
   ArrowRight,
   Trash2,
@@ -44,6 +45,20 @@ type DashboardData = {
   lastCheckTime: string | null;
   deliveriesExpected: number;
   deliverySuppliers: string[];
+};
+
+type ManagerData = {
+  auditDoneToday: boolean;
+  auditInProgress: string | null;
+  teamChecklistsTotal: number;
+  teamChecklistsDone: number;
+  recentAudits: {
+    id: string;
+    template: string;
+    auditor: string;
+    score: number | null;
+    completedAt: string | null;
+  }[];
 };
 
 // ─── Unified task type ──────────────────────────────
@@ -89,11 +104,13 @@ export function HomeClient({
   initialChecklists,
   initialDashboard,
   showQuickActions = true,
+  managerData = null,
 }: {
   user: UserProfile;
   initialChecklists: ChecklistSummary[];
   initialDashboard: DashboardData | null;
   showQuickActions?: boolean;
+  managerData?: ManagerData | null;
 }) {
   const [checklists, setChecklists] = useState(initialChecklists);
   const [dashboard, setDashboard] = useState(initialDashboard);
@@ -239,9 +256,45 @@ export function HomeClient({
       }
     }
 
+    // Manager: "Create New Audit" task
+    if (managerData) {
+      if (managerData.auditInProgress) {
+        list.push({
+          id: "mgr-audit-in-progress",
+          title: "Resume Audit",
+          subtitle: "You have an audit in progress",
+          href: `/audit/${managerData.auditInProgress}`,
+          priority: "due_soon",
+          timeLabel: "In progress",
+          icon: ClipboardList,
+        });
+      } else if (managerData.auditDoneToday) {
+        list.push({
+          id: "mgr-audit-today",
+          title: "Today's Audit",
+          subtitle: "Spot-check completed",
+          href: "/audit",
+          priority: "done",
+          timeLabel: "Done",
+          icon: ClipboardList,
+        });
+      } else {
+        const isAfternoon = hour >= 14;
+        list.push({
+          id: "mgr-new-audit",
+          title: "Create New Audit",
+          subtitle: "Daily spot-check for your team",
+          href: "/audit",
+          priority: isAfternoon ? "due_soon" : "on_track",
+          timeLabel: isAfternoon ? "Do before end of day" : "Today's task",
+          icon: ClipboardList,
+        });
+      }
+    }
+
     list.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
     return list;
-  }, [checklists, dashboard, now, hour, stockSchedule]);
+  }, [checklists, dashboard, now, hour, stockSchedule, managerData]);
 
   const pendingTasks = tasks.filter((t) => t.priority !== "done");
   const doneTasks = tasks.filter((t) => t.priority === "done");
@@ -391,6 +444,73 @@ export function HomeClient({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Manager: Team compliance summary */}
+          {managerData && managerData.teamChecklistsTotal > 0 && (
+            <div>
+              <h2 className="mb-2 text-sm font-semibold text-gray-900">Team Today</h2>
+              <Link href="/audit">
+                <Card className="px-4 py-3 transition-all active:bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900">Staff Checklists</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        {managerData.teamChecklistsDone} of {managerData.teamChecklistsTotal} completed
+                      </p>
+                    </div>
+                    <div className="text-right flex items-center gap-2">
+                      <span className="text-lg font-bold text-gray-700">
+                        {Math.round((managerData.teamChecklistsDone / managerData.teamChecklistsTotal) * 100)}%
+                      </span>
+                      <ArrowRight className="h-4 w-4 text-gray-300" />
+                    </div>
+                  </div>
+                  <div className="mt-2 rounded-full bg-gray-100 h-1.5 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-terracotta transition-all"
+                      style={{ width: `${(managerData.teamChecklistsDone / managerData.teamChecklistsTotal) * 100}%` }}
+                    />
+                  </div>
+                </Card>
+              </Link>
+            </div>
+          )}
+
+          {/* Manager: Recent audits */}
+          {managerData && managerData.recentAudits.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold text-gray-900">Recent Audits</h2>
+                <Link href="/audit/history" className="text-[11px] text-terracotta">View all →</Link>
+              </div>
+              <div className="space-y-1.5">
+                {managerData.recentAudits.map((audit) => (
+                  <Link key={audit.id} href={`/audit/${audit.id}`}>
+                    <Card className="px-3 py-2 transition-all active:bg-gray-50">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-100">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{audit.template}</p>
+                          <p className="text-[10px] text-gray-400">
+                            {audit.auditor} · {formatTimeAgo(audit.completedAt)}
+                          </p>
+                        </div>
+                        {audit.score !== null && (
+                          <span className={`text-xs font-bold shrink-0 ${
+                            audit.score >= 80 ? "text-green-600" : audit.score >= 60 ? "text-yellow-600" : "text-red-600"
+                          }`}>
+                            {Math.round(audit.score)}%
+                          </span>
+                        )}
+                      </div>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
             </div>
           )}
 
