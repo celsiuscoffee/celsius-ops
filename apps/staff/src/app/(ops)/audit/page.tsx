@@ -20,8 +20,11 @@ type Template = {
 };
 type AuditSummary = {
   id: string; date: string; status: string; overallScore: number | null;
+  completedAt: string | null;
   template: { id: string; name: string; roleType: string };
   outlet: { id: string; name: string; code: string };
+  auditor: { id: string; name: string };
+  isMine: boolean;
   totalItems: number; completedItems: number; progress: number;
 };
 type Insight = {
@@ -243,10 +246,15 @@ export default function AuditPage() {
                       <Clock className="h-4 w-4 text-blue-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{audit.template.name}</p>
-                      <p className="text-[10px] text-gray-400 flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-medium text-gray-900 truncate">{audit.template.name}</p>
+                        {audit.isMine && (
+                          <Badge className="text-[9px] bg-terracotta/10 text-terracotta border-none shrink-0">You</Badge>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
                         <Building2 className="h-2.5 w-2.5" />
-                        {audit.outlet.name} · {audit.date} · {audit.completedItems}/{audit.totalItems} items
+                        <span className="truncate">{audit.auditor.name} · {audit.date} · {audit.completedItems}/{audit.totalItems}</span>
                       </p>
                     </div>
                     <div className="shrink-0 text-right flex items-center gap-2">
@@ -277,10 +285,15 @@ export default function AuditPage() {
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{audit.template.name}</p>
-                      <p className="text-[10px] text-gray-400 flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-medium text-gray-900 truncate">{audit.template.name}</p>
+                        {audit.isMine && (
+                          <Badge className="text-[9px] bg-terracotta/10 text-terracotta border-none shrink-0">You</Badge>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
                         <Building2 className="h-2.5 w-2.5" />
-                        {audit.outlet.name} · {audit.date}
+                        <span className="truncate">{audit.auditor.name} · {audit.date}</span>
                       </p>
                     </div>
                     <div className="shrink-0 text-right flex items-center gap-2">

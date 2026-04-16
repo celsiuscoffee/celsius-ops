@@ -2,18 +2,65 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
-// GET /api/audits — list audit reports for current user
+// Check if user has access to a specific module
+// moduleAccess format: { ops: ["audit", "checklists"], inventory: true }
+function hasModule(
+  role: string,
+  moduleAccess: Record<string, unknown> | null | undefined,
+  key: string,
+): boolean {
+  if (role === "OWNER" || role === "ADMIN") return true;
+  if (!moduleAccess) return false;
+  if (key.includes(":")) {
+    const [app, mod] = key.split(":");
+    const appAccess = moduleAccess[app];
+    if (appAccess === true) return true;
+    if (Array.isArray(appAccess)) return appAccess.includes(mod);
+    return false;
+  }
+  const appAccess = moduleAccess[key];
+  if (appAccess === true) return true;
+  if (Array.isArray(appAccess) && appAccess.length > 0) return true;
+  return false;
+}
+
+// GET /api/audits — list audit reports
+// Managers (with ops:audit) see ALL audits at their outlet(s).
+// Staff without audit access see only their own.
 export async function GET(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
-  const outletId = searchParams.get("outletId");
+  const outletIdFilter = searchParams.get("outletId");
 
-  const where: Record<string, unknown> = { auditorId: session.id };
+  // Fetch user's moduleAccess to determine if they're a manager
+  const userRecord = await prisma.user.findUnique({
+    where: { id: session.id },
+    select: { moduleAccess: true, outletId: true, outletIds: true },
+  });
+  const moduleAccess = (userRecord?.moduleAccess ?? null) as Record<string, unknown> | null;
+  const isManager = hasModule(session.role, moduleAccess, "ops:audit");
+
+  const where: Record<string, unknown> = {};
+
+  if (isManager) {
+    // Managers see all audits at the outlets they have access to
+    const myOutlets = [
+      ...(userRecord?.outletId ? [userRecord.outletId] : []),
+      ...(userRecord?.outletIds ?? []),
+    ];
+    if (session.role !== "OWNER" && session.role !== "ADMIN" && myOutlets.length > 0) {
+      where.outletId = { in: myOutlets };
+    }
+  } else {
+    // Non-managers see only their own audits
+    where.auditorId = session.id;
+  }
+
   if (status && status !== "all") where.status = status;
-  if (outletId) where.outletId = outletId;
+  if (outletIdFilter) where.outletId = outletIdFilter;
 
   const reports = await prisma.auditReport.findMany({
     where,
@@ -26,6 +73,7 @@ export async function GET(req: Request) {
       completedAt: true,
       template: { select: { id: true, name: true, roleType: true } },
       outlet: { select: { id: true, name: true, code: true } },
+      auditor: { select: { id: true, name: true } },
       items: { select: { id: true, rating: true, ratingType: true } },
     },
     orderBy: { date: "desc" },
@@ -43,6 +91,8 @@ export async function GET(req: Request) {
       completedAt: r.completedAt?.toISOString() ?? null,
       template: r.template,
       outlet: r.outlet,
+      auditor: r.auditor,
+      isMine: r.auditor.id === session.id,
       totalItems,
       completedItems,
       progress: totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0,
