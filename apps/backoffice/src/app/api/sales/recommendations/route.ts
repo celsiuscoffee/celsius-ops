@@ -219,18 +219,24 @@ export async function GET(request: NextRequest) {
     const allDates7 = [...new Set(Object.values(roundStats7).flatMap(s => [...s.days]))].sort();
     const allDates30 = [...new Set(Object.values(roundStats30).flatMap(s => [...s.days]))].sort();
 
+    // Targets are per-outlet, but revenue here is summed across all outlets
+    // pulled into this analysis. Scale the target by outlet count so the
+    // comparison is apples-to-apples.
+    const outletCount = Math.max(outlets.length, 1);
+
     const roundSummary = ROUNDS.map((r) => {
       const s7 = roundStats7[r.key];
       const s30 = roundStats30[r.key];
       const days7 = Math.max(s7.days.size, 1);
       const days30 = Math.max(s30.days.size, 1);
-      const avgTarget7 = getAvgTarget(r.key, allDates7);
-      const avgTarget30 = getAvgTarget(r.key, allDates30);
+      const avgTarget7 = getAvgTarget(r.key, allDates7) * outletCount;
+      const avgTarget30 = getAvgTarget(r.key, allDates30) * outletCount;
       return {
         round: r.label,
         timeRange: `${r.startH}:00-${r.endH}:00`,
         targetWeekday: ROUND_TARGETS[r.key].weekday,
         targetWeekend: ROUND_TARGETS[r.key].weekend,
+        outletsIncluded: outletCount,
         last7days: {
           avgDailyRevenue: Math.round(s7.revenue / days7),
           avgDailyOrders: Math.round((s7.orders / days7) * 10) / 10,
@@ -301,40 +307,27 @@ CHANNEL BREAKDOWN (Last 30 days):
 - Takeaway: RM ${Math.round(channelStats.takeaway.revenue)} (${channelStats.takeaway.orders} orders)
 - Delivery: RM ${Math.round(channelStats.delivery.revenue)} (${channelStats.delivery.orders} orders)
 
-SALES BY ROUND (Daily target vs actual):
-${roundSummary.map((r) => `${r.round} (${r.timeRange}): Target Weekday RM${r.targetWeekday} / Weekend RM${r.targetWeekend} | Last 7d avg: RM${r.last7days.avgDailyRevenue}/day (${r.last7days.pctOfTarget}%) | Last 30d avg: RM${r.last30days.avgDailyRevenue}/day (${r.last30days.pctOfTarget}%)`).join("\n")}
+SALES BY ROUND (Daily target vs actual, AGGREGATED across ${outletCount} outlet${outletCount !== 1 ? "s" : ""}):
+Note: pctOfTarget below has ALREADY been scaled for outlet count — use these percentages directly.
+${roundSummary.map((r) => `${r.round} (${r.timeRange}): Per-outlet target Wkd RM${r.targetWeekday} / Wknd RM${r.targetWeekend} | Last 7d avg across all outlets: RM${r.last7days.avgDailyRevenue}/day (${r.last7days.pctOfTarget}% of combined target) | Last 30d avg: RM${r.last30days.avgDailyRevenue}/day (${r.last30days.pctOfTarget}%)`).join("\n")}
 
 DAILY TREND (Last 7 days):
 ${dailyTrend.map((d) => `${d.date}: RM${d.revenue} (${d.orders} orders)`).join("\n")}
 
-TOP 20 PRODUCTS BY REVENUE:
-${topProducts.map((p, i) => `${i + 1}. ${p.name}: RM${p.revenue} (${p.quantity} units, avg RM${p.avgPrice})`).join("\n")}
+(Menu/product analysis is out-of-scope for this coach. Do not recommend specific items, combos, upsells, or menu changes. Focus only on round timing, channels, AOV, and traffic patterns.)
 
-LOWEST PERFORMING PRODUCTS (min 5 orders):
-${bottomProducts.map((p) => `- ${p.name}: RM${p.revenue} (${p.quantity} units)`).join("\n")}
+Return a JSON array of 3-5 SHARP, SPECIFIC recommendations. Each object:
+- "type": "opportunity" | "warning" | "insight" | "action"
+- "title": concrete and number-driven, max 60 chars (e.g. "Dinner at 67% — 33% gap = ~RM400/day lost")
+- "description": 1 sentence. Quote the actual number from the data and prescribe ONE concrete action tied to timing, staffing, channel, promotion window, or AOV lever. NO menu/product/combo/upsell suggestions.
+- "impact": "high" | "medium" | "low"
+- "category": "round_performance" | "aov" | "channel" | "trend"
 
-TOP 5 PRODUCTS PER ROUND (to guide round-specific promotions):
-${ROUNDS.map((r) => {
-  const top = Object.values(productStatsByRound[r.key])
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
-  if (top.length === 0) return `${r.label}: (no sales)`;
-  return `${r.label}: ${top.map((p) => `${p.name} (RM${Math.round(p.revenue)}, ${p.quantity}u)`).join(", ")}`;
-}).join("\n")}
-
-Please provide your analysis as a JSON array of recommendation objects. Each recommendation should have:
-- "type": one of "opportunity", "warning", "insight", "action"
-- "title": short title (max 60 chars)
-- "description": 1-2 sentence explanation
-- "impact": "high", "medium", or "low"
-- "category": one of "round_performance", "product_mix", "aov", "channel", "trend"
-
-Provide 5-8 recommendations focused on:
-1. Which rounds are underperforming and what to do about it
-2. Product opportunities (upsell, combo, promote)
-3. AOV improvement tactics
-4. Channel optimization (more takeaway? delivery promotions?)
-5. Trend alerts (declining or growing)
+Rules:
+- Skip menu/product/combo/upsell recommendations entirely — that's out of scope.
+- Every recommendation must cite a specific number from the data above.
+- Prefer fewer, sharper insights over a long list of broad ones.
+- If a round is above target, do not recommend anything for it unless it's a real insight (e.g. "Supper at 150% — consider extending hours on weekends").
 
 Return ONLY valid JSON array, no markdown or explanation.`;
 
