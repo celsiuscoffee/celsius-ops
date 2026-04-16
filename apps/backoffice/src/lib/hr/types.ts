@@ -3,6 +3,8 @@
 export type EmployeeProfile = {
   id: string;
   user_id: string;
+  briohr_id: string | null;
+  briohr_imported_at: string | null;
   ic_number: string | null;
   date_of_birth: string | null;
   gender: string | null;

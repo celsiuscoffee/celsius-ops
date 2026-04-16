@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, CalendarDays, CalendarOff, Receipt, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Clock, CalendarDays, CalendarOff, Receipt, ChevronRight, CheckCircle2, CalendarX } from "lucide-react";
 
 type HRStatus = {
   activeLog: {
@@ -50,6 +50,14 @@ export default function HRHomePage() {
       subtitle: "Request & view balances",
       color: "text-purple-600",
       bgColor: "bg-purple-50",
+    },
+    {
+      href: "/hr/availability",
+      icon: CalendarX,
+      label: "Availability",
+      subtitle: "Mark days you can't work",
+      color: "text-red-600",
+      bgColor: "bg-red-50",
     },
     {
       href: "/hr/payslips",

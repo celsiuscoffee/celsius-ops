@@ -2,7 +2,7 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { UserCog, ChevronRight, CheckCircle2, AlertCircle, Search } from "lucide-react";
+import { UserCog, ChevronRight, CheckCircle2, AlertCircle, Search, Upload } from "lucide-react";
 import Link from "next/link";
 import type { EmployeeProfile } from "@/lib/hr/types";
 
@@ -30,11 +30,20 @@ export default function EmployeesPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-bold">Employees</h1>
-        <p className="text-sm text-muted-foreground">
-          {configured}/{total} profiles configured
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Employees</h1>
+          <p className="text-sm text-muted-foreground">
+            {configured}/{total} profiles configured
+          </p>
+        </div>
+        <Link
+          href="/hr/import"
+          className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark"
+        >
+          <Upload className="h-4 w-4" />
+          Import from BrioHR
+        </Link>
       </div>
 
       <div className="relative">
@@ -68,6 +77,11 @@ export default function EmployeesPage() {
                   <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
                     {emp.role}
                   </span>
+                  {emp.hrProfile?.briohr_id && (
+                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-mono font-medium text-blue-700">
+                      {emp.hrProfile.briohr_id}
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {emp.outlet?.name || "No outlet"}{" "}
