@@ -78,5 +78,6 @@ export async function POST(req: NextRequest) {
     id: matchedUser.id,
     name: matchedUser.name,
     role: matchedUser.role,
+    moduleAccess: matchedUser.moduleAccess ?? {},
   });
 }

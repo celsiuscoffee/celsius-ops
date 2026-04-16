@@ -66,9 +66,21 @@ export async function POST(req: NextRequest) {
     outletName: matchedUser.outlet?.name ?? null,
   });
 
+  // Flatten moduleAccess for backoffice format: { ops: ["audit"] } → ["ops:audit"]
+  const rawMa = (matchedUser.moduleAccess ?? {}) as Record<string, unknown>;
+  const flatModuleAccess: string[] = [];
+  for (const [app, modules] of Object.entries(rawMa)) {
+    if (modules === true) {
+      flatModuleAccess.push(app);
+    } else if (Array.isArray(modules)) {
+      for (const mod of modules) flatModuleAccess.push(`${app}:${mod}`);
+    }
+  }
+
   return NextResponse.json({
     id: matchedUser.id,
     name: matchedUser.name,
     role: matchedUser.role,
+    moduleAccess: flatModuleAccess,
   });
 }

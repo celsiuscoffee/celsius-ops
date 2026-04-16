@@ -2,40 +2,69 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, ClipboardCheck, Package, User, ClipboardList } from "lucide-react";
+import { Home, ClipboardCheck, Package, User, ClipboardList, Clock } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
-type Tab = { href: string; label: string; icon: typeof Home };
-type UserProfile = { id: string; name: string; role: string; moduleAccess?: Record<string, boolean> };
+type Tab = { href: string; label: string; icon: typeof Home; moduleKey?: string };
+type UserProfile = { id: string; name: string; role: string; moduleAccess?: Record<string, unknown> };
 
-const baseTabs: Tab[] = [
-  { href: "/home", label: "Home", icon: Home },
-  { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
-  { href: "/inventory", label: "Inventory", icon: Package },
+/**
+ * All possible tabs with their module access keys.
+ * moduleKey maps to the moduleAccess JSON structure from the User table.
+ * Format: "app" checks for any access in that app section,
+ *          "app:module" checks for a specific module within an app.
+ * Tabs without moduleKey (Profile) are always visible.
+ */
+const allTabs: Tab[] = [
+  { href: "/home", label: "Home", icon: Home, moduleKey: "ops" },
+  { href: "/checklists", label: "Checklists", icon: ClipboardCheck, moduleKey: "ops:checklists" },
+  { href: "/audit", label: "Audit", icon: ClipboardList, moduleKey: "ops:audit" },
+  { href: "/hr", label: "HR", icon: Clock, moduleKey: "hr" },
+  { href: "/inventory", label: "Inventory", icon: Package, moduleKey: "inventory" },
   { href: "/profile", label: "Profile", icon: User },
 ];
 
-const auditTab: Tab = { href: "/audit", label: "Audit", icon: ClipboardList };
+/**
+ * Check if user has access to a specific module.
+ * OWNER and ADMIN always have full access.
+ * moduleAccess format from DB: { ops: ["audit", "checklists", "sops"], inventory: true, hr: true }
+ */
+function hasAccess(
+  role: string | undefined,
+  moduleAccess: Record<string, unknown> | undefined,
+  moduleKey: string | undefined,
+): boolean {
+  // No moduleKey = always visible (e.g. Profile)
+  if (!moduleKey) return true;
+
+  // OWNER and ADMIN bypass all checks
+  if (role === "OWNER" || role === "ADMIN") return true;
+
+  if (!moduleAccess) return false;
+
+  // "app:module" format — check if the app section contains the specific module
+  if (moduleKey.includes(":")) {
+    const [app, mod] = moduleKey.split(":");
+    const appAccess = moduleAccess[app];
+    if (appAccess === true) return true;
+    if (Array.isArray(appAccess)) return appAccess.includes(mod);
+    return false;
+  }
+
+  // "app" format — check if user has ANY access to this app section
+  const appAccess = moduleAccess[moduleKey];
+  if (appAccess === true) return true;
+  if (Array.isArray(appAccess) && appAccess.length > 0) return true;
+  return false;
+}
 
 export function BottomNav() {
   const pathname = usePathname();
   const { data: me } = useFetch<UserProfile>("/api/auth/me");
 
-  // Show audit tab if user has audit access in moduleAccess or is OWNER/ADMIN
-  // moduleAccess format: { ops: ["audit", "sops", ...] } or { audit: true }
-  const ma = me?.moduleAccess as Record<string, unknown> | undefined;
-  const hasAuditAccess =
-    me?.role === "OWNER" ||
-    me?.role === "ADMIN" ||
-    (ma && (
-      ma.audit === true ||
-      Array.isArray(ma.audit) ||
-      (Array.isArray(ma.ops) && (ma.ops as string[]).includes("audit"))
-    ));
-
-  const tabs = hasAuditAccess
-    ? [baseTabs[0], baseTabs[1], auditTab, baseTabs[2], baseTabs[3]]
-    : baseTabs;
+  const tabs = allTabs.filter((tab) =>
+    hasAccess(me?.role, me?.moduleAccess, tab.moduleKey),
+  );
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">

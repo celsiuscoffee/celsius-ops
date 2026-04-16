@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -54,6 +54,11 @@ import {
   Brain,
   MessageCircle,
   Coins,
+  Clock,
+  CalendarDays,
+  CalendarOff,
+  Banknote,
+  Bot,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PullToRefresh } from "@/components/pull-to-refresh";
@@ -94,19 +99,24 @@ type NavSubgroup = {
 type NavSection = {
   label: string;
   icon: React.ReactNode;
+  railIcon: React.ReactNode; // larger icon for the rail
   moduleKey?: string; // top-level module check
   items?: NavItem[];
   subgroups?: NavSubgroup[];
+  dividerBefore?: boolean; // visual divider in rail
 };
 
 // ─── Sidebar Navigation Config ──────────────────────────────────────────
 
 const ICON_SIZE = "h-4 w-4";
+const RAIL_ICON_SIZE = "h-5 w-5";
 
 const NAV_SECTIONS: NavSection[] = [
   {
     label: "Pickup App",
     icon: <ShoppingBag className={ICON_SIZE} />,
+    railIcon: <ShoppingBag className={RAIL_ICON_SIZE} />,
+    dividerBefore: true,
     items: [
       { label: "Orders", href: "/pickup/orders", icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
       { label: "Menu", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
@@ -117,6 +127,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Inventory",
     icon: <Boxes className={ICON_SIZE} />,
+    railIcon: <Boxes className={RAIL_ICON_SIZE} />,
     subgroups: [
       {
         label: "Master Data",
@@ -157,6 +168,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Rewards",
     icon: <Gift className={ICON_SIZE} />,
+    railIcon: <Gift className={RAIL_ICON_SIZE} />,
     items: [
       { label: "Dashboard", href: "/loyalty/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "loyalty:dashboard" },
       { label: "Members", href: "/loyalty/members", icon: <Heart className={ICON_SIZE} />, moduleKey: "loyalty:members" },
@@ -171,6 +183,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Sales",
     icon: <BarChart3 className={ICON_SIZE} />,
+    railIcon: <BarChart3 className={RAIL_ICON_SIZE} />,
     items: [
       { label: "Dashboard", href: "/sales/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "sales:dashboard" },
       { label: "Compare", href: "/sales/compare", icon: <Scale className={ICON_SIZE} />, moduleKey: "sales:dashboard" },
@@ -179,6 +192,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Reviews",
     icon: <MessageCircle className={ICON_SIZE} />,
+    railIcon: <MessageCircle className={RAIL_ICON_SIZE} />,
     items: [
       { label: "All Reviews", href: "/reviews", icon: <Star className={ICON_SIZE} />, moduleKey: "reviews:list" },
       { label: "Settings", href: "/reviews/settings", icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "reviews:settings" },
@@ -187,6 +201,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Ops",
     icon: <ClipboardCheckIcon className={ICON_SIZE} />,
+    railIcon: <ClipboardCheckIcon className={RAIL_ICON_SIZE} />,
     items: [
       { label: "Performance", href: "/ops/performance", icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "ops:performance" },
       { label: "Checklist Audit", href: "/ops/audit", icon: <FileText className={ICON_SIZE} />, moduleKey: "ops:audit" },
@@ -196,8 +211,24 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "HR",
+    icon: <Bot className={ICON_SIZE} />,
+    railIcon: <Bot className={RAIL_ICON_SIZE} />,
+    dividerBefore: true,
+    items: [
+      { label: "Dashboard", href: "/hr", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "hr:dashboard" },
+      { label: "Attendance", href: "/hr/attendance", icon: <Clock className={ICON_SIZE} />, moduleKey: "hr:attendance" },
+      { label: "Schedules", href: "/hr/schedules", icon: <CalendarDays className={ICON_SIZE} />, moduleKey: "hr:schedules" },
+      { label: "Leave", href: "/hr/leave", icon: <CalendarOff className={ICON_SIZE} />, moduleKey: "hr:leave" },
+      { label: "Payroll", href: "/hr/payroll", icon: <Banknote className={ICON_SIZE} />, moduleKey: "hr:payroll" },
+      { label: "Employees", href: "/hr/employees", icon: <UserCog className={ICON_SIZE} />, moduleKey: "hr:employees" },
+    ],
+  },
+  {
     label: "Settings",
     icon: <SlidersHorizontal className={ICON_SIZE} />,
+    railIcon: <SlidersHorizontal className={RAIL_ICON_SIZE} />,
+    dividerBefore: true,
     items: [
       { label: "Outlets", href: "/settings/outlets", icon: <Building2 className={ICON_SIZE} />, moduleKey: "settings:outlets" },
       { label: "Staff & Access", href: "/settings/staff", icon: <UserCog className={ICON_SIZE} />, moduleKey: "settings:staff" },
@@ -213,83 +244,31 @@ const NAV_SECTIONS: NavSection[] = [
 
 function canAccess(user: UserProfile | undefined, moduleKey?: string): boolean {
   if (!user) return false;
-  // Admins and OWNER bypass all checks
   if (user.role === "ADMIN" || user.role === "OWNER") return true;
   if (!moduleKey) return true;
   if (!user.moduleAccess) return false;
   return user.moduleAccess.includes(moduleKey);
 }
 
-// ─── Accordion Section ──────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────────
 
-function SidebarSection({
-  section,
-  user,
-  expanded,
-  onToggle,
-  pathname,
-  onNavigate,
-}: {
-  section: NavSection;
-  user: UserProfile | undefined;
-  expanded: boolean;
-  onToggle: () => void;
-  pathname: string;
-  onNavigate?: () => void;
-}) {
-  // Collect all hrefs for this section to determine if it has any visible items
-  const allItems = section.items
-    ? section.items.filter((item) => canAccess(user, item.moduleKey))
-    : section.subgroups
-      ? section.subgroups.flatMap((sg) => sg.items.filter((item) => canAccess(user, item.moduleKey)))
-      : [];
-
-  if (allItems.length === 0) return null;
-
-  const isActive = allItems.some((item) => pathname === item.href || pathname.startsWith(item.href + "/"));
-
-  return (
-    <div className="mb-1">
-      <button
-        onClick={onToggle}
-        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-          isActive ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white/80"
-        }`}
-      >
-        {section.icon}
-        <span className="flex-1 text-left">{section.label}</span>
-        {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-      </button>
-
-      {expanded && (
-        <div className="mt-1 ml-3 border-l border-white/10 pl-3">
-          {section.items && (() => {
-            const visible = section.items.filter((item) => canAccess(user, item.moduleKey));
-            const hrefs = visible.map((i) => i.href);
-            return visible.map((item) => (
-              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} siblingHrefs={hrefs} />
-            ));
-          })()}
-          {section.subgroups && section.subgroups.map((sg) => {
-            const visibleItems = sg.items.filter((item) => canAccess(user, item.moduleKey));
-            if (visibleItems.length === 0) return null;
-            const hrefs = visibleItems.map((i) => i.href);
-            return (
-              <div key={sg.label} className="mb-2">
-                <p className="mb-1 mt-3 px-3 text-[10px] font-semibold uppercase tracking-wider text-white/30">
-                  {sg.label}
-                </p>
-                {visibleItems.map((item) => (
-                  <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} siblingHrefs={hrefs} />
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+function getSectionHrefs(section: NavSection): string[] {
+  if (section.items) return section.items.map((i) => i.href);
+  if (section.subgroups) return section.subgroups.flatMap((sg) => sg.items.map((i) => i.href));
+  return [];
 }
+
+function getVisibleItems(section: NavSection, user: UserProfile | undefined): NavItem[] {
+  if (section.items) return section.items.filter((item) => canAccess(user, item.moduleKey));
+  if (section.subgroups) return section.subgroups.flatMap((sg) => sg.items.filter((item) => canAccess(user, item.moduleKey)));
+  return [];
+}
+
+function pathMatchesSection(pathname: string, section: NavSection): boolean {
+  return getSectionHrefs(section).some((href) => pathname === href || pathname.startsWith(href + "/"));
+}
+
+// ─── NavLink ────────────────────────────────────────────────────────────
 
 function NavLink({
   item,
@@ -302,7 +281,6 @@ function NavLink({
   onNavigate?: () => void;
   siblingHrefs?: string[];
 }) {
-  // Exact match always wins. For prefix match, only activate if no sibling has a more specific match.
   const exact = pathname === item.href;
   const prefix = !exact && pathname.startsWith(item.href + "/");
   const siblingHasBetterMatch = prefix && siblingHrefs?.some(
@@ -313,15 +291,187 @@ function NavLink({
     <Link
       href={item.href}
       onClick={onNavigate}
-      className={`flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] transition-colors ${
+      className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] transition-colors ${
         isActive
-          ? "bg-terracotta/20 text-terracotta-light font-medium"
-          : "text-white/50 hover:bg-white/5 hover:text-white/70"
+          ? "bg-terracotta/10 text-terracotta font-medium"
+          : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700"
       }`}
     >
       {item.icon}
       {item.label}
     </Link>
+  );
+}
+
+// ─── Icon Rail ──────────────────────────────────────────────────────────
+
+function IconRail({
+  user,
+  activeModule,
+  onModuleClick,
+  pathname,
+  onLogout,
+}: {
+  user: UserProfile;
+  activeModule: string | null;
+  onModuleClick: (label: string) => void;
+  pathname: string;
+  onLogout: () => void;
+}) {
+  const isDashboard = pathname === "/dashboard" || pathname === "/";
+
+  return (
+    <div className="flex h-full w-16 flex-col items-center bg-brand-dark py-3 gap-1">
+      {/* Logo */}
+      <div className="mb-3">
+        <Image
+          src="/images/celsius-logo-sm.jpg"
+          alt="Celsius"
+          width={32}
+          height={32}
+          className="rounded-lg"
+        />
+      </div>
+
+      {/* Dashboard */}
+      <Link
+        href="/dashboard"
+        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+          isDashboard ? "bg-terracotta text-white" : "text-white/50 hover:bg-white/10 hover:text-white/80"
+        }`}
+        title="Dashboard"
+      >
+        <LayoutDashboard className={RAIL_ICON_SIZE} />
+      </Link>
+
+      {/* Module icons */}
+      <div className="mt-1 flex flex-1 flex-col items-center gap-1 overflow-y-auto scrollbar-thin">
+        {NAV_SECTIONS.map((section) => {
+          const visible = getVisibleItems(section, user);
+          if (visible.length === 0) return null;
+
+          const isActive = activeModule === section.label;
+          const hasActiveRoute = pathMatchesSection(pathname, section);
+
+          return (
+            <div key={section.label} className="flex flex-col items-center">
+              {section.dividerBefore && (
+                <div className="my-1.5 h-px w-6 bg-white/10" />
+              )}
+              <button
+                onClick={() => onModuleClick(section.label)}
+                className={`group relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+                  isActive
+                    ? "bg-terracotta text-white"
+                    : hasActiveRoute
+                      ? "bg-white/15 text-white"
+                      : "text-white/40 hover:bg-white/10 hover:text-white/70"
+                }`}
+                title={section.label}
+              >
+                {section.railIcon}
+                {/* Tooltip */}
+                <span className="pointer-events-none absolute left-full ml-2 hidden whitespace-nowrap rounded-md bg-neutral-900 px-2.5 py-1 text-xs text-white shadow-lg group-hover:block z-50">
+                  {section.label}
+                </span>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* User avatar at bottom */}
+      <div className="mt-2 flex flex-col items-center gap-2">
+        <button
+          onClick={onLogout}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-white/30 hover:bg-white/10 hover:text-white/60 transition-colors"
+          title="Logout"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
+        <Avatar size="sm">
+          <AvatarFallback className="bg-terracotta/30 text-terracotta-light text-xs">
+            {user.name?.slice(0, 2).toUpperCase() || "U"}
+          </AvatarFallback>
+        </Avatar>
+      </div>
+    </div>
+  );
+}
+
+// ─── Sub-nav Panel ──────────────────────────────────────────────────────
+
+function SubNavPanel({
+  section,
+  user,
+  pathname,
+  onNavigate,
+}: {
+  section: NavSection;
+  user: UserProfile | undefined;
+  pathname: string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <div className="flex h-full w-56 flex-col border-r border-neutral-200 bg-white">
+      {/* Module header */}
+      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-neutral-100">
+        <span className="text-terracotta">{section.icon}</span>
+        <h2 className="text-sm font-semibold text-neutral-900">{section.label}</h2>
+      </div>
+
+      {/* Nav items */}
+      <div className="flex-1 overflow-y-auto px-3 py-3 scrollbar-thin">
+        {section.items && (() => {
+          const visible = section.items.filter((item) => canAccess(user, item.moduleKey));
+          const hrefs = visible.map((i) => i.href);
+          return (
+            <div className="space-y-0.5">
+              {visible.map((item) => (
+                <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} siblingHrefs={hrefs} />
+              ))}
+            </div>
+          );
+        })()}
+        {section.subgroups && section.subgroups.map((sg) => {
+          const visibleItems = sg.items.filter((item) => canAccess(user, item.moduleKey));
+          if (visibleItems.length === 0) return null;
+          const hrefs = visibleItems.map((i) => i.href);
+          return (
+            <div key={sg.label} className="mb-3">
+              <p className="mb-1.5 mt-4 px-3 text-[10px] font-semibold uppercase tracking-wider text-neutral-400 first:mt-0">
+                {sg.label}
+              </p>
+              <div className="space-y-0.5">
+                {visibleItems.map((item) => (
+                  <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} siblingHrefs={hrefs} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* User footer with password change */}
+      {user && (
+        <div className="border-t border-neutral-100 p-3">
+          <div className="flex items-center gap-2.5">
+            <Avatar size="sm">
+              <AvatarFallback className="bg-terracotta/10 text-terracotta text-xs">
+                {user.name?.slice(0, 2).toUpperCase() || "U"}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="truncate text-xs font-medium text-neutral-900">{user.name}</p>
+              <p className="truncate text-[10px] text-neutral-400">{user.role}</p>
+            </div>
+          </div>
+          <div className="mt-2">
+            <PasswordChangeDialog hasPassword={user.hasPassword} />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -378,7 +528,7 @@ function PasswordChangeDialog({ hasPassword }: { hasPassword?: boolean }) {
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
       <DialogTrigger
-        className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[11px] text-white/50 hover:bg-white/5 hover:text-white/70 transition-colors cursor-pointer"
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[11px] text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 transition-colors cursor-pointer"
       >
         <Lock className="h-3 w-3" />
         {hasPassword ? "Change Password" : "Set Password"}
@@ -448,34 +598,46 @@ function PasswordChangeDialog({ hasPassword }: { hasPassword?: boolean }) {
   );
 }
 
-// ─── Sidebar Content ────────────────────────────────────────────────────
+// ─── Mobile Sidebar (full list, for small screens) ─────────────────────
 
-function SidebarContent({
+function MobileSidebar({
   user,
-  expandedSections,
-  toggleSection,
   pathname,
   onNavigate,
   onLogout,
 }: {
-  user: UserProfile | undefined;
-  expandedSections: Set<string>;
-  toggleSection: (label: string) => void;
+  user: UserProfile;
   pathname: string;
-  onNavigate?: () => void;
+  onNavigate: () => void;
   onLogout: () => void;
 }) {
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    for (const section of NAV_SECTIONS) {
+      if (pathMatchesSection(pathname, section)) {
+        initial.add(section.label);
+        break;
+      }
+    }
+    return initial;
+  });
+
+  const toggleSection = (label: string) => {
+    setExpandedSections((prev) => {
+      if (prev.has(label)) {
+        const next = new Set(prev);
+        next.delete(label);
+        return next;
+      }
+      return new Set([label]);
+    });
+  };
+
   return (
     <div className="flex h-full flex-col bg-brand-dark">
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-white/10 px-4 py-4">
-        <Image
-          src="/images/celsius-logo-sm.jpg"
-          alt="Celsius"
-          width={32}
-          height={32}
-          className="rounded-lg"
-        />
+        <Image src="/images/celsius-logo-sm.jpg" alt="Celsius" width={32} height={32} className="rounded-lg" />
         <div>
           <h2 className="font-heading text-sm font-bold text-white">Celsius Ops</h2>
           <p className="text-[10px] text-white/40">Backoffice</p>
@@ -496,47 +658,103 @@ function SidebarContent({
         </Link>
       </div>
 
-      {/* Nav sections */}
+      {/* Nav sections (accordion) */}
       <div className="flex-1 overflow-y-auto px-3 py-2 scrollbar-thin">
-        {NAV_SECTIONS.map((section) => (
-          <SidebarSection
-            key={section.label}
-            section={section}
-            user={user}
-            expanded={expandedSections.has(section.label)}
-            onToggle={() => toggleSection(section.label)}
-            pathname={pathname}
-            onNavigate={onNavigate}
-          />
-        ))}
+        {NAV_SECTIONS.map((section) => {
+          const visible = getVisibleItems(section, user);
+          if (visible.length === 0) return null;
+
+          const isActive = pathMatchesSection(pathname, section);
+          const expanded = expandedSections.has(section.label);
+
+          return (
+            <div key={section.label} className="mb-1">
+              <button
+                onClick={() => toggleSection(section.label)}
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                  isActive ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white/80"
+                }`}
+              >
+                {section.icon}
+                <span className="flex-1 text-left">{section.label}</span>
+                {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              </button>
+
+              {expanded && (
+                <div className="mt-1 ml-3 border-l border-white/10 pl-3">
+                  {section.items && (() => {
+                    const vis = section.items.filter((item) => canAccess(user, item.moduleKey));
+                    const hrefs = vis.map((i) => i.href);
+                    return vis.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={onNavigate}
+                        className={`flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] transition-colors ${
+                          pathname === item.href || pathname.startsWith(item.href + "/")
+                            ? "bg-terracotta/20 text-terracotta-light font-medium"
+                            : "text-white/50 hover:bg-white/5 hover:text-white/70"
+                        }`}
+                      >
+                        {item.icon}
+                        {item.label}
+                      </Link>
+                    ));
+                  })()}
+                  {section.subgroups && section.subgroups.map((sg) => {
+                    const visibleItems = sg.items.filter((item) => canAccess(user, item.moduleKey));
+                    if (visibleItems.length === 0) return null;
+                    return (
+                      <div key={sg.label} className="mb-2">
+                        <p className="mb-1 mt-3 px-3 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+                          {sg.label}
+                        </p>
+                        {visibleItems.map((item) => (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={onNavigate}
+                            className={`flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] transition-colors ${
+                              pathname === item.href || pathname.startsWith(item.href + "/")
+                                ? "bg-terracotta/20 text-terracotta-light font-medium"
+                                : "text-white/50 hover:bg-white/5 hover:text-white/70"
+                            }`}
+                          >
+                            {item.icon}
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* User footer */}
-      {user && (
-        <div className="border-t border-white/10 p-3">
-          <div className="flex items-center gap-3">
-            <Avatar size="sm">
-              <AvatarFallback className="bg-terracotta/20 text-terracotta-light text-xs">
-                {user.name?.slice(0, 2).toUpperCase() || "U"}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="truncate text-xs font-medium text-white">{user.name}</p>
-              <p className="truncate text-[10px] text-white/40">{user.role}</p>
-            </div>
-            <button
-              onClick={onLogout}
-              className="rounded-md p-1.5 text-white/40 hover:bg-white/10 hover:text-white/70 transition-colors"
-              title="Logout"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
+      <div className="border-t border-white/10 p-3">
+        <div className="flex items-center gap-3">
+          <Avatar size="sm">
+            <AvatarFallback className="bg-terracotta/20 text-terracotta-light text-xs">
+              {user.name?.slice(0, 2).toUpperCase() || "U"}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="truncate text-xs font-medium text-white">{user.name}</p>
+            <p className="truncate text-[10px] text-white/40">{user.role}</p>
           </div>
-          <div className="mt-2">
-            <PasswordChangeDialog hasPassword={user.hasPassword} />
-          </div>
+          <button
+            onClick={onLogout}
+            className="rounded-md p-1.5 text-white/40 hover:bg-white/10 hover:text-white/70 transition-colors"
+            title="Logout"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -547,7 +765,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [activeModule, setActiveModule] = useState<string | null>(null);
 
   const { data: user, isLoading } = useFetch<UserProfile>("/api/auth/me");
 
@@ -558,39 +776,63 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, [isLoading, user, router]);
 
-  // Auto-expand the section containing the current route
+  // Block direct URL access to unauthorized pages
   useEffect(() => {
-    for (const section of NAV_SECTIONS) {
-      const allHrefs = section.items
-        ? section.items.map((i) => i.href)
-        : section.subgroups
-          ? section.subgroups.flatMap((sg) => sg.items.map((i) => i.href))
-          : [];
+    if (!user || !pathname) return;
+    // Dashboard is always accessible
+    if (pathname === "/dashboard" || pathname === "/") return;
+    // OWNER and ADMIN bypass all checks
+    if (user.role === "ADMIN" || user.role === "OWNER") return;
+    // Empty moduleAccess = full access (legacy behavior)
+    if (!user.moduleAccess || user.moduleAccess.length === 0) return;
 
-      if (allHrefs.some((href) => pathname === href || pathname.startsWith(href + "/"))) {
-        setExpandedSections((prev) => {
-          if (prev.has(section.label)) return prev;
-          const next = new Set(prev);
-          next.add(section.label);
-          return next;
-        });
-        break;
+    // Find the moduleKey for the current path
+    for (const section of NAV_SECTIONS) {
+      const allItems = [
+        ...(section.items ?? []),
+        ...(section.subgroups?.flatMap((sg) => sg.items) ?? []),
+      ];
+      for (const item of allItems) {
+        if (pathname === item.href || pathname.startsWith(item.href + "/")) {
+          if (item.moduleKey && !canAccess(user, item.moduleKey)) {
+            router.replace("/dashboard");
+            return;
+          }
+          return; // Found matching route, access OK
+        }
+      }
+    }
+  }, [user, pathname, router]);
+
+  // Auto-select module based on current pathname
+  useEffect(() => {
+    const isDashboard = pathname === "/dashboard" || pathname === "/";
+    if (isDashboard) {
+      setActiveModule(null);
+      return;
+    }
+
+    for (const section of NAV_SECTIONS) {
+      if (pathMatchesSection(pathname, section)) {
+        setActiveModule(section.label);
+        return;
       }
     }
   }, [pathname]);
 
-  const toggleSection = (label: string) => {
-    setExpandedSections((prev) => {
-      if (prev.has(label)) {
-        // Collapse if already open
-        const next = new Set(prev);
-        next.delete(label);
-        return next;
-      }
-      // Accordion: close others, open this one
-      return new Set([label]);
-    });
+  const handleModuleClick = (label: string) => {
+    if (activeModule === label) {
+      // Clicking the same module again collapses the sub-nav
+      setActiveModule(null);
+    } else {
+      setActiveModule(label);
+    }
   };
+
+  const activeSection = useMemo(
+    () => NAV_SECTIONS.find((s) => s.label === activeModule) ?? null,
+    [activeModule]
+  );
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -610,26 +852,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="flex h-screen overflow-hidden bg-brand-offwhite">
-      {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 lg:block h-full overflow-hidden">
-        <SidebarContent
+      {/* Desktop: Icon Rail + Sub-nav */}
+      <div className="hidden lg:flex h-full">
+        <IconRail
           user={user}
-          expandedSections={expandedSections}
-          toggleSection={toggleSection}
+          activeModule={activeModule}
+          onModuleClick={handleModuleClick}
           pathname={pathname}
           onLogout={handleLogout}
         />
-      </aside>
+        {activeSection && (
+          <SubNavPanel
+            section={activeSection}
+            user={user}
+            pathname={pathname}
+          />
+        )}
+      </div>
 
       {/* Mobile sidebar overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
           <aside className="relative z-10 h-full w-72">
-            <SidebarContent
+            <MobileSidebar
               user={user}
-              expandedSections={expandedSections}
-              toggleSection={toggleSection}
               pathname={pathname}
               onNavigate={() => setMobileOpen(false)}
               onLogout={handleLogout}
