@@ -899,12 +899,16 @@ export default function SalesComparePage() {
                     <tr className="border-t-2 border-gray-200 font-semibold">
                       <td className="py-2 pr-3 text-gray-900 sticky left-0 bg-white z-10">Avg/day</td>
                       {data.periods.map((p, pi) => {
-                        const daysWithData = p.dailyTotals.filter((d) => d.revenue > 0 || d.orders > 0).length;
+                        const today = getMYTToday();
+                        const completedDays = p.dailyTotals.filter((d) => d.date < today && (d.revenue > 0 || d.orders > 0));
+                        const daysCount = completedDays.length;
+                        const completedRevenue = completedDays.reduce((s, d) => s + d.revenue, 0);
+                        const completedOrders = completedDays.reduce((s, d) => s + d.orders, 0);
                         const val = metric === "revenue"
-                          ? (daysWithData > 0 ? Math.round((p.summary.revenue / daysWithData) * 100) / 100 : 0)
+                          ? (daysCount > 0 ? Math.round((completedRevenue / daysCount) * 100) / 100 : 0)
                           : metric === "orders"
-                          ? (daysWithData > 0 ? Math.round(p.summary.orders / daysWithData) : 0)
-                          : p.summary.aov;
+                          ? (daysCount > 0 ? Math.round(completedOrders / daysCount) : 0)
+                          : (completedOrders > 0 ? Math.round((completedRevenue / completedOrders) * 100) / 100 : 0);
                         return (
                           <td key={pi} className="text-right py-2 px-2 text-gray-900 tabular-nums whitespace-nowrap">
                             {metric === "revenue" || metric === "aov" ? fmtRM(val) : val}
