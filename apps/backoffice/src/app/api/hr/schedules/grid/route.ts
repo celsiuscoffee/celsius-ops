@@ -41,17 +41,17 @@ export async function GET(req: NextRequest) {
       OR: [{ outletId }, { outletIds: { has: outletId } }],
       role: { in: ["STAFF", "MANAGER"] },
     },
-    select: { id: true, name: true, role: true },
+    select: { id: true, name: true, fullName: true, role: true },
     orderBy: { name: "asc" },
   });
 
   // 3. HR profiles (position, employment type, schedule flag)
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, briohr_id, schedule_required")
+    .select("user_id, position, employment_type, schedule_required")
     .in("user_id", users.map((u) => u.id));
 
-  type ProfileRow = { user_id: string; position: string; employment_type: string; briohr_id: string | null; schedule_required: boolean };
+  type ProfileRow = { user_id: string; position: string; employment_type: string; schedule_required: boolean };
   const profileMap = new Map<string, ProfileRow>(
     (profiles || []).map((p: ProfileRow) => [p.user_id, p]),
   );

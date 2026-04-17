@@ -112,6 +112,7 @@ enum OutletStatus {
 model User {
   id           String     @id @default(uuid())
   name         String
+  fullName     String?
   email        String?    @unique
   phone        String     @unique
   role         UserRole

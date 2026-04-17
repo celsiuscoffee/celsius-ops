@@ -2,18 +2,17 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { Bot, Banknote, Loader2, CheckCircle2, FileText, CalendarDays } from "lucide-react";
+import { Bot, Banknote, Loader2, CheckCircle2, FileText, CalendarDays, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 type PayrollRun = {
   id: string;
-  period_month: number;
-  period_year: number;
+  cycle_type: string;
+  period_start: string;
+  period_end: string;
   status: string;
   total_gross: number;
-  total_deductions: number;
   total_net: number;
-  total_employer_cost: number;
   ai_notes: string | null;
   confirmed_at: string | null;
 };
@@ -21,34 +20,41 @@ type PayrollRun = {
 type PayrollItem = {
   id: string;
   user_id: string;
-  basic_salary: number;
+  total_regular_hours: number;
   total_ot_hours: number;
   ot_1_5x_amount: number;
   ot_2x_amount: number;
   ot_3x_amount: number;
   total_gross: number;
-  epf_employee: number;
-  socso_employee: number;
-  eis_employee: number;
-  pcb_tax: number;
-  total_deductions: number;
   net_pay: number;
-  computation_details: { employment_type: string; hourly_rate: number; attendance_records: number } | null;
+  computation_details: { hourly_rate: number; attendance_records: number } | null;
 };
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** Get the Monday of the current week (or given date) in YYYY-MM-DD */
+function mondayOf(date: Date): string {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay(); // 0 Sun, 1 Mon, ...
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
 
-export default function PayrollPage() {
-  const now = new Date();
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
-  const { data, mutate } = useFetch<{ runs: PayrollRun[] }>("/api/hr/payroll");
+function formatWeek(start: string, end: string): string {
+  const s = new Date(`${start}T00:00:00Z`);
+  const e = new Date(`${end}T00:00:00Z`);
+  const fmt = (d: Date) => d.toLocaleDateString("en-MY", { day: "numeric", month: "short", timeZone: "UTC" });
+  return `${fmt(s)} – ${fmt(e)}`;
+}
+
+export default function WeeklyPayrollPage() {
+  const [weekStart, setWeekStart] = useState(mondayOf(new Date()));
+  const { data, mutate } = useFetch<{ runs: PayrollRun[] }>("/api/hr/payroll/weekly");
   const [computing, setComputing] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [result, setResult] = useState<{ notes: string[] } | null>(null);
   const [viewRunId, setViewRunId] = useState<string | null>(null);
   const { data: detailData } = useFetch<{ run: PayrollRun; items: PayrollItem[] }>(
-    viewRunId ? `/api/hr/payroll?run_id=${viewRunId}` : null,
+    viewRunId ? `/api/hr/payroll/weekly?run_id=${viewRunId}` : null,
   );
 
   const runs = data?.runs || [];
@@ -57,17 +63,17 @@ export default function PayrollPage() {
     setComputing(true);
     setResult(null);
     try {
-      const res = await fetch("/api/hr/payroll", {
+      const res = await fetch("/api/hr/payroll/weekly", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "compute", month, year }),
+        body: JSON.stringify({ action: "compute", week_start: weekStart }),
       });
-      const data = await res.json();
+      const payload = await res.json();
       if (res.ok) {
-        setResult(data);
+        setResult(payload);
         mutate();
       } else {
-        setResult({ notes: [data.error || "Failed"] });
+        setResult({ notes: [payload.error || "Failed"] });
       }
     } finally {
       setComputing(false);
@@ -77,7 +83,7 @@ export default function PayrollPage() {
   const handleConfirm = async (runId: string) => {
     setConfirming(runId);
     try {
-      await fetch("/api/hr/payroll", {
+      await fetch("/api/hr/payroll/weekly", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "confirm", run_id: runId }),
@@ -88,40 +94,39 @@ export default function PayrollPage() {
     }
   };
 
-  const fmt = (n: number) => `RM ${Number(n || 0).toLocaleString("en-MY", { minimumFractionDigits: 2 })}`;
+  const fmt = (n: number) =>
+    `RM ${Number(n || 0).toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Payroll (Monthly · Full-Timers)</h1>
-        <Link
-          href="/hr/payroll/weekly"
-          className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
-        >
-          <CalendarDays className="h-4 w-4" />
-          Weekly (Part-Timers)
+      <div className="flex items-center gap-3">
+        <Link href="/hr/payroll" className="text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="inline h-4 w-4" /> Monthly
         </Link>
+        <h1 className="text-2xl font-bold">Weekly Payroll (Part-Timers)</h1>
       </div>
+      <p className="text-sm text-muted-foreground">
+        Part-time payroll runs Mon–Sun, paid the following week. Gross = approved hours × hourly rate + OT.
+      </p>
 
       {/* Compute Controls */}
       <div className="rounded-xl border bg-card p-5">
         <h2 className="mb-4 flex items-center gap-2 font-semibold">
           <Bot className="h-5 w-5 text-terracotta" />
-          AI Payroll Calculator
+          Compute Weekly Payroll
         </h2>
         <div className="flex flex-wrap items-end gap-3">
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted-foreground">Month</span>
-            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="rounded-lg border bg-background px-3 py-2 text-sm">
-              {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted-foreground">Year</span>
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-lg border bg-background px-3 py-2 text-sm">
-              <option value={2025}>2025</option>
-              <option value={2026}>2026</option>
-            </select>
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">Week starting (Monday)</span>
+            <input
+              type="date"
+              value={weekStart}
+              onChange={(e) => {
+                const d = new Date(`${e.target.value}T00:00:00Z`);
+                setWeekStart(mondayOf(d));
+              }}
+              className="rounded-lg border bg-background px-3 py-2 text-sm"
+            />
           </label>
           <button
             onClick={handleCompute}
@@ -129,17 +134,19 @@ export default function PayrollPage() {
             className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
           >
             {computing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-            Compute Payroll
+            Compute
           </button>
         </div>
         {result && (
           <div className="mt-4 rounded-lg bg-muted/50 p-3 text-sm">
-            {result.notes.map((n, i) => <p key={i} className="text-muted-foreground">{n}</p>)}
+            {result.notes.map((n, i) => (
+              <p key={i} className="text-muted-foreground">{n}</p>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Payroll Runs */}
+      {/* Runs */}
       <div className="space-y-3">
         {runs.map((run) => {
           const isComputed = run.status === "ai_computed";
@@ -151,19 +158,22 @@ export default function PayrollPage() {
               <div className="flex items-center justify-between p-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-semibold">{MONTHS[run.period_month - 1]} {run.period_year}</p>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      isConfirmed ? "bg-green-100 text-green-700" :
-                      isComputed ? "bg-blue-100 text-blue-700" :
-                      "bg-gray-100 text-gray-600"
-                    }`}>
+                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                    <p className="font-semibold">{formatWeek(run.period_start, run.period_end)}</p>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        isConfirmed
+                          ? "bg-green-100 text-green-700"
+                          : isComputed
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
                       {run.status.replace("_", " ")}
                     </span>
                   </div>
                   <div className="mt-1 flex gap-4 text-sm text-muted-foreground">
                     <span>Gross: {fmt(run.total_gross)}</span>
-                    <span>Net: {fmt(run.total_net)}</span>
-                    <span>Employer: {fmt(run.total_employer_cost)}</span>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -171,7 +181,8 @@ export default function PayrollPage() {
                     onClick={() => setViewRunId(isViewing ? null : run.id)}
                     className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
                   >
-                    <FileText className="inline h-3 w-3 mr-1" />{isViewing ? "Hide" : "Details"}
+                    <FileText className="inline h-3 w-3 mr-1" />
+                    {isViewing ? "Hide" : "Details"}
                   </button>
                   {isComputed && (
                     <button
@@ -179,7 +190,11 @@ export default function PayrollPage() {
                       disabled={confirming === run.id}
                       className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
                     >
-                      {confirming === run.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                      {confirming === run.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-3 w-3" />
+                      )}
                       Confirm
                     </button>
                   )}
@@ -187,7 +202,6 @@ export default function PayrollPage() {
                 </div>
               </div>
 
-              {/* Detail Table */}
               {isViewing && detailData?.items && (
                 <div className="border-t px-4 pb-4 pt-3">
                   <div className="overflow-x-auto">
@@ -195,30 +209,28 @@ export default function PayrollPage() {
                       <thead>
                         <tr className="border-b text-left text-muted-foreground">
                           <th className="pb-2 pr-3">Employee</th>
-                          <th className="pb-2 pr-3 text-right">Basic</th>
+                          <th className="pb-2 pr-3 text-right">Rate</th>
+                          <th className="pb-2 pr-3 text-right">Hours</th>
                           <th className="pb-2 pr-3 text-right">OT</th>
-                          <th className="pb-2 pr-3 text-right">Gross</th>
-                          <th className="pb-2 pr-3 text-right">EPF</th>
-                          <th className="pb-2 pr-3 text-right">SOCSO</th>
-                          <th className="pb-2 pr-3 text-right">EIS</th>
-                          <th className="pb-2 pr-3 text-right">PCB</th>
-                          <th className="pb-2 text-right font-semibold">Net</th>
+                          <th className="pb-2 pr-3 text-right">Shifts</th>
+                          <th className="pb-2 text-right font-semibold">Gross</th>
                         </tr>
                       </thead>
                       <tbody>
                         {detailData.items.map((item) => (
                           <tr key={item.id} className="border-b last:border-0">
-                            <td className="py-2 pr-3 font-medium">{item.user_id.slice(0, 8)}...</td>
-                            <td className="py-2 pr-3 text-right">{fmt(item.basic_salary)}</td>
+                            <td className="py-2 pr-3 font-medium">{item.user_id.slice(0, 8)}…</td>
+                            <td className="py-2 pr-3 text-right">
+                              {item.computation_details?.hourly_rate
+                                ? `RM ${item.computation_details.hourly_rate}/h`
+                                : "—"}
+                            </td>
+                            <td className="py-2 pr-3 text-right">{Number(item.total_regular_hours).toFixed(2)}h</td>
                             <td className="py-2 pr-3 text-right">
                               {Number(item.total_ot_hours) > 0 ? `${item.total_ot_hours}h` : "—"}
                             </td>
-                            <td className="py-2 pr-3 text-right">{fmt(item.total_gross)}</td>
-                            <td className="py-2 pr-3 text-right">{fmt(item.epf_employee)}</td>
-                            <td className="py-2 pr-3 text-right">{fmt(item.socso_employee)}</td>
-                            <td className="py-2 pr-3 text-right">{fmt(item.eis_employee)}</td>
-                            <td className="py-2 pr-3 text-right">{fmt(item.pcb_tax)}</td>
-                            <td className="py-2 text-right font-semibold">{fmt(item.net_pay)}</td>
+                            <td className="py-2 pr-3 text-right">{item.computation_details?.attendance_records ?? 0}</td>
+                            <td className="py-2 text-right font-semibold">{fmt(item.total_gross)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -237,8 +249,8 @@ export default function PayrollPage() {
         {runs.length === 0 && (
           <div className="rounded-xl border bg-card py-16 text-center">
             <Banknote className="mx-auto mb-3 h-12 w-12 text-gray-300" />
-            <p className="text-lg font-semibold">No payroll runs yet</p>
-            <p className="text-sm text-muted-foreground">Use the AI calculator above to compute</p>
+            <p className="text-lg font-semibold">No weekly payroll runs yet</p>
+            <p className="text-sm text-muted-foreground">Pick a Monday and compute above</p>
           </div>
         )}
       </div>

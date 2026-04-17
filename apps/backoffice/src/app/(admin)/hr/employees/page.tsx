@@ -9,6 +9,7 @@ import type { EmployeeProfile } from "@/lib/hr/types";
 type Employee = {
   id: string;
   name: string;
+  fullName: string | null;
   role: string;
   phone: string;
   email: string | null;
@@ -17,16 +18,53 @@ type Employee = {
   hrProfile: EmployeeProfile | null;
 };
 
+type EmploymentFilter = "all" | "full_time" | "part_time" | "contract" | "no_profile";
+
 export default function EmployeesPage() {
   const { data } = useFetch<{ employees: Employee[] }>("/api/hr/employees");
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<EmploymentFilter>("all");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [outletFilter, setOutletFilter] = useState<string>("all");
 
-  const employees = (data?.employees || []).filter((e) =>
-    e.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const allEmployees = data?.employees || [];
+  const ftCount = allEmployees.filter((e) => e.hrProfile?.employment_type === "full_time").length;
+  const ptCount = allEmployees.filter((e) => e.hrProfile?.employment_type === "part_time").length;
+  const contractCount = allEmployees.filter((e) => e.hrProfile?.employment_type === "contract").length;
+  const noProfileCount = allEmployees.filter((e) => !e.hrProfile).length;
+
+  const roleOptions = Array.from(new Set(allEmployees.map((e) => e.role))).sort();
+  const outletOptions = Array.from(
+    new Map(allEmployees.filter((e) => e.outlet).map((e) => [e.outletId, e.outlet!.name])).entries(),
+  ).sort((a, b) => a[1].localeCompare(b[1]));
+
+  const employees = allEmployees.filter((e) => {
+    const q = search.toLowerCase();
+    const matchesSearch =
+      !q ||
+      e.name.toLowerCase().includes(q) ||
+      (e.fullName?.toLowerCase().includes(q) ?? false) ||
+      e.phone.toLowerCase().includes(q);
+    const matchesEmployment =
+      filter === "all" ||
+      (filter === "no_profile" ? !e.hrProfile : e.hrProfile?.employment_type === filter);
+    const matchesRole = roleFilter === "all" || e.role === roleFilter;
+    const matchesOutlet =
+      outletFilter === "all" ||
+      (outletFilter === "none" ? !e.outletId : e.outletId === outletFilter);
+    return matchesSearch && matchesEmployment && matchesRole && matchesOutlet;
+  });
 
   const configured = employees.filter((e) => e.hrProfile).length;
   const total = employees.length;
+  const clearAll = () => {
+    setSearch("");
+    setFilter("all");
+    setRoleFilter("all");
+    setOutletFilter("all");
+  };
+  const hasActiveFilters =
+    !!search || filter !== "all" || roleFilter !== "all" || outletFilter !== "all";
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
@@ -41,11 +79,73 @@ export default function EmployeesPage() {
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
-          placeholder="Search employees..."
+          placeholder="Search by name, full name, or phone..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full rounded-lg border bg-background py-2 pl-10 pr-4 text-sm"
         />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {([
+          { key: "all", label: `All (${allEmployees.length})` },
+          { key: "full_time", label: `Full-Time (${ftCount})` },
+          { key: "part_time", label: `Part-Time (${ptCount})` },
+          ...(contractCount > 0 ? [{ key: "contract" as const, label: `Contract (${contractCount})` }] : []),
+          ...(noProfileCount > 0 ? [{ key: "no_profile" as const, label: `No Profile (${noProfileCount})` }] : []),
+        ] as const).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setFilter(tab.key)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+              filter === tab.key
+                ? "border-terracotta bg-terracotta text-white"
+                : "bg-background hover:bg-muted"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-xs">
+          <span className="font-medium text-muted-foreground">Role</span>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="rounded-lg border bg-background px-2 py-1.5 text-xs"
+          >
+            <option value="all">All roles</option>
+            {roleOptions.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex items-center gap-2 text-xs">
+          <span className="font-medium text-muted-foreground">Outlet</span>
+          <select
+            value={outletFilter}
+            onChange={(e) => setOutletFilter(e.target.value)}
+            className="rounded-lg border bg-background px-2 py-1.5 text-xs"
+          >
+            <option value="all">All outlets</option>
+            <option value="none">No outlet (HQ)</option>
+            {outletOptions.map(([id, name]) => (
+              <option key={id} value={id!}>{name}</option>
+            ))}
+          </select>
+        </label>
+
+        {hasActiveFilters && (
+          <button
+            onClick={clearAll}
+            className="rounded-lg border px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -60,17 +160,25 @@ export default function EmployeesPage() {
               <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white ${
                 hasProfile ? "bg-green-500" : "bg-gray-300"
               }`}>
-                {emp.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                {(emp.fullName || emp.name).split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="font-semibold">{emp.name}</p>
+                  <p className="font-semibold">{emp.fullName || emp.name}</p>
+                  {emp.fullName && emp.name !== emp.fullName && (
+                    <span className="text-xs text-muted-foreground">({emp.name})</span>
+                  )}
                   <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
                     {emp.role}
                   </span>
-                  {emp.hrProfile?.briohr_id && (
-                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-mono font-medium text-blue-700">
-                      {emp.hrProfile.briohr_id}
+                  {emp.hrProfile?.employment_type === "part_time" && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                      PART-TIME
+                    </span>
+                  )}
+                  {emp.hrProfile?.employment_type === "full_time" && (
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                      FULL-TIME
                     </span>
                   )}
                 </div>
@@ -78,7 +186,11 @@ export default function EmployeesPage() {
                   {emp.outlet?.name || "No outlet"}{" "}
                   {emp.hrProfile?.position && `· ${emp.hrProfile.position}`}
                 </p>
-                {emp.hrProfile?.basic_salary ? (
+                {emp.hrProfile?.employment_type === "part_time" && emp.hrProfile?.hourly_rate ? (
+                  <p className="text-xs text-muted-foreground">
+                    RM {Number(emp.hrProfile.hourly_rate).toFixed(2)}/hr · weekly pay
+                  </p>
+                ) : emp.hrProfile?.basic_salary ? (
                   <p className="text-xs text-muted-foreground">
                     RM {Number(emp.hrProfile.basic_salary).toLocaleString()}/mo
                   </p>

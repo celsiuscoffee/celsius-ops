@@ -125,6 +125,27 @@ export type LeaveRequest = {
   updated_at: string;
 };
 
+export type PayrollRun = {
+  id: string;
+  cycle_type: "monthly" | "weekly";
+  period_month: number | null;
+  period_year: number | null;
+  period_start: string | null;
+  period_end: string | null;
+  status: "draft" | "ai_computed" | "confirmed";
+  total_gross: number;
+  total_deductions: number;
+  total_net: number;
+  total_employer_cost: number;
+  ai_computed_at: string | null;
+  ai_notes: string | null;
+  confirmed_by: string | null;
+  confirmed_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AgentRun = {
   id: string;
   agent_type: "scheduler" | "attendance_processor" | "leave_manager" | "payroll_calculator";

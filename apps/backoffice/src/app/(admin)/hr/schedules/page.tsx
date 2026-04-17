@@ -19,8 +19,9 @@ type ShiftTemplate = {
 type User = {
   id: string;
   name: string;
+  fullName: string | null;
   role: string;
-  profile: { position: string | null; employment_type: string; briohr_id: string | null } | null;
+  profile: { position: string | null; employment_type: string } | null;
 };
 
 type Shift = {
@@ -412,10 +413,9 @@ export default function SchedulesPage() {
                 return (
                   <tr key={u.id} className="border-b hover:bg-muted/30">
                     <td className="sticky left-0 z-10 bg-background p-2">
-                      <div className="font-medium">{u.name}</div>
+                      <div className="font-medium">{u.fullName || u.name}</div>
                       <div className="text-xs text-muted-foreground">
                         {position} · {empType}
-                        {u.profile?.briohr_id && <span className="ml-1 rounded bg-blue-50 px-1 text-[9px] text-blue-700">{u.profile.briohr_id}</span>}
                       </div>
                     </td>
                     {grid.days.map((d) => {

@@ -16,7 +16,7 @@ export async function GET() {
   const users = await prisma.user.findMany({
     where: { status: "ACTIVE" },
     select: {
-      id: true, name: true, role: true, phone: true, email: true,
+      id: true, name: true, fullName: true, role: true, phone: true, email: true,
       outletId: true, outlet: { select: { name: true } },
       username: true, appAccess: true, moduleAccess: true, status: true,
       pin: true, passwordHash: true, lastLoginAt: true,
