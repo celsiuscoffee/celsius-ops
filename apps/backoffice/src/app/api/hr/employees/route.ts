@@ -12,12 +12,14 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Get all active users from Prisma
+  // Get all active users from Prisma (incl. login fields)
   const users = await prisma.user.findMany({
     where: { status: "ACTIVE" },
     select: {
       id: true, name: true, role: true, phone: true, email: true,
       outletId: true, outlet: { select: { name: true } },
+      username: true, appAccess: true, moduleAccess: true, status: true,
+      pin: true, passwordHash: true, lastLoginAt: true,
     },
     orderBy: [{ role: "asc" }, { name: "asc" }],
   });
@@ -29,10 +31,15 @@ export async function GET() {
 
   const profileMap = new Map((profiles || []).map((p: { user_id: string }) => [p.user_id, p]));
 
-  const employees = users.map((u) => ({
-    ...u,
-    hrProfile: profileMap.get(u.id) || null,
-  }));
+  const employees = users.map((u) => {
+    const { pin, passwordHash, ...rest } = u;
+    return {
+      ...rest,
+      hasPin: !!pin,
+      hasPassword: !!passwordHash,
+      hrProfile: profileMap.get(u.id) || null,
+    };
+  });
 
   return NextResponse.json({ employees });
 }

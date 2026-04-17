@@ -3,7 +3,7 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { ArrowLeft, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Lock, KeyRound, Shield, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import type { EmployeeProfile } from "@/lib/hr/types";
 
@@ -13,9 +13,21 @@ type Employee = {
   role: string;
   phone: string;
   email: string | null;
+  outletId: string | null;
   outlet: { name: string } | null;
   hrProfile: EmployeeProfile | null;
+  username?: string | null;
+  appAccess?: string[];
+  moduleAccess?: Record<string, unknown>;
+  status?: string;
+  hasPin?: boolean;
+  hasPassword?: boolean;
+  lastLoginAt?: string | null;
 };
+
+const ROLES = ["OWNER", "ADMIN", "MANAGER", "STAFF"];
+const APP_OPTIONS = ["backoffice", "inventory", "sales", "loyalty", "pickup", "ops"];
+const HR_MODULES = ["dashboard", "attendance", "schedules", "leave", "payroll", "employees", "settings"];
 
 const EMPLOYMENT_TYPES = [
   { value: "full_time", label: "Full Time" },
@@ -58,6 +70,90 @@ export default function EmployeeDetailPage() {
     emergency_contact_phone: "",
     notes: "",
   });
+
+  // Access / login state
+  const [access, setAccess] = useState({
+    role: "STAFF",
+    username: "",
+    email: "",
+    status: "ACTIVE",
+    hrAccess: false,
+    appAccessSet: new Set<string>(),
+    pin: "",
+    password: "",
+  });
+  const [showPin, setShowPin] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [savingAccess, setSavingAccess] = useState(false);
+  const [accessSaved, setAccessSaved] = useState(false);
+
+  useEffect(() => {
+    if (employee) {
+      const ma = (employee.moduleAccess || {}) as Record<string, unknown>;
+      const hrList = Array.isArray(ma.hr) ? (ma.hr as string[]) : [];
+      setAccess({
+        role: employee.role || "STAFF",
+        username: employee.username || "",
+        email: employee.email || "",
+        status: employee.status || "ACTIVE",
+        hrAccess: hrList.length > 0 || employee.role === "OWNER" || employee.role === "ADMIN",
+        appAccessSet: new Set(employee.appAccess || []),
+        pin: "",
+        password: "",
+      });
+    }
+  }, [employee]);
+
+  const handleSaveAccess = async () => {
+    if (!id) return;
+    setSavingAccess(true);
+    setAccessSaved(false);
+    try {
+      const currentModuleAccess = ((employee?.moduleAccess || {}) as Record<string, unknown>);
+      const nextModuleAccess = { ...currentModuleAccess };
+      if (access.hrAccess) {
+        nextModuleAccess.hr = HR_MODULES;
+      } else {
+        delete nextModuleAccess.hr;
+      }
+
+      const payload: Record<string, unknown> = {
+        role: access.role,
+        username: access.username || null,
+        email: access.email || null,
+        status: access.status,
+        appAccess: Array.from(access.appAccessSet),
+        moduleAccess: nextModuleAccess,
+      };
+      if (access.pin) payload.pin = access.pin;
+      if (access.password) payload.password = access.password;
+
+      const res = await fetch(`/api/hr/employees/${id}/access`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setAccessSaved(true);
+        setAccess((a) => ({ ...a, pin: "", password: "" }));
+        mutate();
+        setTimeout(() => setAccessSaved(false), 2000);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to save access");
+      }
+    } finally {
+      setSavingAccess(false);
+    }
+  };
+
+  const toggleAppAccess = (app: string) => {
+    setAccess((a) => {
+      const next = new Set(a.appAccessSet);
+      if (next.has(app)) next.delete(app); else next.add(app);
+      return { ...a, appAccessSet: next };
+    });
+  };
 
   useEffect(() => {
     if (profile) {
@@ -236,6 +332,127 @@ export default function EmployeeDetailPage() {
             className="input"
             placeholder="Internal notes..."
           />
+        </section>
+
+        {/* Login & Access */}
+        <section className="rounded-xl border bg-card p-5 lg:col-span-2">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 font-semibold">
+              <Shield className="h-5 w-5 text-terracotta" />
+              Login & Access
+            </h2>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {employee.hasPin && <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-green-700"><CheckCircle2 className="h-3 w-3" />PIN set</span>}
+              {employee.hasPassword && <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-green-700"><CheckCircle2 className="h-3 w-3" />Password set</span>}
+              {employee.lastLoginAt && <span>Last login: {new Date(employee.lastLoginAt).toLocaleDateString("en-MY")}</span>}
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            {/* Basic */}
+            <div className="space-y-3">
+              <Field label="Role">
+                <select value={access.role} onChange={(e) => setAccess((a) => ({ ...a, role: e.target.value }))} className="input">
+                  {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </Field>
+              <Field label="Username (for password login)">
+                <input value={access.username} onChange={(e) => setAccess((a) => ({ ...a, username: e.target.value }))} className="input" placeholder="optional" />
+              </Field>
+              <Field label="Email">
+                <input type="email" value={access.email} onChange={(e) => setAccess((a) => ({ ...a, email: e.target.value }))} className="input" />
+              </Field>
+              <Field label="Account Status">
+                <select value={access.status} onChange={(e) => setAccess((a) => ({ ...a, status: e.target.value }))} className="input">
+                  <option value="ACTIVE">Active</option>
+                  <option value="DEACTIVATED">Deactivated</option>
+                </select>
+              </Field>
+            </div>
+
+            {/* Credentials */}
+            <div className="space-y-3">
+              <Field label="Set PIN (4-6 digits)">
+                <div className="relative">
+                  <input
+                    type={showPin ? "text" : "password"}
+                    value={access.pin}
+                    onChange={(e) => setAccess((a) => ({ ...a, pin: e.target.value.replace(/\D/g, "").slice(0, 6) }))}
+                    className="input pr-10"
+                    placeholder={employee.hasPin ? "•••• (leave blank to keep)" : "Enter new PIN"}
+                    maxLength={6}
+                  />
+                  <button type="button" onClick={() => setShowPin(!showPin)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
+                    {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </Field>
+              <Field label="Set Password (8+ chars, OWNER/ADMIN/MANAGER only)">
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={access.password}
+                    onChange={(e) => setAccess((a) => ({ ...a, password: e.target.value }))}
+                    className="input pr-10"
+                    placeholder={employee.hasPassword ? "•••••••• (leave blank to keep)" : "Enter new password"}
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </Field>
+              <p className="text-[10px] text-muted-foreground">
+                PIN is for staff login (phone). Password is for backoffice login (desktop).
+              </p>
+            </div>
+
+            {/* App + HR Module Access */}
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">App Access</label>
+                <div className="grid grid-cols-2 gap-1">
+                  {APP_OPTIONS.map((app) => (
+                    <label key={app} className="flex items-center gap-1.5 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={access.appAccessSet.has(app)}
+                        onChange={() => toggleAppAccess(app)}
+                      />
+                      {app}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">HR Module Access</label>
+                <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={access.hrAccess}
+                    onChange={(e) => setAccess((a) => ({ ...a, hrAccess: e.target.checked }))}
+                    disabled={access.role === "OWNER" || access.role === "ADMIN"}
+                  />
+                  <span>Enable HR portal access</span>
+                </label>
+                {(access.role === "OWNER" || access.role === "ADMIN") && (
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {access.role} bypasses module checks — always has HR access
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={handleSaveAccess}
+              disabled={savingAccess}
+              className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {savingAccess ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+              {accessSaved ? "Access Saved!" : "Save Login & Access"}
+            </button>
+          </div>
         </section>
       </div>
 

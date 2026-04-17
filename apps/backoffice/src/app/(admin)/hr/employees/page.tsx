@@ -38,11 +38,11 @@ export default function EmployeesPage() {
           </p>
         </div>
         <Link
-          href="/hr/import"
+          href="/hr/migrate"
           className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark"
         >
           <Upload className="h-4 w-4" />
-          Import from BrioHR
+          Migrate from BrioHR
         </Link>
       </div>
 
