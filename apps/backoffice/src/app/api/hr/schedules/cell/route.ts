@@ -109,14 +109,33 @@ export async function POST(req: NextRequest) {
     break_minutes = custom.break_minutes ?? 30;
     role_type = custom.label || "Custom";
   } else {
-    const template = getTemplate(template_id);
-    if (!template) {
-      return NextResponse.json({ error: `Unknown template_id: ${template_id}` }, { status: 400 });
+    // Try DB template first (UUID), then hardcoded template (string id)
+    let dbTemplate = null;
+    if (template_id.includes("-")) {
+      // Looks like a UUID
+      const { data } = await hrSupabaseAdmin
+        .from("hr_shift_templates")
+        .select("label, start_time, end_time, break_minutes")
+        .eq("id", template_id)
+        .maybeSingle();
+      dbTemplate = data;
     }
-    start_time = template.start_time;
-    end_time = template.end_time;
-    break_minutes = template.break_minutes;
-    role_type = template.label;
+
+    if (dbTemplate) {
+      start_time = dbTemplate.start_time.slice(0, 5);
+      end_time = dbTemplate.end_time.slice(0, 5);
+      break_minutes = dbTemplate.break_minutes;
+      role_type = dbTemplate.label;
+    } else {
+      const template = getTemplate(template_id);
+      if (!template) {
+        return NextResponse.json({ error: `Unknown template_id: ${template_id}` }, { status: 400 });
+      }
+      start_time = template.start_time;
+      end_time = template.end_time;
+      break_minutes = template.break_minutes;
+      role_type = template.label;
+    }
   }
 
   const { data, error } = await hrSupabaseAdmin

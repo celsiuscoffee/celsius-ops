@@ -24,6 +24,7 @@ export type EmployeeProfile = {
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   notes: string | null;
+  schedule_required: boolean;
   created_at: string;
   updated_at: string;
 };

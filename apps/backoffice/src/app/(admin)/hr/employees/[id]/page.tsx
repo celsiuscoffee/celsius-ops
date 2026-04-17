@@ -69,6 +69,7 @@ export default function EmployeeDetailPage() {
     emergency_contact_name: "",
     emergency_contact_phone: "",
     notes: "",
+    schedule_required: true,
   });
 
   // Access / login state
@@ -175,6 +176,7 @@ export default function EmployeeDetailPage() {
         emergency_contact_name: profile.emergency_contact_name || "",
         emergency_contact_phone: profile.emergency_contact_phone || "",
         notes: profile.notes || "",
+        schedule_required: (profile as unknown as { schedule_required?: boolean }).schedule_required !== false,
       });
     }
   }, [profile]);
@@ -246,6 +248,15 @@ export default function EmployeeDetailPage() {
             <Field label="Join Date">
               <input type="date" value={form.join_date} onChange={(e) => update("join_date", e.target.value)} className="input" />
             </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.schedule_required}
+                onChange={(e) => setForm((f) => ({ ...f, schedule_required: e.target.checked }))}
+              />
+              <span>Appears in weekly schedule grid</span>
+              <span className="text-xs text-muted-foreground">(off for HQ / non-outlet roles)</span>
+            </label>
           </div>
         </section>
 

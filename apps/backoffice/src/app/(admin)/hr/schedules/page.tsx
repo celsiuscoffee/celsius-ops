@@ -3,8 +3,8 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useState, useMemo, useEffect } from "react";
 import {
-  Bot, CalendarDays, Send, Loader2, CheckCircle2, ArrowLeftRight, XCircle,
-  ChevronLeft, ChevronRight, RotateCcw, ChevronDown,
+  Bot, CalendarDays, Send, Loader2, ArrowLeftRight,
+  ChevronLeft, ChevronRight, RotateCcw, Trash2,
 } from "lucide-react";
 
 type ShiftTemplate = {
@@ -100,6 +100,7 @@ export default function SchedulesPage() {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [swapAction, setSwapAction] = useState<string | null>(null);
 
   // Get outlets list from the old endpoint (for dropdown)
@@ -195,6 +196,24 @@ export default function SchedulesPage() {
     }
   };
 
+  const handleClearAll = async () => {
+    if (!selectedOutlet || !grid?.schedule) return;
+    if (!confirm("Clear all shifts for this week? (will not affect published schedules)")) return;
+    setClearing(true);
+    try {
+      const res = await fetch("/api/hr/schedules/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outlet_id: selectedOutlet, week_start: weekStart }),
+      });
+      const data = await res.json();
+      if (!res.ok) alert(data.error || "Failed to clear");
+      mutate();
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const handleAIFill = async () => {
     if (!selectedOutlet) return;
     setGenerating(true);
@@ -247,8 +266,17 @@ export default function SchedulesPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={handleClearAll}
+            disabled={clearing || !grid?.schedule || isPublished}
+            className="flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+            title={isPublished ? "Unpublish first to clear" : "Clear all shifts for this week"}
+          >
+            {clearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Clear Week
+          </button>
+          <button
             onClick={handleAIFill}
-            disabled={generating || !selectedOutlet}
+            disabled={generating || !selectedOutlet || isPublished}
             className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
           >
             {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}

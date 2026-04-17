@@ -83,7 +83,10 @@ const SHIFT_SLOTS = {
   evening:   { start: "16:30", end: "22:00" },  // 5.5h — part-timers
 };
 
-const MIN_STAFF_PER_SHIFT = 2;
+// Celsius constraints: 3-4 people per shift, labor budget RM 19,000/month/outlet
+const MIN_STAFF_PER_SHIFT = 3;
+const MAX_STAFF_PER_SHIFT = 4;
+const MAX_MONTHLY_LABOR_COST_PER_OUTLET = 19000;
 
 /**
  * AI Schedule Generator
@@ -124,29 +127,35 @@ export async function generateSchedule(
     select: { id: true, name: true, role: true, outletId: true },
   });
 
-  // Get HR profiles for employment type, salary, position
+  // Get HR profiles for employment type, salary, position, and schedule flag
+  // Users marked schedule_required=false are excluded from auto-scheduling (HQ staff).
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, basic_salary, hourly_rate")
+    .select("user_id, position, employment_type, basic_salary, hourly_rate, schedule_required")
     .in("user_id", users.map((u) => u.id));
 
   const profileMap = new Map(
-    (profiles || []).map((p: { user_id: string; position: string; employment_type: string; basic_salary: number; hourly_rate: number | null }) => [p.user_id, p]),
+    (profiles || []).map((p: { user_id: string; position: string; employment_type: string; basic_salary: number; hourly_rate: number | null; schedule_required: boolean }) => [p.user_id, p]),
   );
 
-  const staff: StaffInfo[] = users.map((u) => {
-    const p = profileMap.get(u.id);
-    return {
-      id: u.id,
-      name: u.name,
-      role: u.role,
-      outletId: u.outletId,
-      position: p?.position || (u.role === "MANAGER" ? "Shift Lead" : "Barista"),
-      employment_type: (p?.employment_type as StaffInfo["employment_type"]) || "full_time",
-      basic_salary: Number(p?.basic_salary) || 1500,
-      hourly_rate: p?.hourly_rate ? Number(p.hourly_rate) : null,
-    };
-  });
+  const staff: StaffInfo[] = users
+    .filter((u) => {
+      const p = profileMap.get(u.id);
+      return !p || p.schedule_required !== false;
+    })
+    .map((u) => {
+      const p = profileMap.get(u.id);
+      return {
+        id: u.id,
+        name: u.name,
+        role: u.role,
+        outletId: u.outletId,
+        position: p?.position || (u.role === "MANAGER" ? "Shift Lead" : "Barista"),
+        employment_type: (p?.employment_type as StaffInfo["employment_type"]) || "full_time",
+        basic_salary: Number(p?.basic_salary) || 1500,
+        hourly_rate: p?.hourly_rate ? Number(p.hourly_rate) : null,
+      };
+    });
 
   if (staff.length === 0) {
     throw new Error(`No active staff assigned to outlet ${outlet.name}`);
@@ -240,10 +249,11 @@ export async function generateSchedule(
     // Sort by hours (least first = fairness)
     availableFullTimers.sort((a, b) => (hoursPerStaff.get(a.id) || 0) - (hoursPerStaff.get(b.id) || 0));
 
-    // Split into opening and closing
+    // Celsius policy: 3-4 people per shift. Cap staff per shift at MAX_STAFF_PER_SHIFT.
+    const maxPerShift = MAX_STAFF_PER_SHIFT;
     const halfFT = Math.ceil(availableFullTimers.length / 2);
-    const openingFT = availableFullTimers.slice(0, halfFT);
-    const closingFT = availableFullTimers.slice(halfFT);
+    const openingFT = availableFullTimers.slice(0, Math.min(halfFT, maxPerShift));
+    const closingFT = availableFullTimers.slice(halfFT, halfFT + maxPerShift);
 
     // Ensure minimum coverage — overlap if needed
     if (closingFT.length < MIN_STAFF_PER_SHIFT && openingFT.length > MIN_STAFF_PER_SHIFT) {
@@ -321,22 +331,35 @@ export async function generateSchedule(
   let totalHours = 0;
   hoursPerStaff.forEach((h) => { totalHours += h; });
 
-  // Estimate labor cost
-  let estimatedCost = 0;
+  // Estimate this WEEK's labor cost
+  let weeklyCost = 0;
   staff.forEach((s) => {
     const hours = hoursPerStaff.get(s.id) || 0;
     if (hours === 0) return;
 
     if (s.employment_type === "part_time" && s.hourly_rate) {
-      // Part-timers: hourly rate x hours
-      estimatedCost += s.hourly_rate * hours;
+      weeklyCost += s.hourly_rate * hours;
     } else {
-      // Full-timers/contract: monthly salary / 26 / 8 * hours
-      const hourlyRate = s.basic_salary / 26 / 8;
-      estimatedCost += hourlyRate * hours;
+      const hourlyRate = s.basic_salary / 26 / 7.5;
+      weeklyCost += hourlyRate * hours;
     }
   });
-  estimatedCost = Math.round(estimatedCost * 100) / 100;
+  const estimatedCost = Math.round(weeklyCost * 100) / 100;
+
+  // Project to monthly (4.33 weeks) and compare against RM 19k budget
+  const projectedMonthly = estimatedCost * 4.33;
+  if (projectedMonthly > MAX_MONTHLY_LABOR_COST_PER_OUTLET) {
+    notes.push(
+      `⚠️ Budget alert: projected monthly cost RM ${projectedMonthly.toFixed(0)} ` +
+      `exceeds RM ${MAX_MONTHLY_LABOR_COST_PER_OUTLET.toLocaleString()} target. ` +
+      `Consider reducing shifts or using more part-timers.`,
+    );
+  } else {
+    notes.push(
+      `Projected monthly cost: RM ${projectedMonthly.toFixed(0)} ` +
+      `(${Math.round((projectedMonthly / MAX_MONTHLY_LABOR_COST_PER_OUTLET) * 100)}% of RM ${MAX_MONTHLY_LABOR_COST_PER_OUTLET / 1000}k budget)`,
+    );
+  }
 
   // Per-type hour summaries
   const ftHours = fullTimers.reduce((sum, s) => sum + (hoursPerStaff.get(s.id) || 0), 0);
