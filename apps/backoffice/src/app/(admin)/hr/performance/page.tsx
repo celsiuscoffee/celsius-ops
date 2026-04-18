@@ -3,7 +3,7 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { TrendingUp, Star, Clock, CalendarOff, ClipboardCheck, MessageSquare, AlertTriangle, Trophy, Loader2 } from "lucide-react";
+import { TrendingUp, Star, Clock, CalendarOff, ClipboardCheck, MessageSquare, AlertTriangle, Trophy, Loader2, ShieldCheck, ThumbsUp, ThumbsDown } from "lucide-react";
 
 type StaffPerf = {
   userId: string;
@@ -26,7 +26,21 @@ type StaffPerf = {
   opsCompletionRate: number;
   reviewsOnShift: number;
   avgReviewRating: number;
+  auditMentions: number;
+  auditPositive: number;
+  auditNegative: number;
   score: number;
+};
+
+type AuditMention = {
+  reportId: string;
+  outletName: string;
+  date: string;
+  auditor: string;
+  overallScore: number | null;
+  sentiment: "positive" | "negative" | "neutral";
+  excerpt: string;
+  staffMentioned: { userId: string; name: string }[];
 };
 
 type ReviewWithContext = {
@@ -54,11 +68,12 @@ export default function HRPerformancePage() {
   qs.set("year", String(year));
   qs.set("month", String(month));
   if (outletId) qs.set("outletId", outletId);
-  const { data, isLoading } = useFetch<{ staff: StaffPerf[]; reviews: ReviewWithContext[] }>(`/api/hr/performance?${qs}`);
+  const { data, isLoading } = useFetch<{ staff: StaffPerf[]; reviews: ReviewWithContext[]; auditMentions: AuditMention[] }>(`/api/hr/performance?${qs}`);
   const { data: outletsData } = useFetch<{ outlets: Outlet[] }>("/api/settings/outlets");
 
   const staff = data?.staff || [];
   const reviews = data?.reviews || [];
+  const auditMentions = data?.auditMentions || [];
   const outlets = outletsData?.outlets || [];
 
   const scoreColor = (score: number) => {
@@ -152,6 +167,7 @@ export default function HRPerformancePage() {
                 <th className="px-3 py-2 text-center">Leave days</th>
                 <th className="px-3 py-2 text-center">Ops %</th>
                 <th className="px-3 py-2 text-center">Reviews</th>
+                <th className="px-3 py-2 text-center">Audits</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
@@ -186,6 +202,17 @@ export default function HRPerformancePage() {
                       <span className="text-amber-600">{p.reviewsOnShift} · {p.avgReviewRating}★</span>
                     ) : "—"}
                   </td>
+                  <td className="px-3 py-2.5 text-center">
+                    {p.auditMentions > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-xs">
+                        {p.auditPositive > 0 && <span className="text-green-700">👍{p.auditPositive}</span>}
+                        {p.auditNegative > 0 && <span className="text-red-700">👎{p.auditNegative}</span>}
+                        {p.auditMentions - p.auditPositive - p.auditNegative > 0 && (
+                          <span className="text-gray-500">·{p.auditMentions - p.auditPositive - p.auditNegative}</span>
+                        )}
+                      </span>
+                    ) : "—"}
+                  </td>
                   <td className="px-3 py-2.5">
                     <Link href={`/hr/employees/${p.userId}`} className="text-xs text-terracotta hover:underline">View</Link>
                   </td>
@@ -193,7 +220,7 @@ export default function HRPerformancePage() {
               ))}
               {staff.length === 0 && !isLoading && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-10 text-center text-sm text-muted-foreground">No data for this period</td>
+                  <td colSpan={11} className="px-3 py-10 text-center text-sm text-muted-foreground">No data for this period</td>
                 </tr>
               )}
             </tbody>
@@ -236,8 +263,54 @@ export default function HRPerformancePage() {
         </div>
       )}
 
+      {/* Audit mentions panel */}
+      {auditMentions.length > 0 && (
+        <div className="rounded-xl border bg-card">
+          <div className="border-b p-4">
+            <h2 className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-5 w-5 text-terracotta" /> Manager Audit Mentions — {MONTHS[month - 1]} {year}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Completed manager audits with staff named in notes. Positive mentions boost score, negative ones reduce it.</p>
+          </div>
+          <div className="divide-y">
+            {auditMentions.map((a) => (
+              <div key={a.reportId} className="p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="font-medium">{a.outletName}</span>
+                    <span className="text-xs text-gray-400">·</span>
+                    <span className="text-xs text-gray-500">{new Date(a.date).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}</span>
+                    <span className="text-xs text-gray-400">·</span>
+                    <span className="text-xs text-gray-500">by {a.auditor}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {a.overallScore !== null && (
+                      <span className="text-xs text-gray-500">Score: {Number(a.overallScore).toFixed(0)}</span>
+                    )}
+                    {a.sentiment === "positive" && <span className="flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs text-green-700"><ThumbsUp className="h-3 w-3" /> Positive</span>}
+                    {a.sentiment === "negative" && <span className="flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 text-xs text-red-700"><ThumbsDown className="h-3 w-3" /> Negative</span>}
+                    {a.sentiment === "neutral" && <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">Neutral</span>}
+                  </div>
+                </div>
+                {a.excerpt && <p className="mb-2 text-sm text-gray-700">{a.excerpt}{a.excerpt.length >= 300 ? "…" : ""}</p>}
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-xs text-muted-foreground">Mentioned:</span>
+                  {a.staffMentioned.map((s) => (
+                    <span key={s.userId} className={
+                      "rounded-full px-2 py-0.5 text-xs " +
+                      (a.sentiment === "positive" ? "bg-green-100 text-green-800" :
+                       a.sentiment === "negative" ? "bg-red-100 text-red-800" :
+                       "bg-gray-100 text-gray-700")
+                    }>{s.name}</span>
+                  ))}
+                  <Link href={`/ops/audit-reports/${a.reportId}`} className="ml-2 text-xs text-terracotta hover:underline">View full report →</Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <p className="rounded-lg bg-gray-50 p-3 text-xs text-gray-500">
-        <strong>Score formula:</strong> 30% punctuality (100 − avgLateMinutes × 5) · 20% hours efficiency (actual / scheduled) · 20% ops compliance (checklists completed) · 20% review rating (rating × 20, neutral 60 if no reviews) · 10% base. Configurable in a future revision.
+        <strong>Score formula:</strong> 30% punctuality (100 − avgLateMinutes × 5) · 20% hours efficiency (actual / scheduled) · 20% ops compliance (checklists completed) · 20% review rating (rating × 20, neutral 60 if no reviews) · 10% base · ±15 audit adjustment (+5/positive mention, −10/negative).
       </p>
     </div>
   );

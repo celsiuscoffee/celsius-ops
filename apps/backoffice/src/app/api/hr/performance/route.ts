@@ -87,6 +87,27 @@ export async function GET(req: NextRequest) {
     select: { assignedToId: true, status: true },
   });
 
+  // 7b. Audit reports completed in month (manager audits — look for staff mentions in notes)
+  const auditReports = await prisma.auditReport.findMany({
+    where: {
+      completedAt: { gte: new Date(monthStartIso), lte: new Date(monthEndIso) },
+      status: "COMPLETED",
+      ...(outletFilter ? { outletId: outletFilter } : {}),
+    },
+    select: {
+      id: true,
+      outletId: true,
+      auditorId: true,
+      date: true,
+      overallScore: true,
+      overallNotes: true,
+      completedAt: true,
+      outlet: { select: { name: true } },
+      items: { select: { sectionName: true, itemTitle: true, notes: true, rating: true } },
+      auditor: { select: { name: true } },
+    },
+  });
+
   // 8. Reviews from GBP per outlet (for staff-on-shift cross-ref)
   const outletsToCheck = outletFilter
     ? [outletFilter]
@@ -176,6 +197,10 @@ export async function GET(req: NextRequest) {
     // reviews
     reviewsOnShift: number;
     avgReviewRating: number;
+    // manager audit mentions
+    auditMentions: number;
+    auditPositive: number;
+    auditNegative: number;
     // composite
     score: number;
   };
@@ -204,6 +229,9 @@ export async function GET(req: NextRequest) {
       opsCompletionRate: 0,
       reviewsOnShift: 0,
       avgReviewRating: 0,
+      auditMentions: 0,
+      auditPositive: 0,
+      auditNegative: 0,
       score: 0,
     });
   });
@@ -271,6 +299,79 @@ export async function GET(req: NextRequest) {
   }
   perfMap.forEach((p) => { p.avgReviewRating = Math.round(p.avgReviewRating * 10) / 10; });
 
+  // Audit mentions — scan overallNotes + all item notes for each staff's name/fullName
+  type AuditMention = {
+    reportId: string;
+    outletName: string;
+    date: string;
+    auditor: string;
+    overallScore: number | null;
+    sentiment: "positive" | "negative" | "neutral";
+    excerpt: string;
+    staffMentioned: { userId: string; name: string }[];
+  };
+  const auditMentionsOut: AuditMention[] = [];
+
+  const wordBoundaryMatch = (haystack: string, needle: string) => {
+    if (!haystack || !needle || needle.length < 3) return false;
+    const re = new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    return re.test(haystack);
+  };
+
+  for (const report of auditReports) {
+    const overallTxt = report.overallNotes || "";
+    const itemTxts = (report.items || []).map((i) => i.notes || "").filter(Boolean);
+    const allTxt = [overallTxt, ...itemTxts].join(" \n ");
+    if (!allTxt.trim()) continue;
+
+    const score = report.overallScore ? Number(report.overallScore) : null;
+    // Also factor in item-level ratings — avg low rating items amplify negative sentiment
+    const itemRatings = (report.items || []).map((i) => i.rating).filter((r): r is number => r != null);
+    const avgItemRating = itemRatings.length > 0 ? itemRatings.reduce((a, b) => a + b, 0) / itemRatings.length : null;
+
+    // Sentiment: overall >= 80% OR avg item >= 4 → positive; < 60 OR avg item <= 2 → negative; else neutral
+    let sentiment: "positive" | "negative" | "neutral" = "neutral";
+    if ((score !== null && score >= 80) || (avgItemRating !== null && avgItemRating >= 4)) sentiment = "positive";
+    else if ((score !== null && score < 60) || (avgItemRating !== null && avgItemRating <= 2)) sentiment = "negative";
+
+    const mentioned: { userId: string; name: string }[] = [];
+    for (const u of users) {
+      const names = [u.name, u.fullName].filter((n): n is string => !!n && n.length >= 3);
+      // Also add first-name only (first whitespace-delimited token) for nicknames
+      const tokens = new Set<string>();
+      for (const n of names) {
+        tokens.add(n);
+        const first = n.split(/\s+/)[0];
+        if (first.length >= 4) tokens.add(first);
+      }
+      const hit = Array.from(tokens).some((t) => wordBoundaryMatch(allTxt, t));
+      if (hit) {
+        mentioned.push({ userId: u.id, name: u.name });
+        const p = perfMap.get(u.id);
+        if (p) {
+          p.auditMentions += 1;
+          if (sentiment === "positive") p.auditPositive += 1;
+          if (sentiment === "negative") p.auditNegative += 1;
+        }
+      }
+    }
+
+    if (mentioned.length > 0) {
+      // Excerpt: first 200 chars of overall notes, or first item note
+      const firstNonEmpty = [overallTxt, ...itemTxts].find((t) => t.trim().length > 0) || "";
+      auditMentionsOut.push({
+        reportId: report.id,
+        outletName: report.outlet?.name || "Unknown",
+        date: report.date.toISOString().slice(0, 10),
+        auditor: report.auditor?.name || "Unknown",
+        overallScore: score,
+        sentiment,
+        excerpt: firstNonEmpty.substring(0, 300),
+        staffMentioned: mentioned,
+      });
+    }
+  }
+
   // Composite score (0-100)
   // - 30% punctuality: 100 - (avgLateMinutes × 5) capped at 0
   // - 20% hours efficiency: actual / scheduled (capped 100)
@@ -281,13 +382,17 @@ export async function GET(req: NextRequest) {
     const punctuality = Math.max(0, 100 - p.avgLateMinutes * 5);
     const hoursEff = p.scheduledHours > 0 ? Math.min(100, (p.actualHours / p.scheduledHours) * 100) : (p.actualHours > 0 ? 100 : 0);
     const reviewScore = p.reviewsOnShift > 0 ? p.avgReviewRating * 20 : 60; // neutral 60 if no reviews
+    // Audit bonus/penalty: +5 per positive mention, -10 per negative (capped ±15)
+    const auditAdj = Math.max(-15, Math.min(15, p.auditPositive * 5 - p.auditNegative * 10));
     p.score = Math.round(
       (punctuality * 0.3) +
       (hoursEff * 0.2) +
       (p.opsCompletionRate * 0.2) +
       (reviewScore * 0.2) +
-      10,
+      10 +
+      auditAdj,
     );
+    p.score = Math.max(0, Math.min(100, p.score));
   });
 
   const staff = Array.from(perfMap.values())
@@ -301,5 +406,6 @@ export async function GET(req: NextRequest) {
     period: { year, month, start: monthStart, end: monthEnd },
     staff,
     reviews: reviews.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    auditMentions: auditMentionsOut.sort((a, b) => b.date.localeCompare(a.date)),
   });
 }
