@@ -105,6 +105,18 @@ export async function generateSchedule(
 ): Promise<GenerateResult> {
   const notes: string[] = [];
 
+  // 0. Load company-wide working time rules (editable in /hr/settings/working-time)
+  const { data: settings } = await hrSupabaseAdmin
+    .from("hr_company_settings")
+    .select("max_regular_hours_per_week, overtime_warn_threshold, hard_cap_hours_per_week, max_consecutive_days, min_rest_between_shifts_hours, overtime_requires_approval")
+    .limit(1)
+    .maybeSingle();
+
+  const MAX_REG_HOURS = Number(settings?.max_regular_hours_per_week ?? 45);
+  const HARD_CAP_HOURS = Number(settings?.hard_cap_hours_per_week ?? 60);
+  const MAX_CONSEC_DAYS = Number(settings?.max_consecutive_days ?? 6);
+  const MIN_REST_HOURS = Number(settings?.min_rest_between_shifts_hours ?? 11);
+
   // 1. Get outlet info
   const outlet = await prisma.outlet.findUnique({
     where: { id: outletId },
@@ -124,19 +136,42 @@ export async function generateSchedule(
       ],
       role: { in: ["STAFF", "MANAGER"] },
     },
-    select: { id: true, name: true, role: true, outletId: true },
+    select: { id: true, name: true, role: true, outletId: true, outletIds: true },
   });
 
   // Get HR profiles for employment type, salary, position, and schedule flag
   // Users marked schedule_required=false are excluded from auto-scheduling (HQ staff).
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, basic_salary, hourly_rate, schedule_required")
+    .select("user_id, position, employment_type, basic_salary, hourly_rate, schedule_required, is_rotating_multi_outlet, preferred_outlet_id")
     .in("user_id", users.map((u) => u.id));
 
   const profileMap = new Map(
-    (profiles || []).map((p: { user_id: string; position: string; employment_type: string; basic_salary: number; hourly_rate: number | null; schedule_required: boolean }) => [p.user_id, p]),
+    (profiles || []).map((p: { user_id: string; position: string; employment_type: string; basic_salary: number; hourly_rate: number | null; schedule_required: boolean; is_rotating_multi_outlet?: boolean; preferred_outlet_id?: string | null }) => [p.user_id, p]),
   );
+
+  // Track which staff rotate across multiple outlets — we'll allocate a reduced share of their week to THIS outlet
+  const rotatingUserIds = new Set(
+    (profiles || [])
+      .filter((p: { is_rotating_multi_outlet?: boolean }) => p.is_rotating_multi_outlet)
+      .map((p: { user_id: string }) => p.user_id),
+  );
+  if (rotatingUserIds.size > 0) {
+    notes.push(`${rotatingUserIds.size} rotating multi-outlet staff — hours at this outlet capped at a share of their weekly total`);
+  }
+
+  // Load approved/partial OT for the week per user — raises effective weekly cap
+  const weekEndIso = getWeekEnd(weekStart);
+  const { data: otApprovals } = await hrSupabaseAdmin
+    .from("hr_overtime_requests")
+    .select("user_id, hours_approved")
+    .gte("date", weekStart)
+    .lte("date", weekEndIso)
+    .in("status", ["approved", "partial"]);
+  const otHoursByUser = new Map<string, number>();
+  (otApprovals || []).forEach((r: { user_id: string; hours_approved: number | null }) => {
+    otHoursByUser.set(r.user_id, (otHoursByUser.get(r.user_id) || 0) + Number(r.hours_approved || 0));
+  });
 
   const staff: StaffInfo[] = users
     .filter((u) => {
@@ -214,11 +249,43 @@ export async function generateSchedule(
   const shifts: ShiftSlot[] = [];
   const hoursPerStaff = new Map<string, number>();
   const daysWorked = new Map<string, number>();
+  const consecutiveDays = new Map<string, number>();
+  const lastShiftEndISO = new Map<string, string>(); // for rest-gap enforcement
 
   staff.forEach((s) => {
     hoursPerStaff.set(s.id, 0);
     daysWorked.set(s.id, 0);
+    consecutiveDays.set(s.id, 0);
   });
+
+  // Cap helper — combines company rules + approved OT + rotating-staff share
+  const effectiveWeeklyCap = (userId: string, employmentType: StaffInfo["employment_type"]) => {
+    const typeCap = EMPLOYMENT_RULES[employmentType].maxWorkingHoursPerWeek;
+    const otCap = MAX_REG_HOURS + (otHoursByUser.get(userId) || 0);
+    let cap = Math.min(typeCap, otCap, HARD_CAP_HOURS);
+    // Rotating multi-outlet staff: allocate only a share at this outlet (count of outlets)
+    if (rotatingUserIds.has(userId)) {
+      const user = users.find((u) => u.id === userId);
+      const outletCount = (user?.outletIds?.length || 1);
+      cap = Math.floor(cap / Math.max(1, outletCount));
+    }
+    return cap;
+  };
+
+  const canTakeShift = (userId: string, shiftStartHHMM: string, date: string) => {
+    // Consecutive days cap
+    if ((consecutiveDays.get(userId) || 0) >= MAX_CONSEC_DAYS) return false;
+    // Rest gap: if had a shift yesterday, the gap between prev end and this start must be >= MIN_REST_HOURS
+    const lastEnd = lastShiftEndISO.get(userId);
+    if (lastEnd) {
+      const [h, m] = shiftStartHHMM.split(":").map(Number);
+      const thisStart = new Date(`${date}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00`);
+      const prevEnd = new Date(lastEnd);
+      const gapHours = (thisStart.getTime() - prevEnd.getTime()) / 3600000;
+      if (gapHours < MIN_REST_HOURS) return false;
+    }
+    return true;
+  };
 
   const dates = getWeekDates(weekStart);
 
@@ -238,7 +305,11 @@ export async function generateSchedule(
     const availableFullTimers = fullTimers.filter((s) => {
       if (leaveSet.has(`${s.id}:${date}`) || blockoutSet.has(`${s.id}:${date}`)) return false;
       const rules = EMPLOYMENT_RULES[s.employment_type];
-      if ((hoursPerStaff.get(s.id) || 0) >= rules.maxWorkingHoursPerWeek) return false;
+      const cap = effectiveWeeklyCap(s.id, s.employment_type);
+      // Prefer still-under-regular-cap; only allow beyond if they have approved OT
+      if ((hoursPerStaff.get(s.id) || 0) + rules.workingHoursPerShift > cap) return false;
+      // Consecutive-days + rest-gap check against opening slot by default
+      if (!canTakeShift(s.id, SHIFT_SLOTS.opening.start, date)) return false;
       // Rest day: give rest if they've worked enough days
       const worked = daysWorked.get(s.id) || 0;
       const daysLeft = dates.length - dates.indexOf(date);
@@ -272,10 +343,13 @@ export async function generateSchedule(
       });
       hoursPerStaff.set(s.id, (hoursPerStaff.get(s.id) || 0) + rules.workingHoursPerShift);
       daysWorked.set(s.id, (daysWorked.get(s.id) || 0) + 1);
+      consecutiveDays.set(s.id, (consecutiveDays.get(s.id) || 0) + 1);
+      lastShiftEndISO.set(s.id, `${date}T${SHIFT_SLOTS.opening.end}:00`);
     }
 
     for (const s of closingFT) {
       if (openingFT.includes(s)) continue;
+      if (!canTakeShift(s.id, SHIFT_SLOTS.closing.start, date)) continue;
       const rules = EMPLOYMENT_RULES[s.employment_type];
       shifts.push({
         user_id: s.id,
@@ -287,13 +361,23 @@ export async function generateSchedule(
       });
       hoursPerStaff.set(s.id, (hoursPerStaff.get(s.id) || 0) + rules.workingHoursPerShift);
       daysWorked.set(s.id, (daysWorked.get(s.id) || 0) + 1);
+      consecutiveDays.set(s.id, (consecutiveDays.get(s.id) || 0) + 1);
+      lastShiftEndISO.set(s.id, `${date}T${SHIFT_SLOTS.closing.end}:00`);
     }
+
+    // Reset consecutive counter for staff NOT working today
+    staff.forEach((s) => {
+      const workedToday = shifts.some((sh) => sh.user_id === s.id && sh.shift_date === date);
+      if (!workedToday) consecutiveDays.set(s.id, 0);
+    });
 
     // ─── Assign part-timers to fill gaps (morning/afternoon/evening) ───
     const availablePT = partTimers.filter((s) => {
       if (leaveSet.has(`${s.id}:${date}`) || blockoutSet.has(`${s.id}:${date}`)) return false;
       const rules = EMPLOYMENT_RULES.part_time;
-      if ((hoursPerStaff.get(s.id) || 0) >= rules.maxWorkingHoursPerWeek) return false;
+      const cap = effectiveWeeklyCap(s.id, "part_time");
+      if ((hoursPerStaff.get(s.id) || 0) + rules.workingHoursPerShift > cap) return false;
+      if (!canTakeShift(s.id, SHIFT_SLOTS.morning.start, date)) return false;
       return true;
     });
 
@@ -322,10 +406,21 @@ export async function generateSchedule(
       });
       hoursPerStaff.set(s.id, (hoursPerStaff.get(s.id) || 0) + rules.workingHoursPerShift);
       daysWorked.set(s.id, (daysWorked.get(s.id) || 0) + 1);
+      consecutiveDays.set(s.id, (consecutiveDays.get(s.id) || 0) + 1);
+      lastShiftEndISO.set(s.id, `${date}T${slot.end}:00`);
     }
 
     // (no intern scheduling — Celsius doesn't have interns)
   }
+
+  // Surface unapproved OT (nobody should cross the regular cap without OT approval)
+  hoursPerStaff.forEach((h, userId) => {
+    const otAllowance = otHoursByUser.get(userId) || 0;
+    if (h > MAX_REG_HOURS + otAllowance) {
+      const s = staff.find((x) => x.id === userId);
+      notes.push(`⚠️ ${s?.name || userId} scheduled ${h}h — above regular cap ${MAX_REG_HOURS}h. OT approval needed.`);
+    }
+  });
 
   // 5. Calculate totals
   let totalHours = 0;
