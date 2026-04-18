@@ -3,6 +3,7 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import { CalendarClock, Plus, Trash2, Loader2, Sparkles, Bot } from "lucide-react";
+import { SettingsNav } from "./_nav";
 
 type Holiday = {
   id: string;
@@ -90,8 +91,9 @@ export default function HRSettingsPage() {
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <div>
         <h1 className="text-2xl font-bold">HR Settings</h1>
-        <p className="text-sm text-muted-foreground">Public holidays, leave balances, and policies</p>
+        <p className="text-sm text-muted-foreground">Configure how leave, payroll, and scheduling work for your team</p>
       </div>
+      <SettingsNav />
 
       {/* Leave Balances Init */}
       <div className="rounded-xl border bg-card p-5">

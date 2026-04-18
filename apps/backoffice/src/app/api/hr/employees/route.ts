@@ -20,6 +20,7 @@ export async function GET() {
       outletId: true, outlet: { select: { name: true } },
       username: true, appAccess: true, moduleAccess: true, status: true,
       pin: true, passwordHash: true, lastLoginAt: true,
+      bankName: true, bankAccountNumber: true, bankAccountName: true,
     },
     orderBy: [{ role: "asc" }, { name: "asc" }],
   });

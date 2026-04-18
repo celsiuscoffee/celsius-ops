@@ -10,6 +10,7 @@ import type { EmployeeProfile } from "@/lib/hr/types";
 type Employee = {
   id: string;
   name: string;
+  fullName: string | null;
   role: string;
   phone: string;
   email: string | null;
@@ -23,6 +24,9 @@ type Employee = {
   hasPin?: boolean;
   hasPassword?: boolean;
   lastLoginAt?: string | null;
+  bankName?: string | null;
+  bankAccountNumber?: string | null;
+  bankAccountName?: string | null;
 };
 
 const ROLES = ["OWNER", "ADMIN", "MANAGER", "STAFF"];
@@ -41,6 +45,14 @@ const POSITIONS = [
   "Kitchen Lead", "Manager", "Accountant", "Executive", "Director",
 ];
 
+const MY_BANKS = [
+  "Maybank", "CIMB Bank", "Public Bank", "RHB Bank", "Hong Leong Bank",
+  "AmBank", "Bank Islam", "Bank Rakyat", "Bank Muamalat", "BSN",
+  "Agrobank", "Alliance Bank", "Affin Bank", "HSBC Malaysia",
+  "Standard Chartered", "OCBC Bank", "UOB Malaysia", "Citibank Malaysia",
+  "MBSB Bank", "Touch 'n Go eWallet", "GXBank", "Aeon Bank",
+];
+
 export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -55,6 +67,7 @@ export default function EmployeeDetailPage() {
     position: "",
     employment_type: "full_time",
     join_date: "",
+    manager_user_id: "",
     basic_salary: "",
     hourly_rate: "",
     ic_number: "",
@@ -83,6 +96,11 @@ export default function EmployeeDetailPage() {
     pin: "",
     password: "",
   });
+
+  // Bank & identity state (User table)
+  const [bank, setBank] = useState({ fullName: "", bankName: "", bankAccountName: "", bankAccountNumber: "" });
+  const [savingBank, setSavingBank] = useState(false);
+  const [bankSaved, setBankSaved] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [savingAccess, setSavingAccess] = useState(false);
@@ -102,8 +120,42 @@ export default function EmployeeDetailPage() {
         pin: "",
         password: "",
       });
+      setBank({
+        fullName: employee.fullName || "",
+        bankName: employee.bankName || "",
+        bankAccountName: employee.bankAccountName || "",
+        bankAccountNumber: employee.bankAccountNumber || "",
+      });
     }
   }, [employee]);
+
+  const handleSaveBank = async () => {
+    if (!id) return;
+    setSavingBank(true);
+    setBankSaved(false);
+    try {
+      const res = await fetch(`/api/hr/employees/${id}/access`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: bank.fullName || null,
+          bankName: bank.bankName || null,
+          bankAccountName: bank.bankAccountName || null,
+          bankAccountNumber: bank.bankAccountNumber || null,
+        }),
+      });
+      if (res.ok) {
+        setBankSaved(true);
+        mutate();
+        setTimeout(() => setBankSaved(false), 2000);
+      } else {
+        const d = await res.json();
+        alert(d.error || "Failed to save bank details");
+      }
+    } finally {
+      setSavingBank(false);
+    }
+  };
 
   const handleSaveAccess = async () => {
     if (!id) return;
@@ -162,6 +214,7 @@ export default function EmployeeDetailPage() {
         position: profile.position || "",
         employment_type: profile.employment_type || "full_time",
         join_date: profile.join_date?.slice(0, 10) || "",
+        manager_user_id: profile.manager_user_id || "",
         basic_salary: profile.basic_salary?.toString() || "",
         hourly_rate: profile.hourly_rate?.toString() || "",
         ic_number: profile.ic_number || "",
@@ -191,6 +244,7 @@ export default function EmployeeDetailPage() {
         body: JSON.stringify({
           user_id: id,
           ...form,
+          manager_user_id: form.manager_user_id || null,
           basic_salary: form.basic_salary ? parseFloat(form.basic_salary) : 0,
           hourly_rate: form.hourly_rate ? parseFloat(form.hourly_rate) : null,
           epf_employee_rate: parseFloat(form.epf_employee_rate) || 11,
@@ -247,6 +301,19 @@ export default function EmployeeDetailPage() {
             </Field>
             <Field label="Join Date">
               <input type="date" value={form.join_date} onChange={(e) => update("join_date", e.target.value)} className="input" />
+            </Field>
+            <Field label="Reports To (Manager) — used for leave approvals">
+              <select value={form.manager_user_id} onChange={(e) => update("manager_user_id", e.target.value)} className="input">
+                <option value="">— No manager —</option>
+                {(data?.employees || [])
+                  .filter((e) => e.id !== id && (e.role === "OWNER" || e.role === "ADMIN" || e.role === "MANAGER"))
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} — {e.role}
+                    </option>
+                  ))}
+              </select>
             </Field>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -343,6 +410,38 @@ export default function EmployeeDetailPage() {
             className="input"
             placeholder="Internal notes..."
           />
+        </section>
+
+        {/* Bank & Identity */}
+        <section className="rounded-xl border bg-card p-5 lg:col-span-2">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-semibold">Bank & Identity</h2>
+            <button
+              onClick={handleSaveBank}
+              disabled={savingBank}
+              className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+            >
+              {savingBank ? <Loader2 className="h-3 w-3 animate-spin" /> : bankSaved ? <CheckCircle2 className="h-3 w-3" /> : <Save className="h-3 w-3" />}
+              {bankSaved ? "Saved" : "Save Bank"}
+            </button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Full Legal Name (for payslip / statutory)">
+              <input value={bank.fullName} onChange={(e) => setBank((b) => ({ ...b, fullName: e.target.value }))} className="input" placeholder="e.g. Ahmad Bin Abdullah" />
+            </Field>
+            <Field label="Bank">
+              <select value={bank.bankName} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} className="input">
+                <option value="">— Select bank —</option>
+                {MY_BANKS.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </Field>
+            <Field label="Account Holder Name">
+              <input value={bank.bankAccountName} onChange={(e) => setBank((b) => ({ ...b, bankAccountName: e.target.value }))} className="input" placeholder="As per bank records" />
+            </Field>
+            <Field label="Account Number">
+              <input value={bank.bankAccountNumber} onChange={(e) => setBank((b) => ({ ...b, bankAccountNumber: e.target.value.replace(/\s/g, "") })) } className="input" placeholder="Digits only" />
+            </Field>
+          </div>
         </section>
 
         {/* Login & Access */}

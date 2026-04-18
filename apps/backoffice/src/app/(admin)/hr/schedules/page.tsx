@@ -2,6 +2,7 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import {
   Bot, CalendarDays, Send, Loader2, ArrowLeftRight,
   ChevronLeft, ChevronRight, RotateCcw, Trash2,
@@ -99,6 +100,15 @@ export default function SchedulesPage() {
   const [weekStart, setWeekStart] = useState(getNextMonday());
   const [pickerOpen, setPickerOpen] = useState<{ userId: string; date: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [pendingCheck, setPendingCheck] = useState<null | {
+    userId: string;
+    date: string;
+    templateId: string | null;
+    status: "warn" | "overtime" | "block";
+    message: string;
+    proposed: number;
+    limit: number;
+  }>(null);
   const [publishing, setPublishing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -159,8 +169,64 @@ export default function SchedulesPage() {
     return m;
   }, [grid]);
 
-  const setCell = async (userId: string, date: string, templateId: string | null) => {
+  const computeTemplateHours = (templateId: string | null): number => {
+    if (!templateId || templateId === "rest_day") return 0;
+    const t = (grid?.templates || []).find((x) => x.id === templateId);
+    if (!t) return 0;
+    const toMin = (s: string) => {
+      const [h, m] = s.split(":").map(Number);
+      return h * 60 + (m || 0);
+    };
+    const dur = toMin(t.end_time) - toMin(t.start_time) - (t.break_minutes || 0);
+    return dur > 0 ? dur / 60 : 0;
+  };
+
+  const setCell = async (userId: string, date: string, templateId: string | null, bypassCheck = false) => {
     if (!selectedOutlet) return;
+
+    // Hours check (weekly 45h cap, multi-outlet aware, user-scoped)
+    if (!bypassCheck) {
+      const proposedHours = computeTemplateHours(templateId);
+      // Subtract hours of existing shift at this cell (if overwriting) so we don't double-count
+      const existing = shiftsMap.get(`${userId}:${date}`);
+      const existingHours = existing
+        ? (() => {
+            const toMin = (s: string) => { const [h, m] = s.split(":").map(Number); return h * 60 + (m || 0); };
+            const dur = toMin(existing.end_time) - toMin(existing.start_time) - (existing.break_minutes || 0);
+            return dur > 0 ? dur / 60 : 0;
+          })()
+        : 0;
+      const netAdditional = proposedHours - existingHours;
+
+      if (netAdditional > 0) {
+        try {
+          const res = await fetch("/api/hr/schedules/hours-check", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: userId,
+              week_start: weekStart,
+              additional_hours: netAdditional,
+              exclude_shift_id: existing?.id,
+            }),
+          });
+          const check = await res.json();
+          if (check.status === "block" || check.status === "overtime" || check.status === "warn") {
+            setPendingCheck({
+              userId, date, templateId,
+              status: check.status,
+              message: check.message,
+              proposed: check.proposed_total,
+              limit: check.limit,
+            });
+            return; // Hold until user confirms (or aborts if block)
+          }
+        } catch {
+          // If hours-check fails, fall through and save anyway (don't block on infra)
+        }
+      }
+    }
+
     setSaving(true);
     try {
       await fetch("/api/hr/schedules/cell", {
@@ -176,6 +242,7 @@ export default function SchedulesPage() {
       });
       mutate();
       setPickerOpen(null);
+      setPendingCheck(null);
     } finally {
       setSaving(false);
     }
@@ -535,6 +602,56 @@ export default function SchedulesPage() {
       ) : (
         <div className="rounded-xl border bg-card py-16 text-center">
           <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {pendingCheck && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setPendingCheck(null)}>
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center gap-2">
+              <div className={
+                "flex h-9 w-9 items-center justify-center rounded-full " +
+                (pendingCheck.status === "block" ? "bg-red-100 text-red-700" :
+                 pendingCheck.status === "overtime" ? "bg-orange-100 text-orange-700" :
+                 "bg-amber-100 text-amber-700")
+              }>
+                ⚠
+              </div>
+              <h3 className="text-lg font-semibold">
+                {pendingCheck.status === "block" ? "Shift blocked" :
+                 pendingCheck.status === "overtime" ? "Overtime — approval needed" :
+                 "Approaching weekly limit"}
+              </h3>
+            </div>
+            <p className="mb-4 text-sm text-gray-700">{pendingCheck.message}</p>
+            <div className="mb-4 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+              Proposed weekly total: <strong>{pendingCheck.proposed.toFixed(1)}h</strong> · Regular cap: <strong>{pendingCheck.limit}h</strong>
+              <p className="mt-1 text-[11px] text-gray-500">
+                Sum across all outlets this staff works at this week (user-scoped, multi-outlet aware).
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setPendingCheck(null)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button>
+              {pendingCheck.status === "overtime" && (
+                <Link
+                  href="/hr/overtime"
+                  className="rounded-lg border border-terracotta px-4 py-2 text-sm text-terracotta hover:bg-terracotta/5"
+                  onClick={() => setPendingCheck(null)}
+                >
+                  Request OT approval
+                </Link>
+              )}
+              {pendingCheck.status !== "block" && (
+                <button
+                  onClick={() => setCell(pendingCheck.userId, pendingCheck.date, pendingCheck.templateId, true)}
+                  disabled={saving}
+                  className="rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+                >
+                  {pendingCheck.status === "overtime" ? "Save as overtime" : "Confirm"}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

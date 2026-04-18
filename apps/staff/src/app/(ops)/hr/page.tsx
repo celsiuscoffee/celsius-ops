@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, CalendarDays, CalendarOff, Receipt, ChevronRight, CheckCircle2, CalendarX, History } from "lucide-react";
+import { Clock, CalendarDays, CalendarOff, Receipt, ChevronRight, CheckCircle2, CalendarX, History, Zap } from "lucide-react";
 
 type HRStatus = {
   activeLog: {
@@ -58,6 +58,14 @@ export default function HRHomePage() {
       subtitle: "Request & view balances",
       color: "text-purple-600",
       bgColor: "bg-purple-50",
+    },
+    {
+      href: "/hr/overtime",
+      icon: Zap,
+      label: "Overtime",
+      subtitle: "Request OT approval",
+      color: "text-amber-600",
+      bgColor: "bg-amber-50",
     },
     {
       href: "/hr/availability",

@@ -13,6 +13,7 @@ export type EmployeeProfile = {
   probation_end_date: string | null;
   employment_type: "full_time" | "part_time" | "contract" | "intern";
   position: string | null;
+  manager_user_id: string | null;
   basic_salary: number;
   hourly_rate: number | null;
   epf_number: string | null;
@@ -27,6 +28,63 @@ export type EmployeeProfile = {
   schedule_required: boolean;
   created_at: string;
   updated_at: string;
+};
+
+export type LeavePolicy = {
+  id: string;
+  leave_type: string;
+  display_name: string;
+  entitlement_type: "fixed" | "on_request";
+  entitlement_days: number | null;
+  accrual_type: "yearly" | "monthly" | "daily" | "none";
+  prorated: boolean;
+  prorate_mode: "started_month" | "completed_month" | "partial_month";
+  carry_forward: boolean;
+  carry_forward_max_days: number | null;
+  carry_forward_expiry_months: number | null;
+  first_approver: "manager" | "position" | "person" | "role" | "none";
+  second_approver: "manager" | "position" | "person" | "role" | "none";
+  half_day_allowed: boolean;
+  apply_in_past: boolean;
+  min_advance_days: number | null;
+  max_advance_days: number | null;
+  min_consecutive_days: number | null;
+  max_consecutive_days: number | null;
+  mandatory_attachment: boolean;
+  mandatory_justification: boolean;
+  applies_to_employment_types: string[];
+  is_active: boolean;
+  notes: string | null;
+};
+
+export type PayrollItemCatalogEntry = {
+  id: string;
+  code: string;
+  name: string;
+  category: "Remuneration" | "Allowances" | "Deductions" | "Benefits in Kind" | "Other perquisites" | "Tax Relief";
+  item_type: "fixed_remuneration" | "additional_remuneration" | "deduct_from_gross" | "deduct_after_net" | "not_a_remuneration";
+  ea_form_field: string | null;
+  pcb_taxable: boolean;
+  epf_contributing: boolean;
+  socso_contributing: boolean;
+  eis_contributing: boolean;
+  hrdf_contributing: boolean;
+  is_bik: boolean;
+  is_custom: boolean;
+  sort_order: number;
+  is_active: boolean;
+};
+
+export type ShiftTemplate = {
+  id: string;
+  outlet_id: string | null;
+  label: string;
+  start_time: string; // HH:MM:SS
+  end_time: string;
+  break_minutes: number;
+  color: string | null;
+  sort_order: number | null;
+  is_active: boolean;
 };
 
 export type GeofenceZone = {

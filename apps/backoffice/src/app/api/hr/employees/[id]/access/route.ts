@@ -27,6 +27,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.outletIds !== undefined) updateData.outletIds = body.outletIds;
   if (body.appAccess !== undefined) updateData.appAccess = body.appAccess;
   if (body.moduleAccess !== undefined) updateData.moduleAccess = body.moduleAccess;
+  if (body.fullName !== undefined) updateData.fullName = body.fullName || null;
+  if (body.bankName !== undefined) updateData.bankName = body.bankName || null;
+  if (body.bankAccountNumber !== undefined) updateData.bankAccountNumber = body.bankAccountNumber || null;
+  if (body.bankAccountName !== undefined) updateData.bankAccountName = body.bankAccountName || null;
 
   // Hash PIN if provided
   if (body.pin !== undefined) {
