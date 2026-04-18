@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Loader2, Trash2, ListChecks, ClipboardList, ChevronRight } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
-import { AuditNav } from "../_nav";
+import { SopNav } from "../_nav";
 
 type AuditTemplate = {
   id: string;
@@ -100,7 +100,7 @@ export default function AuditTemplatesPage() {
 
   return (
     <div className="space-y-4 p-6">
-      <AuditNav />
+      <SopNav />
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Audit Templates</h2>
