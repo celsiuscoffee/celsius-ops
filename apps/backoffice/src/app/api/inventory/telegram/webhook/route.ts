@@ -92,6 +92,11 @@ async function processMessage(message: TelegramMessage) {
   const upload = await cloudinary.uploader.upload(base64, {
     folder: "celsius-coffee/telegram-inbox",
     resource_type: isPdf ? "raw" : "image",
+    // PDFs uploaded as `raw` need a .pdf public_id so Cloudinary serves them
+    // with `application/pdf` (not `application/octet-stream`). Otherwise
+    // browsers render the raw bytes as text. Shortlink route also guards
+    // against this, but fixing it at the source avoids the proxy hop.
+    ...(isPdf ? { public_id: `pop-${Date.now()}.pdf` } : {}),
     ...(isPdf ? {} : { transformation: [{ quality: "auto", fetch_format: "auto" }] }),
   });
   const cloudinaryUrl = upload.secure_url;
