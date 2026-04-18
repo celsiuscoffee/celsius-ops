@@ -16,6 +16,7 @@ type StaffInfo = {
   role_category: RoleCategory;
   is_rotating: boolean;
   outlet_count: number;
+  rotation_outlet_ids: string[]; // explicit rotation set; empty = rotate across all outletIds
 };
 
 type ShiftSlot = {
@@ -123,7 +124,7 @@ export async function generateSchedule(
 
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, position, employment_type, basic_salary, hourly_rate, schedule_required, is_rotating_multi_outlet, preferred_outlet_id")
+    .select("user_id, position, employment_type, basic_salary, hourly_rate, schedule_required, is_rotating_multi_outlet, preferred_outlet_id, rotation_outlet_ids")
     .in("user_id", users.map((u) => u.id));
 
   const profileMap = new Map(
@@ -132,6 +133,7 @@ export async function generateSchedule(
       basic_salary: number; hourly_rate: number | null;
       schedule_required: boolean | null; is_rotating_multi_outlet: boolean | null;
       preferred_outlet_id: string | null;
+      rotation_outlet_ids: string[] | null;
     }) => [p.user_id, p]),
   );
 
@@ -155,7 +157,17 @@ export async function generateSchedule(
         role_category: classifyRole(p?.position),
         is_rotating: !!p?.is_rotating_multi_outlet,
         outlet_count: Math.max(1, outletIds.length),
+        rotation_outlet_ids: (p?.rotation_outlet_ids || []) as string[],
       };
+    })
+    // Rotating staff: if rotation_outlet_ids is populated, skip them when
+    // scheduling an outlet that's NOT in their explicit rotation set.
+    // (outletIds may include outlets they only have app access to, e.g. for
+    // attendance review, but shouldn't be auto-scheduled at.)
+    .filter((s) => {
+      if (!s.is_rotating) return true;
+      if (s.rotation_outlet_ids.length === 0) return true; // no explicit set → rotate across all outletIds
+      return s.rotation_outlet_ids.includes(outletId);
     });
 
   if (staff.length === 0) throw new Error(`No active staff assigned to outlet ${outlet.name}`);
@@ -231,22 +243,22 @@ export async function generateSchedule(
     consecutiveDays.set(s.id, 0);
   });
 
-  // Rotating staff (Adam Kelvin, Syafiq Kaberi) rotate across 3 core outlets
-  // (Shah Alam, Conezion, Tamarind). Clamp divisor to 3 — their outletIds may
-  // include more for permissions, but the scheduler rotation is 3-way.
-  const ROTATION_OUTLET_SHARE = 3;
+  // Rotating staff split their weekly cap across their rotation outlets.
+  // Use rotation_outlet_ids.length if set (Syafiq/Adam = 3), else full outletIds.
+  const rotationShare = (s: StaffInfo) =>
+    s.rotation_outlet_ids.length > 0 ? s.rotation_outlet_ids.length : Math.max(1, s.outlet_count);
 
   const weeklyCap = (s: StaffInfo) => {
     const typeCap = EMPLOYMENT_RULES[s.employment_type].maxWorkingHoursPerWeek;
     const otCap = MAX_REG_HOURS + (otHoursByUser.get(s.id) || 0);
     let cap = Math.min(typeCap, otCap, HARD_CAP_HOURS);
-    if (s.is_rotating) cap = Math.floor(cap / ROTATION_OUTLET_SHARE); // 15h/week per outlet = 2 shifts
+    if (s.is_rotating) cap = Math.floor(cap / rotationShare(s)); // e.g. 45/3 = 15h per outlet = 2 shifts
     return cap;
   };
 
   const maxDaysFor = (s: StaffInfo) => {
     const rules = EMPLOYMENT_RULES[s.employment_type];
-    if (s.is_rotating) return Math.max(2, Math.floor(rules.maxDaysPerWeek / ROTATION_OUTLET_SHARE)); // 2 days/outlet
+    if (s.is_rotating) return Math.max(2, Math.floor(rules.maxDaysPerWeek / rotationShare(s)));
     return rules.maxDaysPerWeek;
   };
 
