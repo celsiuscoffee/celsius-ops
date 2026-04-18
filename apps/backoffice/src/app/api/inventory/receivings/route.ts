@@ -184,29 +184,52 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Auto-create invoice from receiving (skip for transfers — no supplier invoice)
+  // Attach/create supplier invoice for non-transfer receivings.
+  //
+  // If the PO already has an invoice (e.g. created earlier via the Telegram
+  // POP webhook and possibly already PAID), append the receiving photos to
+  // it and never touch its status. Only create a new PENDING invoice when
+  // the order has no invoice yet, or for ad-hoc receivings without a PO.
   if (!isTransfer) {
     try {
-      const invCount = await prisma.invoice.count();
-      const invoiceNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
-      const totalAmount = orderId
-        ? (await prisma.order.findUnique({ where: { id: orderId }, select: { totalAmount: true } }))?.totalAmount ?? 0
-        : items.reduce((s: number, i: { receivedQty: number; unitPrice?: number }) => s + (i.receivedQty * (i.unitPrice ?? 0)), 0);
+      const existingForOrder = orderId
+        ? await prisma.invoice.findFirst({
+            where: { orderId },
+            orderBy: { createdAt: "desc" },
+            select: { id: true },
+          })
+        : null;
 
-      await prisma.invoice.create({
-        data: {
-          invoiceNumber,
-          orderId: orderId || null,
-          outletId,
-          supplierId: supplierId!,
-          amount: totalAmount,
-          status: "PENDING",
-          photos: invoicePhotos || [],
-          notes: notes ? `From receiving: ${notes}` : null,
-        },
-      });
-    } catch {
-      // Invoice creation is non-critical — don't fail the receiving
+      if (existingForOrder) {
+        if (invoicePhotos && invoicePhotos.length > 0) {
+          await prisma.invoice.update({
+            where: { id: existingForOrder.id },
+            data: { photos: { push: invoicePhotos } },
+          });
+        }
+      } else {
+        const invCount = await prisma.invoice.count();
+        const invoiceNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
+        const totalAmount = orderId
+          ? (await prisma.order.findUnique({ where: { id: orderId }, select: { totalAmount: true } }))?.totalAmount ?? 0
+          : items.reduce((s: number, i: { receivedQty: number; unitPrice?: number }) => s + (i.receivedQty * (i.unitPrice ?? 0)), 0);
+
+        await prisma.invoice.create({
+          data: {
+            invoiceNumber,
+            orderId: orderId || null,
+            outletId,
+            supplierId: supplierId!,
+            amount: totalAmount,
+            status: "PENDING",
+            photos: invoicePhotos || [],
+            notes: notes ? `From receiving: ${notes}` : null,
+          },
+        });
+      }
+    } catch (err) {
+      console.error("[receivings] invoice attach/create failed:", err);
+      // Invoice side-effect is non-critical — don't fail the receiving
     }
   }
 
