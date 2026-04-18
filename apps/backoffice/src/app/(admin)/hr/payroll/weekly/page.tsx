@@ -2,7 +2,7 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { Bot, Banknote, Loader2, CheckCircle2, FileText, CalendarDays, ArrowLeft } from "lucide-react";
+import { Bot, Banknote, Loader2, CheckCircle2, FileText, CalendarDays, ArrowLeft, Download, Edit2, Save, X, DollarSign } from "lucide-react";
 import Link from "next/link";
 
 type PayrollRun = {
@@ -20,6 +20,14 @@ type PayrollRun = {
 type PayrollItem = {
   id: string;
   user_id: string;
+  name: string | null;
+  fullName: string | null;
+  bankName: string | null;
+  bankAccountNumber: string | null;
+  bankAccountName: string | null;
+  hourly_rate: number | null;
+  position: string | null;
+  employment_type: string | null;
   total_regular_hours: number;
   total_ot_hours: number;
   ot_1_5x_amount: number;
@@ -27,7 +35,7 @@ type PayrollItem = {
   ot_3x_amount: number;
   total_gross: number;
   net_pay: number;
-  computation_details: { hourly_rate: number; attendance_records: number } | null;
+  computation_details: { hourly_rate?: number; attendance_records?: number; manually_adjusted?: boolean } | null;
 };
 
 /** Get the Monday of the current week (or given date) in YYYY-MM-DD */
@@ -91,6 +99,59 @@ export default function WeeklyPayrollPage() {
       mutate();
     } finally {
       setConfirming(null);
+    }
+  };
+
+  const handleMarkPaid = async (runId: string) => {
+    if (!confirm("Mark this payroll as paid? Do this after the bank transfer is completed.")) return;
+    await fetch("/api/hr/payroll/weekly", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mark_paid", run_id: runId }),
+    });
+    mutate();
+  };
+
+  const handleBankFile = (runId: string) => {
+    window.open(`/api/hr/payroll/weekly/bank-file?run_id=${runId}`, "_blank");
+  };
+
+  // Inline-edit state for per-item adjust
+  const [editing, setEditing] = useState<{ itemId: string; hours: string; rate: string; ot: string } | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const startEdit = (item: PayrollItem) => {
+    setEditing({
+      itemId: item.id,
+      hours: String(item.total_regular_hours || 0),
+      rate: String(item.hourly_rate || item.computation_details?.hourly_rate || 9),
+      ot: String(item.total_ot_hours || 0),
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch("/api/hr/payroll/weekly", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          item_id: editing.itemId,
+          hours: Number(editing.hours),
+          hourly_rate: Number(editing.rate),
+          ot_hours: Number(editing.ot),
+        }),
+      });
+      if (res.ok) {
+        setEditing(null);
+        mutate();
+      } else {
+        const { error } = await res.json();
+        alert(error || "Failed to save");
+      }
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -198,7 +259,25 @@ export default function WeeklyPayrollPage() {
                       Confirm
                     </button>
                   )}
-                  {isConfirmed && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+                  {isConfirmed && (
+                    <>
+                      <button
+                        onClick={() => handleBankFile(run.id)}
+                        className="flex items-center gap-1 rounded-lg border border-blue-600 px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                      >
+                        <Download className="h-3 w-3" />
+                        Bank file
+                      </button>
+                      <button
+                        onClick={() => handleMarkPaid(run.id)}
+                        className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                      >
+                        <DollarSign className="h-3 w-3" />
+                        Mark paid
+                      </button>
+                    </>
+                  )}
+                  {run.status === "paid" && <CheckCircle2 className="h-5 w-5 text-green-500" />}
                 </div>
               </div>
 
@@ -213,26 +292,73 @@ export default function WeeklyPayrollPage() {
                           <th className="pb-2 pr-3 text-right">Hours</th>
                           <th className="pb-2 pr-3 text-right">OT</th>
                           <th className="pb-2 pr-3 text-right">Shifts</th>
-                          <th className="pb-2 text-right font-semibold">Gross</th>
+                          <th className="pb-2 pr-3 text-right font-semibold">Gross</th>
+                          <th className="pb-2"></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {detailData.items.map((item) => (
-                          <tr key={item.id} className="border-b last:border-0">
-                            <td className="py-2 pr-3 font-medium">{item.user_id.slice(0, 8)}…</td>
-                            <td className="py-2 pr-3 text-right">
-                              {item.computation_details?.hourly_rate
-                                ? `RM ${item.computation_details.hourly_rate}/h`
-                                : "—"}
-                            </td>
-                            <td className="py-2 pr-3 text-right">{Number(item.total_regular_hours).toFixed(2)}h</td>
-                            <td className="py-2 pr-3 text-right">
-                              {Number(item.total_ot_hours) > 0 ? `${item.total_ot_hours}h` : "—"}
-                            </td>
-                            <td className="py-2 pr-3 text-right">{item.computation_details?.attendance_records ?? 0}</td>
-                            <td className="py-2 text-right font-semibold">{fmt(item.total_gross)}</td>
-                          </tr>
-                        ))}
+                        {detailData.items.map((item) => {
+                          const isEditing = editing?.itemId === item.id;
+                          const displayRate = item.hourly_rate || item.computation_details?.hourly_rate || 0;
+                          return (
+                            <tr key={item.id} className="border-b last:border-0">
+                              <td className="py-2 pr-3 font-medium">
+                                {item.fullName || item.name || item.user_id.slice(0, 8) + "…"}
+                                {item.computation_details?.manually_adjusted && (
+                                  <span className="ml-2 text-[10px] text-amber-600">✎ edited</span>
+                                )}
+                                {item.bankName && item.bankAccountNumber && (
+                                  <div className="text-[10px] text-gray-400">{item.bankName} · {item.bankAccountNumber}</div>
+                                )}
+                                {(!item.bankName || !item.bankAccountNumber) && (
+                                  <div className="text-[10px] text-red-500">⚠ no bank details</div>
+                                )}
+                              </td>
+                              <td className="py-2 pr-3 text-right">
+                                {isEditing ? (
+                                  <input type="number" step="0.01" value={editing!.rate}
+                                    onChange={(e) => setEditing({ ...editing!, rate: e.target.value })}
+                                    className="w-16 border rounded px-1 text-right" />
+                                ) : displayRate > 0 ? `RM ${displayRate}/h` : "—"}
+                              </td>
+                              <td className="py-2 pr-3 text-right">
+                                {isEditing ? (
+                                  <input type="number" step="0.5" value={editing!.hours}
+                                    onChange={(e) => setEditing({ ...editing!, hours: e.target.value })}
+                                    className="w-16 border rounded px-1 text-right" />
+                                ) : `${Number(item.total_regular_hours).toFixed(2)}h`}
+                              </td>
+                              <td className="py-2 pr-3 text-right">
+                                {isEditing ? (
+                                  <input type="number" step="0.5" value={editing!.ot}
+                                    onChange={(e) => setEditing({ ...editing!, ot: e.target.value })}
+                                    className="w-14 border rounded px-1 text-right" />
+                                ) : Number(item.total_ot_hours) > 0 ? `${item.total_ot_hours}h` : "—"}
+                              </td>
+                              <td className="py-2 pr-3 text-right">{item.computation_details?.attendance_records ?? 0}</td>
+                              <td className="py-2 pr-3 text-right font-semibold">{fmt(item.total_gross)}</td>
+                              <td className="py-2 text-right">
+                                {isEditing ? (
+                                  <div className="flex gap-1 justify-end">
+                                    <button onClick={saveEdit} disabled={savingEdit}
+                                      className="rounded bg-green-600 text-white px-2 py-0.5 text-[10px]">
+                                      {savingEdit ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                    </button>
+                                    <button onClick={() => setEditing(null)}
+                                      className="rounded border px-2 py-0.5 text-[10px]">
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button onClick={() => startEdit(item)}
+                                    className="rounded border px-2 py-0.5 text-[10px] hover:bg-gray-50">
+                                    <Edit2 className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

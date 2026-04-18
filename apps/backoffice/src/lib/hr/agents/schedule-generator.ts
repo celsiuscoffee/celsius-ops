@@ -243,6 +243,21 @@ export async function generateSchedule(
     consecutiveDays.set(s.id, 0);
   });
 
+  // Compute week dates early so we can pre-assign off days
+  const dates = getWeekDates(weekStart);
+
+  // Pre-assign each FT staff an OFF DAY distributed across the week so
+  // Sunday doesn't end up empty (previous bug: greedy filled Mon-Sat then
+  // everyone maxed out for Sunday). Each FT gets exactly 1 off day.
+  // Rotating staff skip this — they're limited by hours cap anyway.
+  const preferredOffDay = new Map<string, string>(); // userId → YYYY-MM-DD
+  const nonRotatingFT = fullTimers.filter((s) => !s.is_rotating);
+  nonRotatingFT.forEach((s, idx) => {
+    // Spread off days across 7 days of the week (round-robin)
+    // Index 0 = Mon dates[0], 1 = Tue dates[1], ..., 6 = Sun dates[6]
+    preferredOffDay.set(s.id, dates[idx % 7]);
+  });
+
   // Rotating staff split their weekly cap across their rotation outlets.
   // Use rotation_outlet_ids.length if set (Syafiq/Adam = 3), else full outletIds.
   const rotationShare = (s: StaffInfo) =>
@@ -263,14 +278,28 @@ export async function generateSchedule(
   };
 
   // Can this staff take this shift on this date?
-  const canWork = (s: StaffInfo, date: string, shiftStart: string, shiftHours: number): string | true => {
+  // `relaxed` mode is used in the fallback pass when a shift is still below
+  // minimum staffing — drops rest-gap floor to 9h and allows up to 7
+  // consecutive days. Hard limits (leave, same-day, weekly cap) are never
+  // relaxed.
+  const canWork = (
+    s: StaffInfo,
+    date: string,
+    shiftStart: string,
+    shiftHours: number,
+    relaxed = false,
+  ): string | true => {
     if (leaveSet.has(`${s.id}:${date}`)) return "on leave";
     if (blockoutSet.has(`${s.id}:${date}`)) return "blocked out";
     if (shiftsByStaffDate.has(`${s.id}:${date}`)) return "already assigned today";
+    // Preferred off day — skip in normal pass, allow in relaxed pass
+    if (!relaxed && preferredOffDay.get(s.id) === date) return "preferred off day";
     const worked = daysWorked.get(s.id) || 0;
-    if (worked >= maxDaysFor(s)) return `max days reached (${worked})`;
+    const maxDays = relaxed ? maxDaysFor(s) + 1 : maxDaysFor(s);
+    if (worked >= maxDays) return `max days reached (${worked})`;
     const consec = consecutiveDays.get(s.id) || 0;
-    if (consec >= MAX_CONSEC_DAYS) return `max consecutive days`;
+    const maxConsec = relaxed ? MAX_CONSEC_DAYS + 1 : MAX_CONSEC_DAYS;
+    if (consec >= maxConsec) return `max consecutive days`;
     const hours = hoursPerStaff.get(s.id) || 0;
     if (hours + shiftHours > weeklyCap(s)) return `weekly cap`;
     const lastEnd = lastShiftEndISO.get(s.id);
@@ -279,7 +308,8 @@ export async function generateSchedule(
       const thisStart = new Date(`${date}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
       const prevEnd = new Date(lastEnd);
       const gapHours = (thisStart.getTime() - prevEnd.getTime()) / 3600000;
-      if (gapHours < MIN_REST_HOURS) return `rest gap ${gapHours.toFixed(1)}h < ${MIN_REST_HOURS}h`;
+      const minGap = relaxed ? Math.min(9, MIN_REST_HOURS) : MIN_REST_HOURS;
+      if (gapHours < minGap) return `rest gap ${gapHours.toFixed(1)}h < ${minGap}h`;
     }
     return true;
   };
@@ -302,8 +332,6 @@ export async function generateSchedule(
   };
 
   // 5. Main loop — greedy balanced by hours
-  const dates = getWeekDates(weekStart);
-
   for (const date of dates) {
     const dayOfWeek = new Date(date).getDay();
     const dayNum = dayOfWeek === 0 ? 7 : dayOfWeek;
@@ -366,12 +394,38 @@ export async function generateSchedule(
         }
       }
 
-      // Warn if understaffed
+      // Second pass — if still below minimum, retry with RELAXED constraints
+      // (preferred off day, rest gap to 9h, +1 consecutive day).
+      for (const category of ["FOH", "BOH"] as const) {
+        const currentMin = category === "FOH" ? req.foh_min : req.boh_min;
+        const assigned = () => category === "FOH" ? fohAssigned : bohAssigned;
+        while (assigned() < currentMin) {
+          const candidates = [...fullTimers, ...partTimers]
+            .filter((s) => s.role_category === category)
+            .sort((a, b) => (hoursPerStaff.get(a.id) || 0) - (hoursPerStaff.get(b.id) || 0));
+          let picked: StaffInfo | null = null;
+          for (const s of candidates) {
+            if (s.is_rotating && rotatingOnThisShift) continue;
+            const rules = EMPLOYMENT_RULES[s.employment_type];
+            const ok = canWork(s, date, slot.start, rules.workingHoursPerShift, /* relaxed */ true);
+            if (ok === true) { picked = s; break; }
+          }
+          if (!picked) break;
+          const rules = EMPLOYMENT_RULES[picked.employment_type];
+          assignShift(picked, date, slot, rules.workingHoursPerShift, rules.breakMinutes);
+          if (picked.is_rotating) rotatingOnThisShift = true;
+          if (category === "FOH") fohAssigned++;
+          else bohAssigned++;
+          notes.push(`ℹ️ ${date} ${shiftKey}: filled ${category} with ${picked.name} (relaxed constraints)`);
+        }
+      }
+
+      // Warn if STILL understaffed after relaxed pass
       if (fohAssigned < req.foh_min) {
-        notes.push(`⚠️ ${date} ${shiftKey}: FOH understaffed ${fohAssigned}/${req.foh_min}`);
+        notes.push(`⚠️ ${date} ${shiftKey}: FOH understaffed ${fohAssigned}/${req.foh_min} — hire or cover manually`);
       }
       if (bohAssigned < req.boh_min) {
-        notes.push(`⚠️ ${date} ${shiftKey}: BOH understaffed ${bohAssigned}/${req.boh_min}`);
+        notes.push(`⚠️ ${date} ${shiftKey}: BOH understaffed ${bohAssigned}/${req.boh_min} — hire or cover manually`);
       }
     }
 
