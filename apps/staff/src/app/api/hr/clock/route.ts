@@ -189,6 +189,50 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Not clocked in" }, { status: 400 });
     }
 
+    // Geofence check against the OUTLET THEY CLOCKED INTO (not their session outletId — rotating staff may differ)
+    let clockOutWithinGeofence = false;
+    let clockOutDistance: number | null = null;
+    let clockOutZoneName: string | null = null;
+    let clockOutZoneRadius = GEOFENCE_RADIUS_METERS;
+
+    const { data: clockInZone } = await supabase
+      .from("hr_geofence_zones")
+      .select("*")
+      .eq("outlet_id", activeLog.outlet_id)
+      .eq("is_active", true)
+      .limit(1)
+      .single();
+
+    if (clockInZone) {
+      clockOutZoneName = clockInZone.name;
+      clockOutZoneRadius = clockInZone.radius_meters || GEOFENCE_RADIUS_METERS;
+      if (latitude != null && longitude != null) {
+        clockOutDistance = Math.round(haversineDistance(
+          latitude, longitude,
+          Number(clockInZone.latitude), Number(clockInZone.longitude),
+        ));
+        clockOutWithinGeofence = clockOutDistance <= clockOutZoneRadius;
+      }
+    }
+
+    // HARD GATE: must clock out at the same outlet they clocked in at
+    if (clockInZone) {
+      if (latitude == null || longitude == null) {
+        return NextResponse.json({
+          error: "GPS location required to clock out. Please enable location and try again.",
+          needsGps: true,
+        }, { status: 400 });
+      }
+      if (!clockOutWithinGeofence) {
+        return NextResponse.json({
+          error: `You must be at ${clockOutZoneName} to clock out. You're ${clockOutDistance}m away (zone: ${clockOutZoneRadius}m). Return to the outlet or ask your manager to clock you out manually.`,
+          withinGeofence: false,
+          distanceMeters: clockOutDistance,
+          zoneName: clockOutZoneName,
+        }, { status: 403 });
+      }
+    }
+
     const clockOut = new Date();
     const clockIn = new Date(activeLog.clock_in);
     const totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
@@ -216,7 +260,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       log: data,
-      withinGeofence,
+      withinGeofence: clockOutWithinGeofence,
+      distanceMeters: clockOutDistance,
       totalHours: Math.round(totalHours * 100) / 100,
     });
   }
