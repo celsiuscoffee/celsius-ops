@@ -1,5 +1,6 @@
 import { hrSupabaseAdmin } from "../supabase";
 import { WORKING_DAYS_PER_MONTH, NORMAL_WORKING_HOURS_PER_DAY, OT_RATES } from "../constants";
+import { computeAllowancesForUser, loadAllowanceRules } from "../allowances";
 
 type PayrollResult = {
   payrollRunId: string;
@@ -159,7 +160,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
 
   if (runError) throw new Error(`Failed to create payroll run: ${runError.message}`);
 
-  // 5. Calculate per employee
+  // 5. Load allowance rules once — shared across all users
+  const allowanceRules = await loadAllowanceRules();
+
+  // 6. Calculate per employee
   let totalGross = 0;
   let totalDeductions = 0;
   let totalNet = 0;
@@ -213,27 +217,70 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     // Total OT
     const totalOT = Math.round((ot1xAmount + ot15xAmount + ot2xAmount + ot3xAmount) * 100) / 100;
 
-    // Gross
-    const gross = Math.round((basePay + totalOT - unpaidDeduction) * 100) / 100;
+    // Allowances (attendance + performance), review penalty deduction.
+    // Computed via the shared allowance engine — already net of attendance
+    // penalties (late/absent/early-out) and performance score tiering.
+    const allowanceBreakdown = await computeAllowancesForUser(
+      profile.user_id,
+      year,
+      month,
+      allowanceRules,
+    );
+    const attendanceAllowance = Math.round(allowanceBreakdown.attendance.earned * 100) / 100;
+    const performanceAllowance = Math.round(allowanceBreakdown.performance.earned * 100) / 100;
+    const reviewPenalty = Math.round(allowanceBreakdown.reviewPenalty.total * 100) / 100;
+    const totalAllowances = Math.round((attendanceAllowance + performanceAllowance) * 100) / 100;
+
+    // Gross = basic + OT − unpaid + allowances. Review penalty is a post-tax
+    // deduction (in other_deductions), so it doesn't reduce the statutory/PCB basis.
+    const gross = Math.round((basePay + totalOT - unpaidDeduction + totalAllowances) * 100) / 100;
 
     // Statutory deductions
-    // Malaysian convention: EPF/SOCSO/EIS basis = basic salary + fixed allowances
-    // (excludes variable OT). We use basePay here (pre-OT). PCB uses full gross.
-    // Future: track which allowances are EPF-applicable via payroll item flags.
-    const statutoryBasis = basePay - unpaidDeduction; // basic minus unpaid leave
+    // Malaysian convention: EPF/SOCSO/EIS basis = basic salary + fixed/recurring
+    // allowances (excludes variable OT). Attendance + performance allowances are
+    // recurring monthly → included. PCB uses full gross annualized.
+    const statutoryBasis = basePay - unpaidDeduction + totalAllowances;
     const epfRates = calcEPF(statutoryBasis, Number(profile.epf_employee_rate) || 11, Number(profile.epf_employer_rate) || 12);
     const socsoRates = calcSOCSO(statutoryBasis);
     const eisRates = calcEIS(statutoryBasis);
     const pcb = calcPCB(gross * 12); // PCB uses full gross annualized
 
-    const totalDeduct = Math.round((epfRates.employee + socsoRates.employee + eisRates.employee + pcb) * 100) / 100;
-    const netPay = Math.round((gross - totalDeduct) * 100) / 100;
+    // Review penalty is post-tax: subtract from net.
+    const totalDeduct = Math.round((epfRates.employee + socsoRates.employee + eisRates.employee + pcb + reviewPenalty) * 100) / 100;
+    const netPay = Math.round((gross - epfRates.employee - socsoRates.employee - eisRates.employee - pcb - reviewPenalty) * 100) / 100;
     const employerCost = Math.round((epfRates.employer + socsoRates.employer + eisRates.employer) * 100) / 100;
 
     totalGross += gross;
     totalDeductions += totalDeduct;
     totalNet += netPay;
     totalEmployerCost += employerCost;
+
+    // Structured allowance breakdown for payslip transparency
+    const allowancesDetail: Record<string, unknown> = {};
+    if (attendanceAllowance > 0) {
+      allowancesDetail.attendance = {
+        amount: attendanceAllowance,
+        base: allowanceBreakdown.attendance.base,
+        penalties: allowanceBreakdown.attendance.penalties,
+      };
+    }
+    if (performanceAllowance > 0) {
+      allowancesDetail.performance = {
+        amount: performanceAllowance,
+        base: allowanceBreakdown.performance.base,
+        score: allowanceBreakdown.performance.score,
+        breakdown: allowanceBreakdown.performance.breakdown,
+      };
+    }
+
+    const otherDeductions: Record<string, unknown> = {};
+    if (unpaidDeduction > 0) otherDeductions.unpaid_leave = unpaidDeduction;
+    if (reviewPenalty > 0) {
+      otherDeductions.review_penalty = {
+        amount: reviewPenalty,
+        entries: allowanceBreakdown.reviewPenalty.entries,
+      };
+    }
 
     payrollItems.push({
       payroll_run_id: run.id,
@@ -245,13 +292,13 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       ot_1_5x_amount: Math.round(ot15xAmount * 100) / 100,
       ot_2x_amount: Math.round(ot2xAmount * 100) / 100,
       ot_3x_amount: Math.round(ot3xAmount * 100) / 100,
-      allowances: {},
+      allowances: allowancesDetail,
       total_gross: gross,
       epf_employee: epfRates.employee,
       socso_employee: socsoRates.employee,
       eis_employee: eisRates.employee,
       pcb_tax: pcb,
-      other_deductions: unpaidDeduction > 0 ? { unpaid_leave: unpaidDeduction } : {},
+      other_deductions: otherDeductions,
       total_deductions: totalDeduct,
       net_pay: netPay,
       epf_employer: epfRates.employer,
@@ -262,6 +309,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         employment_type: profile.employment_type,
         unpaid_days: unpaidDays,
         attendance_records: userAttendance.length,
+        allowance_attendance_earned: attendanceAllowance,
+        allowance_performance_earned: performanceAllowance,
+        allowance_performance_eligible: allowanceBreakdown.performance.eligible,
+        review_penalty: reviewPenalty,
       },
     });
   }
