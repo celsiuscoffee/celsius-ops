@@ -86,6 +86,32 @@ const APP_MODULES: Record<string, { label: string; key: string }[]> = {
     { label: "Audit", key: "audit" },
     { label: "Dashboard", key: "dashboard" },
   ],
+  hr: [
+    { label: "Dashboard", key: "dashboard" },
+    { label: "Attendance", key: "attendance" },
+    { label: "Schedules", key: "schedules" },
+    { label: "Leave", key: "leave" },
+    { label: "Overtime", key: "overtime" },
+    { label: "Payroll", key: "payroll" },
+    { label: "Employees", key: "employees" },
+    { label: "Performance", key: "performance" },
+    { label: "Allowances", key: "allowances" },
+    { label: "Review Penalties", key: "review-penalties" },
+    { label: "Settings", key: "settings" },
+  ],
+};
+
+// Optional visual groupings for the module picker. Keys map to APP_MODULES keys.
+// When an app has an entry here, the picker renders grouped sections instead of a flat grid.
+const MODULE_GROUPS: Record<string, { label: string; keys: string[] }[]> = {
+  hr: [
+    { label: "People", keys: ["dashboard", "employees"] },
+    { label: "Time & Attendance", keys: ["attendance", "schedules", "overtime"] },
+    { label: "Leave", keys: ["leave"] },
+    { label: "Payroll & Compensation", keys: ["payroll", "allowances"] },
+    { label: "Performance", keys: ["performance", "review-penalties"] },
+    { label: "Admin", keys: ["settings"] },
+  ],
 };
 
 export default function StaffPage() {
@@ -542,11 +568,33 @@ export default function StaffPage() {
                   <h3 className="text-sm font-semibold text-gray-900 mb-1">Module Access</h3>
                   <p className="text-xs text-gray-400 mb-3">Control which modules this user can see within each app. Empty = full access.</p>
                   <div className="space-y-4">
-                    {[...form.appAccess.filter((app) => APP_MODULES[app]), ...(form.appAccess.includes("backoffice") && APP_MODULES["settings"] ? ["settings"] : [])].map((app) => {
+                    {[...form.appAccess.filter((app) => APP_MODULES[app]), ...(form.appAccess.includes("backoffice") ? ["settings", "hr"].filter((a) => APP_MODULES[a]) : [])].map((app) => {
                       const modules = APP_MODULES[app];
                       const selected = form.moduleAccess[app] || [];
                       const allSelected = modules.every((m) => selected.includes(m.key));
                       const noneSelected = selected.length === 0;
+                      const groups = MODULE_GROUPS[app];
+                      const modByKey = new Map(modules.map((m) => [m.key, m]));
+                      const renderToggle = (mod: { key: string; label: string }) => {
+                        const isOn = selected.includes(mod.key);
+                        return (
+                          <button
+                            key={mod.key}
+                            type="button"
+                            onClick={() => toggleModule(app, mod.key)}
+                            className={`flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors ${
+                              isOn
+                                ? "bg-terracotta/5 text-gray-900"
+                                : "text-gray-400 hover:bg-gray-50"
+                            }`}
+                          >
+                            <div className={`flex h-4 w-4 items-center justify-center rounded ${isOn ? "bg-terracotta text-white" : "border border-gray-300"}`}>
+                              {isOn && <Check className="h-2.5 w-2.5" />}
+                            </div>
+                            {mod.label}
+                          </button>
+                        );
+                      };
                       return (
                         <div key={app} className="rounded-lg border border-gray-200 p-3">
                           <div className="flex items-center justify-between mb-2">
@@ -562,28 +610,26 @@ export default function StaffPage() {
                           {noneSelected && (
                             <p className="text-[10px] text-gray-400 mb-2 italic">No restrictions — full access to all modules</p>
                           )}
-                          <div className="grid grid-cols-2 gap-1">
-                            {modules.map((mod) => {
-                              const isOn = selected.includes(mod.key);
-                              return (
-                                <button
-                                  key={mod.key}
-                                  type="button"
-                                  onClick={() => toggleModule(app, mod.key)}
-                                  className={`flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors ${
-                                    isOn
-                                      ? "bg-terracotta/5 text-gray-900"
-                                      : "text-gray-400 hover:bg-gray-50"
-                                  }`}
-                                >
-                                  <div className={`flex h-4 w-4 items-center justify-center rounded ${isOn ? "bg-terracotta text-white" : "border border-gray-300"}`}>
-                                    {isOn && <Check className="h-2.5 w-2.5" />}
+                          {groups ? (
+                            <div className="space-y-2">
+                              {groups.map((g) => {
+                                const groupMods = g.keys.map((k) => modByKey.get(k)).filter((m): m is { key: string; label: string } => !!m);
+                                if (groupMods.length === 0) return null;
+                                return (
+                                  <div key={g.label}>
+                                    <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400 mb-1">{g.label}</p>
+                                    <div className="grid grid-cols-2 gap-1">
+                                      {groupMods.map(renderToggle)}
+                                    </div>
                                   </div>
-                                  {mod.label}
-                                </button>
-                              );
-                            })}
-                          </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-1">
+                              {modules.map(renderToggle)}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
