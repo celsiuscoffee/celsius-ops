@@ -225,6 +225,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Overtime", href: "/hr/overtime", icon: <Clock className={ICON_SIZE} />, moduleKey: "hr:overtime" },
       { label: "Payroll", href: "/hr/payroll", icon: <Banknote className={ICON_SIZE} />, moduleKey: "hr:payroll" },
       { label: "Employees", href: "/hr/employees", icon: <UserCog className={ICON_SIZE} />, moduleKey: "hr:employees" },
+      { label: "Performance", href: "/hr/performance", icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "hr:performance" },
       { label: "Settings", href: "/hr/settings", icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "hr:settings" },
     ],
   },
