@@ -68,126 +68,6 @@ type Invoice = {
 type OutletOption = { id: string; name: string };
 type InvoicesResponse = { invoices: Invoice[]; outlets: OutletOption[]; dueTodayCount: number; dueTodayAmount: number };
 
-type DedupeAction = {
-  orderId: string;
-  survivor: { invoiceNumber: string; status: string };
-  removed: { invoiceNumber: string; status: string }[];
-  mergedPhotos: number;
-  mergedShortLink: boolean;
-  mergedPaymentRef: boolean;
-};
-type DedupeSkipped = { orderId: string; reason: string; invoices: { invoiceNumber: string; status: string }[] };
-type DedupeResponse = {
-  ok: boolean;
-  dryRun: boolean;
-  ordersAffected: number;
-  invoicesToRemove: number;
-  skipped: DedupeSkipped[];
-  actions: DedupeAction[];
-};
-
-function DedupeButton() {
-  const [state, setState] = useState<"idle" | "loading" | "preview" | "done" | "error">("idle");
-  const [plan, setPlan] = useState<DedupeResponse | null>(null);
-  const [msg, setMsg] = useState("");
-
-  async function run(confirm: boolean) {
-    setState("loading");
-    setMsg("");
-    try {
-      const url = confirm
-        ? "/api/inventory/invoices/dedupe?confirm=true"
-        : "/api/inventory/invoices/dedupe";
-      const res = await fetch(url, { method: "POST", credentials: "include" });
-      const data: DedupeResponse & { error?: string } = await res.json();
-      if (!res.ok || !data.ok) {
-        setState("error");
-        setMsg(data.error || `HTTP ${res.status}`);
-        return;
-      }
-      setPlan(data);
-      if (confirm) {
-        setState("done");
-        setMsg(`Removed ${data.invoicesToRemove} duplicate invoice${data.invoicesToRemove === 1 ? "" : "s"} across ${data.ordersAffected} order${data.ordersAffected === 1 ? "" : "s"}. Refresh to see updated list.`);
-      } else {
-        setState("preview");
-        if (data.ordersAffected === 0 && data.skipped.length === 0) {
-          setMsg("No duplicate invoices found — database is clean.");
-        }
-      }
-    } catch (e) {
-      setState("error");
-      setMsg(e instanceof Error ? e.message : "Network error");
-    }
-  }
-
-  return (
-    <div className="flex flex-col items-end gap-2">
-      {state !== "preview" && (
-        <button
-          type="button"
-          onClick={() => run(false)}
-          disabled={state === "loading"}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-50"
-        >
-          {state === "loading" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <AlertTriangle className="h-3.5 w-3.5" />}
-          {state === "loading" ? "Scanning…" : "Dedupe duplicates"}
-        </button>
-      )}
-      {msg && <span className={`text-[10px] ${state === "error" ? "text-red-600" : "text-gray-500"}`}>{msg}</span>}
-      {state === "preview" && plan && plan.ordersAffected > 0 && (
-        <div className="w-[420px] max-h-[60vh] overflow-auto rounded-lg border border-orange-300 bg-orange-50 p-3 shadow-lg">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-orange-900">
-              Plan: remove {plan.invoicesToRemove} duplicate{plan.invoicesToRemove === 1 ? "" : "s"} across {plan.ordersAffected} order{plan.ordersAffected === 1 ? "" : "s"}
-            </span>
-            <button
-              type="button"
-              onClick={() => { setState("idle"); setPlan(null); setMsg(""); }}
-              className="text-orange-600 hover:text-orange-900"
-            ><X className="h-3.5 w-3.5" /></button>
-          </div>
-          <div className="space-y-2 mb-3">
-            {plan.actions.slice(0, 20).map((a) => (
-              <div key={a.orderId} className="rounded bg-white border border-orange-200 p-2 text-[11px]">
-                <div className="text-green-700">Keep: <b>{a.survivor.invoiceNumber}</b> ({a.survivor.status})</div>
-                <div className="text-red-700">Delete: {a.removed.map((r) => `${r.invoiceNumber} (${r.status})`).join(", ")}</div>
-                {(a.mergedPhotos > 0 || a.mergedShortLink || a.mergedPaymentRef) && (
-                  <div className="text-gray-500">Merging: {[
-                    a.mergedPhotos > 0 ? `${a.mergedPhotos} photo${a.mergedPhotos === 1 ? "" : "s"}` : null,
-                    a.mergedShortLink ? "POP shortlink" : null,
-                    a.mergedPaymentRef ? "payment ref" : null,
-                  ].filter(Boolean).join(", ")}</div>
-                )}
-              </div>
-            ))}
-            {plan.actions.length > 20 && (
-              <div className="text-[10px] text-gray-500">…and {plan.actions.length - 20} more</div>
-            )}
-          </div>
-          {plan.skipped.length > 0 && (
-            <div className="mb-3 text-[10px] text-gray-600">
-              {plan.skipped.length} order{plan.skipped.length === 1 ? "" : "s"} skipped (no PAID invoice — manual review needed)
-            </div>
-          )}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => run(true)}
-              className="flex-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
-            >Apply cleanup</button>
-            <button
-              type="button"
-              onClick={() => { setState("idle"); setPlan(null); }}
-              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-            >Cancel</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function InvoicesPage() {
   const [tab, setTab] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -525,7 +405,6 @@ export default function InvoicesPage() {
           <h2 className="text-xl font-semibold text-gray-900">Invoices</h2>
           <p className="mt-0.5 text-sm text-gray-500">{invoices.length} invoices &middot; Track and reconcile supplier invoices</p>
         </div>
-        <DedupeButton />
       </div>
 
       {/* Summary cards — clickable to filter */}
