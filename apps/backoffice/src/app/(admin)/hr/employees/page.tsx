@@ -21,7 +21,8 @@ type Employee = {
 type EmploymentFilter = "all" | "full_time" | "part_time" | "contract" | "no_profile";
 
 export default function EmployeesPage() {
-  const { data } = useFetch<{ employees: Employee[] }>("/api/hr/employees");
+  const { data } = useFetch<{ employees: Employee[]; scope?: "direct-reports" | "all" }>("/api/hr/employees");
+  const scope = data?.scope;
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<EmploymentFilter>("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -73,6 +74,9 @@ export default function EmployeesPage() {
         <p className="text-sm text-muted-foreground">
           {configured}/{total} profiles configured
         </p>
+        {scope === "direct-reports" && (
+          <p className="mt-1 text-xs text-terracotta">Showing your direct reports only.</p>
+        )}
       </div>
 
       <div className="relative">

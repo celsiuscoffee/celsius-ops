@@ -5,16 +5,35 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-// GET: list all employees with their HR profiles
+// GET: list employees with their HR profiles
+// - OWNER / ADMIN: all active users
+// - MANAGER: only their direct reports (users whose hr_employee_profiles.manager_user_id = session.id)
+// - other roles: unauthorized
 export async function GET() {
   const session = await getSession();
-  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+  if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Get all active users from Prisma (incl. login fields)
+  // Get all HR profiles from Supabase (need these for manager filter + enrichment)
+  const { data: profiles } = await hrSupabaseAdmin
+    .from("hr_employee_profiles")
+    .select("*");
+  const profileMap = new Map((profiles || []).map((p: { user_id: string }) => [p.user_id, p]));
+
+  // Determine visible user-id set for non-admin managers
+  let visibleIds: string[] | null = null;
+  if (session.role === "MANAGER") {
+    visibleIds = (profiles || [])
+      .filter((p: { manager_user_id: string | null; user_id: string }) => p.manager_user_id === session.id)
+      .map((p: { user_id: string }) => p.user_id);
+  }
+
   const users = await prisma.user.findMany({
-    where: { status: "ACTIVE" },
+    where: {
+      status: "ACTIVE",
+      ...(visibleIds !== null ? { id: { in: visibleIds } } : {}),
+    },
     select: {
       id: true, name: true, fullName: true, role: true, phone: true, email: true,
       outletId: true, outlet: { select: { name: true } },
@@ -24,13 +43,6 @@ export async function GET() {
     },
     orderBy: [{ role: "asc" }, { name: "asc" }],
   });
-
-  // Get all HR profiles from Supabase
-  const { data: profiles } = await hrSupabaseAdmin
-    .from("hr_employee_profiles")
-    .select("*");
-
-  const profileMap = new Map((profiles || []).map((p: { user_id: string }) => [p.user_id, p]));
 
   const employees = users.map((u) => {
     const { pin, passwordHash, ...rest } = u;
@@ -42,7 +54,7 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ employees });
+  return NextResponse.json({ employees, scope: session.role === "MANAGER" ? "direct-reports" : "all" });
 }
 
 // POST: create or update an HR profile for an employee
