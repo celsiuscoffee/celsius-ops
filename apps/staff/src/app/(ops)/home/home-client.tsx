@@ -19,6 +19,7 @@ import {
   Camera,
   ChevronDown,
   RefreshCw,
+  User,
 } from "lucide-react";
 
 type UserProfile = {
@@ -332,7 +333,7 @@ export function HomeClient({
           {/* Header */}
           <div className="flex items-center gap-3">
             <img src="/images/celsius-logo-sm.jpg" alt="Celsius Coffee" width={40} height={40} className="rounded-lg" />
-            <div>
+            <div className="flex-1">
               <h1 className="font-heading text-lg font-bold text-brand-dark">
                 {greeting}, {user.name || "there"}
               </h1>
@@ -340,6 +341,13 @@ export function HomeClient({
                 {user.outletName && <>{user.outletName} &middot; </>}{dateStr}
               </p>
             </div>
+            <Link
+              href="/profile"
+              aria-label="Profile"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
+            >
+              <User className="h-4 w-4" />
+            </Link>
           </div>
 
           {/* Progress bar */}
