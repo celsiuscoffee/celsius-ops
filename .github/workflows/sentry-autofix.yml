@@ -47,7 +47,10 @@ jobs:
       - run: npm ci
 
       - name: Invoke Claude Code
-        uses: anthropics/claude-code-action@v1
+        # Pinned to commit SHA (v1) — moving tags can be repointed at malicious
+        # commits. Bump by running:
+        #   git ls-remote https://github.com/anthropics/claude-code-action refs/tags/v1
+        uses: anthropics/claude-code-action@8a953dedac4f533f912f13656070914693ed0575
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
