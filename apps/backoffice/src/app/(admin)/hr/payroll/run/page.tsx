@@ -64,11 +64,11 @@ export default function PayrollRunPage() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
-  // Payday defaults to the 3rd of the following month
-  const [payday, setPayday] = useState(() => {
-    const d = new Date(now.getFullYear(), now.getMonth() + 1, 3);
-    return d.toISOString().slice(0, 10);
-  });
+  // Payday defaults to the 3rd of the following month. Format as local date
+  // (not toISOString — UTC conversion shifts MYT back a day).
+  const fmtLocal = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const [payday, setPayday] = useState(() => fmtLocal(new Date(now.getFullYear(), now.getMonth() + 1, 3)));
 
   const [step, setStep] = useState<Step>("setup");
   const [computing, setComputing] = useState(false);
@@ -81,7 +81,7 @@ export default function PayrollRunPage() {
   const [search, setSearch] = useState("");
 
   const cycleStart = `${year}-${String(month).padStart(2, "0")}-01`;
-  const cycleEnd = new Date(year, month, 0).toISOString().slice(0, 10);
+  const cycleEnd = fmtLocal(new Date(year, month, 0));
 
   const runCompute = async () => {
     setComputing(true);
