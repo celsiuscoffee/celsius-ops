@@ -20,13 +20,36 @@ export async function GET(req: NextRequest) {
 
   const url = new URL(req.url);
   const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
+  const outletFilter = url.searchParams.get("outletId"); // "unlinked" | "all" | outletId
+  const campaignFilter = url.searchParams.get("campaignId"); // "all" | campaignId
 
   const from = new Date(Date.UTC(year, 0, 1));
   const to = new Date(Date.UTC(year + 1, 0, 1));
 
+  // Narrow campaign id set based on filters
+  let campaignIdFilter: string[] | undefined;
+  if (campaignFilter && campaignFilter !== "all") {
+    campaignIdFilter = [campaignFilter];
+  } else if (outletFilter && outletFilter !== "all") {
+    const where = outletFilter === "unlinked"
+      ? { outletId: null }
+      : { outletId: outletFilter };
+    const campaigns = await prisma.adsCampaign.findMany({ where, select: { id: true } });
+    campaignIdFilter = campaigns.map((c) => c.id);
+    if (campaignIdFilter.length === 0) {
+      return NextResponse.json({
+        year, sstRate: 0.08, statements: [],
+        summary: { subtotalMYR: 0, taxMYR: 0, totalMYR: 0, monthCount: 0 },
+      });
+    }
+  }
+
   // Campaign-level metrics only (campaignId not null)
   const rows = await prisma.adsMetricDaily.findMany({
-    where: { date: { gte: from, lt: to }, campaignId: { not: null } },
+    where: {
+      date: { gte: from, lt: to },
+      campaignId: campaignIdFilter ? { in: campaignIdFilter } : { not: null },
+    },
     select: { date: true, costMicros: true, campaignId: true, accountId: true },
   });
 

@@ -66,8 +66,24 @@ function downloadCsv(data: Data) {
 export default function InvoicesPage() {
   const currentYear = new Date().getUTCFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [outletId, setOutletId] = useState<string>("all");
+  const [campaignId, setCampaignId] = useState<string>("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const { data, isLoading } = useFetch<Data>(`/api/ads/invoices?year=${selectedYear}`);
+
+  const qs = new URLSearchParams({ year: String(selectedYear) });
+  if (outletId !== "all") qs.set("outletId", outletId);
+  if (campaignId !== "all") qs.set("campaignId", campaignId);
+
+  const { data, isLoading } = useFetch<Data>(`/api/ads/invoices?${qs.toString()}`);
+  const { data: outletList } = useFetch<Array<{ id: string; name: string }>>("/api/ops/outlets");
+  const { data: campaignData } = useFetch<{ campaigns: Array<{ id: string; name: string; outletId: string | null }> }>("/api/ads/campaigns?days=365");
+
+  // Filter campaign options by selected outlet
+  const campaignOptions = (campaignData?.campaigns ?? []).filter((c) => {
+    if (outletId === "all") return true;
+    if (outletId === "unlinked") return c.outletId == null;
+    return c.outletId === outletId;
+  });
 
   if (isLoading || !data) {
     return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-neutral-400" /></div>;
@@ -88,7 +104,28 @@ export default function InvoicesPage() {
           <h1 className="text-xl font-semibold">Ads Statements</h1>
           <p className="text-xs text-neutral-500">Per-campaign monthly spend with 8% SST (Service Tax on digital services, MY)</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={outletId}
+            onChange={(e) => { setOutletId(e.target.value); setCampaignId("all"); }}
+            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm"
+          >
+            <option value="all">All outlets</option>
+            <option value="unlinked">Unlinked</option>
+            {outletList?.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+          <select
+            value={campaignId}
+            onChange={(e) => setCampaignId(e.target.value)}
+            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm"
+          >
+            <option value="all">All campaigns</option>
+            {campaignOptions.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(Number(e.target.value))}
