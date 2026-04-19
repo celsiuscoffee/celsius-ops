@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, CalendarDays, CalendarOff, Receipt, ChevronRight, CheckCircle2, CalendarX, History, Zap, Wallet, Sparkles, AlertTriangle, MapPin } from "lucide-react";
+import { Clock, CalendarDays, CalendarOff, ChevronRight, CheckCircle2, History, Zap, Wallet, Sparkles, AlertTriangle, MapPin } from "lucide-react";
 import { useLocationPing } from "@/lib/hr/use-location-ping";
 
 type HRStatus = {
@@ -83,22 +83,6 @@ export default function HRHomePage() {
       subtitle: "Request OT approval",
       color: "text-amber-600",
       bgColor: "bg-amber-50",
-    },
-    {
-      href: "/hr/availability",
-      icon: CalendarX,
-      label: "Availability",
-      subtitle: "Mark days you can't work",
-      color: "text-red-600",
-      bgColor: "bg-red-50",
-    },
-    {
-      href: "/hr/payslips",
-      icon: Receipt,
-      label: "Payslips",
-      subtitle: "View pay history",
-      color: "text-terracotta",
-      bgColor: "bg-orange-50",
     },
   ];
 
