@@ -15,9 +15,10 @@ export async function GET() {
   });
 
   // Flatten moduleAccess from { settings: ["outlets","staff"] } → ["settings:outlets","settings:staff"]
-  // Legacy callers that stored a flat string[] are kept as-is.
+  // Legacy rows that stored a flat string[] are accepted, but we filter out
+  // non-string elements in case the column was ever written with bad data.
   const flatModuleAccess = Array.isArray(user?.moduleAccess)
-    ? (user.moduleAccess as unknown as string[])
+    ? user.moduleAccess.filter((x): x is string => typeof x === "string")
     : flattenModuleAccess(user?.moduleAccess);
 
   return NextResponse.json({
