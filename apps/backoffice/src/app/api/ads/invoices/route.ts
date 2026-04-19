@@ -4,6 +4,13 @@ import { requireRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+// Malaysia Service Tax on digital services (including Google Ads) — 8% since Mar 2024.
+const SST_RATE = 0.08;
+
+// Generate per-campaign monthly statements from synced metrics.
+// This replaces pulling actual Google invoices (not available for card-billed
+// accounts). Output is suitable for LHDN audit support: shows campaign-level
+// spend + SST per month, with account totals and grand total.
 export async function GET(req: NextRequest) {
   try {
     await requireRole(req.headers, "ADMIN");
@@ -12,43 +19,86 @@ export async function GET(req: NextRequest) {
   }
 
   const url = new URL(req.url);
-  const year = url.searchParams.get("year");
+  const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
 
-  const where = year
-    ? {
-        issueDate: {
-          gte: new Date(`${year}-01-01T00:00:00Z`),
-          lt: new Date(`${Number(year) + 1}-01-01T00:00:00Z`),
-        },
-      }
-    : {};
+  const from = new Date(Date.UTC(year, 0, 1));
+  const to = new Date(Date.UTC(year + 1, 0, 1));
 
-  const invoices = await prisma.adsInvoice.findMany({
-    where,
-    orderBy: { issueDate: "desc" },
-    include: { account: { select: { descriptiveName: true, customerId: true } } },
+  // Campaign-level metrics only (campaignId not null)
+  const rows = await prisma.adsMetricDaily.findMany({
+    where: { date: { gte: from, lt: to }, campaignId: { not: null } },
+    select: { date: true, costMicros: true, campaignId: true, accountId: true },
   });
 
-  const total = invoices.reduce((acc, i) => acc + Number(i.totalMicros) / 1_000_000, 0);
-  const tax = invoices.reduce((acc, i) => acc + Number(i.taxMicros) / 1_000_000, 0);
+  // Also fetch campaigns + outlets for display names
+  const campaignIds = Array.from(new Set(rows.map((r) => r.campaignId!).filter(Boolean)));
+  const campaigns = await prisma.adsCampaign.findMany({
+    where: { id: { in: campaignIds } },
+    select: { id: true, name: true, outletId: true },
+  });
+  const campaignMap = new Map(campaigns.map((c) => [c.id, c]));
+
+  const outletIds = Array.from(new Set(campaigns.map((c) => c.outletId).filter((x): x is string => !!x)));
+  const outlets = outletIds.length
+    ? await prisma.outlet.findMany({ where: { id: { in: outletIds } }, select: { id: true, name: true } })
+    : [];
+  const outletMap = new Map(outlets.map((o) => [o.id, o.name]));
+
+  // Bucket: { "YYYY-MM": { [campaignId]: costMicros } }
+  const buckets = new Map<string, Map<string, bigint>>();
+  for (const r of rows) {
+    const ym = `${r.date.getUTCFullYear()}-${String(r.date.getUTCMonth() + 1).padStart(2, "0")}`;
+    if (!buckets.has(ym)) buckets.set(ym, new Map());
+    const month = buckets.get(ym)!;
+    const key = r.campaignId!;
+    month.set(key, (month.get(key) ?? BigInt(0)) + r.costMicros);
+  }
+
+  // Build structured output sorted by month desc
+  const statements = Array.from(buckets.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([yearMonth, monthRows]) => {
+      const items = Array.from(monthRows.entries())
+        .map(([cid, cost]) => {
+          const c = campaignMap.get(cid);
+          const subtotal = Number(cost) / 1_000_000;
+          const tax = subtotal * SST_RATE;
+          return {
+            campaignId: cid,
+            campaignName: c?.name ?? "Unknown",
+            outletId: c?.outletId ?? null,
+            outletName: c?.outletId ? outletMap.get(c.outletId) ?? null : null,
+            subtotalMYR: subtotal,
+            taxMYR: tax,
+            totalMYR: subtotal + tax,
+          };
+        })
+        .sort((a, b) => b.subtotalMYR - a.subtotalMYR);
+
+      const subtotal = items.reduce((s, i) => s + i.subtotalMYR, 0);
+      const tax = items.reduce((s, i) => s + i.taxMYR, 0);
+
+      return {
+        yearMonth,
+        items,
+        subtotalMYR: subtotal,
+        taxMYR: tax,
+        totalMYR: subtotal + tax,
+      };
+    });
+
+  const ytdSubtotal = statements.reduce((s, m) => s + m.subtotalMYR, 0);
+  const ytdTax = statements.reduce((s, m) => s + m.taxMYR, 0);
 
   return NextResponse.json({
-    invoices: invoices.map((i) => ({
-      id: i.id,
-      invoiceId: i.invoiceId,
-      accountName: i.account.descriptiveName,
-      issueDate: i.issueDate.toISOString().slice(0, 10),
-      periodStart: i.billingPeriodStart.toISOString().slice(0, 10),
-      periodEnd: i.billingPeriodEnd.toISOString().slice(0, 10),
-      subtotalMYR: Number(i.subtotalMicros) / 1_000_000,
-      taxMYR: Number(i.taxMicros) / 1_000_000,
-      totalMYR: Number(i.totalMicros) / 1_000_000,
-      currency: i.currencyCode,
-      status: i.status,
-      hasPdf: !!i.pdfStoragePath,
-      pdfSizeBytes: i.pdfSizeBytes,
-      pdfHash: i.pdfHashSha256,
-    })),
-    summary: { totalMYR: total, taxMYR: tax, count: invoices.length },
+    year,
+    sstRate: SST_RATE,
+    statements,
+    summary: {
+      subtotalMYR: ytdSubtotal,
+      taxMYR: ytdTax,
+      totalMYR: ytdSubtotal + ytdTax,
+      monthCount: statements.length,
+    },
   });
 }
