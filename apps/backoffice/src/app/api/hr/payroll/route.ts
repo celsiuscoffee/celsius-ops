@@ -126,3 +126,33 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 }
+
+// DELETE /api/hr/payroll?run_id=X — remove a payroll run + its items.
+// Only allowed for runs in draft/ai_computed status (not yet paid).
+export async function DELETE(req: NextRequest) {
+  const session = await getSession();
+  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const runId = new URL(req.url).searchParams.get("run_id");
+  if (!runId) return NextResponse.json({ error: "run_id required" }, { status: 400 });
+
+  // Guard: don't allow deleting paid runs — they're historical.
+  const { data: run } = await hrSupabaseAdmin
+    .from("hr_payroll_runs")
+    .select("status")
+    .eq("id", runId)
+    .maybeSingle();
+  if (!run) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (run.status === "paid") {
+    return NextResponse.json({ error: "Cannot delete a paid payroll run. Revert status first." }, { status: 400 });
+  }
+
+  // Items first (no FK cascade on hr_payroll_items)
+  await hrSupabaseAdmin.from("hr_payroll_items").delete().eq("payroll_run_id", runId);
+  const { error } = await hrSupabaseAdmin.from("hr_payroll_runs").delete().eq("id", runId);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
+}

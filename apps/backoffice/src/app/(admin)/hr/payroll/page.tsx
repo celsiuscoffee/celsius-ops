@@ -2,7 +2,7 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { Bot, Banknote, Loader2, CheckCircle2, FileText, CalendarDays, Download, FileSpreadsheet } from "lucide-react";
+import { Bot, Banknote, Loader2, CheckCircle2, FileText, CalendarDays, Download, FileSpreadsheet, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 type PayrollRun = {
@@ -90,6 +90,23 @@ export default function PayrollPage() {
       mutate();
     } finally {
       setConfirming(null);
+    }
+  };
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const handleDelete = async (runId: string) => {
+    if (!confirm("Delete this payroll run? Items will be removed. Paid runs cannot be deleted.")) return;
+    setDeletingId(runId);
+    try {
+      const res = await fetch(`/api/hr/payroll?run_id=${runId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        alert(body?.error || "Delete failed");
+      } else {
+        mutate();
+      }
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -195,6 +212,16 @@ export default function PayrollPage() {
                     </button>
                   )}
                   {isConfirmed && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+                  {run.status !== "paid" && (
+                    <button
+                      onClick={() => handleDelete(run.id)}
+                      disabled={deletingId === run.id}
+                      title="Delete run (paid runs cannot be deleted)"
+                      className="flex items-center rounded-lg border border-red-200 px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      {deletingId === run.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                    </button>
+                  )}
                 </div>
               </div>
 
