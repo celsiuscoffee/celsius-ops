@@ -1081,3 +1081,163 @@ model InternalFeedback {
 
   @@index([outletId, createdAt])
 }
+
+// ─── ADS MODULE ─────────────────────────────────────────────
+// Google Ads performance + invoice tracking.
+// MCC: 415-243-7144, child account: 890-356-3535.
+// Tables created by manual SQL migration (apps/backoffice/supabase/migrations/001_ads_module.sql).
+// These Prisma models mirror that schema for type-safety only — never `prisma db push`.
+
+model AdsAccount {
+  id              String   @id
+  customerId      String   @unique @map("customer_id")
+  descriptiveName String   @map("descriptive_name")
+  currencyCode    String   @default("MYR") @map("currency_code")
+  timeZone        String   @default("Asia/Kuala_Lumpur") @map("time_zone")
+  isManager       Boolean  @default(false) @map("is_manager")
+  isTestAccount   Boolean  @default(false) @map("is_test_account")
+  outletId        String?  @map("outlet_id")
+  status          String   @default("ACTIVE")
+  lastSyncedAt    DateTime? @map("last_synced_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  campaigns AdsCampaign[]
+  metrics   AdsMetricDaily[]
+  invoices  AdsInvoice[]
+  syncLogs  AdsSyncLog[]
+
+  @@index([outletId])
+  @@map("ads_account")
+}
+
+model AdsCampaign {
+  id                      String    @id
+  campaignId              String    @map("campaign_id")
+  accountId               String    @map("account_id")
+  name                    String
+  status                  String    // ENABLED | PAUSED | REMOVED
+  advertisingChannelType  String    @map("advertising_channel_type")
+  startDate               DateTime? @map("start_date") @db.Date
+  endDate                 DateTime? @map("end_date") @db.Date
+  dailyBudgetMicros       BigInt?   @map("daily_budget_micros")
+  outletId                String?   @map("outlet_id")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  account   AdsAccount        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  metrics   AdsMetricDaily[]
+  keywords  AdsKeywordMetric[]
+
+  @@unique([accountId, campaignId])
+  @@index([accountId])
+  @@index([outletId])
+  @@index([status])
+  @@map("ads_campaign")
+}
+
+model AdsMetricDaily {
+  id                String   @id
+  date              DateTime @db.Date
+  accountId         String   @map("account_id")
+  campaignId        String?  @map("campaign_id")
+  impressions       BigInt   @default(0)
+  clicks            BigInt   @default(0)
+  conversions       Decimal  @default(0) @db.Decimal(14, 4)
+  conversionsValue  Decimal  @default(0) @map("conversions_value") @db.Decimal(14, 4)
+  costMicros        BigInt   @default(0) @map("cost_micros")
+  avgCpcMicros      BigInt?  @map("avg_cpc_micros")
+  ctr               Decimal? @db.Decimal(8, 6)
+  syncedAt          DateTime @default(now()) @map("synced_at")
+
+  account  AdsAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  campaign AdsCampaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([date, accountId, campaignId])
+  @@index([date(sort: Desc)])
+  @@index([accountId, date(sort: Desc)])
+  @@index([campaignId, date(sort: Desc)])
+  @@map("ads_metric_daily")
+}
+
+model AdsKeywordMetric {
+  id           String   @id
+  date         DateTime @db.Date
+  campaignId   String   @map("campaign_id")
+  adGroupId    String   @map("ad_group_id")
+  criterionId  String   @map("criterion_id")
+  keywordText  String   @map("keyword_text")
+  matchType    String   @map("match_type")
+  impressions  BigInt   @default(0)
+  clicks       BigInt   @default(0)
+  conversions  Decimal  @default(0) @db.Decimal(14, 4)
+  costMicros   BigInt   @default(0) @map("cost_micros")
+  syncedAt     DateTime @default(now()) @map("synced_at")
+
+  campaign AdsCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([date, campaignId, adGroupId, criterionId])
+  @@index([date(sort: Desc)])
+  @@index([campaignId, date(sort: Desc)])
+  @@map("ads_keyword_metric")
+}
+
+model AdsInvoice {
+  id                    String   @id
+  invoiceId             String   @unique @map("invoice_id")
+  accountId             String   @map("account_id")
+  issueDate             DateTime @map("issue_date") @db.Date
+  dueDate               DateTime? @map("due_date") @db.Date
+  billingPeriodStart    DateTime @map("billing_period_start") @db.Date
+  billingPeriodEnd      DateTime @map("billing_period_end") @db.Date
+  currencyCode          String   @default("MYR") @map("currency_code")
+  subtotalMicros        BigInt   @default(0) @map("subtotal_micros")
+  adjustmentsMicros     BigInt   @default(0) @map("adjustments_micros")
+  regulatoryCostsMicros BigInt   @default(0) @map("regulatory_costs_micros")
+  taxMicros             BigInt   @default(0) @map("tax_micros")
+  totalMicros           BigInt   @default(0) @map("total_micros")
+  status                String
+  pdfSourceUrl          String?  @map("pdf_source_url")
+  pdfStoragePath        String?  @map("pdf_storage_path")
+  pdfHashSha256         String?  @map("pdf_hash_sha256")
+  pdfSizeBytes          Int?     @map("pdf_size_bytes")
+  syncedAt              DateTime @default(now()) @map("synced_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, issueDate(sort: Desc)])
+  @@index([billingPeriodStart(sort: Desc)])
+  @@index([status])
+  @@map("ads_invoice")
+}
+
+model AdsSyncLog {
+  id            String    @id
+  kind          String    // metrics-daily | metrics-backfill | invoices | keywords | accounts
+  accountId     String?   @map("account_id")
+  startedAt     DateTime  @default(now()) @map("started_at")
+  finishedAt    DateTime? @map("finished_at")
+  status        String    @default("RUNNING")
+  rowsInserted  Int?      @map("rows_inserted")
+  rowsUpdated   Int?      @map("rows_updated")
+  errorMessage  String?   @map("error_message")
+  metadata      Json?
+
+  account AdsAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([startedAt(sort: Desc)])
+  @@index([kind, startedAt(sort: Desc)])
+  @@map("ads_sync_log")
+}
+
+model AdsSettings {
+  id                  String   @id @default("singleton")
+  mccCustomerId       String?  @map("mcc_customer_id")
+  dailySyncEnabled    Boolean  @default(true) @map("daily_sync_enabled")
+  keywordSyncEnabled  Boolean  @default(true) @map("keyword_sync_enabled")
+  invoiceSyncEnabled  Boolean  @default(true) @map("invoice_sync_enabled")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("ads_settings")
+}

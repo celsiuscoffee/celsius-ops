@@ -13,6 +13,14 @@
     {
       "path": "/api/hr/review-penalties/sync",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/ads-daily",
+      "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/ads-monthly",
+      "schedule": "0 20 1 * *"
     }
   ]
 }
