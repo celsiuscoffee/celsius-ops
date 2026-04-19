@@ -793,18 +793,21 @@ enum ApprovalRuleType {
 
 model ActivityLog {
   id         String   @id @default(uuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
   action     String
   module     String
   details    String?
   targetId   String?
   targetName String?
+  diff       Json?
+  metadata   Json?
   ipAddress  String?
   createdAt  DateTime @default(now())
 
   @@index([userId, createdAt])
   @@index([module, createdAt])
+  @@index([targetId, createdAt])
 }
 
 // ─── SOPs (Standard Operating Procedures) ──────────────────

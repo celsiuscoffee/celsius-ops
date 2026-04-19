@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 import Anthropic from "@anthropic-ai/sdk";
+import { audited } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { createShortLink } from "@/lib/shortlink";
 import {
@@ -414,17 +415,34 @@ async function resolvePop(
   const invoice = candidates[0] as any;
   const shortLink = await createShortLink(photoUrl).catch(() => null);
 
-  const result = await prisma.invoice.updateMany({
-    where: { id: invoice.id, status: { in: ["PENDING", "INITIATED", "OVERDUE"] } },
-    data: {
-      status: "PAID",
-      paidAt: new Date(),
-      paidVia: "Maybank Transfer",
-      paymentRef: pop.referenceNumber,
-      photos: { push: photoUrl },
-      ...(shortLink ? { popShortLink: shortLink } : {}),
+  const result = await audited(
+    {
+      actorId: null, // system / webhook
+      action: "INVOICE_MARK_PAID",
+      module: "invoices",
+      target: { id: invoice.id, name: invoice.invoiceNumber },
+      metadata: {
+        source: "telegram",
+        amount,
+        referenceNumber: pop.referenceNumber,
+        recipientName: pop.recipientName,
+        recipientAccount: pop.recipientAccount,
+        popShortLink: shortLink,
+      },
     },
-  });
+    () =>
+      prisma.invoice.updateMany({
+        where: { id: invoice.id, status: { in: ["PENDING", "INITIATED", "OVERDUE"] } },
+        data: {
+          status: "PAID",
+          paidAt: new Date(),
+          paidVia: "Maybank Transfer",
+          paymentRef: pop.referenceNumber,
+          photos: { push: photoUrl },
+          ...(shortLink ? { popShortLink: shortLink } : {}),
+        },
+      }),
+  );
 
   if (result.count === 0) {
     await sendMessage(chatId, "⚠️ Invoice was already updated by someone else.", msgId);
