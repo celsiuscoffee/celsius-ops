@@ -83,8 +83,13 @@ export async function POST(req: NextRequest) {
     contentBlocks.push({
       type: "text",
       text: `Extract invoice/receipt details from the uploaded document(s). ${context ? `Context: ${context}` : ""}
-${supplierNames?.length ? `\nKNOWN SUPPLIERS:\n${supplierNames.join("\n")}\n\nMatch the supplier/vendor name on the invoice to one of these known suppliers. Use the EXACT supplier name from this list in the "supplierName" field.` : ""}
-${outletNames?.length ? `\nKNOWN OUTLETS (billed-to / ship-to / delivery address on the invoice):\n${outletNames.join("\n")}\n\nMatch the outlet/branch name or address printed on the invoice (typically in the "Bill To", "Ship To", "Deliver To", or address block) to one of these outlets. Use the EXACT outlet name from this list in the "outletName" field. If the invoice addresses just "Celsius Coffee" with no branch, return null.` : ""}
+${supplierNames?.length ? `\nKNOWN SUPPLIERS:\n${supplierNames.join("\n")}\n\nFor "supplierName": if the vendor on the invoice matches a KNOWN SUPPLIER, use the EXACT supplier name from this list. If it does NOT match any known supplier (one-off vendor — common for asset/maintenance invoices like cleaning, plumbing, electronics), return the vendor name as printed on the invoice (typically in the "INVOICE FROM" or header area). Never return null just because it's not in the known list.` : ""}
+${outletNames?.length ? `\nKNOWN OUTLETS:\n${outletNames.join("\n")}\n\nFor "outletName": identify which Celsius Coffee outlet the invoice relates to. Rules:
+1. Check the "Bill To", "Ship To", "Deliver To", or address block on the invoice.
+2. Match using LOCATION KEYWORDS in the address, not just the outlet name. Examples: "Putrajaya" in the address → match outlet with "Putrajaya" in its name; "Shah Alam" → match "Shah Alam"; "Conezion" / "IOI" → usually Putrajaya; "Tamarind" / "Gamuda" → Tamarind outlet.
+3. Bill-to may be a personal staff name (e.g. "En Syafiq") rather than an outlet name — in that case match by the ADDRESS keywords.
+4. If multiple outlets could match, prefer the one whose name keyword appears most specifically in the address.
+5. Return the EXACT outlet name from the list above. If no clear match, return null — never guess blindly.` : ""}
 ${productNames?.length ? `\nKNOWN PRODUCT CATALOG (use these exact names when matching items on the invoice):\n${productNames.join("\n")}\n\nIMPORTANT MATCHING RULES:
 1. Match each invoice line item to the CLOSEST product from the catalog. Products may have different names on the invoice vs catalog (e.g. "Celsius Blend" = "Home Blend (Collective)", brand names may differ from product names).
 2. Use the EXACT catalog name (without the SKU in brackets) in the "name" field.
