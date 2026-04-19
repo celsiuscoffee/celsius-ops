@@ -18,6 +18,9 @@ type ExtractedInvoice = {
   deliveryDate: string | null; // YYYY-MM-DD
   amount: number | null;
   supplierName: string | null;
+  // Outlet name identified on the invoice (billed-to / ship-to / delivery
+  // address). Matches one of the provided outletNames when possible.
+  outletName: string | null;
   items: ExtractedItem[];
   deliveryCharge: number | null;
   notes: string | null;
@@ -33,7 +36,7 @@ type ExtractedInvoice = {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { urls, context, productNames, supplierNames, orderItems } = body as { urls: string[]; context?: string; productNames?: string[]; supplierNames?: string[]; orderItems?: string[] };
+    const { urls, context, productNames, supplierNames, orderItems, outletNames } = body as { urls: string[]; context?: string; productNames?: string[]; supplierNames?: string[]; orderItems?: string[]; outletNames?: string[] };
 
     if (!urls?.length) {
       return NextResponse.json({ error: "No URLs provided" }, { status: 400 });
@@ -81,6 +84,7 @@ export async function POST(req: NextRequest) {
       type: "text",
       text: `Extract invoice/receipt details from the uploaded document(s). ${context ? `Context: ${context}` : ""}
 ${supplierNames?.length ? `\nKNOWN SUPPLIERS:\n${supplierNames.join("\n")}\n\nMatch the supplier/vendor name on the invoice to one of these known suppliers. Use the EXACT supplier name from this list in the "supplierName" field.` : ""}
+${outletNames?.length ? `\nKNOWN OUTLETS (billed-to / ship-to / delivery address on the invoice):\n${outletNames.join("\n")}\n\nMatch the outlet/branch name or address printed on the invoice (typically in the "Bill To", "Ship To", "Deliver To", or address block) to one of these outlets. Use the EXACT outlet name from this list in the "outletName" field. If the invoice addresses just "Celsius Coffee" with no branch, return null.` : ""}
 ${productNames?.length ? `\nKNOWN PRODUCT CATALOG (use these exact names when matching items on the invoice):\n${productNames.join("\n")}\n\nIMPORTANT MATCHING RULES:
 1. Match each invoice line item to the CLOSEST product from the catalog. Products may have different names on the invoice vs catalog (e.g. "Celsius Blend" = "Home Blend (Collective)", brand names may differ from product names).
 2. Use the EXACT catalog name (without the SKU in brackets) in the "name" field.
@@ -105,6 +109,7 @@ Return a JSON object with these fields:
 - deliveryDate: delivery/shipping date in YYYY-MM-DD format (string or null). If not found, use issueDate.
 - amount: total amount as a number (number or null). Only the final total, not subtotals.
 - supplierName: the vendor/supplier/company name (string or null)
+- outletName: the Celsius Coffee outlet/branch on the invoice (string or null). Match to one of the KNOWN OUTLETS above if provided; return the exact name. Only set this when the invoice clearly identifies a specific branch — never guess.
 - items: array of line items, each with { name: string, quantity: number, unitPrice: number, totalPrice: number, uom: string|null }. ONLY include items that match the product catalog. uom = unit of measure (e.g. "pcs", "kg", "pack", "carton").
 - deliveryCharge: delivery/shipping fee as a number (number or null)
 - notes: any relevant notes like payment terms, bank details summary (string or null)
@@ -141,6 +146,7 @@ IMPORTANT: Return ONLY the JSON object, no markdown, no explanation. If a field 
         deliveryDate: null,
         amount: null,
         supplierName: null,
+        outletName: null,
         items: [],
         deliveryCharge: null,
         notes: null,

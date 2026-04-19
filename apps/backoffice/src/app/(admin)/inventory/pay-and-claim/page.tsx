@@ -472,9 +472,10 @@ export default function PayAndClaimPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             urls: newUrls,
-            context: "Staff pay & claim receipt/invoice. Extract supplier name, total amount, purchase date, invoice number, line items, and delivery/shipping charges.",
+            context: "Staff pay & claim receipt/invoice. Extract supplier name, total amount, purchase date, invoice number, line items, delivery/shipping charges, outlet (from bill-to/ship-to address), and vendor bank details if printed on the invoice.",
             supplierNames,
             productNames: productNames.length > 0 ? productNames : undefined,
+            outletNames: outlets.map((o) => o.name),
           }),
         });
         if (res.ok) {
@@ -495,6 +496,16 @@ export default function PayAndClaimPage() {
           if (data.vendorBankAccountName) setQuVendorAccName(data.vendorBankAccountName);
           // Prefill vendor name from supplier name if AI caught one
           if (data.supplierName && !quVendorName) setQuVendorName(data.supplierName);
+
+          // Auto-select outlet from AI (billed-to / ship-to on invoice)
+          if (data.outletName && !quOutletId) {
+            const aiOutlet = data.outletName.toLowerCase();
+            const match = outlets.find((o) => {
+              const dbName = o.name.toLowerCase();
+              return dbName === aiOutlet || dbName.includes(aiOutlet) || aiOutlet.includes(dbName);
+            });
+            if (match) setQuOutletId(match.id);
+          }
 
           // Auto-select supplier
           if (data.supplierName) {
