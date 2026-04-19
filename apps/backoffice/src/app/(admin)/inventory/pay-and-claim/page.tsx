@@ -939,9 +939,61 @@ export default function PayAndClaimPage() {
                                 ))}
                               </div>
                             )}
-                            {c.notes && (
-                              <p className="text-[11px] text-gray-500 mt-2">Notes: {c.notes}</p>
-                            )}
+                            {c.notes && (() => {
+                              // Notes field may contain raw JSON from AI extraction
+                              // (shape: { userNotes, aiExtracted: {...} }). Parse it
+                              // into readable lines when that's the case; otherwise
+                              // just show the plain string.
+                              type Ai = {
+                                supplierName?: string | null;
+                                issueDate?: string | null;
+                                invoiceNumber?: string | null;
+                                amount?: number | null;
+                                deliveryCharge?: number | null;
+                                notes?: string | null;
+                                confidence?: string | null;
+                                items?: unknown;
+                              };
+                              let userNotes: string | null = null;
+                              let ai: Ai | null = null;
+                              try {
+                                const parsed = JSON.parse(c.notes);
+                                if (parsed && typeof parsed === "object") {
+                                  if ("aiExtracted" in parsed) ai = parsed.aiExtracted as Ai;
+                                  if ("userNotes" in parsed) userNotes = (parsed.userNotes ?? null) as string | null;
+                                }
+                              } catch {
+                                userNotes = c.notes;
+                              }
+                              return (
+                                <div className="mt-2 space-y-1 text-[11px] text-gray-500">
+                                  {userNotes && <p><span className="font-medium text-gray-600">Notes:</span> {userNotes}</p>}
+                                  {ai && (
+                                    <div className="rounded border border-gray-200 bg-white px-2 py-1.5">
+                                      <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1 flex items-center gap-1">
+                                        <Sparkles className="h-2.5 w-2.5" />
+                                        Auto-extracted
+                                        {ai.confidence && (
+                                          <span className={`ml-1 rounded px-1 py-[1px] text-[9px] ${
+                                            ai.confidence === "high" ? "bg-green-50 text-green-700"
+                                            : ai.confidence === "low" ? "bg-red-50 text-red-700"
+                                            : "bg-amber-50 text-amber-700"
+                                          }`}>{ai.confidence}</span>
+                                        )}
+                                      </p>
+                                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                                        {ai.supplierName && <div><span className="text-gray-400">Supplier</span> <span className="text-gray-700">{ai.supplierName}</span></div>}
+                                        {ai.invoiceNumber && <div><span className="text-gray-400">Invoice #</span> <span className="text-gray-700 font-mono">{ai.invoiceNumber}</span></div>}
+                                        {ai.issueDate && <div><span className="text-gray-400">Date</span> <span className="text-gray-700">{ai.issueDate}</span></div>}
+                                        {ai.amount != null && <div><span className="text-gray-400">Amount</span> <span className="text-gray-700 font-mono">RM {Number(ai.amount).toFixed(2)}</span></div>}
+                                        {ai.deliveryCharge != null && ai.deliveryCharge > 0 && <div><span className="text-gray-400">Delivery</span> <span className="text-gray-700 font-mono">RM {Number(ai.deliveryCharge).toFixed(2)}</span></div>}
+                                      </div>
+                                      {ai.notes && <p className="mt-1 text-[10px] text-gray-500 italic">{ai.notes}</p>}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                             {c.invoice && (
                               <p className="text-[11px] text-gray-500">
                                 Invoice: {c.invoice.invoiceNumber}
