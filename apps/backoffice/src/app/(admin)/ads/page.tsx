@@ -188,11 +188,6 @@ export default function AdsOverviewPage() {
               />
             </>
           )}
-          <div className="flex gap-2 text-xs">
-            <Link href="/ads/campaigns" className="rounded-md border px-3 py-1.5 hover:bg-neutral-50">Campaigns</Link>
-            <Link href="/ads/invoices" className="rounded-md border px-3 py-1.5 hover:bg-neutral-50">Invoices</Link>
-            <Link href="/ads/settings" className="rounded-md border px-3 py-1.5 hover:bg-neutral-50">Settings</Link>
-          </div>
         </div>
       </div>
 
