@@ -339,10 +339,8 @@ export default function InvoicesPage() {
   const payableCount = allInvoices.filter((i) => i.status !== "PAID").length;
 
   const statusLabel = (status: string, paymentType: string) => {
-    if (paymentType === "STAFF_CLAIM") {
-      if (status === "INITIATED") return "approved";
-      if (status === "PAID") return "reimbursed";
-    }
+    // Staff claims used to show "approved"/"reimbursed" — unified with supplier
+    // and vendor-request flows, all now read "initiated"/"paid".
     if (paymentType === "INTERNAL_TRANSFER") {
       if (status === "PAID") return "settled";
     }
@@ -364,15 +362,18 @@ export default function InvoicesPage() {
 
   const getActions = (inv: Invoice) => {
     const { status, paymentType, depositPercent } = inv;
-    const isStaffClaim = paymentType === "STAFF_CLAIM";
     const isTransfer = paymentType === "INTERNAL_TRANSFER";
     const hasDeposit = depositPercent && depositPercent > 0;
     const depositAmt = inv.depositAmount ?? Math.round(inv.amount * (depositPercent || 0) / 100 * 100) / 100;
     const balanceAmt = Math.round((inv.amount - depositAmt) * 100) / 100;
 
+    // Unified action labels — "Initiate Payment" / "Mark Paid" everywhere,
+    // except internal transfers which use "Initiate Settlement" / "Mark Settled".
+    const initiateLabel = isTransfer ? "Initiate Settlement" : "Initiate Payment";
+    const paidLabel = isTransfer ? "Mark Settled" : "Mark Paid";
     switch (status) {
       case "PENDING": return [
-        { status: "INITIATED", label: isStaffClaim ? "Approve Claim" : isTransfer ? "Initiate Settlement" : "Initiate Payment", color: "bg-blue-500 hover:bg-blue-600" },
+        { status: "INITIATED", label: initiateLabel, color: "bg-blue-500 hover:bg-blue-600" },
       ];
       case "INITIATED": {
         if (hasDeposit) {
@@ -382,15 +383,15 @@ export default function InvoicesPage() {
           ];
         }
         return [
-          { status: "PAID", label: isStaffClaim ? "Mark Reimbursed" : isTransfer ? "Mark Settled" : "Mark Paid", color: "bg-green-500 hover:bg-green-600" },
+          { status: "PAID", label: paidLabel, color: "bg-green-500 hover:bg-green-600" },
         ];
       }
       case "DEPOSIT_PAID": return [
         { status: "PAID", label: `Pay Balance (RM ${balanceAmt.toFixed(2)})`, color: "bg-green-500 hover:bg-green-600" },
       ];
       case "OVERDUE": return [
-        { status: "INITIATED", label: isStaffClaim ? "Approve Claim" : isTransfer ? "Initiate Settlement" : "Initiate Payment", color: "bg-blue-500 hover:bg-blue-600" },
-        { status: "PAID", label: isStaffClaim ? "Mark Reimbursed" : isTransfer ? "Mark Settled" : "Mark Paid", color: "bg-green-500 hover:bg-green-600" },
+        { status: "INITIATED", label: initiateLabel, color: "bg-blue-500 hover:bg-blue-600" },
+        { status: "PAID", label: paidLabel, color: "bg-green-500 hover:bg-green-600" },
       ];
       case "PAID": return [];
       default: return [];
@@ -488,7 +489,7 @@ export default function InvoicesPage() {
           ))}
         </div>
         <div className="flex gap-1.5">
-          {([["all", "All Types"], ["supplier", "Supplier"], ["staff_claim", "Staff Claims"], ["transfer", "Transfers"]] as const).map(([value, label]) => (
+          {([["all", "All Types"], ["supplier", "Supplier"], ["staff_claim", "Staff Claims"], ["payment_request", "Payment Requests"], ["transfer", "Transfers"]] as const).map(([value, label]) => (
             <button key={value} onClick={() => setTypeFilter(value)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${typeFilter === value ? "border-purple-400 bg-purple-50 text-purple-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>{label}</button>
           ))}
         </div>
@@ -640,6 +641,10 @@ export default function InvoicesPage() {
                   <td className="px-4 py-3 font-medium text-gray-900">
                     {inv.invoiceNumber}
                     {inv.paymentType === "STAFF_CLAIM" && <span className="ml-1.5 rounded bg-purple-100 px-1 py-0.5 text-[9px] font-medium text-purple-600">CLAIM</span>}
+                    {inv.orderType === "PAYMENT_REQUEST" && <span className="ml-1.5 rounded bg-blue-100 px-1 py-0.5 text-[9px] font-medium text-blue-600">REQUEST</span>}
+                    {inv.expenseCategory && inv.expenseCategory !== "INGREDIENT" && (
+                      <span className="ml-1.5 rounded bg-gray-100 px-1 py-0.5 text-[9px] font-medium uppercase text-gray-600">{inv.expenseCategory}</span>
+                    )}
                     {inv.paymentType === "INTERNAL_TRANSFER" && <span className="ml-1.5 rounded bg-orange-100 px-1 py-0.5 text-[9px] font-medium text-orange-600">TRANSFER</span>}
                   </td>
                   <td className="px-4 py-3"><code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{inv.poNumber}</code></td>
@@ -848,9 +853,7 @@ export default function InvoicesPage() {
           <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-semibold text-gray-900">
-                {payingInvoice.paymentType === "STAFF_CLAIM"
-                  ? payingTargetStatus === "INITIATED" ? "Approve Claim" : "Mark Reimbursed"
-                  : payingInvoice.paymentType === "INTERNAL_TRANSFER"
+                {payingInvoice.paymentType === "INTERNAL_TRANSFER"
                   ? payingTargetStatus === "INITIATED" ? "Initiate Settlement" : "Mark Settled"
                   : payingTargetStatus === "DEPOSIT_PAID" ? "Pay Deposit"
                   : payingTargetStatus === "INITIATED" ? "Initiate Payment" : "Mark Paid"}
@@ -1051,9 +1054,7 @@ export default function InvoicesPage() {
                 }`}
               >
                 {paySaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : (
-                  payingInvoice.paymentType === "STAFF_CLAIM"
-                    ? payingTargetStatus === "INITIATED" ? "Approve Claim" : "Mark Reimbursed"
-                    : payingInvoice.paymentType === "INTERNAL_TRANSFER"
+                  payingInvoice.paymentType === "INTERNAL_TRANSFER"
                     ? payingTargetStatus === "INITIATED" ? "Initiate Settlement" : "Confirm Settled"
                     : payingTargetStatus === "INITIATED" ? "Confirm Initiate" : "Confirm Paid"
                 )}

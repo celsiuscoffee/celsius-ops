@@ -17,9 +17,17 @@ export async function GET(req: NextRequest) {
   if (tab === "unpaid") where.status = { in: UNPAID_STATUSES };
   else if (tab === "paid") where.status = "PAID";
 
-  if (type === "supplier") where.paymentType = "SUPPLIER";
-  else if (type === "staff_claim") where.paymentType = "STAFF_CLAIM";
+  if (type === "supplier") {
+    // "Supplier" = ingredient supplier invoices only (exclude one-off vendor
+    // payment requests even though they share paymentType=SUPPLIER).
+    where.paymentType = "SUPPLIER";
+    where.order = { orderType: { not: "PAYMENT_REQUEST" } };
+  } else if (type === "staff_claim") where.paymentType = "STAFF_CLAIM";
   else if (type === "transfer") where.paymentType = "INTERNAL_TRANSFER";
+  else if (type === "payment_request") {
+    // Finance-pays-vendor requests (asset/maintenance/other one-offs)
+    where.order = { orderType: "PAYMENT_REQUEST" };
+  }
 
   const outletIds = req.nextUrl.searchParams.getAll("outlet").filter(Boolean);
   if (outletIds.length === 1) where.outletId = outletIds[0];
