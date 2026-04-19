@@ -148,3 +148,24 @@ create table if not exists ads_settings (
 insert into ads_settings (id, mcc_customer_id)
 values ('singleton', '4152437144')
 on conflict (id) do nothing;
+
+-- ─── Conversion action breakdown ───────────────────────────
+-- Per-campaign, per-day breakdown of conversions by action category.
+-- Lets F&B outlets split "direction requests" vs "phone calls" vs
+-- "website visits" vs other conversion types.
+create table if not exists ads_conversion_daily (
+  id                       text primary key,
+  date                     date not null,
+  account_id               text not null references ads_account(id) on delete cascade,
+  campaign_id              text not null references ads_campaign(id) on delete cascade,
+  conversion_action_id     text not null,
+  conversion_action_name   text not null,
+  conversion_category      text not null,
+  conversions              numeric(14,4) not null default 0,
+  conversions_value        numeric(14,4) not null default 0,
+  synced_at                timestamptz not null default now(),
+  unique (date, campaign_id, conversion_action_id)
+);
+create index if not exists idx_ads_conv_daily_date on ads_conversion_daily(date desc);
+create index if not exists idx_ads_conv_daily_campaign on ads_conversion_daily(campaign_id, date desc);
+create index if not exists idx_ads_conv_daily_category on ads_conversion_daily(conversion_category);

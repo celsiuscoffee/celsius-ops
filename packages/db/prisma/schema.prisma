@@ -1231,6 +1231,25 @@ model AdsSyncLog {
   @@map("ads_sync_log")
 }
 
+model AdsConversionDaily {
+  id                    String   @id
+  date                  DateTime @db.Date
+  accountId             String   @map("account_id")
+  campaignId            String   @map("campaign_id")
+  conversionActionId    String   @map("conversion_action_id")
+  conversionActionName  String   @map("conversion_action_name")
+  conversionCategory    String   @map("conversion_category")
+  conversions           Decimal  @default(0) @db.Decimal(14, 4)
+  conversionsValue      Decimal  @default(0) @map("conversions_value") @db.Decimal(14, 4)
+  syncedAt              DateTime @default(now()) @map("synced_at")
+
+  @@unique([date, campaignId, conversionActionId])
+  @@index([date(sort: Desc)])
+  @@index([campaignId, date(sort: Desc)])
+  @@index([conversionCategory])
+  @@map("ads_conversion_daily")
+}
+
 model AdsSettings {
   id                  String   @id @default("singleton")
   mccCustomerId       String?  @map("mcc_customer_id")

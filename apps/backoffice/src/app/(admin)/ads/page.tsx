@@ -14,6 +14,26 @@ type OverviewData = {
   topCampaigns: Array<{ id: string; name: string; costMYR: number; clicks: number; conversions: number }>;
 };
 
+type ConversionData = {
+  byCategory: Array<{ category: string; conversions: number; value: number }>;
+  byAction: Array<{ name: string; category: string; conversions: number; value: number }>;
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  GET_DIRECTIONS: "Directions requested",
+  PHONE_CALL_LEAD: "Phone calls",
+  STORE_VISIT: "Store visits",
+  SUBMIT_LEAD_FORM: "Lead forms",
+  OUTBOUND_CLICK: "Outbound clicks",
+  PAGE_VIEW: "Page views",
+  CONTACT: "Contact actions",
+  BOOK_APPOINTMENT: "Bookings",
+  PURCHASE: "Purchases",
+  ENGAGEMENT: "Engagement",
+  LEAD: "Leads",
+  DEFAULT: "Other conversions",
+};
+
 function fmtMYR(n: number): string {
   return new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR", maximumFractionDigits: 0 }).format(n);
 }
@@ -84,6 +104,7 @@ export default function AdsOverviewPage() {
   const qsStr = qs.toString();
 
   const { data, isLoading, error } = useFetch<OverviewData>(`/api/ads/overview${qsStr ? `?${qsStr}` : ""}`);
+  const { data: convData } = useFetch<ConversionData>(`/api/ads/conversions${qsStr ? `?${qsStr}` : ""}`);
   const { data: outletList } = useFetch<Array<{ id: string; name: string }>>("/api/ops/outlets");
   const { data: campaignData } = useFetch<{ campaigns: Array<{ id: string; name: string; outletId: string | null }> }>("/api/ads/campaigns?days=365");
 
@@ -198,6 +219,47 @@ export default function AdsOverviewPage() {
           </ResponsiveContainer>
         </div>
       </Card>
+
+      {/* Conversion breakdown */}
+      {convData && convData.byCategory.length > 0 && (
+        <Card className="p-4">
+          <h2 className="mb-3 text-sm font-medium">Conversion Breakdown</h2>
+          <div className="grid grid-cols-2 gap-x-8 gap-y-2 lg:grid-cols-3">
+            {convData.byCategory.map((c) => (
+              <div key={c.category} className="flex items-center justify-between border-b border-neutral-100 py-2">
+                <div>
+                  <div className="text-sm text-neutral-700">{CATEGORY_LABELS[c.category] ?? c.category}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-neutral-400">{c.category}</div>
+                </div>
+                <div className="text-lg font-semibold tabular-nums">{fmtInt(c.conversions)}</div>
+              </div>
+            ))}
+          </div>
+          {convData.byAction.length > 0 && (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs text-neutral-500">View by individual action ({convData.byAction.length})</summary>
+              <table className="mt-2 w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-neutral-500">
+                    <th className="pb-1 font-normal">Action</th>
+                    <th className="pb-1 font-normal">Category</th>
+                    <th className="pb-1 text-right font-normal">Conversions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {convData.byAction.map((a) => (
+                    <tr key={`${a.name}-${a.category}`} className="border-t border-neutral-100">
+                      <td className="py-1.5">{a.name}</td>
+                      <td className="py-1.5 text-xs text-neutral-500">{a.category}</td>
+                      <td className="py-1.5 text-right tabular-nums">{fmtInt(a.conversions)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          )}
+        </Card>
+      )}
 
       {/* Top campaigns */}
       <Card className="p-4">

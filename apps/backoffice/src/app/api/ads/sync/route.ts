@@ -6,6 +6,7 @@ import { syncAccounts } from "@/lib/ads/sync-accounts";
 import { syncCampaigns } from "@/lib/ads/sync-campaigns";
 import { syncMetrics } from "@/lib/ads/sync-metrics";
 import { syncInvoices } from "@/lib/ads/sync-invoices";
+import { syncConversions } from "@/lib/ads/sync-conversions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -58,7 +59,16 @@ export async function POST(req: NextRequest) {
         );
         return { rowsInserted: rows, metadata: { days } };
       });
-      results.push({ account: acc.customerId, campaigns: camp.result, metrics: met.result, errors: [camp.error, met.error].filter(Boolean) });
+      const conv = await runSync("keywords", acc.id, async () => {
+        const { rows } = await syncConversions(
+          acc.id,
+          acc.customerId,
+          from.toISOString().slice(0, 10),
+          to.toISOString().slice(0, 10),
+        );
+        return { rowsInserted: rows, metadata: { days, kind: "conversions" } };
+      });
+      results.push({ account: acc.customerId, campaigns: camp.result, metrics: met.result, conversions: conv.result, errors: [camp.error, met.error, conv.error].filter(Boolean) });
     }
 
     if (kind === "all" || kind === "invoices") {
