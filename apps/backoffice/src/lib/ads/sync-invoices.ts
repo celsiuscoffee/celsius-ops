@@ -18,8 +18,9 @@ import { createHash, randomUUID } from "crypto";
 const INVOICE_BUCKET = "ads-invoices";
 
 function getStorageClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Celsius Vercel env uses LOYALTY_-prefixed names; fall back to generic.
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_LOYALTY_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.LOYALTY_SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Supabase env vars missing");
   return createClient(url, key, { auth: { persistSession: false } });
 }
