@@ -1,5 +1,5 @@
 // Shift templates — the dropdown options used in the schedule grid.
-// Matches BrioHR convention: named shifts per outlet + generic full-day.
+// Named shifts per outlet + generic full-day.
 
 export type ShiftTemplate = {
   id: string;

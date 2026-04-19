@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     const zakat = Number((item.other_deductions as Record<string, unknown>)?.zakat || 0);
     const alloc = item.allowances as Record<string, { amount?: number }> | null;
 
-    // Map BrioHR-style EA categories. B.1(a) = main remuneration, B.1(b) = fees/bonus/profit,
+    // EA categories per LHDN: B.1(a) = main remuneration, B.1(b) = fees/bonus/profit,
     // B.1(c) = allowances. For now, approximate from existing payroll_items shape.
     const grossBasic = Number(item.basic_salary || 0)
       + Number(item.ot_1x_amount || 0) + Number(item.ot_1_5x_amount || 0)

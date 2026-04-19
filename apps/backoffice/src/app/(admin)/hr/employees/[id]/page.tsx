@@ -98,7 +98,7 @@ export default function EmployeeDetailPage() {
     emergency_contact_phone: "",
     notes: "",
     schedule_required: true,
-    // Per-employee statutory overrides (BrioHR parity)
+    // Per-employee statutory overrides
     epf_contribution_type: "default",
     socso_category: "invalidity_injury",
     eis_enabled: true,
