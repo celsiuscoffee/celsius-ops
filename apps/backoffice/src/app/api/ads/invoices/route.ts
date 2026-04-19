@@ -4,13 +4,14 @@ import { requireRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-// Malaysia Service Tax on digital services (including Google Ads) — 8% since Mar 2024.
 const SST_RATE = 0.08;
 
-// Generate per-campaign monthly statements from synced metrics.
-// This replaces pulling actual Google invoices (not available for card-billed
-// accounts). Output is suitable for LHDN audit support: shows campaign-level
-// spend + SST per month, with account totals and grand total.
+// Generate per-outlet, per-month ad-spend statements with SST.
+// Each outlet's spend in a month is a separate claim (INITIATED until
+// the person who fronted the money is reimbursed).
+//
+// Shape:
+//   statements[]: { yearMonth, outlets[]: { outletId, outletName, campaigns[], payment?, ... } }
 export async function GET(req: NextRequest) {
   try {
     await requireRole(req.headers, "ADMIN");
@@ -20,43 +21,39 @@ export async function GET(req: NextRequest) {
 
   const url = new URL(req.url);
   const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
-  const outletFilter = url.searchParams.get("outletId"); // "unlinked" | "all" | outletId
-  const campaignFilter = url.searchParams.get("campaignId"); // "all" | campaignId
+  const outletFilter = url.searchParams.get("outletId");
+  const campaignFilter = url.searchParams.get("campaignId");
 
   const from = new Date(Date.UTC(year, 0, 1));
   const to = new Date(Date.UTC(year + 1, 0, 1));
 
-  // Narrow campaign id set based on filters
+  // Campaign filter narrows set
   let campaignIdFilter: string[] | undefined;
   if (campaignFilter && campaignFilter !== "all") {
     campaignIdFilter = [campaignFilter];
   } else if (outletFilter && outletFilter !== "all") {
-    const where = outletFilter === "unlinked"
-      ? { outletId: null }
-      : { outletId: outletFilter };
+    const where = outletFilter === "unlinked" ? { outletId: null } : { outletId: outletFilter };
     const campaigns = await prisma.adsCampaign.findMany({ where, select: { id: true } });
     campaignIdFilter = campaigns.map((c) => c.id);
     if (campaignIdFilter.length === 0) {
       return NextResponse.json({
-        year, sstRate: 0.08, statements: [],
-        summary: { subtotalMYR: 0, taxMYR: 0, totalMYR: 0, monthCount: 0 },
+        year, sstRate: SST_RATE, statements: [],
+        summary: { subtotalMYR: 0, taxMYR: 0, totalMYR: 0, monthCount: 0, claimedMYR: 0, paidMYR: 0, outstandingMYR: 0 },
       });
     }
   }
 
-  // Campaign-level metrics only (campaignId not null)
   const rows = await prisma.adsMetricDaily.findMany({
     where: {
       date: { gte: from, lt: to },
       campaignId: campaignIdFilter ? { in: campaignIdFilter } : { not: null },
     },
-    select: { date: true, costMicros: true, campaignId: true, accountId: true },
+    select: { date: true, costMicros: true, campaignId: true },
   });
 
-  // Also fetch campaigns + outlets for display names
-  const campaignIds = Array.from(new Set(rows.map((r) => r.campaignId!).filter(Boolean)));
+  const allCampaignIds = Array.from(new Set(rows.map((r) => r.campaignId!).filter(Boolean)));
   const campaigns = await prisma.adsCampaign.findMany({
-    where: { id: { in: campaignIds } },
+    where: { id: { in: allCampaignIds } },
     select: { id: true, name: true, outletId: true },
   });
   const campaignMap = new Map(campaigns.map((c) => [c.id, c]));
@@ -65,93 +62,120 @@ export async function GET(req: NextRequest) {
   const outlets = outletIds.length
     ? await prisma.outlet.findMany({ where: { id: { in: outletIds } }, select: { id: true, name: true } })
     : [];
-  const outletMap = new Map(outlets.map((o) => [o.id, o.name]));
+  const outletNameMap = new Map(outlets.map((o) => [o.id, o.name]));
 
-  // Bucket: { "YYYY-MM": { [campaignId]: costMicros } }
-  const buckets = new Map<string, Map<string, bigint>>();
+  // Bucket: { yearMonth: { outletKey: { outletId, outletName, byCampaign: Map<campaignId, micros> } } }
+  type OutletBucket = {
+    outletId: string | null;
+    outletName: string;
+    byCampaign: Map<string, bigint>;
+  };
+  const monthBuckets = new Map<string, Map<string, OutletBucket>>();
+
   for (const r of rows) {
+    if (!r.campaignId) continue;
+    const c = campaignMap.get(r.campaignId);
+    if (!c) continue;
     const ym = `${r.date.getUTCFullYear()}-${String(r.date.getUTCMonth() + 1).padStart(2, "0")}`;
-    if (!buckets.has(ym)) buckets.set(ym, new Map());
-    const month = buckets.get(ym)!;
-    const key = r.campaignId!;
-    month.set(key, (month.get(key) ?? BigInt(0)) + r.costMicros);
+    const outletKey = c.outletId ?? "__unlinked__";
+    if (!monthBuckets.has(ym)) monthBuckets.set(ym, new Map());
+    const month = monthBuckets.get(ym)!;
+    if (!month.has(outletKey)) {
+      month.set(outletKey, {
+        outletId: c.outletId,
+        outletName: c.outletId ? (outletNameMap.get(c.outletId) ?? "Unknown outlet") : "Unlinked",
+        byCampaign: new Map(),
+      });
+    }
+    const bucket = month.get(outletKey)!;
+    bucket.byCampaign.set(r.campaignId, (bucket.byCampaign.get(r.campaignId) ?? BigInt(0)) + r.costMicros);
   }
 
-  // Build structured output sorted by month desc
-  const statements = Array.from(buckets.entries())
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([yearMonth, monthRows]) => {
-      const items = Array.from(monthRows.entries())
-        .map(([cid, cost]) => {
-          const c = campaignMap.get(cid);
-          const subtotal = Number(cost) / 1_000_000;
-          const tax = subtotal * SST_RATE;
-          return {
-            campaignId: cid,
-            campaignName: c?.name ?? "Unknown",
-            outletId: c?.outletId ?? null,
-            outletName: c?.outletId ? outletMap.get(c.outletId) ?? null : null,
-            subtotalMYR: subtotal,
-            taxMYR: tax,
-            totalMYR: subtotal + tax,
-          };
-        })
-        .sort((a, b) => b.subtotalMYR - a.subtotalMYR);
-
-      const subtotal = items.reduce((s, i) => s + i.subtotalMYR, 0);
-      const tax = items.reduce((s, i) => s + i.taxMYR, 0);
-
-      return {
-        yearMonth,
-        items,
-        subtotalMYR: subtotal,
-        taxMYR: tax,
-        totalMYR: subtotal + tax,
-      };
-    });
-
-  const ytdSubtotal = statements.reduce((s, m) => s + m.subtotalMYR, 0);
-  const ytdTax = statements.reduce((s, m) => s + m.taxMYR, 0);
-
-  // Attach payment records for the year, keyed by {yearMonth, outletId, campaignId}
+  // Load payments for the year
   const payments = await prisma.adsPayment.findMany({
     where: { yearMonth: { startsWith: `${year}-` } },
   });
   const paymentMap = new Map<string, typeof payments[number]>();
   for (const p of payments) {
-    const key = `${p.yearMonth}|${p.outletId ?? ""}|${p.campaignId ?? ""}`;
+    const key = `${p.yearMonth}|${p.outletId ?? "__unlinked__"}|${p.campaignId ?? ""}`;
     paymentMap.set(key, p);
   }
-  // Map outlet filter to a specific scope key for lookup
-  const lookupOutletId = (outletFilter && outletFilter !== "all" && outletFilter !== "unlinked") ? outletFilter : "";
-  const lookupCampaignId = (campaignFilter && campaignFilter !== "all") ? campaignFilter : "";
 
-  const statementsWithPayment = statements.map((m) => {
-    const key = `${m.yearMonth}|${lookupOutletId}|${lookupCampaignId}`;
-    const p = paymentMap.get(key);
-    return {
-      ...m,
-      payment: p ? {
-        id: p.id,
-        status: p.status,
-        paidAt: p.paidAt?.toISOString() ?? null,
-        paymentMethod: p.paymentMethod,
-        referenceNumber: p.referenceNumber,
-        popPhotos: p.popPhotos,
-      } : null,
-    };
-  });
+  const statements = Array.from(monthBuckets.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([yearMonth, outletMap]) => {
+      const outletRows = Array.from(outletMap.values())
+        .map((b) => {
+          const campaignItems = Array.from(b.byCampaign.entries())
+            .map(([cid, cost]) => {
+              const c = campaignMap.get(cid);
+              const subtotal = Number(cost) / 1_000_000;
+              const tax = subtotal * SST_RATE;
+              return {
+                campaignId: cid,
+                campaignName: c?.name ?? "Unknown",
+                subtotalMYR: subtotal,
+                taxMYR: tax,
+                totalMYR: subtotal + tax,
+              };
+            })
+            .sort((a, b) => b.subtotalMYR - a.subtotalMYR);
+          const subtotal = campaignItems.reduce((s, i) => s + i.subtotalMYR, 0);
+          const tax = campaignItems.reduce((s, i) => s + i.taxMYR, 0);
+
+          const paymentKey = `${yearMonth}|${b.outletId ?? "__unlinked__"}|`;
+          const p = paymentMap.get(paymentKey);
+
+          return {
+            outletId: b.outletId,
+            outletName: b.outletName,
+            campaigns: campaignItems,
+            subtotalMYR: subtotal,
+            taxMYR: tax,
+            totalMYR: subtotal + tax,
+            payment: p ? {
+              id: p.id,
+              status: p.status,
+              paidAt: p.paidAt?.toISOString() ?? null,
+              paymentMethod: p.paymentMethod,
+              referenceNumber: p.referenceNumber,
+              popPhotos: p.popPhotos,
+              notes: p.notes,
+            } : null,
+          };
+        })
+        .sort((a, b) => b.subtotalMYR - a.subtotalMYR);
+
+      const subtotal = outletRows.reduce((s, o) => s + o.subtotalMYR, 0);
+      const tax = outletRows.reduce((s, o) => s + o.taxMYR, 0);
+      return { yearMonth, outlets: outletRows, subtotalMYR: subtotal, taxMYR: tax, totalMYR: subtotal + tax };
+    });
+
+  // Summary — total, paid (PAID+VERIFIED), outstanding (INITIATED or no record)
+  let totalAll = 0, paid = 0, claimed = 0, outstanding = 0;
+  for (const m of statements) {
+    totalAll += m.totalMYR;
+    for (const o of m.outlets) {
+      if (o.payment?.status === "PAID" || o.payment?.status === "VERIFIED") paid += o.totalMYR;
+      else if (o.payment?.status === "INITIATED") claimed += o.totalMYR;
+      else outstanding += o.totalMYR;
+    }
+  }
+  const ytdSubtotal = statements.reduce((s, m) => s + m.subtotalMYR, 0);
+  const ytdTax = statements.reduce((s, m) => s + m.taxMYR, 0);
 
   return NextResponse.json({
     year,
     sstRate: SST_RATE,
-    statements: statementsWithPayment,
+    statements,
     summary: {
       subtotalMYR: ytdSubtotal,
       taxMYR: ytdTax,
-      totalMYR: ytdSubtotal + ytdTax,
+      totalMYR: totalAll,
       monthCount: statements.length,
+      claimedMYR: claimed,
+      paidMYR: paid,
+      outstandingMYR: outstanding,
     },
-    filters: { outletId: lookupOutletId || null, campaignId: lookupCampaignId || null },
   });
 }
