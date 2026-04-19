@@ -5,21 +5,37 @@ import { useState } from "react";
 import Link from "next/link";
 import { Receipt, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
 
+type AllowanceItem = { amount: number; base?: number; score?: number };
+type OtherDeductions = {
+  unpaid_leave?: number;
+  zakat?: number;
+  review_penalty?: { amount: number; entries?: unknown[] };
+};
+type ComputationDetails = {
+  source?: string;
+  gross_additions?: number;
+  briohr_internal_id?: string;
+};
+
 type Payslip = {
   id: string;
   basic_salary: number;
   total_regular_hours: number;
   total_ot_hours: number;
+  ot_1x_amount: number;
   ot_1_5x_amount: number;
   ot_2x_amount: number;
   ot_3x_amount: number;
+  allowances: Record<string, AllowanceItem> | null;
   total_gross: number;
   epf_employee: number;
   socso_employee: number;
   eis_employee: number;
   pcb_tax: number;
+  other_deductions: OtherDeductions | null;
   total_deductions: number;
   net_pay: number;
+  computation_details: ComputationDetails | null;
   hr_payroll_runs: {
     period_month: number;
     period_year: number;
@@ -60,7 +76,20 @@ export default function PayslipsPage() {
           {payslips.map((slip) => {
             const period = `${MONTHS[slip.hr_payroll_runs.period_month - 1]} ${slip.hr_payroll_runs.period_year}`;
             const isOpen = expanded === slip.id;
-            const totalOT = Number(slip.ot_1_5x_amount) + Number(slip.ot_2x_amount) + Number(slip.ot_3x_amount);
+            const totalOT =
+              Number(slip.ot_1x_amount || 0) +
+              Number(slip.ot_1_5x_amount || 0) +
+              Number(slip.ot_2x_amount || 0) +
+              Number(slip.ot_3x_amount || 0);
+            const allowances = slip.allowances || {};
+            const allowanceEntries = Object.entries(allowances).filter(([, v]) => Number(v?.amount || 0) > 0);
+            const totalAllowances = allowanceEntries.reduce((s, [, v]) => s + Number(v.amount || 0), 0);
+            const other = slip.other_deductions || {};
+            const unpaidLeave = Number(other.unpaid_leave || 0);
+            const zakat = Number(other.zakat || 0);
+            const reviewPenalty = Number(other.review_penalty?.amount || 0);
+            const isImported = slip.computation_details?.source === "briohr_import";
+            const importedGross = Number(slip.computation_details?.gross_additions || 0);
 
             return (
               <div key={slip.id} className="rounded-2xl border border-gray-100 bg-white shadow-sm">
@@ -82,10 +111,21 @@ export default function PayslipsPage() {
                     <Row label="Basic Salary" value={fmt(slip.basic_salary)} />
                     {totalOT > 0 && (
                       <>
+                        {Number(slip.ot_1x_amount) > 0 && <Row label="OT 1x" value={fmt(slip.ot_1x_amount)} />}
                         {Number(slip.ot_1_5x_amount) > 0 && <Row label="OT 1.5x" value={fmt(slip.ot_1_5x_amount)} />}
                         {Number(slip.ot_2x_amount) > 0 && <Row label="OT 2x (Rest Day)" value={fmt(slip.ot_2x_amount)} />}
                         {Number(slip.ot_3x_amount) > 0 && <Row label="OT 3x (PH)" value={fmt(slip.ot_3x_amount)} />}
                       </>
+                    )}
+                    {totalAllowances > 0 && allowanceEntries.map(([key, a]) => (
+                      <Row
+                        key={key}
+                        label={key === "attendance" ? "Attendance Allowance" : key === "performance" ? "Performance Allowance" : key.replace(/_/g, " ")}
+                        value={fmt(Number(a.amount))}
+                      />
+                    ))}
+                    {isImported && importedGross > 0 && (
+                      <Row label="Other Earnings (imported)" value={fmt(importedGross)} />
                     )}
                     <Row label="Total Gross" value={fmt(slip.total_gross)} bold />
 
@@ -95,6 +135,9 @@ export default function PayslipsPage() {
                     <Row label="SOCSO" value={`-${fmt(slip.socso_employee)}`} />
                     <Row label="EIS" value={`-${fmt(slip.eis_employee)}`} />
                     <Row label="PCB (Tax)" value={`-${fmt(slip.pcb_tax)}`} />
+                    {unpaidLeave > 0 && <Row label="Unpaid Leave" value={`-${fmt(unpaidLeave)}`} />}
+                    {zakat > 0 && <Row label="Zakat" value={`-${fmt(zakat)}`} />}
+                    {reviewPenalty > 0 && <Row label="Review Penalty" value={`-${fmt(reviewPenalty)}`} />}
                     <Row label="Total Deductions" value={`-${fmt(slip.total_deductions)}`} bold />
 
                     {/* Net */}
@@ -105,6 +148,7 @@ export default function PayslipsPage() {
                     {/* Hours */}
                     <p className="mt-4 text-xs text-gray-400">
                       {slip.total_regular_hours}h regular{Number(slip.total_ot_hours) > 0 ? ` + ${slip.total_ot_hours}h OT` : ""}
+                      {isImported && " · imported from BrioHR"}
                     </p>
                   </div>
                 )}
