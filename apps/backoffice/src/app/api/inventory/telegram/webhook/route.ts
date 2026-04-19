@@ -307,7 +307,12 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
   const invoiceInclude = {
     supplier: { select: { id: true, name: true, telegramChatId: true, bankAccountNumber: true, bankName: true } },
     outlet: { select: { name: true, code: true } },
-    order: { select: { orderNumber: true } },
+    order: {
+      select: {
+        orderNumber: true,
+        claimedBy: { select: { id: true, name: true, bankAccountNumber: true, bankName: true } },
+      },
+    },
   };
 
   // 1. Try matching by invoice reference (most direct — invoice number in payment description)
@@ -347,6 +352,28 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
         return await resolvePop(chatId, msgId, photoUrl, pop, amount, bankMatched);
       }
     }
+
+    // 2b. Try matching by staff (claimant) bank account — STAFF_CLAIM payouts
+    const staffByBank = await prisma.user.findFirst({
+      where: { bankAccountNumber: { contains: accountDigits }, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (staffByBank) {
+      const staffMatched = await prisma.invoice.findMany({
+        where: {
+          status: { in: ["PENDING", "INITIATED", "OVERDUE"] },
+          paymentType: "STAFF_CLAIM",
+          order: { claimedById: staffByBank.id },
+          amount: { gte: amount - 0.5, lte: amount + 0.5 },
+        },
+        include: invoiceInclude,
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      });
+      if (staffMatched.length > 0) {
+        return await resolvePop(chatId, msgId, photoUrl, pop, amount, staffMatched);
+      }
+    }
   }
 
   // 3. Find unpaid invoices — exact amount match
@@ -373,18 +400,27 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
     });
   }
 
-  // 5. Narrow by recipient name/bank if multiple matches
+  // 5. Narrow by recipient name/bank if multiple matches — check both supplier
+  // and claimant (staff) records since the pool may contain either kind.
   if (candidates.length > 1 && (pop.recipientName || pop.recipientAccount)) {
     let narrowed = candidates;
     if (pop.recipientAccount) {
       const digits = pop.recipientAccount.replace(/\D/g, "");
-      const byAccount = candidates.filter((inv) => inv.supplier?.bankAccountNumber?.replace(/\D/g, "") === digits);
+      const byAccount = candidates.filter((inv: any) => {
+        const sup = inv.supplier?.bankAccountNumber?.replace(/\D/g, "");
+        const staff = inv.order?.claimedBy?.bankAccountNumber?.replace(/\D/g, "");
+        return sup === digits || staff === digits;
+      });
       if (byAccount.length > 0) narrowed = byAccount;
     }
     if (narrowed.length > 1 && pop.recipientName) {
-      const byName = narrowed.filter((inv) =>
-        inv.supplier?.name?.toLowerCase().includes(pop.recipientName!.toLowerCase()),
-      );
+      const needle = pop.recipientName.toLowerCase();
+      const byName = narrowed.filter((inv: any) => {
+        return (
+          inv.supplier?.name?.toLowerCase().includes(needle) ||
+          inv.order?.claimedBy?.name?.toLowerCase().includes(needle)
+        );
+      });
       if (byName.length > 0) narrowed = byName;
     }
     candidates = narrowed;
@@ -404,7 +440,12 @@ async function resolvePop(
 
   if (candidates.length > 1) {
     const list = candidates
-      .map((inv: any) => `• ${inv.invoiceNumber} — ${inv.supplier?.name ?? "?"} [${inv.outlet?.code ?? "?"}] — RM ${Number(inv.amount).toFixed(2)}`)
+      .map((inv: any) => {
+        const payee = inv.paymentType === "STAFF_CLAIM"
+          ? `Staff: ${inv.order?.claimedBy?.name ?? "?"}`
+          : inv.supplier?.name ?? "?";
+        return `• ${inv.invoiceNumber} — ${payee} [${inv.outlet?.code ?? "?"}] — RM ${Number(inv.amount).toFixed(2)}`;
+      })
       .join("\n");
     await sendMessage(chatId, `💳 POP received — RM ${amount.toFixed(2)}\n\n⚠️ Multiple matching invoices:\n${list}\n\nPlease specify which invoice.`, msgId);
     return;
@@ -439,7 +480,10 @@ async function resolvePop(
     }).catch((e: unknown) => console.error("[telegram] Failed to attach POP to order:", e));
   }
 
-  const supplierName = invoice.supplier?.name ?? "Unknown";
+  const isStaffClaim = invoice.paymentType === "STAFF_CLAIM";
+  const payeeLabel = isStaffClaim
+    ? `Staff: ${invoice.order?.claimedBy?.name ?? "Unknown"}`
+    : `Supplier: ${invoice.supplier?.name ?? "Unknown"}`;
   const outletName = invoice.outlet?.name ?? "";
   const outletCode = invoice.outlet?.code ?? "";
   const poRef = invoice.order?.orderNumber ? `\nPO: ${invoice.order.orderNumber}` : "";
@@ -447,12 +491,13 @@ async function resolvePop(
   const receiptLink = shortLink ? `\n🔗 ${shortLink}` : "";
   await sendMessage(
     chatId,
-    `✅ <b>Payment matched</b>\n\nInvoice: ${invoice.invoiceNumber}${poRef}${outletRef}\nSupplier: ${supplierName}\nAmount: RM ${Number(invoice.amount).toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\n\nMarked as <b>PAID</b>.\n📎 Uploaded to PO + Invoice${receiptLink}`,
+    `✅ <b>Payment matched</b>\n\nInvoice: ${invoice.invoiceNumber}${poRef}${outletRef}\n${payeeLabel}\nAmount: RM ${Number(invoice.amount).toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\n\nMarked as <b>PAID</b>.\n📎 Uploaded to PO + Invoice${receiptLink}`,
     msgId,
   );
 
-  // Forward POP to supplier's Telegram group (or owner for testing)
-  const forwardChatId = invoice.supplier?.telegramChatId
+  // Forward POP: supplier → their Telegram group; staff claim → owner chat
+  // (staff don't have a Telegram group linked).
+  const forwardChatId = !isStaffClaim && invoice.supplier?.telegramChatId
     ? parseInt(invoice.supplier.telegramChatId, 10)
     : process.env.TELEGRAM_OWNER_CHAT_ID
       ? parseInt(process.env.TELEGRAM_OWNER_CHAT_ID, 10)
@@ -462,7 +507,7 @@ async function resolvePop(
     await sendPhoto(
       forwardChatId,
       photoUrl,
-      `✅ Payment confirmed\n\nInvoice: ${invoice.invoiceNumber}\nAmount: RM ${Number(invoice.amount).toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\nDate: ${pop.date ?? "–"}`,
+      `✅ Payment confirmed\n\nInvoice: ${invoice.invoiceNumber}\n${payeeLabel}\nAmount: RM ${Number(invoice.amount).toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\nDate: ${pop.date ?? "–"}`,
     );
   }
 }

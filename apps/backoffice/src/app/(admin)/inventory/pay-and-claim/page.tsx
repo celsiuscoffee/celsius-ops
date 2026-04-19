@@ -579,12 +579,35 @@ export default function PayAndClaimPage() {
     setQuSubmitting(false);
   };
 
-  // Open reimburse dialog
+  // Open "mark as paid" dialog (step 2 of two-step flow)
   const openReimburseDialog = (claim: Claim) => {
     setReimburseClaim(claim);
     setReimbursePaymentRef("");
     setReimbursePaymentVia("Bank Transfer");
     setReimburseDialogOpen(true);
+  };
+
+  // Step 1 of two-step flow — single click transitions PENDING/OVERDUE → INITIATED.
+  // Mirrors the supplier invoice flow. No extra data needed; once initiated,
+  // POP via Telegram (or manual "Mark Paid") closes it out.
+  const [initiatingId, setInitiatingId] = useState<string | null>(null);
+  const handleInitiatePayment = async (claim: Claim) => {
+    if (!claim.invoice) return;
+    setInitiatingId(claim.invoice.id);
+    try {
+      const res = await fetch(`/api/inventory/invoices/${claim.invoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "INITIATED" }),
+      });
+      if (res.ok) mutate();
+      else {
+        const data = await res.json().catch(() => null);
+        alert(data?.error || "Failed to initiate payment.");
+      }
+    } finally {
+      setInitiatingId(null);
+    }
   };
 
   // Mark invoice as paid (reimbursed) with payment details
@@ -832,14 +855,40 @@ export default function PayAndClaimPage() {
                             </Button>
                           )}
                           {c.invoice && c.invoice.status !== "PAID" && c.status !== "DRAFT" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 text-[10px] px-2"
-                              onClick={(e) => { e.stopPropagation(); openReview(c); }}
-                            >
-                              <Eye className="mr-1 h-3 w-3" /> Edit
-                            </Button>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2"
+                                onClick={(e) => { e.stopPropagation(); openReview(c); }}
+                              >
+                                <Eye className="mr-1 h-3 w-3" /> Edit
+                              </Button>
+                              {(c.invoice.status === "PENDING" || c.invoice.status === "OVERDUE") && (
+                                <Button
+                                  size="sm"
+                                  className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700 text-white"
+                                  disabled={initiatingId === c.invoice.id}
+                                  onClick={(e) => { e.stopPropagation(); handleInitiatePayment(c); }}
+                                >
+                                  {initiatingId === c.invoice.id ? (
+                                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="mr-1 h-3 w-3" />
+                                  )}
+                                  Initiate Payment
+                                </Button>
+                              )}
+                              {c.invoice.status === "INITIATED" && (
+                                <Button
+                                  size="sm"
+                                  className="h-6 text-[10px] px-2 bg-green-600 hover:bg-green-700 text-white"
+                                  onClick={(e) => { e.stopPropagation(); openReimburseDialog(c); }}
+                                >
+                                  <CheckCircle2 className="mr-1 h-3 w-3" /> Mark Paid
+                                </Button>
+                              )}
+                            </>
                           )}
                         </div>
                       </td>
@@ -1469,7 +1518,7 @@ export default function PayAndClaimPage() {
         <DialogContent className="!max-w-md p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5" /> Initiate Reimbursement
+              <CheckCircle2 className="h-5 w-5" /> Mark as Paid
             </DialogTitle>
           </DialogHeader>
 
@@ -1550,7 +1599,7 @@ export default function PayAndClaimPage() {
               className="bg-green-600 hover:bg-green-700 text-white"
             >
               {reimburseSaving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
-              Confirm Reimbursement
+              Confirm Paid
             </Button>
           </DialogFooter>
         </DialogContent>

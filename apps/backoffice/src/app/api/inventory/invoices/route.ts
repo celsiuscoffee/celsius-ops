@@ -68,7 +68,19 @@ export async function GET(req: NextRequest) {
       notes: true,
       paymentType: true,
       claimedById: true,
-      order: { select: { orderNumber: true, claimedBy: { select: { name: true } } } },
+      order: {
+        select: {
+          orderNumber: true,
+          claimedBy: {
+            select: {
+              name: true,
+              bankName: true,
+              bankAccountNumber: true,
+              bankAccountName: true,
+            },
+          },
+        },
+      },
       outlet: { select: { name: true } },
       supplier: { select: { name: true, phone: true, bankName: true, bankAccountNumber: true, bankAccountName: true, depositPercent: true } },
       paidAt: true,
@@ -128,6 +140,13 @@ export async function GET(req: NextRequest) {
       bankName: inv.supplier.bankName,
       accountNumber: inv.supplier.bankAccountNumber ?? null,
       accountName: inv.supplier.bankAccountName ?? null,
+    } : null,
+    // For STAFF_CLAIM invoices, surface the claimant's bank details from
+    // their User record (same fields the HR employees page reads from).
+    claimantBank: inv.order?.claimedBy?.bankName ? {
+      bankName: inv.order.claimedBy.bankName,
+      accountNumber: inv.order.claimedBy.bankAccountNumber ?? null,
+      accountName: inv.order.claimedBy.bankAccountName ?? null,
     } : null,
     depositPercent: inv.supplier?.depositPercent ?? null,
     depositAmount: inv.depositAmount ? Number(inv.depositAmount) : null,

@@ -58,6 +58,7 @@ type Invoice = {
   popShortLink: string | null;
   supplierPhone: string | null;
   supplierBank: { bankName: string; accountNumber: string | null; accountName: string | null } | null;
+  claimantBank: { bankName: string; accountNumber: string | null; accountName: string | null } | null;
   transfer: { fromOutlet: string; toOutlet: string; items: { product: string; quantity: number }[] } | null;
   depositPercent: number | null;
   depositAmount: number | null;
@@ -131,8 +132,10 @@ export default function InvoicesPage() {
       if (cardFilter === "payable" && inv.status === "PAID") return false;
       if (cardFilter === "due_today" && (inv.dueDate !== today || inv.status === "PAID")) return false;
     }
-    if (bankFilter === "maybank" && !inv.supplierBank?.bankName?.toLowerCase().includes("maybank")) return false;
-    if (bankFilter === "non-maybank" && inv.supplierBank?.bankName?.toLowerCase().includes("maybank")) return false;
+    // Bank filter: use claimant bank for STAFF_CLAIM, supplier bank otherwise
+    const bankName = (inv.paymentType === "STAFF_CLAIM" ? inv.claimantBank : inv.supplierBank)?.bankName?.toLowerCase() ?? "";
+    if (bankFilter === "maybank" && !bankName.includes("maybank")) return false;
+    if (bankFilter === "non-maybank" && bankName.includes("maybank")) return false;
     return true;
   });
 
@@ -902,49 +905,70 @@ export default function InvoicesPage() {
               </div>
             )}
 
-            {/* Bank details */}
-            {payingInvoice.supplierBank && (
-              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Landmark className="h-3.5 w-3.5 text-blue-600" />
-                  <p className="text-xs font-medium text-blue-700">Bank Details</p>
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-blue-600">Bank</span>
-                    <span className="text-sm font-medium text-blue-900">{payingInvoice.supplierBank.bankName}</span>
+            {/* Bank details — staff claim uses the claimant's bank (from User record,
+                same source as HR module); supplier invoices use the supplier's bank. */}
+            {(() => {
+              const isStaffClaim = payingInvoice.paymentType === "STAFF_CLAIM";
+              const bank = isStaffClaim ? payingInvoice.claimantBank : payingInvoice.supplierBank;
+              if (!bank) {
+                if (isStaffClaim) {
+                  return (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <Landmark className="h-3.5 w-3.5 text-amber-600" />
+                        <p className="text-xs font-medium text-amber-800">
+                          No bank details for {payingInvoice.claimedBy ?? "this staff member"} — add them in HR → Employees before paying out
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              }
+              const headerLabel = isStaffClaim ? "Staff Bank Details (from HR)" : "Bank Details";
+              return (
+                <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Landmark className="h-3.5 w-3.5 text-blue-600" />
+                    <p className="text-xs font-medium text-blue-700">{headerLabel}</p>
                   </div>
-                  {payingInvoice.supplierBank.accountNumber && (
+                  <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-blue-600">Account No.</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-sm font-medium text-blue-900">{payingInvoice.supplierBank.accountNumber}</span>
-                        <button
-                          onClick={() => copyToClipboard(payingInvoice.supplierBank!.accountNumber!, "accNo")}
-                          className="rounded p-0.5 text-blue-400 hover:bg-blue-100 hover:text-blue-600"
-                        >
-                          {copiedField === "accNo" ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-                        </button>
-                      </div>
+                      <span className="text-xs text-blue-600">Bank</span>
+                      <span className="text-sm font-medium text-blue-900">{bank.bankName}</span>
                     </div>
-                  )}
-                  {payingInvoice.supplierBank.accountName && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-blue-600">Account Name</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-medium text-blue-900">{payingInvoice.supplierBank.accountName}</span>
-                        <button
-                          onClick={() => copyToClipboard(payingInvoice.supplierBank!.accountName!, "accName")}
-                          className="rounded p-0.5 text-blue-400 hover:bg-blue-100 hover:text-blue-600"
-                        >
-                          {copiedField === "accName" ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-                        </button>
+                    {bank.accountNumber && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-blue-600">Account No.</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-sm font-medium text-blue-900">{bank.accountNumber}</span>
+                          <button
+                            onClick={() => copyToClipboard(bank.accountNumber!, "accNo")}
+                            className="rounded p-0.5 text-blue-400 hover:bg-blue-100 hover:text-blue-600"
+                          >
+                            {copiedField === "accNo" ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                    {bank.accountName && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-blue-600">Account Name</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium text-blue-900">{bank.accountName}</span>
+                          <button
+                            onClick={() => copyToClipboard(bank.accountName!, "accName")}
+                            className="rounded p-0.5 text-blue-400 hover:bg-blue-100 hover:text-blue-600"
+                          >
+                            {copiedField === "accName" ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Payment reference — only for Mark Paid */}
             {payingTargetStatus === "PAID" && (
