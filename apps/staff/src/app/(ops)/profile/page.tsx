@@ -194,8 +194,11 @@ export default function ProfilePage() {
 
         {/* Change PIN modal */}
         {showPinModal && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center" onClick={() => setShowPinModal(false)}>
-            <div className="w-full max-w-md rounded-t-2xl bg-white p-5 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 sm:items-center" onClick={() => setShowPinModal(false)}>
+            <div
+              className="w-full max-w-md rounded-t-2xl bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-lg font-bold">Change PIN</h2>
                 <button onClick={() => setShowPinModal(false)} className="text-gray-400">
