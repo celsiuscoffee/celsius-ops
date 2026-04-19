@@ -1,4 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
+// Side-effect import: validates env at server startup.
+import "./env";
 
 export function register() {
   const dsn = process.env.SENTRY_DSN;
