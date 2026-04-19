@@ -36,10 +36,12 @@ export default function MyAttendancePage() {
   const logs = data?.logs || [];
   const stats = data?.stats || { totalHours: 0, totalOT: 0, pendingOT: 0, daysWorked: 0, period: days };
 
-  // Group logs by date
+  // Group logs by Malaysian local date (clock_in is UTC timestamptz).
+  // A 7:30am MYT shift is 23:30 UTC prev day — slice would give wrong date.
+  const toMytDate = (iso: string) => new Date(new Date(iso).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   const byDate = new Map<string, AttendanceLog[]>();
   logs.forEach((l) => {
-    const date = l.clock_in.slice(0, 10);
+    const date = toMytDate(l.clock_in);
     const list = byDate.get(date) || [];
     list.push(l);
     byDate.set(date, list);

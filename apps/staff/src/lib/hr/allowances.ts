@@ -124,8 +124,18 @@ export async function computeAllowances(userId: string, year: number, month: num
     }
   };
 
+  // clock_in is stored as UTC timestamptz. Convert to Malaysian local date
+  // (UTC+8) so morning shifts (7:30am MYT = 23:30 UTC previous day) match
+  // the schedule's shift_date correctly.
+  const toMytDate = (iso: string | null | undefined): string => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    // Offset to MYT and take the YYYY-MM-DD portion
+    return new Date(d.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  };
+
   for (const log of logs) {
-    const date = log.clock_in?.slice(0, 10);
+    const date = toMytDate(log.clock_in);
     applyLateTier(log.lateness_minutes || 0, date);
 
     if (!log.clock_out) {
@@ -144,7 +154,7 @@ export async function computeAllowances(userId: string, year: number, month: num
     }
   }
 
-  const loggedDates = new Set(logs.map((l) => l.clock_in?.slice(0, 10)));
+  const loggedDates = new Set(logs.map((l) => toMytDate(l.clock_in)));
   const todayIso = today.toISOString().slice(0, 10);
   for (const sh of scheduled) {
     if (sh.shift_date >= todayIso) continue;

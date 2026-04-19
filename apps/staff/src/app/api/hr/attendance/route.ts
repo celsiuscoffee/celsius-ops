@@ -44,7 +44,13 @@ export async function GET(req: NextRequest) {
     (sum, a) => sum + (!isApproved(a) ? countableOT(a) : 0),
     0,
   );
-  const daysWorked = new Set((data || []).map((a) => a.clock_in.slice(0, 10))).size;
+  // Distinct MYT calendar days worked (clock_in is UTC timestamptz; morning
+  // shifts would otherwise fall on the previous UTC date).
+  const daysWorked = new Set(
+    (data || []).map((a) =>
+      new Date(new Date(a.clock_in).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10),
+    ),
+  ).size;
 
   return NextResponse.json({
     logs: data || [],
