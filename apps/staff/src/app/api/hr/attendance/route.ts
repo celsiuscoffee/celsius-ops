@@ -25,9 +25,21 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Aggregate stats for the period
+  // Aggregate stats for the period. OT only counts when approved —
+  // either auto-approved by the AI (ai_status='approved') or manually
+  // approved by a manager (final_status='approved'). Flagged, pending,
+  // or rejected OT doesn't count toward the total until approved.
+  const isApproved = (a: { ai_status: string | null; final_status: string | null }) =>
+    a.ai_status === "approved" || a.final_status === "approved";
   const totalHours = (data || []).reduce((sum, a) => sum + (Number(a.total_hours) || 0), 0);
-  const totalOT = (data || []).reduce((sum, a) => sum + (Number(a.overtime_hours) || 0), 0);
+  const totalOT = (data || []).reduce(
+    (sum, a) => sum + (isApproved(a) ? Number(a.overtime_hours) || 0 : 0),
+    0,
+  );
+  const pendingOT = (data || []).reduce(
+    (sum, a) => sum + (!isApproved(a) ? Number(a.overtime_hours) || 0 : 0),
+    0,
+  );
   const daysWorked = new Set((data || []).map((a) => a.clock_in.slice(0, 10))).size;
 
   return NextResponse.json({
@@ -35,6 +47,7 @@ export async function GET(req: NextRequest) {
     stats: {
       totalHours: Math.round(totalHours * 100) / 100,
       totalOT: Math.round(totalOT * 100) / 100,
+      pendingOT: Math.round(pendingOT * 100) / 100,
       daysWorked,
       period: days,
     },

@@ -41,13 +41,18 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     ? `${year + 1}-01-01`
     : `${year}-${String(month + 1).padStart(2, "0")}-01`;
 
+  // Fetch ALL logs in the pay period. Approval is applied per-log in
+  // the aggregation loop below (see isApprovedLog). Paying-out rules:
+  //   - AI auto-approved (ai_status='approved', final_status=null) → pay
+  //   - Manager approved after review (final_status='approved') → pay
+  //   - Manager adjusted hours (final_status='adjusted') → pay
+  //   - Rejected OR still pending/flagged/reviewed-unactioned → don't pay
   const { data: attendance } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
     .select("*")
     .gte("clock_in", startDate)
     .lt("clock_in", endDate)
-    .in("ai_status", ["approved", "reviewed"])
-    .or("final_status.eq.approved,final_status.eq.adjusted");
+    .neq("final_status", "rejected");
 
   // Group attendance by user
   const attendanceByUser = new Map<string, typeof attendance>();
@@ -141,9 +146,18 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     let ot2xAmount = 0;
     let ot3xAmount = 0;
 
+    // OT only counts when approved (by AI or manager). Unapproved OT is
+    // ignored so staff can't claim OT that hasn't been signed off.
+    // Regular hours still count regardless (shift happened, pay for it).
+    const isOtApproved = (a: { ai_status: string | null; final_status: string | null }) =>
+      a.final_status === "approved" ||
+      a.final_status === "adjusted" ||
+      (a.ai_status === "approved" && !a.final_status);
+
     for (const a of userAttendance) {
       totalRegularHours += Number(a.regular_hours) || 0;
-      const otHours = Number(a.overtime_hours) || 0;
+      const rawOtHours = Number(a.overtime_hours) || 0;
+      const otHours = isOtApproved(a) ? rawOtHours : 0;
       totalOtHours += otHours;
 
       if (otHours > 0) {

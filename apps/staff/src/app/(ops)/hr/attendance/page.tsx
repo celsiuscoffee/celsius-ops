@@ -18,7 +18,7 @@ type AttendanceLog = {
   final_status: "approved" | "rejected" | "adjusted" | null;
 };
 
-type Stats = { totalHours: number; totalOT: number; daysWorked: number; period: number };
+type Stats = { totalHours: number; totalOT: number; pendingOT: number; daysWorked: number; period: number };
 
 const FLAG_LABELS: Record<string, { label: string; color: string }> = {
   outside_geofence: { label: "Outside zone", color: "text-red-600" },
@@ -34,7 +34,7 @@ export default function MyAttendancePage() {
   const [days, setDays] = useState(30);
   const { data } = useFetch<{ logs: AttendanceLog[]; stats: Stats }>(`/api/hr/attendance?days=${days}`);
   const logs = data?.logs || [];
-  const stats = data?.stats || { totalHours: 0, totalOT: 0, daysWorked: 0, period: days };
+  const stats = data?.stats || { totalHours: 0, totalOT: 0, pendingOT: 0, daysWorked: 0, period: days };
 
   // Group logs by date
   const byDate = new Map<string, AttendanceLog[]>();
@@ -93,6 +93,9 @@ export default function MyAttendancePage() {
         <div className="rounded-xl border border-gray-100 bg-white p-3 text-center">
           <p className="text-2xl font-bold text-blue-600">{stats.totalOT}</p>
           <p className="text-[10px] text-gray-500">OT hours</p>
+          {stats.pendingOT > 0 && (
+            <p className="text-[9px] text-amber-600">+{stats.pendingOT}h pending</p>
+          )}
         </div>
       </div>
 
@@ -139,7 +142,13 @@ export default function MyAttendancePage() {
                           <span className="text-gray-500">{log.total_hours}h</span>
                         )}
                         {Number(log.overtime_hours) > 0 && (
-                          <span className="font-medium text-blue-600">+{log.overtime_hours}h OT</span>
+                          log.ai_status === "approved" || log.final_status === "approved" ? (
+                            <span className="font-medium text-blue-600">+{log.overtime_hours}h OT</span>
+                          ) : (
+                            <span className="font-medium text-amber-600" title="Pending manager approval">
+                              +{log.overtime_hours}h OT (pending)
+                            </span>
+                          )
                         )}
                         <div className="ml-auto flex gap-1">
                           {log.ai_flags.filter((f) => f !== "migrated_from_briohr").map((f) => {
