@@ -56,11 +56,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ period: { year, month }, rules, staff: [] });
   }
 
+  // Allowances are FT-only — filter to full_time employment_type via profile.
+  const { data: ftProfiles } = await hrSupabaseAdmin
+    .from("hr_employee_profiles")
+    .select("user_id")
+    .eq("employment_type", "full_time");
+  const ftUserIds = new Set((ftProfiles || []).map((p: { user_id: string }) => p.user_id));
+
   const users = await prisma.user.findMany({
     where: {
       status: "ACTIVE",
       role: { in: ["STAFF", "MANAGER"] },
-      ...(managerVisibleIds !== null ? { id: { in: managerVisibleIds } } : {}),
+      id: {
+        in: Array.from(
+          managerVisibleIds !== null
+            ? new Set(managerVisibleIds.filter((id) => ftUserIds.has(id)))
+            : ftUserIds,
+        ),
+      },
       ...(outletId ? { OR: [{ outletId }, { outletIds: { has: outletId } }] } : {}),
     },
     select: { id: true, name: true, fullName: true, outletId: true, outlet: { select: { name: true } } },

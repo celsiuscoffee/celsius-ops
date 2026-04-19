@@ -1,6 +1,6 @@
 // Shared allowance computation — used by both backoffice and staff APIs.
-// Model:
-//   Attendance allowance (everyone)  = PUNISH. Base amount, deduct penalties.
+// Model (FT only — part-time / contract / intern staff are not eligible):
+//   Attendance allowance (FT only)   = PUNISH. Base amount, deduct penalties.
 //   Performance allowance (FT only)  = AWARD.  Score = 40% checklists (team-avg) + 30% reviews + 30% audit.
 //   Review penalty (separate line)   = flat deduction applied by manager review.
 import { hrSupabaseAdmin } from "./supabase";
@@ -210,13 +210,22 @@ export async function computeAllowancesForUser(
     metrics.absentCount++;
   }
 
-  const attendanceDeducted = penalties.reduce((s, p) => s + p.amount, 0);
-  const attendanceEarned = Math.max(0, r.attendance_allowance_amount - attendanceDeducted);
+  const attendanceBase = isFullTime ? r.attendance_allowance_amount : 0;
+  const attendanceDeducted = isFullTime ? penalties.reduce((s, p) => s + p.amount, 0) : 0;
+  const attendanceEarned = Math.max(0, attendanceBase - attendanceDeducted);
 
-  let attendanceTip = "Perfect attendance so far — keep it up!";
-  if (metrics.absentCount > 0) attendanceTip = `You've missed ${metrics.absentCount} scheduled shift${metrics.absentCount > 1 ? "s" : ""}. Attend all remaining shifts to protect your allowance.`;
-  else if (metrics.lateCount > 0) attendanceTip = `Be on time for the next ${Math.min(3, daysRemaining)} clock-ins to stay on track.`;
-  else if (metrics.earlyOutCount > 0) attendanceTip = "Avoid leaving before your scheduled end-time.";
+  let attendanceTip: string;
+  if (!isFullTime) {
+    attendanceTip = "Attendance allowance is for full-time staff only.";
+  } else if (metrics.absentCount > 0) {
+    attendanceTip = `You've missed ${metrics.absentCount} scheduled shift${metrics.absentCount > 1 ? "s" : ""}. Attend all remaining shifts to protect your allowance.`;
+  } else if (metrics.lateCount > 0) {
+    attendanceTip = `Be on time for the next ${Math.min(3, daysRemaining)} clock-ins to stay on track.`;
+  } else if (metrics.earlyOutCount > 0) {
+    attendanceTip = "Avoid leaving before your scheduled end-time.";
+  } else {
+    attendanceTip = "Perfect attendance so far — keep it up!";
+  }
 
   // 5. Performance score — FT only
   const { score, parts } = isFullTime
@@ -272,7 +281,7 @@ export async function computeAllowancesForUser(
     isFullTime,
     period: { year, month, daysElapsed, daysRemaining },
     attendance: {
-      base: r.attendance_allowance_amount,
+      base: attendanceBase,
       earned: attendanceEarned,
       penalties,
       metrics,
@@ -292,7 +301,7 @@ export async function computeAllowancesForUser(
       entries: reviewPenaltyEntries,
     },
     totalEarned: Math.round(totalEarned * 100) / 100,
-    totalMax: r.attendance_allowance_amount + (isFullTime ? r.performance_allowance_amount : 0),
+    totalMax: isFullTime ? r.attendance_allowance_amount + r.performance_allowance_amount : 0,
   };
 }
 

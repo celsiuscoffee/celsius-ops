@@ -154,12 +154,24 @@ export async function computeAllowances(userId: string, year: number, month: num
     metrics.absentCount++;
   }
 
-  const attendanceEarned = Math.max(0, r.attBase - penalties.reduce((s, p) => s + p.amount, 0));
+  const attendanceBase = isFullTime ? r.attBase : 0;
+  const attendanceEarned = Math.max(
+    0,
+    attendanceBase - (isFullTime ? penalties.reduce((s, p) => s + p.amount, 0) : 0),
+  );
 
-  let attendanceTip = "Perfect attendance — keep it up!";
-  if (metrics.absentCount > 0) attendanceTip = `You missed ${metrics.absentCount} shift${metrics.absentCount > 1 ? "s" : ""}. Attend the rest to protect your allowance.`;
-  else if (metrics.lateCount > 0) attendanceTip = `Be on time for the next ${Math.min(3, daysRemaining)} clock-ins to stay on track.`;
-  else if (metrics.earlyOutCount > 0) attendanceTip = "Avoid leaving before your scheduled end-time.";
+  let attendanceTip: string;
+  if (!isFullTime) {
+    attendanceTip = "Attendance allowance is for full-time staff only.";
+  } else if (metrics.absentCount > 0) {
+    attendanceTip = `You missed ${metrics.absentCount} shift${metrics.absentCount > 1 ? "s" : ""}. Attend the rest to protect your allowance.`;
+  } else if (metrics.lateCount > 0) {
+    attendanceTip = `Be on time for the next ${Math.min(3, daysRemaining)} clock-ins to stay on track.`;
+  } else if (metrics.earlyOutCount > 0) {
+    attendanceTip = "Avoid leaving before your scheduled end-time.";
+  } else {
+    attendanceTip = "Perfect attendance — keep it up!";
+  }
 
   // Performance (FT only)
   const { score, parts } = isFullTime
@@ -207,7 +219,7 @@ export async function computeAllowances(userId: string, year: number, month: num
     employmentType,
     isFullTime,
     period: { year, month, daysElapsed, daysRemaining },
-    attendance: { base: r.attBase, earned: attendanceEarned, penalties, metrics, tip: attendanceTip },
+    attendance: { base: attendanceBase, earned: attendanceEarned, penalties, metrics, tip: attendanceTip },
     performance: {
       base: isFullTime ? r.perfBase : 0,
       earned: performanceEarned,
@@ -219,7 +231,7 @@ export async function computeAllowances(userId: string, year: number, month: num
     },
     reviewPenalty: { total: reviewPenaltyTotal, entries: reviewPenaltyEntries },
     totalEarned: Math.round(totalEarned * 100) / 100,
-    totalMax: r.attBase + (isFullTime ? r.perfBase : 0),
+    totalMax: isFullTime ? r.attBase + r.perfBase : 0,
   };
 }
 

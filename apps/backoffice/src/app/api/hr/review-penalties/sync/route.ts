@@ -67,6 +67,7 @@ async function runSync() {
             gbp_review_id: r.id,
             outlet_id: o.outletId,
             review_date: reviewDate,
+            review_timestamp: r.createdAt,
             rating: r.rating,
             review_text: r.comment || null,
             reviewer_name: r.reviewer?.name || null,

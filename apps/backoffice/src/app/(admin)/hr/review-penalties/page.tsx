@@ -5,7 +5,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { Star, Loader2, CheckCircle2, XCircle, RefreshCw, AlertTriangle } from "lucide-react";
 
 type Attributed = { id: string; name: string | null; fullName: string | null };
-type Suggested = { user_id: string; name: string | null; fullName: string | null };
+type Suggested = { user_id: string; name: string | null; fullName: string | null; source?: "attendance" | "schedule" };
 
 type ReviewPenalty = {
   id: string;
@@ -172,7 +172,8 @@ export default function ReviewPenaltiesPage() {
                 )}
                 {rp.status === "pending" && rp.suggestedAttribution.length > 0 && (
                   <p className="text-xs text-gray-500">
-                    Scheduled that day: {rp.suggestedAttribution.map((s) => s.fullName || s.name).join(", ")}
+                    {rp.suggestedAttribution[0]?.source === "schedule" ? "Scheduled that day" : "On shift at review time"}:{" "}
+                    {rp.suggestedAttribution.map((s) => s.fullName || s.name).join(", ")}
                   </p>
                 )}
                 {rp.status === "applied" && (
@@ -224,9 +225,14 @@ export default function ReviewPenaltiesPage() {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Attribute to staff on shift that day:</label>
+              <label className="block text-sm font-medium mb-1">Attribute to staff on shift that day:</label>
+              <p className="text-xs text-gray-500 mb-2">
+                {reviewing.suggestedAttribution[0]?.source === "schedule"
+                  ? "No attendance logs for that day — showing scheduled staff."
+                  : "Staff who were clocked in at the moment this review was posted."}
+              </p>
               {reviewing.suggestedAttribution.length === 0 ? (
-                <p className="text-sm text-gray-500">No staff scheduled that day.</p>
+                <p className="text-sm text-gray-500">No staff on shift that day.</p>
               ) : (
                 <div className="space-y-2">
                   {reviewing.suggestedAttribution.map((s) => (
@@ -237,6 +243,9 @@ export default function ReviewPenaltiesPage() {
                         onChange={() => toggleUser(s.user_id)}
                       />
                       <span>{s.fullName || s.name}</span>
+                      {s.source === "attendance" && (
+                        <span className="ml-auto text-[10px] text-green-700 bg-green-50 px-1.5 py-0.5 rounded">clocked in</span>
+                      )}
                     </label>
                   ))}
                 </div>
