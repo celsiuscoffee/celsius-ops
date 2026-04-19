@@ -129,7 +129,7 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: "Inventory",
+    label: "Procurement",
     icon: <Boxes className={ICON_SIZE} />,
     railIcon: <Boxes className={RAIL_ICON_SIZE} />,
     subgroups: [

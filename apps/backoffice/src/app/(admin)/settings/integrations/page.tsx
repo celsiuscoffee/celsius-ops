@@ -606,7 +606,7 @@ export default function IntegrationsPage() {
         <div className="mt-4 space-y-3">
           <InfoBanner>
             Bukku syncs with both <strong>Pickup</strong> (auto-creates sales invoices when orders are completed)
-            and <strong>Inventory</strong> (links supplier purchase orders to accounting).
+            and <strong>Procurement</strong> (links supplier purchase orders to accounting).
             Each outlet has its own Bukku subdomain and API token.
           </InfoBanner>
 
