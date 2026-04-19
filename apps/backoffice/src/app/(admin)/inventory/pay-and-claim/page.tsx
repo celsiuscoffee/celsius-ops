@@ -487,6 +487,15 @@ export default function PayAndClaimPage() {
           if (data.issueDate) setQuDate(data.issueDate);
           if (data.invoiceNumber) setQuInvoiceNum(data.invoiceNumber);
 
+          // Auto-populate vendor bank details (used by REQUEST flow for
+          // asset/maintenance one-off vendors). Always populate — if the user
+          // ends up in CLAIM flow, these get ignored on submit.
+          if (data.vendorBankName) setQuVendorBankName(data.vendorBankName);
+          if (data.vendorBankAccountNumber) setQuVendorAccNum(String(data.vendorBankAccountNumber).replace(/[\s-]/g, ""));
+          if (data.vendorBankAccountName) setQuVendorAccName(data.vendorBankAccountName);
+          // Prefill vendor name from supplier name if AI caught one
+          if (data.supplierName && !quVendorName) setQuVendorName(data.supplierName);
+
           // Auto-select supplier
           if (data.supplierName) {
             const aiName = data.supplierName.toLowerCase();

@@ -21,6 +21,11 @@ type ExtractedInvoice = {
   items: ExtractedItem[];
   deliveryCharge: number | null;
   notes: string | null;
+  // Bank details printed on the invoice (for one-off vendors that
+  // don't have a Supplier record — finance transfers using these).
+  vendorBankName: string | null;
+  vendorBankAccountNumber: string | null;
+  vendorBankAccountName: string | null;
   confidence: "high" | "medium" | "low";
   rawText: string | null;
 };
@@ -103,9 +108,12 @@ Return a JSON object with these fields:
 - items: array of line items, each with { name: string, quantity: number, unitPrice: number, totalPrice: number, uom: string|null }. ONLY include items that match the product catalog. uom = unit of measure (e.g. "pcs", "kg", "pack", "carton").
 - deliveryCharge: delivery/shipping fee as a number (number or null)
 - notes: any relevant notes like payment terms, bank details summary (string or null)
+- vendorBankName: the bank name printed on the invoice for payment (e.g. "Maybank", "CIMB", "Public Bank"). String or null. Invoices for one-off vendors / asset purchases / maintenance often print "Please transfer to:" followed by bank details — extract them here.
+- vendorBankAccountNumber: the account number printed on the invoice, digits only (strip spaces/dashes). String or null.
+- vendorBankAccountName: the account holder name printed on the invoice, typically all-caps. String or null.
 - confidence: "high" if all key fields are clearly readable, "medium" if some fields are ambiguous, "low" if document is unclear
 
-IMPORTANT: Return ONLY the JSON object, no markdown, no explanation. If a field is not found, use null. For items, return empty array [] if no line items found.`,
+IMPORTANT: Return ONLY the JSON object, no markdown, no explanation. If a field is not found, use null. For items, return empty array [] if no line items found. For bank fields, extract only if the invoice clearly prints bank/account info — never guess or infer.`,
     });
 
     const response = await client.messages.create({
@@ -136,6 +144,9 @@ IMPORTANT: Return ONLY the JSON object, no markdown, no explanation. If a field 
         items: [],
         deliveryCharge: null,
         notes: null,
+        vendorBankName: null,
+        vendorBankAccountNumber: null,
+        vendorBankAccountName: null,
         confidence: "low",
         rawText: text,
       };
