@@ -1143,8 +1143,9 @@ export default function PayAndClaimPage() {
                                 </button>
                                 <Input
                                   type="number"
+                                  step="0.01"
                                   value={item.quantity}
-                                  onChange={(e) => rvUpdateQty(idx, parseInt(e.target.value) || 0)}
+                                  onChange={(e) => rvUpdateQty(idx, parseFloat(e.target.value) || 0)}
                                   className="w-14 h-7 text-xs text-center"
                                 />
                                 <button onClick={() => rvUpdateQty(idx, item.quantity + 1)} className="rounded p-0.5 hover:bg-gray-100">
@@ -1418,7 +1419,7 @@ export default function PayAndClaimPage() {
                           </div>
                           <div className="flex items-center gap-1">
                             <button onClick={() => quUpdateQty(idx, item.quantity - 1)} className="rounded p-0.5 hover:bg-gray-100"><Minus className="h-3 w-3" /></button>
-                            <Input type="number" value={item.quantity} onChange={(e) => quUpdateQty(idx, parseInt(e.target.value) || 0)} className="w-14 h-7 text-xs text-center" />
+                            <Input type="number" step="0.01" value={item.quantity} onChange={(e) => quUpdateQty(idx, parseFloat(e.target.value) || 0)} className="w-14 h-7 text-xs text-center" />
                             <button onClick={() => quUpdateQty(idx, item.quantity + 1)} className="rounded p-0.5 hover:bg-gray-100"><Plus className="h-3 w-3" /></button>
                           </div>
                           <div className="flex items-center gap-1">

@@ -416,16 +416,60 @@ export async function generateSchedule(
           if (picked.is_rotating) rotatingOnThisShift = true;
           if (category === "FOH") fohAssigned++;
           else bohAssigned++;
-          notes.push(`ℹ️ ${date} ${shiftKey}: filled ${category} with ${picked.name} (relaxed constraints)`);
+          notes.push(`ℹ️ ${date} ${shiftKey}: filled ${category} with ${picked.name} (relaxed)`);
         }
       }
 
-      // Warn if STILL understaffed after relaxed pass
+      // Third pass (ULTRA-relaxed) — if STILL below min, try PT from any role
+      // (cross-role fill: FOH can cover BOH slot) and allow exceeding weekly
+      // cap by one shift (flagged as OT-needed). Last resort before leaving
+      // the slot empty.
+      for (const category of ["FOH", "BOH"] as const) {
+        const currentMin = category === "FOH" ? req.foh_min : req.boh_min;
+        const assigned = () => category === "FOH" ? fohAssigned : bohAssigned;
+        while (assigned() < currentMin) {
+          // Prefer PT first (to avoid busting FT's OT budget), then FT. Any role.
+          const candidates = [...partTimers, ...fullTimers]
+            .sort((a, b) => (hoursPerStaff.get(a.id) || 0) - (hoursPerStaff.get(b.id) || 0));
+          let picked: StaffInfo | null = null;
+          for (const s of candidates) {
+            if (s.is_rotating && rotatingOnThisShift) continue;
+            if (leaveSet.has(`${s.id}:${date}`)) continue;
+            if (blockoutSet.has(`${s.id}:${date}`)) continue;
+            if (shiftsByStaffDate.has(`${s.id}:${date}`)) continue;
+            const rules = EMPLOYMENT_RULES[s.employment_type];
+            // Allow up to +1 shift over weekly cap (OT) + skip all other constraints
+            const hours = hoursPerStaff.get(s.id) || 0;
+            if (hours + rules.workingHoursPerShift > weeklyCap(s) + rules.workingHoursPerShift) continue;
+            // Rest gap: still respect 8h minimum (safety floor)
+            const lastEnd = lastShiftEndISO.get(s.id);
+            if (lastEnd) {
+              const [h, m] = slot.start.split(":").map(Number);
+              const thisStart = new Date(`${date}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
+              const prevEnd = new Date(lastEnd);
+              if ((thisStart.getTime() - prevEnd.getTime()) / 3600000 < 8) continue;
+            }
+            picked = s;
+            break;
+          }
+          if (!picked) break;
+          const rules = EMPLOYMENT_RULES[picked.employment_type];
+          assignShift(picked, date, slot, rules.workingHoursPerShift, rules.breakMinutes);
+          if (picked.is_rotating) rotatingOnThisShift = true;
+          if (category === "FOH") fohAssigned++;
+          else bohAssigned++;
+          const crossRole = picked.role_category !== category ? ` (cross-role ${picked.role_category}→${category})` : "";
+          const overCap = (hoursPerStaff.get(picked.id) || 0) > weeklyCap(picked) ? " — OT approval needed" : "";
+          notes.push(`⚠️ ${date} ${shiftKey}: filled ${category} with ${picked.name}${crossRole}${overCap}`);
+        }
+      }
+
+      // Warn if STILL understaffed after all 3 passes
       if (fohAssigned < req.foh_min) {
-        notes.push(`⚠️ ${date} ${shiftKey}: FOH understaffed ${fohAssigned}/${req.foh_min} — hire or cover manually`);
+        notes.push(`🚨 ${date} ${shiftKey}: FOH understaffed ${fohAssigned}/${req.foh_min} — hire or cover manually`);
       }
       if (bohAssigned < req.boh_min) {
-        notes.push(`⚠️ ${date} ${shiftKey}: BOH understaffed ${bohAssigned}/${req.boh_min} — hire or cover manually`);
+        notes.push(`🚨 ${date} ${shiftKey}: BOH understaffed ${bohAssigned}/${req.boh_min} — hire or cover manually`);
       }
     }
 
