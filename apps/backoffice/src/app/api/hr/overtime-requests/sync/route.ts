@@ -39,6 +39,27 @@ async function runSync(actorUserId: string) {
   // MYT date conversion (clock_in is UTC timestamptz)
   const toMytDate = (iso: string) => new Date(new Date(iso).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 
+  // Map attendance overtime_type → hr_overtime_requests.ot_type (different enums)
+  const mapOtType = (raw: string | null | undefined): string => {
+    switch (raw) {
+      case "ot_1x":
+      case "rest_day_1x":
+        return "1x";
+      case "ot_2x":
+        return "2x";
+      case "ot_3x":
+      case "ph_2x":
+        return "3x";
+      case "rest_day":
+        return "rest_day";
+      case "public_holiday":
+        return "public_holiday";
+      case "ot_1_5x":
+      default:
+        return "1.5x";
+    }
+  };
+
   // Aggregate per user per date (sum OT hours)
   const agg = new Map<string, { user_id: string; outlet_id: string | null; date: string; hours: number; ot_type: string }>();
   for (const l of logs) {
@@ -50,7 +71,7 @@ async function runSync(actorUserId: string) {
       outlet_id: l.outlet_id,
       date,
       hours: 0,
-      ot_type: l.overtime_type || "ot_1_5x",
+      ot_type: mapOtType(l.overtime_type),
     };
     row.hours += Number(l.overtime_hours) || 0;
     agg.set(key, row);
