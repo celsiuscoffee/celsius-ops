@@ -1,10 +1,14 @@
 import { NextResponse, NextRequest } from "next/server";
 import { createToken, verifyPin, hashPin, COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/auth";
 
-const INV_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFra3dkcmxsdmNwbmt6Z21jbGtrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNzE2MDgsImV4cCI6MjA5MDY0NzYwOH0.XtLmsUyB3kUT2pvpNoFR7KxkEldxgEF7k2Q-sCc131s";
+const INV_SUPABASE_URL = process.env.LEGACY_INVENTORY_SUPABASE_URL || "";
+const INV_ANON_KEY = process.env.LEGACY_INVENTORY_SUPABASE_ANON_KEY || "";
 
 async function findActiveUsersWithPin(outletId?: string) {
-  let url = `https://akkwdrllvcpnkzgmclkk.supabase.co/rest/v1/User?status=eq.ACTIVE&pin=not.is.null&select=id,name,role,pin,outletId`;
+  if (!INV_SUPABASE_URL || !INV_ANON_KEY) {
+    throw new Error("LEGACY_INVENTORY_SUPABASE_URL + LEGACY_INVENTORY_SUPABASE_ANON_KEY env vars required");
+  }
+  let url = `${INV_SUPABASE_URL}/rest/v1/User?status=eq.ACTIVE&pin=not.is.null&select=id,name,role,pin,outletId`;
   if (outletId) {
     url += `&outletId=eq.${outletId}`;
   }

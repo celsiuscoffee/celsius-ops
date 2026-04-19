@@ -8,9 +8,9 @@ const SUPABASE_URL = env.match(/NEXT_PUBLIC_SUPABASE_URL=(.+)/)?.[1].trim();
 const SUPABASE_KEY = env.match(/SUPABASE_SERVICE_ROLE_KEY=(.+)/)?.[1].trim();
 
 cloudinary.config({
-  cloud_name: "dxxzt7k6i",
-  api_key:    "657996329467423",
-  api_secret: "pt5FZsyXdPKU1KPsNmJAPlGc2zs",
+  cloud_name: env.match(/CLOUDINARY_CLOUD_NAME=(.+)/)?.[1].trim(),
+  api_key:    env.match(/CLOUDINARY_API_KEY=(.+)/)?.[1].trim(),
+  api_secret: env.match(/CLOUDINARY_API_SECRET=(.+)/)?.[1].trim(),
   secure:     true,
 });
 

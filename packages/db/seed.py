@@ -6,7 +6,9 @@ import uuid
 import os
 import psycopg2
 
-DB_URL = os.environ.get("DIRECT_URL") or "postgresql://postgres.akkwdrllvcpnkzgmclkk:PqLHwEiggEqe1iAd@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres"
+DB_URL = os.environ.get("DIRECT_URL") or os.environ.get("DATABASE_URL")
+if not DB_URL:
+    raise SystemExit("Set DIRECT_URL (or DATABASE_URL) in env before running seed.py")
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 

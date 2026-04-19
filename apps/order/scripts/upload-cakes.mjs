@@ -4,12 +4,19 @@
  */
 import { readFileSync } from 'fs';
 
-const SUPABASE_URL = 'https://kqdcdhpnyuwrxqhbuyfl.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxZGNkaHBueXV3cnhxaGJ1eWZsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDY3NzgwMCwiZXhwIjoyMDkwMjUzODAwfQ.vAMIxtYKz08n6OyCawZ0KmwLjVJVsLCkeBGdXuL-zBY';
+// Required env vars (use .env.local or inline):
+//   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+//   CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const CLOUD = process.env.CLOUDINARY_CLOUD_NAME;
+const API_KEY = process.env.CLOUDINARY_API_KEY;
+const API_SECRET = process.env.CLOUDINARY_API_SECRET;
 
-const CLOUD = 'dxxzt7k6i';
-const API_KEY = '657996329467423';
-const API_SECRET = 'pt5FZsyXdPKU1KPsNmJAPlGc2zs';
+if (!SUPABASE_URL || !SUPABASE_KEY || !CLOUD || !API_KEY || !API_SECRET) {
+  console.error("Missing required env vars. See comment at top of file.");
+  process.exit(1);
+}
 
 const DIR = '/Users/ammarshahrin/Desktop/CAKES';
 
