@@ -73,14 +73,12 @@ const SHIFT_STYLE: Record<ShiftKind, {
   },
 };
 
-function classifyShift(startTime: string, endTime: string): ShiftKind {
-  const [sh, sm] = startTime.split(":").map(Number);
-  const [eh, em] = endTime.split(":").map(Number);
-  const startMin = sh * 60 + (sm || 0);
-  let endMin = eh * 60 + (em || 0);
-  if (endMin < startMin) endMin += 24 * 60; // overnight shift
-  const durationH = (endMin - startMin) / 60;
-  if (durationH >= 9) return "full_day";
+function classifyShift(startTime: string, endTime: string, roleType: string | null): ShiftKind {
+  // Full-day only when explicitly labeled as such (role_type) — don't infer
+  // from duration, since many long afternoon/evening shifts are 9+ hours but
+  // aren't actual "all-day" shifts.
+  if (roleType && /full\s*day/i.test(roleType)) return "full_day";
+  const [sh] = startTime.split(":").map(Number);
   if (sh < 11) return "morning";
   if (sh < 15) return "afternoon";
   return "evening";
@@ -248,7 +246,7 @@ export default function MyShiftsPage() {
               return (
                 <div key={dateStr} className="space-y-2">
                   {dayShifts.map((shift) => {
-                    const kind = classifyShift(shift.start_time, shift.end_time);
+                    const kind = classifyShift(shift.start_time, shift.end_time, shift.role_type);
                     const style = SHIFT_STYLE[kind];
                     const Icon = style.icon;
                     return (
