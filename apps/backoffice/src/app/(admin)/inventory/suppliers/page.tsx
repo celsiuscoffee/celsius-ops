@@ -317,6 +317,15 @@ export default function SuppliersPage() {
                     <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-500">
                       {supplier.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{supplier.location}</span>}
                       <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{supplier.leadTimeDays}d lead</span>
+                      {supplier.depositPercent != null && supplier.depositPercent > 0 && (
+                        <span
+                          title={supplier.depositTermsDays ? `Balance due ${supplier.depositTermsDays}d after deposit` : "Deposit required"}
+                          className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800"
+                        >
+                          {supplier.depositPercent}% deposit
+                          {supplier.depositTermsDays ? <span className="ml-1 font-normal text-amber-700">· {supplier.depositTermsDays}d terms</span> : null}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

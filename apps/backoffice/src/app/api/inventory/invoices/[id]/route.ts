@@ -37,10 +37,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (paidVia !== undefined) data.paidVia = paidVia;
     if (paymentRef !== undefined) data.paymentRef = paymentRef;
     if (status === "PAID") data.paidAt = new Date();
-    // Deposit payment handling
+    // Deposit payment handling — also compute balance due date from the
+    // supplier's depositTermsDays (e.g. "balance due 30 days after deposit")
     if (status === "DEPOSIT_PAID") {
-      data.depositPaidAt = new Date();
+      const now = new Date();
+      data.depositPaidAt = now;
       if (depositRef) data.depositRef = depositRef;
+
+      // Only overwrite dueDate if caller didn't pass one explicitly
+      if (dueDate === undefined) {
+        const inv = await prisma.invoice.findUnique({
+          where: { id },
+          select: { supplier: { select: { depositTermsDays: true } } },
+        });
+        const termsDays = inv?.supplier?.depositTermsDays;
+        if (termsDays && termsDays > 0) {
+          const balanceDue = new Date(now);
+          balanceDue.setDate(balanceDue.getDate() + termsDays);
+          data.dueDate = balanceDue;
+        }
+      }
     }
 
     const invoice = await prisma.invoice.update({

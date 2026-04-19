@@ -63,7 +63,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, supplierCode, phone, email, location, leadTimeDays } = body;
+  const {
+    name, supplierCode, phone, email, location, leadTimeDays,
+    bankName, bankAccountNumber, bankAccountName,
+    depositPercent, depositTermsDays,
+  } = body;
 
   const supplier = await prisma.supplier.create({
     data: {
@@ -73,6 +77,11 @@ export async function POST(req: NextRequest) {
       email: email || null,
       location: location || null,
       leadTimeDays: leadTimeDays ? parseInt(leadTimeDays) : 1,
+      bankName: bankName || null,
+      bankAccountNumber: bankAccountNumber || null,
+      bankAccountName: bankAccountName || null,
+      depositPercent: depositPercent ? parseInt(depositPercent) : null,
+      depositTermsDays: depositTermsDays ? parseInt(depositTermsDays) : null,
     },
   });
 

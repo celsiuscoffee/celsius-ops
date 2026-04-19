@@ -305,7 +305,7 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
 
   const amount = pop.amount;
   const invoiceInclude = {
-    supplier: { select: { id: true, name: true, telegramChatId: true, bankAccountNumber: true, bankName: true } },
+    supplier: { select: { id: true, name: true, telegramChatId: true, bankAccountNumber: true, bankName: true, depositTermsDays: true } },
     outlet: { select: { name: true, code: true } },
     order: {
       select: {
@@ -392,23 +392,29 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
     }
   }
 
-  // 3. Find unpaid invoices — exact amount match
+  // 3. Find unpaid invoices — exact amount match (full OR deposit amount)
   let candidates = await prisma.invoice.findMany({
     where: {
       status: { in: ["PENDING", "INITIATED", "OVERDUE"] },
-      amount: { equals: amount },
+      OR: [
+        { amount: { equals: amount } },
+        { depositAmount: { equals: amount } },
+      ],
     },
     include: invoiceInclude,
     orderBy: { createdAt: "desc" },
     take: 10,
   });
 
-  // 4. If no exact match, try ±RM 0.50 tolerance
+  // 4. If no exact match, try ±RM 0.50 tolerance (full OR deposit)
   if (candidates.length === 0) {
     candidates = await prisma.invoice.findMany({
       where: {
         status: { in: ["PENDING", "INITIATED", "OVERDUE"] },
-        amount: { gte: amount - 0.5, lte: amount + 0.5 },
+        OR: [
+          { amount: { gte: amount - 0.5, lte: amount + 0.5 } },
+          { depositAmount: { gte: amount - 0.5, lte: amount + 0.5 } },
+        ],
       },
       include: invoiceInclude,
       orderBy: { createdAt: "desc" },
@@ -467,20 +473,49 @@ async function resolvePop(
     return;
   }
 
-  // Single match — mark as PAID + create shortlink
+  // Single match — figure out if the POP matches the full amount or just the
+  // deposit portion (supplier requires upfront deposit). If deposit, transition
+  // to DEPOSIT_PAID and let finance submit the balance POP later for PAID.
   const invoice = candidates[0] as any;
+  const depositAmt = invoice.depositAmount != null ? Number(invoice.depositAmount) : null;
+  const fullAmt = Number(invoice.amount);
+  const matchesDeposit = depositAmt != null && Math.abs(depositAmt - amount) <= 0.5;
+  const matchesFull = Math.abs(fullAmt - amount) <= 0.5;
+  // Prefer full-amount match when both could apply (safest default).
+  const isDepositMatch = !matchesFull && matchesDeposit;
+
   const shortLink = await createShortLink(photoUrl).catch(() => null);
+
+  // DEPOSIT_PAID: stamp depositPaidAt + depositRef and compute balance due
+  // from supplier.depositTermsDays (mirrors PATCH endpoint logic).
+  let depositDueDate: Date | null = null;
+  if (isDepositMatch) {
+    const termsDays = invoice.supplier?.depositTermsDays;
+    if (termsDays && termsDays > 0) {
+      depositDueDate = new Date();
+      depositDueDate.setDate(depositDueDate.getDate() + termsDays);
+    }
+  }
 
   const result = await prisma.invoice.updateMany({
     where: { id: invoice.id, status: { in: ["PENDING", "INITIATED", "OVERDUE"] } },
-    data: {
-      status: "PAID",
-      paidAt: new Date(),
-      paidVia: "Maybank Transfer",
-      paymentRef: pop.referenceNumber,
-      photos: { push: photoUrl },
-      ...(shortLink ? { popShortLink: shortLink } : {}),
-    },
+    data: isDepositMatch
+      ? {
+          status: "DEPOSIT_PAID",
+          depositPaidAt: new Date(),
+          depositRef: pop.referenceNumber,
+          photos: { push: photoUrl },
+          ...(shortLink ? { popShortLink: shortLink } : {}),
+          ...(depositDueDate ? { dueDate: depositDueDate } : {}),
+        }
+      : {
+          status: "PAID",
+          paidAt: new Date(),
+          paidVia: "Maybank Transfer",
+          paymentRef: pop.referenceNumber,
+          photos: { push: photoUrl },
+          ...(shortLink ? { popShortLink: shortLink } : {}),
+        },
   });
 
   if (result.count === 0) {
@@ -509,9 +544,14 @@ async function resolvePop(
   const poRef = invoice.order?.orderNumber ? `\nPO: ${invoice.order.orderNumber}` : "";
   const outletRef = outletName ? `\nOutlet: ${outletName}${outletCode ? ` (${outletCode})` : ""}` : "";
   const receiptLink = shortLink ? `\n🔗 ${shortLink}` : "";
+  const balanceLine = isDepositMatch
+    ? `\nBalance still owing: RM ${(fullAmt - amount).toFixed(2)}${depositDueDate ? ` (due ${depositDueDate.toISOString().slice(0, 10)})` : ""}`
+    : "";
+  const statusLabel = isDepositMatch ? "DEPOSIT PAID" : "PAID";
+  const payType = isDepositMatch ? "Deposit" : "Payment";
   await sendMessage(
     chatId,
-    `✅ <b>Payment matched</b>\n\nInvoice: ${invoice.invoiceNumber}${poRef}${outletRef}\n${payeeLabel}\nAmount: RM ${Number(invoice.amount).toFixed(2)}\nRef: ${pop.referenceNumber ?? "–"}\n\nMarked as <b>PAID</b>.\n📎 Uploaded to PO + Invoice${receiptLink}`,
+    `✅ <b>${payType} matched</b>\n\nInvoice: ${invoice.invoiceNumber}${poRef}${outletRef}\n${payeeLabel}\n${isDepositMatch ? `Deposit` : `Amount`}: RM ${amount.toFixed(2)}${isDepositMatch ? ` / RM ${fullAmt.toFixed(2)} total` : ""}${balanceLine}\nRef: ${pop.referenceNumber ?? "–"}\n\nMarked as <b>${statusLabel}</b>.\n📎 Uploaded to PO + Invoice${receiptLink}`,
     msgId,
   );
 

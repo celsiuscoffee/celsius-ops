@@ -7,7 +7,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const body = await req.json();
 
     // Only allow specific fields to prevent mass-assignment
-    const { name, phone, email, location, leadTimeDays, status, tags, moq, paymentTerms, deliveryDays, notes, bankName, bankAccountNumber, bankAccountName } = body;
+    const {
+      name, phone, email, location, leadTimeDays, status, tags, moq,
+      paymentTerms, deliveryDays, notes,
+      bankName, bankAccountNumber, bankAccountName,
+      depositPercent, depositTermsDays,
+    } = body;
     const data: Record<string, unknown> = {};
     if (name !== undefined) data.name = name;
     if (phone !== undefined) data.phone = phone;
@@ -23,6 +28,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (bankName !== undefined) data.bankName = bankName;
     if (bankAccountNumber !== undefined) data.bankAccountNumber = bankAccountNumber;
     if (bankAccountName !== undefined) data.bankAccountName = bankAccountName;
+    // Empty string / null from the form → clear the field; integer otherwise
+    if (depositPercent !== undefined) {
+      data.depositPercent = depositPercent === "" || depositPercent === null ? null : parseInt(depositPercent, 10);
+    }
+    if (depositTermsDays !== undefined) {
+      data.depositTermsDays = depositTermsDays === "" || depositTermsDays === null ? null : parseInt(depositTermsDays, 10);
+    }
 
     const supplier = await prisma.supplier.update({
       where: { id },

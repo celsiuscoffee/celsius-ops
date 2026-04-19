@@ -38,7 +38,13 @@ type OrderDetail = {
   notes: string | null;
   deliveryDate: string | null;
   outlet: { id: string; name: string };
-  supplier: { id: string; name: string; phone?: string | null } | null;
+  supplier: {
+    id: string;
+    name: string;
+    phone?: string | null;
+    depositPercent?: number | null;
+    depositTermsDays?: number | null;
+  } | null;
   items: OrderItem[];
   createdAt: string;
 };
@@ -254,6 +260,26 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       </div>
 
       <div className="mx-auto max-w-3xl space-y-6">
+        {/* Deposit requirement banner — shown when supplier requires upfront deposit */}
+        {order.supplier?.depositPercent != null && order.supplier.depositPercent > 0 && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+            <div className="flex items-start gap-2">
+              <span className="text-lg">💰</span>
+              <div className="flex-1 text-sm">
+                <p className="font-semibold text-amber-900">
+                  {order.supplier.name} requires {order.supplier.depositPercent}% deposit upfront
+                </p>
+                <p className="mt-0.5 text-xs text-amber-800">
+                  Deposit: <span className="font-mono font-medium">RM {(order.totalAmount * order.supplier.depositPercent / 100).toFixed(2)}</span>
+                  {" · "}
+                  Balance: <span className="font-mono font-medium">RM {(order.totalAmount * (100 - order.supplier.depositPercent) / 100).toFixed(2)}</span>
+                  {order.supplier.depositTermsDays ? ` (due ${order.supplier.depositTermsDays}d after deposit)` : ""}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Delivery Date */}
         <div className="rounded-lg border bg-white p-4">
           <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-gray-600">
