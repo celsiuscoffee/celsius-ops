@@ -42,7 +42,14 @@ export async function syncAccounts(): Promise<{ inserted: number; updated: numbe
       timeZone: cc.time_zone ?? "Asia/Kuala_Lumpur",
       isManager: Boolean(cc.manager),
       isTestAccount: Boolean(cc.test_account),
-      status: cc.status != null ? String(cc.status) : "ACTIVE",
+      // CustomerStatus enum: 2=ENABLED, 3=CANCELED, 4=SUSPENDED, 5=CLOSED
+      status: ((): string => {
+        const s = cc.status;
+        if (s == null) return "ENABLED";
+        if (typeof s === "string") return s;
+        const map: Record<number, string> = { 0: "UNSPECIFIED", 1: "UNKNOWN", 2: "ENABLED", 3: "CANCELED", 4: "SUSPENDED", 5: "CLOSED" };
+        return map[Number(s)] ?? "UNKNOWN";
+      })(),
     };
 
     if (existing) {

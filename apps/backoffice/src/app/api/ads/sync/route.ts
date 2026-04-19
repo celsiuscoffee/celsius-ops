@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   }
 
   const accounts = await prisma.adsAccount.findMany({
-    where: { isManager: false, status: "ACTIVE" },
+    where: { isManager: false, status: "ENABLED" },
   });
 
   if (accounts.length === 0) {

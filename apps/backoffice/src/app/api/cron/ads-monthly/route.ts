@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   const ym = `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, "0")}`;
 
   const accounts = await prisma.adsAccount.findMany({
-    where: { isManager: false, status: "ACTIVE" },
+    where: { isManager: false, status: "ENABLED" },
   });
 
   const results: Array<Record<string, unknown>> = [];

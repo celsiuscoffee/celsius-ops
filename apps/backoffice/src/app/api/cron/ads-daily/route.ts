@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
   // Step 2 & 3 per non-manager account
   const accounts = await prisma.adsAccount.findMany({
-    where: { isManager: false, status: "ACTIVE" },
+    where: { isManager: false, status: "ENABLED" },
   });
 
   const yesterday = new Date();
