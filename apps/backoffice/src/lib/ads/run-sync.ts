@@ -40,9 +40,13 @@ export async function runSync(
     });
     return { logId, result, error: null };
   } catch (err) {
-    // Google Ads errors can be plain objects with { errors: [{ message, errorCode }] }
+    // Google Ads errors: GoogleAdsFailure with .errors[{ error_code, message, location }]
     let message: string;
-    if (err instanceof Error) {
+    const e = err as { errors?: Array<{ error_code?: unknown; message?: string; location?: unknown }>; request_id?: string; message?: string; stack?: string };
+    if (e?.errors && Array.isArray(e.errors) && e.errors.length > 0) {
+      const parts = e.errors.map((x) => `${x.message ?? "(no message)"} [code=${JSON.stringify(x.error_code ?? {})}]${x.location ? ` loc=${JSON.stringify(x.location)}` : ""}`);
+      message = `GoogleAds: ${parts.join(" | ")} (request_id=${e.request_id ?? "?"})`;
+    } else if (err instanceof Error) {
       message = err.message + (err.stack ? `\n${err.stack}` : "");
     } else if (err && typeof err === "object") {
       try {
