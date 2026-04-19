@@ -2,7 +2,8 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { Clock, Plus, Loader2, CheckCircle2, XCircle, AlertTriangle, X } from "lucide-react";
+import Link from "next/link";
+import { Clock, Plus, Loader2, CheckCircle2, XCircle, AlertTriangle, X, ArrowLeft } from "lucide-react";
 
 type OTRequest = {
   id: string;
@@ -77,14 +78,21 @@ export default function StaffOTPage() {
 
   return (
     <div className="space-y-5 p-4">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-start gap-3">
+        <Link
+          href="/hr"
+          aria-label="Back"
+          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold">Overtime Requests</h1>
           <p className="text-xs text-muted-foreground">Submit an OT request before your shift so your extra hours get paid correctly.</p>
         </div>
         <button
           onClick={() => setForm({ date: new Date().toISOString().slice(0, 10), hours: "", ot_type: "1.5x", reason: "", start: "", end: "" })}
-          className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-semibold text-white"
+          className="flex items-center gap-1 shrink-0 rounded-lg bg-terracotta px-3 py-2 text-sm font-semibold text-white"
         >
           <Plus className="h-4 w-4" /> New OT
         </button>

@@ -66,8 +66,10 @@ export async function GET(req: NextRequest) {
     select: { id: true, name: true, fullName: true, outletId: true, outlet: { select: { name: true } } },
   });
 
-  // Compute in parallel but cap concurrency
-  const results = await Promise.all(
+  // Compute in parallel. Swallow per-user errors (rare edge cases like
+  // profile missing, bad leave date) so one broken user doesn't zero the
+  // whole page.
+  const settled = await Promise.allSettled(
     users.map((u) => computeAllowancesForUser(u.id, year, month, rules).then((b) => ({
       userId: u.id,
       name: u.name,
@@ -88,6 +90,15 @@ export async function GET(req: NextRequest) {
       absentCount: b.attendance.metrics.absentCount,
     }))),
   );
+  const results = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  const failedCount = settled.length - results.length;
+  if (failedCount > 0) {
+    const firstErrors = settled
+      .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+      .slice(0, 3)
+      .map((r) => r.reason?.message || String(r.reason));
+    console.warn(`[hr/allowances] ${failedCount} user(s) failed to compute`, firstErrors);
+  }
 
   return NextResponse.json({
     period: { year, month },

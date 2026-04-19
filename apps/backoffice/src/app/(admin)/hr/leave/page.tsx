@@ -5,9 +5,11 @@ import { useState } from "react";
 import { CalendarOff, CheckCircle2, XCircle, Loader2, Bot } from "lucide-react";
 import type { LeaveRequest } from "@/lib/hr/types";
 
+type EnrichedLeaveRequest = LeaveRequest & { user_name?: string | null; outlet_name?: string | null };
+
 export default function LeaveReviewPage() {
-  const [filter, setFilter] = useState("ai_escalated");
-  const { data, mutate } = useFetch<{ requests: LeaveRequest[] }>(`/api/hr/leave?status=${filter}`);
+  const [filter, setFilter] = useState("all");
+  const { data, mutate } = useFetch<{ requests: EnrichedLeaveRequest[] }>(`/api/hr/leave?status=${filter}`);
   const [actioning, setActioning] = useState<string | null>(null);
 
   const requests = data?.requests || [];
@@ -38,12 +40,12 @@ export default function LeaveReviewPage() {
           onChange={(e) => setFilter(e.target.value)}
           className="rounded-lg border bg-background px-3 py-2 text-sm"
         >
+          <option value="all">All</option>
           <option value="ai_escalated">Escalated (need review)</option>
           <option value="pending">Pending</option>
           <option value="ai_approved">AI Approved</option>
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
-          <option value="all">All</option>
         </select>
       </div>
 
@@ -60,7 +62,10 @@ export default function LeaveReviewPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-semibold">{req.user_id.slice(0, 8)}...</p>
+                    <p className="font-semibold">{req.user_name || req.user_id.slice(0, 8) + "…"}</p>
+                    {req.outlet_name && (
+                      <span className="text-xs text-muted-foreground">· {req.outlet_name}</span>
+                    )}
                     <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">
                       {req.leave_type}
                     </span>

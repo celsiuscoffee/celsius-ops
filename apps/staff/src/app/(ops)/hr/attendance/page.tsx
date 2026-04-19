@@ -2,7 +2,8 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { Clock, MapPinOff, AlertTriangle, CheckCircle2, Timer, Calendar } from "lucide-react";
+import Link from "next/link";
+import { Clock, MapPinOff, AlertTriangle, CheckCircle2, Timer, Calendar, ArrowLeft } from "lucide-react";
 
 type AttendanceLog = {
   id: string;
@@ -53,7 +54,16 @@ export default function MyAttendancePage() {
 
   return (
     <div className="px-4 pt-6">
-      <h1 className="mb-6 text-2xl font-bold">My Attendance</h1>
+      <div className="mb-6 flex items-center gap-3">
+        <Link
+          href="/hr"
+          aria-label="Back"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <h1 className="text-2xl font-bold">My Attendance</h1>
+      </div>
 
       {/* Period selector */}
       <div className="mb-4 flex gap-2">

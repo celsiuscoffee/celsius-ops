@@ -167,8 +167,8 @@ export default function HRHomePage() {
         </div>
       )}
 
-      {/* Allowances card */}
-      {allowance && (
+      {/* Allowances card — only for staff assigned to an outlet (not HQ / non-scheduled owners) */}
+      {allowance && clockStatus?.outletId && (
         <div className="mb-6 rounded-2xl border border-terracotta/30 bg-gradient-to-br from-orange-50 to-amber-50 p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">

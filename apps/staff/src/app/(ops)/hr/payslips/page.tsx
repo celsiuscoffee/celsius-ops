@@ -2,7 +2,8 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { Receipt, ChevronDown, ChevronUp } from "lucide-react";
+import Link from "next/link";
+import { Receipt, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
 
 type Payslip = {
   id: string;
@@ -37,7 +38,16 @@ export default function PayslipsPage() {
 
   return (
     <div className="px-4 pt-6">
-      <h1 className="mb-6 text-2xl font-bold">Payslips</h1>
+      <div className="mb-6 flex items-center gap-3">
+        <Link
+          href="/hr"
+          aria-label="Back"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <h1 className="text-2xl font-bold">Payslips</h1>
+      </div>
 
       {payslips.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-gray-50 py-16 text-center">

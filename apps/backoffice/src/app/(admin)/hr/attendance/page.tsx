@@ -20,7 +20,8 @@ const FLAG_LABELS: Record<string, { label: string; icon: typeof AlertTriangle; c
 };
 
 export default function AttendanceReviewPage() {
-  const { data, mutate } = useFetch<{ logs: EnrichedLog[]; count: number }>("/api/hr/attendance?status=flagged");
+  const [filter, setFilter] = useState<"flagged" | "all">("flagged");
+  const { data, mutate } = useFetch<{ logs: EnrichedLog[]; count: number }>(`/api/hr/attendance?status=${filter}`);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -42,11 +43,29 @@ export default function AttendanceReviewPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-bold">Attendance Review</h1>
-        <p className="text-sm text-muted-foreground">
-          {logs.length} flagged item{logs.length !== 1 ? "s" : ""} need review
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Attendance Review</h1>
+          <p className="text-sm text-muted-foreground">
+            {filter === "flagged"
+              ? `${logs.length} flagged item${logs.length !== 1 ? "s" : ""} need review`
+              : `${logs.length} attendance log${logs.length !== 1 ? "s" : ""}`}
+          </p>
+        </div>
+        <div className="flex gap-1 rounded-lg border bg-card p-1 text-sm">
+          <button
+            onClick={() => setFilter("flagged")}
+            className={`rounded-md px-3 py-1.5 font-medium ${filter === "flagged" ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
+          >
+            Flagged
+          </button>
+          <button
+            onClick={() => setFilter("all")}
+            className={`rounded-md px-3 py-1.5 font-medium ${filter === "all" ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
+          >
+            All
+          </button>
+        </div>
       </div>
 
       {logs.length === 0 ? (

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, MapPin, LogIn, LogOut, Loader2, CheckCircle2, AlertTriangle, Camera, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { Clock, MapPin, LogIn, LogOut, Loader2, CheckCircle2, AlertTriangle, Camera, RefreshCw, ArrowLeft } from "lucide-react";
 
 type ClockStatus = {
   activeLog: {
@@ -58,8 +59,11 @@ export default function ClockPage() {
     );
   }, []);
 
-  // Start camera on mount
+  // Start camera on mount — skip entirely if the user has no outlet (they'll
+  // see the "no outlet" message instead and don't need the camera running).
+  const hasOutlet = !!status?.outletId;
   useEffect(() => {
+    if (status && !hasOutlet) return;
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -78,7 +82,7 @@ export default function ClockPage() {
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
-  }, []);
+  }, [status, hasOutlet]);
 
   // Capture photo from video feed
   const capturePhoto = useCallback(() => {
@@ -181,8 +185,34 @@ export default function ClockPage() {
     distanceInfo = withinZone ? "Within zone" : `${dist}m away`;
   }
 
+  const backBtn = (
+    <Link
+      href="/hr"
+      aria-label="Back"
+      className="absolute left-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
+    >
+      <ArrowLeft className="h-5 w-5" />
+    </Link>
+  );
+
+  // Short-circuit: staff without an assigned outlet can't use the time clock.
+  // Show just the banner instead of an empty camera / stuck GPS spinner.
+  if (status && !status.outletId) {
+    return (
+      <div className="relative flex min-h-[80vh] flex-col items-center justify-center px-4">
+        {backBtn}
+        <Clock className="mb-3 h-10 w-10 text-gray-300" />
+        <h1 className="mb-2 text-xl font-bold">Time Clock</h1>
+        <div className="max-w-xs rounded-xl bg-amber-50 px-5 py-3 text-center text-sm text-amber-700">
+          No outlet assigned. Time clock is for outlet staff only.
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-[80vh] flex-col items-center px-4 pt-6">
+    <div className="relative flex min-h-[80vh] flex-col items-center px-4 pt-6">
+      {backBtn}
       {/* Header */}
       <div className="mb-4 text-center">
         <Clock className="mx-auto mb-2 h-8 w-8 text-terracotta" />

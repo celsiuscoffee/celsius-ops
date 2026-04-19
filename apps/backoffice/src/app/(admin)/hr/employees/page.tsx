@@ -233,9 +233,9 @@ export default function EmployeesPage() {
               }`}>
                 {(emp.fullName || emp.name).split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
               </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold">{emp.fullName || emp.name}</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <p className="font-semibold break-words">{emp.fullName || emp.name}</p>
                   {emp.fullName && emp.name !== emp.fullName && (
                     <span className="text-xs text-muted-foreground">({emp.name})</span>
                   )}
@@ -254,7 +254,7 @@ export default function EmployeesPage() {
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {emp.outlet?.name || "No outlet"}{" "}
+                  {emp.outlet?.name || "HQ"}{" "}
                   {emp.hrProfile?.position && `· ${emp.hrProfile.position}`}
                 </p>
                 {emp.hrProfile?.employment_type === "part_time" && emp.hrProfile?.hourly_rate ? (

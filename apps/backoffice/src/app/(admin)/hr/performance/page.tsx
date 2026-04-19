@@ -159,15 +159,15 @@ export default function HRPerformancePage() {
             <thead className="bg-gray-50">
               <tr className="text-xs text-gray-500">
                 <th className="px-3 py-2 text-left">Staff</th>
-                <th className="px-3 py-2 text-center">Score</th>
-                <th className="px-3 py-2 text-center">Clock-ins</th>
-                <th className="px-3 py-2 text-center">Late (avg)</th>
-                <th className="px-3 py-2 text-center">Hours (actual / scheduled)</th>
-                <th className="px-3 py-2 text-center">OT</th>
-                <th className="px-3 py-2 text-center">Leave days</th>
-                <th className="px-3 py-2 text-center">Ops %</th>
-                <th className="px-3 py-2 text-center">Reviews</th>
-                <th className="px-3 py-2 text-center">Audits</th>
+                <th className="px-3 py-2 text-center" title="Composite score 0-100. See formula at bottom of page.">Score</th>
+                <th className="px-3 py-2 text-center" title="Number of attendance records this period">Clock-ins</th>
+                <th className="px-3 py-2 text-center" title="Average minutes late per clock-in">Late (avg)</th>
+                <th className="px-3 py-2 text-center" title="Actual clocked hours / scheduled hours">Hours (actual / scheduled)</th>
+                <th className="px-3 py-2 text-center" title="Approved overtime hours">OT</th>
+                <th className="px-3 py-2 text-center" title="Approved leave days taken">Leave days</th>
+                <th className="px-3 py-2 text-center" title="Completed checklists / total assigned this period">Ops %</th>
+                <th className="px-3 py-2 text-center" title="Google reviews mentioning this staff member (positive / negative)">Reviews</th>
+                <th className="px-3 py-2 text-center" title="Audit reports with this staff mentioned">Audits</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>

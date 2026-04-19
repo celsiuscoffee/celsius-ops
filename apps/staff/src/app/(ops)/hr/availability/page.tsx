@@ -2,7 +2,8 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { CalendarX, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { CalendarX, X, Loader2, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 
 type Availability = {
   id: string;
@@ -94,7 +95,16 @@ export default function AvailabilityPage() {
 
   return (
     <div className="px-4 pt-6">
-      <h1 className="mb-2 text-2xl font-bold">My Availability</h1>
+      <div className="mb-4 flex items-center gap-3">
+        <Link
+          href="/hr"
+          aria-label="Back"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <h1 className="text-2xl font-bold">My Availability</h1>
+      </div>
       <p className="mb-5 text-sm text-gray-500">
         Tap a date to mark yourself <strong>unavailable</strong>. The AI scheduler won&apos;t assign shifts on these days.
       </p>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,26 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ requests: data });
+  // Enrich with user name + outlet for display
+  const userIds = Array.from(new Set((data || []).map((r: { user_id: string }) => r.user_id)));
+  const users = userIds.length > 0
+    ? await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true, fullName: true, outlet: { select: { name: true } } },
+      })
+    : [];
+  const userMap = new Map(users.map((u) => [u.id, u]));
+
+  const requests = (data || []).map((r: { user_id: string; [k: string]: unknown }) => {
+    const u = userMap.get(r.user_id);
+    return {
+      ...r,
+      user_name: u?.fullName || u?.name || null,
+      outlet_name: u?.outlet?.name || null,
+    };
+  });
+
+  return NextResponse.json({ requests });
 }
 
 // PATCH: approve or reject an escalated leave request

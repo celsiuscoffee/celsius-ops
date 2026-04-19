@@ -2,7 +2,8 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { CalendarOff, CheckCircle2, XCircle, Clock, Loader2, Bot, Plus } from "lucide-react";
+import Link from "next/link";
+import { CalendarOff, CheckCircle2, XCircle, Clock, Loader2, Bot, Plus, ArrowLeft } from "lucide-react";
 import type { LeaveBalance, LeaveRequest } from "@/lib/hr/types";
 import { LEAVE_TYPES } from "@/lib/hr/constants";
 
@@ -65,8 +66,15 @@ export default function LeavePage() {
 
   return (
     <div className="px-4 pt-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Leave</h1>
+      <div className="mb-6 flex items-center gap-3">
+        <Link
+          href="/hr"
+          aria-label="Back"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <h1 className="flex-1 text-2xl font-bold">Leave</h1>
         <button
           onClick={() => setShowForm(!showForm)}
           className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white"
