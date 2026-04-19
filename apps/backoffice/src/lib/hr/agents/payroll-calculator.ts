@@ -2,6 +2,7 @@ import { hrSupabaseAdmin } from "../supabase";
 import { WORKING_DAYS_PER_MONTH, NORMAL_WORKING_HOURS_PER_DAY, OT_RATES } from "../constants";
 import { computeAllowancesForUser, loadAllowanceRules } from "../allowances";
 import { calcAllStatutory } from "../statutory/calculators";
+import { computeProrate, prorateAmount } from "../payroll/prorate";
 
 type PayrollResult = {
   payrollRunId: string;
@@ -172,18 +173,36 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       }
     }
 
+    // Prorate — calendar-day based per MY Employment Act. Applies to fixed
+    // salary. Skipped for part-timers (paid on actual hours).
+    // Priority: joiner → resigner → unpaid leave (first match wins).
+    const cycleStart = `${year}-${String(month).padStart(2, "0")}-01`;
+    const lastDayOfMonth = new Date(year, month, 0).getDate();
+    const cycleEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
+    const unpaidDays = unpaidLeaveByUser.get(profile.user_id) || 0;
+    const prorate = isPartTime
+      ? ({ reason: null, daysWorked: 0, daysTotal: 0, factor: 1, explanation: null } as ReturnType<typeof computeProrate>)
+      : computeProrate({
+          cycleStart,
+          cycleEnd,
+          joinDate: profile.join_date || null,
+          resignDate: profile.resigned_at || profile.end_date || null,
+          unpaidLeaveDays: unpaidDays,
+          fullSalary: basicSalary,
+        });
+
     // Base pay
     let basePay: number;
     if (isPartTime) {
       basePay = totalRegularHours * hourlyRate;
     } else {
-      basePay = basicSalary;
+      basePay = prorateAmount(basicSalary, prorate);
     }
 
-    // Unpaid leave deduction
-    const unpaidDays = unpaidLeaveByUser.get(profile.user_id) || 0;
+    // Unpaid leave deduction — when prorate.reason='unpaid_leave', the factor
+    // already covers it; don't double-deduct. Otherwise apply as a separate line.
     const dailyRate = basicSalary / WORKING_DAYS_PER_MONTH;
-    const unpaidDeduction = unpaidDays * dailyRate;
+    const unpaidDeduction = prorate.reason === "unpaid_leave" ? 0 : unpaidDays * dailyRate;
 
     // Total OT
     const totalOT = Math.round((ot1xAmount + ot15xAmount + ot2xAmount + ot3xAmount) * 100) / 100;
@@ -274,6 +293,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     payrollItems.push({
       payroll_run_id: run.id,
       user_id: profile.user_id,
+      // Prorate metadata — surfaced on payslip + review UI
+      prorate_reason: prorate.reason,
+      prorate_days_worked: prorate.reason ? prorate.daysWorked : null,
+      prorate_days_total: prorate.reason ? prorate.daysTotal : null,
       basic_salary: basePay,
       total_regular_hours: Math.round(totalRegularHours * 100) / 100,
       total_ot_hours: Math.round(totalOtHours * 100) / 100,
