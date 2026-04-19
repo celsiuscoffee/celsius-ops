@@ -230,7 +230,7 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
   // YTD summary (if available)
   if (d.ytdGross !== undefined) {
     y -= 10;
-    page.drawText(`YEAR-TO-DATE (Jan ${d.periodYear} → ${MONTHS[d.periodMonth - 1]})`, { x: M, y, size: 8, font: bold, color: gray });
+    page.drawText(`YEAR-TO-DATE (Jan ${d.periodYear} - ${MONTHS[d.periodMonth - 1]})`, { x: M, y, size: 8, font: bold, color: gray });
     y -= 12;
     const ytdLines: [string, number][] = [
       ["Gross YTD", d.ytdGross ?? 0],
