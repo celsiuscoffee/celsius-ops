@@ -3,9 +3,24 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { ArrowLeft, Save, Loader2, Lock, KeyRound, Shield, Eye, EyeOff, CheckCircle2, TrendingUp, Clock, Sparkles, AlertTriangle, Star } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Lock, KeyRound, Shield, Eye, EyeOff, CheckCircle2, TrendingUp, Clock, Sparkles, AlertTriangle, Star, FileText, Upload, Trash2, Download } from "lucide-react";
 import Link from "next/link";
 import type { EmployeeProfile } from "@/lib/hr/types";
+
+type EmployeeDocument = {
+  id: string;
+  user_id: string;
+  doc_type: string;
+  title: string | null;
+  file_name: string;
+  storage_path: string;
+  size_bytes: number | null;
+  mime_type: string | null;
+  note: string | null;
+  effective_date: string | null;
+  uploaded_at: string;
+  signed_url: string | null;
+};
 
 type Employee = {
   id: string;
@@ -71,9 +86,53 @@ export default function EmployeeDetailPage() {
   const { data, mutate } = useFetch<{ employees: Employee[] }>("/api/hr/employees");
   const { data: me } = useFetch<{ role: string }>("/api/auth/me");
   const canSeeSalary = me?.role === "OWNER" || me?.role === "ADMIN";
+  const canUploadDocs = canSeeSalary; // same gate as HR admin actions
   const { data: outlets } = useFetch<{ id: string; name: string; code: string }[]>("/api/ops/outlets");
   const { data: allowanceData } = useFetch<AllowanceData>(id ? `/api/hr/allowances?userId=${id}` : null);
+  const { data: docsData, mutate: refetchDocs } = useFetch<{ documents: EmployeeDocument[] }>(
+    id ? `/api/hr/employee-documents?userId=${id}` : null,
+  );
   const allowance = allowanceData?.breakdown;
+  const documents = docsData?.documents || [];
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [newDocType, setNewDocType] = useState<string>("loe");
+  const [newDocTitle, setNewDocTitle] = useState<string>("");
+  const [newDocEffectiveDate, setNewDocEffectiveDate] = useState<string>("");
+
+  const handleUploadDoc = async (file: File) => {
+    if (!id) return;
+    setUploadingDoc(true);
+    try {
+      const fd = new FormData();
+      fd.append("user_id", id);
+      fd.append("doc_type", newDocType);
+      if (newDocTitle) fd.append("title", newDocTitle);
+      if (newDocEffectiveDate) fd.append("effective_date", newDocEffectiveDate);
+      fd.append("file", file);
+      const res = await fetch("/api/hr/employee-documents", { method: "POST", body: fd });
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({ error: "Upload failed" }));
+        alert(b?.error || "Upload failed");
+        return;
+      }
+      setNewDocTitle("");
+      setNewDocEffectiveDate("");
+      refetchDocs();
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteDoc = async (docId: string) => {
+    if (!confirm("Delete this document?")) return;
+    const res = await fetch(`/api/hr/employee-documents?id=${docId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({ error: "Delete failed" }));
+      alert(b?.error || "Delete failed");
+      return;
+    }
+    refetchDocs();
+  };
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -596,6 +655,135 @@ export default function EmployeeDetailPage() {
             </div>
           </section>
         )}
+
+        {/* Documents — LoE, contracts, confirmation letters, resignation letters, etc. */}
+        <section className="rounded-xl border bg-card p-5">
+          <h2 className="mb-3 flex items-center gap-2 font-semibold">
+            <FileText className="h-4 w-4" />
+            Documents
+          </h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Letters of Employment, contracts, NDAs, confirmation letters, resignation letters, etc.
+            Click a row to open.
+          </p>
+
+          {canUploadDocs && (
+            <div className="mb-4 rounded-lg border border-dashed bg-muted/20 p-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <label className="block">
+                  <span className="text-[10px] font-medium uppercase text-muted-foreground">Type</span>
+                  <select
+                    value={newDocType}
+                    onChange={(e) => setNewDocType(e.target.value)}
+                    className="mt-0.5 w-full rounded border bg-background px-2 py-1.5 text-xs"
+                  >
+                    <option value="loe">Letter of Employment</option>
+                    <option value="coe">Contract of Employment</option>
+                    <option value="contract">Contract</option>
+                    <option value="nda">NDA</option>
+                    <option value="confirmation">Confirmation Letter</option>
+                    <option value="resignation">Resignation Letter</option>
+                    <option value="medical">Medical</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-[10px] font-medium uppercase text-muted-foreground">Title (optional)</span>
+                  <input
+                    type="text"
+                    value={newDocTitle}
+                    onChange={(e) => setNewDocTitle(e.target.value)}
+                    placeholder={`e.g. ${new Date().getFullYear()} LoE`}
+                    className="mt-0.5 w-full rounded border bg-background px-2 py-1.5 text-xs"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] font-medium uppercase text-muted-foreground">Effective date</span>
+                  <input
+                    type="date"
+                    value={newDocEffectiveDate}
+                    onChange={(e) => setNewDocEffectiveDate(e.target.value)}
+                    className="mt-0.5 w-full rounded border bg-background px-2 py-1.5 text-xs"
+                  />
+                </label>
+              </div>
+              <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded border-2 border-dashed bg-background py-4 text-xs text-muted-foreground hover:bg-muted/30">
+                {uploadingDoc ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Uploading…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Click to select a file (PDF / image / doc)
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept=".pdf,image/*,.doc,.docx"
+                  className="hidden"
+                  disabled={uploadingDoc}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleUploadDoc(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+          )}
+
+          {documents.length === 0 ? (
+            <p className="rounded border bg-muted/10 p-4 text-center text-xs text-muted-foreground">
+              No documents uploaded yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {documents.map((d) => (
+                <div key={d.id} className="flex items-center gap-3 rounded-lg border bg-background p-3 text-xs">
+                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-semibold uppercase text-gray-600">
+                        {d.doc_type}
+                      </span>
+                      <span className="font-medium truncate">
+                        {d.title || d.file_name}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-muted-foreground">
+                      {d.file_name}
+                      {d.effective_date && ` · Effective ${d.effective_date}`}
+                      {d.size_bytes && ` · ${(d.size_bytes / 1024).toFixed(0)} KB`}
+                      {" · "}
+                      Uploaded {new Date(d.uploaded_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                  {d.signed_url && (
+                    <a
+                      href={d.signed_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-muted"
+                      title="Open in new tab"
+                    >
+                      <Download className="h-3 w-3" /> Open
+                    </a>
+                  )}
+                  {canUploadDocs && (
+                    <button
+                      onClick={() => handleDeleteDoc(d.id)}
+                      className="rounded-lg border border-red-200 bg-red-50 p-1.5 text-red-600 hover:bg-red-100"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* Personal */}
         <section className="rounded-xl border bg-card p-5">
