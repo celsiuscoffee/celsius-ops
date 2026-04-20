@@ -466,16 +466,30 @@ async function resolvePop(
   }
 
   if (candidates.length > 1) {
-    const list = candidates
-      .map((inv: any) => {
-        const payee = inv.paymentType === "STAFF_CLAIM"
-          ? `Staff: ${inv.order?.claimedBy?.name ?? "?"}`
-          : inv.supplier?.name ?? "?";
-        return `• ${inv.invoiceNumber} — ${payee} [${inv.outlet?.code ?? "?"}] — RM ${Number(inv.amount).toFixed(2)}`;
-      })
-      .join("\n");
-    await sendMessage(chatId, `💳 POP received — RM ${amount.toFixed(2)}\n\n⚠️ Multiple matching invoices:\n${list}\n\nPlease specify which invoice.`, msgId);
-    return;
+    // Finance pays identical-amount staff claims individually (e.g. Ariff has
+    // two RM 10 claims at MT2, receives two separate RM 10 transfers). When
+    // all candidates are the same claimant's STAFF_CLAIM at the same outlet,
+    // consume the oldest one instead of asking to disambiguate — next POP
+    // picks up the next one.
+    const allStaffClaim = candidates.every((c: any) => c.paymentType === "STAFF_CLAIM");
+    const claimantIds = new Set(candidates.map((c: any) => c.order?.claimedBy?.id));
+    const outletIds = new Set(candidates.map((c: any) => c.outletId));
+    if (allStaffClaim && claimantIds.size === 1 && !claimantIds.has(undefined) && outletIds.size === 1) {
+      candidates = [...candidates].sort(
+        (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      ).slice(0, 1);
+    } else {
+      const list = candidates
+        .map((inv: any) => {
+          const payee = inv.paymentType === "STAFF_CLAIM"
+            ? `Staff: ${inv.order?.claimedBy?.name ?? "?"}`
+            : inv.supplier?.name ?? "?";
+          return `• ${inv.invoiceNumber} — ${payee} [${inv.outlet?.code ?? "?"}] — RM ${Number(inv.amount).toFixed(2)}`;
+        })
+        .join("\n");
+      await sendMessage(chatId, `💳 POP received — RM ${amount.toFixed(2)}\n\n⚠️ Multiple matching invoices:\n${list}\n\nPlease specify which invoice.`, msgId);
+      return;
+    }
   }
 
   // Single match — figure out if the POP matches the full amount or just the
