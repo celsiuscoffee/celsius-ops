@@ -419,10 +419,10 @@ function IconRail({
               <button
                 onClick={() => onModuleClick(section.label)}
                 className={`group relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
-                  isActive
+                  hasActiveRoute
                     ? "bg-terracotta text-white"
-                    : hasActiveRoute
-                      ? "bg-white/15 text-white"
+                    : isActive
+                      ? "bg-white/15 text-white ring-1 ring-white/25"
                       : "text-white/40 hover:bg-white/10 hover:text-white/70"
                 }`}
                 title={section.label}
