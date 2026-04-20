@@ -320,6 +320,74 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
     },
   };
 
+  // 0. Try matching an OPEN ClaimBatch first — Finance often pays many small
+  // claims via a single bulk transfer. A batch's totalAmount matched against
+  // the POP amount (± 0.50) resolves all its children in one stroke.
+  // Narrow by recipient account if available (multiple batches can share a total).
+  {
+    const batchCandidates = await prisma.hrClaimBatch.findMany({
+      where: {
+        status: "OPEN",
+        totalAmount: { gte: amount - 0.5, lte: amount + 0.5 },
+      },
+      include: {
+        invoices: {
+          select: { id: true, invoiceNumber: true, outletId: true },
+        },
+      },
+      take: 10,
+    });
+
+    if (batchCandidates.length > 0) {
+      // Narrow by recipient account (match payee's User.bankAccountNumber)
+      let narrowed = batchCandidates;
+      if (pop.recipientAccount) {
+        const digits = pop.recipientAccount.replace(/\D/g, "");
+        const payees = await prisma.user.findMany({
+          where: { id: { in: batchCandidates.map((b) => b.userId) } },
+          select: { id: true, bankAccountNumber: true },
+        });
+        const acctMap = new Map(payees.map((p) => [p.id, (p.bankAccountNumber || "").replace(/\D/g, "")]));
+        const byAccount = batchCandidates.filter((b) => acctMap.get(b.userId) === digits);
+        if (byAccount.length > 0) narrowed = byAccount;
+      }
+
+      if (narrowed.length === 1) {
+        const batch = narrowed[0];
+        const now = new Date();
+        const ref = pop.referenceNumber ?? null;
+        await prisma.$transaction(async (tx) => {
+          await tx.hrClaimBatch.update({
+            where: { id: batch.id },
+            data: { status: "PAID", paidAt: now, paymentRef: ref, paidVia: "bank_transfer" },
+          });
+          await tx.invoice.updateMany({
+            where: { claimBatchId: batch.id },
+            data: { status: "PAID", paidAt: now, paidVia: "bank_transfer", paymentRef: ref, popShortLink: photoUrl },
+          });
+        });
+        await sendMessage(
+          chatId,
+          `💳 POP received — RM ${amount.toFixed(2)}\n\n✅ Matched batch ${batch.batchNumber}\n${batch.invoices.length} claim${batch.invoices.length === 1 ? "" : "s"} settled in one go.`,
+          msgId,
+        );
+        return;
+      }
+      if (narrowed.length > 1) {
+        const list = narrowed
+          .map((b) => `• ${b.batchNumber} — RM ${Number(b.totalAmount).toFixed(2)} (${b.invoices.length} claims)`)
+          .join("\n");
+        await sendMessage(
+          chatId,
+          `💳 POP received — RM ${amount.toFixed(2)}\n\n⚠️ Multiple matching batches:\n${list}\n\nPlease mark paid manually in the backoffice.`,
+          msgId,
+        );
+        return;
+      }
+      // narrowed length 0 — fall through to individual invoice matching below
+    }
+  }
+
   // 1. Try matching by invoice reference (most direct — invoice number in payment description)
   if (pop.invoiceReference) {
     const byInvoiceRef = await prisma.invoice.findMany({

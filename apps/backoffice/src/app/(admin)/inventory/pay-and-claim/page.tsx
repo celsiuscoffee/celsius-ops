@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, Fragment } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -689,6 +690,11 @@ export default function PayAndClaimPage() {
           <p className="mt-0.5 text-sm text-gray-500">Staff claims and direct vendor payment requests</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/inventory/pay-and-claim/batches">
+            <Button size="sm" variant="outline">
+              Claim Batches
+            </Button>
+          </Link>
           <Button size="sm" variant="outline" onClick={openQuickUpload}>
             <Upload className="mr-1.5 h-4 w-4" /> New Request
           </Button>

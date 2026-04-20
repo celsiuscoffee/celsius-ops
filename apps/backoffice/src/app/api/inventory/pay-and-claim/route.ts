@@ -66,6 +66,8 @@ export async function GET(req: NextRequest) {
         select: {
           id: true, invoiceNumber: true, amount: true, status: true, photos: true,
           vendorName: true, vendorBankName: true, vendorBankAccountNumber: true, vendorBankAccountName: true,
+          claimBatchId: true,
+          claimBatch: { select: { id: true, batchNumber: true, status: true } },
         },
         take: 1,
       },
