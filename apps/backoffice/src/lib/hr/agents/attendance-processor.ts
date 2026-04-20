@@ -157,7 +157,7 @@ export async function processAttendance(): Promise<ProcessResult> {
         // Public holiday: all hours at 2x, OT at 3x
         if (workedHours > otThreshold) {
           regularHours = otThreshold;
-          overtimeHours = Math.round((workedHours - otThreshold) * 100) / 100;
+          overtimeHours = Math.floor(workedHours - otThreshold); // OT always floored to whole hours
           overtimeType = "ot_3x"; // PH overtime = 3x
         } else {
           regularHours = Math.round(workedHours * 100) / 100;
@@ -168,7 +168,7 @@ export async function processAttendance(): Promise<ProcessResult> {
         // Rest day: normal hours at 1x, OT at 2x
         if (workedHours > otThreshold) {
           regularHours = otThreshold;
-          overtimeHours = Math.round((workedHours - otThreshold) * 100) / 100;
+          overtimeHours = Math.floor(workedHours - otThreshold); // OT always floored to whole hours
           overtimeType = "ot_2x"; // rest day OT = 2x
         } else {
           regularHours = Math.round(workedHours * 100) / 100;
@@ -178,7 +178,7 @@ export async function processAttendance(): Promise<ProcessResult> {
       } else if (workedHours > otThreshold) {
         // Normal weekday OT
         regularHours = otThreshold;
-        overtimeHours = Math.round((workedHours - otThreshold) * 100) / 100;
+        overtimeHours = Math.floor(workedHours - otThreshold); // OT always floored to whole hours
         overtimeType = "ot_1_5x"; // weekday OT = 1.5x
         flags.push("overtime_detected");
       } else {

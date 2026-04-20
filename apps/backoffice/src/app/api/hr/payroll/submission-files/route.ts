@@ -103,10 +103,18 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  // Fallback payment date: 3rd of the month AFTER the payroll period. Guard
+  // December so month+1 doesn't produce an invalid "YYYY-13-03". Use
+  // Date arithmetic which handles the year rollover cleanly.
+  let fallbackPaymentDate = run.payment_date as string | null;
+  if (!fallbackPaymentDate) {
+    const nextPeriod = new Date(Date.UTC(run.period_year, run.period_month, 3));
+    fallbackPaymentDate = nextPeriod.toISOString().slice(0, 10);
+  }
   const runMeta = {
     period_month: run.period_month,
     period_year: run.period_year,
-    payment_date: run.payment_date || `${run.period_year}-${String(run.period_month + 1).padStart(2, "0")}-03`,
+    payment_date: fallbackPaymentDate,
   };
 
   let result;

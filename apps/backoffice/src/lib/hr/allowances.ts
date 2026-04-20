@@ -101,7 +101,10 @@ export async function computeAllowancesForUser(
   month: number,
   rules?: AllowanceRules,
 ): Promise<AllowanceBreakdown> {
-  const r = rules ?? (await loadAllowanceRules());
+  // CRITICAL: clone so per-staff overrides applied below don't leak into
+  // sibling calls. Under Promise.all the shared `rules` object would have
+  // last-writer-wins semantics and every staff would get the same override.
+  const r: AllowanceRules = { ...(rules ?? (await loadAllowanceRules())) };
 
   const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
   const monthEndDate = new Date(year, month, 0);

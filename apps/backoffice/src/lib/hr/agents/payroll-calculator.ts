@@ -27,6 +27,22 @@ type PayrollResult = {
 export async function calculatePayroll(month: number, year: number): Promise<PayrollResult> {
   const notes: string[] = [];
 
+  // 0. Refuse to recompute a confirmed/paid period. Operators can still
+  // recompute "draft" or "ai_computed" runs; those are overwritten below.
+  const { data: lockedRuns } = await hrSupabaseAdmin
+    .from("hr_payroll_runs")
+    .select("id, status")
+    .eq("period_month", month)
+    .eq("period_year", year)
+    .in("status", ["confirmed", "paid"])
+    .limit(1);
+  if (lockedRuns && lockedRuns.length > 0) {
+    throw new Error(
+      `Payroll for ${year}-${String(month).padStart(2, "0")} is already ${lockedRuns[0].status}. ` +
+      `Delete or unlock the existing run before recomputing.`,
+    );
+  }
+
   // 1. Get all employee profiles
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
@@ -34,6 +50,28 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
 
   if (!profiles || profiles.length === 0) {
     throw new Error("No employee profiles found. Set up employee HR profiles first.");
+  }
+
+  // Pre-flight validation — refuse to compute if required data is missing
+  // rather than silently producing RM 0 rows or fabricating hourly rates.
+  const ptMissingRate = profiles
+    .filter((p) => p.employment_type === "part_time" && (p.hourly_rate == null || Number(p.hourly_rate) === 0))
+    .map((p) => p.user_id);
+  const ftMissingSalary = profiles
+    .filter((p) =>
+      p.employment_type === "full_time"
+      && p.schedule_required !== false
+      && (p.basic_salary == null || Number(p.basic_salary) === 0),
+    )
+    .map((p) => p.user_id);
+  if (ptMissingRate.length > 0 || ftMissingSalary.length > 0) {
+    const problems: string[] = [];
+    if (ptMissingRate.length) problems.push(`${ptMissingRate.length} part-timer(s) missing hourly_rate`);
+    if (ftMissingSalary.length) problems.push(`${ftMissingSalary.length} full-timer(s) missing basic_salary`);
+    throw new Error(
+      `Payroll compute aborted — fix the following before re-running: ${problems.join("; ")}. ` +
+      `User IDs: ${[...ptMissingRate, ...ftMissingSalary].map((id) => id.slice(0, 8)).join(", ")}.`,
+    );
   }
 
   // 2. Get approved attendance for this month
@@ -163,7 +201,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
 
     for (const a of userAttendance) {
       totalRegularHours += Number(a.regular_hours) || 0;
-      const rawOtHours = Number(a.overtime_hours) || 0;
+      // OT must always be floored to whole hours per Celsius payroll policy.
+      // The attendance-processor already floors; this is defensive for any
+      // historical data that snuck in rounded.
+      const rawOtHours = Math.floor(Number(a.overtime_hours) || 0);
       const otHours = isOtApproved(a) && rawOtHours >= OT_MIN_HOURS ? rawOtHours : 0;
       totalOtHours += otHours;
 
@@ -227,12 +268,23 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
 
     // Gross = basic + OT − unpaid + allowances. Review penalty is a post-tax
     // deduction (in other_deductions), so it doesn't reduce the statutory/PCB basis.
-    const gross = Math.round((basePay + totalOT - unpaidDeduction + totalAllowances) * 100) / 100;
+    // Clamp to 0 so heavy unpaid-leave doesn't produce a negative payslip.
+    const rawGross = basePay + totalOT - unpaidDeduction + totalAllowances;
+    const gross = Math.max(0, Math.round(rawGross * 100) / 100);
+    if (rawGross < 0) {
+      notes.push(
+        `⚠ Negative gross clamped to 0 for ${profile.user_id.slice(0, 8)} ` +
+        `— unpaid leave exceeded earnings. Review before confirming.`,
+      );
+    }
 
     // Statutory deductions via hr_stat_* reference tables.
-    // Malaysian convention: EPF/SOCSO/EIS basis = basic + fixed/recurring
-    // allowances (excludes variable OT). PCB uses full gross annualized.
-    const statutoryBasis = basePay - unpaidDeduction + totalAllowances;
+    // Malaysian convention (KWSP/PERKESO): EPF + SOCSO + EIS basis = basic +
+    // FIXED recurring allowances only. Attendance allowance is contractually
+    // fixed (capped); performance allowance is VARIABLE incentive pay and
+    // therefore excluded from the statutory basis. PCB still uses full gross
+    // annualized.
+    const statutoryBasis = Math.max(0, basePay - unpaidDeduction + attendanceAllowance);
     const ytd = ytdByUser.get(profile.user_id) || { gross: 0, pcb: 0 };
     const stat = await calcAllStatutory({
       wage: statutoryBasis,
