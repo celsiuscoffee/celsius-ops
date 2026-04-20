@@ -119,12 +119,11 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
 
-  // Load the log first so we can gate MANAGER access by its outlet.
-  // Without this check a MANAGER could acknowledge/excuse/adjust logs for
-  // outlets they aren't assigned to by guessing the id.
+  // Load the log first so we can gate MANAGER access by its outlet AND so
+  // 'adjust' can preserve the original overtime_type (PH/rest-day/weekday).
   const { data: existingLog } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("outlet_id")
+    .select("outlet_id, overtime_type")
     .eq("id", id)
     .maybeSingle();
   if (!existingLog) {
@@ -159,10 +158,21 @@ export async function PATCH(req: NextRequest) {
   } else if (action === "reject") {
     updateData.final_status = "rejected";
   } else if (action === "adjust" && adjustedHours != null) {
+    // Preserve the original overtime classification so a manager-adjusted
+    // rest-day / public-holiday shift doesn't silently become a weekday 1.5x
+    // line in payroll. OT hours always floor to whole numbers per policy.
+    const NORMAL_SHIFT_HOURS = 8;
+    const regularHours = Math.min(adjustedHours, NORMAL_SHIFT_HOURS);
+    const overtimeHours = Math.floor(Math.max(0, adjustedHours - NORMAL_SHIFT_HOURS));
     updateData.final_status = "adjusted";
     updateData.total_hours = adjustedHours;
-    updateData.regular_hours = Math.min(adjustedHours, 8);
-    updateData.overtime_hours = Math.max(0, adjustedHours - 8);
+    updateData.regular_hours = regularHours;
+    updateData.overtime_hours = overtimeHours;
+    // Only set overtime_type if there's OT to classify and the existing log
+    // already has a type; otherwise leave the existing value untouched.
+    if (overtimeHours > 0 && !existingLog.overtime_type) {
+      updateData.overtime_type = "ot_1_5x"; // default weekday OT for un-classified adjusts
+    }
   }
 
   const { data, error } = await hrSupabaseAdmin

@@ -385,8 +385,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         // Final-payroll marker: staff resigned this cycle. HR should add
         // leave encashment + notice-pay manually via an ad-hoc adjustment
         // line before confirming the run.
-        final_payroll: prorate.reason === "resigner",
-        resignation_end_date: prorate.reason === "resigner" ? (profile.resigned_at || profile.end_date) : null,
+        final_payroll: prorate.reason === "resigner" || prorate.reason === "joiner_and_resigner",
+        resignation_end_date: (prorate.reason === "resigner" || prorate.reason === "joiner_and_resigner")
+          ? (profile.resigned_at || profile.end_date)
+          : null,
       },
     });
   }));

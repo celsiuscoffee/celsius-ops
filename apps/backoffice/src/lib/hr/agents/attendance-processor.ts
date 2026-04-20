@@ -59,16 +59,19 @@ export async function processAttendance(): Promise<ProcessResult> {
   const zonesByOutlet = new Map<string, GeofenceZone>();
   (zones || []).forEach((z: GeofenceZone) => zonesByOutlet.set(z.outlet_id, z));
 
-  // 3. Get employee profiles (employment type for OT threshold)
+  // 3. Get employee profiles (employment type for OT threshold, rest_day for OT rate)
   const userIds = [...new Set((pendingLogs as AttendanceLog[]).map((l) => l.user_id))];
   const { data: profiles } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("user_id, employment_type")
+    .select("user_id, employment_type, rest_day")
     .in("user_id", userIds);
 
   const profileMap = new Map<string, string>();
-  (profiles || []).forEach((p: { user_id: string; employment_type: string }) => {
+  const restDayByUser = new Map<string, number>();
+  (profiles || []).forEach((p: { user_id: string; employment_type: string; rest_day: number | null }) => {
     profileMap.set(p.user_id, p.employment_type);
+    // NULL → Sunday (0) default per MY Employment Act convention.
+    restDayByUser.set(p.user_id, p.rest_day == null ? 0 : Number(p.rest_day));
   });
 
   // 4. Get public holidays for the date range of pending logs
@@ -151,7 +154,9 @@ export async function processAttendance(): Promise<ProcessResult> {
       const clockDate = log.clock_in.slice(0, 10);
       const isPH = publicHolidaySet.has(clockDate);
       const dayOfWeek = new Date(clockDate).getDay(); // 0=Sun
-      const isRestDay = dayOfWeek === 0; // Sunday = default rest day
+      // Per-employee rest day (NULL → Sunday default).
+      const restDay = restDayByUser.get(log.user_id) ?? 0;
+      const isRestDay = dayOfWeek === restDay;
 
       if (isPH) {
         // Public holiday: all hours at 2x, OT at 3x

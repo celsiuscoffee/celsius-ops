@@ -36,6 +36,15 @@ export async function GET(req: NextRequest) {
     .eq("id", runId)
     .single();
   if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 });
+  // Bank / statutory submission files must never be generated from a draft
+  // or ai_computed run — those are still editable and the numbers aren't
+  // final. CP39/KWSP/Maybank all assume the run is locked.
+  if (!["confirmed", "paid"].includes(run.status)) {
+    return NextResponse.json(
+      { error: `Run must be confirmed or paid before generating submission files (current: ${run.status})` },
+      { status: 409 },
+    );
+  }
 
   const { data: items } = await hrSupabaseAdmin
     .from("hr_payroll_items")
@@ -142,7 +151,9 @@ export async function GET(req: NextRequest) {
     headers: {
       "Content-Type": result.mime,
       "Content-Disposition": `attachment; filename="${result.filename}"`,
-      "X-Summary": JSON.stringify(result.summary),
+      // HTTP headers are ASCII-only; staff full names with accents would
+      // throw on header set. URI-encode defensively.
+      "X-Summary": encodeURIComponent(JSON.stringify(result.summary)),
     },
   });
 }

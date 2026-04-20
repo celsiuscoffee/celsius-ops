@@ -10,7 +10,7 @@
  *   3. Approved unpaid leave during cycle → reduces effective days_worked
  */
 
-export type ProrateReason = "joiner" | "resigner" | "unpaid_leave" | null;
+export type ProrateReason = "joiner" | "resigner" | "joiner_and_resigner" | "unpaid_leave" | null;
 
 export type ProrateResult = {
   reason: ProrateReason;
@@ -43,34 +43,50 @@ export function computeProrate(params: {
   const end = dateOnly(params.cycleEnd);
   const daysTotal = daysBetween(start, end);
 
+  // Detect both joiner and resigner windows upfront so the rare case of
+  // joining and resigning within the same cycle is prorated on the
+  // intersection — not just the joiner slice.
+  const j = params.joinDate && dateOnly(params.joinDate);
+  const r = params.resignDate && dateOnly(params.resignDate);
+  const joiner = j && j > start && j <= end ? j : null;
+  const resigner = r && r >= start && r < end ? r : null;
+
+  if (joiner && resigner) {
+    // Work from the later of (start, joinDate) to the earlier of (end, resignDate).
+    const windowStart = joiner;
+    const windowEnd = resigner;
+    const worked = Math.max(0, daysBetween(windowStart, windowEnd));
+    return {
+      reason: "joiner_and_resigner",
+      daysWorked: worked,
+      daysTotal,
+      factor: worked / daysTotal,
+      explanation: `Salary prorated: RM ${params.fullSalary.toFixed(2)} × ${worked}/${daysTotal} days (joined ${joiner.toISOString().slice(0, 10)}, resigned ${resigner.toISOString().slice(0, 10)})`,
+    };
+  }
+
   // Priority 1: joined mid-cycle
-  if (params.joinDate) {
-    const j = dateOnly(params.joinDate);
-    if (j > start && j <= end) {
-      const worked = daysBetween(j, end);
-      return {
-        reason: "joiner",
-        daysWorked: worked,
-        daysTotal,
-        factor: worked / daysTotal,
-        explanation: `Salary prorated: RM ${params.fullSalary.toFixed(2)} × ${worked}/${daysTotal} days based on join date ${j.toISOString().slice(0, 10)}`,
-      };
-    }
+  if (joiner) {
+    const worked = daysBetween(joiner, end);
+    return {
+      reason: "joiner",
+      daysWorked: worked,
+      daysTotal,
+      factor: worked / daysTotal,
+      explanation: `Salary prorated: RM ${params.fullSalary.toFixed(2)} × ${worked}/${daysTotal} days based on join date ${joiner.toISOString().slice(0, 10)}`,
+    };
   }
 
   // Priority 2: resigned mid-cycle
-  if (params.resignDate) {
-    const r = dateOnly(params.resignDate);
-    if (r >= start && r < end) {
-      const worked = daysBetween(start, r);
-      return {
-        reason: "resigner",
-        daysWorked: worked,
-        daysTotal,
-        factor: worked / daysTotal,
-        explanation: `Salary prorated: RM ${params.fullSalary.toFixed(2)} × ${worked}/${daysTotal} days based on resignation date ${r.toISOString().slice(0, 10)}`,
-      };
-    }
+  if (resigner) {
+    const worked = daysBetween(start, resigner);
+    return {
+      reason: "resigner",
+      daysWorked: worked,
+      daysTotal,
+      factor: worked / daysTotal,
+      explanation: `Salary prorated: RM ${params.fullSalary.toFixed(2)} × ${worked}/${daysTotal} days based on resignation date ${resigner.toISOString().slice(0, 10)}`,
+    };
   }
 
   // Priority 3: unpaid leave

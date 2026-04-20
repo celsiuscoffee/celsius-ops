@@ -15,6 +15,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json();
 
+  // Lockout guard: prevent demoting / deactivating the last remaining OWNER.
+  // Also prevent OWNERs from accidentally demoting themselves without a
+  // second OWNER on the account.
+  if (body.role !== undefined || body.status !== undefined) {
+    const target = await prisma.user.findUnique({ where: { id }, select: { role: true, status: true } });
+    if (target?.role === "OWNER") {
+      const willDemote = body.role !== undefined && body.role !== "OWNER";
+      const willDeactivate = body.status !== undefined && body.status !== "ACTIVE";
+      if (willDemote || willDeactivate) {
+        const otherActiveOwners = await prisma.user.count({
+          where: { role: "OWNER", status: "ACTIVE", id: { not: id } },
+        });
+        if (otherActiveOwners === 0) {
+          return NextResponse.json(
+            { error: "Cannot demote or deactivate the last active OWNER — assign another OWNER first" },
+            { status: 409 },
+          );
+        }
+      }
+    }
+  }
+
   // Build update data from provided fields
   const updateData: Record<string, unknown> = {};
 

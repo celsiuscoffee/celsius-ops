@@ -72,11 +72,13 @@ export async function POST(req: NextRequest) {
 
     if (profileError) {
       console.error("[create-employee] profile error:", profileError.message);
-      // User row was created; return partial success
-      return NextResponse.json({
-        user,
-        warning: `User created but profile failed: ${profileError.message}`,
-      }, { status: 207 });
+      // Roll back the User row so we don't leave an orphaned login record.
+      // Mirrors the /api/hr/loe-import/commit behaviour.
+      await prisma.user.delete({ where: { id: user.id } }).catch(() => null);
+      return NextResponse.json(
+        { error: `Profile insert failed: ${profileError.message}` },
+        { status: 500 },
+      );
     }
 
     // Backfill initial salary/job history rows

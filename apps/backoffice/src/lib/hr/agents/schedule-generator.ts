@@ -192,9 +192,9 @@ export async function generateSchedule(
     .gte("end_date", weekStart);
   const leaveSet = new Set<string>();
   (leaves || []).forEach((l: { user_id: string; start_date: string; end_date: string }) => {
-    const s = new Date(l.start_date);
-    const e = new Date(l.end_date);
-    for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+    const s = new Date(l.start_date + "T00:00:00Z");
+    const e = new Date(l.end_date + "T00:00:00Z");
+    for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate() + 1)) {
       leaveSet.add(`${l.user_id}:${d.toISOString().slice(0, 10)}`);
     }
   });
@@ -209,6 +209,31 @@ export async function generateSchedule(
   (availabilities || []).forEach((a: { user_id: string; date: string }) => {
     blockoutSet.add(`${a.user_id}:${a.date}`);
   });
+
+  // Weekly recurring availability — applies to part-timers. A PT with ANY
+  // weekly-availability row is treated as "only available on those day/window
+  // combinations"; a PT with NO rows is treated as generally available (legacy).
+  const { data: weeklyAvail } = await hrSupabaseAdmin
+    .from("hr_staff_weekly_availability")
+    .select("user_id, day_of_week, start_time, end_time");
+  type WeeklyAvailRow = { user_id: string; day_of_week: number; start_time: string; end_time: string };
+  const weeklyByUser = new Map<string, WeeklyAvailRow[]>();
+  for (const row of (weeklyAvail || []) as WeeklyAvailRow[]) {
+    const list = weeklyByUser.get(row.user_id) || [];
+    list.push(row);
+    weeklyByUser.set(row.user_id, list);
+  }
+  // Returns true when the given user is NOT available for any shift that starts
+  // at startTime on the JS day-of-week (0=Sun). Only applies when the user has
+  // at least one weekly-availability row — otherwise we treat them as available.
+  const outsideWeeklyAvailability = (userId: string, dow: number, shiftStart: string): boolean => {
+    const rows = weeklyByUser.get(userId);
+    if (!rows || rows.length === 0) return false; // opt-out → always considered available
+    const dayRows = rows.filter((r) => r.day_of_week === dow);
+    if (dayRows.length === 0) return true; // day not covered at all
+    // Match if shiftStart falls within any [start_time, end_time) on that day
+    return !dayRows.some((r) => r.start_time <= shiftStart && shiftStart < r.end_time);
+  };
 
   const { data: holidays } = await hrSupabaseAdmin
     .from("hr_public_holidays")
@@ -292,6 +317,14 @@ export async function generateSchedule(
     if (leaveSet.has(`${s.id}:${date}`)) return "on leave";
     if (blockoutSet.has(`${s.id}:${date}`)) return "blocked out";
     if (shiftsByStaffDate.has(`${s.id}:${date}`)) return "already assigned today";
+    // Weekly recurring availability — PT only. Staff with no weekly rows are
+    // treated as always available (legacy opt-out).
+    if (s.employment_type === "part_time") {
+      const dow = new Date(date + "T00:00:00Z").getUTCDay();
+      if (outsideWeeklyAvailability(s.id, dow, shiftStart)) {
+        return "outside weekly availability";
+      }
+    }
     // Preferred off day — skip in normal pass, allow in relaxed pass
     if (!relaxed && preferredOffDay.get(s.id) === date) return "preferred off day";
     const worked = daysWorked.get(s.id) || 0;
@@ -437,6 +470,11 @@ export async function generateSchedule(
             if (leaveSet.has(`${s.id}:${date}`)) continue;
             if (blockoutSet.has(`${s.id}:${date}`)) continue;
             if (shiftsByStaffDate.has(`${s.id}:${date}`)) continue;
+            // Even in the emergency "uncovered slot" fallback, respect PT weekly availability.
+            if (s.employment_type === "part_time") {
+              const dow = new Date(date + "T00:00:00Z").getUTCDay();
+              if (outsideWeeklyAvailability(s.id, dow, slot.start)) continue;
+            }
             const rules = EMPLOYMENT_RULES[s.employment_type];
             // Allow up to +1 shift over weekly cap (OT) + skip all other constraints
             const hours = hoursPerStaff.get(s.id) || 0;

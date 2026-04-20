@@ -32,14 +32,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "end_date must be on/after resigned_at" }, { status: 400 });
   }
 
+  // Load existing notes so we can append, not overwrite. Previous personal
+  // notes / disciplinary memos etc. must survive a resignation action.
+  const { data: existing } = await hrSupabaseAdmin
+    .from("hr_employee_profiles")
+    .select("notes")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const stamp = reason ? `[Resigned ${end_date}] ${reason}` : `[Resigned ${end_date}]`;
+  const mergedNotes = existing?.notes ? `${existing.notes}\n${stamp}` : stamp;
+
   // Persist on hr_employee_profiles (columns added earlier)
   const { error: profileErr } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
     .update({
       resigned_at,
       end_date,
-      // Append resignation note
-      notes: reason ? `[Resigned ${end_date}] ${reason}` : `[Resigned ${end_date}]`,
+      notes: mergedNotes,
     })
     .eq("user_id", userId);
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
+import { resolveVisibleUserIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid type" }, { status: 400 });
   }
 
+  // MANAGER can only address memos to their own subtree (self + reports).
+  if (session.role === "MANAGER") {
+    const visibleIds = await resolveVisibleUserIds(session);
+    const allowed = new Set([session.id, ...(visibleIds || [])]);
+    const outsiders = recipientIds.filter((id) => !allowed.has(id));
+    if (outsiders.length > 0) {
+      return NextResponse.json(
+        { error: `Forbidden — ${outsiders.length} recipient(s) outside your subtree` },
+        { status: 403 },
+      );
+    }
+  }
+
   const { data, error } = await hrSupabaseAdmin
     .from("hr_memos")
     .insert({
@@ -106,6 +120,25 @@ export async function PATCH(req: NextRequest) {
   const { id, action, reason } = await req.json();
   if (!id || action !== "rescind") {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+
+  // Only OWNER/ADMIN can rescind any memo; MANAGER can only rescind memos
+  // they themselves issued. Prevents cross-manager interference.
+  if (session.role === "MANAGER") {
+    const { data: existing } = await hrSupabaseAdmin
+      .from("hr_memos")
+      .select("issued_by")
+      .eq("id", id)
+      .maybeSingle();
+    if (!existing) {
+      return NextResponse.json({ error: "Memo not found" }, { status: 404 });
+    }
+    if (existing.issued_by !== session.id) {
+      return NextResponse.json(
+        { error: "Forbidden — you can only rescind memos you issued" },
+        { status: 403 },
+      );
+    }
   }
 
   const { data, error } = await hrSupabaseAdmin

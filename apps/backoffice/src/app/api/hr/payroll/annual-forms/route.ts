@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
       headers: {
         "Content-Type": result.mime,
         "Content-Disposition": `attachment; filename="${result.filename}"`,
-        "X-Summary": JSON.stringify(result.summary),
+        "X-Summary": encodeURIComponent(JSON.stringify(result.summary)),
       },
     });
   }
@@ -157,7 +157,7 @@ export async function GET(req: NextRequest) {
       headers: {
         "Content-Type": file.mime,
         "Content-Disposition": `attachment; filename="${file.filename}"`,
-        "X-Summary": JSON.stringify(bundle.summary),
+        "X-Summary": encodeURIComponent(JSON.stringify(bundle.summary)),
       },
     });
   }

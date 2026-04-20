@@ -190,9 +190,10 @@ export async function computeAllowancesForUser(
     .lte("end_date", monthEnd);
   const leaveDays = new Set<string>();
   (leaves || []).forEach((l: { start_date: string; end_date: string }) => {
-    const s = new Date(l.start_date);
-    const e = new Date(l.end_date);
-    for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+    // UTC setters avoid DST-edge day-skipping when Vercel runs us in local-tz.
+    const s = new Date(l.start_date + "T00:00:00Z");
+    const e = new Date(l.end_date + "T00:00:00Z");
+    for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate() + 1)) {
       leaveDays.add(d.toISOString().slice(0, 10));
     }
   });
