@@ -367,11 +367,10 @@ export default function InvoicesPage() {
     const depositAmt = inv.depositAmount ?? Math.round(inv.amount * (depositPercent || 0) / 100 * 100) / 100;
     const balanceAmt = Math.round((inv.amount - depositAmt) * 100) / 100;
 
-    // Unified action labels. Internal transfers use Settle language.
-    // Everywhere else the action is simply "Initiate Payment" — the POP flow
-    // (Telegram / bank-ref match) finalises to PAID.
+    // Unified action labels — "Initiate Payment" / "Mark Paid" everywhere,
+    // except internal transfers which use "Initiate Settlement" / "Mark Settled".
     const initiateLabel = isTransfer ? "Initiate Settlement" : "Initiate Payment";
-    const paidLabel = isTransfer ? "Mark Settled" : "Initiate Payment";
+    const paidLabel = isTransfer ? "Mark Settled" : "Mark Paid";
     switch (status) {
       case "PENDING": return [
         { status: "INITIATED", label: initiateLabel, color: "bg-blue-500 hover:bg-blue-600" },
@@ -857,7 +856,7 @@ export default function InvoicesPage() {
                 {payingInvoice.paymentType === "INTERNAL_TRANSFER"
                   ? payingTargetStatus === "INITIATED" ? "Initiate Settlement" : "Mark Settled"
                   : payingTargetStatus === "DEPOSIT_PAID" ? "Pay Deposit"
-                  : "Initiate Payment"}
+                  : payingTargetStatus === "INITIATED" ? "Initiate Payment" : "Mark Paid"}
               </h3>
               <button onClick={() => setPayingInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
                 <X className="h-5 w-5" />
