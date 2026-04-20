@@ -1,6 +1,7 @@
 "use client";
 
 import { useFetch } from "@/lib/use-fetch";
+import { minConcurrentInSlot } from "@/lib/hr/coverage";
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
@@ -272,13 +273,14 @@ export default function SchedulesPage() {
     );
   };
 
-  // Count staff on duty overlapping a slot (used for coverage display)
+  // Minimum concurrent staff during the slot — coverage rules require N
+  // bodies on the floor at every moment, not N unique people across the day.
   const staffOnDutyForSlot = (dayIso: string, slotStart: string, slotEnd: string): number => {
     const active = (grid?.shifts || []).filter(
       (s) => s.shift_date === dayIso && s.notes !== "rest_day" &&
         s.start_time < slotEnd && s.end_time > slotStart,
     );
-    return new Set(active.map((s) => s.user_id)).size;
+    return minConcurrentInSlot(active, slotStart, slotEnd);
   };
 
   const computeTemplateHours = (templateId: string | null): number => {

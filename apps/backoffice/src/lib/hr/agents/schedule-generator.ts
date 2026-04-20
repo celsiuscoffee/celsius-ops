@@ -1,5 +1,6 @@
 import { hrSupabaseAdmin } from "../supabase";
 import { prisma } from "@/lib/prisma";
+import { minConcurrentInSlot } from "../coverage";
 
 // ─── Types ───────────────────────────────────────────────────────────
 type RoleCategory = "FOH" | "BOH" | "OTHER";
@@ -579,11 +580,11 @@ export async function generateSchedule(
             s.start_time < rule.slot_end &&
             s.end_time > rule.slot_start,
         );
-        const uniqueStaff = new Set(covered.map((c) => c.user_id)).size;
-        if (uniqueStaff < rule.min_staff) {
+        const concurrent = minConcurrentInSlot(covered, rule.slot_start, rule.slot_end);
+        if (concurrent < rule.min_staff) {
           const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dow];
           const label = rule.slot_label ? `${rule.slot_label} ` : "";
-          gaps.push(`${dayName} ${rule.slot_start.slice(0, 5)}-${rule.slot_end.slice(0, 5)} ${label}(${uniqueStaff}/${rule.min_staff})`);
+          gaps.push(`${dayName} ${rule.slot_start.slice(0, 5)}-${rule.slot_end.slice(0, 5)} ${label}(${concurrent}/${rule.min_staff})`);
         }
       }
     }
