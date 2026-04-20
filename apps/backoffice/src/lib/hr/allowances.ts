@@ -115,14 +115,26 @@ export async function computeAllowancesForUser(
   // Employment type — FT gate for performance allowance.
   // schedule_required=false → staff doesn't work operational shifts (OWNER,
   // HQ roles) so attendance + performance allowances don't apply.
+  // attendance_allowance_amount / performance_allowance_amount are per-staff
+  // overrides; NULL falls back to the global rules loaded above.
   const { data: profile } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("employment_type, schedule_required")
+    .select("employment_type, schedule_required, attendance_allowance_amount, performance_allowance_amount")
     .eq("user_id", userId)
     .maybeSingle();
   const employmentType = profile?.employment_type ?? null;
   const isFullTime = employmentType === "full_time";
   const scheduleRequired = profile?.schedule_required !== false;
+
+  // Apply per-staff overrides on top of the global defaults. We do this before
+  // the early return for schedule_required=false so the returned r object is
+  // internally consistent (though those staff won't use these amounts).
+  if (profile?.attendance_allowance_amount != null) {
+    r.attendance_allowance_amount = Number(profile.attendance_allowance_amount);
+  }
+  if (profile?.performance_allowance_amount != null) {
+    r.performance_allowance_amount = Number(profile.performance_allowance_amount);
+  }
   if (!scheduleRequired) {
     // Non-operational staff (OWNER / HQ / role without scheduled shifts) —
     // no attendance or performance allowance. They're salaried and don't

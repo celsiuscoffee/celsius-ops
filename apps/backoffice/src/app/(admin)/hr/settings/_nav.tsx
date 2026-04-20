@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarClock, Briefcase, Clock, Timer, Building2, Banknote } from "lucide-react";
+import { CalendarClock, Briefcase, Clock, Timer, Building2, Banknote, UserCog } from "lucide-react";
 
 // Payroll Items tab is hidden while payroll refinement is paused. Re-add
 // { href: "/hr/settings/payroll-items", label: "Payroll Items", icon: Calculator }
@@ -13,6 +13,7 @@ const TABS = [
   { href: "/hr/settings/shift-templates", label: "Shift Templates", icon: Clock },
   { href: "/hr/settings/working-time", label: "Working Time", icon: Timer },
   { href: "/hr/settings/allowances", label: "Allowances", icon: Banknote },
+  { href: "/hr/settings/staff-allowances", label: "Per-Staff Allowances", icon: UserCog },
   { href: "/hr/settings/company", label: "Company", icon: Building2 },
 ];
 
