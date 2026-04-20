@@ -321,31 +321,45 @@ export default function EmployeeDetailPage() {
     setSaving(true);
     setSaved(false);
     try {
+      // Only OWNER/ADMIN may write compensation fields. When a MANAGER submits
+      // the form, OMIT basic_salary and hourly_rate so a blank/stripped local
+      // form doesn't wipe the admin-set value on the server.
+      const payload: Record<string, unknown> = {
+        user_id: id,
+        ...form,
+        manager_user_id: form.manager_user_id || null,
+        epf_employee_rate: parseFloat(form.epf_employee_rate) || 11,
+        epf_employer_rate: parseFloat(form.epf_employer_rate) || 12,
+        join_date: form.join_date || new Date().toISOString().slice(0, 10),
+        date_of_birth: form.date_of_birth || null,
+        // New statutory overrides
+        prs_rate: form.prs_rate ? parseFloat(form.prs_rate) : null,
+        zakat_amount: form.zakat_amount ? parseFloat(form.zakat_amount) : null,
+        overtime_flat_rate: form.overtime_flat_rate ? parseFloat(form.overtime_flat_rate) : null,
+        ea_commencement_date: form.ea_commencement_date || null,
+        ssfw_number: form.ssfw_number || null,
+      };
+      if (canSeeSalary) {
+        payload.basic_salary = form.basic_salary ? parseFloat(form.basic_salary) : 0;
+        payload.hourly_rate = form.hourly_rate ? parseFloat(form.hourly_rate) : null;
+      } else {
+        // Remove stale empties from the spread above so they don't land on the server
+        delete payload.basic_salary;
+        delete payload.hourly_rate;
+      }
+
       const res = await fetch("/api/hr/employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: id,
-          ...form,
-          manager_user_id: form.manager_user_id || null,
-          basic_salary: form.basic_salary ? parseFloat(form.basic_salary) : 0,
-          hourly_rate: form.hourly_rate ? parseFloat(form.hourly_rate) : null,
-          epf_employee_rate: parseFloat(form.epf_employee_rate) || 11,
-          epf_employer_rate: parseFloat(form.epf_employer_rate) || 12,
-          join_date: form.join_date || new Date().toISOString().slice(0, 10),
-          date_of_birth: form.date_of_birth || null,
-          // New statutory overrides
-          prs_rate: form.prs_rate ? parseFloat(form.prs_rate) : null,
-          zakat_amount: form.zakat_amount ? parseFloat(form.zakat_amount) : null,
-          overtime_flat_rate: form.overtime_flat_rate ? parseFloat(form.overtime_flat_rate) : null,
-          ea_commencement_date: form.ea_commencement_date || null,
-          ssfw_number: form.ssfw_number || null,
-        }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         setSaved(true);
         mutate();
         setTimeout(() => setSaved(false), 2000);
+      } else {
+        const body = await res.json().catch(() => ({ error: "Save failed" }));
+        alert(body?.error || `Save failed (${res.status})`);
       }
     } finally {
       setSaving(false);

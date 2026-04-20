@@ -134,6 +134,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "schedule_id required" }, { status: 400 });
     }
 
+    // Resolve schedule → outlet, then re-run the outlet access check.
+    // The body-level outlet_id check above is skipped for publish since the
+    // client only sends schedule_id. Without this look-up a MANAGER could
+    // publish any outlet's draft by guessing the id.
+    const { data: scheduleRow } = await hrSupabaseAdmin
+      .from("hr_schedules")
+      .select("outlet_id")
+      .eq("id", schedule_id)
+      .maybeSingle();
+    if (!scheduleRow) {
+      return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    }
+    if (session.role === "MANAGER") {
+      const allowed = await canAccessOutlet(session, scheduleRow.outlet_id);
+      if (!allowed) {
+        return NextResponse.json({ error: "Forbidden — managers can only publish their assigned outlets" }, { status: 403 });
+      }
+    }
+
     const { data, error } = await hrSupabaseAdmin
       .from("hr_schedules")
       .update({
