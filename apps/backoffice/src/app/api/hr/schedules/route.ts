@@ -4,7 +4,7 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { generateSchedule } from "@/lib/hr/agents/schedule-generator";
 import { linkChecklistsToSchedule } from "@/lib/hr/agents/checklist-linker";
 import { prisma } from "@/lib/prisma";
-import { getAccessibleOutletIds, canAccessOutlet } from "@/lib/hr/scope";
+import { getAccessibleOutletIds, canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,9 @@ export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await hasModuleAccess(session, "hr:schedules"))) {
+    return NextResponse.json({ error: "Forbidden — no access to Schedules" }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);
@@ -64,6 +67,9 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await hasModuleAccess(session, "hr:schedules"))) {
+    return NextResponse.json({ error: "Forbidden — no access to Schedules" }, { status: 403 });
   }
 
   const body = await req.json();

@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { SHIFT_TEMPLATES as FALLBACK_TEMPLATES, templatesForOutlet } from "@/lib/hr/shift-templates";
-import { canAccessOutlet } from "@/lib/hr/scope";
+import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +12,11 @@ export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Module access gate: Schedules is optional per manager (e.g. Syafiq/Chef Bo
+  // don't have hr:schedules, so they can't call the grid API even via direct URL).
+  if (!(await hasModuleAccess(session, "hr:schedules"))) {
+    return NextResponse.json({ error: "Forbidden — no access to Schedules" }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);

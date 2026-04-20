@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { getTemplate, REST_DAY_ID } from "@/lib/hr/shift-templates";
-import { canAccessOutlet } from "@/lib/hr/scope";
+import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,9 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await hasModuleAccess(session, "hr:schedules"))) {
+    return NextResponse.json({ error: "Forbidden — no access to Schedules" }, { status: 403 });
   }
 
   const body = await req.json();

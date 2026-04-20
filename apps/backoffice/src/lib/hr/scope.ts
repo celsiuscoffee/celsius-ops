@@ -79,3 +79,37 @@ export async function canAccessOutlet(
   if (allowed === null) return true; // OWNER/ADMIN
   return allowed.includes(outletId);
 }
+
+/**
+ * Check whether a session has the given module permission (e.g. "hr:schedules").
+ *
+ * OWNER/ADMIN bypass all module checks (match the sidebar's canAccess).
+ * Everyone else must have the flat key in their moduleAccess — stored as
+ * `{ "hr": ["schedules", ...] }` in the DB and flattened to `"hr:schedules"`.
+ *
+ * Use for defense-in-depth on API routes where the sidebar already gates
+ * navigation but a user could still hit the URL directly.
+ */
+export async function hasModuleAccess(
+  session: { role: string; id: string },
+  moduleKey: string,
+): Promise<boolean> {
+  if (session.role === "OWNER" || session.role === "ADMIN") return true;
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.id },
+    select: { moduleAccess: true },
+  });
+  const raw = user?.moduleAccess;
+  if (!raw) return false;
+
+  if (Array.isArray(raw)) {
+    return (raw as unknown as string[]).includes(moduleKey);
+  }
+  if (typeof raw === "object") {
+    const [app, mod] = moduleKey.split(":");
+    const list = (raw as Record<string, unknown>)[app];
+    return Array.isArray(list) && (list as string[]).includes(mod);
+  }
+  return false;
+}
