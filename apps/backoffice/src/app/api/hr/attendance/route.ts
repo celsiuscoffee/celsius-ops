@@ -115,6 +115,31 @@ export async function PATCH(req: NextRequest) {
     excuseReason?: string;
   };
 
+  if (!id) {
+    return NextResponse.json({ error: "id required" }, { status: 400 });
+  }
+
+  // Load the log first so we can gate MANAGER access by its outlet.
+  // Without this check a MANAGER could acknowledge/excuse/adjust logs for
+  // outlets they aren't assigned to by guessing the id.
+  const { data: existingLog } = await hrSupabaseAdmin
+    .from("hr_attendance_logs")
+    .select("outlet_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!existingLog) {
+    return NextResponse.json({ error: "Attendance log not found" }, { status: 404 });
+  }
+  if (session.role === "MANAGER") {
+    const allowedOutletIds = await getAccessibleOutletIds(session);
+    if (!allowedOutletIds || !existingLog.outlet_id || !allowedOutletIds.includes(existingLog.outlet_id)) {
+      return NextResponse.json(
+        { error: "Forbidden — managers can only review their assigned outlets" },
+        { status: 403 },
+      );
+    }
+  }
+
   const updateData: Record<string, unknown> = {
     ai_status: "reviewed",
     reviewed_by: session.id,

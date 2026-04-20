@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { canAccessOutlet } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
-// GET: pending swap requests for manager approval
+// GET: pending swap requests for manager approval.
+// MANAGER sees only swaps whose requester_shift outlet is in their accessible set.
 export async function GET() {
   const session = await getSession();
   if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
@@ -19,7 +21,23 @@ export async function GET() {
     .limit(50);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ swaps: data });
+
+  // Scope for MANAGER: keep only swaps on outlets they're assigned to.
+  type SwapRow = { requester_shift?: { outlet_id?: string | null } | null };
+  let filtered = data || [];
+  if (session.role === "MANAGER") {
+    const rows = filtered as SwapRow[];
+    const checks = await Promise.all(
+      rows.map(async (r) => {
+        const outletId = r.requester_shift?.outlet_id;
+        if (!outletId) return false;
+        return await canAccessOutlet(session, outletId);
+      }),
+    );
+    filtered = rows.filter((_, i) => checks[i]);
+  }
+
+  return NextResponse.json({ swaps: filtered });
 }
 
 // PATCH: manager approves or rejects a swap
@@ -47,13 +65,31 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Swap request not found" }, { status: 404 });
   }
 
-  if (action === "approve") {
-    // Swap the user_ids on the two shifts
-    const [reqShift, tgtShift] = await Promise.all([
-      hrSupabaseAdmin.from("hr_schedule_shifts").select("user_id").eq("id", swap.requester_shift_id).single(),
-      hrSupabaseAdmin.from("hr_schedule_shifts").select("user_id").eq("id", swap.target_shift_id).single(),
-    ]);
+  // Need the two shifts regardless of action, both to do the swap AND to
+  // gate MANAGER access by their outlet.
+  const [reqShift, tgtShift] = await Promise.all([
+    hrSupabaseAdmin.from("hr_schedule_shifts").select("user_id, outlet_id").eq("id", swap.requester_shift_id).single(),
+    hrSupabaseAdmin.from("hr_schedule_shifts").select("user_id, outlet_id").eq("id", swap.target_shift_id).single(),
+  ]);
 
+  // MANAGER can only act on swaps for outlets they're assigned to.
+  // Check both sides — a cross-outlet swap requires access to both.
+  if (session.role === "MANAGER") {
+    const reqOutletOk = reqShift.data?.outlet_id
+      ? await canAccessOutlet(session, reqShift.data.outlet_id)
+      : false;
+    const tgtOutletOk = tgtShift.data?.outlet_id
+      ? await canAccessOutlet(session, tgtShift.data.outlet_id)
+      : false;
+    if (!reqOutletOk || !tgtOutletOk) {
+      return NextResponse.json(
+        { error: "Forbidden — managers can only act on swaps for their assigned outlets" },
+        { status: 403 },
+      );
+    }
+  }
+
+  if (action === "approve") {
     if (!reqShift.data || !tgtShift.data) {
       return NextResponse.json({ error: "Shifts not found" }, { status: 500 });
     }
