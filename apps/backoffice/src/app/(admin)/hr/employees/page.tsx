@@ -36,6 +36,9 @@ export default function EmployeesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  // "Login access" toggle. When OFF, phone + PIN are treated as optional — used
+  // for contract / vendor / HR-only records that won't sign into the staff app.
+  const [wantsLogin, setWantsLogin] = useState(true);
   const [newEmp, setNewEmp] = useState({
     name: "",
     fullName: "",
@@ -60,13 +63,16 @@ export default function EmployeesPage() {
     try {
       const payload = {
         ...newEmp,
+        // If login isn't required, drop phone + pin so no placeholder gets
+        // saved. Phone is nullable at the schema level.
+        phone: wantsLogin ? (newEmp.phone || null) : (newEmp.phone || null),
         outletId: newEmp.outletId || null,
         email: newEmp.email || null,
         fullName: newEmp.fullName || null,
         ic_number: newEmp.ic_number || null,
         date_of_birth: newEmp.date_of_birth || null,
         gender: newEmp.gender || null,
-        pin: newEmp.pin || null,
+        pin: wantsLogin ? (newEmp.pin || null) : null,
       };
       const res = await fetch("/api/hr/employees/create", {
         method: "POST",
@@ -360,11 +366,24 @@ export default function EmployeesPage() {
                     className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="As per IC" />
                 </label>
               </div>
+              {/* Login access toggle — when off, phone + PIN become truly optional */}
+              <label className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={wantsLogin}
+                  onChange={(e) => setWantsLogin(e.target.checked)}
+                />
+                <span className="font-medium">This employee needs a staff-app login</span>
+                <span className="text-muted-foreground">
+                  — uncheck for contract / vendor / HR-only records
+                </span>
+              </label>
+
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">Phone *</span>
+                  <span className="text-xs font-medium text-muted-foreground">Phone {wantsLogin ? "*" : "(optional)"}</span>
                   <input type="text" value={newEmp.phone} onChange={(e) => setNewEmp({ ...newEmp, phone: e.target.value })}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="+60…" />
+                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder={wantsLogin ? "+60…" : "Leave blank if no login"} />
                 </label>
                 <label className="block">
                   <span className="text-xs font-medium text-muted-foreground">Email</span>
@@ -431,12 +450,14 @@ export default function EmployeesPage() {
                   <input type="text" value={newEmp.ic_number} onChange={(e) => setNewEmp({ ...newEmp, ic_number: e.target.value })}
                     className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
                 </label>
-                <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">PIN (4-6 digits)</span>
-                  <input type="text" inputMode="numeric" maxLength={6} value={newEmp.pin}
-                    onChange={(e) => setNewEmp({ ...newEmp, pin: e.target.value.replace(/\D/g, "") })}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Optional" />
-                </label>
+                {wantsLogin && (
+                  <label className="block">
+                    <span className="text-xs font-medium text-muted-foreground">PIN (4-6 digits)</span>
+                    <input type="text" inputMode="numeric" maxLength={6} value={newEmp.pin}
+                      onChange={(e) => setNewEmp({ ...newEmp, pin: e.target.value.replace(/\D/g, "") })}
+                      className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Optional — can set later" />
+                  </label>
+                )}
               </div>
             </div>
 
@@ -454,7 +475,7 @@ export default function EmployeesPage() {
               </button>
               <button
                 onClick={handleCreate}
-                disabled={creating || !newEmp.name || !newEmp.phone}
+                disabled={creating || !newEmp.name || (wantsLogin && !newEmp.phone)}
                 className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90 disabled:opacity-50"
               >
                 {creating && <Loader2 className="h-4 w-4 animate-spin" />}

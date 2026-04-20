@@ -20,14 +20,18 @@ export async function POST(req: NextRequest) {
     ic_number, date_of_birth, gender, pin,
   } = body;
 
-  if (!name || !phone || !role) {
-    return NextResponse.json({ error: "name, phone, and role are required" }, { status: 400 });
+  if (!name || !role) {
+    return NextResponse.json({ error: "name and role are required" }, { status: 400 });
   }
 
-  // Unique phone check
-  const existing = await prisma.user.findUnique({ where: { phone } });
-  if (existing) {
-    return NextResponse.json({ error: `Phone ${phone} is already registered` }, { status: 409 });
+  // Phone is optional now — contract staff / HR-only records don't need one.
+  // Only check uniqueness when a phone was provided.
+  const phoneValue = (phone || "").trim() || null;
+  if (phoneValue) {
+    const existing = await prisma.user.findUnique({ where: { phone: phoneValue } });
+    if (existing) {
+      return NextResponse.json({ error: `Phone ${phoneValue} is already registered` }, { status: 409 });
+    }
   }
 
   try {
@@ -35,7 +39,7 @@ export async function POST(req: NextRequest) {
       data: {
         name,
         fullName: fullName || null,
-        phone,
+        phone: phoneValue,
         email: email || null,
         role,
         outletId: outletId || null,

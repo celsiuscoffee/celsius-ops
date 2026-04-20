@@ -114,7 +114,7 @@ model User {
   name         String
   fullName     String?
   email        String?    @unique
-  phone        String     @unique
+  phone        String?    @unique
   role         UserRole
   outletId     String?
   outlet       Outlet?    @relation(fields: [outletId], references: [id])
