@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
+import { getAccessibleOutletIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -15,16 +16,23 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") || "flagged"; // default to flagged only
   const limit = parseInt(searchParams.get("limit") || "50");
-  // MANAGER is forced to their own outlet; URL param is ignored for managers to
-  // prevent lateral outlet reconnaissance. OWNER/ADMIN honor the URL param.
+  // MANAGER sees attendance across ALL their assigned outlets (outletId +
+  // outletIds[]). A URL outlet_id param is honored only if accessible.
+  // OWNER/ADMIN honor the URL param freely.
   const requestedOutletId = searchParams.get("outlet_id");
-  const effectiveOutletId = session.role === "MANAGER"
-    ? (session.outletId || null)
-    : requestedOutletId;
+  const allowedOutletIds = await getAccessibleOutletIds(session);
 
-  // Manager with no outlet assignment cannot see any attendance
-  if (session.role === "MANAGER" && !effectiveOutletId) {
-    return NextResponse.json({ logs: [] });
+  let outletFilterIds: string[] | null = null;
+  if (allowedOutletIds === null) {
+    // OWNER/ADMIN: optional single-outlet filter from URL
+    outletFilterIds = requestedOutletId ? [requestedOutletId] : null;
+  } else {
+    if (allowedOutletIds.length === 0) {
+      return NextResponse.json({ logs: [] });
+    }
+    outletFilterIds = requestedOutletId && allowedOutletIds.includes(requestedOutletId)
+      ? [requestedOutletId]
+      : allowedOutletIds;
   }
 
   let query = hrSupabaseAdmin
@@ -36,8 +44,8 @@ export async function GET(req: NextRequest) {
   if (status !== "all") {
     query = query.eq("ai_status", status);
   }
-  if (effectiveOutletId) {
-    query = query.eq("outlet_id", effectiveOutletId);
+  if (outletFilterIds !== null) {
+    query = query.in("outlet_id", outletFilterIds);
   }
 
   const { data: rawData, error } = await query;

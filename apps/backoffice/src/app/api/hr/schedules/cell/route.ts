@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { getTemplate, REST_DAY_ID } from "@/lib/hr/shift-templates";
+import { canAccessOutlet } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -32,9 +33,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  // MANAGER can only edit their own outlet
-  if (session.role === "MANAGER" && outlet_id !== session.outletId) {
-    return NextResponse.json({ error: "Forbidden — managers can only edit their own outlet" }, { status: 403 });
+  // MANAGER can only edit outlets they're assigned to (outletId + outletIds[])
+  if (session.role === "MANAGER") {
+    const allowed = await canAccessOutlet(session, outlet_id);
+    if (!allowed) {
+      return NextResponse.json({ error: "Forbidden — managers can only edit their assigned outlets" }, { status: 403 });
+    }
   }
 
   // Compute week_end

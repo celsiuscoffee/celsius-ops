@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { linkChecklistsToSchedule } from "@/lib/hr/agents/checklist-linker";
+import { canAccessOutlet } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +17,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { outlet_id, week_start, action } = body as { outlet_id: string; week_start: string; action: string };
 
-  // MANAGER can only publish/unpublish their own outlet's schedule
-  if (session.role === "MANAGER" && outlet_id !== session.outletId) {
-    return NextResponse.json({ error: "Forbidden — managers can only publish their own outlet" }, { status: 403 });
+  // MANAGER can only publish/unpublish schedules for outlets they're assigned to
+  if (session.role === "MANAGER") {
+    const allowed = await canAccessOutlet(session, outlet_id);
+    if (!allowed) {
+      return NextResponse.json({ error: "Forbidden — managers can only publish their assigned outlets" }, { status: 403 });
+    }
   }
 
   const { data: schedule } = await hrSupabaseAdmin

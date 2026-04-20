@@ -1,4 +1,5 @@
 import { hrSupabaseAdmin } from "./supabase";
+import { prisma } from "@/lib/prisma";
 
 /**
  * Resolve the set of user_ids a session is allowed to see in HR views.
@@ -38,4 +39,43 @@ export async function resolveVisibleUserIds(
     }
   }
   return Array.from(visited);
+}
+
+/**
+ * Resolve the set of outlets a session can access.
+ *
+ * - OWNER / ADMIN: null (no restriction — all outlets).
+ * - MANAGER: union of `User.outletId` (primary) and `User.outletIds` (multi-outlet
+ *   assignment). The session cookie only carries the legacy single `outletId`,
+ *   so we fetch fresh from Prisma to pick up `outletIds` too.
+ * - Any other role: empty list.
+ *
+ * Use `canAccessOutlet` for single-outlet membership checks.
+ */
+export async function getAccessibleOutletIds(
+  session: { role: string; id: string; outletId: string | null },
+): Promise<string[] | null> {
+  if (session.role === "OWNER" || session.role === "ADMIN") return null;
+  if (session.role !== "MANAGER") return [];
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.id },
+    select: { outletId: true, outletIds: true },
+  });
+  const set = new Set<string>();
+  if (user?.outletId) set.add(user.outletId);
+  for (const id of user?.outletIds || []) set.add(id);
+  // Fallback to cookie-level outletId if DB lookup returned nothing
+  if (set.size === 0 && session.outletId) set.add(session.outletId);
+  return Array.from(set);
+}
+
+/** True when the session is allowed to read/write this outlet. */
+export async function canAccessOutlet(
+  session: { role: string; id: string; outletId: string | null },
+  outletId: string,
+): Promise<boolean> {
+  const allowed = await getAccessibleOutletIds(session);
+  if (allowed === null) return true; // OWNER/ADMIN
+  return allowed.includes(outletId);
 }

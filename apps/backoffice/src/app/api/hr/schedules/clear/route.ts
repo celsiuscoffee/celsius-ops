@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { canAccessOutlet } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
-  // MANAGER can only clear their own outlet's schedule
-  if (session.role === "MANAGER" && outlet_id !== session.outletId) {
-    return NextResponse.json({ error: "Forbidden — managers can only clear their own outlet" }, { status: 403 });
+  // MANAGER can only clear schedules for outlets they're assigned to
+  if (session.role === "MANAGER") {
+    const allowed = await canAccessOutlet(session, outlet_id);
+    if (!allowed) {
+      return NextResponse.json({ error: "Forbidden — managers can only clear their assigned outlets" }, { status: 403 });
+    }
   }
 
   const { data: schedule } = await hrSupabaseAdmin
