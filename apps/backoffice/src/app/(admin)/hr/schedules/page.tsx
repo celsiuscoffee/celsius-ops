@@ -117,6 +117,8 @@ export default function SchedulesPage() {
   const [selectedOutlet, setSelectedOutlet] = useState<string>("");
   const [weekStart, setWeekStart] = useState(getNextMonday());
   const [pickerOpen, setPickerOpen] = useState<{ userId: string; date: string; top: number; left: number } | null>(null);
+  // Custom hours form state — opened from inside picker
+  const [customForm, setCustomForm] = useState<{ start: string; end: string; breakMinutes: number } | null>(null);
 
   const openPicker = (userId: string, date: string, e: React.MouseEvent<HTMLButtonElement>) => {
     if (isPublished) return;
@@ -125,6 +127,7 @@ export default function SchedulesPage() {
     const left = Math.min(rect.left, window.innerWidth - POPUP_WIDTH - 8);
     const top = rect.bottom + 4;
     setPickerOpen({ userId, date, top, left });
+    setCustomForm(null); // close custom form when reopening picker
   };
   const [saving, setSaving] = useState(false);
   const [pendingCheck, setPendingCheck] = useState<null | {
@@ -315,6 +318,35 @@ export default function SchedulesPage() {
       mutate();
       setPickerOpen(null);
       setPendingCheck(null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Custom-hours shift (flex scheduling for part-timers)
+  const setCellCustom = async (userId: string, date: string, startTime: string, endTime: string, breakMinutes = 0, label = "Custom") => {
+    if (!selectedOutlet) return;
+    setSaving(true);
+    try {
+      await fetch("/api/hr/schedules/cell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outlet_id: selectedOutlet,
+          week_start: weekStart,
+          user_id: userId,
+          shift_date: date,
+          template_id: "custom",
+          custom: {
+            start_time: startTime + ":00",
+            end_time: endTime + ":00",
+            break_minutes: breakMinutes,
+            label,
+          },
+        }),
+      });
+      mutate();
+      setPickerOpen(null);
     } finally {
       setSaving(false);
     }
@@ -550,9 +582,6 @@ export default function SchedulesPage() {
                 const position = u.profile?.position || (u.role === "MANAGER" ? "Manager" : "Barista");
                 const isPartTime = u.profile?.employment_type === "part_time";
                 const empType = isPartTime ? "PT" : "FT";
-                // Part-timer availability summary — which days they can work
-                const userAvail = availByUserDay.get(u.id);
-                const availableDays: number[] = userAvail ? Array.from(userAvail.keys()).sort() : [];
                 return (
                   <tr key={u.id} className="border-b hover:bg-muted/30">
                     <td className="sticky left-0 z-10 bg-background p-2">
@@ -560,26 +589,6 @@ export default function SchedulesPage() {
                       <div className="text-xs text-muted-foreground">
                         {position} · {empType}
                       </div>
-                      {isPartTime && (
-                        <div className="mt-0.5 flex items-center gap-0.5" title={
-                          availableDays.length
-                            ? `Available: ${availableDays.map((i) => DAY_NAMES[(i + 6) % 7]).join(", ")}`
-                            : "No availability set"
-                        }>
-                          {[1, 2, 3, 4, 5, 6, 0].map((dow) => {
-                            const has = userAvail?.get(dow);
-                            return (
-                              <span
-                                key={dow}
-                                className={`h-1 w-3 rounded-full ${has ? "bg-emerald-400" : "bg-gray-200"}`}
-                              />
-                            );
-                          })}
-                          <span className="ml-1 text-[9px] text-gray-400">
-                            {availableDays.length ? "avail" : "no avail"}
-                          </span>
-                        </div>
-                      )}
                     </td>
                     {grid.days.map((d) => {
                       const key = `${u.id}:${d}`;
@@ -609,59 +618,27 @@ export default function SchedulesPage() {
                               <div className="text-[10px] font-bold uppercase text-gray-500">Rest Day</div>
                             </button>
                           ) : shift ? (
-                            (() => {
-                              const conflict = isPartTime && isShiftOutsideAvailability(shift);
-                              return (
-                                <button
-                                  onClick={(e) => openPicker(u.id, d, e)}
-                                  title={conflict ? "⚠ Shift is outside this part-timer's availability" : undefined}
-                                  className={`relative w-full rounded-lg border p-2 text-left ${
-                                    COLOR_MAP[guessColor(shift)] || COLOR_MAP.gray
-                                  } ${conflict ? "ring-2 ring-red-400 ring-offset-0" : ""} disabled:cursor-default`}
-                                  disabled={isPublished}
-                                >
-                                  {conflict && (
-                                    <span className="absolute top-0.5 right-0.5 flex h-2 w-2">
-                                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-60"></span>
-                                      <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
-                                    </span>
-                                  )}
-                                  <div className="text-[10px] font-bold truncate">{shift.role_type || "Shift"}</div>
-                                  <div className="text-[10px]">
-                                    {shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)}
-                                  </div>
-                                </button>
-                              );
-                            })()
-                          ) : (() => {
-                            // For part-timers, show availability windows in empty cell
-                            const dow = dowFromIso(d);
-                            const windows = isPartTime ? availByUserDay.get(u.id)?.get(dow) : null;
-                            return (
-                              <button
-                                onClick={(e) => openPicker(u.id, d, e)}
-                                title={windows ? `Available: ${windows.map((w) => w.available_from.slice(0, 5) + "-" + w.available_until.slice(0, 5)).join(", ")}` : undefined}
-                                className={`w-full rounded-lg border border-dashed p-2 text-center text-xs hover:bg-gray-50 disabled:cursor-default ${
-                                  windows && windows.length
-                                    ? "border-emerald-300 bg-emerald-50/40 text-emerald-700"
-                                    : isPartTime && userAvail
-                                      ? "border-gray-200 bg-gray-50 text-gray-300"
-                                      : "border-gray-300 text-gray-400"
-                                }`}
-                                disabled={isPublished}
-                              >
-                                {windows && windows.length > 0 ? (
-                                  <span className="text-[10px] font-mono">
-                                    {windows[0].available_from.slice(0, 5)}–{windows[0].available_until.slice(0, 5)}
-                                  </span>
-                                ) : isPartTime && userAvail ? (
-                                  <span className="text-[10px]">Not available</span>
-                                ) : (
-                                  "+ Add"
-                                )}
-                              </button>
-                            );
-                          })()}
+                            <button
+                              onClick={(e) => openPicker(u.id, d, e)}
+                              className={`w-full rounded-lg border p-2 text-left ${
+                                COLOR_MAP[guessColor(shift)] || COLOR_MAP.gray
+                              } disabled:cursor-default`}
+                              disabled={isPublished}
+                            >
+                              <div className="text-[10px] font-bold truncate">{shift.role_type || "Shift"}</div>
+                              <div className="text-[10px]">
+                                {shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)}
+                              </div>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => openPicker(u.id, d, e)}
+                              className="w-full rounded-lg border border-dashed border-gray-300 p-2 text-center text-xs text-gray-400 hover:bg-gray-50 disabled:cursor-default"
+                              disabled={isPublished}
+                            >
+                              + Add
+                            </button>
+                          )}
 
                           {/* Picker popup */}
                           {isPicking && (
@@ -695,6 +672,87 @@ export default function SchedulesPage() {
                                     </div>
                                   </button>
                                 ))}
+
+                                {/* Custom hours — flex scheduling for part-timers */}
+                                <div className="my-1 border-t" />
+                                {!customForm ? (
+                                  <button
+                                    onClick={() => {
+                                      // Default to part-timer's availability window for this day if set
+                                      const dow = dowFromIso(d);
+                                      const windows = isPartTime ? availByUserDay.get(u.id)?.get(dow) : null;
+                                      if (windows && windows.length > 0) {
+                                        setCustomForm({
+                                          start: windows[0].available_from.slice(0, 5),
+                                          end: windows[0].available_until.slice(0, 5),
+                                          breakMinutes: 0,
+                                        });
+                                      } else {
+                                        setCustomForm({ start: "09:00", end: "17:00", breakMinutes: 0 });
+                                      }
+                                    }}
+                                    disabled={saving}
+                                    className="w-full rounded px-3 py-2 text-left text-xs text-blue-700 hover:bg-blue-50"
+                                  >
+                                    <div className="font-medium">+ Custom hours…</div>
+                                    <div className="text-[10px] text-blue-400">Flexible start / end</div>
+                                  </button>
+                                ) : (
+                                  <div className="space-y-1.5 px-2 py-2">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Custom Shift</p>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                      <label className="block">
+                                        <span className="block text-[9px] text-gray-500">From</span>
+                                        <input
+                                          type="time"
+                                          value={customForm.start}
+                                          onChange={(e) => setCustomForm({ ...customForm, start: e.target.value })}
+                                          className="w-full rounded border px-1.5 py-1 text-xs"
+                                        />
+                                      </label>
+                                      <label className="block">
+                                        <span className="block text-[9px] text-gray-500">Until</span>
+                                        <input
+                                          type="time"
+                                          value={customForm.end}
+                                          onChange={(e) => setCustomForm({ ...customForm, end: e.target.value })}
+                                          className="w-full rounded border px-1.5 py-1 text-xs"
+                                        />
+                                      </label>
+                                    </div>
+                                    <label className="block">
+                                      <span className="block text-[9px] text-gray-500">Break (min)</span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={customForm.breakMinutes}
+                                        onChange={(e) => setCustomForm({ ...customForm, breakMinutes: Number(e.target.value) || 0 })}
+                                        className="w-full rounded border px-1.5 py-1 text-xs"
+                                      />
+                                    </label>
+                                    <div className="flex gap-1 pt-1">
+                                      <button
+                                        onClick={() => setCustomForm(null)}
+                                        disabled={saving}
+                                        className="flex-1 rounded border px-2 py-1 text-[11px] hover:bg-gray-50"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          if (customForm.start >= customForm.end) return;
+                                          setCellCustom(u.id, d, customForm.start, customForm.end, customForm.breakMinutes);
+                                          setCustomForm(null);
+                                        }}
+                                        disabled={saving || customForm.start >= customForm.end}
+                                        className="flex-1 rounded bg-blue-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                                      >
+                                        Save
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
                                 {shift && (
                                   <>
                                     <div className="my-1 border-t" />

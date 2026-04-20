@@ -1,84 +1,71 @@
 "use client";
 
 /**
- * Staff Weekly Availability
+ * Part-Timer Blockout Dates
  *
- * Captures what hours each staff CAN work, per day-of-week. HR can pick a
- * staff from the dropdown and add windows. Used by scheduling to flag
- * shifts outside staff availability.
+ * Model: PTs are AVAILABLE by default. HR only captures exceptions —
+ * specific dates when a PT can't work. These render as red "Blocked"
+ * cells on the schedule grid.
+ *
+ * Backed by hr_staff_availability (per-date, not recurring).
  */
 
 import { useEffect, useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
-import { Loader2, Plus, Trash2, Clock, Star } from "lucide-react";
+import { Loader2, Plus, Trash2, CalendarOff } from "lucide-react";
 
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-type Availability = {
+type Blockout = {
   id: string;
   user_id: string;
-  day_of_week: number;
-  available_from: string;     // "07:30:00"
-  available_until: string;
-  is_preferred: boolean;
-  max_shifts_per_week: number | null;
-  notes: string | null;
+  date: string;          // YYYY-MM-DD
+  availability: string;  // "unavailable"
+  reason: string | null;
+  created_at: string;
 };
 
 type Employee = {
-  id: string; name: string; fullName: string | null; role: string;
+  id: string;
+  name: string;
+  fullName: string | null;
+  role: string;
   hrProfile?: { employment_type?: string } | null;
 };
 
-export default function AvailabilityPage() {
+export default function BlockoutsPage() {
   const { data: empData } = useFetch<{ employees: Employee[] }>("/api/hr/employees");
-  // Availability is a part-timer concept only — full-timers work fixed schedules.
-  const employees = (empData?.employees ?? []).filter(
+  const partTimers = (empData?.employees ?? []).filter(
     (e) => e.hrProfile?.employment_type === "part_time",
   );
   const [userId, setUserId] = useState<string>("");
-
   useEffect(() => {
-    if (!userId && employees.length > 0) setUserId(employees[0].id);
-  }, [employees, userId]);
+    if (!userId && partTimers.length > 0) setUserId(partTimers[0].id);
+  }, [partTimers, userId]);
 
-  const { data: availData, mutate } = useFetch<{ availability: Availability[] }>(
-    userId ? `/api/hr/availability?user_id=${userId}` : null,
+  const { data: blockData, mutate } = useFetch<{ blockouts: Blockout[] }>(
+    userId ? `/api/hr/blockouts?user_id=${userId}` : null,
   );
-  const availability = availData?.availability ?? [];
+  const blockouts = blockData?.blockouts ?? [];
 
-  // Form state for new window
-  const [day, setDay] = useState(1);
-  const [from, setFrom] = useState("09:00");
-  const [until, setUntil] = useState("17:00");
-  const [preferred, setPreferred] = useState(true);
-  const [maxShifts, setMaxShifts] = useState("");
-  const [notes, setNotes] = useState("");
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState(today);
+  const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const add = async () => {
-    if (!userId) return;
+    if (!userId || !date) return;
     setSaving(true);
     setErr(null);
     try {
-      const res = await fetch("/api/hr/availability", {
+      const res = await fetch("/api/hr/blockouts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: userId,
-          day_of_week: day,
-          available_from: from + ":00",
-          available_until: until + ":00",
-          is_preferred: preferred,
-          max_shifts_per_week: maxShifts ? Number(maxShifts) : null,
-          notes: notes || null,
-        }),
+        body: JSON.stringify({ user_id: userId, date, reason: reason || null }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || "Save failed");
       mutate();
-      setNotes("");
+      setReason("");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -87,41 +74,42 @@ export default function AvailabilityPage() {
   };
 
   const remove = async (id: string) => {
-    if (!confirm("Delete this availability window?")) return;
-    await fetch(`/api/hr/availability?id=${id}`, { method: "DELETE" });
+    if (!confirm("Remove this blockout?")) return;
+    await fetch(`/api/hr/blockouts?id=${id}`, { method: "DELETE" });
     mutate();
   };
 
-  // Group availability by day for display
-  const byDay = new Map<number, Availability[]>();
-  for (const a of availability) {
-    const arr = byDay.get(a.day_of_week) ?? [];
-    arr.push(a);
-    byDay.set(a.day_of_week, arr);
-  }
+  const selectedEmp = partTimers.find((e) => e.id === userId);
 
-  const selectedEmp = employees.find((e) => e.id === userId);
+  const upcoming = blockouts
+    .filter((b) => b.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const past = blockouts
+    .filter((b) => b.date < today)
+    .sort((a, b) => b.date.localeCompare(a.date));
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <div>
-        <h1 className="text-2xl font-bold">Staff Availability</h1>
+        <h1 className="text-2xl font-bold">Part-Timer Blockout Dates</h1>
         <p className="text-sm text-muted-foreground">
-          Capture recurring weekly hours each staff can work. Used to flag schedule conflicts and guide shift assignment.
+          Part-timers are available by default. Mark specific dates they can&apos;t work
+          (exam, prior commitment, etc.) so the schedule grid blocks assignment.
         </p>
       </div>
 
       {/* Staff picker */}
       <div className="rounded-lg border bg-card p-4">
-        <label className="mb-1 block text-xs font-medium text-muted-foreground">Staff</label>
+        <label className="mb-1 block text-xs font-medium text-muted-foreground">Part-Timer</label>
         <select
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
           className="w-full max-w-md rounded-md border px-3 py-2 text-sm"
         >
-          {employees.map((e) => (
+          {partTimers.length === 0 && <option value="">No part-timers found</option>}
+          {partTimers.map((e) => (
             <option key={e.id} value={e.id}>
-              {e.fullName || e.name} · {e.role}
+              {e.fullName || e.name}
             </option>
           ))}
         </select>
@@ -129,97 +117,101 @@ export default function AvailabilityPage() {
 
       {selectedEmp && (
         <>
-          {/* Weekly grid */}
+          {/* Add form */}
           <div className="rounded-lg border bg-card p-4">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              Weekly Availability — {selectedEmp.fullName || selectedEmp.name}
+              Add Blockout Date
             </h2>
-            <div className="grid grid-cols-7 gap-2 text-xs">
-              {DAYS.map((d, i) => {
-                const windows = byDay.get(i) ?? [];
-                return (
-                  <div key={i} className={`rounded-md border p-2 ${windows.length ? "border-emerald-200 bg-emerald-50/50" : "border-gray-200 bg-gray-50"}`}>
-                    <p className="mb-1.5 font-semibold">{d}</p>
-                    {windows.length === 0 ? (
-                      <p className="text-[10px] text-gray-400 italic">Not available</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {windows.map((w) => (
-                          <div key={w.id} className="flex items-center justify-between rounded bg-white px-1.5 py-1 text-[11px]">
-                            <span className="font-mono">
-                              {w.available_from.slice(0, 5)}–{w.available_until.slice(0, 5)}
-                            </span>
-                            <div className="flex items-center gap-0.5">
-                              {w.is_preferred && <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />}
-                              <button
-                                onClick={() => remove(w.id)}
-                                className="rounded p-0.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                              >
-                                <Trash2 className="h-2.5 w-2.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <Field label="Date">
+                <input
+                  type="date"
+                  value={date}
+                  min={today}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                />
+              </Field>
+              <Field label="Reason (optional)">
+                <input
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g. exam, family event"
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                />
+              </Field>
+              <div className="flex items-end">
+                <button
+                  onClick={add}
+                  disabled={saving || !date}
+                  className="inline-flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  Block this date
+                </button>
+              </div>
+            </div>
+            {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+          </div>
+
+          {/* Upcoming */}
+          <div className="rounded-lg border bg-card p-4">
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              <CalendarOff className="h-4 w-4" /> Upcoming Blockouts ({upcoming.length})
+            </h2>
+            {upcoming.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No upcoming blockouts.</p>
+            ) : (
+              <div className="divide-y">
+                {upcoming.map((b) => (
+                  <div key={b.id} className="flex items-center justify-between py-2 text-sm">
+                    <div>
+                      <span className="font-mono font-medium">{fmtDate(b.date)}</span>
+                      {b.reason && <span className="ml-3 text-xs text-gray-500">{b.reason}</span>}
+                    </div>
+                    <button
+                      onClick={() => remove(b.id)}
+                      className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Add window form */}
-          <div className="rounded-lg border bg-card p-4">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              Add Availability Window
-            </h2>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-              <Field label="Day">
-                <select value={day} onChange={(e) => setDay(Number(e.target.value))} className="w-full rounded-md border px-3 py-2 text-sm">
-                  {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
-                </select>
-              </Field>
-              <Field label="From">
-                <input type="time" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm" />
-              </Field>
-              <Field label="Until">
-                <input type="time" value={until} onChange={(e) => setUntil(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm" />
-              </Field>
-              <Field label="Max shifts/week (optional)">
-                <input type="number" min="0" value={maxShifts} onChange={(e) => setMaxShifts(e.target.value)} placeholder="e.g. 5" className="w-full rounded-md border px-3 py-2 text-sm" />
-              </Field>
-              <Field label="Preferred">
-                <label className="mt-1 flex items-center gap-1.5 text-sm">
-                  <input type="checkbox" checked={preferred} onChange={(e) => setPreferred(e.target.checked)} />
-                  Happy to work these hours
-                </label>
-              </Field>
+          {/* Past (collapsible if needed) */}
+          {past.length > 0 && (
+            <div className="rounded-lg border bg-card p-4">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Past Blockouts ({past.length})
+              </h2>
+              <div className="divide-y max-h-60 overflow-y-auto">
+                {past.map((b) => (
+                  <div key={b.id} className="flex items-center justify-between py-1.5 text-xs text-gray-500">
+                    <div>
+                      <span className="font-mono">{fmtDate(b.date)}</span>
+                      {b.reason && <span className="ml-3">{b.reason}</span>}
+                    </div>
+                    <button onClick={() => remove(b.id)} className="rounded p-0.5 text-gray-300 hover:text-red-500">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="mt-3">
-              <Field label="Notes (optional)">
-                <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. 'only available after exam period'" className="w-full rounded-md border px-3 py-2 text-sm" />
-              </Field>
-            </div>
-            <div className="mt-3 flex items-center justify-end gap-2">
-              {err && <span className="text-xs text-red-600">{err}</span>}
-              <button
-                onClick={add}
-                disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Add Window
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            <Clock className="mb-1 inline h-3 w-3" /> Tip: Multiple windows per day are allowed (e.g. 09:00-12:00 and 18:00-22:00 for split availability).
-          </div>
+          )}
         </>
       )}
     </div>
   );
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00Z");
+  const dow = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getUTCDay()];
+  return `${dow} · ${iso}`;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
