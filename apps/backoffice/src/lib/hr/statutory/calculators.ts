@@ -270,6 +270,7 @@ export type EmployeeStatutoryInputs = {
   ytdGross?: number;
   ytdTaxPaid?: number;
   // Profile
+  employmentType?: "full_time" | "part_time" | "contract" | "intern" | string;
   epfCategory?: "A" | "B" | "C";
   epfEmployeeRateOverride?: number;
   epfEmployerRateOverride?: number;
@@ -287,6 +288,21 @@ export type EmployeeStatutoryInputs = {
 };
 
 export async function calcAllStatutory(inputs: EmployeeStatutoryInputs) {
+  // CONTRACT staff are paid on invoice / service agreement — no statutory
+  // contributions (no EPF/SOCSO/EIS/HRDF/PCB). Return a zeroed result so the
+  // caller's ledger math still works without a special case.
+  if (inputs.employmentType === "contract") {
+    return {
+      epf: { employee: 0, employer: 0 },
+      socso: { employee: 0, employer: 0 },
+      eis: { employee: 0, employer: 0 },
+      hrdf: { employer: 0 },
+      pcb: 0,
+      zakat: 0,
+      pcbDebug: { skipped: "contract — no statutory deductions" },
+    };
+  }
+
   const epfCat = inputs.epfCategory ?? "A";
   const socsoCat = inputs.socsoCategory === "injury_only" ? 2
     : inputs.socsoCategory === "exempt" ? null : 1;

@@ -240,6 +240,7 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       currentMonth: month,
       ytdGross: ytd.gross,
       ytdTaxPaid: ytd.pcb,
+      employmentType: profile.employment_type as string | undefined,
       epfCategory: (profile.epf_category as "A" | "B" | "C") || "A",
       epfEmployeeRateOverride: profile.epf_employee_rate ? Number(profile.epf_employee_rate) : undefined,
       epfEmployerRateOverride: profile.epf_employer_rate ? Number(profile.epf_employer_rate) : undefined,
