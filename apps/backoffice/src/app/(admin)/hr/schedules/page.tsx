@@ -211,6 +211,20 @@ export default function SchedulesPage() {
     return m;
   }, [grid]);
 
+  // Total net working hours per user for the week (gross - break).
+  // Rest-day markers don't count.
+  const hoursByUser = useMemo(() => {
+    const m = new Map<string, number>();
+    const toMin = (s: string) => { const [h, mm] = s.split(":").map(Number); return h * 60 + (mm || 0); };
+    for (const sh of grid?.shifts || []) {
+      if (sh.notes === "rest_day") continue;
+      const gross = toMin(sh.end_time) - toMin(sh.start_time);
+      const net = Math.max(0, gross - (sh.break_minutes || 0));
+      m.set(sh.user_id, (m.get(sh.user_id) ?? 0) + net / 60);
+    }
+    return m;
+  }, [grid]);
+
   // Coverage rules grouped by day-of-week
   const coverageByDow = useMemo(() => {
     const m = new Map<number, CoverageRule[]>();
@@ -582,10 +596,32 @@ export default function SchedulesPage() {
                 const position = u.profile?.position || (u.role === "MANAGER" ? "Manager" : "Barista");
                 const isPartTime = u.profile?.employment_type === "part_time";
                 const empType = isPartTime ? "PT" : "FT";
+                const weeklyHours = hoursByUser.get(u.id) ?? 0;
+                // MY Employment Act cap = 45h/week (FT); PT typically ≤24h
+                const ftCap = 45;
+                const ptCap = 24;
+                const cap = isPartTime ? ptCap : ftCap;
+                const overCap = weeklyHours > cap;
                 return (
                   <tr key={u.id} className="border-b hover:bg-muted/30">
                     <td className="sticky left-0 z-10 bg-background p-2">
-                      <div className="font-medium">{u.fullName || u.name}</div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-medium">{u.fullName || u.name}</div>
+                        {weeklyHours > 0 && (
+                          <span
+                            title={`${weeklyHours.toFixed(1)}h this week · cap ${cap}h${overCap ? " (OVER)" : ""}`}
+                            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+                              overCap
+                                ? "bg-red-100 text-red-700"
+                                : weeklyHours >= cap * 0.9
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-emerald-100 text-emerald-800"
+                            }`}
+                          >
+                            ({weeklyHours % 1 === 0 ? weeklyHours : weeklyHours.toFixed(1)}h)
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-muted-foreground">
                         {position} · {empType}
                       </div>
