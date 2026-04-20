@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 // POST /api/hr/coverage  body: { outlet_id, day_of_week, slot_start, slot_end, min_staff, slot_label?, is_peak? }
 export async function POST(req: NextRequest) {
   const session = await getSession();
-  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+  if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 // DELETE /api/hr/coverage?id=X
 export async function DELETE(req: NextRequest) {
   const session = await getSession();
-  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+  if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const id = new URL(req.url).searchParams.get("id");

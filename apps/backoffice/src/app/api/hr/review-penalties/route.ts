@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
+import { resolveVisibleUserIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,11 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!["OWNER", "ADMIN"].includes(session.role)) {
+  if (!["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const visibleIds = await resolveVisibleUserIds(session);
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") || "pending";
@@ -31,13 +34,23 @@ export async function GET(req: NextRequest) {
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // MANAGER scoping: show all pending (they need to triage & attribute),
+  // and for applied/dismissed only rows where attributed_user_ids ∩ subtree is non-empty.
+  const filteredData = visibleIds !== null
+    ? (data || []).filter((r: { status: string; attributed_user_ids: string[] | null }) => {
+        if (r.status === "pending") return true;
+        const attributed = r.attributed_user_ids || [];
+        return attributed.some((u) => visibleIds.includes(u));
+      })
+    : (data || []);
+
   // Enrich with outlet names + staff on shift + attributed-user names
-  const outletIds = Array.from(new Set((data || []).map((r: { outlet_id: string }) => r.outlet_id)));
+  const outletIds = Array.from(new Set(filteredData.map((r: { outlet_id: string }) => r.outlet_id)));
   const outlets = await prisma.outlet.findMany({ where: { id: { in: outletIds } }, select: { id: true, name: true } });
   const outletMap = new Map(outlets.map((o) => [o.id, o.name]));
 
   const allUserIds = new Set<string>();
-  (data || []).forEach((r: { attributed_user_ids: string[] }) => {
+  filteredData.forEach((r: { attributed_user_ids: string[] }) => {
     (r.attributed_user_ids || []).forEach((u) => allUserIds.add(u));
   });
 
@@ -45,7 +58,7 @@ export async function GET(req: NextRequest) {
   //   Primary: staff ACTUALLY CLOCKED IN at the review timestamp (attendance logs)
   //   Fallback: staff scheduled that day (if no attendance logs exist, e.g. old reviews)
   const suggestions = new Map<string, { user_id: string; name: string | null; fullName: string | null; source: "attendance" | "schedule" }[]>();
-  for (const row of data || []) {
+  for (const row of filteredData) {
     const typed = row as {
       id: string;
       outlet_id: string;
@@ -98,7 +111,7 @@ export async function GET(req: NextRequest) {
   });
   const userMap = new Map(users.map((u) => [u.id, { name: u.name, fullName: u.fullName }]));
 
-  const enriched = (data || []).map((r: {
+  const enriched = filteredData.map((r: {
     id: string; outlet_id: string; attributed_user_ids: string[]; status: string;
   }) => ({
     ...r,

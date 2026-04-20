@@ -3,20 +3,13 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { computeAllowancesForUser, loadAllowanceRules } from "@/lib/hr/allowances";
+import { resolveVisibleUserIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
-async function managerDirectReports(managerId: string): Promise<string[]> {
-  const { data } = await hrSupabaseAdmin
-    .from("hr_employee_profiles")
-    .select("user_id")
-    .eq("manager_user_id", managerId);
-  return (data || []).map((r: { user_id: string }) => r.user_id);
-}
-
 // GET /api/hr/allowances?year=2026&month=4&userId=xxx&outletId=yyy
-// - userId provided → single-user breakdown (staff: self only; manager: direct reports; admin: anyone)
-// - otherwise: list staff — admin sees all; manager sees only direct reports
+// - userId provided → single-user breakdown (staff: self only; manager: full subtree; admin: anyone)
+// - otherwise: list staff — admin sees all; manager sees full subtree
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -37,8 +30,8 @@ export async function GET(req: NextRequest) {
     const isSelf = userId === session.id;
     let allowed = isSelf || isAdmin;
     if (!allowed && isManager) {
-      const reports = await managerDirectReports(session.id);
-      allowed = reports.includes(userId);
+      const visible = await resolveVisibleUserIds(session);
+      allowed = (visible || []).includes(userId);
     }
     if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -51,7 +44,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const managerVisibleIds = isManager ? await managerDirectReports(session.id) : null;
+  const managerVisibleIds = isManager ? await resolveVisibleUserIds(session) : null;
   if (managerVisibleIds !== null && managerVisibleIds.length === 0) {
     return NextResponse.json({ period: { year, month }, rules, staff: [] });
   }

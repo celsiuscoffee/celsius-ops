@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { fetchGoogleReviews } from "@/lib/reviews/gbp";
+import { resolveVisibleUserIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,11 @@ export const dynamic = "force-dynamic";
 // Returns per-staff performance aggregates for the month.
 export async function GET(req: NextRequest) {
   const session = await getSession();
-  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+  if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const visibleIds = await resolveVisibleUserIds(session);
 
   const { searchParams } = new URL(req.url);
   const now = new Date();
@@ -26,12 +29,18 @@ export async function GET(req: NextRequest) {
   const monthStartIso = `${monthStart}T00:00:00Z`;
   const monthEndIso = `${monthEnd}T23:59:59Z`;
 
+  // MANAGER with empty subtree → return empty early.
+  if (visibleIds !== null && visibleIds.length === 0) {
+    return NextResponse.json({ period: { year, month, start: monthStart, end: monthEnd }, staff: [], reviews: [], auditMentions: [] });
+  }
+
   // 1. Staff (filtered to scheduled employees at outlet if given)
   const users = await prisma.user.findMany({
     where: {
       status: "ACTIVE",
       role: { in: ["STAFF", "MANAGER"] },
       ...(outletFilter ? { OR: [{ outletId: outletFilter }, { outletIds: { has: outletFilter } }] } : {}),
+      ...(visibleIds !== null ? { id: { in: visibleIds } } : {}),
     },
     select: { id: true, name: true, fullName: true, role: true, outletId: true, outletIds: true, outlet: { select: { name: true, id: true } } },
   });

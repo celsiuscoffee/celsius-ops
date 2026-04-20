@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
+import { resolveVisibleUserIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -16,14 +17,28 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
+  const isAdmin = ["OWNER", "ADMIN"].includes(session.role);
+  const isManager = session.role === "MANAGER";
+
   let q = hrSupabaseAdmin.from("hr_overtime_requests").select("*").order("date", { ascending: false });
   if (status) q = q.eq("status", status);
   if (user_id) q = q.eq("user_id", user_id);
   if (from) q = q.gte("date", from);
   if (to) q = q.lte("date", to);
 
-  // Non-admins only see their own
-  if (!["OWNER", "ADMIN"].includes(session.role)) {
+  if (isAdmin) {
+    // no user scoping
+  } else if (isManager) {
+    const visibleIds = await resolveVisibleUserIds(session);
+    // Manager sees their own + subtree
+    const allowed = Array.from(new Set([session.id, ...(visibleIds || [])]));
+    if (user_id && !allowed.includes(user_id)) {
+      return NextResponse.json({ requests: [] });
+    }
+    if (!user_id) {
+      q = q.in("user_id", allowed);
+    }
+  } else {
     q = q.eq("user_id", session.id);
   }
 
@@ -101,13 +116,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "date, hours_requested, reason, request_type required" }, { status: 400 });
   }
 
-  // Staff can only submit pre-approval for themselves. Managers can submit post-hoc for anyone.
+  // Staff can only submit pre-approval for themselves. Managers/admins can submit post-hoc for their subtree (MANAGER) or anyone (OWNER/ADMIN).
   const targetUserId = user_id || session.id;
-  if (request_type === "post_hoc" && !["OWNER", "ADMIN"].includes(session.role)) {
+  const isAdmin = ["OWNER", "ADMIN"].includes(session.role);
+  const isManager = session.role === "MANAGER";
+
+  if (request_type === "post_hoc" && !isAdmin && !isManager) {
     return NextResponse.json({ error: "Only managers can submit post-hoc OT" }, { status: 403 });
   }
-  if (request_type === "pre_approval" && targetUserId !== session.id && !["OWNER", "ADMIN"].includes(session.role)) {
+  if (request_type === "pre_approval" && targetUserId !== session.id && !isAdmin && !isManager) {
     return NextResponse.json({ error: "Can only submit OT for yourself" }, { status: 403 });
+  }
+  if (isManager && targetUserId !== session.id) {
+    const visibleIds = await resolveVisibleUserIds(session);
+    if (!(visibleIds || []).includes(targetUserId)) {
+      return NextResponse.json({ error: "Forbidden — outside your subtree" }, { status: 403 });
+    }
   }
 
   const { data, error } = await hrSupabaseAdmin
@@ -136,7 +160,7 @@ export async function POST(req: NextRequest) {
 // PATCH: manager approves/rejects an OT request
 export async function PATCH(req: NextRequest) {
   const session = await getSession();
-  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+  if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -146,6 +170,20 @@ export async function PATCH(req: NextRequest) {
   if (!id || !status) return NextResponse.json({ error: "id and status required" }, { status: 400 });
   if (!["approved", "rejected", "partial", "cancelled"].includes(status)) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+  }
+
+  // MANAGER: only act on requests within subtree.
+  if (session.role === "MANAGER") {
+    const { data: existing } = await hrSupabaseAdmin
+      .from("hr_overtime_requests")
+      .select("user_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const visibleIds = await resolveVisibleUserIds(session);
+    if (!(visibleIds || []).includes(existing.user_id)) {
+      return NextResponse.json({ error: "Forbidden — outside your subtree" }, { status: 403 });
+    }
   }
 
   const updates: Record<string, unknown> = {
@@ -201,8 +239,15 @@ export async function DELETE(req: NextRequest) {
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const isAdmin = ["OWNER", "ADMIN"].includes(session.role);
-  if (!isAdmin && existing.user_id !== session.id) {
+  const isManager = session.role === "MANAGER";
+  if (!isAdmin && !isManager && existing.user_id !== session.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (isManager && existing.user_id !== session.id) {
+    const visibleIds = await resolveVisibleUserIds(session);
+    if (!(visibleIds || []).includes(existing.user_id)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
   if (existing.status !== "pending") {
     return NextResponse.json({ error: "Only pending requests can be cancelled" }, { status: 400 });

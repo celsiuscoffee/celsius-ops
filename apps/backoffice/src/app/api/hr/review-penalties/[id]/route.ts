@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { resolveVisibleUserIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function PATCH(
 ) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!["OWNER", "ADMIN"].includes(session.role)) {
+  if (!["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -30,6 +31,19 @@ export async function PATCH(
   if (action === "apply") {
     if (!Array.isArray(userIds) || userIds.length === 0) {
       return NextResponse.json({ error: "userIds required" }, { status: 400 });
+    }
+
+    // MANAGER: attributed userIds must all be in subtree.
+    if (session.role === "MANAGER") {
+      const visibleIds = await resolveVisibleUserIds(session);
+      const allowed = new Set(visibleIds || []);
+      const outOfScope = userIds.filter((u) => !allowed.has(u));
+      if (outOfScope.length > 0) {
+        return NextResponse.json(
+          { error: "Forbidden — one or more users are outside your subtree" },
+          { status: 403 },
+        );
+      }
     }
     const { data, error } = await hrSupabaseAdmin
       .from("hr_review_penalty")
