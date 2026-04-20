@@ -52,25 +52,43 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     throw new Error("No employee profiles found. Set up employee HR profiles first.");
   }
 
-  // Pre-flight validation — refuse to compute if required data is missing
-  // rather than silently producing RM 0 rows or fabricating hourly rates.
-  const ptMissingRate = profiles
-    .filter((p) => p.employment_type === "part_time" && (p.hourly_rate == null || Number(p.hourly_rate) === 0))
-    .map((p) => p.user_id);
-  const ftMissingSalary = profiles
-    .filter((p) =>
+  // Per-user pre-flight — skip invalid profiles instead of aborting the
+  // whole run. Reasons get surfaced in `notes` so the UI can show them
+  // against the affected staff.
+  const cycleStartStr = `${year}-${String(month).padStart(2, "0")}-01`;
+  const skippedUsers = new Map<string, string>();
+
+  for (const p of profiles) {
+    // Resigned before this cycle → don't include in this run at all.
+    const resignDate = p.resigned_at || p.end_date || null;
+    if (resignDate && resignDate < cycleStartStr) {
+      skippedUsers.set(p.user_id, `resigned ${resignDate}`);
+      continue;
+    }
+    if (p.employment_type === "part_time" && (p.hourly_rate == null || Number(p.hourly_rate) === 0)) {
+      skippedUsers.set(p.user_id, "part-timer missing hourly_rate");
+      continue;
+    }
+    if (
       p.employment_type === "full_time"
       && p.schedule_required !== false
-      && (p.basic_salary == null || Number(p.basic_salary) === 0),
-    )
-    .map((p) => p.user_id);
-  if (ptMissingRate.length > 0 || ftMissingSalary.length > 0) {
-    const problems: string[] = [];
-    if (ptMissingRate.length) problems.push(`${ptMissingRate.length} part-timer(s) missing hourly_rate`);
-    if (ftMissingSalary.length) problems.push(`${ftMissingSalary.length} full-timer(s) missing basic_salary`);
+      && (p.basic_salary == null || Number(p.basic_salary) === 0)
+    ) {
+      skippedUsers.set(p.user_id, "full-timer missing basic_salary");
+      continue;
+    }
+  }
+
+  for (const [uid, reason] of skippedUsers) {
+    notes.push(`Skipped ${uid.slice(0, 8)}: ${reason}`);
+  }
+
+  // Filter the profiles list down to those we'll actually process.
+  const eligibleProfiles = profiles.filter((p) => !skippedUsers.has(p.user_id));
+
+  if (eligibleProfiles.length === 0) {
     throw new Error(
-      `Payroll compute aborted — fix the following before re-running: ${problems.join("; ")}. ` +
-      `User IDs: ${[...ptMissingRate, ...ftMissingSalary].map((id) => id.slice(0, 8)).join(", ")}.`,
+      `No eligible employees to compute. ${skippedUsers.size} skipped — see notes for details.`,
     );
   }
 
@@ -173,7 +191,7 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
   let totalEmployerCost = 0;
   const payrollItems: Record<string, unknown>[] = [];
 
-  await Promise.all(profiles.map(async (profile) => {
+  await Promise.all(eligibleProfiles.map(async (profile) => {
     const basicSalary = Number(profile.basic_salary) || 0;
     const isPartTime = profile.employment_type === "part_time";
     const hourlyRate = isPartTime && profile.hourly_rate
