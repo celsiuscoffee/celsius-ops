@@ -664,18 +664,30 @@ export default function SchedulesPage() {
                               <div className="text-[10px] font-bold uppercase text-gray-500">Rest Day</div>
                             </button>
                           ) : shift ? (
-                            <button
-                              onClick={(e) => openPicker(u.id, d, e)}
-                              className={`w-full rounded-lg border p-2 text-left ${
-                                COLOR_MAP[guessColor(shift)] || COLOR_MAP.gray
-                              } disabled:cursor-default`}
-                              disabled={isPublished}
-                            >
-                              <div className="text-[10px] font-bold truncate">{shift.role_type || "Shift"}</div>
-                              <div className="text-[10px]">
-                                {shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)}
-                              </div>
-                            </button>
+                            (() => {
+                              const toMin = (s: string) => { const [h, m] = s.split(":").map(Number); return h * 60 + (m || 0); };
+                              const gross = toMin(shift.end_time) - toMin(shift.start_time);
+                              const net = Math.max(0, gross - (shift.break_minutes || 0));
+                              const netH = net / 60;
+                              const hoursLabel = netH % 1 === 0 ? `${netH}h` : `${netH.toFixed(1)}h`;
+                              return (
+                                <button
+                                  onClick={(e) => openPicker(u.id, d, e)}
+                                  className={`w-full rounded-lg border p-2 text-left ${
+                                    COLOR_MAP[guessColor(shift)] || COLOR_MAP.gray
+                                  } disabled:cursor-default`}
+                                  disabled={isPublished}
+                                >
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-[10px] font-bold truncate">{shift.role_type || "Shift"}</span>
+                                    <span className="shrink-0 rounded bg-white/60 px-1 text-[9px] font-semibold tabular-nums">{hoursLabel}</span>
+                                  </div>
+                                  <div className="text-[10px]">
+                                    {shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)}
+                                  </div>
+                                </button>
+                              );
+                            })()
                           ) : (
                             <button
                               onClick={(e) => openPicker(u.id, d, e)}

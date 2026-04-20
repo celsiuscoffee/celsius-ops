@@ -249,7 +249,7 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Scheduling",
         items: [
           { label: "Schedules", href: "/hr/schedules", icon: <CalendarDays className={ICON_SIZE} />, moduleKey: "hr:schedules" },
-          { label: "Blockout Dates", href: "/hr/availability", icon: <CalendarOff className={ICON_SIZE} />, moduleKey: "hr:schedules" },
+          { label: "Availability", href: "/hr/availability", icon: <Clock className={ICON_SIZE} />, moduleKey: "hr:schedules" },
           { label: "Coverage Rules", href: "/hr/coverage", icon: <Flame className={ICON_SIZE} />, moduleKey: "hr:schedules" },
         ],
       },
