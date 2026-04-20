@@ -123,6 +123,7 @@ const NAV_SECTIONS: NavSection[] = [
     railIcon: <ShoppingBag className={RAIL_ICON_SIZE} />,
     dividerBefore: true,
     items: [
+      { label: "Dashboard", href: "/pickup", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "pickup:orders" },
       { label: "Orders", href: "/pickup/orders", icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
       { label: "Menu", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
       { label: "Analytics", href: "/pickup/analytics", icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "pickup:analytics" },
@@ -134,6 +135,12 @@ const NAV_SECTIONS: NavSection[] = [
     icon: <Boxes className={ICON_SIZE} />,
     railIcon: <Boxes className={RAIL_ICON_SIZE} />,
     subgroups: [
+      {
+        label: "Overview",
+        items: [
+          { label: "Dashboard", href: "/inventory/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "inventory:products" },
+        ],
+      },
       {
         label: "Master Data",
         items: [
@@ -219,6 +226,7 @@ const NAV_SECTIONS: NavSection[] = [
     icon: <ClipboardCheckIcon className={ICON_SIZE} />,
     railIcon: <ClipboardCheckIcon className={RAIL_ICON_SIZE} />,
     items: [
+      { label: "Dashboard", href: "/ops/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ops:performance" },
       { label: "Performance", href: "/ops/performance", icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "ops:performance" },
       { label: "Audits", href: "/ops/audit", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "ops:audit" },
       { label: "SOPs & Templates", href: "/ops/sops", icon: <BookOpen className={ICON_SIZE} />, moduleKey: "ops:sops" },
