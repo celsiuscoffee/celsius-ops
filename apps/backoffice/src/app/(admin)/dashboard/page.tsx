@@ -4,14 +4,14 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Sparkles, RefreshCw, Loader2, ArrowRight,
-  Gift, ClipboardCheck, Boxes, Trash2, HandCoins, Users, AlertOctagon,
+  Gift, ClipboardCheck, Boxes, Trash2, HandCoins, Users, AlertOctagon, TrendingUp,
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 type UserProfile = { id: string; name: string; role: string };
 
 type Recommendation = {
-  area: "loyalty" | "ops" | "inventory" | "wastage" | "cash" | "people" | "other";
+  area: "sales" | "loyalty" | "ops" | "inventory" | "wastage" | "cash" | "people" | "other";
   priority: "critical" | "high" | "medium" | "low";
   title: string;
   why: string;
@@ -24,6 +24,7 @@ type Cached = {
 };
 
 const AREA_ICON: Record<Recommendation["area"], React.ElementType> = {
+  sales: TrendingUp,
   loyalty: Gift,
   ops: ClipboardCheck,
   inventory: Boxes,
@@ -34,6 +35,7 @@ const AREA_ICON: Record<Recommendation["area"], React.ElementType> = {
 };
 
 const AREA_LINK: Record<Recommendation["area"], string> = {
+  sales: "/sales/dashboard",
   loyalty: "/loyalty/dashboard",
   ops: "/ops/dashboard",
   inventory: "/inventory/dashboard",
