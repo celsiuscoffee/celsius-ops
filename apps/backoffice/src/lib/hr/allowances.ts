@@ -112,14 +112,41 @@ export async function computeAllowancesForUser(
   const daysElapsed = Math.min(endForElapsed.getDate(), monthEndDate.getDate());
   const daysRemaining = Math.max(0, monthEndDate.getDate() - daysElapsed);
 
-  // Employment type — FT gate for performance allowance
+  // Employment type — FT gate for performance allowance.
+  // schedule_required=false → staff doesn't work operational shifts (OWNER,
+  // HQ roles) so attendance + performance allowances don't apply.
   const { data: profile } = await hrSupabaseAdmin
     .from("hr_employee_profiles")
-    .select("employment_type")
+    .select("employment_type, schedule_required")
     .eq("user_id", userId)
     .maybeSingle();
   const employmentType = profile?.employment_type ?? null;
   const isFullTime = employmentType === "full_time";
+  const scheduleRequired = profile?.schedule_required !== false;
+  if (!scheduleRequired) {
+    // Non-operational staff (OWNER / HQ / role without scheduled shifts) —
+    // no attendance or performance allowance. They're salaried and don't
+    // clock in, so awarding "perfect attendance" RM100 is incorrect.
+    return {
+      userId,
+      employmentType,
+      isFullTime,
+      period: { year, month, daysElapsed, daysRemaining },
+      attendance: {
+        base: 0, earned: 0, penalties: [],
+        metrics: { lateCount: 0, absentCount: 0, earlyOutCount: 0, missedClockoutCount: 0, exceededBreakCount: 0 },
+        tip: "Not applicable — schedule not required for this role",
+      },
+      performance: {
+        base: 0, earned: 0, score: 0, mode: r.performance_allowance_mode, eligible: false,
+        breakdown: { checklists: 0, reviews: 0, audit: 0 },
+        tip: "Not applicable — schedule not required for this role",
+      },
+      reviewPenalty: { total: 0, entries: [] },
+      totalEarned: 0,
+      totalMax: 0,
+    };
+  }
 
   // 1. Attendance logs (lateness is computed from clock_in vs scheduled_start
   // below — the lateness_minutes column doesn't exist)
