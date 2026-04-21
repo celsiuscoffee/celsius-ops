@@ -536,7 +536,7 @@ export default function TransfersPage() {
                   <div className="flex items-center gap-1">
                     <Package className="h-3.5 w-3.5 text-gray-400" />
                     <span className="font-medium">{t.items.length}</span>
-                    <span className="text-gray-400 text-xs">items</span>
+                    <span className="text-gray-400 text-xs">{t.items.length === 1 ? "item" : "items"}</span>
                   </div>
                 </td>
                 <td className="px-4 py-3 text-gray-600">{t.transferredBy}</td>
