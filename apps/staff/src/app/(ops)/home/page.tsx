@@ -166,6 +166,7 @@ export default async function HomePage() {
         role: session.role,
         outletId: session.outletId ?? null,
         outletName: session.outletName ?? null,
+        moduleAccess: moduleAccess ?? undefined,
       }}
       initialChecklists={checklistData}
       initialDashboard={dashboardData}

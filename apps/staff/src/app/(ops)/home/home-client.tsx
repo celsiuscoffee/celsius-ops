@@ -5,6 +5,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
+import { hasAccess } from "@/lib/access";
 import {
   ClipboardCheck,
   ClipboardList,
@@ -28,6 +29,7 @@ type UserProfile = {
   role: string;
   outletId: string | null;
   outletName?: string | null;
+  moduleAccess?: Record<string, unknown>;
 };
 
 type ChecklistSummary = {
@@ -522,33 +524,43 @@ export function HomeClient({
             </div>
           )}
 
-          {/* Quick actions — only shown if user has inventory access */}
-          {showQuickActions && (
-            <div>
-              <h2 className="mb-2 text-sm font-semibold text-gray-900">Quick Actions</h2>
-              <div className="grid grid-cols-5 gap-2">
-                {[
-                  { href: "/stock-count", icon: ClipboardCheck, label: "Count" },
-                  { href: "/receiving", icon: Package, label: "Receive" },
-                  { href: "/wastage", icon: Trash2, label: "Wastage" },
-                  { href: "/transfers", icon: ArrowLeftRight, label: "Transfer" },
-                  { href: "/claims", icon: Receipt, label: "Claim" },
-                ].map((action) => {
-                  const Icon = action.icon;
-                  return (
-                    <Link
-                      key={action.label}
-                      href={action.href}
-                      className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 bg-white py-3 text-gray-600 transition-colors hover:bg-terracotta/5 hover:text-terracotta"
-                    >
-                      <Icon className="h-5 w-5" />
-                      <span className="text-[10px] font-medium">{action.label}</span>
-                    </Link>
-                  );
-                })}
+          {/* Quick actions — filtered by user's moduleAccess */}
+          {showQuickActions && (() => {
+            const allActions = [
+              { href: "/stock-count", icon: ClipboardCheck, label: "Count", moduleKey: "inventory:stock-count" },
+              { href: "/receiving", icon: Package, label: "Receive", moduleKey: "inventory:receivings" },
+              { href: "/wastage", icon: Trash2, label: "Wastage", moduleKey: "inventory:wastage" },
+              { href: "/transfers", icon: ArrowLeftRight, label: "Transfer", moduleKey: "inventory:transfers" },
+              { href: "/claims", icon: Receipt, label: "Claim", moduleKey: "inventory:pay-and-claim" },
+            ];
+            const visibleActions = allActions.filter((a) => hasAccess(user.role, user.moduleAccess, a.moduleKey));
+            if (visibleActions.length === 0) return null;
+            const gridCls = visibleActions.length >= 5 ? "grid-cols-5"
+              : visibleActions.length === 4 ? "grid-cols-4"
+              : visibleActions.length === 3 ? "grid-cols-3"
+              : visibleActions.length === 2 ? "grid-cols-2"
+              : "grid-cols-1";
+            return (
+              <div>
+                <h2 className="mb-2 text-sm font-semibold text-gray-900">Quick Actions</h2>
+                <div className={`grid gap-2 ${gridCls}`}>
+                  {visibleActions.map((action) => {
+                    const Icon = action.icon;
+                    return (
+                      <Link
+                        key={action.label}
+                        href={action.href}
+                        className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 bg-white py-3 text-gray-600 transition-colors hover:bg-terracotta/5 hover:text-terracotta"
+                      >
+                        <Icon className="h-5 w-5" />
+                        <span className="text-[10px] font-medium">{action.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </div>
     </div>

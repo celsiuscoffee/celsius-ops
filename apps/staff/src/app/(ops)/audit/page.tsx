@@ -101,20 +101,27 @@ export default function AuditPage() {
             </select>
           </div>
 
-          {/* Select Outlet */}
-          <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Outlet</label>
-            <select
-              value={selectedOutlet}
-              onChange={(e) => setSelectedOutlet(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
-            >
-              <option value="">Select outlet...</option>
-              {outlets?.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </select>
-          </div>
+          {/* Select Outlet — non-admins are pinned to their own outlet */}
+          {(() => {
+            const isAdmin = me?.role === "OWNER" || me?.role === "ADMIN";
+            const visibleOutlets = isAdmin ? (outlets ?? []) : (outlets ?? []).filter((o) => o.id === me?.outletId);
+            return (
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Outlet</label>
+                <select
+                  value={selectedOutlet}
+                  onChange={(e) => setSelectedOutlet(e.target.value)}
+                  disabled={!isAdmin && visibleOutlets.length === 1}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white disabled:bg-gray-50"
+                >
+                  <option value="">Select outlet...</option>
+                  {visibleOutlets.map((o) => (
+                    <option key={o.id} value={o.id}>{o.name}</option>
+                  ))}
+                </select>
+              </div>
+            );
+          })()}
 
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowNew(false)} className="text-xs flex-1">

@@ -129,6 +129,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "templateId and outletId required" }, { status: 400 });
   }
 
+  // Outlet scope — non-admins may only create audits at their own outlet.
+  const isAdmin = session.role === "OWNER" || session.role === "ADMIN";
+  if (!isAdmin && outletId !== session.outletId) {
+    return NextResponse.json({ error: "Cannot create audit for another outlet" }, { status: 403 });
+  }
+
   // Fetch template with sections and items
   const template = await prisma.auditTemplate.findUnique({
     where: { id: templateId },
