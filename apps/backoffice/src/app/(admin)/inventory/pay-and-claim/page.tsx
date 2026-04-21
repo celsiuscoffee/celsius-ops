@@ -178,6 +178,7 @@ export default function PayAndClaimPage() {
   const [quSupplierId, setQuSupplierId] = useState("");
   const [quAmount, setQuAmount] = useState("");
   const [quDate, setQuDate] = useState(new Date().toISOString().split("T")[0]);
+  const [quDueDate, setQuDueDate] = useState("");
   const [quInvoiceNum, setQuInvoiceNum] = useState("");
   const [quCart, setQuCart] = useState<CartItem[]>([]);
   const [quProductSearch, setQuProductSearch] = useState("");
@@ -432,6 +433,7 @@ export default function PayAndClaimPage() {
     setQuSupplierId(adhoc?.id || "");
     setQuAmount("");
     setQuDate(new Date().toISOString().split("T")[0]);
+    setQuDueDate("");
     setQuInvoiceNum("");
     setQuCart([]);
     setQuProductSearch("");
@@ -589,6 +591,7 @@ export default function PayAndClaimPage() {
           supplierId: quSupplierId || undefined,
           amount: quAmount ? parseFloat(quAmount) : undefined,
           purchaseDate: quDate || (quAiData as Record<string, string>).issueDate || undefined,
+          dueDate: quDueDate || undefined,
           invoiceNumber: quInvoiceNum || undefined,
           expenseCategory: quCategory,
           flow: quFlow,
@@ -1534,6 +1537,10 @@ export default function PayAndClaimPage() {
                       {(quAiData as Record<string, string>).issueDate && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
                     </label>
                     <Input type="date" value={quDate} onChange={(e) => setQuDate(e.target.value)} className={`h-9 text-sm ${(quAiData as Record<string, string>).issueDate ? "border-purple-300 bg-purple-50/30" : ""}`} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1.5 block">Due Date</label>
+                    <Input type="date" value={quDueDate} onChange={(e) => setQuDueDate(e.target.value)} min={quDate || undefined} className="h-9 text-sm" placeholder="When payment is due" />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1.5">

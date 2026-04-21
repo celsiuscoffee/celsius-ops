@@ -131,7 +131,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const {
-    outletId, claimedById, items, notes, photos, purchaseDate,
+    outletId, claimedById, items, notes, photos, purchaseDate, dueDate,
     draft, quickUpload, aiExtracted, invoiceNumber: bodyInvoiceNumber,
     // New fields for asset/maintenance/other expense requests:
     expenseCategory,          // "INGREDIENT" (default) | "ASSET" | "MAINTENANCE" | "OTHER"
@@ -298,6 +298,7 @@ export async function POST(req: NextRequest) {
         vendorBankAccountName: vendorBankAccountName || null,
         photos: photos || [],
         issueDate: purchaseDate ? new Date(purchaseDate) : new Date(),
+        dueDate: dueDate ? new Date(dueDate) : null,
         notes: isDraft
           ? (notes ? `Draft: ${notes}` : `Draft ${category.toLowerCase()} ${requestFlow === "REQUEST" ? "payment request" : "claim"}`)
           : (notes ? `Quick upload: ${notes}` : `Quick upload ${category.toLowerCase()} ${requestFlow === "REQUEST" ? "payment request" : "claim"}`),
@@ -453,6 +454,8 @@ export async function POST(req: NextRequest) {
       vendorBankAccountNumber: vendorBankAccountNumber || null,
       vendorBankAccountName: vendorBankAccountName || null,
       photos: photos || [],
+      issueDate: purchaseDate ? new Date(purchaseDate) : new Date(),
+      dueDate: dueDate ? new Date(dueDate) : null,
       notes: notes ? `${noteLabel}: ${notes}` : noteLabel,
     },
   });
