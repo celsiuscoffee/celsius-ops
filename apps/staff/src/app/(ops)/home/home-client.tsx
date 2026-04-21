@@ -250,7 +250,7 @@ export function HomeClient({
       if (dashboard.deliveriesExpected > 0) {
         list.push({
           id: "inv-deliveries",
-          title: `Receive ${dashboard.deliveriesExpected} Delivery${dashboard.deliveriesExpected > 1 ? "s" : ""}`,
+          title: `Receive ${dashboard.deliveriesExpected} ${dashboard.deliveriesExpected === 1 ? "Delivery" : "Deliveries"}`,
           subtitle: dashboard.deliverySuppliers.slice(0, 3).join(", "),
           href: "/receiving", priority: "due_soon", timeLabel: "Awaiting arrival", icon: Package,
         });

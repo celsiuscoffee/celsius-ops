@@ -343,7 +343,8 @@ export default function ReceivePage() {
                             {po.supplier}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {po.orderNumber} &middot; {po.items.length} items
+                            {po.orderNumber} &middot; {po.items.length}{" "}
+                            {po.items.length === 1 ? "item" : "items"}{" "}
                             &middot; RM {po.totalAmount.toFixed(2)}
                           </p>
                         </div>
@@ -413,7 +414,7 @@ export default function ReceivePage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-gray-500">
-                          {r.items.length} items
+                          {r.items.length} {r.items.length === 1 ? "item" : "items"}
                         </span>
                         {r.status === "COMPLETE" ? (
                           <Check className="h-4 w-4 text-green-500" />
