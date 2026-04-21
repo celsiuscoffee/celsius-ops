@@ -41,11 +41,14 @@ export function hasAccess(
 // Map of pathname-prefix → required moduleKey. Routes not listed here
 // require no module access (login, home, profile, hr root, etc).
 const ROUTE_ACCESS: Array<{ prefix: string; moduleKey: string }> = [
-  { prefix: "/checklists", moduleKey: "ops:checklists" },
+  // Operational manager-only views (dashboard = manager outlet overview)
+  { prefix: "/dashboard", moduleKey: "ops:audit" },
   { prefix: "/audit", moduleKey: "ops:audit" },
   { prefix: "/sops", moduleKey: "ops:sops" },
   { prefix: "/categories", moduleKey: "ops:categories" },
   { prefix: "/schedules", moduleKey: "ops:checklists" },
+  // Staff-accessible operations
+  { prefix: "/checklists", moduleKey: "ops:checklists" },
   { prefix: "/stock-count", moduleKey: "inventory:stock-count" },
   { prefix: "/receiving", moduleKey: "inventory:receivings" },
   { prefix: "/wastage", moduleKey: "inventory:wastage" },
