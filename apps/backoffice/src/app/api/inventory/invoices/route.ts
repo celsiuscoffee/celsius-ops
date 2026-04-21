@@ -1,6 +1,8 @@
 import { NextResponse, NextRequest } from "next/server";
+import type { Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
+import { detectCreationFlags } from "@/lib/inventory/flag-detector";
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
@@ -42,6 +44,15 @@ export async function GET(req: NextRequest) {
     where.dueDate = dueDateFilter;
   }
 
+  const paidDateFrom = req.nextUrl.searchParams.get("paidDateFrom") || "";
+  const paidDateTo = req.nextUrl.searchParams.get("paidDateTo") || "";
+  if (paidDateFrom || paidDateTo) {
+    const paidDateFilter: Record<string, Date> = {};
+    if (paidDateFrom) paidDateFilter.gte = new Date(paidDateFrom);
+    if (paidDateTo) paidDateFilter.lte = new Date(paidDateTo + "T23:59:59Z");
+    where.paidAt = paidDateFilter;
+  }
+
   if (search) {
     where.OR = [
       { invoiceNumber: { contains: search, mode: "insensitive" } },
@@ -81,6 +92,7 @@ export async function GET(req: NextRequest) {
       vendorBankName: true,
       vendorBankAccountNumber: true,
       vendorBankAccountName: true,
+      flags: true,
       order: {
         select: {
           orderNumber: true,
@@ -105,7 +117,12 @@ export async function GET(req: NextRequest) {
       depositPaidAt: true,
       depositRef: true,
     },
-    orderBy: { issueDate: "desc" },
+    // Paid invoices sort by paidAt desc (newest payment first). Unpaid rows
+    // have paidAt=null and fall through to issueDate desc.
+    orderBy: [
+      { paidAt: { sort: "desc", nulls: "last" } },
+      { issueDate: "desc" },
+    ],
   });
 
   // Fetch distinct outlets for filter dropdown
@@ -175,6 +192,7 @@ export async function GET(req: NextRequest) {
     depositAmount: inv.depositAmount ? Number(inv.depositAmount) : null,
     depositPaidAt: inv.depositPaidAt?.toISOString() ?? null,
     depositRef: inv.depositRef ?? null,
+    flags: Array.isArray(inv.flags) ? inv.flags : [],
   }));
 
   return NextResponse.json({ invoices: mapped, outlets, dueTodayCount, dueTodayAmount });
@@ -208,6 +226,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const flagsAtCreation = await detectCreationFlags({
+      orderId: orderId || null,
+      supplierId: supplierId || null,
+      amount: Number(amount ?? 0),
+      issueDate: issueDate ? new Date(issueDate) : null,
+    });
+
     const invoice = await prisma.invoice.create({
       data: {
         invoiceNumber: invNumber,
@@ -220,6 +245,9 @@ export async function POST(req: NextRequest) {
         dueDate: dueDate ? new Date(dueDate) : null,
         photos: photos || [],
         ...(depositAmount ? { depositAmount } : {}),
+        ...(flagsAtCreation.length > 0
+          ? { flags: flagsAtCreation as unknown as Prisma.InputJsonValue }
+          : {}),
       },
     });
 

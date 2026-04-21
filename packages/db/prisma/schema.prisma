@@ -454,6 +454,9 @@ model Invoice {
   // NULL = standalone invoice (existing behaviour). Non-null = settled via batch.
   claimBatchId  String?
   claimBatch    HrClaimBatch? @relation(fields: [claimBatchId], references: [id])
+  // Review flags raised by the auto-matcher or duplicate-invoice guard.
+  // Shape: [{ code, message, detectedAt, dismissed?, dismissedAt?, dismissedById? }]
+  flags         Json          @default("[]")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }

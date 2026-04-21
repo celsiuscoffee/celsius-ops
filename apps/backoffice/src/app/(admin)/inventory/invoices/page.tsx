@@ -68,7 +68,35 @@ type Invoice = {
   depositAmount: number | null;
   depositPaidAt: string | null;
   depositRef: string | null;
+  flags: InvoiceFlag[];
 };
+
+type InvoiceFlagCode =
+  | "DUPLICATE_PO"
+  | "DUPLICATE_PAYMENT_REF"
+  | "REF_MATCHES_PAID_INVOICE"
+  | "AMOUNT_TOLERANCE_MATCH"
+  | "BANK_MISMATCH";
+
+type InvoiceFlag = {
+  code: InvoiceFlagCode;
+  message: string;
+  detectedAt: string;
+  dismissed?: boolean;
+  dismissedAt?: string;
+  dismissedById?: string;
+  meta?: Record<string, unknown>;
+};
+
+const FLAG_TITLE: Record<InvoiceFlagCode, string> = {
+  DUPLICATE_PO: "Duplicate PO",
+  DUPLICATE_PAYMENT_REF: "Payment ref already used",
+  REF_MATCHES_PAID_INVOICE: "Reference matches paid invoice",
+  AMOUNT_TOLERANCE_MATCH: "Amount matched only within tolerance",
+  BANK_MISMATCH: "POP bank ≠ supplier bank",
+};
+
+const activeFlags = (inv: Pick<Invoice, "flags">) => (inv.flags ?? []).filter((f) => !f.dismissed);
 
 type OutletOption = { id: string; name: string };
 type InvoicesResponse = { invoices: Invoice[]; outlets: OutletOption[]; dueTodayCount: number; dueTodayAmount: number };
@@ -83,6 +111,8 @@ export default function InvoicesPage() {
   const [bankFilter, setBankFilter] = useState<"all" | "maybank" | "non-maybank">("all");
   const [dueDateFrom, setDueDateFrom] = useState("");
   const [dueDateTo, setDueDateTo] = useState("");
+  const [paidDateFrom, setPaidDateFrom] = useState("");
+  const [paidDateTo, setPaidDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [viewingPhotos, setViewingPhotos] = useState<{ invoiceNumber: string; photos: string[] } | null>(null);
   const [cardFilter, setCardFilter] = useState<"all" | "pending" | "overdue" | "paid" | "due_today" | "payable" | null>(null);
@@ -99,6 +129,10 @@ export default function InvoicesPage() {
 
   // Send POP shortlink
   const [sendingPopId, setSendingPopId] = useState<string | null>(null);
+
+  // Flag review dialog
+  const [reviewingFlags, setReviewingFlags] = useState<Invoice | null>(null);
+  const [flagActionCode, setFlagActionCode] = useState<InvoiceFlagCode | null>(null);
 
   // Edit invoice dialog
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -117,6 +151,8 @@ export default function InvoicesPage() {
   outletFilter.forEach((id) => params.append("outlet", id));
   if (dueDateFrom) params.set("dueDateFrom", dueDateFrom);
   if (dueDateTo) params.set("dueDateTo", dueDateTo);
+  if (paidDateFrom) params.set("paidDateFrom", paidDateFrom);
+  if (paidDateTo) params.set("paidDateTo", paidDateTo);
 
   const url = `/api/inventory/invoices?${params.toString()}`;
   const { data, isLoading: loading, mutate: loadInvoices } = useFetch<InvoicesResponse>(url);
@@ -143,7 +179,7 @@ export default function InvoicesPage() {
     return true;
   });
 
-  const activeFilterCount = [outletFilter.length > 0, bankFilter !== "all", dueDateFrom, dueDateTo].filter(Boolean).length;
+  const activeFilterCount = [outletFilter.length > 0, bankFilter !== "all", dueDateFrom, dueDateTo, paidDateFrom, paidDateTo].filter(Boolean).length;
 
   const openPayDialog = (inv: Invoice, targetStatus: string) => {
     setPayingInvoice(inv);
@@ -310,6 +346,31 @@ export default function InvoicesPage() {
       loadInvoices(undefined, { revalidate: true });
     } finally {
       setEditSaving(false);
+    }
+  };
+
+  const dismissFlag = async (invoiceId: string, code: InvoiceFlagCode) => {
+    setFlagActionCode(code);
+    try {
+      const res = await fetch(`/api/inventory/invoices/${invoiceId}/flags`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "dismiss", code }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Failed: ${err.error || res.statusText}`);
+        return;
+      }
+      await loadInvoices(undefined, { revalidate: true });
+      // Update the open dialog from the refreshed list
+      setReviewingFlags((prev) => {
+        if (!prev) return prev;
+        const refreshed = (data?.invoices ?? []).find((i) => i.id === prev.id);
+        return refreshed ?? prev;
+      });
+    } finally {
+      setFlagActionCode(null);
     }
   };
 
@@ -591,11 +652,38 @@ export default function InvoicesPage() {
               </div>
             </div>
 
+            {/* Paid date range */}
+            <div className="space-y-2">
+              <div>
+                <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+                  <CheckCircle2 className="h-3 w-3" /> Paid From
+                </label>
+                <input
+                  type="date"
+                  value={paidDateFrom}
+                  onChange={(e) => setPaidDateFrom(e.target.value)}
+                  className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+                  <CheckCircle2 className="h-3 w-3" /> Paid To
+                </label>
+                <input
+                  type="date"
+                  value={paidDateTo}
+                  onChange={(e) => setPaidDateTo(e.target.value)}
+                  min={paidDateFrom || undefined}
+                  className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+            </div>
+
             {/* Clear all */}
             <div className="flex items-end">
               {activeFilterCount > 0 && (
                 <button
-                  onClick={() => { setOutletFilter([]); setBankFilter("all"); setDueDateFrom(""); setDueDateTo(""); }}
+                  onClick={() => { setOutletFilter([]); setBankFilter("all"); setDueDateFrom(""); setDueDateTo(""); setPaidDateFrom(""); setPaidDateTo(""); }}
                   className="flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
                 >
                   <X className="h-3 w-3" /> Clear All Filters
@@ -617,6 +705,7 @@ export default function InvoicesPage() {
             <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">Issue Date</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">Due Date</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-500">Paid Date</th>
             <th className="px-4 py-3 text-right font-medium text-gray-500">Amount (RM)</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">Photo</th>
             <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
@@ -624,7 +713,7 @@ export default function InvoicesPage() {
           <tbody>
             {invoices.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-12 text-center">
+                <td colSpan={12} className="px-4 py-12 text-center">
                   <FileText className="mx-auto h-8 w-8 text-gray-300" />
                   <p className="mt-2 text-sm text-gray-500">
                     {!debouncedSearch && tab === "all"
@@ -646,6 +735,16 @@ export default function InvoicesPage() {
                       <span className="ml-1.5 rounded bg-gray-100 px-1 py-0.5 text-[9px] font-medium uppercase text-gray-600">{inv.expenseCategory}</span>
                     )}
                     {inv.paymentType === "INTERNAL_TRANSFER" && <span className="ml-1.5 rounded bg-orange-100 px-1 py-0.5 text-[9px] font-medium text-orange-600">TRANSFER</span>}
+                    {activeFlags(inv).length > 0 && (
+                      <button
+                        onClick={() => setReviewingFlags(inv)}
+                        className="ml-1.5 inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 hover:bg-amber-200"
+                        title={`${activeFlags(inv).length} review flag${activeFlags(inv).length > 1 ? "s" : ""}`}
+                      >
+                        <AlertTriangle className="h-3 w-3" />
+                        REVIEW {activeFlags(inv).length > 1 ? `×${activeFlags(inv).length}` : ""}
+                      </button>
+                    )}
                   </td>
                   <td className="px-4 py-3"><code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{inv.poNumber}</code></td>
                   <td className="px-4 py-3 text-gray-600">{inv.supplier}</td>
@@ -659,6 +758,7 @@ export default function InvoicesPage() {
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{inv.issueDate}</td>
                   <td className="px-4 py-3 text-xs text-gray-500">{inv.dueDate ?? "—"}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{inv.paidAt ? inv.paidAt.slice(0, 10) : "—"}</td>
                   <td className="px-4 py-3 text-right font-medium">{inv.amount.toFixed(2)}</td>
                   <td className="px-4 py-3">
                     {inv.hasPhoto ? (
@@ -1111,6 +1211,71 @@ export default function InvoicesPage() {
                 </div>
               ),
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Flag review dialog */}
+      {reviewingFlags && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setReviewingFlags(null)}>
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  Review flags
+                </h3>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {reviewingFlags.invoiceNumber} · {reviewingFlags.supplier} · RM {reviewingFlags.amount.toFixed(2)}
+                </p>
+              </div>
+              <button onClick={() => setReviewingFlags(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {(reviewingFlags.flags ?? []).map((f) => (
+                <div
+                  key={f.code}
+                  className={`rounded-lg border p-3 ${f.dismissed ? "border-gray-200 bg-gray-50" : "border-amber-200 bg-amber-50"}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <p className={`text-sm font-semibold ${f.dismissed ? "text-gray-500 line-through" : "text-amber-900"}`}>
+                        {FLAG_TITLE[f.code]}
+                      </p>
+                      <p className={`mt-1 text-xs ${f.dismissed ? "text-gray-400" : "text-amber-800"}`}>
+                        {f.message}
+                      </p>
+                      <p className="mt-1 text-[10px] text-gray-400">
+                        Detected {new Date(f.detectedAt).toLocaleString()}
+                        {f.dismissed && f.dismissedAt && ` · Accepted ${new Date(f.dismissedAt).toLocaleString()}`}
+                      </p>
+                    </div>
+                    {!f.dismissed && (
+                      <button
+                        onClick={() => dismissFlag(reviewingFlags.id, f.code)}
+                        disabled={flagActionCode === f.code}
+                        className="shrink-0 rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                      >
+                        {flagActionCode === f.code ? <Loader2 className="h-3 w-3 animate-spin" /> : "Accept"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {(reviewingFlags.flags ?? []).length === 0 && (
+                <p className="text-sm text-gray-500">No flags on this invoice.</p>
+              )}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between border-t pt-3 text-xs text-gray-500">
+              <span>"Accept" dismisses the flag — keep evidence in the invoice notes if needed.</span>
+              <button onClick={() => setReviewingFlags(null)} className="rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100">
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

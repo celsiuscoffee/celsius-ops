@@ -1,6 +1,8 @@
 import { NextResponse, NextRequest } from "next/server";
+import type { Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
+import { detectPaymentFlags, mergeFlags } from "@/lib/inventory/flag-detector";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const caller = await getUserFromHeaders(req.headers);
@@ -63,6 +65,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       where: { id },
       data,
     });
+
+    // When transitioning to PAID/DEPOSIT_PAID, run the flag detector against
+    // the freshly-attached payment data so the UI can surface any duplicates.
+    if (status === "PAID" || status === "DEPOSIT_PAID") {
+      const paymentRefForCheck = status === "DEPOSIT_PAID" ? depositRef : paymentRef;
+      const newFlags = await detectPaymentFlags({
+        invoiceId: id,
+        paymentRef: paymentRefForCheck ?? null,
+      });
+      if (newFlags.length > 0) {
+        const merged = mergeFlags(invoice.flags, newFlags);
+        await prisma.invoice.update({
+          where: { id },
+          data: { flags: merged as unknown as Prisma.InputJsonValue },
+        });
+      }
+    }
 
     return NextResponse.json(invoice);
   } catch (err) {

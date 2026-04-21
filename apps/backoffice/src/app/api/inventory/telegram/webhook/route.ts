@@ -4,6 +4,7 @@ import { v2 as cloudinary } from "cloudinary";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { createShortLink } from "@/lib/shortlink";
+import { detectPaymentFlags, appendInvoiceFlags } from "@/lib/inventory/flag-detector";
 import {
   sendMessage,
   sendPhoto,
@@ -608,6 +609,32 @@ async function resolvePop(
   if (result.count === 0) {
     await sendMessage(chatId, "⚠️ Invoice was already updated by someone else.", msgId);
     return;
+  }
+
+  // Detect review-worthy issues: duplicate paymentRef, ref points at a paid
+  // invoice, bank mismatch, tolerance-only match. Surfaces as flags in the UI
+  // so finance can manually accept or reject.
+  try {
+    const matchedAmount = isDepositMatch ? Number(invoice.depositAmount) : Number(invoice.amount);
+    const matchMethod: "exact" | "tolerance" = Math.abs(matchedAmount - amount) < 0.01 ? "exact" : "tolerance";
+    const popFlags = await detectPaymentFlags({
+      invoiceId: invoice.id,
+      paymentRef: pop.referenceNumber ?? null,
+      popInvoiceReference: pop.invoiceReference ?? null,
+      popRecipientAccount: pop.recipientAccount ?? null,
+      matchMethod,
+    });
+    if (popFlags.length > 0) {
+      await appendInvoiceFlags(invoice.id, popFlags);
+      const flagList = popFlags.map((f) => `• ${f.message}`).join("\n");
+      await sendMessage(
+        chatId,
+        `⚠️ <b>Review needed</b> on ${invoice.invoiceNumber}:\n${flagList}\n\nOpen the invoices tab to accept or reject.`,
+        msgId,
+      );
+    }
+  } catch (e) {
+    console.error("[telegram] Flag detection failed:", e);
   }
 
   // Also attach POP photo to the linked PO (Order)
