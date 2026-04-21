@@ -859,10 +859,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const { data: user, isLoading } = useFetch<UserProfile>("/api/auth/me");
 
-  // Redirect to login if not authenticated
+  // Redirect to login if not authenticated, or if a STAFF session somehow
+  // reached the backoffice (login API only issues sessions to OWNER/ADMIN/
+  // MANAGER, but a stale or cross-subdomain cookie could land here).
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (isLoading) return;
+    if (!user) {
       router.push("/login");
+      return;
+    }
+    if (!["OWNER", "ADMIN", "MANAGER"].includes(user.role)) {
+      router.push("/login?reason=role");
     }
   }, [isLoading, user, router]);
 

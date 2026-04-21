@@ -195,7 +195,7 @@ export default function OpsDashboardPage() {
               <div key={s.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-gray-700 truncate">{s.name}</p>
-                  <p className="text-[10px] text-gray-400">{s.role.toLowerCase()} · {s.itemsCompleted} items</p>
+                  <p className="text-[10px] text-gray-400">{s.role.toLowerCase()} · {s.itemsCompleted} {s.itemsCompleted === 1 ? "item" : "items"}</p>
                 </div>
                 <span className={`text-xs font-bold ${completionAccent(s.completionRate)}`}>
                   {s.completionRate}%
