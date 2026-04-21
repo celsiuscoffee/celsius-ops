@@ -196,10 +196,20 @@ export async function POST(req: NextRequest) {
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-  // Generate order number with PC- prefix
+  // Generate order number with PC- prefix. Use MAX(orderNumber) over the whole
+  // PC-<code>- namespace so PAYMENT_REQUEST orders (also PC-) don't collide
+  // with fresh PAY_AND_CLAIM numbering.
   const outletRecord = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId } });
-  const count = await prisma.order.count({ where: { outletId, orderType: "PAY_AND_CLAIM" } });
-  const orderNumber = `PC-${outletRecord.code}-${String(count + 1).padStart(4, "0")}`;
+  const nextPcOrderNumber = async (offset: number) => {
+    const maxResult = await prisma.order.aggregate({
+      where: { orderNumber: { startsWith: `PC-${outletRecord.code}-` } },
+      _max: { orderNumber: true },
+    });
+    const lastNum = maxResult._max.orderNumber
+      ? parseInt(maxResult._max.orderNumber.split("-").pop() || "0", 10)
+      : 0;
+    return `PC-${outletRecord.code}-${String(lastNum + 1 + offset).padStart(4, "0")}`;
+  };
 
   const itemsTotal = items?.length
     ? items.reduce(
@@ -223,35 +233,46 @@ export async function POST(req: NextRequest) {
     const invoicePaymentType = requestFlow === "REQUEST" ? "SUPPLIER" : "STAFF_CLAIM";
     const orderType = requestFlow === "REQUEST" ? "PAYMENT_REQUEST" : "PAY_AND_CLAIM";
 
-    const order = await prisma.order.create({
-      data: {
-        orderNumber,
-        orderType,
-        expenseCategory: category,
-        outletId,
-        supplierId: supplierId || null,
-        status: orderStatus,
-        totalAmount,
-        notes: orderNotes,
-        deliveryDate: purchaseDate ? new Date(purchaseDate) : new Date(),
-        createdById: caller.id,
-        // REQUEST flow has no claimant (staff didn't pay); CLAIM flow needs one.
-        claimedById: requestFlow === "REQUEST" ? null : (claimedById || caller.id),
-        ...(items?.length
-          ? {
-              items: {
-                create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }) => ({
-                  productId: i.productId,
-                  productPackageId: i.productPackageId || null,
-                  quantity: i.quantity,
-                  unitPrice: i.unitPrice,
-                  totalPrice: i.quantity * i.unitPrice,
-                })),
-              },
-            }
-          : {}),
-      },
-    });
+    let order;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const orderNumber = await nextPcOrderNumber(attempt);
+      try {
+        order = await prisma.order.create({
+          data: {
+            orderNumber,
+            orderType,
+            expenseCategory: category,
+            outletId,
+            supplierId: supplierId || null,
+            status: orderStatus,
+            totalAmount,
+            notes: orderNotes,
+            deliveryDate: purchaseDate ? new Date(purchaseDate) : new Date(),
+            createdById: caller.id,
+            // REQUEST flow has no claimant (staff didn't pay); CLAIM flow needs one.
+            claimedById: requestFlow === "REQUEST" ? null : (claimedById || caller.id),
+            ...(items?.length
+              ? {
+                  items: {
+                    create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }) => ({
+                      productId: i.productId,
+                      productPackageId: i.productPackageId || null,
+                      quantity: i.quantity,
+                      unitPrice: i.unitPrice,
+                      totalPrice: i.quantity * i.unitPrice,
+                    })),
+                  },
+                }
+              : {}),
+          },
+        });
+        break;
+      } catch (e: unknown) {
+        const isUniqueViolation = e instanceof Error && e.message.includes("Unique constraint");
+        if (!isUniqueViolation || attempt === 4) throw e;
+      }
+    }
+    if (!order) throw new Error("Failed to generate unique order number after 5 attempts");
 
     // Create invoice — use provided invoice number if given, else auto-generate
     let invoiceNumber = bodyInvoiceNumber?.trim() || null;
@@ -336,35 +357,47 @@ export async function POST(req: NextRequest) {
   const invoicePaymentType = requestFlow === "REQUEST" ? "SUPPLIER" : "STAFF_CLAIM";
   const orderType = requestFlow === "REQUEST" ? "PAYMENT_REQUEST" : "PAY_AND_CLAIM";
 
-  // 1. Create order (already COMPLETED since purchase is done)
-  const order = await prisma.order.create({
-    data: {
-      orderNumber,
-      orderType,
-      expenseCategory: category,
-      outletId,
-      supplierId: supplierId || null,
-      status: "COMPLETED",
-      totalAmount,
-      notes: notes || null,
-      deliveryDate: purchaseDate ? new Date(purchaseDate) : new Date(),
-      createdById: caller.id,
-      claimedById: requestFlow === "REQUEST" ? null : claimedById,
-      ...(items?.length
-        ? {
-            items: {
-              create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }) => ({
-                productId: i.productId,
-                productPackageId: i.productPackageId || null,
-                quantity: i.quantity,
-                unitPrice: i.unitPrice,
-                totalPrice: i.quantity * i.unitPrice,
-              })),
-            },
-          }
-        : {}),
-    },
-  });
+  // 1. Create order (already COMPLETED since purchase is done) — retry on
+  // orderNumber collision (MAX lookup can race with concurrent creates).
+  let order;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const orderNumber = await nextPcOrderNumber(attempt);
+    try {
+      order = await prisma.order.create({
+        data: {
+          orderNumber,
+          orderType,
+          expenseCategory: category,
+          outletId,
+          supplierId: supplierId || null,
+          status: "COMPLETED",
+          totalAmount,
+          notes: notes || null,
+          deliveryDate: purchaseDate ? new Date(purchaseDate) : new Date(),
+          createdById: caller.id,
+          claimedById: requestFlow === "REQUEST" ? null : claimedById,
+          ...(items?.length
+            ? {
+                items: {
+                  create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }) => ({
+                    productId: i.productId,
+                    productPackageId: i.productPackageId || null,
+                    quantity: i.quantity,
+                    unitPrice: i.unitPrice,
+                    totalPrice: i.quantity * i.unitPrice,
+                  })),
+                },
+              }
+            : {}),
+        },
+      });
+      break;
+    } catch (e: unknown) {
+      const isUniqueViolation = e instanceof Error && e.message.includes("Unique constraint");
+      if (!isUniqueViolation || attempt === 4) throw e;
+    }
+  }
+  if (!order) throw new Error("Failed to generate unique order number after 5 attempts");
 
   // 2. Receiving + stock adjustment — only for INGREDIENT (non-ingredient has no stock impact)
   let receivingId: string | null = null;
