@@ -58,13 +58,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cannot record wastage for another outlet" }, { status: 403 });
   }
 
+  // Auto-fill cost from cheapest active supplier price when client didn't
+  // provide one. Stock is tracked in product baseUom; supplier prices are
+  // per package, so divide by conversionFactor to get per-baseUom cost.
+  let resolvedCost: number | null = costAmount ?? null;
+  if (resolvedCost == null) {
+    const sp = await prisma.supplierProduct.findMany({
+      where: { productId, isActive: true, productPackage: { isNot: null } },
+      select: { price: true, productPackage: { select: { conversionFactor: true } } },
+    });
+    const perBaseUnit = sp
+      .map((s) => {
+        const cf = Number(s.productPackage?.conversionFactor ?? 0);
+        return cf > 0 ? Number(s.price) / cf : null;
+      })
+      .filter((v): v is number => v != null && v > 0);
+    if (perBaseUnit.length > 0) {
+      const cheapest = Math.min(...perBaseUnit);
+      resolvedCost = Math.round(cheapest * Math.abs(Number(quantity)) * 100) / 100;
+    }
+  }
+
   const adjustment = await prisma.stockAdjustment.create({
     data: {
       outletId,
       productId,
       adjustmentType,
       quantity,
-      costAmount: costAmount ?? null,
+      costAmount: resolvedCost,
       reason: reason || null,
       adjustedById: session.id,
     },

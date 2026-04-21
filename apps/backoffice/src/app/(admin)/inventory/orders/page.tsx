@@ -125,7 +125,10 @@ export default function OrdersPage() {
     return () => clearTimeout(t);
   }, [search]);
   const url = `/api/inventory/orders?tab=${tab}${debouncedSearch ? `&search=${debouncedSearch}` : ""}`;
-  const { data: orders = [], isLoading: loading, mutate: loadOrders } = useFetch<Order[]>(url);
+  type OrdersResponse = { orders: Order[]; summary: { total: number; draft: number; active: number; completed: number; totalValue: number } };
+  const { data, isLoading: loading, mutate: loadOrders } = useFetch<OrdersResponse>(url);
+  const orders: Order[] = data?.orders ?? [];
+  const summary = data?.summary ?? { total: 0, draft: 0, active: 0, completed: 0, totalValue: 0 };
   const [cardFilter, setCardFilter] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -510,7 +513,7 @@ export default function OrdersPage() {
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Purchase Orders</h2>
           <p className="mt-0.5 text-sm text-gray-500">
-            {orders.length} {orders.length === 1 ? 'order' : 'orders'} &middot; {pendingCount} active
+            {summary.total} {summary.total === 1 ? 'order' : 'orders'} &middot; {summary.active} active
           </p>
         </div>
         <Link href="/inventory/orders/create">
@@ -524,23 +527,23 @@ export default function OrdersPage() {
       <div className="mt-4 grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === null ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(null)}>
           <p className="text-xs text-gray-500">Total Orders</p>
-          <p className="text-xl font-bold text-gray-900">{orders.length}</p>
+          <p className="text-xl font-bold text-gray-900">{summary.total}</p>
         </Card>
         <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === "DRAFT" ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(cardFilter === "DRAFT" ? null : "DRAFT")}>
           <p className="text-xs text-gray-500">Draft</p>
-          <p className="text-xl font-bold text-gray-500">{orders.filter((o) => o.status === "DRAFT").length}</p>
+          <p className="text-xl font-bold text-gray-500">{summary.draft}</p>
         </Card>
         <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === "active" ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(cardFilter === "active" ? null : "active")}>
           <p className="text-xs text-gray-500">Active / In Progress</p>
-          <p className="text-xl font-bold text-terracotta">{pendingCount}</p>
+          <p className="text-xl font-bold text-terracotta">{summary.active}</p>
         </Card>
         <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === "COMPLETED" ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(cardFilter === "COMPLETED" ? null : "COMPLETED")}>
           <p className="text-xs text-gray-500">Completed</p>
-          <p className="text-xl font-bold text-green-600">{orders.filter((o) => o.status === "COMPLETED").length}</p>
+          <p className="text-xl font-bold text-green-600">{summary.completed}</p>
         </Card>
         <Card className="px-4 py-3">
           <p className="text-xs text-gray-500">Total Value</p>
-          <p className="text-xl font-bold text-gray-900">RM {totalValue.toFixed(2)}</p>
+          <p className="text-xl font-bold text-gray-900">RM {summary.totalValue.toFixed(2)}</p>
         </Card>
       </div>
 

@@ -24,6 +24,16 @@ export async function GET(req: NextRequest) {
     ];
   }
 
+  // Cross-tab summary — runs in parallel with the filtered list. The
+  // summary cards on the page should always show all-time totals, not
+  // shift counts when the user changes the tab filter.
+  const summaryGroupsP = prisma.order.groupBy({
+    by: ["status"],
+    where: { orderType: "PURCHASE_ORDER" },
+    _count: { _all: true },
+    _sum: { totalAmount: true },
+  });
+
   const orders = await prisma.order.findMany({
     where,
     take: 100,
@@ -112,7 +122,25 @@ export async function GET(req: NextRequest) {
       : null,
   }));
 
-  return NextResponse.json(mapped);
+  const summaryGroups = await summaryGroupsP;
+  const summary = {
+    total: 0,
+    draft: 0,
+    active: 0,
+    completed: 0,
+    totalValue: 0,
+  };
+  for (const g of summaryGroups) {
+    const count = g._count._all;
+    const value = Number(g._sum.totalAmount ?? 0);
+    summary.total += count;
+    summary.totalValue += value;
+    if ((g.status as string) === "DRAFT") summary.draft += count;
+    else if (g.status === "COMPLETED") summary.completed += count;
+    else if (ACTIVE_STATUSES.includes(g.status)) summary.active += count;
+  }
+
+  return NextResponse.json({ orders: mapped, summary });
 }
 
 export async function POST(req: NextRequest) {
