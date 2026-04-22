@@ -576,7 +576,25 @@ async function resolvePop(
   // Prefer full-amount match when both could apply (safest default).
   const isDepositMatch = !matchesFull && matchesDeposit;
 
-  const shortLink = await createShortLink(photoUrl).catch(() => null);
+  // Rename the Supabase file to something human-readable now that we know
+  // which invoice it belongs to. Falls back to the original URL if the file
+  // lives outside Supabase (e.g. Cloudinary images) or if rename fails.
+  let renamedUrl = photoUrl;
+  try {
+    const { popStoragePath } = await import("@/lib/inventory/file-naming");
+    const { moveInStorage } = await import("@/lib/inventory/pdf-splitter");
+    const ext = /\.pdf(\?|$)/i.test(photoUrl) ? "pdf" : "jpg";
+    const newPath = popStoragePath(
+      { ...invoice, paidAt: new Date() } as any,
+      ext,
+    );
+    const moved = await moveInStorage(photoUrl, newPath);
+    if (moved) renamedUrl = moved;
+  } catch (err) {
+    console.error("[telegram] POP rename failed:", err);
+  }
+
+  const shortLink = await createShortLink(renamedUrl).catch(() => null);
 
   // DEPOSIT_PAID: stamp depositPaidAt + depositRef and compute balance due
   // from supplier.depositTermsDays (mirrors PATCH endpoint logic).
@@ -596,7 +614,7 @@ async function resolvePop(
           status: "DEPOSIT_PAID",
           depositPaidAt: new Date(),
           depositRef: pop.referenceNumber,
-          photos: { push: photoUrl },
+          photos: { push: renamedUrl },
           ...(shortLink ? { popShortLink: shortLink } : {}),
           ...(depositDueDate ? { dueDate: depositDueDate } : {}),
         }
@@ -605,7 +623,7 @@ async function resolvePop(
           paidAt: new Date(),
           paidVia: "Maybank Transfer",
           paymentRef: pop.referenceNumber,
-          photos: { push: photoUrl },
+          photos: { push: renamedUrl },
           ...(shortLink ? { popShortLink: shortLink } : {}),
         },
   });
@@ -645,7 +663,7 @@ async function resolvePop(
   if (invoice.orderId) {
     await prisma.order.update({
       where: { id: invoice.orderId },
-      data: { photos: { push: photoUrl } },
+      data: { photos: { push: renamedUrl } },
     }).catch((e: unknown) => console.error("[telegram] Failed to attach POP to order:", e));
   }
 
@@ -753,10 +771,31 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
   const order = matchingOrders[0];
   const existingInvoice = order.invoices[0];
 
+  // Rename the Supabase file to a readable invoice name now that we know the
+  // supplier, amount, and invoice number. Safe no-op for Cloudinary images.
+  let renamedUrl = photoUrl;
+  try {
+    const { invoiceStoragePath } = await import("@/lib/inventory/file-naming");
+    const { moveInStorage } = await import("@/lib/inventory/pdf-splitter");
+    const ext = /\.pdf(\?|$)/i.test(photoUrl) ? "pdf" : "jpg";
+    const newPath = invoiceStoragePath(
+      {
+        invoiceNumber: inv.invoiceNumber || order.orderNumber,
+        amount: amount ?? Number(order.totalAmount),
+        supplier: order.supplier ?? null,
+      } as any,
+      ext,
+    );
+    const moved = await moveInStorage(photoUrl, newPath);
+    if (moved) renamedUrl = moved;
+  } catch (err) {
+    console.error("[telegram] Invoice rename failed:", err);
+  }
+
   // Also attach invoice photo to the PO (Order)
   await prisma.order.update({
     where: { id: order.id },
-    data: { photos: { push: photoUrl } },
+    data: { photos: { push: renamedUrl } },
   }).catch((e) => console.error("[telegram] Failed to attach invoice photo to order:", e));
 
   if (existingInvoice) {
@@ -764,7 +803,7 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
     await prisma.invoice.update({
       where: { id: existingInvoice.id },
       data: {
-        photos: { push: photoUrl },
+        photos: { push: renamedUrl },
         ...(inv.invoiceNumber ? { invoiceNumber: inv.invoiceNumber } : {}),
       },
     });
@@ -788,7 +827,7 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
         amount: amount ?? Number(order.totalAmount),
         status: "PENDING",
         paymentType: "SUPPLIER",
-        photos: [photoUrl],
+        photos: [renamedUrl],
         issueDate: inv.date ? new Date(inv.date) : new Date(),
       },
     });

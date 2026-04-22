@@ -66,6 +66,42 @@ export async function splitAndUploadPdfPages(
 }
 
 /**
+ * Move a file within the `invoices` bucket. Rewrites the object path (e.g.
+ * renaming `pop/pop-1776xxx.pdf` → `pop/2026-04-21_26-0374_BLANCOZ_RM240.pdf`)
+ * and returns the new public URL. No-op if the file is hosted outside Supabase.
+ */
+export async function moveInStorage(
+  currentUrl: string,
+  newPath: string,
+): Promise<string | null> {
+  const supabase = getSupabase();
+
+  // Extract current object path from a Supabase public URL:
+  //   https://<ref>.supabase.co/storage/v1/object/public/invoices/pop/foo.pdf
+  //   →  pop/foo.pdf
+  const match = currentUrl.match(/\/storage\/v1\/object\/public\/invoices\/(.+)$/);
+  if (!match) return null;
+  const currentPath = decodeURIComponent(match[1]);
+  if (currentPath === newPath) {
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(newPath);
+    return data.publicUrl;
+  }
+
+  const { error } = await supabase.storage.from(BUCKET).move(currentPath, newPath);
+  if (error) {
+    // If the target already exists (idempotent rerun), try copy-then-delete.
+    if (/already exists/i.test(error.message)) {
+      const { data } = supabase.storage.from(BUCKET).getPublicUrl(newPath);
+      return data.publicUrl;
+    }
+    throw new Error(`Storage move failed: ${error.message}`);
+  }
+
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(newPath);
+  return data.publicUrl;
+}
+
+/**
  * Upload a buffer to Supabase Storage and return the public URL.
  */
 export async function uploadToStorage(
