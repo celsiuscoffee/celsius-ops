@@ -55,12 +55,16 @@ export async function GET(
   }
 
   // Image fast path: 302 to Cloudinary with fl_attachment so the download
-  // filename is set by Cloudinary itself (no proxy overhead).
+  // filename is set by Cloudinary itself (no proxy overhead). Cloudinary
+  // rejects fl_attachment values containing `.` (it interprets them as a
+  // file-extension separator), so strip the extension then swap any remaining
+  // periods for hyphens — e.g. `RM21.20` → `RM21-20`.
   if (!isRaw && hasImageExt) {
-    const name = buildName("jpg");
+    const raw = buildName("jpg").replace(/\.[^.]+$/, "");
+    const attachmentName = raw.replace(/\./g, "-");
     const target = link.url.replace(
       /\/image\/upload\//,
-      `/image/upload/fl_attachment:${encodeURIComponent(name.replace(/\.[^.]+$/, ""))}/`,
+      `/image/upload/fl_attachment:${encodeURIComponent(attachmentName)}/`,
     );
     return NextResponse.redirect(target, 302);
   }
