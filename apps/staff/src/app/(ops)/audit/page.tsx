@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
@@ -37,6 +37,20 @@ export default function AuditPage() {
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [selectedOutlet, setSelectedOutlet] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // /api/audits/outlets is already scoped to what the user is allowed to
+  // audit (OWNER/ADMIN → all; everyone else → assigned outlets only).
+  const visibleOutlets = outlets ?? [];
+  const singleOutlet = visibleOutlets.length === 1;
+
+  // If only one outlet is allowed, auto-select it so the disabled dropdown
+  // represents a locked-in choice rather than a dead-end empty value.
+  useEffect(() => {
+    if (!showNew) return;
+    if (singleOutlet && selectedOutlet !== visibleOutlets[0].id) {
+      setSelectedOutlet(visibleOutlets[0].id);
+    }
+  }, [showNew, singleOutlet, visibleOutlets, selectedOutlet]);
 
   const inProgress = audits?.filter((a) => a.status === "IN_PROGRESS") ?? [];
   const completed = audits?.filter((a) => a.status === "COMPLETED") ?? [];
@@ -101,27 +115,27 @@ export default function AuditPage() {
             </select>
           </div>
 
-          {/* Select Outlet — non-admins are pinned to their own outlet */}
-          {(() => {
-            const isAdmin = me?.role === "OWNER" || me?.role === "ADMIN";
-            const visibleOutlets = isAdmin ? (outlets ?? []) : (outlets ?? []).filter((o) => o.id === me?.outletId);
-            return (
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Outlet</label>
-                <select
-                  value={selectedOutlet}
-                  onChange={(e) => setSelectedOutlet(e.target.value)}
-                  disabled={!isAdmin && visibleOutlets.length === 1}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white disabled:bg-gray-50"
-                >
-                  <option value="">Select outlet...</option>
-                  {visibleOutlets.map((o) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
-                </select>
-              </div>
-            );
-          })()}
+          {/* Select Outlet — scoped server-side to the caller's assignments */}
+          <div>
+            <label className="text-xs font-medium text-gray-500 mb-1 block">Outlet</label>
+            {visibleOutlets.length === 0 ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                You&apos;re not assigned to any outlet. Ask an admin to add you to an outlet before starting an audit.
+              </p>
+            ) : (
+              <select
+                value={selectedOutlet}
+                onChange={(e) => setSelectedOutlet(e.target.value)}
+                disabled={singleOutlet}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white disabled:bg-gray-50"
+              >
+                <option value="">Select outlet...</option>
+                {visibleOutlets.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
 
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowNew(false)} className="text-xs flex-1">
