@@ -26,6 +26,12 @@ export function HomeContent({ featuredProducts, promoBanner, campaignBgUrl }: Ho
   const selectedStore = hasHydrated ? _selectedStore : null;
   const itemCount = hasHydrated ? _itemCount : 0;
 
+  // If the cart has items, the "Order Now" CTAs jump straight to checkout
+  // flow so a half-built order isn't abandoned by starting a new one.
+  const orderHref = itemCount > 0
+    ? "/cart"
+    : selectedStore ? `/menu?store=${selectedStore.id}` : "/store";
+
   return (
     <div className="flex flex-col min-h-dvh bg-[#f5f5f5]">
       {/* Header */}
@@ -99,7 +105,7 @@ export function HomeContent({ featuredProducts, promoBanner, campaignBgUrl }: Ho
               </div>
               <p className="text-sm text-white/60 mt-2">{promoBanner.description}</p>
               <Link
-                href={selectedStore ? `/menu?store=${selectedStore.id}` : "/store"}
+                href={orderHref}
                 className="inline-flex items-center gap-1.5 mt-4 bg-white text-primary rounded-full px-5 py-2.5 text-sm font-bold shadow-lg"
               >
                 Order Now <ChevronRight className="h-4 w-4" />
@@ -113,15 +119,15 @@ export function HomeContent({ featuredProducts, promoBanner, campaignBgUrl }: Ho
 
         {/* Quick Actions */}
         <div className="grid grid-cols-2 gap-3 px-4">
-          <Link href={selectedStore ? `/menu?store=${selectedStore.id}` : "/store"} className="block h-full">
+          <Link href={orderHref} className="block h-full">
             <Card className="p-4 flex flex-col gap-2.5 border border-border/60 shadow-sm bg-white hover:shadow-md hover:border-primary/20 transition-all active:scale-[0.98] h-full">
               <div className="w-10 h-10 rounded-xl bg-primary/8 flex items-center justify-center">
                 <Coffee className="h-5 w-5 text-primary" strokeWidth={1.5} />
               </div>
               <div>
-                <p className="font-bold text-sm">Order Now</p>
+                <p className="font-bold text-sm">{itemCount > 0 ? "Review Cart" : "Order Now"}</p>
                 <p className="text-xs text-muted-foreground leading-tight mt-0.5">
-                  Browse full menu
+                  {itemCount > 0 ? `${itemCount} item${itemCount === 1 ? "" : "s"} waiting` : "Browse full menu"}
                 </p>
               </div>
             </Card>
