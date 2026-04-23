@@ -507,24 +507,24 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Purchase Orders</h2>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Purchase Orders</h2>
+          <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
             {summary.total} {summary.total === 1 ? 'order' : 'orders'} &middot; {summary.active} active
           </p>
         </div>
-        <Link href="/inventory/orders/create">
-          <Button className="bg-terracotta hover:bg-terracotta-dark">
+        <Link href="/inventory/orders/create" className="sm:w-auto">
+          <Button className="bg-terracotta hover:bg-terracotta-dark w-full sm:w-auto">
             <Plus className="mr-1.5 h-4 w-4" />Create Order
           </Button>
         </Link>
       </div>
 
       {/* Summary cards */}
-      <div className="mt-4 grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="mt-4 grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-4">
         <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === null ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(null)}>
           <p className="text-xs text-gray-500">Total Orders</p>
           <p className="text-xl font-bold text-gray-900">{summary.total}</p>
@@ -548,8 +548,8 @@ export default function OrdersPage() {
       </div>
 
       {/* Filters */}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-md">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        <div className="relative w-full sm:flex-1 sm:max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input placeholder="Search by PO#, supplier, or outlet..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
@@ -568,7 +568,7 @@ export default function OrdersPage() {
 
       {/* Orders table */}
       <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[820px] text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="w-8 px-3 py-3"></th>
@@ -950,8 +950,8 @@ export default function OrdersPage() {
                   Order Items
                   {aiExtracted.items && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium normal-case text-purple-600">AI updated qty &amp; prices</span>}
                 </p>
-                <div className="rounded-lg border overflow-hidden">
-                  <table className="w-full text-xs">
+                <div className="rounded-lg border overflow-hidden overflow-x-auto">
+                  <table className="w-full text-xs min-w-[720px]">
                     <thead>
                       <tr className="bg-gray-50 border-b">
                         <th className="px-3 py-2 text-left font-medium text-gray-500">Product</th>

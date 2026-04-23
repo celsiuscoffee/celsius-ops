@@ -65,7 +65,7 @@ export default function OpsPerformancePage() {
   ] : [];
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Ops Performance</h2>
         <p className="mt-0.5 text-sm text-gray-500">Monitor staff checklist completion and compliance</p>

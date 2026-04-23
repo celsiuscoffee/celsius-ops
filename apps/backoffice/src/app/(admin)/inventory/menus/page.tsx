@@ -151,8 +151,8 @@ export default function MenusPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Menu & Recipes (BOM)</h2>
           <p className="mt-0.5 text-sm text-gray-500">{menus.length} menu items with ingredient costing</p>
@@ -200,8 +200,8 @@ export default function MenusPage() {
       </div>
 
       {/* Menu table with expandable ingredients */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white">
-        <table className="w-full text-sm">
+      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
+        <table className="w-full text-sm min-w-[720px]">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="w-8 px-3 py-3"></th>

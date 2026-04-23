@@ -260,9 +260,9 @@ export default function PickupMenu() {
   const unavailableCount = products.filter((p) => !p.is_available).length;
 
   return (
-    <div className="p-6 space-y-5 max-w-4xl">
+    <div className="p-3 sm:p-6 space-y-5 max-w-4xl">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[#160800]">Pickup Menu</h1>
           <p className="text-sm text-muted-foreground mt-0.5">

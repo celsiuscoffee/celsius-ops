@@ -732,7 +732,7 @@ export default function MembersPage() {
   }
 
   return (
-    <div className="p-6 space-y-0 pb-20 md:pb-0">
+    <div className="p-3 sm:p-6 space-y-0 pb-20 md:pb-0">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Members</h1>

@@ -493,7 +493,7 @@ export default function NotificationsPage() {
     totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
 
   return (
-    <div className="p-6 space-y-6 pb-20 md:pb-0">
+    <div className="p-3 sm:p-6 space-y-6 pb-20 md:pb-0">
       {/* ── KPI Cards ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         {/* SMS123 Balance */}

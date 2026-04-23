@@ -110,7 +110,7 @@ export default function PurchaseSummaryPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link
@@ -237,8 +237,8 @@ export default function PurchaseSummaryPage() {
 
       {/* Table */}
       {data && (
-        <div className="mt-4 rounded-xl border border-gray-200 bg-white">
-          <table className="w-full text-sm">
+        <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="w-8 px-4 py-3" />

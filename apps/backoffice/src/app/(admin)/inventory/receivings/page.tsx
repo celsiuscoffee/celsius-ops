@@ -358,19 +358,19 @@ export default function ReceivingsPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Receivings</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{receivings.length} delivery records</p>
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Receivings</h2>
+          <p className="mt-0.5 text-xs sm:text-sm text-gray-500">{receivings.length} delivery records</p>
         </div>
-        <Button className="bg-terracotta hover:bg-terracotta-dark" onClick={() => openReceiveDialog()}>
+        <Button className="bg-terracotta hover:bg-terracotta-dark w-full sm:w-auto" onClick={() => openReceiveDialog()}>
           <ClipboardCheck className="mr-1.5 h-4 w-4" />Record Delivery
         </Button>
       </div>
 
       {/* Summary — clickable to filter */}
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
         {([
           { key: "awaiting" as const, label: "Awaiting Delivery", count: awaitingOrders.length, color: "text-purple-600", border: "border-purple-400", ring: "ring-purple-100" },
           { key: "all_received" as const, label: "Total Received", count: receivings.length, color: "text-gray-900", border: "border-gray-400", ring: "ring-gray-100" },
@@ -429,8 +429,8 @@ export default function ReceivingsPage() {
       )}
 
       {/* Search & Tabs */}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-md">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        <div className="relative w-full sm:flex-1 sm:max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input placeholder="Search by PO#, supplier, or outlet..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
@@ -448,8 +448,8 @@ export default function ReceivingsPage() {
       </div>
 
       {/* Receivings Table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white">
-        <table className="w-full text-sm">
+      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="w-8 px-3 py-3"></th>
@@ -599,8 +599,8 @@ export default function ReceivingsPage() {
             {receiveItems.length > 0 && (
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Enter Received Quantities</label>
-                <div className="rounded-md border border-gray-200">
-                  <table className="w-full text-xs">
+                <div className="rounded-md border border-gray-200 overflow-x-auto">
+                  <table className="w-full text-xs min-w-[720px]">
                     <thead>
                       <tr className="border-b bg-gray-50 text-gray-500">
                         <th className="px-3 py-2 text-left font-medium">Product</th>

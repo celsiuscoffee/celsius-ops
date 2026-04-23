@@ -417,9 +417,9 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <div className="p-6 max-w-3xl space-y-6">
+    <div className="p-3 sm:p-6 max-w-3xl space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Integrations</h1>
           <p className="text-sm text-gray-500 mt-0.5">Payment gateways, accounting, and connected services</p>

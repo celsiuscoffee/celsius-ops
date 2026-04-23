@@ -101,8 +101,8 @@ export default function PickupOrders() {
     .reduce((s, o) => s + o.total, 0);
 
   return (
-    <div className="p-6 space-y-5 max-w-6xl">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-6 space-y-5 max-w-6xl">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[#160800]">Pickup Orders</h1>
           <p className="text-sm text-muted-foreground mt-0.5">

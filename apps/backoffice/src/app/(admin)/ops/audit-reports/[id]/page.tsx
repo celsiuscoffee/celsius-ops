@@ -145,7 +145,7 @@ export default function AuditReportDetailPage({
   const isDone = report.status === "COMPLETED";
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">

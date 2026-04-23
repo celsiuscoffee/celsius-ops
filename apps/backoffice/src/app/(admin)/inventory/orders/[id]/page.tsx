@@ -207,7 +207,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const statusConfig = STATUS_LABELS[order.status];
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">

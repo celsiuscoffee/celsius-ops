@@ -234,9 +234,9 @@ export default function AIDecisionsPage() {
   const { purchaseOrders, transfers, wastageAlerts, summary } = data;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-white">AI Inventory Decisions</h1>
           <p className="text-xs text-zinc-500 mt-0.5">Auto-reorder, stock balancing, wastage control</p>
@@ -325,8 +325,8 @@ export default function AIDecisionsPage() {
                   </div>
 
                   {/* Items table */}
-                  <div className="border-t border-zinc-800">
-                    <table className="w-full text-xs">
+                  <div className="border-t border-zinc-800 overflow-x-auto">
+                    <table className="w-full text-xs min-w-[720px]">
                       <thead>
                         <tr className="text-zinc-500 bg-zinc-950/50">
                           <th className="text-left py-1.5 px-3 font-medium">Product</th>
@@ -423,8 +423,8 @@ export default function AIDecisionsPage() {
       {wastageAlerts.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-white mb-3">Wastage Alerts (30d)</h2>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
-            <table className="w-full text-xs">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden overflow-x-auto">
+            <table className="w-full text-xs min-w-[720px]">
               <thead>
                 <tr className="text-zinc-500 bg-zinc-950/50">
                   <th className="text-left py-2 px-3 font-medium">Product</th>

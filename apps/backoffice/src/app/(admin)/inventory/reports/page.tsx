@@ -13,7 +13,7 @@ const REPORTS = [
 
 export default function ReportsPage() {
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       <h2 className="text-xl font-semibold text-gray-900">Reports</h2>
       <p className="mt-0.5 text-sm text-gray-500">{REPORTS.length} reports for Celsius Coffee operations</p>
 

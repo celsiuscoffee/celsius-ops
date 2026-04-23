@@ -330,9 +330,9 @@ export default function PerishablesPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Perishables</h2>
           <p className="mt-0.5 text-sm text-gray-500">{products.length} perishables — packaging, tissue, cleaning supplies</p>

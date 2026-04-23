@@ -180,7 +180,7 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
   if (!sop) return <div className="p-6 text-center"><p className="text-gray-500">SOP not found</p><Link href="/ops/sops" className="mt-2 text-sm text-terracotta hover:underline">Back</Link></div>;
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       {/* Header */}
       <div className="mb-6">
         <Link href="/ops/sops" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-3">

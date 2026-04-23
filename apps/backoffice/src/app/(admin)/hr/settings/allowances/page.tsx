@@ -78,7 +78,7 @@ export default function AllowanceSettingsPage() {
   const perfWeightSum = form.perf_weight_checklists + form.perf_weight_reviews + form.perf_weight_audit;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       <SettingsNav />
       <div className="mt-6 flex items-center justify-between">
         <div>
