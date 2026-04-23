@@ -133,8 +133,8 @@ export default function PayrollItemsPage() {
           {CATEGORIES.filter((c) => grouped.has(c)).map((cat) => (
             <div key={cat}>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{cat}</h3>
-              <div className="overflow-hidden rounded-lg border">
-                <table className="w-full text-sm">
+              <div className="overflow-hidden rounded-lg border overflow-x-auto">
+                <table className="w-full text-sm min-w-[720px]">
                   <thead className="bg-gray-50">
                     <tr className="text-xs text-gray-500">
                       <th className="px-3 py-2 text-left">Code</th>

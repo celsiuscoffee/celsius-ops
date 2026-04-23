@@ -272,7 +272,7 @@ export default function SalesDashboard() {
   // ─── Render ─────────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 pb-10 min-h-0 w-full">
+    <div className="p-3 sm:p-6 pb-10 min-h-0 w-full">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Sales Dashboard</h1>

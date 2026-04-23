@@ -322,8 +322,8 @@ export default function StaffPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Staff</h2>
           <p className="mt-0.5 text-sm text-gray-500">{filtered.length === staff.length ? staff.length : `${filtered.length} of ${staff.length}`} members across {new Set(staff.map((s) => s.outlet).filter(Boolean)).size} locations</p>
@@ -358,8 +358,8 @@ export default function StaffPage() {
         </div>
       </div>
 
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white">
-        <table className="w-full text-sm">
+      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
+        <table className="w-full text-sm min-w-[720px]">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="px-4 py-3 text-left font-medium text-gray-500">User</th>

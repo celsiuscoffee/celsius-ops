@@ -68,8 +68,8 @@ export default function CategoriesPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Categories</h2>
           <p className="mt-0.5 text-sm text-gray-500">{categories.length} product {categories.length === 1 ? 'category' : 'categories'}</p>

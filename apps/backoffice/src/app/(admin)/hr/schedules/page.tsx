@@ -597,8 +597,8 @@ export default function SchedulesPage() {
 
       {/* Grid */}
       {grid && grid.users.length > 0 ? (
-        <div className="flex-1 min-h-0 overflow-auto rounded-xl border bg-card shadow-sm">
-          <table className="w-full text-sm">
+        <div className="flex-1 min-h-0 overflow-auto rounded-xl border bg-card shadow-sm overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
             <thead className="sticky top-0 z-20">
               <tr className="border-b bg-muted/50">
                 <th className="sticky left-0 z-30 bg-muted/50 p-2 text-left font-medium min-w-[180px]">

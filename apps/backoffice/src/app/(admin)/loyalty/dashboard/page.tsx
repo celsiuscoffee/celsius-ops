@@ -314,7 +314,7 @@ export default function LoyaltyDashboard() {
   }
 
   return (
-    <div className="p-6 pb-10 min-h-0 w-full">
+    <div className="p-3 sm:p-6 pb-10 min-h-0 w-full">
       <div className="mb-8 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>

@@ -685,20 +685,20 @@ export default function PayAndClaimPage() {
   ];
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-5">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Payment Requests</h1>
-          <p className="mt-0.5 text-sm text-gray-500">Staff claims and direct vendor payment requests</p>
+          <h1 className="text-lg sm:text-xl font-semibold text-gray-900">Payment Requests</h1>
+          <p className="mt-0.5 text-xs sm:text-sm text-gray-500">Staff claims and direct vendor payment requests</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/inventory/pay-and-claim/batches">
-            <Button size="sm" variant="outline">
+          <Link href="/inventory/pay-and-claim/batches" className="flex-1 sm:flex-none">
+            <Button size="sm" variant="outline" className="w-full sm:w-auto">
               Claim Batches
             </Button>
           </Link>
-          <Button size="sm" variant="outline" onClick={openQuickUpload}>
+          <Button size="sm" variant="outline" onClick={openQuickUpload} className="flex-1 sm:flex-none">
             <Upload className="mr-1.5 h-4 w-4" /> New Request
           </Button>
         </div>
@@ -744,8 +744,8 @@ export default function PayAndClaimPage() {
       </div>
 
       {/* ── Tabs + Search + Outlet Filter ── */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex rounded-lg border overflow-hidden">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        <div className="-mx-3 flex rounded-none border-y sm:mx-0 sm:rounded-lg sm:border overflow-x-auto">
           {TABS.map((t) => (
             <button
               key={t.key}
@@ -763,7 +763,7 @@ export default function PayAndClaimPage() {
             </button>
           ))}
         </div>
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative w-full sm:flex-1 sm:min-w-[200px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
           <Input
             placeholder="Search requests..."
@@ -794,8 +794,8 @@ export default function PayAndClaimPage() {
           {tab === "draft" ? "No draft requests to review" : "No requests found"}
         </div>
       ) : (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="rounded-xl border border-gray-200 bg-white overflow-x-auto">
+          <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="border-b bg-gray-50/50 text-gray-500 text-left">
                 <th className="px-4 py-3 font-medium w-10"></th>
@@ -1028,10 +1028,10 @@ export default function PayAndClaimPage() {
 
       {/* ── Review Dialog ── */}
       <Dialog open={reviewOpen} onOpenChange={(open) => { if (!open) closeReview(); }}>
-        <DialogContent className="!max-w-6xl max-h-[92vh] overflow-hidden p-0">
-          <div className="flex h-[85vh]">
-            {/* Left: Photo viewer (40%) */}
-            <div className="w-[40%] bg-gray-900 flex flex-col">
+        <DialogContent className="!max-w-6xl max-h-[95vh] overflow-hidden p-0">
+          <div className="flex h-[90vh] flex-col lg:h-[85vh] lg:flex-row">
+            {/* Left: Photo viewer (40% desktop, top 40vh on mobile) */}
+            <div className="h-[40vh] w-full bg-gray-900 flex flex-col lg:h-auto lg:w-[40%]">
               <div className="p-4 border-b border-gray-700">
                 <p className="text-xs text-gray-400 font-medium">Receipt / Invoice</p>
                 {reviewPhotos.length > 0 && (
@@ -1112,8 +1112,8 @@ export default function PayAndClaimPage() {
             </div>
 
             {/* Right: Editable form (60%) */}
-            <div className="w-[60%] flex flex-col">
-              <div className="p-5 border-b">
+            <div className="flex flex-1 flex-col lg:w-[60%] lg:flex-none">
+              <div className="p-4 sm:p-5 border-b">
                 <h2 className="text-base font-semibold flex items-center gap-2">
                   <Receipt className="h-4 w-4" />
                   Review Claim: {reviewClaim?.orderNumber}
@@ -1353,10 +1353,10 @@ export default function PayAndClaimPage() {
 
       {/* ── Quick Upload Dialog (full layout like review) ── */}
       <Dialog open={quickUploadOpen} onOpenChange={(open) => { if (!open) { setQuickUploadOpen(false); setQuSupplierId(""); setQuAmount(""); setQuDate(new Date().toISOString().split("T")[0]); setQuInvoiceNum(""); setQuCart([]); setQuProductSearch(""); setQuPhotoIdx(0); setQuPhotos([]); setQuAiData({}); setQuNotes(""); setQuOutletId(""); setQuStaffId(""); setQuCategory("INGREDIENT"); setQuFlow("CLAIM"); setQuVendorName(""); setQuVendorBankName(""); setQuVendorAccNum(""); setQuVendorAccName(""); } }}>
-        <DialogContent className="!max-w-6xl max-h-[92vh] overflow-hidden p-0">
-          <div className="flex h-[85vh]">
-            {/* Left: Photo upload & viewer (40%) */}
-            <div className="w-[40%] bg-gray-900 flex flex-col"
+        <DialogContent className="!max-w-6xl max-h-[95vh] overflow-hidden p-0">
+          <div className="flex h-[90vh] flex-col lg:h-[85vh] lg:flex-row">
+            {/* Left: Photo upload & viewer (40% desktop, top 40vh mobile) */}
+            <div className="h-[40vh] w-full bg-gray-900 flex flex-col lg:h-auto lg:w-[40%]"
               onDragOver={(e) => { e.preventDefault(); setQuDragging(true); }}
               onDragEnter={(e) => { e.preventDefault(); setQuDragging(true); }}
               onDragLeave={(e) => { e.preventDefault(); if (!e.currentTarget.contains(e.relatedTarget as Node)) setQuDragging(false); }}
@@ -1429,8 +1429,8 @@ export default function PayAndClaimPage() {
             </div>
 
             {/* Right: Form (60%) */}
-            <div className="w-[60%] flex flex-col">
-              <div className="p-5 border-b">
+            <div className="flex flex-1 flex-col lg:w-[60%] lg:flex-none">
+              <div className="p-4 sm:p-5 border-b">
                 <h2 className="text-base font-semibold flex items-center gap-2">
                   <Receipt className="h-4 w-4" /> New Expense Request
                 </h2>

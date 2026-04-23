@@ -278,7 +278,7 @@ export default function InsightsPage() {
   const otherActions = quick_actions.filter(a => a.priority !== "high");
 
   return (
-    <div className="p-6 space-y-8">
+    <div className="p-3 sm:p-6 space-y-8">
       {/* ─── Header ─── */}
       <div className="flex items-start justify-between gap-4">
         <div>

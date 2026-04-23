@@ -97,7 +97,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   return (
-    <div className="p-6 space-y-5 max-w-2xl">
+    <div className="p-3 sm:p-6 space-y-5 max-w-2xl">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button

@@ -70,7 +70,7 @@ export default function HRDashboardPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">HR Dashboard</h1>
           <p className="text-sm text-muted-foreground">AI-managed, human-reviewed</p>

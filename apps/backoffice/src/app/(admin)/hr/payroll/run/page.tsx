@@ -158,7 +158,7 @@ export default function PayrollRunPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Link href="/hr/payroll" className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100">
             <ArrowLeft className="h-4 w-4" />

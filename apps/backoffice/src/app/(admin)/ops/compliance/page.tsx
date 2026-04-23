@@ -46,7 +46,7 @@ export default function CompliancePage() {
   const { data, isLoading } = useFetch<ComplianceData>("/api/ops/compliance");
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900">SOP Compliance</h2>
         <p className="mt-0.5 text-sm text-gray-500">Check that all SOPs are properly scheduled across outlets</p>

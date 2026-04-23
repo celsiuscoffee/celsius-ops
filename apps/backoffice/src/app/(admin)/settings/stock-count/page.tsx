@@ -72,7 +72,7 @@ export default function StockCountSettingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-3 sm:p-6 max-w-2xl">
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Stock Count Schedule</h2>
         <p className="mt-1 text-sm text-gray-500">

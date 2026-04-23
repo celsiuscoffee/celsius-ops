@@ -46,7 +46,7 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-4 p-4 lg:p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-semibold">Campaigns</h1>
         <select
           value={days}

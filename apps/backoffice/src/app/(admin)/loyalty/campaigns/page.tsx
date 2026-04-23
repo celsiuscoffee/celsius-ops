@@ -18,6 +18,7 @@ import {
   Trash2,
   Clock,
   Bell,
+  Gift,
   MessageSquare,
   Send,
   Phone,
@@ -152,6 +153,7 @@ const segmentOptions = [
   { value: "new", label: "New customers" },
   { value: "returning", label: "Returning customers" },
   { value: "inactive", label: "Inactive members (30+ days)" },
+  { value: "birthday", label: "Birthday this month" },
   { value: "eligible", label: "Eligible to redeem" },
   { value: "custom", label: "Custom filter" },
 ];
@@ -183,11 +185,17 @@ const combinedTemplates: Record<string, string> = {
   "buy1free1:returning": "Hey {name}! BUY 1 FREE 1 at Celsius Coffee just for you. Thanks for being loyal!",
   "buy1free1:inactive":  "We miss you {name}! Come back & enjoy BUY 1 FREE 1 at Celsius Coffee. See you soon!",
   "buy1free1:eligible":  "{name}, you have {points} pts! Plus enjoy BUY 1 FREE 1 at Celsius Coffee today!",
+  // Birthday — sent during the member's birthday month
+  "multiplier:birthday":  "Happy Birthday {name}! Earn 2X POINTS all month at Celsius Coffee. Celebrate with us!",
+  "bonus:birthday":       "Happy Birthday {name}! Enjoy BONUS points at Celsius Coffee this month. Our treat!",
+  "cash_rebate:birthday": "Happy Birthday {name}! Enjoy a CASH REBATE at Celsius Coffee this month. Our treat!",
+  "buy1free1:birthday":   "Happy Birthday {name}! BUY 1 FREE 1 at Celsius Coffee this month. Show this SMS at any outlet.",
   // Custom — empty, user writes their own
   "custom:all": "",
   "custom:new": "",
   "custom:returning": "",
   "custom:inactive": "",
+  "custom:birthday": "",
   "custom:eligible": "",
   "custom:custom": "",
 };
@@ -387,6 +395,7 @@ export default function CampaignsPage() {
       new: "new",
       active: "returning",
       inactive: "inactive",
+      birthday: "birthday",
       eligible: "eligible",
       custom: "custom",
     };
@@ -424,6 +433,7 @@ export default function CampaignsPage() {
       new: "new",
       returning: "active",
       inactive: "inactive",
+      birthday: "birthday",
       eligible: "eligible",
       custom: "custom",
     };
@@ -452,6 +462,8 @@ export default function CampaignsPage() {
     const cleanDesc = formCustomDesc.replace(/^\[AUTO:\w+(?::\d+)?\]\s*/g, "");
     if (formSegment === "inactive") {
       body.description = `[AUTO:inactive:${formInactiveDays}] ${cleanDesc || `Re-engage after ${formInactiveDays} days inactivity`}`;
+    } else if (formSegment === "birthday") {
+      body.description = `[AUTO:birthday] ${cleanDesc || "Birthday reward campaign"}`;
     }
 
     if (formMessage.trim()) body.message = formMessage.trim();
@@ -566,7 +578,7 @@ export default function CampaignsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 pb-20 md:pb-0">
+    <div className="p-3 sm:p-6 space-y-6 pb-20 md:pb-0">
       {/* ── KPI Cards ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Total sales */}
@@ -1104,6 +1116,19 @@ export default function CampaignsPage() {
                       />
                       <span className="text-sm text-orange-800 dark:text-orange-300">days</span>
                     </div>
+                  </div>
+                )}
+
+                {/* Birthday trigger info */}
+                {formSegment === "birthday" && (
+                  <div className="rounded-lg border border-pink-200 dark:border-pink-900/50 bg-pink-50 dark:bg-pink-900/20 p-4">
+                    <div className="mb-2 flex items-center gap-2 text-sm font-medium text-pink-800 dark:text-pink-300">
+                      <Gift className="h-4 w-4" />
+                      Birthday trigger
+                    </div>
+                    <p className="text-xs text-pink-700 dark:text-pink-400">
+                      Automatically sends once during each member&apos;s birthday month. Members without a birthday on file are skipped.
+                    </p>
                   </div>
                 )}
 

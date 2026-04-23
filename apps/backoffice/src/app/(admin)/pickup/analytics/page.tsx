@@ -151,7 +151,7 @@ export default function PickupAnalyticsPage() {
   const peakHour = hourSeries.reduce((m, h) => h.count > m.count ? h : m, hourSeries[0] ?? { hour: 0, count: 0, label: "" });
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl">
+    <div className="p-3 sm:p-6 space-y-6 max-w-6xl">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[#160800]">Pickup Analytics</h1>
