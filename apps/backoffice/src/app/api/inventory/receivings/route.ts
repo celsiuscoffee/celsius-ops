@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { adjustStockBalance } from "@/lib/stock";
 import { getUserFromHeaders } from "@/lib/auth";
+import { computeDepositAmount } from "@/lib/inventory/deposit";
 
 export async function GET(req: NextRequest) {
   // Auto-reconcile: fix PO statuses where receivings exist but order is still "awaiting"
@@ -214,6 +215,8 @@ export async function POST(req: NextRequest) {
           ? (await prisma.order.findUnique({ where: { id: orderId }, select: { totalAmount: true } }))?.totalAmount ?? 0
           : items.reduce((s: number, i: { receivedQty: number; unitPrice?: number }) => s + (i.receivedQty * (i.unitPrice ?? 0)), 0);
 
+        const depositAmount = await computeDepositAmount(supplierId, Number(totalAmount));
+
         await prisma.invoice.create({
           data: {
             invoiceNumber,
@@ -224,6 +227,7 @@ export async function POST(req: NextRequest) {
             status: "PENDING",
             photos: invoicePhotos || [],
             notes: notes ? `From receiving: ${notes}` : null,
+            ...(depositAmount ? { depositAmount } : {}),
           },
         });
       }

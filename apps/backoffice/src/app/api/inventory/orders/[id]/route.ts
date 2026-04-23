@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
+import { computeDepositAmount } from "@/lib/inventory/deposit";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -104,6 +105,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const existingInvoice = await prisma.invoice.findFirst({ where: { orderId: id } });
         if (!existingInvoice) {
           const invCount = await prisma.invoice.count();
+          const depositAmount = await computeDepositAmount(order.supplierId, Number(order.totalAmount));
           await prisma.invoice.create({
             data: {
               invoiceNumber: `INV-${String(invCount + 1).padStart(4, "0")}`,
@@ -113,6 +115,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               amount: order.totalAmount,
               status: "PENDING",
               photos: invoicePhotos || [],
+              ...(depositAmount ? { depositAmount } : {}),
             },
           });
         }

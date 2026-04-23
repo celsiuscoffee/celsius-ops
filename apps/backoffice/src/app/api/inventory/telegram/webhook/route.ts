@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { createShortLink } from "@/lib/shortlink";
 import { detectPaymentFlags, appendInvoiceFlags } from "@/lib/inventory/flag-detector";
+import { computeDepositAmount } from "@/lib/inventory/deposit";
 import {
   sendMessage,
   sendPhoto,
@@ -740,7 +741,7 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
     include: {
       supplier: { select: { name: true } },
       outlet: { select: { id: true, name: true } },
-      invoices: { select: { id: true, photos: true } },
+      invoices: { select: { id: true, photos: true, depositAmount: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 5,
@@ -799,24 +800,39 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
   }).catch((e) => console.error("[telegram] Failed to attach invoice photo to order:", e));
 
   if (existingInvoice) {
-    // Update existing invoice — add photo
+    // Update existing invoice — add photo. Also backfill depositAmount if the
+    // invoice was created by receivings/orders (which skip deposit calc) and
+    // the supplier requires a deposit — otherwise the POP matcher can never
+    // hit the DEPOSIT_PAID branch for this row.
+    const existingDepositAmount = (existingInvoice as { depositAmount: unknown }).depositAmount;
+    const shouldBackfillDeposit = existingDepositAmount == null;
+    const backfilledDeposit = shouldBackfillDeposit
+      ? await computeDepositAmount(order.supplierId, amount ?? Number(order.totalAmount))
+      : null;
+
     await prisma.invoice.update({
       where: { id: existingInvoice.id },
       data: {
         photos: { push: renamedUrl },
         ...(inv.invoiceNumber ? { invoiceNumber: inv.invoiceNumber } : {}),
+        ...(backfilledDeposit ? { depositAmount: backfilledDeposit } : {}),
       },
     });
 
+    const depositLine = backfilledDeposit
+      ? `\n💡 Deposit required: RM ${backfilledDeposit.toFixed(2)}`
+      : "";
     await sendMessage(
       chatId,
-      `✅ <b>Invoice photo added</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nAmount: RM ${Number(order.totalAmount).toFixed(2)}\nInvoice #: ${inv.invoiceNumber ?? existingInvoice.id.slice(0, 8)}\n\n📎 Uploaded to PO + Invoice`,
+      `✅ <b>Invoice photo added</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nAmount: RM ${Number(order.totalAmount).toFixed(2)}\nInvoice #: ${inv.invoiceNumber ?? existingInvoice.id.slice(0, 8)}${depositLine}\n\n📎 Uploaded to PO + Invoice`,
       msgId,
     );
   } else {
     // Create new invoice linked to PO
     const invCount = await prisma.invoice.count();
     const invoiceNumber = inv.invoiceNumber || `INV-${String(invCount + 1).padStart(4, "0")}`;
+    const invoiceAmount = amount ?? Number(order.totalAmount);
+    const depositAmount = await computeDepositAmount(order.supplierId, invoiceAmount);
 
     await prisma.invoice.create({
       data: {
@@ -824,17 +840,21 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
         orderId: order.id,
         outletId: order.outlet.id,
         supplierId: order.supplierId ?? undefined,
-        amount: amount ?? Number(order.totalAmount),
+        amount: invoiceAmount,
         status: "PENDING",
         paymentType: "SUPPLIER",
         photos: [renamedUrl],
         issueDate: inv.date ? new Date(inv.date) : new Date(),
+        ...(depositAmount ? { depositAmount } : {}),
       },
     });
 
+    const depositLine = depositAmount
+      ? `\nDeposit: RM ${depositAmount.toFixed(2)}`
+      : "";
     await sendMessage(
       chatId,
-      `✅ <b>Invoice created</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nInvoice: ${invoiceNumber}\nAmount: RM ${(amount ?? Number(order.totalAmount)).toFixed(2)}\n\n📎 Uploaded to PO + Invoice`,
+      `✅ <b>Invoice created</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nInvoice: ${invoiceNumber}\nAmount: RM ${invoiceAmount.toFixed(2)}${depositLine}\n\n📎 Uploaded to PO + Invoice`,
       msgId,
     );
   }
