@@ -170,6 +170,7 @@ type InvoiceData = {
   documentType: "INVOICE";
   invoiceNumber: string | null;
   amount: number | null;
+  deliveryCharge: number | null;
   supplierName: string | null;
   date: string | null;
   items: { name: string; quantity: number; unitPrice: number; totalPrice: number; matchedProduct?: string }[];
@@ -276,7 +277,8 @@ Return:
 {
   "documentType": "INVOICE",
   "invoiceNumber": "<string or null>",
-  "amount": <number or null — the total amount>,
+  "amount": <number or null — the GRAND TOTAL payable, INCLUDING any delivery/shipping/service charges. This is what the customer pays, not the line-item subtotal.>,
+  "deliveryCharge": <number or null — delivery, shipping, or service fee shown on the invoice (0 or null if none)>,
   "supplierName": "<exact name from known suppliers or null>",
   "date": "<YYYY-MM-DD or null>",
   "items": [{ "name": "<item name on invoice>", "matchedProduct": "<exact catalog name or null>", "quantity": <number>, "unitPrice": <number>, "totalPrice": <number> }]
@@ -713,6 +715,10 @@ async function resolvePop(
 async function handleInvoice(chatId: number, msgId: number, photoUrl: string, inv: InvoiceData) {
   const supplierName = inv.supplierName;
   const amount = inv.amount;
+  // Delivery/shipping/service charges — AI extracts these separately so we
+  // can back them out when matching against a PO (PO stores line-item subtotal
+  // only) but add them back in for the invoice amount customers actually pay.
+  const deliveryCharge = inv.deliveryCharge ?? 0;
 
   if (!supplierName && !amount) {
     await sendMessage(chatId, "📄 Invoice detected but couldn't extract supplier or amount.", msgId);
@@ -728,19 +734,23 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
   }
 
   // Find matching PO
+  // Match against order.totalAmount using the subtotal (amount minus delivery),
+  // since order.totalAmount is the line-item subtotal. Loosened tolerance to
+  // ±RM 2 to absorb rounding when Claude splits delivery out.
+  const subtotalForMatch = amount != null ? amount - deliveryCharge : null;
   const orderWhere: Record<string, unknown> = {
     orderType: "PURCHASE_ORDER",
     status: { in: ["SENT", "AWAITING_DELIVERY", "CONFIRMED"] },
   };
   if (supplier) orderWhere.supplierId = supplier.id;
-  if (amount) orderWhere.totalAmount = { gte: amount - 1, lte: amount + 1 };
+  if (subtotalForMatch != null) orderWhere.totalAmount = { gte: subtotalForMatch - 2, lte: subtotalForMatch + 2 };
 
   const matchingOrders = await prisma.order.findMany({
     where: orderWhere,
     include: {
       supplier: { select: { name: true } },
       outlet: { select: { id: true, name: true } },
-      invoices: { select: { id: true, photos: true } },
+      invoices: { select: { id: true, photos: true, amount: true, status: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 5,
@@ -771,6 +781,12 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
   const order = matchingOrders[0];
   const existingInvoice = order.invoices[0];
 
+  // Effective amount payable = AI-extracted grand total (preferred) or the
+  // PO subtotal plus any delivery charge the AI pulled out separately.
+  // This is what POPs will be matched against later, so it must include
+  // delivery/service fees that the supplier actually bills.
+  const effectiveAmount = amount ?? (Number(order.totalAmount) + deliveryCharge);
+
   // Rename the Supabase file to a readable invoice name now that we know the
   // supplier, amount, and invoice number. Safe no-op for Cloudinary images.
   let renamedUrl = photoUrl;
@@ -781,7 +797,7 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
     const newPath = invoiceStoragePath(
       {
         invoiceNumber: inv.invoiceNumber || order.orderNumber,
-        amount: amount ?? Number(order.totalAmount),
+        amount: effectiveAmount,
         supplier: order.supplier ?? null,
       } as any,
       ext,
@@ -799,18 +815,32 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
   }).catch((e) => console.error("[telegram] Failed to attach invoice photo to order:", e));
 
   if (existingInvoice) {
-    // Update existing invoice — add photo
+    // Update existing invoice — add photo, and correct the amount if the
+    // AI-extracted grand total is materially higher than what's stored
+    // (typically because the receiving flow created the invoice with
+    // order.totalAmount = subtotal and missed the delivery charge). Only
+    // touch amount on unpaid invoices so we don't rewrite settled records.
+    const storedAmount = Number(existingInvoice.amount);
+    const shouldCorrectAmount =
+      effectiveAmount > storedAmount + 0.5 &&
+      ["PENDING", "INITIATED", "OVERDUE", "DRAFT"].includes(existingInvoice.status);
+
+    const updateData: Record<string, unknown> = {
+      photos: { push: renamedUrl },
+      ...(inv.invoiceNumber ? { invoiceNumber: inv.invoiceNumber } : {}),
+      ...(shouldCorrectAmount ? { amount: effectiveAmount } : {}),
+    };
     await prisma.invoice.update({
       where: { id: existingInvoice.id },
-      data: {
-        photos: { push: renamedUrl },
-        ...(inv.invoiceNumber ? { invoiceNumber: inv.invoiceNumber } : {}),
-      },
+      data: updateData,
     });
 
+    const correctionLine = shouldCorrectAmount
+      ? `\n💡 Amount corrected: RM ${storedAmount.toFixed(2)} → RM ${effectiveAmount.toFixed(2)} (delivery ${deliveryCharge ? `+RM ${deliveryCharge.toFixed(2)}` : "included"})`
+      : "";
     await sendMessage(
       chatId,
-      `✅ <b>Invoice photo added</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nAmount: RM ${Number(order.totalAmount).toFixed(2)}\nInvoice #: ${inv.invoiceNumber ?? existingInvoice.id.slice(0, 8)}\n\n📎 Uploaded to PO + Invoice`,
+      `✅ <b>Invoice photo added</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nAmount: RM ${effectiveAmount.toFixed(2)}\nInvoice #: ${inv.invoiceNumber ?? existingInvoice.id.slice(0, 8)}${correctionLine}\n\n📎 Uploaded to PO + Invoice`,
       msgId,
     );
   } else {
@@ -824,7 +854,7 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
         orderId: order.id,
         outletId: order.outlet.id,
         supplierId: order.supplierId ?? undefined,
-        amount: amount ?? Number(order.totalAmount),
+        amount: effectiveAmount,
         status: "PENDING",
         paymentType: "SUPPLIER",
         photos: [renamedUrl],
@@ -832,9 +862,10 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
       },
     });
 
+    const deliveryLine = deliveryCharge > 0 ? `\nDelivery: RM ${deliveryCharge.toFixed(2)}` : "";
     await sendMessage(
       chatId,
-      `✅ <b>Invoice created</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nInvoice: ${invoiceNumber}\nAmount: RM ${(amount ?? Number(order.totalAmount)).toFixed(2)}\n\n📎 Uploaded to PO + Invoice`,
+      `✅ <b>Invoice created</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nInvoice: ${invoiceNumber}\nAmount: RM ${effectiveAmount.toFixed(2)}${deliveryLine}\n\n📎 Uploaded to PO + Invoice`,
       msgId,
     );
   }
