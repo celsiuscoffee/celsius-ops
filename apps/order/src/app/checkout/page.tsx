@@ -187,9 +187,17 @@ export default function CheckoutPage() {
       const data = await res.json() as {
         orderId: string; orderNumber: string; totalSen: number;
         clientSecret?: string;
+        freeOrder?: boolean;
         // Legacy redirect fallback (Revenue Monster)
         paymentType?: string; paymentUrl?: string;
       };
+
+      // Reward fully covers the bill — no gateway step, already "preparing".
+      if (data.freeOrder) {
+        saveOrderAndClearCart(data.orderId, data.orderNumber, data.totalSen);
+        router.push(`/order/${data.orderId}?payment=done`);
+        return;
+      }
 
       // New flow: Stripe PaymentIntent — open payment sheet.
       // Save order to recentOrders NOW (before any redirect) so FPX orders

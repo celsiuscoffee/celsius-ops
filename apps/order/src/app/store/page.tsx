@@ -13,6 +13,7 @@ import { BottomNav } from "@/components/bottom-nav";
 export default function StoreSelector() {
   const router = useRouter();
   const { selectedStore, setSelectedStore } = useCartStore();
+  const itemCount = useCartStore((s) => s.getItemCount());
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -28,7 +29,9 @@ export default function StoreSelector() {
 
   function handleSelectStore(store: Store) {
     setSelectedStore(store);
-    router.push(`/menu?store=${store.id}`);
+    // If they already have items, skip the menu and review the cart at the
+    // freshly-chosen outlet instead of starting a new browse session.
+    router.push(itemCount > 0 ? "/cart" : `/menu?store=${store.id}`);
   }
 
   return (

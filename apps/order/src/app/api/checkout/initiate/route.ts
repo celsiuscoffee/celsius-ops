@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { createPayment } from "@/lib/revenue-monster/client";
+import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
 import type { OrderRow } from "@/lib/supabase/types";
 
 // All active payment methods route through Stripe (live keys, MYR).
@@ -151,19 +152,26 @@ export async function POST(request: NextRequest) {
         .eq("reward_id", rewardId)
         .single();
 
-      if (rewardConfig) {
-        const { discount_type, discount_value } = rewardConfig;
-        if (discount_type === "flat" && discount_value != null) {
-          rewardDiscountSenAmt = Math.round(discount_value); // already in sen
-        } else if (discount_type === "percent" && discount_value != null) {
-          rewardDiscountSenAmt = Math.round(serverSubtotalSen * (discount_value / 100));
-        } else if (discount_type === "free_item" || discount_type === "bogo") {
-          // For free_item/bogo, the discount is the value of the free item(s)
-          // Trust the client value as it depends on which items were selected
-          rewardDiscountSenAmt = Math.round(rewardDiscountSen ?? 0);
-        }
+      // Reject unknown rewards up front — silently dropping the discount
+      // would cause the customer to be charged the pre-reward amount while
+      // the UI showed "free".
+      if (!rewardConfig) {
+        return NextResponse.json(
+          { error: "Reward is no longer valid" },
+          { status: 400 }
+        );
       }
-      // If no config found, discount stays 0 (don't trust client)
+
+      const { discount_type, discount_value } = rewardConfig;
+      if (discount_type === "flat" && discount_value != null) {
+        rewardDiscountSenAmt = Math.round(discount_value); // already in sen
+      } else if (discount_type === "percent" && discount_value != null) {
+        rewardDiscountSenAmt = Math.round(serverSubtotalSen * (discount_value / 100));
+      } else if (discount_type === "free_item" || discount_type === "bogo") {
+        // For free_item/bogo, the discount is the value of the free item(s)
+        // Trust the client value as it depends on which items were selected
+        rewardDiscountSenAmt = Math.round(rewardDiscountSen ?? 0);
+      }
     }
 
     // ── Server-side SST calculation ───────────────────────────────────────
@@ -257,6 +265,34 @@ export async function POST(request: NextRequest) {
 
     // Points deduction (reward) happens post-payment in webhook/confirm-stripe
     // to avoid deducting on abandoned payments.
+
+    // ── Zero-total bypass (fully-covered reward redemption) ────────────────
+    // Stripe rejects zero-amount PaymentIntents. If discounts fully cover the
+    // bill, skip the gateway and advance the order to "preparing" so it lands
+    // on KDS immediately. Loyalty earn/deduct runs here since there is no
+    // webhook / confirm-stripe callback to trigger it later.
+    if (totalSen === 0) {
+      await supabase
+        .from("orders")
+        .update({ status: "preparing" } as Record<string, unknown>)
+        .eq("id", order.id);
+
+      if (loyaltyId) {
+        if (pointsToEarn > 0) {
+          earnLoyaltyPoints(loyaltyId, order.id, pointsToEarn, order.store_id);
+        }
+        if (rewardId) {
+          deductLoyaltyPoints(loyaltyId, rewardId, order.store_id);
+        }
+      }
+
+      return NextResponse.json({
+        orderId:     order.id,
+        orderNumber: order.order_number,
+        totalSen:    0,
+        freeOrder:   true,
+      });
+    }
 
     // ── Stripe PaymentIntent ───────────────────────────────────────────────
     if (STRIPE_METHODS.has(paymentMethod)) {
