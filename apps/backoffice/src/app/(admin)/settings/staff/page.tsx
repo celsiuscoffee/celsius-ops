@@ -49,6 +49,7 @@ const APP_MODULES: Record<string, { label: string; key: string }[]> = {
   ],
   inventory: [
     { label: "Products", key: "products" },
+    { label: "Perishables", key: "perishables" },
     { label: "Suppliers", key: "suppliers" },
     { label: "Categories", key: "categories" },
     { label: "Menu & BOM", key: "menus" },
