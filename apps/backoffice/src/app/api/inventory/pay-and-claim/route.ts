@@ -200,8 +200,9 @@ export async function POST(req: NextRequest) {
   // PC-<code>- namespace so PAYMENT_REQUEST orders (also PC-) don't collide
   // with fresh PAY_AND_CLAIM numbering.
   const outletRecord = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId } });
-  const nextPcOrderNumber = async (offset: number) => {
-    const maxResult = await prisma.order.aggregate({
+  type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+  const nextPcOrderNumber = async (tx: Tx, offset: number) => {
+    const maxResult = await tx.order.aggregate({
       where: { orderNumber: { startsWith: `PC-${outletRecord.code}-` } },
       _max: { orderNumber: true },
     });
@@ -210,6 +211,21 @@ export async function POST(req: NextRequest) {
       : 0;
     return `PC-${outletRecord.code}-${String(lastNum + 1 + offset).padStart(4, "0")}`;
   };
+  // Invoice number — use MAX(invoiceNumber) starting with INV- so concurrent
+  // submits don't both compute the same N+1 from count(). Falls back to the
+  // user-supplied invoice number when present.
+  const nextInvoiceNumber = async (tx: Tx, offset: number) => {
+    const maxResult = await tx.invoice.aggregate({
+      where: { invoiceNumber: { startsWith: "INV-" } },
+      _max: { invoiceNumber: true },
+    });
+    const lastNum = maxResult._max.invoiceNumber
+      ? parseInt(maxResult._max.invoiceNumber.split("-").pop() || "0", 10)
+      : 0;
+    return `INV-${String(lastNum + 1 + offset).padStart(4, "0")}`;
+  };
+  const isUniqueViolation = (e: unknown) =>
+    e instanceof Error && e.message.includes("Unique constraint");
 
   const itemsTotal = items?.length
     ? items.reduce(
@@ -226,31 +242,176 @@ export async function POST(req: NextRequest) {
     : notes || null;
 
   if (isDraft || isQuickUpload) {
-    // ── Draft / Quick Upload mode: no receiving, no stock adjustment ──
+    // ── Draft / Quick Upload mode ──
+    // Order + invoice (+ optional receiving) created atomically. Previously these
+    // ran as separate Prisma calls outside any tx — when invoice creation hit a
+    // unique-constraint collision under concurrent submits (count()-based number
+    // generation), the order persisted with the receipt photos vanishing into the
+    // failed request, leaving an "orphan" order with no invoice and no photos.
+    // Both pieces now commit together or roll back together.
     const orderStatus = isQuickUpload && !isDraft ? "COMPLETED" : "DRAFT";
     const invoiceStatus = isQuickUpload && !isDraft ? "PENDING" : "DRAFT";
-    // Payment type depends on flow: REQUEST pays vendor (SUPPLIER), CLAIM pays staff.
     const invoicePaymentType = requestFlow === "REQUEST" ? "SUPPLIER" : "STAFF_CLAIM";
     const orderType = requestFlow === "REQUEST" ? "PAYMENT_REQUEST" : "PAY_AND_CLAIM";
 
+    const willCreateReceiving = !!(isQuickUpload && !isDraft && items?.length && supplierId);
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Order — retry on orderNumber collision
+      let order;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const orderNumber = await nextPcOrderNumber(tx, attempt);
+        try {
+          order = await tx.order.create({
+            data: {
+              orderNumber,
+              orderType,
+              expenseCategory: category,
+              outletId,
+              supplierId: supplierId || null,
+              status: orderStatus,
+              totalAmount,
+              notes: orderNotes,
+              deliveryDate: purchaseDate ? new Date(purchaseDate) : new Date(),
+              createdById: caller.id,
+              claimedById: requestFlow === "REQUEST" ? null : (claimedById || caller.id),
+              ...(items?.length
+                ? {
+                    items: {
+                      create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }) => ({
+                        productId: i.productId,
+                        productPackageId: i.productPackageId || null,
+                        quantity: i.quantity,
+                        unitPrice: i.unitPrice,
+                        totalPrice: i.quantity * i.unitPrice,
+                      })),
+                    },
+                  }
+                : {}),
+            },
+          });
+          break;
+        } catch (e: unknown) {
+          if (!isUniqueViolation(e) || attempt === 4) throw e;
+        }
+      }
+      if (!order) throw new Error("Failed to generate unique order number after 5 attempts");
+
+      // 2. Invoice — retry on invoiceNumber collision unless caller pinned one
+      let invoice;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const invoiceNumber = bodyInvoiceNumber?.trim() || (await nextInvoiceNumber(tx, attempt));
+        try {
+          invoice = await tx.invoice.create({
+            data: {
+              invoiceNumber,
+              orderId: order.id,
+              outletId,
+              supplierId: supplierId || null,
+              amount: totalAmount,
+              status: invoiceStatus,
+              paymentType: invoicePaymentType,
+              expenseCategory: category,
+              claimedById: requestFlow === "REQUEST" ? null : (claimedById || caller.id),
+              vendorName: vendorName || null,
+              vendorBankName: vendorBankName || null,
+              vendorBankAccountNumber: vendorBankAccountNumber || null,
+              vendorBankAccountName: vendorBankAccountName || null,
+              photos: photos || [],
+              issueDate: purchaseDate ? new Date(purchaseDate) : new Date(),
+              dueDate: dueDate ? new Date(dueDate) : null,
+              notes: isDraft
+                ? (notes ? `Draft: ${notes}` : `Draft ${category.toLowerCase()} ${requestFlow === "REQUEST" ? "payment request" : "claim"}`)
+                : (notes ? `Quick upload: ${notes}` : `Quick upload ${category.toLowerCase()} ${requestFlow === "REQUEST" ? "payment request" : "claim"}`),
+            },
+          });
+          break;
+        } catch (e: unknown) {
+          // If caller passed an explicit invoiceNumber, don't retry — surface the
+          // collision so they can choose a different one.
+          if (bodyInvoiceNumber?.trim() || !isUniqueViolation(e) || attempt === 4) throw e;
+        }
+      }
+      if (!invoice) throw new Error("Failed to generate unique invoice number after 5 attempts");
+
+      // 3. Optional receiving for QuickUpload with items
+      let receiving = null as { id: string } | null;
+      if (willCreateReceiving) {
+        receiving = await tx.receiving.create({
+          data: {
+            orderId: order.id,
+            outletId,
+            supplierId: supplierId!,
+            receivedById: caller.id,
+            status: "COMPLETE",
+            notes: notes ? `Pay & Claim: ${notes}` : "Pay & Claim",
+            invoicePhotos: photos || [],
+            items: {
+              create: items.map((i: { productId: string; productPackageId?: string; quantity: number }) => ({
+                productId: i.productId,
+                productPackageId: i.productPackageId || null,
+                orderedQty: i.quantity,
+                receivedQty: i.quantity,
+              })),
+            },
+          },
+          select: { id: true },
+        });
+      }
+
+      return { order, invoice, receiving };
+    });
+
+    // Post-commit side effect — stock adjustments. Doesn't run in the tx because
+    // adjustStockBalance uses the global prisma client. If this fails, the
+    // financial records still exist and stock can be reconciled separately.
+    if (willCreateReceiving) {
+      await Promise.all(
+        items.map((item: { productId: string; productPackageId?: string; quantity: number }) =>
+          adjustStockBalance(outletId, item.productId, item.quantity, item.productPackageId),
+        ),
+      );
+    }
+
+    return NextResponse.json(
+      {
+        order: { id: result.order.id, orderNumber: result.order.orderNumber },
+        ...(result.receiving ? { receiving: { id: result.receiving.id } } : {}),
+        invoice: { id: result.invoice.id, invoiceNumber: result.invoice.invoiceNumber },
+      },
+      { status: 201 },
+    );
+  }
+
+  // ── Non-draft: full flow ──
+  // For INGREDIENT: create order + receiving + invoice (atomic), then stock adjust.
+  // For non-ingredient (asset/maintenance/other): create order + invoice only.
+  const invoicePaymentType = requestFlow === "REQUEST" ? "SUPPLIER" : "STAFF_CLAIM";
+  const orderType = requestFlow === "REQUEST" ? "PAYMENT_REQUEST" : "PAY_AND_CLAIM";
+  const willCreateFullReceiving = !!(isIngredient && items?.length && supplierId);
+  const noteLabel = requestFlow === "REQUEST"
+    ? `${category.toLowerCase()} payment request`
+    : `${category.toLowerCase()} claim`;
+
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Order
     let order;
     for (let attempt = 0; attempt < 5; attempt++) {
-      const orderNumber = await nextPcOrderNumber(attempt);
+      const orderNumber = await nextPcOrderNumber(tx, attempt);
       try {
-        order = await prisma.order.create({
+        order = await tx.order.create({
           data: {
             orderNumber,
             orderType,
             expenseCategory: category,
             outletId,
             supplierId: supplierId || null,
-            status: orderStatus,
+            status: "COMPLETED",
             totalAmount,
-            notes: orderNotes,
+            notes: notes || null,
             deliveryDate: purchaseDate ? new Date(purchaseDate) : new Date(),
             createdById: caller.id,
-            // REQUEST flow has no claimant (staff didn't pay); CLAIM flow needs one.
-            claimedById: requestFlow === "REQUEST" ? null : (claimedById || caller.id),
+            claimedById: requestFlow === "REQUEST" ? null : claimedById,
             ...(items?.length
               ? {
                   items: {
@@ -268,50 +429,19 @@ export async function POST(req: NextRequest) {
         });
         break;
       } catch (e: unknown) {
-        const isUniqueViolation = e instanceof Error && e.message.includes("Unique constraint");
-        if (!isUniqueViolation || attempt === 4) throw e;
+        if (!isUniqueViolation(e) || attempt === 4) throw e;
       }
     }
     if (!order) throw new Error("Failed to generate unique order number after 5 attempts");
 
-    // Create invoice — use provided invoice number if given, else auto-generate
-    let invoiceNumber = bodyInvoiceNumber?.trim() || null;
-    if (!invoiceNumber) {
-      const invCount = await prisma.invoice.count();
-      invoiceNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
-    }
-    const invoice = await prisma.invoice.create({
-      data: {
-        invoiceNumber,
-        orderId: order.id,
-        outletId,
-        supplierId: supplierId || null,
-        amount: totalAmount,
-        status: invoiceStatus,
-        paymentType: invoicePaymentType,
-        expenseCategory: category,
-        claimedById: requestFlow === "REQUEST" ? null : (claimedById || caller.id),
-        // Capture one-off vendor on the invoice (used when no Supplier record)
-        vendorName: vendorName || null,
-        vendorBankName: vendorBankName || null,
-        vendorBankAccountNumber: vendorBankAccountNumber || null,
-        vendorBankAccountName: vendorBankAccountName || null,
-        photos: photos || [],
-        issueDate: purchaseDate ? new Date(purchaseDate) : new Date(),
-        dueDate: dueDate ? new Date(dueDate) : null,
-        notes: isDraft
-          ? (notes ? `Draft: ${notes}` : `Draft ${category.toLowerCase()} ${requestFlow === "REQUEST" ? "payment request" : "claim"}`)
-          : (notes ? `Quick upload: ${notes}` : `Quick upload ${category.toLowerCase()} ${requestFlow === "REQUEST" ? "payment request" : "claim"}`),
-      },
-    });
-
-    // If quickUpload with items and not draft → also create receiving + stock adjustments
-    if (isQuickUpload && !isDraft && items?.length && supplierId) {
-      const receiving = await prisma.receiving.create({
+    // 2. Receiving — only for INGREDIENT
+    let receiving = null as { id: string } | null;
+    if (willCreateFullReceiving) {
+      receiving = await tx.receiving.create({
         data: {
           orderId: order.id,
           outletId,
-          supplierId,
+          supplierId: supplierId!,
           receivedById: caller.id,
           status: "COMPLETE",
           notes: notes ? `Pay & Claim: ${notes}` : "Pay & Claim",
@@ -325,105 +455,48 @@ export async function POST(req: NextRequest) {
             })),
           },
         },
+        select: { id: true },
       });
-
-      await Promise.all(
-        items.map((item: { productId: string; productPackageId?: string; quantity: number }) =>
-          adjustStockBalance(outletId, item.productId, item.quantity, item.productPackageId),
-        ),
-      );
-
-      return NextResponse.json(
-        {
-          order: { id: order.id, orderNumber: order.orderNumber },
-          receiving: { id: receiving.id },
-          invoice: { id: invoice.id, invoiceNumber },
-        },
-        { status: 201 },
-      );
     }
 
-    return NextResponse.json(
-      {
-        order: { id: order.id, orderNumber: order.orderNumber },
-        invoice: { id: invoice.id, invoiceNumber },
-      },
-      { status: 201 },
-    );
-  }
-
-  // ── Non-draft: full flow ──
-  // For INGREDIENT: create order + receiving + stock adjust + invoice.
-  // For non-ingredient (asset/maintenance/other): create order + invoice only.
-  const invoicePaymentType = requestFlow === "REQUEST" ? "SUPPLIER" : "STAFF_CLAIM";
-  const orderType = requestFlow === "REQUEST" ? "PAYMENT_REQUEST" : "PAY_AND_CLAIM";
-
-  // 1. Create order (already COMPLETED since purchase is done) — retry on
-  // orderNumber collision (MAX lookup can race with concurrent creates).
-  let order;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const orderNumber = await nextPcOrderNumber(attempt);
-    try {
-      order = await prisma.order.create({
-        data: {
-          orderNumber,
-          orderType,
-          expenseCategory: category,
-          outletId,
-          supplierId: supplierId || null,
-          status: "COMPLETED",
-          totalAmount,
-          notes: notes || null,
-          deliveryDate: purchaseDate ? new Date(purchaseDate) : new Date(),
-          createdById: caller.id,
-          claimedById: requestFlow === "REQUEST" ? null : claimedById,
-          ...(items?.length
-            ? {
-                items: {
-                  create: items.map((i: { productId: string; productPackageId?: string; quantity: number; unitPrice: number }) => ({
-                    productId: i.productId,
-                    productPackageId: i.productPackageId || null,
-                    quantity: i.quantity,
-                    unitPrice: i.unitPrice,
-                    totalPrice: i.quantity * i.unitPrice,
-                  })),
-                },
-              }
-            : {}),
-        },
-      });
-      break;
-    } catch (e: unknown) {
-      const isUniqueViolation = e instanceof Error && e.message.includes("Unique constraint");
-      if (!isUniqueViolation || attempt === 4) throw e;
+    // 3. Invoice — retry on invoiceNumber collision
+    let invoice;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const invoiceNumber = await nextInvoiceNumber(tx, attempt);
+      try {
+        invoice = await tx.invoice.create({
+          data: {
+            invoiceNumber,
+            orderId: order.id,
+            outletId,
+            supplierId: supplierId || null,
+            amount: totalAmount,
+            status: "PENDING",
+            paymentType: invoicePaymentType,
+            expenseCategory: category,
+            claimedById: requestFlow === "REQUEST" ? null : claimedById,
+            vendorName: vendorName || null,
+            vendorBankName: vendorBankName || null,
+            vendorBankAccountNumber: vendorBankAccountNumber || null,
+            vendorBankAccountName: vendorBankAccountName || null,
+            photos: photos || [],
+            issueDate: purchaseDate ? new Date(purchaseDate) : new Date(),
+            dueDate: dueDate ? new Date(dueDate) : null,
+            notes: notes ? `${noteLabel}: ${notes}` : noteLabel,
+          },
+        });
+        break;
+      } catch (e: unknown) {
+        if (!isUniqueViolation(e) || attempt === 4) throw e;
+      }
     }
-  }
-  if (!order) throw new Error("Failed to generate unique order number after 5 attempts");
+    if (!invoice) throw new Error("Failed to generate unique invoice number after 5 attempts");
 
-  // 2. Receiving + stock adjustment — only for INGREDIENT (non-ingredient has no stock impact)
-  let receivingId: string | null = null;
-  if (isIngredient && items?.length && supplierId) {
-    const receiving = await prisma.receiving.create({
-      data: {
-        orderId: order.id,
-        outletId,
-        supplierId,
-        receivedById: caller.id,
-        status: "COMPLETE",
-        notes: notes ? `Pay & Claim: ${notes}` : "Pay & Claim",
-        invoicePhotos: photos || [],
-        items: {
-          create: items.map((i: { productId: string; productPackageId?: string; quantity: number }) => ({
-            productId: i.productId,
-            productPackageId: i.productPackageId || null,
-            orderedQty: i.quantity,
-            receivedQty: i.quantity,
-          })),
-        },
-      },
-    });
-    receivingId = receiving.id;
+    return { order, invoice, receiving };
+  });
 
+  // Post-commit stock adjustments
+  if (willCreateFullReceiving) {
     await Promise.all(
       items.map((item: { productId: string; productPackageId?: string; quantity: number }) =>
         adjustStockBalance(outletId, item.productId, item.quantity, item.productPackageId),
@@ -431,40 +504,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 3. Create invoice
-  const invCount = await prisma.invoice.count();
-  const invoiceNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
-
-  const noteLabel = requestFlow === "REQUEST"
-    ? `${category.toLowerCase()} payment request`
-    : `${category.toLowerCase()} claim`;
-  const invoice = await prisma.invoice.create({
-    data: {
-      invoiceNumber,
-      orderId: order.id,
-      outletId,
-      supplierId: supplierId || null,
-      amount: totalAmount,
-      status: "PENDING",
-      paymentType: invoicePaymentType,
-      expenseCategory: category,
-      claimedById: requestFlow === "REQUEST" ? null : claimedById,
-      vendorName: vendorName || null,
-      vendorBankName: vendorBankName || null,
-      vendorBankAccountNumber: vendorBankAccountNumber || null,
-      vendorBankAccountName: vendorBankAccountName || null,
-      photos: photos || [],
-      issueDate: purchaseDate ? new Date(purchaseDate) : new Date(),
-      dueDate: dueDate ? new Date(dueDate) : null,
-      notes: notes ? `${noteLabel}: ${notes}` : noteLabel,
-    },
-  });
-
   return NextResponse.json(
     {
-      order: { id: order.id, orderNumber: order.orderNumber },
-      receiving: receivingId ? { id: receivingId } : null,
-      invoice: { id: invoice.id, invoiceNumber: invoice.invoiceNumber },
+      order: { id: result.order.id, orderNumber: result.order.orderNumber },
+      receiving: result.receiving ? { id: result.receiving.id } : null,
+      invoice: { id: result.invoice.id, invoiceNumber: result.invoice.invoiceNumber },
     },
     { status: 201 },
   );
