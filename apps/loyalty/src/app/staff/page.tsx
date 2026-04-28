@@ -1104,13 +1104,29 @@ export default function PortalPage() {
                   </div>
 
                   {/* OTP Input Boxes */}
-                  <div className="mb-4 flex justify-center gap-2">
+                  {/* Tap anywhere on the row to focus the first empty box —
+                      Android Chrome refuses to show the soft keyboard for
+                      programmatic focus (autoFocus); we need a real user
+                      gesture. The blur+focus dance forces the IME to re-open
+                      even when the input is already focused from autoFocus. */}
+                  <div
+                    className="mb-2 flex cursor-text justify-center gap-2"
+                    onClick={() => {
+                      const firstEmpty = redeemOtp.findIndex((c) => !c);
+                      const target = otpInputRefs.current[firstEmpty === -1 ? 0 : firstEmpty];
+                      if (!target) return;
+                      target.blur();
+                      requestAnimationFrame(() => target.focus());
+                    }}
+                  >
                     {[0, 1, 2, 3, 4, 5].map((i) => (
                       <input
                         key={i}
                         ref={(el) => { otpInputRefs.current[i] = el; }}
-                        type="text"
+                        type="tel"
                         inputMode="numeric"
+                        autoComplete="one-time-code"
+                        pattern="[0-9]*"
                         maxLength={1}
                         value={redeemOtp[i]}
                         onChange={(e) => handleOtpChange(i, e.target.value)}
@@ -1124,6 +1140,9 @@ export default function PortalPage() {
                       />
                     ))}
                   </div>
+                  <p className="mb-4 text-center text-xs text-neutral-500">
+                    Tap a box if the keyboard doesn&apos;t appear
+                  </p>
 
                   {redeemOtpError && (
                     <p className="mb-4 text-center text-sm text-red-400 font-medium">{redeemOtpError}</p>
