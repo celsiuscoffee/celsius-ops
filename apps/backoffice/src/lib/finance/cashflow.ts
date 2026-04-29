@@ -47,12 +47,32 @@ export type CashflowBucket = {
 export type CashflowResult = {
   asOf: string;
   weeks: number;
-  outletId: string | null;
+  outletId: string | null;       // legacy back-compat (set when exactly 1)
+  outletIds: string[];           // canonical: empty array = all outlets
   openingBalance: { amount: number; statementDate: string | null };
   // Per-day averages derived from BankStatement period totals; null if no
   // statements have period info yet. Echoed back so the UI can explain
   // what "Other (bank)" represents.
   bankFlowsPerDay: { inflow: number; outflow: number; sampleDays: number } | null;
+  // Historical "cash generated per month" — straight from BankStatement
+  // period totals, consolidated across accounts. The user's primary
+  // KPI: did we generate cash or burn it last month?
+  monthlyHistory: Array<{
+    month: string;            // YYYY-MM
+    cashIn: number;           // sum of totalInflows across accounts
+    cashOut: number;          // sum of totalOutflows
+    netGenerated: number;     // cashIn - cashOut
+    accountsReporting: number; // 3 = full coverage; less = data gap
+  }>;
+  // Rolled-up averages for the headline cards. burnPerMonth is positive
+  // when the business is losing cash; runwayMonths is openingBalance /
+  // burn (only meaningful when burn > 0).
+  cashGeneration: {
+    lastMonth: { month: string; net: number } | null;
+    avg3Month: number | null;     // average net generated across last 3 full months
+    burnPerMonth: number | null;  // -avg3Month when negative; else null
+    runwayMonths: number | null;  // openingBalance / burnPerMonth
+  };
   buckets: CashflowBucket[];
   warnings: string[];
 };
@@ -86,13 +106,21 @@ function addCadence(d: Date, cadence: "MONTHLY" | "QUARTERLY" | "YEARLY"): Date 
   }
 }
 
+// Build a Prisma `outletId` filter clause from the array. Empty array =
+// no scoping (all outlets). Single id = exact match. Multi = `in`.
+function outletScope(outletIds: string[]) {
+  if (outletIds.length === 0) return {};
+  if (outletIds.length === 1) return { outletId: outletIds[0] };
+  return { outletId: { in: outletIds } };
+}
+
 // Avg daily sales by day-of-week (0=Sun..6=Sat) from the last 12 weeks.
-async function dayOfWeekSalesAverages(outletId: string | null): Promise<number[]> {
+async function dayOfWeekSalesAverages(outletIds: string[]): Promise<number[]> {
   const lookbackStart = new Date(Date.now() - 12 * 7 * DAY_MS);
   const rows = await prisma.salesTransaction.findMany({
     where: {
       transactedAt: { gte: lookbackStart },
-      ...(outletId ? { outletId } : {}),
+      ...outletScope(outletIds),
     },
     select: { transactedAt: true, grossAmount: true },
   });
@@ -115,15 +143,34 @@ async function dayOfWeekSalesAverages(outletId: string | null): Promise<number[]
   });
 }
 
+// Opening balance = sum of the most-recent closing balance per account.
+// Multiple bank accounts each contribute their own latest closing; the
+// projection runs against the consolidated cash position, not whichever
+// single statement happened to be uploaded last.
 async function fetchOpeningBalance(): Promise<{ amount: number; statementDate: string | null }> {
-  const latest = await prisma.bankStatement.findFirst({
-    orderBy: { statementDate: "desc" },
+  const rows = await prisma.bankStatement.findMany({
+    orderBy: [{ accountName: "asc" }, { statementDate: "desc" }],
+    select: { accountName: true, statementDate: true, closingBalance: true },
   });
-  if (!latest) return { amount: 0, statementDate: null };
-  return {
-    amount: Number(latest.closingBalance),
-    statementDate: ymd(latest.statementDate),
-  };
+  if (rows.length === 0) return { amount: 0, statementDate: null };
+
+  // Group by accountName (null = "default"), keep first row in each group
+  // since rows are already sorted statementDate desc within each group.
+  const seen = new Set<string>();
+  const latestPerAccount: typeof rows = [];
+  for (const r of rows) {
+    const key = r.accountName ?? "__default__";
+    if (seen.has(key)) continue;
+    seen.add(key);
+    latestPerAccount.push(r);
+  }
+
+  const amount = latestPerAccount.reduce((s, r) => s + Number(r.closingBalance), 0);
+  const newest = latestPerAccount.reduce(
+    (acc, r) => (acc == null || r.statementDate > acc ? r.statementDate : acc),
+    null as Date | null,
+  );
+  return { amount, statementDate: newest ? ymd(newest) : null };
 }
 
 // Last 3 paid monthly payroll runs → average net per month.
@@ -171,10 +218,13 @@ async function projectMarketing(start: Date, end: Date): Promise<{ date: Date; a
   return out;
 }
 
-// Hybrid model — derive a per-day inflow/outflow average from recent bank
-// statements that have period totals. The cashflow then ascribes whatever
-// the synthetic model can't explain to "other (bank)". Returns null if no
-// statement carries period info yet.
+// Hybrid model — derive a per-day inflow/outflow rate from recent bank
+// statements with period totals. With multiple bank accounts each posting
+// statements covering the same calendar dates, naive sum-then-divide
+// understates the per-day rate by the number of accounts (a calendar day
+// would be triple-counted in the divisor). Group by accountName, compute
+// a per-day rate per account from its own period coverage, then sum
+// across accounts — that's the consolidated daily flow.
 async function bankFlowsPerDay(): Promise<{ inflow: number; outflow: number; sampleDays: number } | null> {
   const rows = await prisma.bankStatement.findMany({
     where: {
@@ -183,38 +233,53 @@ async function bankFlowsPerDay(): Promise<{ inflow: number; outflow: number; sam
       OR: [{ totalInflows: { not: null } }, { totalOutflows: { not: null } }],
     },
     orderBy: { statementDate: "desc" },
-    take: 8, // last ~8 weeks of statements is plenty for a stable run-rate
-    select: { periodStart: true, periodEnd: true, totalInflows: true, totalOutflows: true },
+    select: { accountName: true, periodStart: true, periodEnd: true, totalInflows: true, totalOutflows: true },
   });
   if (rows.length === 0) return null;
 
-  let totalIn = 0;
-  let totalOut = 0;
-  let totalDays = 0;
+  // Bucket by account, keep at most the last 6 statements per account so a
+  // very stale row doesn't drag the rate.
+  const byAccount = new Map<string, typeof rows>();
   for (const r of rows) {
-    if (!r.periodStart || !r.periodEnd) continue;
-    const days = Math.max(1, Math.round((r.periodEnd.getTime() - r.periodStart.getTime()) / DAY_MS) + 1);
-    totalDays += days;
-    if (r.totalInflows != null) totalIn += Number(r.totalInflows);
-    if (r.totalOutflows != null) totalOut += Number(r.totalOutflows);
+    const key = r.accountName ?? "__default__";
+    const existing = byAccount.get(key) ?? [];
+    if (existing.length >= 6) continue;
+    existing.push(r);
+    byAccount.set(key, existing);
   }
-  if (totalDays === 0) return null;
-  return {
-    inflow: totalIn / totalDays,
-    outflow: totalOut / totalDays,
-    sampleDays: totalDays,
-  };
+
+  let perDayIn = 0;
+  let perDayOut = 0;
+  let maxSpanDays = 0;
+  for (const accountRows of byAccount.values()) {
+    let acctIn = 0;
+    let acctOut = 0;
+    let acctDays = 0;
+    for (const r of accountRows) {
+      if (!r.periodStart || !r.periodEnd) continue;
+      const days = Math.max(1, Math.round((r.periodEnd.getTime() - r.periodStart.getTime()) / DAY_MS) + 1);
+      acctDays += days;
+      if (r.totalInflows != null) acctIn += Number(r.totalInflows);
+      if (r.totalOutflows != null) acctOut += Number(r.totalOutflows);
+    }
+    if (acctDays === 0) continue;
+    perDayIn += acctIn / acctDays;
+    perDayOut += acctOut / acctDays;
+    maxSpanDays = Math.max(maxSpanDays, acctDays);
+  }
+  if (maxSpanDays === 0) return null;
+  return { inflow: perDayIn, outflow: perDayOut, sampleDays: maxSpanDays };
 }
 
 // Total invoice outflow paid out over the last 4 months / total days in the
 // window — feeds the synthetic-known per-day baseline for the residual calc.
-async function historicalInvoicePerDay(outletId: string | null): Promise<number> {
+async function historicalInvoicePerDay(outletIds: string[]): Promise<number> {
   const since = new Date(Date.now() - 120 * DAY_MS);
   const rows = await prisma.invoice.findMany({
     where: {
       status: "PAID",
       paidAt: { gte: since },
-      ...(outletId ? { outletId } : {}),
+      ...outletScope(outletIds),
     },
     select: { amount: true },
   });
@@ -243,10 +308,19 @@ function expandRecurring(
 
 export async function computeCashflow(opts: {
   weeks?: number;
+  // Either a single outletId (legacy) or an outletIds array (multi-filter).
+  // Empty / null / undefined = consolidated "all outlets" view.
   outletId?: string | null;
+  outletIds?: string[];
 }): Promise<CashflowResult> {
   const weeks = Math.max(1, Math.min(26, opts.weeks ?? 8));
-  const outletId = opts.outletId ?? null;
+  // Normalise to an array; deduplicate just in case.
+  const outletIds = Array.from(
+    new Set(
+      (opts.outletIds ?? []).concat(opts.outletId ? [opts.outletId] : []).filter(Boolean) as string[],
+    ),
+  );
+  const isFiltered = outletIds.length > 0;
   const warnings: string[] = [];
 
   // Today (local midnight). Buckets start at the next Monday.
@@ -255,12 +329,14 @@ export async function computeCashflow(opts: {
   const firstMonday = startOfWeek(today);
   const horizonEnd = new Date(firstMonday.getTime() + weeks * 7 * DAY_MS - 1);
 
-  // Opening balance
+  // Opening balance — always consolidated across all bank accounts; we
+  // don't have account → outlet mapping, so per-outlet views still see
+  // the company's full cash position.
   const opening = await fetchOpeningBalance();
   if (!opening.statementDate) warnings.push("No bank statement uploaded — opening balance is RM 0.00. Upload one to get a real projection.");
 
   // Sales forecast — day-of-week averages
-  const dowAvg = await dayOfWeekSalesAverages(outletId);
+  const dowAvg = await dayOfWeekSalesAverages(outletIds);
   const dowTotal = dowAvg.reduce((a, b) => a + b, 0);
   if (dowTotal === 0) warnings.push("No StoreHub sales in the last 12 weeks for the selected scope — sales forecast is RM 0.");
 
@@ -269,7 +345,7 @@ export async function computeCashflow(opts: {
     where: {
       status: { in: ["DRAFT", "PENDING", "INITIATED", "DEPOSIT_PAID", "OVERDUE"] },
       dueDate: { gte: today, lte: horizonEnd },
-      ...(outletId ? { outletId } : {}),
+      ...outletScope(outletIds),
     },
     select: { id: true, amount: true, depositAmount: true, status: true, dueDate: true },
   });
@@ -278,22 +354,24 @@ export async function computeCashflow(opts: {
   const recurring = await prisma.recurringExpense.findMany({
     where: {
       isActive: true,
-      ...(outletId ? { OR: [{ outletId }, { outletId: null }] } : {}),
+      ...(isFiltered
+        ? { OR: [{ outletId: outletIds.length === 1 ? outletIds[0] : { in: outletIds } }, { outletId: null }] }
+        : {}),
     },
   });
 
   // Outflows — payroll + marketing (HQ-level, not outlet-split for v1)
   const payrollProjected = await projectPayroll(today, horizonEnd);
-  const marketingProjected = outletId ? [] : await projectMarketing(today, horizonEnd);
-  if (outletId && !warnings.some((w) => w.includes("marketing"))) {
-    warnings.push("Marketing run-rate is HQ-only and not allocated to outlets — it's excluded from the per-outlet view.");
+  const marketingProjected = isFiltered ? [] : await projectMarketing(today, horizonEnd);
+  if (isFiltered) {
+    warnings.push("Marketing run-rate is HQ-only and not allocated to outlets — it's excluded from the filtered view.");
   }
 
   // Hybrid residual — bank flows per day minus what the synthetic streams
   // would already cover. Only applies in "all outlets" mode since
   // BankStatement isn't outlet-tagged.
-  const bankFlows = outletId ? null : await bankFlowsPerDay();
-  if (!outletId && !bankFlows) {
+  const bankFlows = isFiltered ? null : await bankFlowsPerDay();
+  if (!isFiltered && !bankFlows) {
     warnings.push("Bank statement period totals not yet uploaded — \"Other (bank)\" residual is RM 0. Upload a CSV/Excel statement to see the gap between bank actuals and the synthetic forecast.");
   }
   let otherInPerDay = 0;
@@ -310,7 +388,7 @@ export async function computeCashflow(opts: {
       const perYear = r.cadence === "MONTHLY" ? 12 : r.cadence === "QUARTERLY" ? 4 : 1;
       return s + Number(r.amount) * perYear / 365;
     }, 0);
-    const invoicePerDayHistory = await historicalInvoicePerDay(null);
+    const invoicePerDayHistory = await historicalInvoicePerDay([]);
     const dailySyntheticOut = monthlyPayrollAvg / 30 + monthlyMarketingAvg / 30 + recurringPerDay + invoicePerDayHistory;
     otherInPerDay = Math.max(0, bankFlows.inflow - dailySalesSynthetic);
     otherOutPerDay = Math.max(0, bankFlows.outflow - dailySyntheticOut);
@@ -397,17 +475,107 @@ export async function computeCashflow(opts: {
     runningOpening = closing;
   }
 
+  // Historical "cash generated per month" — primary KPI Finance asks
+  // about. Pulled straight from BankStatement period totals, summed
+  // across accounts. Caveat surfaced in the warnings: gross bank flows
+  // can include InterCo transfers between Celsius entities (CCSB / CCT
+  // / CCC + any 4th internal account) which inflate both sides without
+  // representing real cash generation. Outliers like Jan 2026 (CCC RM
+  // 233k outflow with no matching inflow on the other accounts) suggest
+  // a 4th internal account exists.
+  const monthlyHistory = await loadMonthlyHistory();
+  const cashGeneration = summariseCashGeneration(monthlyHistory, opening.amount);
+  const hasOutlier = monthlyHistory.some((m) => Math.abs(m.netGenerated) > 100000 && m.accountsReporting < 3 || (m.accountsReporting === 3 && Math.abs(m.netGenerated) > 100000));
+  if (hasOutlier && !isFiltered) {
+    warnings.push("One or more historical months show a net swing > RM 100k — typically an InterCo transfer to an internal account we don't yet track. Cash generation figures include these gross flows; treat outlier months with caution.");
+  }
+  if (monthlyHistory.some((m) => m.accountsReporting < 3) && !isFiltered) {
+    warnings.push("Some months have fewer than 3 reporting accounts — uploaded statement set is incomplete for those months.");
+  }
+
   return {
     asOf: ymd(today),
     weeks,
-    outletId,
+    // Echo back what the API was scoped to so the page can label the result.
+    // Still legacy outletId for back-compat; outletIds is the canonical field.
+    outletId: outletIds.length === 1 ? outletIds[0] : null,
+    outletIds,
     openingBalance: opening,
     bankFlowsPerDay: bankFlows
       ? { inflow: round2(bankFlows.inflow), outflow: round2(bankFlows.outflow), sampleDays: bankFlows.sampleDays }
       : null,
+    monthlyHistory,
+    cashGeneration,
     buckets,
     warnings,
   };
+}
+
+// Pull last 12 months of BankStatement period totals, group by calendar
+// month of periodStart, and consolidate across accounts. The unique
+// (accountName, month) pairs determine `accountsReporting` so the UI
+// can flag months with incomplete statement coverage.
+async function loadMonthlyHistory(): Promise<CashflowResult["monthlyHistory"]> {
+  const since = new Date();
+  since.setMonth(since.getMonth() - 12);
+  const rows = await prisma.bankStatement.findMany({
+    where: {
+      periodStart: { not: null, gte: since },
+      totalInflows: { not: null },
+      totalOutflows: { not: null },
+    },
+    select: { accountName: true, periodStart: true, totalInflows: true, totalOutflows: true },
+    orderBy: { periodStart: "asc" },
+  });
+
+  type Bucket = { cashIn: number; cashOut: number; accounts: Set<string> };
+  const byMonth = new Map<string, Bucket>();
+  for (const r of rows) {
+    if (!r.periodStart) continue;
+    const key = `${r.periodStart.getFullYear()}-${String(r.periodStart.getMonth() + 1).padStart(2, "0")}`;
+    const b = byMonth.get(key) ?? { cashIn: 0, cashOut: 0, accounts: new Set<string>() };
+    b.cashIn += Number(r.totalInflows ?? 0);
+    b.cashOut += Number(r.totalOutflows ?? 0);
+    b.accounts.add(r.accountName ?? "__default__");
+    byMonth.set(key, b);
+  }
+
+  return Array.from(byMonth.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, b]) => ({
+      month,
+      cashIn: round2(b.cashIn),
+      cashOut: round2(b.cashOut),
+      netGenerated: round2(b.cashIn - b.cashOut),
+      accountsReporting: b.accounts.size,
+    }));
+}
+
+// Last-month / 3-month-avg / runway. Excludes incomplete months (fewer
+// than the max accountsReporting we have) and the in-progress current
+// month so the headline numbers don't get distorted by partial data.
+function summariseCashGeneration(
+  history: CashflowResult["monthlyHistory"],
+  openingBalance: number,
+): CashflowResult["cashGeneration"] {
+  if (history.length === 0) {
+    return { lastMonth: null, avg3Month: null, burnPerMonth: null, runwayMonths: null };
+  }
+  const maxAccounts = Math.max(...history.map((m) => m.accountsReporting));
+  const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const complete = history.filter(
+    (m) => m.month !== currentMonth && m.accountsReporting === maxAccounts,
+  );
+  const lastMonth = complete.length > 0
+    ? { month: complete[complete.length - 1].month, net: complete[complete.length - 1].netGenerated }
+    : null;
+  const recent3 = complete.slice(-3);
+  const avg3 = recent3.length > 0
+    ? round2(recent3.reduce((s, m) => s + m.netGenerated, 0) / recent3.length)
+    : null;
+  const burn = avg3 != null && avg3 < 0 ? -avg3 : null;
+  const runway = burn != null && burn > 0 ? round2(openingBalance / burn) : null;
+  return { lastMonth, avg3Month: avg3, burnPerMonth: burn, runwayMonths: runway };
 }
 
 function round2(n: number): number {

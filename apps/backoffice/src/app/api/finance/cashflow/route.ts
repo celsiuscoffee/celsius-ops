@@ -10,11 +10,16 @@ export async function GET(req: NextRequest) {
   }
 
   const weeksParam = req.nextUrl.searchParams.get("weeks");
-  const outletId = req.nextUrl.searchParams.get("outletId");
+  // Accept either ?outletId=X (legacy single) or repeated ?outlet=X for
+  // multi-filter — same convention used by /api/inventory/invoices.
+  const outletIds = [
+    ...req.nextUrl.searchParams.getAll("outlet"),
+    ...req.nextUrl.searchParams.getAll("outletId"),
+  ].filter(Boolean);
   const weeks = weeksParam ? parseInt(weeksParam, 10) : 8;
 
   try {
-    const result = await computeCashflow({ weeks, outletId });
+    const result = await computeCashflow({ weeks, outletIds });
     return NextResponse.json(result);
   } catch (err) {
     console.error("[finance/cashflow]", err);

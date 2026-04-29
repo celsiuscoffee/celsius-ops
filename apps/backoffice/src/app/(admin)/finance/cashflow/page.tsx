@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Loader2, AlertTriangle, Banknote, Settings, ArrowRight, TrendingDown, TrendingUp } from "lucide-react";
+import { Loader2, AlertTriangle, Banknote, Settings, ArrowRight, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
 
 type Outlet = { id: string; name: string; code: string };
 
@@ -23,12 +23,30 @@ type CashflowBucket = {
   recurringExpenseIds: string[];
 };
 
+type MonthlyHistory = {
+  month: string;
+  cashIn: number;
+  cashOut: number;
+  netGenerated: number;
+  accountsReporting: number;
+};
+
+type CashGeneration = {
+  lastMonth: { month: string; net: number } | null;
+  avg3Month: number | null;
+  burnPerMonth: number | null;
+  runwayMonths: number | null;
+};
+
 type CashflowResult = {
   asOf: string;
   weeks: number;
   outletId: string | null;
+  outletIds: string[];
   openingBalance: { amount: number; statementDate: string | null };
   bankFlowsPerDay: { inflow: number; outflow: number; sampleDays: number } | null;
+  monthlyHistory: MonthlyHistory[];
+  cashGeneration: CashGeneration;
   buckets: CashflowBucket[];
   warnings: string[];
 };
@@ -53,12 +71,21 @@ function shortRange(start: string, end: string): string {
 
 export default function CashflowPage() {
   const [weeks, setWeeks] = useState<number>(8);
-  const [outletId, setOutletId] = useState<string>("");
+  const [outletIds, setOutletIds] = useState<string[]>([]);
+  const [outletPickerOpen, setOutletPickerOpen] = useState(false);
 
   const params = new URLSearchParams({ weeks: String(weeks) });
-  if (outletId) params.set("outletId", outletId);
+  outletIds.forEach((id) => params.append("outlet", id));
   const { data, isLoading } = useFetch<CashflowResult>(`/api/finance/cashflow?${params.toString()}`);
   const { data: outlets } = useFetch<Outlet[]>("/api/settings/outlets");
+
+  const toggleOutlet = (id: string) =>
+    setOutletIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const clearOutlets = () => setOutletIds([]);
+  const outletButtonLabel =
+    outletIds.length === 0 ? "All outlets"
+    : outletIds.length === 1 ? (outlets?.find((o) => o.id === outletIds[0])?.name ?? "1 outlet")
+    : `${outletIds.length} outlets`;
 
   // Chart bounds — y-axis runs from min(closing, opening, 0) to max(closing).
   const chartData = useMemo(() => {
@@ -87,10 +114,52 @@ export default function CashflowPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm">
-            <option value="">All outlets</option>
-            {(outlets ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
+          {/* Multi-filter outlet picker. Click to toggle the popover; tick
+              one or more outlets, click outside to dismiss. Empty selection
+              = consolidated "All outlets" view (same as the bank-residual
+              view that includes the Other-bank column). */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOutletPickerOpen((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-md border bg-white px-3 py-1.5 text-sm transition-colors ${outletIds.length > 0 ? "border-terracotta text-terracotta-dark" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}
+            >
+              {outletButtonLabel}
+              {outletIds.length > 0 && (
+                <span
+                  role="button"
+                  onClick={(e) => { e.stopPropagation(); clearOutlets(); }}
+                  className="ml-1 rounded-full p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  aria-label="Clear outlet filter"
+                >
+                  <X className="h-3 w-3" />
+                </span>
+              )}
+              <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+            </button>
+            {outletPickerOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setOutletPickerOpen(false)} />
+                <div className="absolute right-0 z-20 mt-1 w-64 rounded-lg border border-gray-200 bg-white shadow-lg">
+                  <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+                    <span className="text-xs font-medium text-gray-500">Filter by outlet</span>
+                    <button onClick={clearOutlets} className="text-[11px] text-blue-600 hover:underline">Clear</button>
+                  </div>
+                  <div className="max-h-[280px] overflow-y-auto p-1">
+                    {(outlets ?? []).map((o) => {
+                      const checked = outletIds.includes(o.id);
+                      return (
+                        <label key={o.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
+                          <input type="checkbox" checked={checked} onChange={() => toggleOutlet(o.id)} className="rounded border-gray-300 text-terracotta focus:ring-terracotta" />
+                          {o.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
           <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
             {HORIZONS.map((h) => (
               <button key={h} onClick={() => setWeeks(h)}
@@ -112,49 +181,104 @@ export default function CashflowPage() {
         <div className="mt-6 flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
       ) : (
         <>
-          {/* Headline cards */}
+          {/* Headline — Cash Generation. The primary KPI. */}
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
             <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-              <p className="text-xs text-gray-500">Opening balance</p>
+              <p className="text-xs text-gray-500">Last month generated</p>
+              {data.cashGeneration.lastMonth ? (
+                <>
+                  <p className={`mt-0.5 flex items-center gap-1 text-lg font-bold ${data.cashGeneration.lastMonth.net >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    {data.cashGeneration.lastMonth.net >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                    {fmtMYR2(data.cashGeneration.lastMonth.net)}
+                  </p>
+                  <p className="text-[10px] text-gray-400">{data.cashGeneration.lastMonth.month}</p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-0.5 text-lg font-bold text-gray-400">—</p>
+                  <p className="text-[10px] text-gray-400">No complete months yet</p>
+                </>
+              )}
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+              <p className="text-xs text-gray-500">3-month avg / month</p>
+              {data.cashGeneration.avg3Month != null ? (
+                <p className={`mt-0.5 text-lg font-bold ${data.cashGeneration.avg3Month >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  {fmtMYR2(data.cashGeneration.avg3Month)}
+                </p>
+              ) : (
+                <p className="mt-0.5 text-lg font-bold text-gray-400">—</p>
+              )}
+              <p className="text-[10px] text-gray-400">From bank statements</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+              <p className="text-xs text-gray-500">Cash on hand</p>
               <p className="mt-0.5 text-lg font-bold text-gray-900">{fmtMYR2(data.openingBalance.amount)}</p>
               <p className="text-[10px] text-gray-400">
-                {data.openingBalance.statementDate ? `Statement: ${data.openingBalance.statementDate}` : "No statement uploaded"}
+                {data.openingBalance.statementDate ? `As of ${data.openingBalance.statementDate}` : "No statement uploaded"}
               </p>
             </div>
             <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-              <p className="text-xs text-gray-500">Projected end of {weeks}w</p>
-              <p className={`mt-0.5 text-lg font-bold ${data.buckets[data.buckets.length-1].closing < 0 ? "text-red-600" : "text-gray-900"}`}>
-                {fmtMYR2(data.buckets[data.buckets.length-1]?.closing ?? 0)}
-              </p>
-              <p className="text-[10px] text-gray-400">{data.buckets[data.buckets.length-1]?.weekEnd.slice(0,10)}</p>
-            </div>
-            <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-              <p className="text-xs text-gray-500">Lowest week</p>
-              {lowestWeek ? (
+              <p className="text-xs text-gray-500">Runway</p>
+              {data.cashGeneration.runwayMonths != null ? (
                 <>
-                  <p className={`mt-0.5 text-lg font-bold ${lowestWeek.closing < 0 ? "text-red-600" : "text-amber-600"}`}>
-                    {fmtMYR2(lowestWeek.closing)}
+                  <p className={`mt-0.5 text-lg font-bold ${data.cashGeneration.runwayMonths < 3 ? "text-red-600" : data.cashGeneration.runwayMonths < 6 ? "text-amber-600" : "text-gray-900"}`}>
+                    {data.cashGeneration.runwayMonths.toFixed(1)} months
                   </p>
-                  <p className="text-[10px] text-gray-400">{shortRange(lowestWeek.weekStart, lowestWeek.weekEnd)}</p>
+                  <p className="text-[10px] text-gray-400">at current burn ({fmtMYR(data.cashGeneration.burnPerMonth ?? 0)}/mo)</p>
                 </>
-              ) : <p className="text-sm text-gray-400">—</p>}
-            </div>
-            <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-              <p className="text-xs text-gray-500">Net change</p>
-              {(() => {
-                const last = data.buckets[data.buckets.length-1]?.closing ?? data.openingBalance.amount;
-                const delta = last - data.openingBalance.amount;
-                const Icon = delta >= 0 ? TrendingUp : TrendingDown;
-                return (
-                  <p className={`mt-0.5 flex items-center gap-1 text-lg font-bold ${delta >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    <Icon className="h-4 w-4" />
-                    {fmtMYR2(delta)}
-                  </p>
-                );
-              })()}
-              <p className="text-[10px] text-gray-400">over {weeks} weeks</p>
+              ) : (
+                <>
+                  <p className="mt-0.5 text-lg font-bold text-green-600">∞</p>
+                  <p className="text-[10px] text-gray-400">3-month avg is positive</p>
+                </>
+              )}
             </div>
           </div>
+
+          {/* Monthly historical — actuals from bank statements */}
+          {data.monthlyHistory.length > 0 && (
+            <div className="mt-4 rounded-xl border border-gray-200 bg-white">
+              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cash generated per month (actual)</p>
+                <p className="text-[10px] text-gray-400">From {data.monthlyHistory.length} months of bank statements</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50/50 text-left text-gray-500">
+                      <th className="px-4 py-2 font-medium">Month</th>
+                      <th className="px-4 py-2 text-right font-medium text-green-600">Cash in</th>
+                      <th className="px-4 py-2 text-right font-medium text-red-600">Cash out</th>
+                      <th className="px-4 py-2 text-right font-medium">Net generated</th>
+                      <th className="px-4 py-2 font-medium">Coverage</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {data.monthlyHistory.map((m) => {
+                      const expectedAccounts = Math.max(...data.monthlyHistory.map((x) => x.accountsReporting));
+                      const incomplete = m.accountsReporting < expectedAccounts;
+                      return (
+                        <tr key={m.month} className={`hover:bg-gray-50 ${m.netGenerated < 0 ? "bg-red-50/30" : ""}`}>
+                          <td className="px-4 py-2 text-xs font-medium text-gray-700">{m.month}</td>
+                          <td className="px-4 py-2 text-right font-mono text-xs text-green-700">+{fmtMYR(m.cashIn)}</td>
+                          <td className="px-4 py-2 text-right font-mono text-xs text-red-700">−{fmtMYR(m.cashOut)}</td>
+                          <td className={`px-4 py-2 text-right font-mono text-xs font-bold ${m.netGenerated >= 0 ? "text-green-700" : "text-red-700"}`}>
+                            {m.netGenerated >= 0 ? "+" : ""}{fmtMYR(m.netGenerated)}
+                          </td>
+                          <td className="px-4 py-2 text-[11px]">
+                            {incomplete
+                              ? <span className="text-amber-600">{m.accountsReporting}/{expectedAccounts} accounts ⚠</span>
+                              : <span className="text-gray-500">{m.accountsReporting}/{expectedAccounts} accounts</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Warnings */}
           {data.warnings.length > 0 && (
@@ -168,9 +292,35 @@ export default function CashflowPage() {
             </div>
           )}
 
+          {/* Forward weekly projection — sub-header */}
+          <div className="mt-6 mb-2 flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Forward projection · {weeks} weeks</p>
+              <p className="text-[11px] text-gray-400">Synthetic streams + bank-flow residual. Use the {weeks}w toggle above to change horizon.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-500">
+              {lowestWeek && (
+                <span>
+                  Lowest week: <span className={`font-mono ${lowestWeek.closing < 0 ? "text-red-600" : "text-amber-600"}`}>{fmtMYR(lowestWeek.closing)}</span>{" "}
+                  ({shortRange(lowestWeek.weekStart, lowestWeek.weekEnd)})
+                </span>
+              )}
+              {(() => {
+                const last = data.buckets[data.buckets.length-1]?.closing ?? data.openingBalance.amount;
+                const delta = last - data.openingBalance.amount;
+                return (
+                  <span>
+                    Net change over {weeks}w:{" "}
+                    <span className={`font-mono ${delta >= 0 ? "text-green-600" : "text-red-600"}`}>{delta >= 0 ? "+" : ""}{fmtMYR(delta)}</span>
+                  </span>
+                );
+              })()}
+            </div>
+          </div>
+
           {/* Chart */}
           {chartData && (
-            <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
               <p className="mb-2 text-xs font-medium text-gray-500">Projected closing balance</p>
               <Sparkline points={chartData.points} max={chartData.max} min={chartData.min} />
             </div>
@@ -215,7 +365,7 @@ export default function CashflowPage() {
           </div>
 
           <p className="mt-3 text-[11px] text-gray-400">
-            Sales forecast: 12-week day-of-week average{outletId ? " for selected outlet" : ""}. Payroll: 4-month run-rate, projected on the 25th. Marketing: 4-month avg of Google Ads invoices, projected once per month{outletId ? " (HQ-level, excluded from per-outlet view)" : ""}.
+            Sales forecast: 12-week day-of-week average{outletIds.length > 0 ? ` for ${outletIds.length === 1 ? "selected outlet" : `${outletIds.length} selected outlets`}` : ""}. Payroll: 4-month run-rate, projected on the 25th. Marketing: 4-month avg of Google Ads invoices, projected once per month{outletIds.length > 0 ? " (HQ-level, excluded from filtered view)" : ""}.
             <strong className="text-gray-600"> Other (bank)</strong>: per-day residual from your bank statement period totals, minus everything the synthetic model already covers — captures pickup-app revenue, refunds, card-charged subscriptions, transfers and any other movement the projection isn&apos;t modelling yet.
             {data.bankFlowsPerDay
               ? ` Computed from the last ${data.bankFlowsPerDay.sampleDays} days of bank statements (avg in ${fmtMYR2(data.bankFlowsPerDay.inflow)}/day, out ${fmtMYR2(data.bankFlowsPerDay.outflow)}/day).`
