@@ -23,6 +23,14 @@ type BankStatement = {
   createdAt: string;
 };
 
+type ParsedLine = {
+  txnDate: string;
+  description: string;
+  reference: string | null;
+  amount: number;
+  direction: "CR" | "DR";
+};
+
 type ParseResult = {
   totalInflows: number;
   totalOutflows: number;
@@ -32,6 +40,7 @@ type ParseResult = {
   warnings: string[];
   fileName: string;
   fileSize: number;
+  lines: ParsedLine[];
 };
 
 export default function BankStatementsPage() {
@@ -163,6 +172,9 @@ export default function BankStatementsPage() {
       payload.accountName = accountName || null;
       payload.statementDate = statementDate;
       payload.fileUrl = fileUrl;
+      // Forward parsed line items so the server can classify + persist
+      // BankStatementLine rows. Only present when a CSV/XLSX was parsed.
+      if (parseResult?.lines?.length) payload.lines = parseResult.lines;
     }
     const res = await fetch(url, {
       method,
