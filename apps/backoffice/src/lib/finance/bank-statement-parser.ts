@@ -22,6 +22,14 @@ import * as XLSX from "xlsx";
 // Anything we can't parse becomes a warning the UI surfaces — Finance can
 // still type in the totals manually if the parse fails.
 
+export type ParsedLine = {
+  txnDate: string;            // YYYY-MM-DD
+  description: string;
+  reference: string | null;
+  amount: number;             // always positive
+  direction: "CR" | "DR";
+};
+
 export type ParsedStatement = {
   totalInflows: number;
   totalOutflows: number;
@@ -29,6 +37,7 @@ export type ParsedStatement = {
   periodEnd: string | null;     // YYYY-MM-DD
   rowsParsed: number;
   warnings: string[];
+  lines: ParsedLine[];          // individual transactions for line-item ingest
 };
 
 const INFLOW_HEADERS = ["credit", "deposit", "credits", "kredit", "in"];
@@ -36,6 +45,8 @@ const OUTFLOW_HEADERS = ["debit", "withdrawal", "withdrawals", "debits", "debit 
 const DATE_HEADERS = ["date", "transaction date", "txn date", "value date", "tarikh", "posting date"];
 const AMOUNT_HEADERS = ["amount", "transaction amount", "amt"];
 const DR_CR_HEADERS = ["dr/cr", "dr cr", "type", "debit/credit", "transaction type"];
+const DESC_HEADERS = ["description", "transaction description", "particulars", "narrative", "details", "remark", "remarks"];
+const REF_HEADERS = ["reference", "ref", "reference no", "ref no", "transaction reference"];
 
 function normalize(s: unknown): string {
   return typeof s === "string" ? s.trim().toLowerCase() : "";
@@ -103,11 +114,13 @@ function findHeaderRow(rows: unknown[][]): { idx: number; cols: Record<string, n
     const creditIdx = row.findIndex((c) => INFLOW_HEADERS.some((h) => c === h || c.includes(h)));
     const amountIdx = row.findIndex((c) => AMOUNT_HEADERS.some((h) => c === h));
     const drcrIdx = row.findIndex((c) => DR_CR_HEADERS.some((h) => c.includes(h)));
+    const descIdx = row.findIndex((c) => DESC_HEADERS.some((h) => c === h || c.includes(h)));
+    const refIdx = row.findIndex((c) => REF_HEADERS.some((h) => c === h || c.includes(h)));
     if (debitIdx >= 0 && creditIdx >= 0) {
-      return { idx: i, cols: { date: dateIdx, debit: debitIdx, credit: creditIdx } };
+      return { idx: i, cols: { date: dateIdx, debit: debitIdx, credit: creditIdx, desc: descIdx, ref: refIdx } };
     }
     if (amountIdx >= 0 && drcrIdx >= 0) {
-      return { idx: i, cols: { date: dateIdx, amount: amountIdx, drcr: drcrIdx } };
+      return { idx: i, cols: { date: dateIdx, amount: amountIdx, drcr: drcrIdx, desc: descIdx, ref: refIdx } };
     }
   }
   return null;
@@ -126,6 +139,7 @@ export function parseBankStatementBuffer(buffer: Buffer, filename = "statement")
       periodEnd: null,
       rowsParsed: 0,
       warnings: [`Could not read file as CSV/XLSX: ${err instanceof Error ? err.message : "parse error"}`],
+      lines: [],
     };
   }
 
@@ -137,6 +151,7 @@ export function parseBankStatementBuffer(buffer: Buffer, filename = "statement")
       periodStart: null,
       periodEnd: null,
       rowsParsed: 0,
+      lines: [],
       warnings: [`No worksheets found in ${filename}`],
     };
   }
@@ -152,6 +167,7 @@ export function parseBankStatementBuffer(buffer: Buffer, filename = "statement")
       periodEnd: null,
       rowsParsed: 0,
       warnings: [`Couldn't find a header row with date + debit/credit columns. Expected something like "Date / Debit / Credit" or "Date / Amount / DR/CR". Type the totals in manually.`],
+      lines: [],
     };
   }
 
@@ -160,12 +176,28 @@ export function parseBankStatementBuffer(buffer: Buffer, filename = "statement")
   let periodStart: Date | null = null;
   let periodEnd: Date | null = null;
   let rowsParsed = 0;
+  const lines: ParsedLine[] = [];
+
+  // Maybank quirk: a transaction's description sometimes wraps onto the
+  // following row(s) with a blank date column. Buffer the most recent
+  // parsed line so we can append continuation rows to its description.
+  let lastLineIdx = -1;
 
   for (let i = header.idx + 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row || row.length === 0) continue;
     const date = parseDate(row[header.cols.date!]);
-    if (!date) continue;
+    if (!date) {
+      // Continuation row: blank date, but the description column may have
+      // more text. Append to the previous line if any.
+      if (lastLineIdx >= 0 && header.cols.desc != null) {
+        const more = String(row[header.cols.desc] ?? "").trim();
+        if (more) {
+          lines[lastLineIdx].description = `${lines[lastLineIdx].description} ${more}`.trim();
+        }
+      }
+      continue;
+    }
 
     let inflow = 0;
     let outflow = 0;
@@ -182,13 +214,45 @@ export function parseBankStatementBuffer(buffer: Buffer, filename = "statement")
       else if (/^c|credit|cr|dep|deposit/.test(tag)) inflow = amt;
     }
 
-    if (inflow === 0 && outflow === 0) continue;
+    if (inflow === 0 && outflow === 0) {
+      // Maybe a header repeat or balance-only row — skip but don't reset
+      // lastLineIdx so any continuation text still attaches to the
+      // previous real line.
+      continue;
+    }
 
     totalIn += inflow;
     totalOut += outflow;
     if (!periodStart || date < periodStart) periodStart = date;
     if (!periodEnd || date > periodEnd) periodEnd = date;
     rowsParsed++;
+
+    const description = header.cols.desc != null
+      ? String(row[header.cols.desc] ?? "").trim()
+      : "";
+    const reference = header.cols.ref != null
+      ? (String(row[header.cols.ref] ?? "").trim() || null)
+      : null;
+
+    if (inflow > 0) {
+      lines.push({
+        txnDate: ymd(date),
+        description,
+        reference,
+        amount: Math.round(inflow * 100) / 100,
+        direction: "CR",
+      });
+      lastLineIdx = lines.length - 1;
+    } else if (outflow > 0) {
+      lines.push({
+        txnDate: ymd(date),
+        description,
+        reference,
+        amount: Math.round(outflow * 100) / 100,
+        direction: "DR",
+      });
+      lastLineIdx = lines.length - 1;
+    }
   }
 
   if (rowsParsed === 0) {
@@ -202,5 +266,6 @@ export function parseBankStatementBuffer(buffer: Buffer, filename = "statement")
     periodEnd: periodEnd ? ymd(periodEnd) : null,
     rowsParsed,
     warnings,
+    lines,
   };
 }

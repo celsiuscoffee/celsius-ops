@@ -96,6 +96,7 @@ model Outlet {
   internalFeedbacks InternalFeedback[]
   auditReports      AuditReport[]
   recurringExpenses RecurringExpense[]
+  bankStatementLines BankStatementLine[]
 }
 
 enum OutletType {
@@ -1375,8 +1376,104 @@ model BankStatement {
   uploadedById   String
   uploadedBy     User     @relation(fields: [uploadedById], references: [id])
   createdAt      DateTime @default(now())
+  lines          BankStatementLine[]
 
   @@index([statementDate])
+}
+
+// Per-transaction breakdown of a bank statement, populated when CSV/Excel
+// is uploaded. The cash-tracking matrix page reads from these — every row
+// gets classified into one of the CashCategory buckets (matching Finance's
+// existing spreadsheet framework), tagged with an outlet inferred from the
+// transaction description, and InterCo-flagged when the counterparty is
+// another Celsius entity. PDFs only give totals so PDF-sourced statements
+// won't have lines.
+model BankStatementLine {
+  id              String   @id @default(uuid())
+  statementId     String
+  statement       BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  txnDate         DateTime
+  description     String
+  reference       String?
+  amount          Decimal  @db.Decimal(12, 2)        // always positive
+  direction       BankLineDirection                  // CR (in) | DR (out)
+  category        CashCategory?
+  outletId        String?
+  outlet          Outlet?  @relation(fields: [outletId], references: [id])
+  isInterCo       Boolean  @default(false)
+  classifiedBy    String?  // 'rule' | 'manual'
+  ruleName        String?  // which regex rule fired
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([statementId])
+  @@index([txnDate])
+  @@index([category, outletId])
+}
+
+enum BankLineDirection {
+  CR
+  DR
+}
+
+// Cash-tracking categories — verbatim from the per-outlet spreadsheet
+// framework Finance uses. Same enum is used on both inflow and outflow
+// sides; direction is on the line itself. InterCo categories show on
+// both sides; consolidated views net them across outlets.
+enum CashCategory {
+  // Inflow channels
+  CARD
+  QR
+  STOREHUB
+  GRAB
+  GRAB_PUTRAJAYA
+  FOODPANDA
+  MEETINGS_EVENTS
+  GASTROHUB
+  CAPITAL
+  MANAGEMENT_FEE
+  ADTD
+  // Outflow — COGS
+  RAW_MATERIALS
+  DELIVERY
+  // Outflow — Labor
+  DIRECTORS_ALLOWANCE
+  EMPLOYEE_SALARY
+  PARTIMER
+  STATUTORY_PAYMENT
+  STAFF_CLAIM
+  PETTY_CASH
+  // Outflow — Marketing
+  MARKETPLACE_FEE
+  DIGITAL_ADS
+  KOL
+  OTHER_MARKETING
+  // Outflow — Property / Ops
+  RENT
+  UTILITIES
+  SOFTWARE
+  // Outflow — Compliance / Finance
+  CFS_FEE
+  COMPLIANCE
+  TAX
+  LICENSING_FEE
+  ROYALTY_FEE
+  LOAN
+  BANK_FEE
+  // Outflow — Capex / Maintenance
+  EQUIPMENTS
+  MAINTENANCE
+  INVESTMENTS
+  // InterCo (net to zero across consolidation)
+  INTERCO_PEOPLE
+  INTERCO_RAW_MATERIAL
+  INTERCO_INVESTMENTS
+  INTERCO_EXPENSES
+  // Catch-alls
+  TRANSFER_NOT_SUCCESSFUL
+  OTHER_INFLOW
+  OTHER_OUTFLOW
 }
 
 model RecurringExpense {

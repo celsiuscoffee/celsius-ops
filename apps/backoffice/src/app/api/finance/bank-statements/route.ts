@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRole, AuthError } from "@/lib/auth";
+import { classifyBankLine } from "@/lib/finance/bank-line-classifier";
 
 // Bank statements are uploaded periodically by Finance — typically weekly.
 // The most recent row is the opening balance for the cashflow projection.
+// When CSV/XLSX lines are forwarded from the parser, each row is auto-
+// classified into a CashCategory and persisted as a BankStatementLine —
+// these power the cash-tracking matrix and the per-category projection.
+
+type IncomingLine = {
+  txnDate: string;
+  description: string;
+  reference: string | null;
+  amount: number;
+  direction: "CR" | "DR";
+};
 
 export async function GET(req: NextRequest) {
   try { await requireRole(req.headers, "ADMIN"); }
@@ -42,13 +54,14 @@ export async function POST(req: NextRequest) {
   const {
     accountName, statementDate, closingBalance, fileUrl, notes,
     periodStart, periodEnd, totalInflows, totalOutflows,
-    interCoInflows, interCoOutflows,
+    interCoInflows, interCoOutflows, lines,
   } = (body ?? {}) as {
     accountName?: string | null; statementDate?: string;
     closingBalance?: number | string; fileUrl?: string | null; notes?: string | null;
     periodStart?: string | null; periodEnd?: string | null;
     totalInflows?: number | string | null; totalOutflows?: number | string | null;
     interCoInflows?: number | string | null; interCoOutflows?: number | string | null;
+    lines?: IncomingLine[];
   };
 
   if (!statementDate || closingBalance == null) {
@@ -76,6 +89,46 @@ export async function POST(req: NextRequest) {
     include: { uploadedBy: { select: { id: true, name: true } } },
   });
 
+  // Classify + persist lines if the parser forwarded any. Best-effort —
+  // a failure here doesn't roll back the statement (Finance can re-upload
+  // or hand-classify in the cash-tracking edit UI).
+  let linesCreated = 0;
+  if (Array.isArray(lines) && lines.length > 0) {
+    // Map outlet codes once up front
+    const outlets = await prisma.outlet.findMany({ select: { id: true, code: true } });
+    const codeToId = new Map(outlets.map((o) => [o.code, o.id]));
+
+    const data = lines
+      .filter((l) => l && l.txnDate && l.amount > 0 && (l.direction === "CR" || l.direction === "DR"))
+      .map((l) => {
+        const cls = classifyBankLine({
+          description: l.description ?? "",
+          reference: l.reference ?? null,
+          amount: l.amount,
+          direction: l.direction,
+          accountKey: accountName ?? undefined,
+        });
+        return {
+          statementId: created.id,
+          txnDate: new Date(l.txnDate),
+          description: l.description ?? "",
+          reference: l.reference ?? null,
+          amount: Number(l.amount),
+          direction: l.direction,
+          category: cls.category,
+          outletId: cls.outletCode ? codeToId.get(cls.outletCode) ?? null : null,
+          isInterCo: cls.isInterCo,
+          classifiedBy: "rule",
+          ruleName: cls.ruleName,
+        };
+      });
+
+    if (data.length > 0) {
+      const result = await prisma.bankStatementLine.createMany({ data, skipDuplicates: true });
+      linesCreated = result.count;
+    }
+  }
+
   return NextResponse.json(
     {
       ...created,
@@ -84,6 +137,7 @@ export async function POST(req: NextRequest) {
       totalOutflows: created.totalOutflows == null ? null : Number(created.totalOutflows),
       interCoInflows: created.interCoInflows == null ? null : Number(created.interCoInflows),
       interCoOutflows: created.interCoOutflows == null ? null : Number(created.interCoOutflows),
+      linesCreated,
     },
     { status: 201 },
   );

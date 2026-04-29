@@ -4,21 +4,30 @@ import { prisma } from "@/lib/prisma";
 // optional outletId, returns weekly buckets with the breakdown that the
 // dashboard renders.
 //
-// Inputs (all read at request time, no side effects):
-//   - Opening balance: latest BankStatement.closingBalance.
-//   - Sales forecast: day-of-week average over the last 12 weeks of
-//     SalesTransaction (per outlet if filtered, else all), projected forward.
-//   - Invoice outflows: unpaid Invoice rows with dueDate in horizon.
-//   - Payroll: avg of the last 3 paid hr_payroll_runs, projected once per
-//     month on the cycle's payday (or 25th-of-month fallback).
-//   - Marketing: avg of the last 3 ads_invoice totals, projected once per
-//     month on (or near) the issue_date day-of-month.
-//   - RecurringExpense: walked forward by cadence from nextDueDate.
+// Source of truth: classified BankStatementLine rows. Per-category daily
+// rates are derived from the last 90 days of bank lines and used to
+// project forward. Sales categories (CARD/QR/STOREHUB/GRAB/FOODPANDA/
+// GASTROHUB/MEETINGS_EVENTS) get a day-of-week shape from their txnDate
+// distribution; outflow categories project as a flat daily rate.
 //
-// Sales forecast scope: when outletId is null we sum all outlets; otherwise
-// we filter both the historical lookback and the projection to that outlet.
-// Payroll/marketing run-rates stay HQ-level — they're not split per outlet
-// in the source data.
+// Inputs (all read at request time, no side effects):
+//   - Opening balance: sum of latest BankStatement.closingBalance per
+//     account.
+//   - Bank-line projection: per-category × DOW (or per-day) averages
+//     from BankStatementLine over the last 90 days. Drives salesIn,
+//     payrollOut, marketingOut, recurringOut, otherIn, otherOut.
+//   - Invoice outflows: unpaid Invoice rows with dueDate in horizon
+//     (additive on top of bank-line residual — these are committed
+//     future payments not yet on the bank statement).
+//   - Synthetic fallback: when bank lines are empty for a category we
+//     fall back to the legacy streams (StoreHub DOW, hr_payroll_runs
+//     avg, ads_invoice avg, RecurringExpense expansion).
+//
+// Sales forecast scope: when outletId is null we sum all outlets; outlet
+// filter applies to both the bank-line lookback and to invoices.
+// Categories with no outletId attribution (paid from HQ on behalf of all
+// outlets — e.g. payroll, central marketing) are dropped from filtered
+// views and surfaced as a warning.
 
 const DAY_MS = 86400_000;
 
@@ -222,6 +231,139 @@ async function projectMarketing(start: Date, end: Date): Promise<{ date: Date; a
   return out;
 }
 
+// --- Bank-line per-category projection ---------------------------------
+//
+// Aggregates BankStatementLine rows into the bucket fields the projection
+// renders. Sales-channel inflows (CARD/QR/STOREHUB/GRAB/FOODPANDA/
+// GASTROHUB/MEETINGS_EVENTS) get a per-DOW shape so weekend revenue
+// projects higher than Tuesday revenue; everything else projects as a
+// flat per-day rate over the lookback window.
+//
+// This is the "projection should be based on this as well" path — when
+// bank-line data exists for a category, that supersedes the synthetic
+// stream (StoreHub DOW averages, hr_payroll_runs, ads_invoice). When a
+// category has no bank-line data (e.g. brand new bank account) the
+// caller falls back to the synthetic stream.
+
+const SALES_INFLOW_CATEGORIES = [
+  "CARD", "QR", "STOREHUB", "GRAB", "GRAB_PUTRAJAYA",
+  "FOODPANDA", "MEETINGS_EVENTS", "GASTROHUB",
+] as const;
+
+const PAYROLL_OUTFLOW_CATEGORIES = [
+  "DIRECTORS_ALLOWANCE", "EMPLOYEE_SALARY", "PARTIMER",
+  "STATUTORY_PAYMENT", "STAFF_CLAIM", "PETTY_CASH",
+] as const;
+
+const MARKETING_OUTFLOW_CATEGORIES = [
+  "DIGITAL_ADS", "KOL", "OTHER_MARKETING", "MARKETPLACE_FEE",
+] as const;
+
+const RECURRING_OUTFLOW_CATEGORIES = [
+  "RENT", "UTILITIES", "SOFTWARE", "CFS_FEE", "COMPLIANCE", "TAX",
+  "LICENSING_FEE", "ROYALTY_FEE", "LOAN", "BANK_FEE", "MAINTENANCE",
+] as const;
+
+// Categories that are "other" — not sales, not payroll, not marketing,
+// not recurring. Includes capex, raw materials, and the catch-alls.
+const OTHER_OUTFLOW_CATEGORIES = [
+  "RAW_MATERIALS", "DELIVERY", "EQUIPMENTS", "INVESTMENTS",
+  "TRANSFER_NOT_SUCCESSFUL", "OTHER_OUTFLOW",
+] as const;
+
+const OTHER_INFLOW_CATEGORIES = [
+  "CAPITAL", "MANAGEMENT_FEE", "ADTD", "OTHER_INFLOW",
+] as const;
+
+type BankLineProjection = {
+  salesByDow: number[];          // [Sun..Sat] daily averages from sales categories
+  payrollPerDay: number;
+  marketingPerDay: number;
+  recurringPerDay: number;
+  otherInPerDay: number;
+  otherOutPerDay: number;
+  sampleDays: number;            // number of distinct calendar days the data covers
+  hasData: boolean;
+};
+
+async function bankLineProjection(outletIds: string[]): Promise<BankLineProjection | null> {
+  const lookback = 90;
+  const since = new Date(Date.now() - lookback * DAY_MS);
+  // Outlet filter: when filtered, only include lines tagged to the
+  // selected outlets; HQ-paid (null outletId) rows are excluded so we
+  // don't double-count central spend against an outlet view.
+  const lines = await prisma.bankStatementLine.findMany({
+    where: {
+      txnDate: { gte: since },
+      isInterCo: false,
+      ...(outletIds.length > 0 ? { outletId: outletIds.length === 1 ? outletIds[0] : { in: outletIds } } : {}),
+    },
+    select: { txnDate: true, direction: true, amount: true, category: true },
+  });
+
+  if (lines.length === 0) return null;
+
+  // Span the actual lookback window — distinct days seen, fall back to
+  // the lookback constant when no data.
+  const daySet = new Set<string>();
+  const salesSumByDow = [0, 0, 0, 0, 0, 0, 0];
+  const salesDistinctDaysByDow: Set<string>[] = [
+    new Set(), new Set(), new Set(), new Set(), new Set(), new Set(), new Set(),
+  ];
+  let payrollSum = 0;
+  let marketingSum = 0;
+  let recurringSum = 0;
+  let otherInSum = 0;
+  let otherOutSum = 0;
+
+  const SALES_SET = new Set<string>(SALES_INFLOW_CATEGORIES as readonly string[]);
+  const PAYROLL_SET = new Set<string>(PAYROLL_OUTFLOW_CATEGORIES as readonly string[]);
+  const MARKETING_SET = new Set<string>(MARKETING_OUTFLOW_CATEGORIES as readonly string[]);
+  const RECURRING_SET = new Set<string>(RECURRING_OUTFLOW_CATEGORIES as readonly string[]);
+  const OTHER_OUT_SET = new Set<string>(OTHER_OUTFLOW_CATEGORIES as readonly string[]);
+  const OTHER_IN_SET = new Set<string>(OTHER_INFLOW_CATEGORIES as readonly string[]);
+
+  for (const l of lines) {
+    if (!l.category) continue;
+    const dayKey = ymd(l.txnDate);
+    daySet.add(dayKey);
+    const amt = Number(l.amount);
+    const cat = l.category as string;
+    if (l.direction === "CR") {
+      if (SALES_SET.has(cat)) {
+        const dow = l.txnDate.getDay();
+        salesSumByDow[dow] += amt;
+        salesDistinctDaysByDow[dow].add(dayKey);
+      } else if (OTHER_IN_SET.has(cat)) {
+        otherInSum += amt;
+      }
+    } else {
+      // DR
+      if (PAYROLL_SET.has(cat)) payrollSum += amt;
+      else if (MARKETING_SET.has(cat)) marketingSum += amt;
+      else if (RECURRING_SET.has(cat)) recurringSum += amt;
+      else if (OTHER_OUT_SET.has(cat)) otherOutSum += amt;
+    }
+  }
+
+  const sampleDays = Math.max(1, daySet.size);
+  const salesByDow = salesSumByDow.map((s, dow) => {
+    const n = salesDistinctDaysByDow[dow].size;
+    return n > 0 ? s / n : 0;
+  });
+
+  return {
+    salesByDow,
+    payrollPerDay: payrollSum / sampleDays,
+    marketingPerDay: marketingSum / sampleDays,
+    recurringPerDay: recurringSum / sampleDays,
+    otherInPerDay: otherInSum / sampleDays,
+    otherOutPerDay: otherOutSum / sampleDays,
+    sampleDays,
+    hasData: true,
+  };
+}
+
 // Hybrid model — derive a per-day inflow/outflow rate from recent bank
 // statements with period totals. With multiple bank accounts each posting
 // statements covering the same calendar dates, naive sum-then-divide
@@ -348,10 +490,20 @@ export async function computeCashflow(opts: {
   const opening = await fetchOpeningBalance();
   if (!opening.statementDate) warnings.push("No bank statement uploaded — opening balance is RM 0.00. Upload one to get a real projection.");
 
-  // Sales forecast — day-of-week averages
-  const dowAvg = await dayOfWeekSalesAverages(outletIds);
+  // Bank-line projection — primary source. When categorized lines exist,
+  // they drive every bucket field. Synthetic streams below act as a
+  // fallback only.
+  const bankProj = await bankLineProjection(outletIds);
+
+  // Sales forecast — bank-line DOW averages take precedence; synthetic
+  // StoreHub DOW is fallback when no bank-line sales data exists for
+  // the scope.
+  const synthDow = await dayOfWeekSalesAverages(outletIds);
+  const dowAvg = bankProj && bankProj.salesByDow.some((v) => v > 0)
+    ? bankProj.salesByDow
+    : synthDow;
   const dowTotal = dowAvg.reduce((a, b) => a + b, 0);
-  if (dowTotal === 0) warnings.push("No StoreHub sales in the last 12 weeks for the selected scope — sales forecast is RM 0.");
+  if (dowTotal === 0) warnings.push("No bank-line sales nor StoreHub history for the selected scope — sales forecast is RM 0.");
 
   // Outflows — invoices in horizon (full-DB scope; outlet filter applies if set)
   const invoices = await prisma.invoice.findMany({
@@ -373,23 +525,38 @@ export async function computeCashflow(opts: {
     },
   });
 
-  // Outflows — payroll + marketing (HQ-level, not outlet-split for v1)
-  const payrollProjected = await projectPayroll(today, horizonEnd);
-  const marketingProjected = isFiltered ? [] : await projectMarketing(today, horizonEnd);
-  if (isFiltered) {
+  // Outflows — payroll + marketing. Bank-line per-day rates take
+  // precedence (smoothed daily); synthetic monthly-pulse streams are
+  // fallback when no bank-line data exists.
+  const useBankLinePayroll = !!(bankProj && bankProj.payrollPerDay > 0);
+  const useBankLineMarketing = !!(bankProj && bankProj.marketingPerDay > 0);
+  const payrollProjected = useBankLinePayroll ? [] : await projectPayroll(today, horizonEnd);
+  const marketingProjected = (useBankLineMarketing || isFiltered) ? [] : await projectMarketing(today, horizonEnd);
+  if (isFiltered && !useBankLineMarketing) {
     warnings.push("Marketing run-rate is HQ-only and not allocated to outlets — it's excluded from the filtered view.");
   }
 
-  // Hybrid residual — bank flows per day minus what the synthetic streams
-  // would already cover. Only applies in "all outlets" mode since
-  // BankStatement isn't outlet-tagged.
-  const bankFlows = isFiltered ? null : await bankFlowsPerDay();
-  if (!isFiltered && !bankFlows) {
-    warnings.push("Bank statement period totals not yet uploaded — \"Other (bank)\" residual is RM 0. Upload a CSV/Excel statement to see the gap between bank actuals and the synthetic forecast.");
+  // Other-bank residual. Two paths:
+  //  1. Bank-line projection available → use the per-category buckets
+  //     directly (otherInPerDay = unclassified inflow run-rate;
+  //     otherOutPerDay = capex/raw-mat/catch-all run-rate). This is
+  //     the "projection should be based on bank lines as well" path.
+  //  2. Fallback to legacy bankStatementsPerDay residual model — bank
+  //     period totals minus the synthetic streams. Only used when no
+  //     classified lines exist yet.
+  const bankFlows = (!bankProj && !isFiltered) ? await bankFlowsPerDay() : null;
+  if (!bankProj && !bankFlows && !isFiltered) {
+    warnings.push("No classified bank lines and no statement period totals — \"Other (bank)\" residual is RM 0. Upload a CSV/Excel statement to enable a real projection.");
   }
   let otherInPerDay = 0;
   let otherOutPerDay = 0;
-  if (bankFlows) {
+  if (bankProj) {
+    // Bank-line model is authoritative — categories already partition
+    // the flow exactly, no residual subtraction needed.
+    otherInPerDay = bankProj.otherInPerDay;
+    otherOutPerDay = bankProj.otherOutPerDay;
+  } else if (bankFlows) {
+    // Legacy residual fallback (no classified lines yet)
     const dailySalesSynthetic = dowAvg.reduce((a, b) => a + b, 0) / 7;
     const monthlyPayrollAvg = payrollProjected.length > 0
       ? payrollProjected.reduce((s, p) => s + p.amount, 0) / Math.max(1, payrollProjected.length)
@@ -406,6 +573,13 @@ export async function computeCashflow(opts: {
     otherInPerDay = Math.max(0, bankFlows.inflow - dailySalesSynthetic);
     otherOutPerDay = Math.max(0, bankFlows.outflow - dailySyntheticOut);
   }
+
+  // When we're using bank-line projection for payroll/marketing, derive
+  // per-day rates so the bucket builder can spread them across days
+  // (versus the monthly-pulse synthetic streams).
+  const bankPayrollPerDay = useBankLinePayroll ? bankProj!.payrollPerDay : 0;
+  const bankMarketingPerDay = useBankLineMarketing ? bankProj!.marketingPerDay : 0;
+  const bankRecurringPerDay = bankProj && bankProj.recurringPerDay > 0 ? bankProj.recurringPerDay : 0;
 
   // Bucket builder
   const buckets: CashflowBucket[] = [];
@@ -457,8 +631,9 @@ export async function computeCashflow(opts: {
       }
     }
 
-    // Other (bank residual) — count days in the week that are >= today, since
-    // partial first weeks shouldn't include past days.
+    // Other (bank residual) + bank-line-driven daily-rate streams
+    // (payroll/marketing/recurring). Count days in the week that are
+    // >= today, since partial first weeks shouldn't include past days.
     let activeDays = 0;
     for (let d = 0; d < 7; d++) {
       const day = new Date(weekStart.getTime() + d * DAY_MS);
@@ -467,7 +642,19 @@ export async function computeCashflow(opts: {
     const otherIn = otherInPerDay * activeDays;
     const otherOut = otherOutPerDay * activeDays;
 
-    const closing = runningOpening + salesIn + otherIn - invoiceOut - payrollOut - marketingOut - recurringOut - otherOut;
+    // Add bank-line daily-rate spend for the categories we promoted from
+    // synthetic monthly pulses. Stacks on top of any synthetic
+    // payrollProjected / marketingProjected entries, but those arrays
+    // are emptied above when bank-line data exists for the category.
+    const bankPayrollOut = bankPayrollPerDay * activeDays;
+    const bankMarketingOut = bankMarketingPerDay * activeDays;
+    const bankRecurringOut = bankRecurringPerDay * activeDays;
+
+    const totalPayrollOut = payrollOut + bankPayrollOut;
+    const totalMarketingOut = marketingOut + bankMarketingOut;
+    const totalRecurringOut = recurringOut + bankRecurringOut;
+
+    const closing = runningOpening + salesIn + otherIn - invoiceOut - totalPayrollOut - totalMarketingOut - totalRecurringOut - otherOut;
 
     buckets.push({
       weekStart: ymd(weekStart),
@@ -476,9 +663,9 @@ export async function computeCashflow(opts: {
       salesIn: round2(salesIn),
       otherIn: round2(otherIn),
       invoiceOut: round2(invoiceOut),
-      payrollOut: round2(payrollOut),
-      marketingOut: round2(marketingOut),
-      recurringOut: round2(recurringOut),
+      payrollOut: round2(totalPayrollOut),
+      marketingOut: round2(totalMarketingOut),
+      recurringOut: round2(totalRecurringOut),
       otherOut: round2(otherOut),
       closing: round2(closing),
       invoiceIds: wkInvoices.map((iv) => iv.id),
@@ -515,9 +702,20 @@ export async function computeCashflow(opts: {
     outletId: outletIds.length === 1 ? outletIds[0] : null,
     outletIds,
     openingBalance: opening,
-    bankFlowsPerDay: bankFlows
-      ? { inflow: round2(bankFlows.inflow), outflow: round2(bankFlows.outflow), sampleDays: bankFlows.sampleDays }
-      : null,
+    bankFlowsPerDay: bankProj
+      ? {
+          // Bank-line model — sum of all per-day rates on each side
+          inflow: round2(
+            (bankProj.salesByDow.reduce((a, b) => a + b, 0) / 7) + bankProj.otherInPerDay,
+          ),
+          outflow: round2(
+            bankProj.payrollPerDay + bankProj.marketingPerDay + bankProj.recurringPerDay + bankProj.otherOutPerDay,
+          ),
+          sampleDays: bankProj.sampleDays,
+        }
+      : bankFlows
+        ? { inflow: round2(bankFlows.inflow), outflow: round2(bankFlows.outflow), sampleDays: bankFlows.sampleDays }
+        : null,
     monthlyHistory,
     cashGeneration,
     buckets,

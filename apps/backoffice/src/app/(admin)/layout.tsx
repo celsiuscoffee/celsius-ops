@@ -60,6 +60,7 @@ import {
   CalendarOff,
   Flame,
   Banknote,
+  TableProperties,
   Bot,
   Sun,
   Moon,
@@ -210,6 +211,7 @@ const NAV_SECTIONS: NavSection[] = [
       // OWNER/ADMIN regardless of moduleAccess, so the section won't render
       // in the rail for managers/staff.
       { label: "Cashflow", href: "/finance/cashflow", icon: <LineChart className={ICON_SIZE} />, moduleKey: "finance:cashflow" },
+      { label: "Cash Tracking", href: "/finance/cash-tracking", icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
       { label: "Bank Statements", href: "/finance/bank-statements", icon: <Banknote className={ICON_SIZE} />, moduleKey: "finance:bank-statements" },
       { label: "Recurring Expenses", href: "/finance/recurring-expenses", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "finance:recurring-expenses" },
     ],
