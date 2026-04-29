@@ -132,19 +132,56 @@ export async function GET(req: NextRequest) {
     orderBy: { name: "asc" },
   });
 
-  // Count due-today invoices (unpaid, due date = today)
+  // Summary cards aggregate over the FULL invoice table — not the paginated
+  // 200-row response. Previously the client computed Total / Payable / Overdue
+  // / Paid by filtering `invoices` (capped at 200), so once you had >200
+  // PAID invoices the older unpaid ones fell off the page and Payable
+  // collapsed to RM 0.00 even though Due Today (server-side) correctly
+  // showed 17 outstanding. Compute everything server-side on the same
+  // snapshot so the cards stay consistent. INITIATED counts as Payable —
+  // it stays INITIATED rather than rolling to OVERDUE on its own (per the
+  // updateMany above) but it's still owed, not paid.
   const today = new Date();
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const todayEnd = new Date(todayStart.getTime() + 86400000);
-  const dueTodayInvoices = await prisma.invoice.findMany({
-    where: {
-      status: { in: UNPAID_STATUSES as ("DRAFT" | "INITIATED" | "PENDING" | "OVERDUE")[] },
-      dueDate: { gte: todayStart, lt: todayEnd },
-    },
-    select: { id: true, amount: true },
-  });
+
+  const [allAgg, paidAgg, overdueAgg, payableInvoices, dueTodayInvoices] = await Promise.all([
+    prisma.invoice.aggregate({ _sum: { amount: true }, _count: { _all: true } }),
+    prisma.invoice.aggregate({ where: { status: "PAID" }, _sum: { amount: true }, _count: { _all: true } }),
+    prisma.invoice.aggregate({ where: { status: "OVERDUE" }, _sum: { amount: true }, _count: { _all: true } }),
+    prisma.invoice.findMany({
+      where: { status: { in: UNPAID_STATUSES as ("DRAFT" | "INITIATED" | "PENDING" | "DEPOSIT_PAID" | "OVERDUE")[] } },
+      select: { id: true, amount: true, status: true, depositAmount: true },
+    }),
+    prisma.invoice.findMany({
+      where: {
+        status: { in: UNPAID_STATUSES as ("DRAFT" | "INITIATED" | "PENDING" | "DEPOSIT_PAID" | "OVERDUE")[] },
+        dueDate: { gte: todayStart, lt: todayEnd },
+      },
+      select: { id: true, amount: true, status: true, depositAmount: true },
+    }),
+  ]);
+
+  // Outstanding balance = full amount, minus deposit already paid for
+  // DEPOSIT_PAID rows (only the balance is still owed). All other unpaid
+  // statuses owe the full amount.
+  const outstanding = (i: { amount: { toNumber?: () => number } | number; status: string; depositAmount: { toNumber?: () => number } | number | null }) => {
+    const amt = typeof i.amount === "number" ? i.amount : i.amount.toNumber?.() ?? 0;
+    const dep = i.depositAmount == null ? 0 : (typeof i.depositAmount === "number" ? i.depositAmount : i.depositAmount.toNumber?.() ?? 0);
+    return i.status === "DEPOSIT_PAID" ? Math.max(0, amt - dep) : amt;
+  };
+  const payableAmount = payableInvoices.reduce((s, i) => s + outstanding(i), 0);
+  const payableCount = payableInvoices.length;
   const dueTodayCount = dueTodayInvoices.length;
-  const dueTodayAmount = dueTodayInvoices.reduce((s, i) => s + Number(i.amount), 0);
+  const dueTodayAmount = dueTodayInvoices.reduce((s, i) => s + outstanding(i), 0);
+
+  const summary = {
+    total: { count: allAgg._count._all, amount: Number(allAgg._sum.amount ?? 0) },
+    payable: { count: payableCount, amount: payableAmount },
+    overdue: { count: overdueAgg._count._all, amount: Number(overdueAgg._sum.amount ?? 0) },
+    paid: { count: paidAgg._count._all, amount: Number(paidAgg._sum.amount ?? 0) },
+    dueToday: { count: dueTodayCount, amount: dueTodayAmount },
+  };
 
   const mapped = invoices.map((inv) => ({
     id: inv.id,
@@ -195,7 +232,7 @@ export async function GET(req: NextRequest) {
     flags: Array.isArray(inv.flags) ? inv.flags : [],
   }));
 
-  return NextResponse.json({ invoices: mapped, outlets, dueTodayCount, dueTodayAmount });
+  return NextResponse.json({ invoices: mapped, outlets, dueTodayCount, dueTodayAmount, summary });
 }
 
 export async function POST(req: NextRequest) {

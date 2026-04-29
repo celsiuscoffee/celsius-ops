@@ -99,7 +99,21 @@ const FLAG_TITLE: Record<InvoiceFlagCode, string> = {
 const activeFlags = (inv: Pick<Invoice, "flags">) => (inv.flags ?? []).filter((f) => !f.dismissed);
 
 type OutletOption = { id: string; name: string };
-type InvoicesResponse = { invoices: Invoice[]; outlets: OutletOption[]; dueTodayCount: number; dueTodayAmount: number };
+type SummaryBucket = { count: number; amount: number };
+type InvoicesSummary = {
+  total: SummaryBucket;
+  payable: SummaryBucket;
+  overdue: SummaryBucket;
+  paid: SummaryBucket;
+  dueToday: SummaryBucket;
+};
+type InvoicesResponse = {
+  invoices: Invoice[];
+  outlets: OutletOption[];
+  dueTodayCount: number;
+  dueTodayAmount: number;
+  summary?: InvoicesSummary;
+};
 
 export default function InvoicesPage() {
   const [tab, setTab] = useState("all");
@@ -393,11 +407,21 @@ export default function InvoicesPage() {
     }
   };
 
-  const totalOverdue = allInvoices.filter((i) => i.status === "OVERDUE").reduce((a, i) => a + i.amount, 0);
-  const totalPaid = allInvoices.filter((i) => i.status === "PAID").reduce((a, i) => a + i.amount, 0);
-  const totalAll = allInvoices.reduce((a, i) => a + i.amount, 0);
-  const totalPayable = allInvoices.filter((i) => i.status !== "PAID").reduce((a, i) => a + i.amount, 0);
-  const payableCount = allInvoices.filter((i) => i.status !== "PAID").length;
+  // Summary cards come from a server-side aggregate over the full invoice
+  // table. Computing from `allInvoices` here would silently understate
+  // anything when the API truncates at the 200-row pagination limit
+  // (e.g. once PAID grows past 200, Payable/Overdue collapsed to zero
+  // even when work was outstanding). Falls back to the loaded subset
+  // only when the API hasn't been redeployed yet.
+  const summary = data?.summary;
+  const totalAll = summary?.total.amount ?? allInvoices.reduce((a, i) => a + i.amount, 0);
+  const totalAllCount = summary?.total.count ?? allInvoices.length;
+  const totalPayable = summary?.payable.amount ?? allInvoices.filter((i) => i.status !== "PAID").reduce((a, i) => a + i.amount, 0);
+  const payableCount = summary?.payable.count ?? allInvoices.filter((i) => i.status !== "PAID").length;
+  const totalOverdue = summary?.overdue.amount ?? allInvoices.filter((i) => i.status === "OVERDUE").reduce((a, i) => a + i.amount, 0);
+  const overdueCount = summary?.overdue.count ?? allInvoices.filter((i) => i.status === "OVERDUE").length;
+  const totalPaid = summary?.paid.amount ?? allInvoices.filter((i) => i.status === "PAID").reduce((a, i) => a + i.amount, 0);
+  const paidCount = summary?.paid.count ?? allInvoices.filter((i) => i.status === "PAID").length;
 
   const statusLabel = (status: string, paymentType: string) => {
     // Staff claims used to show "approved"/"reimbursed" — unified with supplier
@@ -479,11 +503,11 @@ export default function InvoicesPage() {
       {/* Summary cards — clickable to filter */}
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
         {([
-          { key: "all" as const, label: "Total", amount: totalAll, count: allInvoices.length, color: "text-gray-900", border: "border-gray-300", ring: "ring-gray-200" },
+          { key: "all" as const, label: "Total", amount: totalAll, count: totalAllCount, color: "text-gray-900", border: "border-gray-300", ring: "ring-gray-200" },
           { key: "payable" as const, label: "Payable", amount: totalPayable, count: payableCount, color: payableCount > 0 ? "text-orange-600" : "text-gray-400", border: "border-orange-400", ring: "ring-orange-100" },
           { key: "due_today" as const, label: "Due Today", amount: dueTodayAmount, count: dueTodayCount, color: dueTodayCount > 0 ? "text-blue-600" : "text-gray-400", border: "border-blue-400", ring: "ring-blue-100" },
-          { key: "overdue" as const, label: "Overdue", amount: totalOverdue, count: allInvoices.filter((i) => i.status === "OVERDUE").length, color: "text-red-600", border: "border-red-400", ring: "ring-red-100" },
-          { key: "paid" as const, label: "Paid", amount: totalPaid, count: allInvoices.filter((i) => i.status === "PAID").length, color: "text-green-600", border: "border-green-400", ring: "ring-green-100" },
+          { key: "overdue" as const, label: "Overdue", amount: totalOverdue, count: overdueCount, color: "text-red-600", border: "border-red-400", ring: "ring-red-100" },
+          { key: "paid" as const, label: "Paid", amount: totalPaid, count: paidCount, color: "text-green-600", border: "border-green-400", ring: "ring-green-100" },
         ]).map((card) => (
           <button
             key={card.key}
