@@ -95,6 +95,7 @@ model Outlet {
   reviewSettings    ReviewSettings?
   internalFeedbacks InternalFeedback[]
   auditReports      AuditReport[]
+  recurringExpenses RecurringExpense[]
 }
 
 enum OutletType {
@@ -151,6 +152,7 @@ model User {
   activityLogs       ActivityLog[]
   auditTemplatesCreated AuditTemplate[] @relation("AuditTemplateCreatedBy")
   auditReports          AuditReport[]   @relation("AuditReportAuditor")
+  bankStatements        BankStatement[]
 }
 
 enum UserRole {
@@ -1331,4 +1333,62 @@ model AdsSettings {
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("ads_settings")
+}
+
+// ─── FINANCE / CASHFLOW ─────────────────────────────────────
+//
+// BankStatement: Finance uploads a periodic bank statement (PDF + manual
+// closing-balance entry) so the cashflow projection has a known starting
+// point. The latest row per (accountName) is treated as the opening
+// balance for "today" projections; older rows are kept for audit.
+//
+// RecurringExpense: predictable cash outflows that don't flow through
+// the Invoice system (rent, utilities, SaaS, etc.). Marketing recurring
+// streams that show up as Ads-module expense are NOT entered here —
+// the cashflow compute pulls those directly from the Ads module so they
+// aren't double-counted.
+
+model BankStatement {
+  id             String   @id @default(uuid())
+  accountName    String?  // e.g. "Maybank Operating", optional
+  statementDate  DateTime
+  closingBalance Decimal  @db.Decimal(12, 2)
+  fileUrl        String?  // optional PDF/image of the statement
+  notes          String?
+  uploadedById   String
+  uploadedBy     User     @relation(fields: [uploadedById], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@index([statementDate])
+}
+
+model RecurringExpense {
+  id          String                     @id @default(uuid())
+  name        String
+  category    RecurringExpenseCategory
+  amount      Decimal                    @db.Decimal(12, 2)
+  cadence     RecurringCadence
+  nextDueDate DateTime
+  outletId    String?                    // null = HQ-level
+  outlet      Outlet?                    @relation(fields: [outletId], references: [id])
+  isActive    Boolean                    @default(true)
+  notes       String?
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+
+  @@index([isActive, nextDueDate])
+}
+
+enum RecurringExpenseCategory {
+  RENT
+  UTILITY
+  SAAS
+  PAYROLL_SUPPORT
+  OTHER
+}
+
+enum RecurringCadence {
+  MONTHLY
+  QUARTERLY
+  YEARLY
 }

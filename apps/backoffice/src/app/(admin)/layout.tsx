@@ -202,6 +202,19 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Finance",
+    icon: <Banknote className={ICON_SIZE} />,
+    railIcon: <Banknote className={RAIL_ICON_SIZE} />,
+    items: [
+      // moduleKey starts with "finance:" — canAccess hard-restricts these to
+      // OWNER/ADMIN regardless of moduleAccess, so the section won't render
+      // in the rail for managers/staff.
+      { label: "Cashflow", href: "/finance/cashflow", icon: <LineChart className={ICON_SIZE} />, moduleKey: "finance:cashflow" },
+      { label: "Bank Statements", href: "/finance/bank-statements", icon: <Banknote className={ICON_SIZE} />, moduleKey: "finance:bank-statements" },
+      { label: "Recurring Expenses", href: "/finance/recurring-expenses", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "finance:recurring-expenses" },
+    ],
+  },
+  {
     label: "Reviews",
     icon: <MessageCircle className={ICON_SIZE} />,
     railIcon: <MessageCircle className={RAIL_ICON_SIZE} />,
@@ -310,6 +323,12 @@ const NAV_SECTIONS: NavSection[] = [
 
 function canAccess(user: UserProfile | undefined, moduleKey?: string): boolean {
   if (!user) return false;
+  // Finance module — consolidated cashflow + bank balances + payroll run-rate.
+  // Owner/Admin only, no exceptions. The moduleAccess checkbox cannot
+  // override this even if it ends up set on a Manager record.
+  if (moduleKey?.startsWith("finance:")) {
+    return user.role === "ADMIN" || user.role === "OWNER";
+  }
   if (user.role === "ADMIN" || user.role === "OWNER") return true;
   if (!moduleKey) return true;
   if (!user.moduleAccess) return false;
