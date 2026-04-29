@@ -104,6 +104,7 @@ type InvoicesSummary = {
   total: SummaryBucket;
   payable: SummaryBucket;
   overdue: SummaryBucket;
+  initiated: SummaryBucket;
   paid: SummaryBucket;
   dueToday: SummaryBucket;
 };
@@ -129,7 +130,7 @@ export default function InvoicesPage() {
   const [paidDateTo, setPaidDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [viewingPhotos, setViewingPhotos] = useState<{ invoiceNumber: string; photos: string[] } | null>(null);
-  const [cardFilter, setCardFilter] = useState<"all" | "pending" | "overdue" | "paid" | "due_today" | "payable" | null>(null);
+  const [cardFilter, setCardFilter] = useState<"all" | "pending" | "overdue" | "initiated" | "paid" | "due_today" | "payable" | null>(null);
   const [batchInitiating, setBatchInitiating] = useState(false);
 
   // Payment dialog
@@ -420,6 +421,8 @@ export default function InvoicesPage() {
   const payableCount = summary?.payable.count ?? allInvoices.filter((i) => i.status !== "PAID").length;
   const totalOverdue = summary?.overdue.amount ?? allInvoices.filter((i) => i.status === "OVERDUE").reduce((a, i) => a + i.amount, 0);
   const overdueCount = summary?.overdue.count ?? allInvoices.filter((i) => i.status === "OVERDUE").length;
+  const totalInitiated = summary?.initiated.amount ?? allInvoices.filter((i) => i.status === "INITIATED").reduce((a, i) => a + i.amount, 0);
+  const initiatedCount = summary?.initiated.count ?? allInvoices.filter((i) => i.status === "INITIATED").length;
   const totalPaid = summary?.paid.amount ?? allInvoices.filter((i) => i.status === "PAID").reduce((a, i) => a + i.amount, 0);
   const paidCount = summary?.paid.count ?? allInvoices.filter((i) => i.status === "PAID").length;
 
@@ -501,12 +504,13 @@ export default function InvoicesPage() {
       </div>
 
       {/* Summary cards — clickable to filter */}
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
         {([
           { key: "all" as const, label: "Total", amount: totalAll, count: totalAllCount, color: "text-gray-900", border: "border-gray-300", ring: "ring-gray-200" },
           { key: "payable" as const, label: "Payable", amount: totalPayable, count: payableCount, color: payableCount > 0 ? "text-orange-600" : "text-gray-400", border: "border-orange-400", ring: "ring-orange-100" },
           { key: "due_today" as const, label: "Due Today", amount: dueTodayAmount, count: dueTodayCount, color: dueTodayCount > 0 ? "text-blue-600" : "text-gray-400", border: "border-blue-400", ring: "ring-blue-100" },
-          { key: "overdue" as const, label: "Overdue", amount: totalOverdue, count: overdueCount, color: "text-red-600", border: "border-red-400", ring: "ring-red-100" },
+          { key: "initiated" as const, label: "Initiated", amount: totalInitiated, count: initiatedCount, color: initiatedCount > 0 ? "text-indigo-600" : "text-gray-400", border: "border-indigo-400", ring: "ring-indigo-100" },
+          { key: "overdue" as const, label: "Overdue", amount: totalOverdue, count: overdueCount, color: overdueCount > 0 ? "text-red-600" : "text-gray-400", border: "border-red-400", ring: "ring-red-100" },
           { key: "paid" as const, label: "Paid", amount: totalPaid, count: paidCount, color: "text-green-600", border: "border-green-400", ring: "ring-green-100" },
         ]).map((card) => (
           <button
@@ -526,7 +530,7 @@ export default function InvoicesPage() {
               <p className="text-xs text-gray-500">{card.label}</p>
               {card.count > 0 && card.key !== "all" && (
                 <span className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white ${
-                  card.key === "payable" ? "bg-orange-500" : card.key === "due_today" ? "bg-blue-500" : card.key === "overdue" ? "bg-red-500" : "bg-green-500"
+                  card.key === "payable" ? "bg-orange-500" : card.key === "due_today" ? "bg-blue-500" : card.key === "overdue" ? "bg-red-500" : card.key === "initiated" ? "bg-indigo-500" : "bg-green-500"
                 }`}>
                   {card.count}
                 </span>

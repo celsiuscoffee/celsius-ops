@@ -24,9 +24,22 @@ export async function GET(req: NextRequest) {
   const _todayStart = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate());
   const _todayEnd = new Date(_todayStart.getTime() + 86400000);
 
+  // "Overdue" semantically = anything unpaid past its due date. The OVERDUE
+  // status auto-rollover only flips PENDING → OVERDUE (line below); INITIATED
+  // is intentionally left alone so Finance can see "payment in progress" at a
+  // glance. But once an INITIATED invoice sits past its due date, it really
+  // is overdue from the supplier's perspective. We surface it as overdue in
+  // the cards and filter without rewriting the status, so the table badge
+  // still reads INITIATED — useful triage info for Finance.
+  const overdueOr: Prisma.InvoiceWhereInput[] = [
+    { status: "OVERDUE" },
+    { status: "INITIATED", dueDate: { lt: _todayStart } },
+  ];
+
   const where: Record<string, unknown> = {};
   if (cardFilter === "paid") where.status = "PAID";
-  else if (cardFilter === "overdue") where.status = "OVERDUE";
+  else if (cardFilter === "overdue") where.OR = overdueOr;
+  else if (cardFilter === "initiated") where.status = "INITIATED";
   else if (cardFilter === "pending") where.status = "PENDING";
   else if (cardFilter === "payable") where.status = { in: UNPAID_STATUSES };
   else if (cardFilter === "due_today") {
@@ -160,10 +173,15 @@ export async function GET(req: NextRequest) {
   const todayStart = _todayStart;
   const todayEnd = _todayEnd;
 
-  const [allAgg, paidAgg, overdueAgg, payableInvoices, dueTodayInvoices] = await Promise.all([
+  const [allAgg, paidAgg, overdueAgg, initiatedAgg, payableInvoices, dueTodayInvoices] = await Promise.all([
     prisma.invoice.aggregate({ _sum: { amount: true }, _count: { _all: true } }),
     prisma.invoice.aggregate({ where: { status: "PAID" }, _sum: { amount: true }, _count: { _all: true } }),
-    prisma.invoice.aggregate({ where: { status: "OVERDUE" }, _sum: { amount: true }, _count: { _all: true } }),
+    // Overdue = literal OVERDUE status PLUS INITIATED past due date.
+    // Same OR shape as the cardFilter so card count and table count agree.
+    prisma.invoice.aggregate({ where: { OR: overdueOr }, _sum: { amount: true }, _count: { _all: true } }),
+    // Initiated card — counts every INITIATED row regardless of due date.
+    // Useful for Finance to see how many payments are mid-flight.
+    prisma.invoice.aggregate({ where: { status: "INITIATED" }, _sum: { amount: true }, _count: { _all: true } }),
     prisma.invoice.findMany({
       where: { status: { in: UNPAID_STATUSES as ("DRAFT" | "INITIATED" | "PENDING" | "DEPOSIT_PAID" | "OVERDUE")[] } },
       select: { id: true, amount: true, status: true, depositAmount: true },
@@ -194,6 +212,7 @@ export async function GET(req: NextRequest) {
     total: { count: allAgg._count._all, amount: Number(allAgg._sum.amount ?? 0) },
     payable: { count: payableCount, amount: payableAmount },
     overdue: { count: overdueAgg._count._all, amount: Number(overdueAgg._sum.amount ?? 0) },
+    initiated: { count: initiatedAgg._count._all, amount: Number(initiatedAgg._sum.amount ?? 0) },
     paid: { count: paidAgg._count._all, amount: Number(paidAgg._sum.amount ?? 0) },
     dueToday: { count: dueTodayCount, amount: dueTodayAmount },
   };
