@@ -55,13 +55,17 @@ export type CashflowResult = {
   // what "Other (bank)" represents.
   bankFlowsPerDay: { inflow: number; outflow: number; sampleDays: number } | null;
   // Historical "cash generated per month" — straight from BankStatement
-  // period totals, consolidated across accounts. The user's primary
-  // KPI: did we generate cash or burn it last month?
+  // period totals, consolidated across accounts. cashIn/cashOut are
+  // gross; netGenerated subtracts any InterCo offset Finance has marked
+  // so internal transfers don't distort the KPI. The user's primary
+  // question: did we generate cash or burn it last month?
   monthlyHistory: Array<{
     month: string;            // YYYY-MM
-    cashIn: number;           // sum of totalInflows across accounts
-    cashOut: number;          // sum of totalOutflows
-    netGenerated: number;     // cashIn - cashOut
+    cashIn: number;           // gross totalInflows across accounts
+    cashOut: number;          // gross totalOutflows
+    interCoInflows: number;   // marked InterCo portion of cashIn
+    interCoOutflows: number;  // marked InterCo portion of cashOut
+    netGenerated: number;     // (cashIn - interCoIn) - (cashOut - interCoOut)
     accountsReporting: number; // 3 = full coverage; less = data gap
   }>;
   // Rolled-up averages for the headline cards. burnPerMonth is positive
@@ -233,7 +237,11 @@ async function bankFlowsPerDay(): Promise<{ inflow: number; outflow: number; sam
       OR: [{ totalInflows: { not: null } }, { totalOutflows: { not: null } }],
     },
     orderBy: { statementDate: "desc" },
-    select: { accountName: true, periodStart: true, periodEnd: true, totalInflows: true, totalOutflows: true },
+    select: {
+      accountName: true, periodStart: true, periodEnd: true,
+      totalInflows: true, totalOutflows: true,
+      interCoInflows: true, interCoOutflows: true,
+    },
   });
   if (rows.length === 0) return null;
 
@@ -259,8 +267,13 @@ async function bankFlowsPerDay(): Promise<{ inflow: number; outflow: number; sam
       if (!r.periodStart || !r.periodEnd) continue;
       const days = Math.max(1, Math.round((r.periodEnd.getTime() - r.periodStart.getTime()) / DAY_MS) + 1);
       acctDays += days;
-      if (r.totalInflows != null) acctIn += Number(r.totalInflows);
-      if (r.totalOutflows != null) acctOut += Number(r.totalOutflows);
+      // Subtract InterCo flows so the bank-residual rate reflects only
+      // external cash movement (sales receipts, supplier payments, etc),
+      // not internal transfers between Celsius entities.
+      const ico_in = r.interCoInflows == null ? 0 : Number(r.interCoInflows);
+      const ico_out = r.interCoOutflows == null ? 0 : Number(r.interCoOutflows);
+      if (r.totalInflows != null)  acctIn  += Math.max(0, Number(r.totalInflows)  - ico_in);
+      if (r.totalOutflows != null) acctOut += Math.max(0, Number(r.totalOutflows) - ico_out);
     }
     if (acctDays === 0) continue;
     perDayIn += acctIn / acctDays;
@@ -477,17 +490,18 @@ export async function computeCashflow(opts: {
 
   // Historical "cash generated per month" — primary KPI Finance asks
   // about. Pulled straight from BankStatement period totals, summed
-  // across accounts. Caveat surfaced in the warnings: gross bank flows
-  // can include InterCo transfers between Celsius entities (CCSB / CCT
-  // / CCC + any 4th internal account) which inflate both sides without
-  // representing real cash generation. Outliers like Jan 2026 (CCC RM
-  // 233k outflow with no matching inflow on the other accounts) suggest
-  // a 4th internal account exists.
+  // across accounts. When BankStatement.interCoInflows/Outflows are set
+  // we subtract them from gross flows so the net excludes internal
+  // transfers between Celsius entities — without that, a transfer to
+  // an internal account we don't track shows as "cash burned" when
+  // it isn't.
   const monthlyHistory = await loadMonthlyHistory();
   const cashGeneration = summariseCashGeneration(monthlyHistory, opening.amount);
-  const hasOutlier = monthlyHistory.some((m) => Math.abs(m.netGenerated) > 100000 && m.accountsReporting < 3 || (m.accountsReporting === 3 && Math.abs(m.netGenerated) > 100000));
-  if (hasOutlier && !isFiltered) {
-    warnings.push("One or more historical months show a net swing > RM 100k — typically an InterCo transfer to an internal account we don't yet track. Cash generation figures include these gross flows; treat outlier months with caution.");
+  const unflaggedOutlier = monthlyHistory.find(
+    (m) => Math.abs(m.netGenerated) > 100000 && (m.interCoInflows ?? 0) === 0 && (m.interCoOutflows ?? 0) === 0,
+  );
+  if (unflaggedOutlier && !isFiltered) {
+    warnings.push(`${unflaggedOutlier.month} net was ${unflaggedOutlier.netGenerated >= 0 ? "+" : ""}RM ${Math.round(unflaggedOutlier.netGenerated).toLocaleString()} — likely an InterCo transfer. Edit that month's statement and fill in the InterCo offset to exclude it from cash generation.`);
   }
   if (monthlyHistory.some((m) => m.accountsReporting < 3) && !isFiltered) {
     warnings.push("Some months have fewer than 3 reporting accounts — uploaded statement set is incomplete for those months.");
@@ -524,31 +538,43 @@ async function loadMonthlyHistory(): Promise<CashflowResult["monthlyHistory"]> {
       totalInflows: { not: null },
       totalOutflows: { not: null },
     },
-    select: { accountName: true, periodStart: true, totalInflows: true, totalOutflows: true },
+    select: {
+      accountName: true, periodStart: true,
+      totalInflows: true, totalOutflows: true,
+      interCoInflows: true, interCoOutflows: true,
+    },
     orderBy: { periodStart: "asc" },
   });
 
-  type Bucket = { cashIn: number; cashOut: number; accounts: Set<string> };
+  type Bucket = { cashIn: number; cashOut: number; icoIn: number; icoOut: number; accounts: Set<string> };
   const byMonth = new Map<string, Bucket>();
   for (const r of rows) {
     if (!r.periodStart) continue;
     const key = `${r.periodStart.getFullYear()}-${String(r.periodStart.getMonth() + 1).padStart(2, "0")}`;
-    const b = byMonth.get(key) ?? { cashIn: 0, cashOut: 0, accounts: new Set<string>() };
+    const b = byMonth.get(key) ?? { cashIn: 0, cashOut: 0, icoIn: 0, icoOut: 0, accounts: new Set<string>() };
     b.cashIn += Number(r.totalInflows ?? 0);
     b.cashOut += Number(r.totalOutflows ?? 0);
+    if (r.interCoInflows  != null) b.icoIn  += Number(r.interCoInflows);
+    if (r.interCoOutflows != null) b.icoOut += Number(r.interCoOutflows);
     b.accounts.add(r.accountName ?? "__default__");
     byMonth.set(key, b);
   }
 
   return Array.from(byMonth.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, b]) => ({
-      month,
-      cashIn: round2(b.cashIn),
-      cashOut: round2(b.cashOut),
-      netGenerated: round2(b.cashIn - b.cashOut),
-      accountsReporting: b.accounts.size,
-    }));
+    .map(([month, b]) => {
+      const adjustedIn  = Math.max(0, b.cashIn  - b.icoIn);
+      const adjustedOut = Math.max(0, b.cashOut - b.icoOut);
+      return {
+        month,
+        cashIn: round2(b.cashIn),
+        cashOut: round2(b.cashOut),
+        interCoInflows: round2(b.icoIn),
+        interCoOutflows: round2(b.icoOut),
+        netGenerated: round2(adjustedIn - adjustedOut),
+        accountsReporting: b.accounts.size,
+      };
+    });
 }
 
 // Last-month / 3-month-avg / runway. Excludes incomplete months (fewer

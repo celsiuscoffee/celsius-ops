@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
       closingBalance: Number(s.closingBalance),
       totalInflows: s.totalInflows == null ? null : Number(s.totalInflows),
       totalOutflows: s.totalOutflows == null ? null : Number(s.totalOutflows),
+      interCoInflows: s.interCoInflows == null ? null : Number(s.interCoInflows),
+      interCoOutflows: s.interCoOutflows == null ? null : Number(s.interCoOutflows),
     })),
   );
 }
@@ -40,11 +42,13 @@ export async function POST(req: NextRequest) {
   const {
     accountName, statementDate, closingBalance, fileUrl, notes,
     periodStart, periodEnd, totalInflows, totalOutflows,
+    interCoInflows, interCoOutflows,
   } = (body ?? {}) as {
     accountName?: string | null; statementDate?: string;
     closingBalance?: number | string; fileUrl?: string | null; notes?: string | null;
     periodStart?: string | null; periodEnd?: string | null;
     totalInflows?: number | string | null; totalOutflows?: number | string | null;
+    interCoInflows?: number | string | null; interCoOutflows?: number | string | null;
   };
 
   if (!statementDate || closingBalance == null) {
@@ -61,6 +65,8 @@ export async function POST(req: NextRequest) {
       closingBalance: Number(closingBalance),
       periodStart: periodStart ? new Date(periodStart) : null,
       periodEnd: periodEnd ? new Date(periodEnd) : null,
+      interCoInflows: interCoInflows == null || interCoInflows === "" ? null : Number(interCoInflows),
+      interCoOutflows: interCoOutflows == null || interCoOutflows === "" ? null : Number(interCoOutflows),
       totalInflows: totalInflows == null || totalInflows === "" ? null : Number(totalInflows),
       totalOutflows: totalOutflows == null || totalOutflows === "" ? null : Number(totalOutflows),
       fileUrl: fileUrl || null,
@@ -76,6 +82,8 @@ export async function POST(req: NextRequest) {
       closingBalance: Number(created.closingBalance),
       totalInflows: created.totalInflows == null ? null : Number(created.totalInflows),
       totalOutflows: created.totalOutflows == null ? null : Number(created.totalOutflows),
+      interCoInflows: created.interCoInflows == null ? null : Number(created.interCoInflows),
+      interCoOutflows: created.interCoOutflows == null ? null : Number(created.interCoOutflows),
     },
     { status: 201 },
   );

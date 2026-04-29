@@ -1362,6 +1362,14 @@ model BankStatement {
   periodEnd      DateTime?
   totalInflows   Decimal?  @db.Decimal(12, 2)
   totalOutflows  Decimal?  @db.Decimal(12, 2)
+  // Portion of totalInflows / totalOutflows that represents InterCo
+  // transfers between Celsius entities (CCSB / CCT / CCC / any 4th
+  // internal account). When finance fills these in, the cash-generation
+  // KPI subtracts them from both sides so internal movement doesn't
+  // distort the net. Without these, a transfer to an account we don't
+  // track shows as "cash burned" when it isn't.
+  interCoInflows  Decimal? @db.Decimal(12, 2)
+  interCoOutflows Decimal? @db.Decimal(12, 2)
   fileUrl        String?  // optional source file (CSV / Excel / PDF)
   notes          String?
   uploadedById   String
