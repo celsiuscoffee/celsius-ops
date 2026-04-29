@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Loader2, AlertTriangle, Banknote, Settings, ArrowRight, TrendingDown, TrendingUp } from "lucide-react";
+import { Loader2, AlertTriangle, Banknote, Settings, ArrowRight, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
 
 type Outlet = { id: string; name: string; code: string };
 
@@ -27,6 +27,7 @@ type CashflowResult = {
   asOf: string;
   weeks: number;
   outletId: string | null;
+  outletIds: string[];
   openingBalance: { amount: number; statementDate: string | null };
   bankFlowsPerDay: { inflow: number; outflow: number; sampleDays: number } | null;
   buckets: CashflowBucket[];
@@ -53,12 +54,21 @@ function shortRange(start: string, end: string): string {
 
 export default function CashflowPage() {
   const [weeks, setWeeks] = useState<number>(8);
-  const [outletId, setOutletId] = useState<string>("");
+  const [outletIds, setOutletIds] = useState<string[]>([]);
+  const [outletPickerOpen, setOutletPickerOpen] = useState(false);
 
   const params = new URLSearchParams({ weeks: String(weeks) });
-  if (outletId) params.set("outletId", outletId);
+  outletIds.forEach((id) => params.append("outlet", id));
   const { data, isLoading } = useFetch<CashflowResult>(`/api/finance/cashflow?${params.toString()}`);
   const { data: outlets } = useFetch<Outlet[]>("/api/settings/outlets");
+
+  const toggleOutlet = (id: string) =>
+    setOutletIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const clearOutlets = () => setOutletIds([]);
+  const outletButtonLabel =
+    outletIds.length === 0 ? "All outlets"
+    : outletIds.length === 1 ? (outlets?.find((o) => o.id === outletIds[0])?.name ?? "1 outlet")
+    : `${outletIds.length} outlets`;
 
   // Chart bounds — y-axis runs from min(closing, opening, 0) to max(closing).
   const chartData = useMemo(() => {
@@ -87,10 +97,52 @@ export default function CashflowPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm">
-            <option value="">All outlets</option>
-            {(outlets ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
+          {/* Multi-filter outlet picker. Click to toggle the popover; tick
+              one or more outlets, click outside to dismiss. Empty selection
+              = consolidated "All outlets" view (same as the bank-residual
+              view that includes the Other-bank column). */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOutletPickerOpen((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-md border bg-white px-3 py-1.5 text-sm transition-colors ${outletIds.length > 0 ? "border-terracotta text-terracotta-dark" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}
+            >
+              {outletButtonLabel}
+              {outletIds.length > 0 && (
+                <span
+                  role="button"
+                  onClick={(e) => { e.stopPropagation(); clearOutlets(); }}
+                  className="ml-1 rounded-full p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  aria-label="Clear outlet filter"
+                >
+                  <X className="h-3 w-3" />
+                </span>
+              )}
+              <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+            </button>
+            {outletPickerOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setOutletPickerOpen(false)} />
+                <div className="absolute right-0 z-20 mt-1 w-64 rounded-lg border border-gray-200 bg-white shadow-lg">
+                  <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+                    <span className="text-xs font-medium text-gray-500">Filter by outlet</span>
+                    <button onClick={clearOutlets} className="text-[11px] text-blue-600 hover:underline">Clear</button>
+                  </div>
+                  <div className="max-h-[280px] overflow-y-auto p-1">
+                    {(outlets ?? []).map((o) => {
+                      const checked = outletIds.includes(o.id);
+                      return (
+                        <label key={o.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
+                          <input type="checkbox" checked={checked} onChange={() => toggleOutlet(o.id)} className="rounded border-gray-300 text-terracotta focus:ring-terracotta" />
+                          {o.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
           <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
             {HORIZONS.map((h) => (
               <button key={h} onClick={() => setWeeks(h)}
@@ -215,7 +267,7 @@ export default function CashflowPage() {
           </div>
 
           <p className="mt-3 text-[11px] text-gray-400">
-            Sales forecast: 12-week day-of-week average{outletId ? " for selected outlet" : ""}. Payroll: 4-month run-rate, projected on the 25th. Marketing: 4-month avg of Google Ads invoices, projected once per month{outletId ? " (HQ-level, excluded from per-outlet view)" : ""}.
+            Sales forecast: 12-week day-of-week average{outletIds.length > 0 ? ` for ${outletIds.length === 1 ? "selected outlet" : `${outletIds.length} selected outlets`}` : ""}. Payroll: 4-month run-rate, projected on the 25th. Marketing: 4-month avg of Google Ads invoices, projected once per month{outletIds.length > 0 ? " (HQ-level, excluded from filtered view)" : ""}.
             <strong className="text-gray-600"> Other (bank)</strong>: per-day residual from your bank statement period totals, minus everything the synthetic model already covers — captures pickup-app revenue, refunds, card-charged subscriptions, transfers and any other movement the projection isn&apos;t modelling yet.
             {data.bankFlowsPerDay
               ? ` Computed from the last ${data.bankFlowsPerDay.sampleDays} days of bank statements (avg in ${fmtMYR2(data.bankFlowsPerDay.inflow)}/day, out ${fmtMYR2(data.bankFlowsPerDay.outflow)}/day).`
