@@ -167,6 +167,11 @@ export default function InvoicesPage() {
   if (dueDateTo) params.set("dueDateTo", dueDateTo);
   if (paidDateFrom) params.set("paidDateFrom", paidDateFrom);
   if (paidDateTo) params.set("paidDateTo", paidDateTo);
+  // cardFilter is server-side now — without this, picking "Due Today"
+  // would show 0 rows because the unpaid-due-today set sits past the
+  // paginated 200-row cutoff. Server narrows the result to the right
+  // bucket regardless of which tab is active.
+  if (cardFilter && cardFilter !== "all") params.set("cardFilter", cardFilter);
 
   const url = `/api/inventory/invoices?${params.toString()}`;
   const { data, isLoading: loading, mutate: loadInvoices } = useFetch<InvoicesResponse>(url);
@@ -177,15 +182,10 @@ export default function InvoicesPage() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Apply card filter + bank filter on top of API results
+  // Bank filter is still applied client-side (it's a free-text contains check
+  // on supplier/claimant bank names — not worth a server roundtrip). cardFilter
+  // is handled by the API now, so it's dropped from the local filter.
   const invoices = allInvoices.filter((inv) => {
-    if (cardFilter) {
-      if (cardFilter === "pending" && inv.status !== "PENDING") return false;
-      if (cardFilter === "overdue" && inv.status !== "OVERDUE") return false;
-      if (cardFilter === "paid" && inv.status !== "PAID") return false;
-      if (cardFilter === "payable" && inv.status === "PAID") return false;
-      if (cardFilter === "due_today" && (inv.dueDate !== today || inv.status === "PAID")) return false;
-    }
     // Bank filter: use claimant bank for STAFF_CLAIM, supplier bank otherwise
     const bankName = (inv.paymentType === "STAFF_CLAIM" ? inv.claimantBank : inv.supplierBank)?.bankName?.toLowerCase() ?? "";
     if (bankFilter === "maybank" && !bankName.includes("maybank")) return false;

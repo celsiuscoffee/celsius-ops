@@ -14,9 +14,25 @@ export async function GET(req: NextRequest) {
   const UNPAID_STATUSES = ["DRAFT", "INITIATED", "PENDING", "DEPOSIT_PAID", "OVERDUE"];
 
   const type = req.nextUrl.searchParams.get("type") || "all";
+  // cardFilter narrows the result set the same way the summary cards do.
+  // Pushed to the server so paginated fetches don't hide unpaid rows that
+  // sit below the top 200 PAID-by-paidAt-desc cutoff. cardFilter wins
+  // over `tab` when they conflict — the user explicitly clicked a card.
+  const cardFilter = req.nextUrl.searchParams.get("cardFilter") || "";
+
+  const _now = new Date();
+  const _todayStart = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate());
+  const _todayEnd = new Date(_todayStart.getTime() + 86400000);
 
   const where: Record<string, unknown> = {};
-  if (tab === "unpaid") where.status = { in: UNPAID_STATUSES };
+  if (cardFilter === "paid") where.status = "PAID";
+  else if (cardFilter === "overdue") where.status = "OVERDUE";
+  else if (cardFilter === "pending") where.status = "PENDING";
+  else if (cardFilter === "payable") where.status = { in: UNPAID_STATUSES };
+  else if (cardFilter === "due_today") {
+    where.status = { in: UNPAID_STATUSES };
+    where.dueDate = { gte: _todayStart, lt: _todayEnd };
+  } else if (tab === "unpaid") where.status = { in: UNPAID_STATUSES };
   else if (tab === "paid") where.status = "PAID";
 
   if (type === "supplier") {
@@ -63,12 +79,10 @@ export async function GET(req: NextRequest) {
 
   // Auto-mark overdue: only PENDING invoices past due date become OVERDUE
   // (INITIATED invoices stay INITIATED — payment is already in progress)
-  const now = new Date();
-  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   await prisma.invoice.updateMany({
     where: {
       status: "PENDING",
-      dueDate: { lt: todayMidnight },
+      dueDate: { lt: _todayStart },
     },
     data: { status: "OVERDUE" },
   });
@@ -141,9 +155,10 @@ export async function GET(req: NextRequest) {
   // snapshot so the cards stay consistent. INITIATED counts as Payable —
   // it stays INITIATED rather than rolling to OVERDUE on its own (per the
   // updateMany above) but it's still owed, not paid.
-  const today = new Date();
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const todayEnd = new Date(todayStart.getTime() + 86400000);
+  // Reuse the today window already computed at the top so the cardFilter,
+  // auto-overdue update, and these summary queries all share one boundary.
+  const todayStart = _todayStart;
+  const todayEnd = _todayEnd;
 
   const [allAgg, paidAgg, overdueAgg, payableInvoices, dueTodayInvoices] = await Promise.all([
     prisma.invoice.aggregate({ _sum: { amount: true }, _count: { _all: true } }),
