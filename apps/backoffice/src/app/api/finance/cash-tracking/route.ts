@@ -19,7 +19,11 @@ export async function GET(req: NextRequest) {
     ...sp.getAll("outlet"),
     ...sp.getAll("outletId"),
   ].filter(Boolean);
-  const includeInterCo = sp.get("includeInterCo") !== "false";
+  // InterCo is always excluded — internal transfers net to zero across
+  // entities and shouldn't show as cash generated/burned. The classifier
+  // still tags them so we know what to net out; we just never surface
+  // them in the matrix or roll them into totals.
+  const includeInterCo = false;
 
   try {
     const matrix = await loadCashTrackingMatrix({ monthsBack, outletIds, includeInterCo });
