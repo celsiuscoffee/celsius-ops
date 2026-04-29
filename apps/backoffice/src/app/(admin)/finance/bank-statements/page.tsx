@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Plus, Trash2, X, Upload, FileDown, FileSpreadsheet, AlertTriangle } from "lucide-react";
+import { Loader2, Plus, Trash2, X, Upload, FileDown, FileSpreadsheet, AlertTriangle, Pencil } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 type BankStatement = {
@@ -15,6 +15,8 @@ type BankStatement = {
   periodEnd: string | null;
   totalInflows: number | null;
   totalOutflows: number | null;
+  interCoInflows: number | null;
+  interCoOutflows: number | null;
   fileUrl: string | null;
   notes: string | null;
   uploadedBy: { id: string; name: string };
@@ -35,6 +37,7 @@ type ParseResult = {
 export default function BankStatementsPage() {
   const { data, isLoading, mutate } = useFetch<BankStatement[]>("/api/finance/bank-statements");
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [accountName, setAccountName] = useState("Maybank Operating");
   const [statementDate, setStatementDate] = useState(new Date().toISOString().split("T")[0]);
@@ -43,6 +46,8 @@ export default function BankStatementsPage() {
   const [periodEnd, setPeriodEnd] = useState("");
   const [totalInflows, setTotalInflows] = useState("");
   const [totalOutflows, setTotalOutflows] = useState("");
+  const [interCoInflows, setInterCoInflows] = useState("");
+  const [interCoOutflows, setInterCoOutflows] = useState("");
   const [notes, setNotes] = useState("");
   const [fileUrl, setFileUrl] = useState<string | null>(null);
 
@@ -56,15 +61,35 @@ export default function BankStatementsPage() {
 
   const reset = () => {
     setAdding(false);
+    setEditingId(null);
     setAccountName("Maybank Operating");
     setStatementDate(new Date().toISOString().split("T")[0]);
     setClosingBalance("");
     setPeriodStart(""); setPeriodEnd("");
     setTotalInflows(""); setTotalOutflows("");
+    setInterCoInflows(""); setInterCoOutflows("");
     setNotes("");
     setFileUrl(null);
     setParseResult(null);
     setError("");
+  };
+
+  const openEdit = (s: BankStatement) => {
+    setEditingId(s.id);
+    setAccountName(s.accountName ?? "");
+    setStatementDate(s.statementDate.slice(0, 10));
+    setClosingBalance(String(s.closingBalance));
+    setPeriodStart(s.periodStart?.slice(0, 10) ?? "");
+    setPeriodEnd(s.periodEnd?.slice(0, 10) ?? "");
+    setTotalInflows(s.totalInflows == null ? "" : String(s.totalInflows));
+    setTotalOutflows(s.totalOutflows == null ? "" : String(s.totalOutflows));
+    setInterCoInflows(s.interCoInflows == null ? "" : String(s.interCoInflows));
+    setInterCoOutflows(s.interCoOutflows == null ? "" : String(s.interCoOutflows));
+    setNotes(s.notes ?? "");
+    setFileUrl(s.fileUrl);
+    setParseResult(null);
+    setError("");
+    setAdding(true);
   };
 
   // Single combined drop-and-parse handler. CSV/XLSX → parse + extract +
@@ -120,20 +145,29 @@ export default function BankStatementsPage() {
   const save = async () => {
     if (!statementDate || !closingBalance) { setError("Statement date and closing balance required"); return; }
     setSaving(true); setError("");
-    const res = await fetch("/api/finance/bank-statements", {
-      method: "POST",
+    const url = editingId ? `/api/finance/bank-statements/${editingId}` : "/api/finance/bank-statements";
+    const method = editingId ? "PATCH" : "POST";
+    const payload: Record<string, unknown> = {
+      closingBalance: parseFloat(closingBalance),
+      periodStart: periodStart || null,
+      periodEnd: periodEnd || null,
+      totalInflows: totalInflows === "" ? null : parseFloat(totalInflows),
+      totalOutflows: totalOutflows === "" ? null : parseFloat(totalOutflows),
+      interCoInflows: interCoInflows === "" ? null : parseFloat(interCoInflows),
+      interCoOutflows: interCoOutflows === "" ? null : parseFloat(interCoOutflows),
+      notes: notes || null,
+    };
+    // POST also accepts accountName + statementDate + fileUrl; PATCH ignores
+    // those (statement date / account are immutable for audit).
+    if (!editingId) {
+      payload.accountName = accountName || null;
+      payload.statementDate = statementDate;
+      payload.fileUrl = fileUrl;
+    }
+    const res = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        accountName: accountName || null,
-        statementDate,
-        closingBalance: parseFloat(closingBalance),
-        periodStart: periodStart || null,
-        periodEnd: periodEnd || null,
-        totalInflows: totalInflows === "" ? null : parseFloat(totalInflows),
-        totalOutflows: totalOutflows === "" ? null : parseFloat(totalOutflows),
-        fileUrl,
-        notes: notes || null,
-      }),
+      body: JSON.stringify(payload),
     });
     setSaving(false);
     if (!res.ok) {
@@ -184,7 +218,7 @@ export default function BankStatementsPage() {
         </div>
       ) : (
         <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
-          <table className="w-full min-w-[860px] text-sm">
+          <table className="w-full min-w-[960px] text-sm">
             <thead>
               <tr className="border-b bg-gray-50/50 text-left text-gray-500">
                 <th className="px-4 py-3 font-medium">Statement Date</th>
@@ -193,6 +227,7 @@ export default function BankStatementsPage() {
                 <th className="px-4 py-3 text-right font-medium">Closing (RM)</th>
                 <th className="px-4 py-3 text-right font-medium text-green-700">Inflows</th>
                 <th className="px-4 py-3 text-right font-medium text-red-700">Outflows</th>
+                <th className="px-4 py-3 text-right font-medium text-blue-700">InterCo</th>
                 <th className="px-4 py-3 font-medium">Uploaded By</th>
                 <th className="px-4 py-3 font-medium">File</th>
                 <th className="px-4 py-3 text-right font-medium"></th>
@@ -209,6 +244,15 @@ export default function BankStatementsPage() {
                   <td className="px-4 py-3 text-right font-mono">RM {s.closingBalance.toFixed(2)}</td>
                   <td className="px-4 py-3 text-right font-mono text-xs text-green-700">{s.totalInflows == null ? "—" : `+${s.totalInflows.toFixed(2)}`}</td>
                   <td className="px-4 py-3 text-right font-mono text-xs text-red-700">{s.totalOutflows == null ? "—" : `−${s.totalOutflows.toFixed(2)}`}</td>
+                  <td className="px-4 py-3 text-right font-mono text-[11px] text-blue-700">
+                    {(s.interCoInflows ?? 0) === 0 && (s.interCoOutflows ?? 0) === 0
+                      ? <span className="text-gray-300">—</span>
+                      : <>
+                          {(s.interCoInflows ?? 0) > 0 && <div>+{(s.interCoInflows ?? 0).toFixed(2)}</div>}
+                          {(s.interCoOutflows ?? 0) > 0 && <div>−{(s.interCoOutflows ?? 0).toFixed(2)}</div>}
+                        </>
+                    }
+                  </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{s.uploadedBy.name}</td>
                   <td className="px-4 py-3">
                     {s.fileUrl
@@ -217,6 +261,9 @@ export default function BankStatementsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
+                      <button onClick={() => openEdit(s)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Edit">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
                       <button onClick={() => remove(s.id)} className="rounded-md p-1 text-gray-400 hover:bg-red-50 hover:text-red-600" title="Delete">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -234,7 +281,7 @@ export default function BankStatementsPage() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={reset}>
           <div className="relative w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-gray-900">New Bank Statement</h3>
+              <h3 className="text-base font-semibold text-gray-900">{editingId ? "Edit Bank Statement" : "New Bank Statement"}</h3>
               <button onClick={reset} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
                 <X className="h-5 w-5" />
               </button>
@@ -311,6 +358,23 @@ export default function BankStatementsPage() {
                   </div>
                 </div>
                 <p className="text-[10px] text-gray-400">Auto-filled when you upload a CSV/Excel; you can edit before saving.</p>
+              </div>
+
+              {/* InterCo offsets — let finance carve out internal transfers
+                  so the cash-generation KPI excludes them. */}
+              <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 space-y-3">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-blue-700">InterCo offset (optional)</p>
+                <p className="text-[10px] text-blue-700/80">Portion of the totals above that was a transfer between Celsius accounts (CCSB ↔ CCT ↔ CCC ↔ any 4th internal account). Subtracted from gross flows so cash generation reflects external movement only.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-600">InterCo Inflows (RM)</label>
+                    <Input type="number" step="0.01" value={interCoInflows} onChange={(e) => setInterCoInflows(e.target.value)} placeholder="Internal transfer received" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-600">InterCo Outflows (RM)</label>
+                    <Input type="number" step="0.01" value={interCoOutflows} onChange={(e) => setInterCoOutflows(e.target.value)} placeholder="Internal transfer sent" />
+                  </div>
+                </div>
               </div>
 
               <div>
