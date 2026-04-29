@@ -81,9 +81,10 @@ const BANDS: Array<{ label: string; categories: string[]; tone: "in" | "out" }> 
     "CFS_FEE", "COMPLIANCE", "TAX", "LICENSING_FEE", "ROYALTY_FEE", "LOAN", "BANK_FEE",
   ]},
   { label: "Capex / Capital", tone: "out", categories: ["EQUIPMENTS", "MAINTENANCE", "INVESTMENTS"] },
-  { label: "InterCo", tone: "out", categories: [
-    "INTERCO_PEOPLE", "INTERCO_RAW_MATERIAL", "INTERCO_INVESTMENTS", "INTERCO_EXPENSES",
-  ]},
+  // InterCo categories deliberately omitted — internal transfers between
+  // Celsius entities net to zero and shouldn't appear as cash flow.
+  // The classifier still tags them so the API can exclude them from
+  // totals; we just don't render them.
   { label: "Catch-all", tone: "out", categories: ["TRANSFER_NOT_SUCCESSFUL", "OTHER_OUTFLOW"] },
 ];
 
@@ -102,11 +103,9 @@ function monthLabel(m: string): string {
 export default function CashTrackingPage() {
   const [monthsBack, setMonthsBack] = useState(6);
   const [activeOutletId, setActiveOutletId] = useState<string | null>(null); // null = all
-  const [includeInterCo, setIncludeInterCo] = useState(true);
 
   const params = new URLSearchParams({ months: String(monthsBack) });
   if (activeOutletId) params.set("outlet", activeOutletId);
-  if (!includeInterCo) params.set("includeInterCo", "false");
 
   const { data, isLoading } = useFetch<CashMatrix>(`/api/finance/cash-tracking?${params.toString()}`);
 
@@ -131,15 +130,6 @@ export default function CashTrackingPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700">
-            <input
-              type="checkbox"
-              checked={includeInterCo}
-              onChange={(e) => setIncludeInterCo(e.target.checked)}
-              className="rounded border-gray-300 text-terracotta focus:ring-terracotta"
-            />
-            Include InterCo
-          </label>
           <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
             {[3, 6, 12].map((m) => (
               <button
@@ -236,7 +226,7 @@ export default function CashTrackingPage() {
           </div>
 
           <p className="mt-2 text-[11px] text-gray-400">
-            Inflows shown positive · outflows negative · empty cells dashed · &ldquo;HQ / unallocated&rdquo; holds payments paid centrally that aren&rsquo;t outlet-tagged.
+            Inflows shown positive · outflows negative · empty cells dashed · &ldquo;HQ / unallocated&rdquo; holds payments paid centrally that aren&rsquo;t outlet-tagged · InterCo transfers between Celsius entities are netted out automatically.
           </p>
         </>
       )}
