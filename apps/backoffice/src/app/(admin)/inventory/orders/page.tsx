@@ -533,7 +533,11 @@ export default function OrdersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (!res.ok) { alert("Failed to update order status"); return; }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as { error?: string }));
+        alert(body.error || "Failed to update order status");
+        return;
+      }
       loadOrders();
     } finally {
       setUpdatingId(null);
@@ -717,7 +721,10 @@ export default function OrdersPage() {
                             <Pencil className="h-3 w-3" />
                           </button>
                         )}
-                        {["SENT", "APPROVED", "AWAITING_DELIVERY"].includes(order.status) && order.invoice?.status !== "PAID" && (
+                        {/* Cancel hidden once a committed invoice exists (INITIATED/DEPOSIT_PAID/PAID).
+                            API also enforces this — frontend hide is just for UX. */}
+                        {["SENT", "APPROVED", "AWAITING_DELIVERY"].includes(order.status)
+                          && !["INITIATED", "DEPOSIT_PAID", "PAID"].includes(order.invoice?.status ?? "") && (
                           <button onClick={() => { if (confirm("Cancel this order?")) updateStatus(order.id, "CANCELLED"); }} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50" title="Cancel Order">
                             Cancel
                           </button>

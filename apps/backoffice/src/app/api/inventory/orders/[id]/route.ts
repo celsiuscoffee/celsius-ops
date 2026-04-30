@@ -30,6 +30,32 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const data: Record<string, unknown> = {};
 
+    // Block PO cancellation if any linked invoice is INITIATED / DEPOSIT_PAID
+    // / PAID — those represent payments mid-flight or money already moved
+    // and need manual reversal first. Placeholder + real-but-PENDING invoices
+    // are fine to cancel through (placeholders cascade-delete below).
+    if (status === "CANCELLED") {
+      const blockingInvoice = await prisma.invoice.findFirst({
+        where: {
+          orderId: id,
+          status: { in: ["INITIATED", "DEPOSIT_PAID", "PAID"] },
+        },
+        select: { invoiceNumber: true, status: true, amount: true },
+      });
+      if (blockingInvoice) {
+        const verb =
+          blockingInvoice.status === "PAID" ? "is already paid" :
+          blockingInvoice.status === "DEPOSIT_PAID" ? "has a paid deposit" :
+          "has payment initiated";
+        return NextResponse.json(
+          {
+            error: `Cannot cancel — invoice ${blockingInvoice.invoiceNumber} (RM ${Number(blockingInvoice.amount).toFixed(2)}) ${verb}. Reverse the payment first, then cancel.`,
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     // Status transition
     if (status) {
       data.status = status;
