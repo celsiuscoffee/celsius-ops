@@ -32,8 +32,12 @@ type MonthlyHistory = {
   interCoOutflows: number;
   netGenerated: number;
   netSource: 'balance' | 'periodTotals';
+  minBalance: number | null;
+  minBalanceDate: string | null;
   accountsReporting: number;
 };
+
+type ProjectedMin = { closing: number; weekStart: string; weekEnd: string };
 
 type OperatingCashFlow = {
   month: string;
@@ -59,6 +63,7 @@ type CashflowResult = {
   monthlyHistory: MonthlyHistory[];
   operatingCashFlow: OperatingCashFlow[];
   cashGeneration: CashGeneration;
+  projectedMin: ProjectedMin | null;
   buckets: CashflowBucket[];
   warnings: string[];
 };
@@ -194,7 +199,7 @@ export default function CashflowPage() {
       ) : (
         <>
           {/* Headline — Cash Generation. The primary KPI. */}
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
             <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
               <p className="text-xs text-gray-500">Last month generated</p>
               {data.cashGeneration.lastMonth ? (
@@ -246,6 +251,22 @@ export default function CashflowPage() {
                 </>
               )}
             </div>
+            {/* Projected min balance — QuickBooks-style cash-crunch
+                indicator. Lowest closing balance the projection forecasts
+                across the horizon. Red if it dips negative or near zero. */}
+            <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+              <p className="text-xs text-gray-500">Projected min balance</p>
+              {data.projectedMin ? (
+                <>
+                  <p className={`mt-0.5 text-lg font-bold ${data.projectedMin.closing < 0 ? "text-red-600" : data.projectedMin.closing < 10000 ? "text-amber-600" : "text-gray-900"}`}>
+                    {fmtMYR2(data.projectedMin.closing)}
+                  </p>
+                  <p className="text-[10px] text-gray-400">{shortRange(data.projectedMin.weekStart, data.projectedMin.weekEnd)}</p>
+                </>
+              ) : (
+                <p className="mt-0.5 text-lg font-bold text-gray-400">—</p>
+              )}
+            </div>
           </div>
 
           {/* Monthly historical — actuals from bank statements */}
@@ -263,6 +284,7 @@ export default function CashflowPage() {
                       <th className="px-4 py-2 text-right font-medium text-green-600">Cash in</th>
                       <th className="px-4 py-2 text-right font-medium text-red-600">Cash out</th>
                       <th className="px-4 py-2 text-right font-medium">Net generated</th>
+                      <th className="px-4 py-2 text-right font-medium">Min balance</th>
                       <th className="px-4 py-2 font-medium">Coverage</th>
                     </tr>
                   </thead>
@@ -277,6 +299,12 @@ export default function CashflowPage() {
                           <td className="px-4 py-2 text-right font-mono text-xs text-red-700">−{fmtMYR(m.cashOut)}</td>
                           <td className={`px-4 py-2 text-right font-mono text-xs font-bold ${m.netGenerated >= 0 ? "text-green-700" : "text-red-700"}`}>
                             {m.netGenerated >= 0 ? "+" : ""}{fmtMYR(m.netGenerated)}
+                          </td>
+                          <td className={`px-4 py-2 text-right font-mono text-xs ${m.minBalance == null ? "text-gray-400" : m.minBalance < 0 ? "text-red-600 font-semibold" : m.minBalance < 10000 ? "text-amber-600" : "text-gray-700"}`}>
+                            {m.minBalance == null ? "—" : fmtMYR(m.minBalance)}
+                            {m.minBalanceDate && (
+                              <span className="ml-1 text-[10px] text-gray-400">({m.minBalanceDate.slice(8, 10)}/{m.minBalanceDate.slice(5, 7)})</span>
+                            )}
                           </td>
                           <td className="px-4 py-2 text-[11px]">
                             {incomplete

@@ -80,6 +80,8 @@ export type CashflowResult = {
     interCoOutflows: number;  // InterCo portion of cashOut
     netGenerated: number;     // headline — balance roll-forward + (interCoOut - interCoIn)
     netSource: 'balance' | 'periodTotals'; // which method drove the headline number
+    minBalance: number | null;  // lowest consolidated daily balance within the month, null if not reconstructable
+    minBalanceDate: string | null; // YYYY-MM-DD, the day min was hit
     accountsReporting: number; // 3 = full coverage; less = data gap
   }>;
   // Operating Cash Flow per month — drill-down on what's driving the
@@ -112,6 +114,11 @@ export type CashflowResult = {
     burnPerMonth: number | null;  // -avg3Month when negative; else null
     runwayMonths: number | null;  // openingBalance / burnPerMonth
   };
+  // Lowest closing balance across the projection horizon. The week
+  // when this hits is the cash crunch — most useful single number
+  // for "should I be worried?" decisions. Inspired by QuickBooks'
+  // Cash Flow Projector minimum-balance highlighting.
+  projectedMin: { closing: number; weekStart: string; weekEnd: string } | null;
   buckets: CashflowBucket[];
   warnings: string[];
 };
@@ -728,11 +735,25 @@ export async function computeCashflow(opts: {
   // transfers between Celsius entities — without that, a transfer to
   // an internal account we don't track shows as "cash burned" when
   // it isn't.
-  const [monthlyHistory, operatingCashFlow] = await Promise.all([
+  const [monthlyHistory, operatingCashFlow, minByMonth] = await Promise.all([
     loadMonthlyHistory(),
     loadOperatingCashFlow(),
+    loadMinBalancePerMonth(),
   ]);
+  // Merge min balance into monthlyHistory rows
+  for (const row of monthlyHistory) {
+    const m = minByMonth.get(row.month);
+    if (m) {
+      row.minBalance = m.min;
+      row.minBalanceDate = m.date;
+    }
+  }
   const cashGeneration = summariseCashGeneration(monthlyHistory, opening.amount);
+  // Projected min balance — lowest closing across the projection horizon
+  const projectedMin = buckets.length === 0 ? null : buckets.reduce<{ closing: number; weekStart: string; weekEnd: string } | null>(
+    (acc, b) => acc == null || b.closing < acc.closing ? { closing: b.closing, weekStart: b.weekStart, weekEnd: b.weekEnd } : acc,
+    null,
+  );
   const unflaggedOutlier = monthlyHistory.find(
     (m) => Math.abs(m.netGenerated) > 100000 && (m.interCoInflows ?? 0) === 0 && (m.interCoOutflows ?? 0) === 0,
   );
@@ -769,6 +790,7 @@ export async function computeCashflow(opts: {
     monthlyHistory,
     operatingCashFlow,
     cashGeneration,
+    projectedMin,
     buckets,
     warnings,
   };
@@ -864,9 +886,128 @@ async function loadMonthlyHistory(): Promise<CashflowResult["monthlyHistory"]> {
         interCoOutflows: round2(icoOut),
         netGenerated: round2(netGenerated),
         netSource,
+        minBalance: null as number | null,
+        minBalanceDate: null as string | null,
         accountsReporting: new Set(stmts.map((s) => s.account)).size,
       };
     });
+}
+
+// Reconstruct daily consolidated balance (sum across accounts) and
+// return min per month. Uses prior month's closingBalance as the
+// starting balance and walks forward day-by-day applying lines and
+// carrying balance when there's no activity. Skips months where any
+// account has no prior closing (we can't anchor the reconstruction).
+//
+// QuickBooks-style: their Cash Flow Projector highlights minimum
+// projected balance — same idea here for the past, so finance can
+// see "we got down to RM 20,676 on Feb 11" not just "Feb net was X".
+async function loadMinBalancePerMonth(): Promise<Map<string, { min: number; date: string }>> {
+  const since = new Date();
+  since.setMonth(since.getMonth() - 12);
+
+  const statements = await prisma.bankStatement.findMany({
+    where: { periodStart: { gte: since } },
+    select: { id: true, accountName: true, periodStart: true, periodEnd: true, closingBalance: true },
+    orderBy: { periodStart: "asc" },
+  });
+  const lines = await prisma.bankStatementLine.findMany({
+    where: { txnDate: { gte: since } },
+    select: { txnDate: true, amount: true, direction: true, statementId: true },
+  });
+
+  const accountByStmt = new Map<string, string>();
+  for (const s of statements) accountByStmt.set(s.id, s.accountName ?? "__default__");
+
+  // Per-account chronological closings
+  const closingsPerAccount = new Map<string, { month: string; periodStart: Date; periodEnd: Date; closing: number }[]>();
+  for (const s of statements) {
+    if (!s.periodStart || !s.periodEnd) continue;
+    const account = s.accountName ?? "__default__";
+    if (!closingsPerAccount.has(account)) closingsPerAccount.set(account, []);
+    closingsPerAccount.get(account)!.push({
+      month: ymd(s.periodStart).slice(0, 7),
+      periodStart: s.periodStart,
+      periodEnd: s.periodEnd,
+      closing: Number(s.closingBalance),
+    });
+  }
+  for (const list of closingsPerAccount.values()) {
+    list.sort((a, b) => a.periodStart.getTime() - b.periodStart.getTime());
+  }
+
+  // Per-account chronological lines
+  const linesByAccount = new Map<string, { date: Date; signed: number }[]>();
+  for (const l of lines) {
+    const account = accountByStmt.get(l.statementId);
+    if (!account) continue;
+    if (!linesByAccount.has(account)) linesByAccount.set(account, []);
+    linesByAccount.get(account)!.push({
+      date: l.txnDate,
+      signed: l.direction === "CR" ? Number(l.amount) : -Number(l.amount),
+    });
+  }
+  for (const list of linesByAccount.values()) {
+    list.sort((a, b) => a.date.getTime() - b.date.getTime());
+  }
+
+  // For each month, build the per-account daily series and aggregate
+  // across accounts. Track min consolidated balance per month.
+  // dailyByAccount[account][YYYY-MM-DD] = balance at end of that day
+  const dailyByAccount = new Map<string, Map<string, number>>();
+  for (const [account, closings] of closingsPerAccount.entries()) {
+    const lns = linesByAccount.get(account) ?? [];
+    const days = new Map<string, number>();
+    for (let i = 1; i < closings.length; i++) {     // start from i=1 — need a prior closing to anchor
+      const prior = closings[i - 1];
+      const cur = closings[i];
+      const monthStart = cur.periodStart;
+      const monthEnd = cur.periodEnd;
+      let balance = prior.closing;
+      const cursor = new Date(monthStart);
+      // Apply all lines in [monthStart, monthEnd] day by day
+      let li = 0;
+      while (li < lns.length && lns[li].date < monthStart) li++;
+      while (cursor.getTime() <= monthEnd.getTime()) {
+        const dayKey = ymd(cursor);
+        while (li < lns.length && ymd(lns[li].date) === dayKey) {
+          balance += lns[li].signed;
+          li++;
+        }
+        days.set(dayKey, balance);
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+    dailyByAccount.set(account, days);
+  }
+
+  // Consolidated per day = sum across accounts. Only include a day
+  // when ALL accounts have a balance for it (so we don't undercount
+  // by missing an account's contribution).
+  const accounts = Array.from(closingsPerAccount.keys());
+  const dailyConsolidated = new Map<string, number>();
+  // Find every distinct day where at least one account has data
+  const allDays = new Set<string>();
+  for (const days of dailyByAccount.values()) for (const d of days.keys()) allDays.add(d);
+  for (const day of allDays) {
+    let sum = 0;
+    let allHave = true;
+    for (const account of accounts) {
+      const bal = dailyByAccount.get(account)?.get(day);
+      if (bal == null) { allHave = false; break; }
+      sum += bal;
+    }
+    if (allHave) dailyConsolidated.set(day, sum);
+  }
+
+  // Min per month
+  const minByMonth = new Map<string, { min: number; date: string }>();
+  for (const [day, bal] of dailyConsolidated.entries()) {
+    const month = day.slice(0, 7);
+    const cur = minByMonth.get(month);
+    if (!cur || bal < cur.min) minByMonth.set(month, { min: round2(bal), date: day });
+  }
+  return minByMonth;
 }
 
 // Operating Cash Flow per month — sourced from classified bank lines.
