@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
-import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign, Landmark, Copy, Check } from "lucide-react";
+import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign, Landmark, Copy, Check, Ban } from "lucide-react";
 
 const isPdf = (url: string) => /\.pdf($|\?)/i.test(url);
 const fixImageUrl = (url: string) => url.replace("/raw/upload/", "/image/upload/");
@@ -165,6 +165,12 @@ export default function InvoicesPage() {
   const [attachPhotos, setAttachPhotos] = useState<string[]>([]);
   const [attachSaving, setAttachSaving] = useState(false);
   const [attachUploading, setAttachUploading] = useState(false);
+
+  // Reject Initiated Payment — revert INITIATED → PENDING when payment fails
+  // (wrong account, supplier rejected, duplicate caught in review, etc.)
+  const [rejectingInvoice, setRejectingInvoice] = useState<Invoice | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectSaving, setRejectSaving] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -454,6 +460,42 @@ export default function InvoicesPage() {
       alert("Network error attaching invoice");
     } finally {
       setAttachSaving(false);
+    }
+  };
+
+  const openReject = (inv: Invoice) => {
+    setRejectingInvoice(inv);
+    setRejectReason("");
+  };
+
+  const submitReject = async () => {
+    if (!rejectingInvoice) return;
+    setRejectSaving(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const oldRef = rejectingInvoice.paymentRef ?? "n/a";
+      const stamp = `[Rejected ${today} — was ref: ${oldRef}]${rejectReason.trim() ? ": " + rejectReason.trim() : ""}`;
+      const newNotes = rejectingInvoice.notes ? `${rejectingInvoice.notes}\n\n${stamp}` : stamp;
+      const res = await fetch(`/api/inventory/invoices/${rejectingInvoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "PENDING",
+          paymentRef: null,
+          notes: newNotes,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Failed to reject: ${err.error || res.statusText}`);
+        return;
+      }
+      setRejectingInvoice(null);
+      await loadInvoices(undefined, { revalidate: true });
+    } catch {
+      alert("Network error rejecting payment");
+    } finally {
+      setRejectSaving(false);
     }
   };
 
@@ -922,6 +964,15 @@ export default function InvoicesPage() {
                       Attach Invoice
                     </button>
                   )}
+                  {inv.status === "INITIATED" && (
+                    <button
+                      onClick={() => openReject(inv)}
+                      className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50"
+                    >
+                      <Ban className="h-3.5 w-3.5" />
+                      Reject
+                    </button>
+                  )}
                   {actions.map((a) => (
                     <button
                       key={a.status}
@@ -1078,6 +1129,16 @@ export default function InvoicesPage() {
                         >
                           <FileText className="h-3 w-3" />
                           Attach Invoice
+                        </button>
+                      )}
+                      {inv.status === "INITIATED" && (
+                        <button
+                          onClick={() => openReject(inv)}
+                          className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-[10px] font-medium text-red-600 hover:bg-red-50"
+                          title="Reject — payment failed, revert to Pending"
+                        >
+                          <Ban className="h-3 w-3" />
+                          Reject
                         </button>
                       )}
                       {actions.map((a) => (
@@ -1378,6 +1439,60 @@ export default function InvoicesPage() {
                 className="flex-1 rounded-md bg-yellow-500 px-3 py-2 text-sm font-medium text-white hover:bg-yellow-600 disabled:opacity-50"
               >
                 {attachSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Attach & Move to Payable"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Initiated Payment dialog — rolls invoice back to PENDING and
+          stamps the rejection in notes so finance keeps an audit trail. */}
+      {rejectingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={() => setRejectingInvoice(null)}>
+          <div className="relative w-full max-w-md rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="flex items-center gap-1.5 text-base font-semibold text-gray-900">
+                  <Ban className="h-4 w-4 text-red-500" />
+                  Reject Payment
+                </h3>
+                <p className="mt-0.5 text-xs text-gray-500">Revert this invoice to Pending. Use when the initiated payment didn&apos;t go through.</p>
+              </div>
+              <button onClick={() => setRejectingInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                <p><span className="font-medium text-gray-800">{rejectingInvoice.invoiceNumber}</span> · {rejectingInvoice.supplier} · RM {rejectingInvoice.amount.toFixed(2)}</p>
+                {rejectingInvoice.paymentRef && (
+                  <p className="mt-1 text-[11px] text-gray-500">Initiated ref: <code className="rounded bg-white px-1 py-0.5 text-[10px]">{rejectingInvoice.paymentRef}</code> (will be cleared)</p>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Reason <span className="text-gray-400 font-normal">(optional, recommended)</span></label>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="e.g. wrong account number, supplier rejected, duplicate caught in review..."
+                  rows={3}
+                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-red-300 focus:outline-none focus:ring-1 focus:ring-red-300"
+                  autoFocus
+                />
+                <p className="mt-1 text-[10px] text-gray-400">Stored in invoice notes with today&apos;s date and the original payment ref.</p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setRejectingInvoice(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button
+                onClick={submitReject}
+                disabled={rejectSaving}
+                className="flex-1 rounded-md bg-red-500 px-3 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                {rejectSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Reject & Revert to Pending"}
               </button>
             </div>
           </div>
