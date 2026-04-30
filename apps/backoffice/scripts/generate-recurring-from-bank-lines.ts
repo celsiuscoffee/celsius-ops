@@ -91,41 +91,38 @@ async function main() {
     select: { txnDate: true, amount: true, category: true, outletId: true, description: true },
   });
 
-  // Group by (outletId | "HQ", bankCategory, year-month)
-  type Bucket = { totalAmount: number; lineCount: number; latestDate: Date; latestAmount: number };
-  const groups = new Map<string, Bucket>();
-  for (const l of lines) {
-    const oid = l.outletId ?? "__HQ__";
-    const month = `${l.txnDate.getFullYear()}-${String(l.txnDate.getMonth() + 1).padStart(2, "0")}`;
-    const key = `${oid}|${l.category}|${month}`;
-    const amt = Number(l.amount);
-    const existing = groups.get(key);
-    if (!existing) {
-      groups.set(key, { totalAmount: amt, lineCount: 1, latestDate: l.txnDate, latestAmount: amt });
-    } else {
-      existing.totalAmount += amt;
-      existing.lineCount += 1;
-      if (l.txnDate > existing.latestDate) {
-        existing.latestDate = l.txnDate;
-        existing.latestAmount = amt;
-      }
-    }
-  }
-
-  // Aggregate across months per (outletId, category)
+  // Per (outletId, category): keep month-by-month totals + last
+  // payment date per month. We use the latest month's TOTAL (handles
+  // multi-line categories like SALARY = many staff payments) but
+  // skip months whose total is < 30% of the largest historical month
+  // (filters out partial/noisy months — e.g. April HQ rent that
+  // only had a RM 399 ice-machine rental, not the actual landlord
+  // payment).
   type CatBucket = {
     outletId: string;
     category: string;
-    monthlyTotals: Array<{ month: string; total: number; latestDate: Date; latestAmount: number }>;
+    months: Map<string, { total: number; latestDate: Date; latestLineAmount: number; latestDescription: string }>;
   };
   const perCategory = new Map<string, CatBucket>();
-  for (const [key, b] of groups.entries()) {
-    const [oid, cat, month] = key.split("|");
-    const k = `${oid}|${cat}`;
+  for (const l of lines) {
+    const oid = l.outletId ?? "__HQ__";
+    const k = `${oid}|${l.category}`;
     if (!perCategory.has(k)) {
-      perCategory.set(k, { outletId: oid, category: cat, monthlyTotals: [] });
+      perCategory.set(k, { outletId: oid, category: l.category as string, months: new Map() });
     }
-    perCategory.get(k)!.monthlyTotals.push({ month, total: b.totalAmount, latestDate: b.latestDate, latestAmount: b.latestAmount });
+    const cb = perCategory.get(k)!;
+    const monthKey = `${l.txnDate.getFullYear()}-${String(l.txnDate.getMonth() + 1).padStart(2, "0")}`;
+    const m = cb.months.get(monthKey);
+    if (!m) {
+      cb.months.set(monthKey, { total: Number(l.amount), latestDate: l.txnDate, latestLineAmount: Number(l.amount), latestDescription: l.description });
+    } else {
+      m.total += Number(l.amount);
+      if (l.txnDate > m.latestDate) {
+        m.latestDate = l.txnDate;
+        m.latestLineAmount = Number(l.amount);
+        m.latestDescription = l.description;
+      }
+    }
   }
 
   // For each (outletId, category) with >= 2 months of history, emit a
@@ -145,18 +142,25 @@ async function main() {
   const emits: Emit[] = [];
 
   for (const cb of perCategory.values()) {
-    const months = cb.monthlyTotals;
-    if (months.length < 2) continue;     // not yet recurring — skip
+    if (cb.months.size < 2) continue;            // not yet recurring — skip
 
-    // Average monthly total
-    const avgAmount = months.reduce((s, m) => s + m.total, 0) / months.length;
-    if (avgAmount < 50) continue;        // ignore tiny noise
+    // Sort months descending and find the latest "non-noisy" month —
+    // total >= 30% of the largest month's total. Filters out months
+    // where only a small one-off line hit this category (e.g. ice
+    // machine rental classified as RENT).
+    const monthsArr = Array.from(cb.months.entries())
+      .sort(([a], [b]) => b.localeCompare(a));
+    const maxMonthTotal = Math.max(...monthsArr.map(([, m]) => m.total));
+    const threshold = maxMonthTotal * 0.3;
+    const sigMonth = monthsArr.find(([, m]) => m.total >= threshold);
+    if (!sigMonth) continue;
+    const [latestMonth, latestMonthData] = sigMonth;
 
-    // Day-of-month from the most-recent occurrence (latest among all months)
-    const latest = months.reduce((acc, m) => m.latestDate > acc.latestDate ? m : acc);
-    const dayOfMonth = latest.latestDate.getDate();
+    const projectionAmount = latestMonthData.total;
+    if (projectionAmount < 50) continue;         // ignore tiny noise
 
-    // Next due date = next occurrence of dayOfMonth strictly after today
+    // Day-of-month from the most-recent line in that month
+    const dayOfMonth = latestMonthData.latestDate.getDate();
     const next = new Date(today.getFullYear(), today.getMonth(), Math.min(28, dayOfMonth));
     if (next <= today) next.setMonth(next.getMonth() + 1);
 
@@ -168,11 +172,11 @@ async function main() {
     emits.push({
       name: `${friendly} — ${outletLabel}`,
       category: recurringCat,
-      amount: Math.round(avgAmount * 100) / 100,
+      amount: Math.round(projectionAmount * 100) / 100,
       cadence: "MONTHLY",
       nextDueDate: next,
       outletId,
-      notes: `Auto-generated from bank-line history (${months.length} months, avg over ${months.map((m) => m.month).join(", ")}). Last seen ${ymd(latest.latestDate)} for RM ${latest.latestAmount.toFixed(2)}.`,
+      notes: `Auto-generated from bank-line history. Latest month: ${latestMonth} = RM ${projectionAmount.toFixed(2)}. ${cb.months.size} months observed: ${monthsArr.map(([k, v]) => `${k}=${v.total.toFixed(0)}`).join(", ")}.`,
     });
   }
 
