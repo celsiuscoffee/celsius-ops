@@ -145,8 +145,42 @@ export default function InvoicesPage() {
   const [payReceipts, setPayReceipts] = useState<string[]>([]);
   const [payUploading, setPayUploading] = useState(false);
 
-  // Send POP shortlink
+  // Send POP shortlink — opens a small dialog with two options:
+  //   - Direct: wa.me/<supplierPhone>?text=...
+  //   - Picker: wa.me/?text=... — user picks any chat (group OR contact)
+  // WhatsApp doesn't expose group IDs in their deep-link API, so the picker
+  // is the only way to send pre-filled text into a group.
   const [sendingPopId, setSendingPopId] = useState<string | null>(null);
+  const [popDialogInvoice, setPopDialogInvoice] = useState<Invoice | null>(null);
+
+  const sendPop = async (inv: Invoice, mode: "direct" | "picker") => {
+    setSendingPopId(inv.id);
+    try {
+      let receiptUrl = inv.popShortLink;
+      if (!receiptUrl) {
+        try {
+          const res = await fetch(`/api/inventory/invoices/${inv.id}/shortlink`, { method: "POST" });
+          const data = await res.json();
+          if (data.shortLink) {
+            receiptUrl = data.shortLink;
+            inv.popShortLink = data.shortLink;
+          }
+        } catch { /* fall through to photo URL */ }
+      }
+      if (!receiptUrl) receiptUrl = inv.photos[inv.photos.length - 1];
+
+      const msg = `Hi, payment has been made for invoice ${inv.invoiceNumber} — RM ${inv.amount.toFixed(2)}.\nRef: ${inv.paymentRef ?? "N/A"}\n\nReceipt: ${receiptUrl}\n\nThank you.`;
+      const text = encodeURIComponent(msg);
+      const phone = inv.supplierPhone?.replace(/\D/g, "") ?? "";
+      const url = mode === "picker" || !phone
+        ? `https://wa.me/?text=${text}`
+        : `https://wa.me/${phone}?text=${text}`;
+      window.open(url, "_blank");
+      setPopDialogInvoice(null);
+    } finally {
+      setSendingPopId(null);
+    }
+  };
 
   // Flag review dialog
   const [reviewingFlags, setReviewingFlags] = useState<Invoice | null>(null);
@@ -997,33 +1031,10 @@ export default function InvoicesPage() {
                   {actions.length === 0 && inv.status === "PAID" && (
                     <div className="flex items-center gap-1.5">
                       <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      {inv.supplierPhone && inv.photos.length > 0 && (
+                      {inv.photos.length > 0 && (
                         <button
                           disabled={sendingPopId === inv.id}
-                          onClick={async () => {
-                            setSendingPopId(inv.id);
-                            try {
-                              let receiptUrl = inv.popShortLink;
-                              if (!receiptUrl) {
-                                const res = await fetch(`/api/inventory/invoices/${inv.id}/shortlink`, { method: "POST" });
-                                const data = await res.json();
-                                if (data.shortLink) {
-                                  receiptUrl = data.shortLink;
-                                  inv.popShortLink = data.shortLink;
-                                } else {
-                                  receiptUrl = inv.photos[inv.photos.length - 1];
-                                }
-                              }
-                              const msg = `Hi, payment has been made for invoice ${inv.invoiceNumber} — RM ${inv.amount.toFixed(2)}.\nRef: ${inv.paymentRef ?? "N/A"}\n\nReceipt: ${receiptUrl}\n\nThank you.`;
-                              window.open(`https://wa.me/${inv.supplierPhone!.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`, "_blank");
-                            } catch {
-                              const fallback = inv.photos[inv.photos.length - 1];
-                              const msg = `Hi, payment has been made for invoice ${inv.invoiceNumber} — RM ${inv.amount.toFixed(2)}.\nRef: ${inv.paymentRef ?? "N/A"}\n\nReceipt: ${fallback}\n\nThank you.`;
-                              window.open(`https://wa.me/${inv.supplierPhone!.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`, "_blank");
-                            } finally {
-                              setSendingPopId(null);
-                            }
-                          }}
+                          onClick={() => setPopDialogInvoice(inv)}
                           className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-2 py-1 text-[11px] font-medium text-green-700 disabled:opacity-50"
                         >
                           {sendingPopId === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Send POP"}
@@ -1169,35 +1180,12 @@ export default function InvoicesPage() {
                       {actions.length === 0 && inv.status === "PAID" && (
                         <div className="flex items-center gap-1.5">
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          {inv.supplierPhone && inv.photos.length > 0 && (
+                          {inv.photos.length > 0 && (
                             <button
                               disabled={sendingPopId === inv.id}
-                              onClick={async () => {
-                                setSendingPopId(inv.id);
-                                try {
-                                  let receiptUrl = inv.popShortLink;
-                                  if (!receiptUrl) {
-                                    const res = await fetch(`/api/inventory/invoices/${inv.id}/shortlink`, { method: "POST" });
-                                    const data = await res.json();
-                                    if (data.shortLink) {
-                                      receiptUrl = data.shortLink;
-                                      inv.popShortLink = data.shortLink;
-                                    } else {
-                                      receiptUrl = inv.photos[inv.photos.length - 1];
-                                    }
-                                  }
-                                  const msg = `Hi, payment has been made for invoice ${inv.invoiceNumber} — RM ${inv.amount.toFixed(2)}.\nRef: ${inv.paymentRef ?? "N/A"}\n\nReceipt: ${receiptUrl}\n\nThank you.`;
-                                  window.open(`https://wa.me/${inv.supplierPhone!.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`, "_blank");
-                                } catch {
-                                  const fallback = inv.photos[inv.photos.length - 1];
-                                  const msg = `Hi, payment has been made for invoice ${inv.invoiceNumber} — RM ${inv.amount.toFixed(2)}.\nRef: ${inv.paymentRef ?? "N/A"}\n\nReceipt: ${fallback}\n\nThank you.`;
-                                  window.open(`https://wa.me/${inv.supplierPhone!.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`, "_blank");
-                                } finally {
-                                  setSendingPopId(null);
-                                }
-                              }}
+                              onClick={() => setPopDialogInvoice(inv)}
                               className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 hover:bg-green-100 border border-green-200 transition-colors disabled:opacity-50"
-                              title={`WhatsApp ${inv.supplier}`}
+                              title="Send proof of payment"
                             >
                               {sendingPopId === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Send POP"}
                             </button>
@@ -1451,6 +1439,49 @@ export default function InvoicesPage() {
               >
                 {attachSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Attach & Move to Payable"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send POP dialog — picks between direct WhatsApp send to the
+          supplier's saved number and the chat-picker fallback (only way to
+          send pre-filled text into a group chat). */}
+      {popDialogInvoice && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={() => setPopDialogInvoice(null)}>
+          <div className="relative w-full max-w-md rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Send Proof of Payment</h3>
+                <p className="mt-0.5 text-xs text-gray-500">{popDialogInvoice.invoiceNumber} · {popDialogInvoice.supplier} · RM {popDialogInvoice.amount.toFixed(2)}</p>
+              </div>
+              <button onClick={() => setPopDialogInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <button
+                onClick={() => sendPop(popDialogInvoice, "direct")}
+                disabled={sendingPopId === popDialogInvoice.id || !popDialogInvoice.supplierPhone}
+                className="w-full rounded-md bg-green-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {sendingPopId === popDialogInvoice.id ? (
+                  <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+                ) : (
+                  popDialogInvoice.supplierPhone ? `Send to ${popDialogInvoice.supplier}` : "No phone on supplier"
+                )}
+              </button>
+              <button
+                onClick={() => sendPop(popDialogInvoice, "picker")}
+                disabled={sendingPopId === popDialogInvoice.id}
+                className="w-full rounded-md border border-green-200 bg-white px-3 py-2.5 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+              >
+                Send to a group / pick chat →
+              </button>
+              <p className="pt-1 text-[10px] text-gray-400 text-center">
+                WhatsApp doesn&apos;t allow direct group links. The group option opens WhatsApp&apos;s chat picker with the message pre-filled — tap the supplier&apos;s group, hit send.
+              </p>
             </div>
           </div>
         </div>
