@@ -100,6 +100,30 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
     });
 
+    // Cascade cancel: when a PO is cancelled, drop any GRNI placeholder
+    // invoices auto-attached to it. Without this, the placeholder lingers
+    // forever in the Pending Invoice card after the PO is dead. Real
+    // (non-placeholder) invoices and any PAID/INITIATED records are left
+    // alone — those represent commitments or money already moved and
+    // require manual handling.
+    if (status === "CANCELLED") {
+      try {
+        const deleted = await prisma.invoice.deleteMany({
+          where: {
+            orderId: id,
+            status: "PENDING",
+            dueDate: null,
+            invoiceNumber: { startsWith: "INV-" },
+          },
+        });
+        if (deleted.count > 0) {
+          console.log(`[orders/[id] PATCH] Cascaded ${deleted.count} placeholder invoice(s) on PO cancel: ${id}`);
+        }
+      } catch (e) {
+        console.error("[orders/[id] PATCH] Placeholder cascade-delete failed:", e);
+      }
+    }
+
     // Auto-create invoice + receiving when order is confirmed (AWAITING_DELIVERY)
     if (status === "AWAITING_DELIVERY") {
       const caller = await getUserFromHeaders(req.headers);
