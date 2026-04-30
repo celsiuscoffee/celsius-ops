@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
-import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign, Landmark, Copy, Check } from "lucide-react";
+import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign, Landmark, Copy, Check, Ban } from "lucide-react";
 
 const isPdf = (url: string) => /\.pdf($|\?)/i.test(url);
 const fixImageUrl = (url: string) => url.replace("/raw/upload/", "/image/upload/");
@@ -69,6 +69,8 @@ type Invoice = {
   depositPaidAt: string | null;
   depositRef: string | null;
   flags: InvoiceFlag[];
+  isPendingInvoice: boolean;
+  supplierPaymentTerms: string | null;
 };
 
 type InvoiceFlagCode =
@@ -107,6 +109,7 @@ type InvoicesSummary = {
   initiated: SummaryBucket;
   paid: SummaryBucket;
   dueToday: SummaryBucket;
+  pendingInvoice?: SummaryBucket;
 };
 type InvoicesResponse = {
   invoices: Invoice[];
@@ -130,7 +133,7 @@ export default function InvoicesPage() {
   const [paidDateTo, setPaidDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [viewingPhotos, setViewingPhotos] = useState<{ invoiceNumber: string; photos: string[] } | null>(null);
-  const [cardFilter, setCardFilter] = useState<"all" | "pending" | "overdue" | "initiated" | "paid" | "due_today" | "payable" | null>(null);
+  const [cardFilter, setCardFilter] = useState<"all" | "pending" | "overdue" | "initiated" | "paid" | "due_today" | "payable" | "pending_invoice" | null>(null);
   const [batchInitiating, setBatchInitiating] = useState(false);
 
   // Payment dialog
@@ -155,6 +158,19 @@ export default function InvoicesPage() {
   const [editPhotos, setEditPhotos] = useState<string[]>([]);
   const [editSaving, setEditSaving] = useState(false);
   const [editUploading, setEditUploading] = useState(false);
+
+  // Attach Invoice dialog (GRNI placeholder → real supplier invoice)
+  const [attachingInvoice, setAttachingInvoice] = useState<Invoice | null>(null);
+  const [attachForm, setAttachForm] = useState({ invoiceNumber: "", issueDate: "", dueDate: "", amount: "" });
+  const [attachPhotos, setAttachPhotos] = useState<string[]>([]);
+  const [attachSaving, setAttachSaving] = useState(false);
+  const [attachUploading, setAttachUploading] = useState(false);
+
+  // Reject Initiated Payment — revert INITIATED → PENDING when payment fails
+  // (wrong account, supplier rejected, duplicate caught in review, etc.)
+  const [rejectingInvoice, setRejectingInvoice] = useState<Invoice | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectSaving, setRejectSaving] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -364,6 +380,125 @@ export default function InvoicesPage() {
     }
   };
 
+  // Parse free-text payment terms ("Net 30", "30 days", "COD") into days.
+  // Returns null when no obvious numeric term found — caller falls back to
+  // a manual due-date pick.
+  const parsePaymentTermDays = (terms: string | null): number | null => {
+    if (!terms) return null;
+    const m = terms.match(/(\d+)/);
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    return Number.isFinite(n) && n > 0 && n <= 365 ? n : null;
+  };
+
+  const addDays = (iso: string, days: number) => {
+    const d = new Date(iso);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split("T")[0];
+  };
+
+  const openAttach = (inv: Invoice) => {
+    setAttachingInvoice(inv);
+    const today = new Date().toISOString().split("T")[0];
+    const termDays = parsePaymentTermDays(inv.supplierPaymentTerms);
+    setAttachForm({
+      invoiceNumber: "",
+      issueDate: today,
+      dueDate: termDays ? addDays(today, termDays) : "",
+      amount: inv.amount.toFixed(2),
+    });
+    setAttachPhotos(inv.photos || []);
+  };
+
+  const handleAttachPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    setAttachUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("folder", "invoices");
+        const res = await fetch("/api/inventory/upload", { method: "POST", body: formData });
+        if (res.ok) {
+          const data = await res.json();
+          setAttachPhotos((prev) => [...prev, data.url]);
+        }
+      }
+    } catch { /* ignore */ }
+    setAttachUploading(false);
+    e.target.value = "";
+  };
+
+  const submitAttach = async () => {
+    if (!attachingInvoice) return;
+    if (!attachForm.invoiceNumber.trim()) {
+      alert("Supplier invoice number is required");
+      return;
+    }
+    setAttachSaving(true);
+    try {
+      const res = await fetch(`/api/inventory/invoices/${attachingInvoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invoiceNumber: attachForm.invoiceNumber.trim(),
+          issueDate: attachForm.issueDate || null,
+          dueDate: attachForm.dueDate || null,
+          amount: parseFloat(attachForm.amount) || attachingInvoice.amount,
+          photos: attachPhotos,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Failed to attach invoice: ${err.error || res.statusText}`);
+        return;
+      }
+      setAttachingInvoice(null);
+      await loadInvoices(undefined, { revalidate: true });
+    } catch {
+      alert("Network error attaching invoice");
+    } finally {
+      setAttachSaving(false);
+    }
+  };
+
+  const openReject = (inv: Invoice) => {
+    setRejectingInvoice(inv);
+    setRejectReason("");
+  };
+
+  const submitReject = async () => {
+    if (!rejectingInvoice) return;
+    setRejectSaving(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const oldRef = rejectingInvoice.paymentRef ?? "n/a";
+      const stamp = `[Rejected ${today} — was ref: ${oldRef}]${rejectReason.trim() ? ": " + rejectReason.trim() : ""}`;
+      const newNotes = rejectingInvoice.notes ? `${rejectingInvoice.notes}\n\n${stamp}` : stamp;
+      const res = await fetch(`/api/inventory/invoices/${rejectingInvoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "PENDING",
+          paymentRef: null,
+          notes: newNotes,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Failed to reject: ${err.error || res.statusText}`);
+        return;
+      }
+      setRejectingInvoice(null);
+      await loadInvoices(undefined, { revalidate: true });
+    } catch {
+      alert("Network error rejecting payment");
+    } finally {
+      setRejectSaving(false);
+    }
+  };
+
   const dismissFlag = async (invoiceId: string, code: InvoiceFlagCode) => {
     setFlagActionCode(code);
     try {
@@ -425,6 +560,8 @@ export default function InvoicesPage() {
   const initiatedCount = summary?.initiated.count ?? allInvoices.filter((i) => i.status === "INITIATED").length;
   const totalPaid = summary?.paid.amount ?? allInvoices.filter((i) => i.status === "PAID").reduce((a, i) => a + i.amount, 0);
   const paidCount = summary?.paid.count ?? allInvoices.filter((i) => i.status === "PAID").length;
+  const totalPendingInvoice = summary?.pendingInvoice?.amount ?? allInvoices.filter((i) => i.isPendingInvoice).reduce((a, i) => a + i.amount, 0);
+  const pendingInvoiceCount = summary?.pendingInvoice?.count ?? allInvoices.filter((i) => i.isPendingInvoice).length;
 
   const statusLabel = (status: string, paymentType: string) => {
     // Staff claims used to show "approved"/"reimbursed" — unified with supplier
@@ -454,6 +591,10 @@ export default function InvoicesPage() {
     const hasDeposit = depositPercent && depositPercent > 0;
     const depositAmt = inv.depositAmount ?? Math.round(inv.amount * (depositPercent || 0) / 100 * 100) / 100;
     const balanceAmt = Math.round((inv.amount - depositAmt) * 100) / 100;
+
+    // GRNI placeholders shouldn't be paid until the supplier invoice arrives —
+    // suppress payment actions so users go through "Attach Invoice" first.
+    if (inv.isPendingInvoice) return [];
 
     // Unified action labels — "Initiate Payment" / "Mark Paid" everywhere,
     // except internal transfers which use "Initiate Settlement" / "Mark Settled".
@@ -504,9 +645,10 @@ export default function InvoicesPage() {
       </div>
 
       {/* Summary cards — clickable to filter */}
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-3">
         {([
           { key: "all" as const, label: "Total", amount: totalAll, count: totalAllCount, color: "text-gray-900", border: "border-gray-300", ring: "ring-gray-200" },
+          { key: "pending_invoice" as const, label: "Pending Invoice", amount: totalPendingInvoice, count: pendingInvoiceCount, color: pendingInvoiceCount > 0 ? "text-yellow-700" : "text-gray-400", border: "border-yellow-400", ring: "ring-yellow-100" },
           { key: "payable" as const, label: "Payable", amount: totalPayable, count: payableCount, color: payableCount > 0 ? "text-orange-600" : "text-gray-400", border: "border-orange-400", ring: "ring-orange-100" },
           { key: "due_today" as const, label: "Due Today", amount: dueTodayAmount, count: dueTodayCount, color: dueTodayCount > 0 ? "text-blue-600" : "text-gray-400", border: "border-blue-400", ring: "ring-blue-100" },
           { key: "initiated" as const, label: "Initiated", amount: totalInitiated, count: initiatedCount, color: initiatedCount > 0 ? "text-indigo-600" : "text-gray-400", border: "border-indigo-400", ring: "ring-indigo-100" },
@@ -523,6 +665,8 @@ export default function InvoicesPage() {
                   ? "border-blue-200 bg-blue-50/50 hover:border-blue-300"
                   : card.key === "payable" && card.count > 0
                   ? "border-orange-200 bg-orange-50/50 hover:border-orange-300"
+                  : card.key === "pending_invoice" && card.count > 0
+                  ? "border-yellow-200 bg-yellow-50/50 hover:border-yellow-300"
                   : "border-gray-200 hover:border-gray-300"
             }`}
           >
@@ -530,7 +674,7 @@ export default function InvoicesPage() {
               <p className="text-xs text-gray-500">{card.label}</p>
               {card.count > 0 && card.key !== "all" && (
                 <span className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white ${
-                  card.key === "payable" ? "bg-orange-500" : card.key === "due_today" ? "bg-blue-500" : card.key === "overdue" ? "bg-red-500" : card.key === "initiated" ? "bg-indigo-500" : "bg-green-500"
+                  card.key === "payable" ? "bg-orange-500" : card.key === "due_today" ? "bg-blue-500" : card.key === "overdue" ? "bg-red-500" : card.key === "initiated" ? "bg-indigo-500" : card.key === "pending_invoice" ? "bg-yellow-500" : "bg-green-500"
                 }`}>
                   {card.count}
                 </span>
@@ -558,7 +702,7 @@ export default function InvoicesPage() {
       {cardFilter && (
         <div className="mt-2 flex items-center gap-2">
           <span className="text-xs text-gray-500">
-            Showing: <span className="font-medium text-gray-700">{cardFilter === "due_today" ? "Due Today" : cardFilter === "payable" ? "Payable" : cardFilter === "all" ? "All" : cardFilter.charAt(0).toUpperCase() + cardFilter.slice(1)}</span>
+            Showing: <span className="font-medium text-gray-700">{cardFilter === "due_today" ? "Due Today" : cardFilter === "pending_invoice" ? "Pending Invoice" : cardFilter === "payable" ? "Payable" : cardFilter === "all" ? "All" : cardFilter.charAt(0).toUpperCase() + cardFilter.slice(1)}</span>
             {" "}({invoices.length} invoice{invoices.length !== 1 ? "s" : ""})
           </span>
           <button onClick={() => setCardFilter(null)} className="flex items-center gap-0.5 rounded-full border border-gray-200 px-2 py-0.5 text-[10px] text-gray-500 hover:bg-gray-50">
@@ -742,7 +886,11 @@ export default function InvoicesPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <p className="text-sm font-semibold text-gray-900">{inv.invoiceNumber}</p>
-                    <Badge className={`text-[10px] ${statusColor(inv.status)}`}>{statusLabel(inv.status, inv.paymentType)}</Badge>
+                    {inv.isPendingInvoice ? (
+                      <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-[9px] font-semibold text-yellow-800">AWAITING INVOICE</span>
+                    ) : (
+                      <Badge className={`text-[10px] ${statusColor(inv.status)}`}>{statusLabel(inv.status, inv.paymentType)}</Badge>
+                    )}
                     {inv.paymentType === "STAFF_CLAIM" && <span className="rounded bg-purple-100 px-1 py-0.5 text-[9px] font-medium text-purple-600">CLAIM</span>}
                     {inv.orderType === "PAYMENT_REQUEST" && <span className="rounded bg-blue-100 px-1 py-0.5 text-[9px] font-medium text-blue-600">REQUEST</span>}
                     {inv.paymentType === "INTERNAL_TRANSFER" && <span className="rounded bg-orange-100 px-1 py-0.5 text-[9px] font-medium text-orange-600">TRANSFER</span>}
@@ -807,6 +955,24 @@ export default function InvoicesPage() {
                   Edit
                 </button>
                 <div className="ml-auto flex flex-wrap justify-end gap-1.5">
+                  {inv.isPendingInvoice && (
+                    <button
+                      onClick={() => openAttach(inv)}
+                      className="inline-flex items-center gap-1 rounded-md bg-yellow-500 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-yellow-600"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Attach Invoice
+                    </button>
+                  )}
+                  {inv.status === "INITIATED" && (
+                    <button
+                      onClick={() => openReject(inv)}
+                      className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50"
+                    >
+                      <Ban className="h-3.5 w-3.5" />
+                      Reject
+                    </button>
+                  )}
                   {actions.map((a) => (
                     <button
                       key={a.status}
@@ -919,7 +1085,11 @@ export default function InvoicesPage() {
                   <td className="px-4 py-3 text-xs text-gray-500">{inv.outlet}</td>
                   {typeFilter !== "supplier" && <td className="px-4 py-3 text-xs text-gray-500">{inv.claimedBy ?? "—"}</td>}
                   <td className="px-4 py-3">
-                    <Badge className={`text-[10px] ${statusColor(inv.status)}`}>{statusLabel(inv.status, inv.paymentType)}</Badge>
+                    {inv.isPendingInvoice ? (
+                      <span className="inline-block rounded bg-yellow-100 px-1.5 py-0.5 text-[9px] font-semibold text-yellow-800">AWAITING INVOICE</span>
+                    ) : (
+                      <Badge className={`text-[10px] ${statusColor(inv.status)}`}>{statusLabel(inv.status, inv.paymentType)}</Badge>
+                    )}
                     {inv.status === "DEPOSIT_PAID" && inv.depositAmount && (
                       <p className="text-[9px] text-amber-600 mt-0.5">Bal: RM {(inv.amount - inv.depositAmount).toFixed(2)}</p>
                     )}
@@ -951,6 +1121,26 @@ export default function InvoicesPage() {
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
+                      {inv.isPendingInvoice && (
+                        <button
+                          onClick={() => openAttach(inv)}
+                          className="inline-flex items-center gap-1 rounded-md bg-yellow-500 px-2 py-1 text-[10px] font-medium text-white hover:bg-yellow-600"
+                          title="Attach supplier invoice"
+                        >
+                          <FileText className="h-3 w-3" />
+                          Attach Invoice
+                        </button>
+                      )}
+                      {inv.status === "INITIATED" && (
+                        <button
+                          onClick={() => openReject(inv)}
+                          className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-[10px] font-medium text-red-600 hover:bg-red-50"
+                          title="Reject — payment failed, revert to Pending"
+                        >
+                          <Ban className="h-3 w-3" />
+                          Reject
+                        </button>
+                      )}
                       {actions.map((a) => (
                         <button
                           key={a.status}
@@ -1109,6 +1299,200 @@ export default function InvoicesPage() {
                 className="flex-1 rounded-md bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
               >
                 {editSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Attach Invoice modal — fills GRNI placeholder with the supplier's
+          actual invoice details once the supplier sends them post-delivery. */}
+      {attachingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={() => setAttachingInvoice(null)}>
+          <div className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Attach Supplier Invoice</h3>
+                <p className="mt-0.5 text-xs text-gray-500">Goods already received. Fill in the supplier&apos;s invoice details so it&apos;s ready to pay.</p>
+              </div>
+              <button onClick={() => setAttachingInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-3 py-2 text-xs text-gray-700">
+                <span className="font-medium">{attachingInvoice.supplier}</span> · {attachingInvoice.outlet} · PO: {attachingInvoice.poNumber}
+                {attachingInvoice.supplierPaymentTerms && (
+                  <span className="ml-2 rounded bg-yellow-100 px-1.5 py-0.5 text-[10px] font-medium text-yellow-800">Terms: {attachingInvoice.supplierPaymentTerms}</span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Supplier Invoice No. <span className="text-red-500">*</span></label>
+                  <Input
+                    value={attachForm.invoiceNumber}
+                    onChange={(e) => setAttachForm({ ...attachForm, invoiceNumber: e.target.value })}
+                    placeholder="e.g. ABC-2026-1234"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Amount (RM)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={attachForm.amount}
+                    onChange={(e) => setAttachForm({ ...attachForm, amount: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Issue Date</label>
+                  <input
+                    type="date"
+                    value={attachForm.issueDate}
+                    onChange={(e) => {
+                      const newIssue = e.target.value;
+                      const termDays = parsePaymentTermDays(attachingInvoice.supplierPaymentTerms);
+                      setAttachForm((prev) => ({
+                        ...prev,
+                        issueDate: newIssue,
+                        // Re-compute due date when issue changes if user is still
+                        // on the auto-suggested term (avoids overwriting a hand-picked due date).
+                        dueDate: termDays && newIssue ? addDays(newIssue, termDays) : prev.dueDate,
+                      }));
+                    }}
+                    className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Due Date</label>
+                  <input
+                    type="date"
+                    value={attachForm.dueDate}
+                    onChange={(e) => setAttachForm({ ...attachForm, dueDate: e.target.value })}
+                    className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {[7, 14, 30, 60].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setAttachForm((prev) => ({
+                          ...prev,
+                          dueDate: prev.issueDate ? addDays(prev.issueDate, d) : prev.dueDate,
+                        }))}
+                        className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50"
+                      >
+                        +{d}d
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Photos — start from any photos captured at receiving */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Invoice Photos</label>
+                {attachPhotos.length > 0 && (
+                  <div className="mb-2 grid grid-cols-3 gap-2">
+                    {attachPhotos.map((url, i) => (
+                      <div key={i} className="group relative overflow-hidden rounded-lg border border-gray-200">
+                        {isPdf(url) ? (
+                          <a href={url} target="_blank" rel="noopener noreferrer" className="flex h-24 w-full flex-col items-center justify-center bg-gray-50 text-gray-400 hover:text-blue-500">
+                            <FileDown className="h-6 w-6" />
+                            <span className="mt-1 text-[10px]">PDF</span>
+                          </a>
+                        ) : (
+                          <img src={fixImageUrl(url)} alt={`Photo ${i + 1}`} className="h-24 w-full object-cover" />
+                        )}
+                        <button
+                          onClick={() => setAttachPhotos(attachPhotos.filter((_, j) => j !== i))}
+                          className="absolute right-1 top-1 rounded-full bg-red-500 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-4 py-3 text-sm transition-colors hover:border-yellow-400 hover:bg-yellow-50/30 ${attachUploading ? "opacity-50 pointer-events-none" : ""}`}>
+                  {attachUploading ? (
+                    <><Loader2 className="h-4 w-4 animate-spin text-yellow-500" /> Uploading...</>
+                  ) : (
+                    <><Upload className="h-4 w-4 text-gray-400" /> <span className="text-gray-500">Upload supplier invoice</span></>
+                  )}
+                  <input type="file" accept="image/*,.pdf" multiple className="hidden" onChange={handleAttachPhotoUpload} />
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setAttachingInvoice(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button
+                onClick={submitAttach}
+                disabled={attachSaving || !attachForm.invoiceNumber.trim()}
+                className="flex-1 rounded-md bg-yellow-500 px-3 py-2 text-sm font-medium text-white hover:bg-yellow-600 disabled:opacity-50"
+              >
+                {attachSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Attach & Move to Payable"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Initiated Payment dialog — rolls invoice back to PENDING and
+          stamps the rejection in notes so finance keeps an audit trail. */}
+      {rejectingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={() => setRejectingInvoice(null)}>
+          <div className="relative w-full max-w-md rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="flex items-center gap-1.5 text-base font-semibold text-gray-900">
+                  <Ban className="h-4 w-4 text-red-500" />
+                  Reject Payment
+                </h3>
+                <p className="mt-0.5 text-xs text-gray-500">Revert this invoice to Pending. Use when the initiated payment didn&apos;t go through.</p>
+              </div>
+              <button onClick={() => setRejectingInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                <p><span className="font-medium text-gray-800">{rejectingInvoice.invoiceNumber}</span> · {rejectingInvoice.supplier} · RM {rejectingInvoice.amount.toFixed(2)}</p>
+                {rejectingInvoice.paymentRef && (
+                  <p className="mt-1 text-[11px] text-gray-500">Initiated ref: <code className="rounded bg-white px-1 py-0.5 text-[10px]">{rejectingInvoice.paymentRef}</code> (will be cleared)</p>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Reason <span className="text-gray-400 font-normal">(optional, recommended)</span></label>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="e.g. wrong account number, supplier rejected, duplicate caught in review..."
+                  rows={3}
+                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-red-300 focus:outline-none focus:ring-1 focus:ring-red-300"
+                  autoFocus
+                />
+                <p className="mt-1 text-[10px] text-gray-400">Stored in invoice notes with today&apos;s date and the original payment ref.</p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setRejectingInvoice(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button
+                onClick={submitReject}
+                disabled={rejectSaving}
+                className="flex-1 rounded-md bg-red-500 px-3 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                {rejectSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Reject & Revert to Pending"}
               </button>
             </div>
           </div>

@@ -80,10 +80,25 @@ const INFLOW_RULES: Rule[] = [
   { name: "qr_duitnow_named", match: /\bDUITNOW QR\b/i, direction: "CR", category: "QR" as CashCategory },
   { name: "qr_qcode",         match: /\b\d{7,}Q\b/,     direction: "CR", category: "QR" as CashCategory },
 
-  // Card — "DR/CARD SALES M/N <ref>" — debit/credit terminal settlements
-  { name: "card_terminal", match: /\bDR\/?CARD\s*SALES?\b/i, direction: "CR", category: "CARD" as CashCategory },
+  // Card — Maybank shows terminal settlements as both "DR/CARD SALES"
+  // (debit-card) and "CR/CARD SALES" (credit-card). Both are CR-side
+  // (money in) on our statement; the DR/CR prefix in the description
+  // refers to the cardholder's card type, not our direction. Match
+  // either prefix.
+  { name: "card_terminal", match: /\b(?:DR|CR)\/?CARD\s*SALES?\b/i, direction: "CR", category: "CARD" as CashCategory },
   // GHL terminal settlement — "IBG TRANSACTION DMS A3 (FOR GHL)"
   { name: "card_ghl_settlement", match: /\bDMS\s*A3\b.*\bGHL\b|\bFOR\s*GHL\b/i, direction: "CR", category: "CARD" as CashCategory },
+
+  // Inflow suffix rules — "TRANSFER TO A/C <party> * <purpose>" pattern.
+  // Like the outflow side, the prefix is just routing; the suffix tells
+  // us why money came in.
+  { name: "in_loan_repayment",     match: /\bLOAN\b/i,                               direction: "CR", category: "LOAN" as CashCategory },
+  { name: "in_management_fee",     match: /\bMANAGEMENT\s*FEE|\bMNGMT\s*FEE\b/i,     direction: "CR", category: "MANAGEMENT_FEE" as CashCategory, isInterCo: true },
+  { name: "in_salary_return",      match: /\bSALARY\b/i,                             direction: "CR", category: "EMPLOYEE_SALARY" as CashCategory, isInterCo: true },
+  { name: "in_stat_pay_return",    match: /\b(STAT\s*PAY|STATUTORY)\b/i,             direction: "CR", category: "STATUTORY_PAYMENT" as CashCategory, isInterCo: true },
+  { name: "in_inventory_return",   match: /\bINVENTORY\b/i,                          direction: "CR", category: "RAW_MATERIALS" as CashCategory, isInterCo: true },
+  { name: "in_capital_injection",  match: /\bCAPITAL\s*(INJECTION|TRANSFER)\b/i,     direction: "CR", category: "CAPITAL" as CashCategory },
+  { name: "in_chq_deposit",        match: /\bCHQ\s*DEP\b|\bCHEQUE\s*DEPOSIT\b/i,     direction: "CR", category: "OTHER_INFLOW" as CashCategory },
 
   // StoreHub — Interbank GIRO from STOREHUB SDN BHD
   { name: "storehub", match: /\bSTOREHUB\b/i, direction: "CR", category: "STOREHUB" as CashCategory },
@@ -128,9 +143,12 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "purpose_software",         match: /\bSOFTWARE|\bSAAS\b|\bSUBSCRIPTION\b/i, direction: "DR", category: "SOFTWARE" as CashCategory },
   { name: "purpose_petty_cash",       match: /\bPETTY\s*CASH\b/i,                     direction: "DR", category: "PETTY_CASH" as CashCategory },
   { name: "purpose_staff_claim",      match: /\bSTAFF\s*CLAIM|\bCLAIM\b/i,             direction: "DR", category: "STAFF_CLAIM" as CashCategory },
-  { name: "purpose_maintenance",      match: /\bMAINTENANCE\b|\bREPAIR\b|\bSERVICING\b/i, direction: "DR", category: "MAINTENANCE" as CashCategory },
-  { name: "purpose_equipment",        match: /\bEQUIPMENT\b|\bMACHINE\b/i,            direction: "DR", category: "EQUIPMENTS" as CashCategory },
+  { name: "purpose_maintenance",      match: /\bMAINTENANCE\b|\bREPAIR\b|\bSERVICING\b|\bDEMO\s*AND\s*REINS|\bDEMOLISH\b/i, direction: "DR", category: "MAINTENANCE" as CashCategory },
+  { name: "purpose_equipment",        match: /\bEQUIPMENT\b|\bMACHINE\b|\bFREEZER\b|\bKITCHEN\s*HOOD\b|\bWALL\s*SHELVES?\b|\bWET\s*CHEMICAL\b|\bRACK\b/i, direction: "DR", category: "EQUIPMENTS" as CashCategory },
   { name: "purpose_kol",              match: /\bKOL\b|\bINFLUENCER\b/i,               direction: "DR", category: "KOL" as CashCategory },
+  { name: "purpose_renovation",       match: /\bRENOVATION\b|\bRENOVATE\b/i,          direction: "DR", category: "INVESTMENTS" as CashCategory },
+  { name: "purpose_legal",            match: /\bLEGAL\s*FEE|\bASHRAF\s*&\s*PARTNERS|\bLAWYER\b/i, direction: "DR", category: "COMPLIANCE" as CashCategory },
+  { name: "purpose_dividend",         match: /\bDIVIDEND\b/i,                         direction: "DR", category: "OTHER_OUTFLOW" as CashCategory },
 
   // Statutory — EPF / SOCSO / EIS / KWSP / PERKESO / LHDN tax
   { name: "statutory_epf",   match: /\b(EPF|KWSP|M2UBEPF)\b/i,            direction: "DR", category: "STATUTORY_PAYMENT" as CashCategory },

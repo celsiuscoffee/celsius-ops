@@ -593,7 +593,7 @@ export default function CreateOrderPage() {
     setWhatsappDialog({ open: true, supplier, supplierId: group.supplierId, message, phone: group.phone, items: group.items });
   };
 
-  const openWhatsApp = async () => {
+  const openWhatsApp = async (whatsappMode: "direct" | "picker" = "direct") => {
     setSending(true);
     try {
       const group = cartBySupplier[whatsappDialog.supplier];
@@ -639,8 +639,17 @@ export default function CreateOrderPage() {
         }
       }
 
+      // mode='direct' opens chat with the supplier's saved number.
+      // mode='picker' opens WhatsApp without a target — user picks any chat
+      // (group OR contact) from their list and the message is pre-filled.
+      // WhatsApp doesn't expose group IDs in their deep-link API, so the
+      // picker is the only way to send to a group with prefilled text.
       const phone = whatsappDialog.phone.replace(/\+/g, "");
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(whatsappDialog.message)}`, "_blank");
+      const text = encodeURIComponent(whatsappDialog.message);
+      const url = whatsappMode === "picker"
+        ? `https://wa.me/?text=${text}`
+        : `https://wa.me/${phone}?text=${text}`;
+      window.open(url, "_blank");
 
       setCart((prev) => prev.filter((c) => c.supplierId !== whatsappDialog.supplierId));
       setWhatsappDialog({ open: false, supplier: "", supplierId: "", message: "", phone: "", items: [] });
@@ -1248,10 +1257,21 @@ export default function CreateOrderPage() {
             <div className="rounded-lg bg-green-50 p-3">
               <pre className="whitespace-pre-wrap text-xs text-gray-700">{whatsappDialog.message}</pre>
             </div>
-            <Button className="w-full bg-green-600 hover:bg-green-700" onClick={openWhatsApp} disabled={sending}>
+            <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => openWhatsApp("direct")} disabled={sending || !whatsappDialog.phone}>
               {sending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <MessageCircle className="mr-1.5 h-4 w-4" />}
-              {sending ? "Creating order..." : "Open WhatsApp"}
+              {sending ? "Creating order..." : whatsappDialog.phone ? `Send to ${whatsappDialog.supplier}` : "Open WhatsApp"}
             </Button>
+            <button
+              type="button"
+              onClick={() => openWhatsApp("picker")}
+              disabled={sending}
+              className="w-full rounded-md border border-green-200 bg-white px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+            >
+              Send to a group / pick chat →
+            </button>
+            <p className="text-[10px] text-gray-400 text-center">
+              WhatsApp doesn&apos;t allow direct group links. The group option opens WhatsApp&apos;s chat picker with the message pre-filled — tap the supplier&apos;s group, hit send.
+            </p>
           </div>
         </DialogContent>
       </Dialog>

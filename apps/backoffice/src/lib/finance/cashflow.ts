@@ -44,6 +44,7 @@ export type CashflowBucket = {
   otherIn: number;
   invoiceOut: number;
   payrollOut: number;
+  cogsOut: number;
   marketingOut: number;
   recurringOut: number;
   otherOut: number;
@@ -245,43 +246,47 @@ async function projectMarketing(start: Date, end: Date): Promise<{ date: Date; a
 // category has no bank-line data (e.g. brand new bank account) the
 // caller falls back to the synthetic stream.
 
+// Sales channels — DOW-shaped projection (revenue varies by day-of-week)
 const SALES_INFLOW_CATEGORIES = [
   "CARD", "QR", "STOREHUB", "GRAB", "GRAB_PUTRAJAYA",
   "FOODPANDA", "MEETINGS_EVENTS", "GASTROHUB",
 ] as const;
 
-const PAYROLL_OUTFLOW_CATEGORIES = [
-  "DIRECTORS_ALLOWANCE", "EMPLOYEE_SALARY", "PARTIMER",
-  "STATUTORY_PAYMENT", "STAFF_CLAIM", "PETTY_CASH",
+// COGS — separate column for raw materials + delivery. Daily rate
+// smearing is the right model: suppliers paid throughout the week.
+const COGS_OUTFLOW_CATEGORIES = [
+  "RAW_MATERIALS", "DELIVERY",
 ] as const;
 
-const MARKETING_OUTFLOW_CATEGORIES = [
-  "DIGITAL_ADS", "KOL", "OTHER_MARKETING", "MARKETPLACE_FEE",
-] as const;
+// Categories that are projected via RecurringExpense entries (exact
+// pulse timing, per outlet). The auto-generator at
+// scripts/generate-recurring-from-bank-lines.ts populates these.
+// Bank lines in these categories are EXCLUDED from the catch-all
+// daily-smear path to avoid double-counting (the RecurringExpense
+// expansion already fires them on the actual due date).
+const PULSE_CATEGORIES = new Set<string>([
+  "RENT", "UTILITIES", "SOFTWARE",
+  "EMPLOYEE_SALARY", "STATUTORY_PAYMENT",
+  "TAX", "COMPLIANCE", "MAINTENANCE",
+  "LICENSING_FEE", "ROYALTY_FEE", "BANK_FEE", "CFS_FEE",
+  "LOAN", "MANAGEMENT_FEE",
+]);
 
-const RECURRING_OUTFLOW_CATEGORIES = [
-  "RENT", "UTILITIES", "SOFTWARE", "CFS_FEE", "COMPLIANCE", "TAX",
-  "LICENSING_FEE", "ROYALTY_FEE", "LOAN", "BANK_FEE", "MAINTENANCE",
-] as const;
-
-// Categories that are "other" — not sales, not payroll, not marketing,
-// not recurring. Includes capex, raw materials, and the catch-alls.
-const OTHER_OUTFLOW_CATEGORIES = [
-  "RAW_MATERIALS", "DELIVERY", "EQUIPMENTS", "INVESTMENTS",
-  "TRANSFER_NOT_SUCCESSFUL", "OTHER_OUTFLOW",
-] as const;
-
-const OTHER_INFLOW_CATEGORIES = [
-  "CAPITAL", "MANAGEMENT_FEE", "ADTD", "OTHER_INFLOW",
-] as const;
+// Everything else (DIRECTORS_ALLOWANCE, PARTIMER, STAFF_CLAIM,
+// PETTY_CASH, MARKETING categories, EQUIPMENTS, INVESTMENTS,
+// TRANSFER_NOT_SUCCESSFUL, OTHER_OUTFLOW) flows into the catch-all
+// "Other outflow" daily-rate stream. These are genuinely variable
+// (directors' draws, capex, marketing campaigns) — exact pulse
+// timing wouldn't be useful and a smoothed daily rate represents
+// the run-rate fairly.
 
 type BankLineProjection = {
   salesByDow: number[];          // [Sun..Sat] daily averages from sales categories
-  payrollPerDay: number;
-  marketingPerDay: number;
-  recurringPerDay: number;
-  otherInPerDay: number;
-  otherOutPerDay: number;
+  cogsPerDay: number;            // raw materials + delivery
+  otherInPerDay: number;         // catch-all CR (LOAN inflow, refunds, OTHER_INFLOW, etc.)
+  otherOutPerDay: number;        // catch-all DR (directors, partimer, marketing, capex,
+                                 // OTHER_OUTFLOW, etc.) — excludes PULSE_CATEGORIES
+                                 // to avoid double-count with RecurringExpense pulses
   sampleDays: number;            // number of distinct calendar days the data covers
   hasData: boolean;
 };
@@ -310,18 +315,12 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
   const salesDistinctDaysByDow: Set<string>[] = [
     new Set(), new Set(), new Set(), new Set(), new Set(), new Set(), new Set(),
   ];
-  let payrollSum = 0;
-  let marketingSum = 0;
-  let recurringSum = 0;
+  let cogsSum = 0;
   let otherInSum = 0;
   let otherOutSum = 0;
 
   const SALES_SET = new Set<string>(SALES_INFLOW_CATEGORIES as readonly string[]);
-  const PAYROLL_SET = new Set<string>(PAYROLL_OUTFLOW_CATEGORIES as readonly string[]);
-  const MARKETING_SET = new Set<string>(MARKETING_OUTFLOW_CATEGORIES as readonly string[]);
-  const RECURRING_SET = new Set<string>(RECURRING_OUTFLOW_CATEGORIES as readonly string[]);
-  const OTHER_OUT_SET = new Set<string>(OTHER_OUTFLOW_CATEGORIES as readonly string[]);
-  const OTHER_IN_SET = new Set<string>(OTHER_INFLOW_CATEGORIES as readonly string[]);
+  const COGS_SET = new Set<string>(COGS_OUTFLOW_CATEGORIES as readonly string[]);
 
   for (const l of lines) {
     if (!l.category) continue;
@@ -334,15 +333,19 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
         const dow = l.txnDate.getDay();
         salesSumByDow[dow] += amt;
         salesDistinctDaysByDow[dow].add(dayKey);
-      } else if (OTHER_IN_SET.has(cat)) {
+      } else {
+        // Catch-all: refunds, LOAN inflow, OTHER_INFLOW etc.
         otherInSum += amt;
       }
     } else {
       // DR
-      if (PAYROLL_SET.has(cat)) payrollSum += amt;
-      else if (MARKETING_SET.has(cat)) marketingSum += amt;
-      else if (RECURRING_SET.has(cat)) recurringSum += amt;
-      else if (OTHER_OUT_SET.has(cat)) otherOutSum += amt;
+      if (COGS_SET.has(cat)) cogsSum += amt;
+      else if (PULSE_CATEGORIES.has(cat)) {
+        // Skip — these are projected via RecurringExpense expansion
+        // on their actual due dates. Including them here would
+        // double-count.
+      }
+      else otherOutSum += amt;  // directors, partimer, marketing, capex, catch-alls
     }
   }
 
@@ -354,9 +357,7 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
 
   return {
     salesByDow,
-    payrollPerDay: payrollSum / sampleDays,
-    marketingPerDay: marketingSum / sampleDays,
-    recurringPerDay: recurringSum / sampleDays,
+    cogsPerDay: cogsSum / sampleDays,
     otherInPerDay: otherInSum / sampleDays,
     otherOutPerDay: otherOutSum / sampleDays,
     sampleDays,
@@ -515,7 +516,17 @@ export async function computeCashflow(opts: {
     select: { id: true, amount: true, depositAmount: true, status: true, dueDate: true },
   });
 
-  // Outflows — recurring (HQ + outlet-tagged that match scope)
+  // Recurring / payroll / monthly outflows are now driven by the
+  // RecurringExpense table — auto-populated per-outlet with exact
+  // amounts and due-day-of-month from bank-line history (see
+  // scripts/generate-recurring-from-bank-lines.ts). expandRecurring()
+  // then fires each entry on its actual due date inside the horizon
+  // — no daily smearing, no double-counting.
+  //
+  // Per-outlet filter: only entries tagged to the selected outlet (or
+  // HQ-level entries for shared services) fire. RecurringExpense
+  // categories cover RENT, UTILITY, SAAS, PAYROLL_SUPPORT (salary +
+  // directors + statutory), and OTHER (loan, tax, compliance).
   const recurring = await prisma.recurringExpense.findMany({
     where: {
       isActive: true,
@@ -525,14 +536,16 @@ export async function computeCashflow(opts: {
     },
   });
 
-  // Outflows — payroll + marketing. Bank-line per-day rates take
-  // precedence (smoothed daily); synthetic monthly-pulse streams are
-  // fallback when no bank-line data exists.
-  const useBankLinePayroll = !!(bankProj && bankProj.payrollPerDay > 0);
-  const useBankLineMarketing = !!(bankProj && bankProj.marketingPerDay > 0);
-  const payrollProjected = useBankLinePayroll ? [] : await projectPayroll(today, horizonEnd);
-  const marketingProjected = (useBankLineMarketing || isFiltered) ? [] : await projectMarketing(today, horizonEnd);
-  if (isFiltered && !useBankLineMarketing) {
+  // Synthetic payroll/marketing streams (the legacy hr_payroll_runs
+  // and ads_invoice path) are only used as a fallback when no
+  // RecurringExpense entries exist for the relevant categories. The
+  // per-outlet RecurringExpense entries above replace this for
+  // payroll. Marketing's still synthetic since we don't auto-generate
+  // marketing recurring entries (most marketing is one-off card spend).
+  const hasRecurringPayroll = recurring.some((r) => r.category === "PAYROLL_SUPPORT");
+  const payrollProjected = hasRecurringPayroll ? [] : await projectPayroll(today, horizonEnd);
+  const marketingProjected = isFiltered ? [] : await projectMarketing(today, horizonEnd);
+  if (isFiltered) {
     warnings.push("Marketing run-rate is HQ-only and not allocated to outlets — it's excluded from the filtered view.");
   }
 
@@ -574,12 +587,15 @@ export async function computeCashflow(opts: {
     otherOutPerDay = Math.max(0, bankFlows.outflow - dailySyntheticOut);
   }
 
-  // When we're using bank-line projection for payroll/marketing, derive
-  // per-day rates so the bucket builder can spread them across days
-  // (versus the monthly-pulse synthetic streams).
-  const bankPayrollPerDay = useBankLinePayroll ? bankProj!.payrollPerDay : 0;
-  const bankMarketingPerDay = useBankLineMarketing ? bankProj!.marketingPerDay : 0;
-  const bankRecurringPerDay = bankProj && bankProj.recurringPerDay > 0 ? bankProj.recurringPerDay : 0;
+  // Bank-line daily-rate streams. Only used for COGS and the
+  // catch-all Other in/out — those are paid frequently throughout
+  // the week (multiple supplier runs, refunds, transfers etc.) so a
+  // per-day rate is more accurate than a monthly pulse. Payroll /
+  // marketing / recurring instead use exact pulse timing from the
+  // RecurringExpense expansion above so the projection shows
+  // payments on their actual due-day-of-month rather than smeared
+  // across every week.
+  const bankCogsPerDay = bankProj && bankProj.cogsPerDay > 0 ? bankProj.cogsPerDay : 0;
 
   // Bucket builder
   const buckets: CashflowBucket[] = [];
@@ -616,23 +632,7 @@ export async function computeCashflow(opts: {
       .filter((m) => m.date >= weekStart && m.date <= weekEnd)
       .reduce((s, m) => s + m.amount, 0);
 
-    // Recurring this week
-    let recurringOut = 0;
-    const recurringExpenseIds: string[] = [];
-    for (const exp of recurring) {
-      const occurrences = expandRecurring(
-        { id: exp.id, amount: Number(exp.amount), cadence: exp.cadence, nextDueDate: exp.nextDueDate },
-        weekStart,
-        weekEnd,
-      );
-      for (const occ of occurrences) {
-        recurringOut += occ.amount;
-        if (!recurringExpenseIds.includes(occ.recurringExpenseId)) recurringExpenseIds.push(occ.recurringExpenseId);
-      }
-    }
-
-    // Other (bank residual) + bank-line-driven daily-rate streams
-    // (payroll/marketing/recurring). Count days in the week that are
+    // Other (bank residual) — count days in the week that are
     // >= today, since partial first weeks shouldn't include past days.
     let activeDays = 0;
     for (let d = 0; d < 7; d++) {
@@ -642,19 +642,39 @@ export async function computeCashflow(opts: {
     const otherIn = otherInPerDay * activeDays;
     const otherOut = otherOutPerDay * activeDays;
 
-    // Add bank-line daily-rate spend for the categories we promoted from
-    // synthetic monthly pulses. Stacks on top of any synthetic
-    // payrollProjected / marketingProjected entries, but those arrays
-    // are emptied above when bank-line data exists for the category.
-    const bankPayrollOut = bankPayrollPerDay * activeDays;
-    const bankMarketingOut = bankMarketingPerDay * activeDays;
-    const bankRecurringOut = bankRecurringPerDay * activeDays;
+    // Bank-line daily rate ONLY for COGS (paid to suppliers throughout
+    // the week — daily smearing is the right model).
+    const cogsOut = bankCogsPerDay * activeDays;
 
-    const totalPayrollOut = payrollOut + bankPayrollOut;
-    const totalMarketingOut = marketingOut + bankMarketingOut;
-    const totalRecurringOut = recurringOut + bankRecurringOut;
+    // RecurringExpense entries fire on their actual due dates inside
+    // the week (no smearing). Category determines which bucket they
+    // land in: PAYROLL_SUPPORT → Payroll column; everything else →
+    // Recurring. Mirrors the bucket grouping in the auto-generator at
+    // scripts/generate-recurring-from-bank-lines.ts.
+    let payrollFromRecurring = 0;
+    let recurringFromRecurring = 0;
+    const recurringExpenseIds: string[] = [];
+    for (const exp of recurring) {
+      const occurrences = expandRecurring(
+        { id: exp.id, amount: Number(exp.amount), cadence: exp.cadence, nextDueDate: exp.nextDueDate },
+        weekStart,
+        weekEnd,
+      );
+      if (occurrences.length === 0) continue;
+      const wkAmount = occurrences.reduce((s, o) => s + o.amount, 0);
+      if (exp.category === "PAYROLL_SUPPORT") payrollFromRecurring += wkAmount;
+      else recurringFromRecurring += wkAmount;
+      if (!recurringExpenseIds.includes(exp.id)) recurringExpenseIds.push(exp.id);
+    }
 
-    const closing = runningOpening + salesIn + otherIn - invoiceOut - totalPayrollOut - totalMarketingOut - totalRecurringOut - otherOut;
+    // Bucket totals
+    const totalPayrollOut = payrollOut + payrollFromRecurring;
+    const totalMarketingOut = marketingOut;
+    const totalRecurringOut = recurringFromRecurring;
+
+    const closing = runningOpening
+      + salesIn + otherIn
+      - invoiceOut - totalPayrollOut - cogsOut - totalMarketingOut - totalRecurringOut - otherOut;
 
     buckets.push({
       weekStart: ymd(weekStart),
@@ -664,6 +684,7 @@ export async function computeCashflow(opts: {
       otherIn: round2(otherIn),
       invoiceOut: round2(invoiceOut),
       payrollOut: round2(totalPayrollOut),
+      cogsOut: round2(cogsOut),
       marketingOut: round2(totalMarketingOut),
       recurringOut: round2(totalRecurringOut),
       otherOut: round2(otherOut),
@@ -704,13 +725,14 @@ export async function computeCashflow(opts: {
     openingBalance: opening,
     bankFlowsPerDay: bankProj
       ? {
-          // Bank-line model — sum of all per-day rates on each side
+          // Bank-line daily averages — Sales DOW + Other inflow on the
+          // CR side; COGS + Other outflow on the DR side. Pulse-driven
+          // categories (rent/salary/etc.) aren't included here because
+          // they fire on specific dates, not daily.
           inflow: round2(
             (bankProj.salesByDow.reduce((a, b) => a + b, 0) / 7) + bankProj.otherInPerDay,
           ),
-          outflow: round2(
-            bankProj.payrollPerDay + bankProj.marketingPerDay + bankProj.recurringPerDay + bankProj.otherOutPerDay,
-          ),
+          outflow: round2(bankProj.cogsPerDay + bankProj.otherOutPerDay),
           sampleDays: bankProj.sampleDays,
         }
       : bankFlows

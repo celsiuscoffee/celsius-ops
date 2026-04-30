@@ -15,6 +15,7 @@ type CashflowBucket = {
   otherIn: number;
   invoiceOut: number;
   payrollOut: number;
+  cogsOut: number;
   marketingOut: number;
   recurringOut: number;
   otherOut: number;
@@ -333,13 +334,14 @@ export default function CashflowPage() {
                 <tr className="border-b bg-gray-50/50 text-left text-gray-500">
                   <th className="px-3 py-3 font-medium">Week</th>
                   <th className="px-3 py-3 text-right font-medium">Opening</th>
-                  <th className="px-3 py-3 text-right font-medium text-green-600">Sales (forecast)</th>
-                  <th className="px-3 py-3 text-right font-medium text-green-600">Other (bank)</th>
+                  <th className="px-3 py-3 text-right font-medium text-green-600">Sales</th>
+                  <th className="px-3 py-3 text-right font-medium text-green-600">Other inflow</th>
                   <th className="px-3 py-3 text-right font-medium text-red-600">Invoices due</th>
                   <th className="px-3 py-3 text-right font-medium text-red-600">Payroll</th>
+                  <th className="px-3 py-3 text-right font-medium text-red-600">COGS</th>
                   <th className="px-3 py-3 text-right font-medium text-red-600">Marketing</th>
                   <th className="px-3 py-3 text-right font-medium text-red-600">Recurring</th>
-                  <th className="px-3 py-3 text-right font-medium text-red-600">Other (bank)</th>
+                  <th className="px-3 py-3 text-right font-medium text-red-600">Other outflow</th>
                   <th className="px-3 py-3 text-right font-medium">Closing</th>
                 </tr>
               </thead>
@@ -352,6 +354,7 @@ export default function CashflowPage() {
                     <td className="px-3 py-3 text-right font-mono text-xs text-green-700">{b.otherIn > 0 ? `+${fmtMYR(b.otherIn)}` : "—"}</td>
                     <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.invoiceOut > 0 ? `−${fmtMYR(b.invoiceOut)}` : "—"}</td>
                     <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.payrollOut > 0 ? `−${fmtMYR(b.payrollOut)}` : "—"}</td>
+                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.cogsOut > 0 ? `−${fmtMYR(b.cogsOut)}` : "—"}</td>
                     <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.marketingOut > 0 ? `−${fmtMYR(b.marketingOut)}` : "—"}</td>
                     <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.recurringOut > 0 ? `−${fmtMYR(b.recurringOut)}` : "—"}</td>
                     <td className="px-3 py-3 text-right font-mono text-xs text-red-700">{b.otherOut > 0 ? `−${fmtMYR(b.otherOut)}` : "—"}</td>
@@ -365,10 +368,9 @@ export default function CashflowPage() {
           </div>
 
           <p className="mt-3 text-[11px] text-gray-400">
-            Sales forecast: 12-week day-of-week average{outletIds.length > 0 ? ` for ${outletIds.length === 1 ? "selected outlet" : `${outletIds.length} selected outlets`}` : ""}. Payroll: 4-month run-rate, projected on the 25th. Marketing: 4-month avg of Google Ads invoices, projected once per month{outletIds.length > 0 ? " (HQ-level, excluded from filtered view)" : ""}.
-            <strong className="text-gray-600"> Other (bank)</strong>: per-day residual from your bank statement period totals, minus everything the synthetic model already covers — captures pickup-app revenue, refunds, card-charged subscriptions, transfers and any other movement the projection isn&apos;t modelling yet.
+            All columns derived from classified bank-line categories over the last 90 days. <strong>Sales</strong>: Card + QR + StoreHub + Grab + FoodPanda + GastroHub + Meetings/Events. <strong>COGS</strong>: Raw Materials + Delivery. <strong>Recurring</strong>: Rent + Utilities + Software + Tax + Maintenance + bank/loan/licensing. <strong>Other inflow/outflow</strong>: anything the auto-classifier hasn&apos;t mapped to a category yet — review the matrix on Cash Tracking to see what&apos;s in here.
             {data.bankFlowsPerDay
-              ? ` Computed from the last ${data.bankFlowsPerDay.sampleDays} days of bank statements (avg in ${fmtMYR2(data.bankFlowsPerDay.inflow)}/day, out ${fmtMYR2(data.bankFlowsPerDay.outflow)}/day).`
+              ? ` 90-day sample: avg in ${fmtMYR2(data.bankFlowsPerDay.inflow)}/day, out ${fmtMYR2(data.bankFlowsPerDay.outflow)}/day.`
               : " Upload a CSV/Excel statement with period totals to populate."}
           </p>
           <div className="mt-3">
