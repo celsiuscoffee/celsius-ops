@@ -1,8 +1,35 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireRole, AuthError } from "@/lib/auth";
+import { getUserFromHeaders, hasModulePermission, type SessionUser } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
 import { hashPin, verifyPin } from "@celsius/auth";
+
+// Authorise a staff-management action.
+// ADMIN/OWNER → always allowed.
+// MANAGER → allowed only when the target user is STAFF in the manager's outlet,
+//           the manager has settings:staff module permission, and any role change
+//           keeps the target as STAFF.
+async function authorizeStaffAction(
+  caller: SessionUser,
+  targetId: string,
+  newRole?: string,
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  if (caller.role === "OWNER" || caller.role === "ADMIN") return { ok: true };
+  if (caller.role !== "MANAGER") return { ok: false, status: 403, error: "Forbidden" };
+
+  const target = await prisma.user.findUnique({ where: { id: targetId }, select: { role: true, outletId: true } });
+  if (!target) return { ok: false, status: 404, error: "Not found" };
+  if (target.role !== "STAFF") return { ok: false, status: 403, error: "Managers can only manage Staff" };
+  if (caller.outletId && target.outletId !== caller.outletId) {
+    return { ok: false, status: 403, error: "Out of scope" };
+  }
+  if (newRole && newRole !== "STAFF") {
+    return { ok: false, status: 403, error: "Managers cannot change role away from Staff" };
+  }
+  const allowed = await hasModulePermission(caller, "settings:staff", prisma);
+  if (!allowed) return { ok: false, status: 403, error: "Forbidden" };
+  return { ok: true };
+}
 
 /** Check if a plaintext PIN is already used by another active staff at the same outlet */
 async function checkDuplicatePin(pin: string, outletId: string | null, excludeUserId: string): Promise<string | null> {
@@ -20,13 +47,8 @@ async function checkDuplicatePin(pin: string, outletId: string | null, excludeUs
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    await requireRole(req.headers, "ADMIN");
-  } catch (e) {
-    if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: e.status });
-    console.error('[staff PATCH] Auth error:', e);
-    return NextResponse.json({ error: 'Auth error' }, { status: 500 });
-  }
+  const caller = await getUserFromHeaders(req.headers);
+  if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   let body;
@@ -35,6 +57,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   } catch (e) {
     console.error('[staff PATCH] Body parse error:', e);
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
+
+  const authz = await authorizeStaffAction(caller, id, body?.role);
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+
+  // Manager cannot move a staff member out of their own outlet
+  if (caller.role === "MANAGER" && body.outletId !== undefined && caller.outletId && body.outletId !== caller.outletId) {
+    return NextResponse.json({ error: "Managers cannot move staff to another outlet" }, { status: 403 });
   }
 
   const data: Record<string, unknown> = {};
@@ -105,14 +135,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    await requireRole(req.headers, "ADMIN");
-  } catch (e) {
-    if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: e.status });
-    return NextResponse.json({ error: "Auth error" }, { status: 500 });
-  }
+  const caller = await getUserFromHeaders(req.headers);
+  if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+  const authz = await authorizeStaffAction(caller, id);
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+
   await prisma.user.update({
     where: { id },
     data: { status: "DEACTIVATED" },

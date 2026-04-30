@@ -99,6 +99,28 @@ export async function requireRole(headersOrReq: Headers | NextRequest, ...roles:
   return user;
 }
 
+// Check whether a Manager has a specific module permission (e.g. "settings:staff").
+// OWNER/ADMIN always pass. Reads moduleAccess from DB since it's not in the JWT.
+export async function hasModulePermission(
+  user: SessionUser,
+  moduleKey: string,
+  prisma: { user: { findUnique: (args: { where: { id: string }; select: { moduleAccess: true } }) => Promise<{ moduleAccess: unknown } | null> } },
+): Promise<boolean> {
+  if (user.role === "OWNER" || user.role === "ADMIN") return true;
+  const [app, mod] = moduleKey.split(":");
+  if (!app || !mod) return false;
+  const row = await prisma.user.findUnique({ where: { id: user.id }, select: { moduleAccess: true } });
+  const ma = row?.moduleAccess;
+  if (ma && typeof ma === "object" && !Array.isArray(ma)) {
+    const modules = (ma as Record<string, string[]>)[app];
+    return Array.isArray(modules) && modules.includes(mod);
+  }
+  if (Array.isArray(ma)) {
+    return (ma as string[]).includes(moduleKey);
+  }
+  return false;
+}
+
 export class AuthError extends Error {
   status: number;
   constructor(message: string, status: number) {

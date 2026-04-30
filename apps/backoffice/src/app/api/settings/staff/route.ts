@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserFromHeaders, requireRole, AuthError } from "@/lib/auth";
+import { getUserFromHeaders, hasModulePermission, AuthError } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
 import { hashPin, verifyPin } from "@celsius/auth";
 
@@ -68,22 +68,34 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    await requireRole(req.headers, "ADMIN");
-  } catch (e) {
-    if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: e.status });
-    throw e;
-  }
+  const caller = await getUserFromHeaders(req.headers);
+  if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
   const { name, phone, email, role, outletId, outletIds, username, password, pin, appAccess, moduleAccess } = body;
+  const targetRole = role || "STAFF";
+
+  // OWNER/ADMIN can create any role. MANAGER can create only STAFF, gated by settings:staff
+  // module permission and scoped to their own outlet.
+  if (caller.role === "MANAGER") {
+    if (targetRole !== "STAFF") {
+      return NextResponse.json({ error: "Managers can only add Staff" }, { status: 403 });
+    }
+    const allowed = await hasModulePermission(caller, "settings:staff", prisma);
+    if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (caller.outletId && outletId && outletId !== caller.outletId) {
+      return NextResponse.json({ error: "Managers can only add staff to their own outlet" }, { status: 403 });
+    }
+  } else if (caller.role !== "ADMIN" && caller.role !== "OWNER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const data: Record<string, unknown> = {
     name,
     phone,
     email: email || null,
-    role: role || "STAFF",
-    outletId: outletId || null,
+    role: targetRole,
+    outletId: outletId || (caller.role === "MANAGER" ? caller.outletId : null),
     outletIds: outletIds || [],
     username: username || null,
     appAccess: appAccess || [],

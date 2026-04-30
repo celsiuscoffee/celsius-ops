@@ -128,6 +128,7 @@ export default function StaffPage() {
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [form, setForm] = useState<StaffForm>(emptyForm);
   const [outlets, setOutlets] = useState<OutletOption[]>([]);
+  const [me, setMe] = useState<{ role: string; outletId: string | null } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -144,7 +145,12 @@ export default function StaffPage() {
   useEffect(() => {
     loadStaff();
     fetch("/api/settings/outlets").then((r) => r.json()).then(setOutlets);
+    fetch("/api/auth/me").then((r) => r.ok ? r.json() : null).then((d) => {
+      if (d) setMe({ role: d.role, outletId: d.outletId ?? null });
+    });
   }, []);
+
+  const isManagerOnly = me?.role === "MANAGER";
 
   const filtered = staff.filter((s) => {
     const matchStatus = filter === "all" || s.status === filter;
@@ -155,7 +161,11 @@ export default function StaffPage() {
   });
 
   const openAdd = () => {
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      role: "STAFF",
+      outletId: isManagerOnly && me?.outletId ? me.outletId : "",
+    });
     setEditingId(null);
     setEditingStaff(null);
     setActiveTab("details");
@@ -505,10 +515,15 @@ export default function StaffPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium">Role</label>
-                  <select className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                    <option value="OWNER">Owner</option>
-                    <option value="ADMIN">Company Admin</option>
-                    <option value="MANAGER">Manager</option>
+                  <select
+                    className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm disabled:bg-gray-50"
+                    value={form.role}
+                    disabled={isManagerOnly}
+                    onChange={(e) => setForm({ ...form, role: e.target.value })}
+                  >
+                    {!isManagerOnly && <option value="OWNER">Owner</option>}
+                    {!isManagerOnly && <option value="ADMIN">Company Admin</option>}
+                    {!isManagerOnly && <option value="MANAGER">Manager</option>}
                     <option value="STAFF">Staff</option>
                   </select>
                 </div>
