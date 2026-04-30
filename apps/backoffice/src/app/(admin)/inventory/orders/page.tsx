@@ -695,9 +695,16 @@ export default function OrdersPage() {
                             {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : a.label}
                           </button>
                         ))}
-                        {["SENT", "APPROVED"].includes(order.status) && (
-                          <button onClick={() => openEditDialog(order)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-purple-500 hover:bg-purple-600 disabled:opacity-50" title="Confirm Order">
-                            {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm Order"}
+                        {/* Upload Invoice — appears when there's a placeholder invoice waiting for the
+                            supplier's real invoice details. Hidden once the invoice is fully attached
+                            (has dueDate) or paid. New flow: PO → AWAITING_DELIVERY → staff receives →
+                            COMPLETED (placeholder invoice) → procurement clicks here to attach. */}
+                        {["AWAITING_DELIVERY", "PARTIALLY_RECEIVED", "COMPLETED", "SENT", "APPROVED"].includes(order.status)
+                          && order.invoice
+                          && !order.invoice.dueDate
+                          && order.invoice.status !== "PAID" && (
+                          <button onClick={() => openEditDialog(order)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50" title="Upload Invoice">
+                            {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Upload Invoice"}
                           </button>
                         )}
                         {order.status === "DRAFT" && (
@@ -813,8 +820,8 @@ export default function OrdersPage() {
         <DialogContent className={`max-h-[95vh] overflow-y-auto ${editOrder?.invoice && editOrder.invoice.photos.length > 0 ? "sm:max-w-[1400px] w-[95vw]" : "sm:max-w-3xl"}`}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {confirmOnSave ? <CheckCircle2 className="h-4 w-4 text-blue-500" /> : <Pencil className="h-4 w-4" />}
-              {confirmOnSave ? `Confirm ${editOrder?.orderNumber}` : `Edit ${editOrder?.orderNumber}`}
+              {confirmOnSave ? <CheckCircle2 className="h-4 w-4 text-yellow-500" /> : <Pencil className="h-4 w-4" />}
+              {confirmOnSave ? `Upload Invoice — ${editOrder?.orderNumber}` : `Edit ${editOrder?.orderNumber}`}
             </DialogTitle>
           </DialogHeader>
 
@@ -1095,9 +1102,9 @@ export default function OrdersPage() {
 
           <DialogFooter className="flex gap-2">
             <Button variant="outline" onClick={() => setEditOrder(null)}>Cancel</Button>
-            <Button onClick={saveEdit} disabled={editSaving || uploading} className={confirmOnSave ? "bg-blue-500 hover:bg-blue-600" : "bg-terracotta hover:bg-terracotta-dark"}>
+            <Button onClick={saveEdit} disabled={editSaving || uploading} className={confirmOnSave ? "bg-yellow-500 hover:bg-yellow-600" : "bg-terracotta hover:bg-terracotta-dark"}>
               {editSaving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
-              {confirmOnSave ? "Confirm Order" : "Save Changes"}
+              {confirmOnSave ? "Upload Invoice" : "Save Changes"}
             </Button>
             {editOrder && ["SENT", "APPROVED"].includes(editOrder.status) && (
               <Button
@@ -1119,7 +1126,7 @@ export default function OrdersPage() {
                 }}
               >
                 {editSaving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Truck className="mr-1.5 h-4 w-4" />}
-                Confirm Order
+                Upload Invoice &amp; Send
               </Button>
             )}
           </DialogFooter>

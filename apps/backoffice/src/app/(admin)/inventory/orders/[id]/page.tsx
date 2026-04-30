@@ -165,7 +165,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       await fetch(`/api/inventory/orders/${order.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "SENT" }),
+        body: JSON.stringify({ status: "AWAITING_DELIVERY" }),
       });
       router.push("/inventory/orders");
     } finally {

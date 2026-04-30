@@ -140,21 +140,94 @@ export async function POST(req: NextRequest) {
     ),
   );
 
-  // Update order status if linked
+  // PO reconciliation: hard-overwrite each PO line to reflect cumulative
+  // receivedQty so the PO total matches what the supplier should bill us.
+  // Discrepancy is preserved on receiving rows (orderedQty vs receivedQty).
   if (orderId) {
     const allReceivings = await prisma.receiving.findMany({
       where: { orderId },
-      select: { items: { select: { receivedQty: true } } },
+      select: {
+        items: {
+          select: { productId: true, productPackageId: true, receivedQty: true },
+        },
+      },
     });
-    const order = await prisma.order.findUnique({
+    const cumulativeByLine = new Map<string, number>();
+    for (const r of allReceivings) {
+      for (const it of r.items) {
+        const key = `${it.productId}::${it.productPackageId ?? ""}`;
+        cumulativeByLine.set(key, (cumulativeByLine.get(key) ?? 0) + Number(it.receivedQty));
+      }
+    }
+
+    const orderItems = await prisma.orderItem.findMany({
+      where: { orderId },
+      select: { id: true, productId: true, productPackageId: true, unitPrice: true, quantity: true },
+    });
+
+    let newTotalAmount = 0;
+    for (const oi of orderItems) {
+      const key = `${oi.productId}::${oi.productPackageId ?? ""}`;
+      const cumReceived = cumulativeByLine.get(key);
+      const newQty = cumReceived ?? Number(oi.quantity);
+      const lineTotal = newQty * Number(oi.unitPrice);
+      newTotalAmount += lineTotal;
+      if (cumReceived !== undefined && cumReceived !== Number(oi.quantity)) {
+        await prisma.orderItem.update({
+          where: { id: oi.id },
+          data: { quantity: cumReceived, totalPrice: lineTotal },
+        });
+      }
+    }
+
+    await prisma.order.update({
       where: { id: orderId },
-      select: { items: { select: { quantity: true } } },
+      data: { totalAmount: newTotalAmount, status: "COMPLETED" },
     });
-    if (order) {
-      const totalOrdered = order.items.reduce((s, i) => s + Number(i.quantity), 0);
-      const totalReceived = allReceivings.flatMap((r) => r.items).reduce((s, i) => s + Number(i.receivedQty), 0);
-      const newStatus = totalReceived >= totalOrdered ? "COMPLETED" : "PARTIALLY_RECEIVED";
-      await prisma.order.update({ where: { id: orderId }, data: { status: newStatus } });
+
+    // Placeholder invoice (GRNI). Staff app needs this so the supplier
+    // invoice can be attached later via backoffice. If a placeholder
+    // already exists for this order, update its amount to match the
+    // freshly-overwritten PO total. Don't touch a real (non-placeholder)
+    // invoice — finance owns those.
+    try {
+      const existing = await prisma.invoice.findFirst({
+        where: { orderId },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, invoiceNumber: true, dueDate: true, status: true },
+      });
+
+      if (existing) {
+        const isPlaceholder =
+          existing.invoiceNumber.startsWith("INV-") &&
+          existing.dueDate == null &&
+          existing.status === "PENDING";
+        const updateData: Record<string, unknown> = {};
+        if (invoicePhotos && invoicePhotos.length > 0) {
+          updateData.photos = { push: invoicePhotos };
+        }
+        if (isPlaceholder) updateData.amount = newTotalAmount;
+        if (Object.keys(updateData).length > 0) {
+          await prisma.invoice.update({ where: { id: existing.id }, data: updateData });
+        }
+      } else if (supplierId) {
+        const invCount = await prisma.invoice.count();
+        const invoiceNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
+        await prisma.invoice.create({
+          data: {
+            invoiceNumber,
+            orderId,
+            outletId,
+            supplierId,
+            amount: newTotalAmount,
+            status: "PENDING",
+            photos: invoicePhotos || [],
+            notes: notes ? `From receiving: ${notes}` : null,
+          },
+        });
+      }
+    } catch (err) {
+      console.error("[staff receivings] placeholder invoice attach/create failed:", err);
     }
   }
 
