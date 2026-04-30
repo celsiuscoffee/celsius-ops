@@ -695,14 +695,14 @@ export default function OrdersPage() {
                             {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : a.label}
                           </button>
                         ))}
-                        {/* Upload Invoice — appears when there's a placeholder invoice waiting for the
-                            supplier's real invoice details. Hidden once the invoice is fully attached
-                            (has dueDate) or paid. New flow: PO → AWAITING_DELIVERY → staff receives →
-                            COMPLETED (placeholder invoice) → procurement clicks here to attach. */}
+                        {/* Upload Invoice — replaces the old "Confirm Order" CTA. Shows on every
+                            in-flight PO state so procurement can fill in supplier invoice details
+                            whenever they arrive (before delivery, on delivery, or days after).
+                            Hidden once the invoice is paid (no need to upload anymore) or once a
+                            real invoice is fully attached (has dueDate set). */}
                         {["AWAITING_DELIVERY", "PARTIALLY_RECEIVED", "COMPLETED", "SENT", "APPROVED"].includes(order.status)
-                          && order.invoice
-                          && !order.invoice.dueDate
-                          && order.invoice.status !== "PAID" && (
+                          && order.invoice?.status !== "PAID"
+                          && !order.invoice?.dueDate && (
                           <button onClick={() => openEditDialog(order)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50" title="Upload Invoice">
                             {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Upload Invoice"}
                           </button>
