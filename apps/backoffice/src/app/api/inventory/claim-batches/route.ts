@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
     where: { id: { in: invoiceIds } },
     select: {
       id: true, invoiceNumber: true, amount: true, status: true,
+      outletId: true,
       claimBatchId: true, claimedById: true,
       order: { select: { claimedById: true } },
     },
@@ -96,6 +97,15 @@ export async function POST(req: NextRequest) {
     );
   }
   const payeeId = payeeIds[0];
+
+  // All invoices must share one outlet — Finance reimburses outlet-by-outlet
+  const outletIds = Array.from(new Set(invoices.map((i) => i.outletId).filter(Boolean)));
+  if (outletIds.length !== 1) {
+    return NextResponse.json(
+      { error: "All invoices must belong to the same outlet" },
+      { status: 400 },
+    );
+  }
 
   const already = invoices.filter((i) => i.claimBatchId);
   if (already.length > 0) {
