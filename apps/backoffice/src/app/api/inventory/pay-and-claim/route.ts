@@ -47,10 +47,12 @@ export async function GET(req: NextRequest) {
       totalAmount: true,
       notes: true,
       createdAt: true,
-      outlet: { select: { name: true, code: true } },
+      outletId: true,
+      outlet: { select: { id: true, name: true, code: true } },
       supplier: { select: { id: true, name: true } },
       createdBy: { select: { name: true } },
-      claimedBy: { select: { name: true, bankName: true, bankAccountNumber: true, bankAccountName: true } },
+      claimedById: true,
+      claimedBy: { select: { id: true, name: true, bankName: true, bankAccountNumber: true, bankAccountName: true } },
       items: {
         select: {
           id: true,
@@ -83,9 +85,11 @@ export async function GET(req: NextRequest) {
     flow: o.orderType === "PAYMENT_REQUEST" ? "REQUEST" : "CLAIM",
     expenseCategory: o.expenseCategory,
     outlet: o.outlet.name,
+    outletId: o.outletId,
     outletCode: o.outlet.code,
     supplierId: o.supplier?.id ?? null,
     supplier: o.supplier?.name ?? "Unknown",
+    claimedById: o.claimedById,
     claimedBy: o.claimedBy?.name ?? null,
     claimedByBank: o.claimedBy ? {
       bankName: o.claimedBy.bankName ?? null,
@@ -115,6 +119,8 @@ export async function GET(req: NextRequest) {
           status: o.invoices[0].status,
           photoCount: o.invoices[0].photos.length,
           photos: o.invoices[0].photos,
+          claimBatchId: o.invoices[0].claimBatchId,
+          claimBatch: o.invoices[0].claimBatch,
           vendorName: o.invoices[0].vendorName ?? null,
           vendorBank: o.invoices[0].vendorBankName ? {
             bankName: o.invoices[0].vendorBankName,

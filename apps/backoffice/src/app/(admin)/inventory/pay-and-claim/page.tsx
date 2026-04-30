@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Fragment } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -60,9 +61,11 @@ type Claim = {
   flow?: "CLAIM" | "REQUEST";
   expenseCategory?: "INGREDIENT" | "ASSET" | "MAINTENANCE" | "OTHER";
   outlet: string;
+  outletId: string | null;
   outletCode: string;
   supplierId: string;
   supplier: string;
+  claimedById: string | null;
   claimedBy: string | null;
   claimedByBank: { bankName: string | null; bankAccountNumber: string | null; bankAccountName: string | null } | null;
   createdBy: string;
@@ -78,6 +81,8 @@ type Claim = {
     status: string;
     photoCount: number;
     photos: string[];
+    claimBatchId: string | null;
+    claimBatch: { id: string; batchNumber: string; status: string } | null;
     vendorName?: string | null;
     vendorBank?: { bankName: string; accountNumber: string | null; accountName: string | null } | null;
   } | null;
@@ -123,6 +128,7 @@ function aiConfidenceBadge(claim: Claim) {
 
 export default function PayAndClaimPage() {
   // Current user
+  const router = useRouter();
   const [currentUserId, setCurrentUserId] = useState("");
   useEffect(() => {
     fetch("/api/auth/me").then((r) => r.json()).then((me) => {
@@ -143,6 +149,13 @@ export default function PayAndClaimPage() {
 
   // Quick Upload dialog state
   const [quickUploadOpen, setQuickUploadOpen] = useState(false);
+
+  // Bulk-batch selection state (only enabled on the Pending tab)
+  const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set());
+  const [batchPayeeId, setBatchPayeeId] = useState<string | null>(null);
+  const [batchOutletId, setBatchOutletId] = useState<string | null>(null);
+  const [batchNotes, setBatchNotes] = useState("");
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
 
   // Shared options (loaded on demand)
   const [outlets, setOutlets] = useState<OutletOption[]>([]);
@@ -241,6 +254,64 @@ export default function PayAndClaimPage() {
   };
 
   // ── Review Dialog ───────────────────────────────────────────────────────
+
+  // ── Bulk-batch handlers ─────────────────────────────────────────────────
+  const toggleBatchInvoice = (c: Claim) => {
+    const invoiceId = c.invoice?.id;
+    if (!invoiceId || !c.claimedById || !c.outletId) return;
+    setBatchSelected((prev) => {
+      const next = new Set(prev);
+      const switchingPayee = batchPayeeId && batchPayeeId !== c.claimedById && next.size > 0 && !next.has(invoiceId);
+      const switchingOutlet = batchOutletId && batchOutletId !== c.outletId && next.size > 0 && !next.has(invoiceId);
+      if (switchingPayee || switchingOutlet) {
+        const reason = switchingPayee ? "payee" : "outlet";
+        if (!confirm(`Switching ${reason} will clear current selection. Continue?`)) return prev;
+        next.clear();
+      }
+      if (next.has(invoiceId)) next.delete(invoiceId);
+      else next.add(invoiceId);
+      if (next.size === 0) {
+        setBatchPayeeId(null);
+        setBatchOutletId(null);
+      } else {
+        setBatchPayeeId(c.claimedById);
+        setBatchOutletId(c.outletId);
+      }
+      return next;
+    });
+  };
+
+  const clearBatchSelection = () => {
+    setBatchSelected(new Set());
+    setBatchPayeeId(null);
+    setBatchOutletId(null);
+    setBatchNotes("");
+  };
+
+  const submitBatch = async () => {
+    if (batchSelected.size === 0) return;
+    setBatchSubmitting(true);
+    try {
+      const res = await fetch("/api/inventory/claim-batches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invoiceIds: Array.from(batchSelected),
+          notes: batchNotes || null,
+        }),
+      });
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({ error: "Create failed" }));
+        alert(b?.error || "Create failed");
+        return;
+      }
+      const { batch } = await res.json();
+      clearBatchSelection();
+      router.push(`/inventory/pay-and-claim/batches/${batch.id}`);
+    } finally {
+      setBatchSubmitting(false);
+    }
+  };
 
   const openReview = async (claim: Claim) => {
     const loadedSuppliers = await loadOptions();
@@ -749,7 +820,10 @@ export default function PayAndClaimPage() {
           {TABS.map((t) => (
             <button
               key={t.key}
-              onClick={() => setTab(t.key)}
+              onClick={() => {
+                setTab(t.key);
+                if (t.key !== "pending") clearBatchSelection();
+              }}
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 tab === t.key ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
               }`}
@@ -798,6 +872,7 @@ export default function PayAndClaimPage() {
           <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="border-b bg-gray-50/50 text-gray-500 text-left">
+                {tab === "pending" && <th className="px-3 py-3 font-medium w-8"></th>}
                 <th className="px-4 py-3 font-medium w-10"></th>
                 <th className="px-4 py-3 font-medium">Claim #</th>
                 <th className="px-4 py-3 font-medium">Outlet</th>
@@ -813,12 +888,39 @@ export default function PayAndClaimPage() {
             <tbody className="divide-y">
               {claims.map((c) => {
                 const confidence = aiConfidenceBadge(c);
+                const invoiceId = c.invoice?.id ?? null;
+                const isBatchable =
+                  tab === "pending" &&
+                  c.flow === "CLAIM" &&
+                  !!invoiceId &&
+                  !!c.claimedById &&
+                  !!c.outletId &&
+                  !c.invoice?.claimBatchId &&
+                  ["PENDING", "INITIATED"].includes(c.invoice?.status ?? "");
+                const checked = invoiceId ? batchSelected.has(invoiceId) : false;
+                const lockedByPayee = !!batchPayeeId && batchPayeeId !== c.claimedById;
+                const lockedByOutlet = !!batchOutletId && batchOutletId !== c.outletId;
+                const rowDisabled = isBatchable && !checked && (lockedByPayee || lockedByOutlet);
                 return (
                   <Fragment key={c.id}>
                     <tr
-                      className="hover:bg-gray-50 cursor-pointer"
+                      className={`hover:bg-gray-50 cursor-pointer ${rowDisabled ? "opacity-40" : ""}`}
                       onClick={() => setExpanded(expanded === c.id ? null : c.id)}
                     >
+                      {tab === "pending" && (
+                        <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                          {isBatchable ? (
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 cursor-pointer"
+                              checked={checked}
+                              disabled={rowDisabled}
+                              onChange={() => toggleBatchInvoice(c)}
+                              aria-label={`Select claim ${c.orderNumber}`}
+                            />
+                          ) : null}
+                        </td>
+                      )}
                       {/* Photo thumbnail */}
                       <td className="px-4 py-3">
                         {c.invoice && c.invoice.photos?.length > 0 ? (
@@ -927,7 +1029,7 @@ export default function PayAndClaimPage() {
                     </tr>
                     {expanded === c.id && (
                       <tr>
-                        <td colSpan={tab !== "reimbursed" ? 10 : 9} className="bg-gray-50 px-6 py-3">
+                        <td colSpan={(tab !== "reimbursed" ? 10 : 9) + (tab === "pending" ? 1 : 0)} className="bg-gray-50 px-6 py-3">
                           <div className="space-y-2">
                             <p className="text-[10px] text-gray-500 uppercase font-medium">Items</p>
                             {c.items.length === 0 ? (
@@ -1810,6 +1912,53 @@ export default function PayAndClaimPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk-batch floating action bar */}
+      {batchSelected.size > 0 && (() => {
+        const selectedClaims = (claims ?? []).filter((c) => c.invoice && batchSelected.has(c.invoice.id));
+        const total = selectedClaims.reduce((s, c) => s + (c.invoice?.amount ?? 0), 0);
+        const payeeName = selectedClaims[0]?.claimedBy ?? "—";
+        const outletName = selectedClaims[0]?.outlet ?? "—";
+        return (
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white shadow-2xl">
+            <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-gray-500">Bulk batch</div>
+                <div className="text-sm font-semibold text-gray-900">
+                  {batchSelected.size} claim{batchSelected.size === 1 ? "" : "s"} · RM {total.toFixed(2)}
+                </div>
+                <div className="text-[11px] text-gray-500">
+                  Payee: <span className="font-medium text-gray-700">{payeeName}</span>
+                  {" · "}
+                  Outlet: <span className="font-medium text-gray-700">{outletName}</span>
+                </div>
+              </div>
+              <div className="flex items-end gap-2">
+                <label className="flex flex-col text-[11px] text-gray-500">
+                  <span>Notes (optional)</span>
+                  <Input
+                    value={batchNotes}
+                    onChange={(e) => setBatchNotes(e.target.value)}
+                    placeholder="e.g. week 17 reimbursement"
+                    className="mt-0.5 h-8 w-56 text-sm"
+                  />
+                </label>
+                <Button variant="outline" onClick={clearBatchSelection} className="h-8">
+                  Clear
+                </Button>
+                <Button
+                  onClick={submitBatch}
+                  disabled={batchSubmitting}
+                  className="h-8 bg-emerald-600 text-white hover:bg-emerald-700"
+                >
+                  {batchSubmitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}
+                  Create Batch ({batchSelected.size})
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
