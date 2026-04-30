@@ -60,13 +60,19 @@ type Rule = {
 };
 
 // Inflow rules
+//
+// IMPORTANT InterCo philosophy: a transfer between Celsius entities is
+// only "InterCo" (and only nets to zero in consolidation) when the
+// underlying purpose is itself a wash — i.e., management fees, capital
+// injections, asset transfers between sister entities. When the purpose
+// is "Stat pay", "Digital Ads", "Inventory" etc., the transfer is just
+// the routing mechanism — the actual economic spend is real and should
+// be categorised by purpose, not flagged InterCo.
+//
+// Therefore: NO entity-name based InterCo rule. Only the explicit
+// purpose-based rules in the suffix-extraction pass below.
+
 const INFLOW_RULES: Rule[] = [
-  // InterCo inbound — credit from another Celsius entity. Match BEFORE
-  // generic vendor rules so internal transfers don't get classified as
-  // sales or other revenue. Match only the full entity names
-  // ("CELSIUS COFFEE SDN", "...CONEZION", "...TAMARIND") — these are the
-  // legal entities, not the outlet prefixes ("CelsiusCoffee SA" etc).
-  { name: "interco_in_celsius_entity", match: /\bCELSIUS\s*COFFEE\s+(SDN|CONEZION|TAMARIND)\b/i, direction: "CR", category: "INTERCO_PEOPLE" as CashCategory, isInterCo: true },
 
   // QR — DuitNow QR transactions. Two formats:
   //   "DUITNOW QR-         <NAME>"
@@ -96,13 +102,35 @@ const INFLOW_RULES: Rule[] = [
 ];
 
 // Outflow rules
+//
+// As above — no entity-name InterCo rule. Real InterCo (management fee,
+// asset transfer, capital injection) is matched explicitly below by
+// the verb in the description, not by the counterparty being a
+// Celsius entity.
 const OUTFLOW_RULES: Rule[] = [
-  // InterCo outbound — payment to another Celsius entity. Match BEFORE
-  // vendor rules so internal transfers don't get tagged as RAW_MATERIALS
-  // or similar. Restrict to the full entity names
-  // ("CELSIUS COFFEE SDN", "...CONEZION", "...TAMARIND") — outlet
-  // prefixes alone don't qualify.
-  { name: "interco_out_celsius_entity", match: /\bCELSIUS\s*COFFEE\s+(SDN|CONEZION|TAMARIND)\b/i, direction: "DR", category: "INTERCO_PEOPLE" as CashCategory, isInterCo: true },
+  // True InterCo — management fees, asset transfers, capital injections
+  // between Celsius entities. These genuinely net to zero across
+  // consolidation. Match by purpose verb, not entity name.
+  { name: "interco_management_fee", match: /\bMANAGEMENT\s*FEE\b/i, direction: "DR", category: "MANAGEMENT_FEE" as CashCategory, isInterCo: true },
+  { name: "interco_asset_transfer", match: /\bASSET\s*TRANSFER\b/i, direction: "DR", category: "INTERCO_INVESTMENTS" as CashCategory, isInterCo: true },
+  { name: "interco_capital",        match: /\bCAPITAL\s*(INJECTION|TRANSFER)\b/i, direction: "DR", category: "CAPITAL" as CashCategory, isInterCo: true },
+
+  // Suffix-based reclassification for Maybank's "TRANSFER FR A/C
+  // CELSIUS COFFEE SDN.* <purpose>" pattern. The leading entity name
+  // is just routing; the meaningful info is in the suffix. Match the
+  // actual purpose so these end up in real categories.
+  { name: "purpose_stat_pay",         match: /\b(STAT\s*PAY|STATUTORY)\b/i,           direction: "DR", category: "STATUTORY_PAYMENT" as CashCategory },
+  { name: "purpose_inventory",        match: /\bINVENTORY\b/i,                        direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "purpose_digital_ads",      match: /\bDIGITAL\s*ADS?\b/i,                   direction: "DR", category: "DIGITAL_ADS" as CashCategory },
+  { name: "purpose_marketing_generic",match: /\bMARKETING\b/i,                        direction: "DR", category: "OTHER_MARKETING" as CashCategory },
+  { name: "purpose_rent",             match: /\bRENT(AL)?\b/i,                        direction: "DR", category: "RENT" as CashCategory },
+  { name: "purpose_utility",          match: /\bUTILIT(Y|IES)\b/i,                    direction: "DR", category: "UTILITIES" as CashCategory },
+  { name: "purpose_software",         match: /\bSOFTWARE|\bSAAS\b|\bSUBSCRIPTION\b/i, direction: "DR", category: "SOFTWARE" as CashCategory },
+  { name: "purpose_petty_cash",       match: /\bPETTY\s*CASH\b/i,                     direction: "DR", category: "PETTY_CASH" as CashCategory },
+  { name: "purpose_staff_claim",      match: /\bSTAFF\s*CLAIM|\bCLAIM\b/i,             direction: "DR", category: "STAFF_CLAIM" as CashCategory },
+  { name: "purpose_maintenance",      match: /\bMAINTENANCE\b|\bREPAIR\b|\bSERVICING\b/i, direction: "DR", category: "MAINTENANCE" as CashCategory },
+  { name: "purpose_equipment",        match: /\bEQUIPMENT\b|\bMACHINE\b/i,            direction: "DR", category: "EQUIPMENTS" as CashCategory },
+  { name: "purpose_kol",              match: /\bKOL\b|\bINFLUENCER\b/i,               direction: "DR", category: "KOL" as CashCategory },
 
   // Statutory — EPF / SOCSO / EIS / KWSP / PERKESO / LHDN tax
   { name: "statutory_epf",   match: /\b(EPF|KWSP|M2UBEPF)\b/i,            direction: "DR", category: "STATUTORY_PAYMENT" as CashCategory },

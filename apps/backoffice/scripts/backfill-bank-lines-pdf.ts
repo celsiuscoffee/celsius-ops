@@ -188,14 +188,10 @@ async function main() {
       continue;
     }
 
-    // Skip if this statement already has lines (preserves the April CSV
-    // ingest from the prior backfill). Use deleteMany only when the
-    // current line set is clearly stale or you want to re-classify.
-    const existing = await prisma.bankStatementLine.count({ where: { statementId: statement.id } });
-    if (existing > 0) {
-      console.log(`[skip] ${accountName} ${periodStart.toISOString().slice(0,10)} already has ${existing} lines — preserving`);
-      continue;
-    }
+    // Wipe any pre-existing lines for idempotency so re-runs always
+    // reflect the current classifier rules.
+    const wiped = await prisma.bankStatementLine.deleteMany({ where: { statementId: statement.id } });
+    if (wiped.count > 0) console.log(`[reset] dropped ${wiped.count} existing lines for ${statement.accountName} ${periodStart.toISOString().slice(0,10)}`);
 
     // pdftotext --layout for columnar preservation
     const tmpFile = `/tmp/maybank-pdf-${Date.now()}.txt`;

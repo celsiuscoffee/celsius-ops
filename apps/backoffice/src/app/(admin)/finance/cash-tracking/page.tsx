@@ -11,7 +11,11 @@ type CashMatrix = {
   outlets: Outlet[];
   months: string[];
   cells: Record<string, number>;     // "category|outletId|YYYY-MM" → signed amount
-  monthTotals: Record<string, number>;
+  bsMonthNet: Record<string, number>;        // BS-derived monthly net (excl InterCo)
+  bsMonthInflow: Record<string, number>;     // BS gross inflow (excl InterCo)
+  bsMonthOutflow: Record<string, number>;    // BS gross outflow (excl InterCo)
+  bsMonthInterCoIn: Record<string, number>;  // InterCo CR offset
+  bsMonthInterCoOut: Record<string, number>; // InterCo DR offset
   categoryMonthTotals: Record<string, Record<string, number>>;
   categories: string[];
 };
@@ -215,21 +219,33 @@ export default function CashTrackingPage() {
                     />
                   );
                 })}
-                {/* Uncategorized residual — lines that fell into the
-                    catch-all OTHER_INFLOW / OTHER_OUTFLOW /
-                    TRANSFER_NOT_SUCCESSFUL buckets. Shown muted so
-                    Finance can see how much still needs hand-classifying;
-                    it's signed so the Net Cash Flow row reconciles. */}
+                {/* Uncategorized residual — reconciles visible categories
+                    to the headline Net Cash Flow.
+                    All-outlets view: residual = BS net minus the sum of
+                    visible categorized lines, forcing the matrix bottom
+                    to equal what the bank PDFs say.
+                    Per-outlet view: residual = sum of OTHER catch-all
+                    lines tagged to that outlet (BS isn't outlet-tagged). */}
                 {(() => {
-                  const present = UNCATEGORIZED_CATEGORIES.filter((c) => data.categories.includes(c));
-                  if (present.length === 0) return null;
                   const monthlyResidual: Record<string, number> = {};
                   let anyNonZero = false;
                   for (const m of data.months) {
-                    let s = 0;
-                    for (const c of present) s += getCellValue(data, c, activeOutletId, m);
-                    monthlyResidual[m] = s;
-                    if (s !== 0) anyNonZero = true;
+                    let visibleSum = 0;
+                    for (const band of visibleBands) {
+                      for (const c of band.categories) visibleSum += getCellValue(data, c, activeOutletId, m);
+                    }
+                    let r: number;
+                    if (activeOutletId) {
+                      // Per-outlet: residual = sum of OTHER_* lines for this outlet
+                      r = 0;
+                      for (const c of UNCATEGORIZED_CATEGORIES) r += getCellValue(data, c, activeOutletId, m);
+                    } else {
+                      // Consolidated: residual = BS net − categorized
+                      const bsNet = data.bsMonthNet[m] ?? 0;
+                      r = bsNet - visibleSum;
+                    }
+                    monthlyResidual[m] = r;
+                    if (Math.abs(r) >= 0.5) anyNonZero = true;
                   }
                   if (!anyNonZero) return null;
                   return (
@@ -245,13 +261,17 @@ export default function CashTrackingPage() {
                     </tr>
                   );
                 })()}
-                {/* Grand total */}
+                {/* Grand total — sourced from BankStatement totals (excl
+                    InterCo) for the consolidated view so the matrix
+                    matches what the bank PDFs say. Per-outlet view falls
+                    back to summing the outlet's tagged lines (BS isn't
+                    outlet-tagged). */}
                 <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold">
                   <td className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-gray-900">Net cash flow</td>
                   {data.months.map((m) => {
                     const total = activeOutletId
                       ? totalForOutletMonth(data, activeOutletId, m)
-                      : (data.monthTotals[m] ?? 0);
+                      : (data.bsMonthNet[m] ?? 0);
                     return (
                       <td key={m} className={`px-3 py-2 text-right tabular-nums ${total >= 0 ? "text-green-700" : "text-red-700"}`}>
                         {fmtMYR(total, { showZero: true })}
@@ -264,7 +284,7 @@ export default function CashTrackingPage() {
           </div>
 
           <p className="mt-2 text-[11px] text-gray-400">
-            Inflows shown positive · outflows negative · empty cells dashed · &ldquo;HQ / unallocated&rdquo; holds payments paid centrally that aren&rsquo;t outlet-tagged · InterCo transfers are netted out automatically · the &ldquo;Uncategorized&rdquo; row holds lines the auto-classifier couldn&rsquo;t map yet — they still count toward Net Cash Flow.
+            Net Cash Flow row is sourced from <strong>BankStatement totals</strong> (verified against bank PDFs/CSVs), net of InterCo offsets · category rows come from classified bank lines · the &ldquo;Uncategorized&rdquo; row is the residual that makes the matrix reconcile to the BS total · InterCo (Management Fee / Asset Transfer) is netted out automatically.
           </p>
         </>
       )}

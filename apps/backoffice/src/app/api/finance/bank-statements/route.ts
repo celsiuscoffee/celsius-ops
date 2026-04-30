@@ -126,6 +126,26 @@ export async function POST(req: NextRequest) {
     if (data.length > 0) {
       const result = await prisma.bankStatementLine.createMany({ data, skipDuplicates: true });
       linesCreated = result.count;
+
+      // Auto-fill BankStatement.interCoInflows/Outflows from the
+      // line classifier when finance hasn't manually set them. Real
+      // InterCo (Management Fee / Asset Transfer / Capital) is the
+      // only thing flagged isInterCo=true, so this is a safe default.
+      // Finance can override via the edit UI if any line should not
+      // have netted out.
+      const icoIn  = data.filter((d) => d.isInterCo && d.direction === "CR").reduce((s, d) => s + d.amount, 0);
+      const icoOut = data.filter((d) => d.isInterCo && d.direction === "DR").reduce((s, d) => s + d.amount, 0);
+      const explicitIcoIn  = interCoInflows  != null && interCoInflows  !== "";
+      const explicitIcoOut = interCoOutflows != null && interCoOutflows !== "";
+      if ((!explicitIcoIn && icoIn > 0) || (!explicitIcoOut && icoOut > 0)) {
+        await prisma.bankStatement.update({
+          where: { id: created.id },
+          data: {
+            ...(explicitIcoIn  ? {} : { interCoInflows:  Math.round(icoIn  * 100) / 100 }),
+            ...(explicitIcoOut ? {} : { interCoOutflows: Math.round(icoOut * 100) / 100 }),
+          },
+        });
+      }
     }
   }
 

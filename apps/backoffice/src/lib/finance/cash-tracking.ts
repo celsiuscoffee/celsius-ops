@@ -25,8 +25,14 @@ export type CashTrackingMatrix = {
   // For each (category, outletId, month) → net amount with sign:
   //   inflows positive, outflows negative.
   cells: Record<CashCellKey, number>;
-  // Per-month totals across all outlets (also signed).
-  monthTotals: Record<string, number>;
+  // Per-month totals across all outlets, derived from BankStatement
+  // (NOT from line sums) so the headline matches the bank PDFs exactly
+  // even when some lines fail to classify or are missing. Net of InterCo.
+  bsMonthNet: Record<string, number>;        // YYYY-MM → BS-derived net cash flow
+  bsMonthInflow: Record<string, number>;     // YYYY-MM → BS gross inflow (excl InterCo)
+  bsMonthOutflow: Record<string, number>;    // YYYY-MM → BS gross outflow (excl InterCo)
+  bsMonthInterCoIn: Record<string, number>;  // YYYY-MM → InterCo offset CR
+  bsMonthInterCoOut: Record<string, number>; // YYYY-MM → InterCo offset DR
   // Per-month totals broken out by category (for the bottom summary band).
   categoryMonthTotals: Record<string, Record<string, number>>; // category → month → amount
   // Categories actually present in the data, in spreadsheet display order.
@@ -108,9 +114,9 @@ export async function loadCashTrackingMatrix(opts: {
   since.setHours(0, 0, 0, 0);
   since.setMonth(since.getMonth() - (monthsBack - 1));
 
-  // Fetch all lines in the window. Outlet filter applied here only for
-  // tagged lines; "HQ" pseudo bucket is only included when the caller
-  // didn't filter (empty array) or explicitly listed it.
+  // Fetch all lines in the window. Always exclude InterCo from the
+  // category cells — InterCo nets to zero by definition. The headline
+  // BS-derived totals also subtract InterCo so the matrix reconciles.
   const lines = await prisma.bankStatementLine.findMany({
     where: {
       txnDate: { gte: since },
@@ -125,6 +131,45 @@ export async function loadCashTrackingMatrix(opts: {
       isInterCo: true,
     },
   });
+
+  // Headline totals — sourced from BankStatement (NOT from line sums).
+  // BankStatement.totalInflows/Outflows are the verified period totals;
+  // line sums drift slightly due to PDF parsing. Sourcing the headline
+  // from BS guarantees the matrix Net Cash Flow row matches what the
+  // bank PDFs actually say.
+  const statements = await prisma.bankStatement.findMany({
+    where: { periodStart: { gte: since } },
+    select: {
+      periodStart: true, periodEnd: true,
+      totalInflows: true, totalOutflows: true,
+      interCoInflows: true, interCoOutflows: true,
+    },
+  });
+  const bsMonthInflow: Record<string, number> = {};
+  const bsMonthOutflow: Record<string, number> = {};
+  const bsMonthInterCoIn: Record<string, number> = {};
+  const bsMonthInterCoOut: Record<string, number> = {};
+  for (const s of statements) {
+    if (!s.periodStart) continue;
+    const m = ymd(s.periodStart).slice(0, 7);
+    const inflow = s.totalInflows == null ? 0 : Number(s.totalInflows);
+    const outflow = s.totalOutflows == null ? 0 : Number(s.totalOutflows);
+    const icoIn = s.interCoInflows == null ? 0 : Number(s.interCoInflows);
+    const icoOut = s.interCoOutflows == null ? 0 : Number(s.interCoOutflows);
+    bsMonthInflow[m] = (bsMonthInflow[m] ?? 0) + inflow;
+    bsMonthOutflow[m] = (bsMonthOutflow[m] ?? 0) + outflow;
+    bsMonthInterCoIn[m] = (bsMonthInterCoIn[m] ?? 0) + icoIn;
+    bsMonthInterCoOut[m] = (bsMonthInterCoOut[m] ?? 0) + icoOut;
+  }
+  const bsMonthNet: Record<string, number> = {};
+  for (const m of Object.keys(bsMonthInflow)) {
+    const net = (bsMonthInflow[m] - bsMonthInterCoIn[m]) - (bsMonthOutflow[m] - bsMonthInterCoOut[m]);
+    bsMonthNet[m] = round2(net);
+    bsMonthInflow[m] = round2(bsMonthInflow[m] - bsMonthInterCoIn[m]);
+    bsMonthOutflow[m] = round2(bsMonthOutflow[m] - bsMonthInterCoOut[m]);
+    bsMonthInterCoIn[m] = round2(bsMonthInterCoIn[m]);
+    bsMonthInterCoOut[m] = round2(bsMonthInterCoOut[m]);
+  }
 
   // Resolve outlets (including HQ pseudo). Outlet uses status enum, not
   // an isActive boolean — only ACTIVE outlets show up.
@@ -171,6 +216,9 @@ export async function loadCashTrackingMatrix(opts: {
     outlets.push({ id: HQ_PSEUDO_OUTLET_ID, code: "HQ", name: "HQ / unallocated", isHQ: true });
   }
 
+  // Union of months across both line data and BS totals so all months
+  // appear even if one source is empty for a month.
+  for (const m of Object.keys(bsMonthInflow)) monthSet.add(m);
   // Months ascending
   const months = Array.from(monthSet).sort();
 
@@ -186,7 +234,18 @@ export async function loadCashTrackingMatrix(opts: {
     }
   }
 
-  return { outlets, months, cells, monthTotals, categoryMonthTotals, categories };
+  return {
+    outlets,
+    months,
+    cells,
+    bsMonthNet,
+    bsMonthInflow,
+    bsMonthOutflow,
+    bsMonthInterCoIn,
+    bsMonthInterCoOut,
+    categoryMonthTotals,
+    categories,
+  };
 }
 
 function ymd(d: Date): string {
