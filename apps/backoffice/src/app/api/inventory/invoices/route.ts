@@ -36,11 +36,28 @@ export async function GET(req: NextRequest) {
     { status: "INITIATED", dueDate: { lt: _todayStart } },
   ];
 
+  // GRNI / "pending invoice" = goods received, supplier hasn't sent the
+  // actual invoice yet. Created by the receivings POST side-effect with
+  // an auto-generated INV-NNNN number, no dueDate, status=PENDING, and
+  // linked to the PO. Once the user clicks "Attach Invoice" and fills in
+  // the supplier's real invoice number + dueDate, the row drops out of
+  // this bucket naturally.
+  const pendingInvoiceWhere: Prisma.InvoiceWhereInput = {
+    invoiceNumber: { startsWith: "INV-" },
+    dueDate: null,
+    status: "PENDING",
+    orderId: { not: null },
+    paymentType: "SUPPLIER",
+  };
+
   const where: Record<string, unknown> = {};
   if (cardFilter === "paid") where.status = "PAID";
   else if (cardFilter === "overdue") where.OR = overdueOr;
   else if (cardFilter === "initiated") where.status = "INITIATED";
   else if (cardFilter === "pending") where.status = "PENDING";
+  else if (cardFilter === "pending_invoice") {
+    Object.assign(where, pendingInvoiceWhere);
+  }
   else if (cardFilter === "payable") where.status = { in: UNPAID_STATUSES };
   else if (cardFilter === "due_today") {
     where.status = { in: UNPAID_STATUSES };
@@ -135,7 +152,7 @@ export async function GET(req: NextRequest) {
         },
       },
       outlet: { select: { name: true } },
-      supplier: { select: { name: true, phone: true, bankName: true, bankAccountNumber: true, bankAccountName: true, depositPercent: true } },
+      supplier: { select: { name: true, phone: true, bankName: true, bankAccountNumber: true, bankAccountName: true, depositPercent: true, paymentTerms: true } },
       paidAt: true,
       paidVia: true,
       paymentRef: true,
@@ -173,7 +190,7 @@ export async function GET(req: NextRequest) {
   const todayStart = _todayStart;
   const todayEnd = _todayEnd;
 
-  const [allAgg, paidAgg, overdueAgg, initiatedAgg, payableInvoices, dueTodayInvoices] = await Promise.all([
+  const [allAgg, paidAgg, overdueAgg, initiatedAgg, payableInvoices, dueTodayInvoices, pendingInvoiceAgg] = await Promise.all([
     prisma.invoice.aggregate({ _sum: { amount: true }, _count: { _all: true } }),
     prisma.invoice.aggregate({ where: { status: "PAID" }, _sum: { amount: true }, _count: { _all: true } }),
     // Overdue = literal OVERDUE status PLUS INITIATED past due date.
@@ -193,6 +210,8 @@ export async function GET(req: NextRequest) {
       },
       select: { id: true, amount: true, status: true, depositAmount: true },
     }),
+    // Pending Invoice = goods received but supplier invoice not yet attached
+    prisma.invoice.aggregate({ where: pendingInvoiceWhere, _sum: { amount: true }, _count: { _all: true } }),
   ]);
 
   // Outstanding balance = full amount, minus deposit already paid for
@@ -215,6 +234,7 @@ export async function GET(req: NextRequest) {
     initiated: { count: initiatedAgg._count._all, amount: Number(initiatedAgg._sum.amount ?? 0) },
     paid: { count: paidAgg._count._all, amount: Number(paidAgg._sum.amount ?? 0) },
     dueToday: { count: dueTodayCount, amount: dueTodayAmount },
+    pendingInvoice: { count: pendingInvoiceAgg._count._all, amount: Number(pendingInvoiceAgg._sum.amount ?? 0) },
   };
 
   const mapped = invoices.map((inv) => ({
@@ -264,6 +284,15 @@ export async function GET(req: NextRequest) {
     depositPaidAt: inv.depositPaidAt?.toISOString() ?? null,
     depositRef: inv.depositRef ?? null,
     flags: Array.isArray(inv.flags) ? inv.flags : [],
+    // True when this is a GRNI placeholder — auto-created on receiving,
+    // awaiting the supplier to send the actual invoice details.
+    isPendingInvoice:
+      inv.invoiceNumber.startsWith("INV-") &&
+      inv.dueDate == null &&
+      inv.status === "PENDING" &&
+      inv.order != null &&
+      inv.paymentType === "SUPPLIER",
+    supplierPaymentTerms: inv.supplier?.paymentTerms ?? null,
   }));
 
   return NextResponse.json({ invoices: mapped, outlets, dueTodayCount, dueTodayAmount, summary });

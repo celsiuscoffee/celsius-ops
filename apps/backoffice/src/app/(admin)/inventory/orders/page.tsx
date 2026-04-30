@@ -113,6 +113,62 @@ const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof
   CANCELLED: [],
 };
 
+// ── Invoice preview pane ──────────────────────────────────────────────────
+// Image-or-PDF aware preview with onError fallback to iframe. Bigger now so
+// it actually fills the wider edit dialog (was capped at 60vh, broke when
+// the URL was a PDF or expired Cloudinary asset).
+function InvoicePreviewPane({ photos }: { photos: string[] }) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const url = photos[activeIdx];
+  const isPdf = /\.pdf($|\?)/i.test(url) || url.includes("/raw/upload/");
+  const imgUrl = url.replace("/raw/upload/", "/image/upload/");
+
+  return (
+    <div className="hidden lg:flex w-[48%] shrink-0 flex-col rounded-lg bg-gray-900 overflow-hidden">
+      <div className="flex items-center justify-between p-3 border-b border-gray-700">
+        <p className="text-xs text-gray-400 font-medium">Invoice / Receipt</p>
+        {photos.length > 1 && (
+          <div className="flex gap-1">
+            {photos.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => { setActiveIdx(i); setFailed(false); }}
+                className={`h-6 w-6 rounded text-[10px] font-medium ${i === activeIdx ? "bg-terracotta text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex-1 flex items-stretch justify-stretch p-3 min-h-[600px]">
+        {isPdf || failed ? (
+          <iframe src={url} className="w-full h-full min-h-[600px] rounded bg-white" title="Invoice" />
+        ) : (
+          <a href={imgUrl} target="_blank" rel="noopener noreferrer" className="group relative flex-1 flex items-center justify-center">
+            <img
+              src={imgUrl}
+              alt="Invoice"
+              className="max-w-full max-h-[80vh] object-contain rounded"
+              onError={() => setFailed(true)}
+            />
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 rounded transition-opacity">
+              <span className="text-white text-xs font-medium bg-black/50 px-2 py-1 rounded">Open full size</span>
+            </div>
+          </a>
+        )}
+      </div>
+      <div className="px-3 py-2 border-t border-gray-700 flex items-center justify-between">
+        <a href={url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-blue-400 hover:text-blue-300">
+          Open in new tab →
+        </a>
+        <span className="text-[10px] text-gray-500">{isPdf ? "PDF" : failed ? "Preview unavailable" : "Image"}</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────
 
 export default function OrdersPage() {
@@ -754,7 +810,7 @@ export default function OrdersPage() {
 
       {/* Edit Order Dialog */}
       <Dialog open={!!editOrder} onOpenChange={(open) => !open && setEditOrder(null)}>
-        <DialogContent className={`max-h-[90vh] overflow-y-auto ${editOrder?.invoice && editOrder.invoice.photos.length > 0 ? "sm:max-w-5xl" : "sm:max-w-2xl"}`}>
+        <DialogContent className={`max-h-[95vh] overflow-y-auto ${editOrder?.invoice && editOrder.invoice.photos.length > 0 ? "sm:max-w-[1400px] w-[95vw]" : "sm:max-w-3xl"}`}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {confirmOnSave ? <CheckCircle2 className="h-4 w-4 text-blue-500" /> : <Pencil className="h-4 w-4" />}
@@ -764,25 +820,9 @@ export default function OrdersPage() {
 
           {editOrder && (
             <div className={`flex gap-4 ${editOrder.invoice && editOrder.invoice.photos.length > 0 ? "" : ""}`}>
-              {/* Left: Invoice image preview */}
+              {/* Left: Invoice image / PDF preview */}
               {editOrder.invoice && editOrder.invoice.photos.length > 0 && (
-                <div className="hidden sm:flex w-[40%] shrink-0 flex-col rounded-lg bg-gray-900 overflow-hidden">
-                  <div className="p-3 border-b border-gray-700">
-                    <p className="text-xs text-gray-400 font-medium">Invoice / Receipt</p>
-                  </div>
-                  <div className="flex-1 flex items-center justify-center p-3 min-h-[400px]">
-                    <a href={editOrder.invoice.photos[0].replace("/raw/upload/", "/image/upload/")} target="_blank" rel="noopener noreferrer" className="group relative">
-                      <img
-                        src={editOrder.invoice.photos[0].replace("/raw/upload/", "/image/upload/")}
-                        alt="Invoice"
-                        className="max-w-full max-h-[60vh] object-contain rounded"
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 rounded transition-opacity">
-                        <span className="text-white text-xs font-medium bg-black/50 px-2 py-1 rounded">Open full size</span>
-                      </div>
-                    </a>
-                  </div>
-                </div>
+                <InvoicePreviewPane photos={editOrder.invoice.photos} />
               )}
 
               {/* Right: Form */}
