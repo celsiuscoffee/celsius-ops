@@ -681,6 +681,17 @@ export default function InvoicesPage() {
               )}
             </div>
             <p className={`text-lg font-bold ${card.color}`}>RM {card.amount.toFixed(2)}</p>
+            {card.key === "payable" && pendingInvoiceCount > 0 && (
+              // Soft-hide: GRNI placeholders are excluded from Payable count/amount,
+              // but the sub-line keeps the full liability visible for cashflow planning.
+              <p
+                onClick={(e) => { e.stopPropagation(); setCardFilter("pending_invoice"); }}
+                className="mt-0.5 text-[10px] text-yellow-700 hover:underline cursor-pointer"
+                title="Click to view Pending Invoice rows"
+              >
+                + RM {totalPendingInvoice.toFixed(2)} awaiting invoice
+              </p>
+            )}
             {card.key === "due_today" && card.count > 0 && cardFilter === "due_today" && (
               <div
                 onClick={(e) => { e.stopPropagation(); batchInitiateDueToday(); }}

@@ -154,22 +154,61 @@ export async function POST(req: NextRequest) {
     ),
   );
 
-  // Update order status if linked to a PO
+  // PO reconciliation: hard-overwrite each PO line to reflect cumulative
+  // receivedQty across all receivings on this PO. This way the PO total
+  // matches what the supplier should actually invoice us for — critical
+  // for the credit-term flow where the placeholder invoice (and downstream
+  // Pending Invoice card) need the real received value, not the original
+  // ordered total. Discrepancy is preserved on the receiving rows
+  // (orderedQty vs receivedQty).
   if (orderId) {
     const allReceivings = await prisma.receiving.findMany({
       where: { orderId },
-      select: { items: { select: { receivedQty: true } } },
+      select: {
+        items: {
+          select: {
+            productId: true,
+            productPackageId: true,
+            receivedQty: true,
+          },
+        },
+      },
     });
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      select: { items: { select: { quantity: true } } },
-    });
-    if (order) {
-      const totalOrdered = order.items.reduce((s, i) => s + Number(i.quantity), 0);
-      const totalReceived = allReceivings.flatMap((r) => r.items).reduce((s, i) => s + Number(i.receivedQty), 0);
-      const newStatus = totalReceived >= totalOrdered ? "COMPLETED" : "PARTIALLY_RECEIVED";
-      await prisma.order.update({ where: { id: orderId }, data: { status: newStatus } });
+    const cumulativeByLine = new Map<string, number>();
+    for (const r of allReceivings) {
+      for (const it of r.items) {
+        const key = `${it.productId}::${it.productPackageId ?? ""}`;
+        cumulativeByLine.set(key, (cumulativeByLine.get(key) ?? 0) + Number(it.receivedQty));
+      }
     }
+
+    const orderItems = await prisma.orderItem.findMany({
+      where: { orderId },
+      select: { id: true, productId: true, productPackageId: true, unitPrice: true, quantity: true },
+    });
+
+    let newTotalAmount = 0;
+    for (const oi of orderItems) {
+      const key = `${oi.productId}::${oi.productPackageId ?? ""}`;
+      const cumReceived = cumulativeByLine.get(key);
+      const newQty = cumReceived ?? Number(oi.quantity);
+      const lineTotal = newQty * Number(oi.unitPrice);
+      newTotalAmount += lineTotal;
+      if (cumReceived !== undefined && cumReceived !== Number(oi.quantity)) {
+        await prisma.orderItem.update({
+          where: { id: oi.id },
+          data: { quantity: cumReceived, totalPrice: lineTotal },
+        });
+      }
+    }
+
+    // After overwrite, ordered == received per line, so status always
+    // collapses to COMPLETED. If supplier delivers more later, another
+    // receiving will expand the PO line again and re-mark COMPLETED.
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { totalAmount: newTotalAmount, status: "COMPLETED" },
+    });
   }
 
   // Update transfer status to RECEIVED if linked to a transfer
@@ -187,25 +226,45 @@ export async function POST(req: NextRequest) {
 
   // Attach/create supplier invoice for non-transfer receivings.
   //
-  // If the PO already has an invoice (e.g. created earlier via the Telegram
-  // POP webhook and possibly already PAID), append the receiving photos to
-  // it and never touch its status. Only create a new PENDING invoice when
-  // the order has no invoice yet, or for ad-hoc receivings without a PO.
+  // For an existing PLACEHOLDER (auto-created INV-NNNN with null due date —
+  // i.e. supplier hasn't sent the real invoice yet), update its amount to
+  // match the freshly-overwritten PO total and append any new photos.
+  // For an already-attached invoice (real supplier invoice number, has due
+  // date, possibly PAID), don't touch the amount — finance owns that record.
+  // For orders with no invoice yet, or ad-hoc receivings, create a new
+  // PENDING placeholder.
   if (!isTransfer) {
     try {
       const existingForOrder = orderId
         ? await prisma.invoice.findFirst({
             where: { orderId },
             orderBy: { createdAt: "desc" },
-            select: { id: true },
+            select: { id: true, invoiceNumber: true, dueDate: true, status: true },
           })
         : null;
 
       if (existingForOrder) {
+        const isPlaceholder =
+          existingForOrder.invoiceNumber.startsWith("INV-") &&
+          existingForOrder.dueDate == null &&
+          existingForOrder.status === "PENDING";
+
+        const updateData: Record<string, unknown> = {};
         if (invoicePhotos && invoicePhotos.length > 0) {
+          updateData.photos = { push: invoicePhotos };
+        }
+        if (isPlaceholder && orderId) {
+          // Sync placeholder amount with the freshly-recalculated PO total.
+          const o = await prisma.order.findUnique({
+            where: { id: orderId },
+            select: { totalAmount: true },
+          });
+          if (o) updateData.amount = o.totalAmount;
+        }
+        if (Object.keys(updateData).length > 0) {
           await prisma.invoice.update({
             where: { id: existingForOrder.id },
-            data: { photos: { push: invoicePhotos } },
+            data: updateData,
           });
         }
       } else {

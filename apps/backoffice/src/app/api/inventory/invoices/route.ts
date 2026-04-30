@@ -50,20 +50,30 @@ export async function GET(req: NextRequest) {
     paymentType: "SUPPLIER",
   };
 
+  // NOT-placeholder shape — the inverse of pendingInvoiceWhere. Used to
+  // filter placeholders out of all default views (Unpaid / Paid / All
+  // tabs and Payable / Due Today / Overdue cards). Only the explicit
+  // "Pending Invoice" cardFilter shows them.
+  const notPlaceholder: Prisma.InvoiceWhereInput = {
+    NOT: pendingInvoiceWhere,
+  };
+
   const where: Record<string, unknown> = {};
   if (cardFilter === "paid") where.status = "PAID";
-  else if (cardFilter === "overdue") where.OR = overdueOr;
+  else if (cardFilter === "overdue") { where.OR = overdueOr; Object.assign(where, notPlaceholder); }
   else if (cardFilter === "initiated") where.status = "INITIATED";
-  else if (cardFilter === "pending") where.status = "PENDING";
+  else if (cardFilter === "pending") { where.status = "PENDING"; Object.assign(where, notPlaceholder); }
   else if (cardFilter === "pending_invoice") {
     Object.assign(where, pendingInvoiceWhere);
   }
-  else if (cardFilter === "payable") where.status = { in: UNPAID_STATUSES };
+  else if (cardFilter === "payable") { where.status = { in: UNPAID_STATUSES }; Object.assign(where, notPlaceholder); }
   else if (cardFilter === "due_today") {
     where.status = { in: UNPAID_STATUSES };
     where.dueDate = { gte: _todayStart, lt: _todayEnd };
-  } else if (tab === "unpaid") where.status = { in: UNPAID_STATUSES };
+    Object.assign(where, notPlaceholder);
+  } else if (tab === "unpaid") { where.status = { in: UNPAID_STATUSES }; Object.assign(where, notPlaceholder); }
   else if (tab === "paid") where.status = "PAID";
+  else { Object.assign(where, notPlaceholder); }
 
   if (type === "supplier") {
     // "Supplier" = ingredient supplier invoices only (exclude one-off vendor
@@ -200,13 +210,20 @@ export async function GET(req: NextRequest) {
     // Useful for Finance to see how many payments are mid-flight.
     prisma.invoice.aggregate({ where: { status: "INITIATED" }, _sum: { amount: true }, _count: { _all: true } }),
     prisma.invoice.findMany({
-      where: { status: { in: UNPAID_STATUSES as ("DRAFT" | "INITIATED" | "PENDING" | "DEPOSIT_PAID" | "OVERDUE")[] } },
+      // Payable = unpaid AND NOT a GRNI placeholder. Placeholders surface
+      // separately in the Pending Invoice card (and on the Payable card as
+      // a soft sub-line) so cashflow planning still sees the full liability.
+      where: {
+        status: { in: UNPAID_STATUSES as ("DRAFT" | "INITIATED" | "PENDING" | "DEPOSIT_PAID" | "OVERDUE")[] },
+        NOT: pendingInvoiceWhere,
+      },
       select: { id: true, amount: true, status: true, depositAmount: true },
     }),
     prisma.invoice.findMany({
       where: {
         status: { in: UNPAID_STATUSES as ("DRAFT" | "INITIATED" | "PENDING" | "DEPOSIT_PAID" | "OVERDUE")[] },
         dueDate: { gte: todayStart, lt: todayEnd },
+        NOT: pendingInvoiceWhere,
       },
       select: { id: true, amount: true, status: true, depositAmount: true },
     }),

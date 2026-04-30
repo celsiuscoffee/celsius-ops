@@ -43,7 +43,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         data.approvedAt = new Date();
       }
 
-      if (status === "SENT") {
+      // Capture transmit timestamp on first transition to a "supplier has it"
+      // state. Order flow used to step through SENT before AWAITING_DELIVERY,
+      // but the new flow goes straight to AWAITING_DELIVERY — both should
+      // stamp sentAt so audit/lead-time analytics keep working.
+      if (status === "SENT" || status === "AWAITING_DELIVERY") {
         data.sentAt = new Date();
       }
     }

@@ -603,11 +603,11 @@ export default function CreateOrderPage() {
       let orderId = editingDraftId;
 
       if (editingDraftId) {
-        // Update existing draft then mark as SENT
+        // Update existing draft then mark as Awaiting Delivery (transmit step)
         await fetch(`/api/inventory/orders/${editingDraftId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "SENT" }),
+          body: JSON.stringify({ status: "AWAITING_DELIVERY" }),
         });
       } else {
         // Create new order
@@ -634,7 +634,7 @@ export default function CreateOrderPage() {
           await fetch(`/api/inventory/orders/${order.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: "SENT" }),
+            body: JSON.stringify({ status: "AWAITING_DELIVERY" }),
           });
         }
       }
