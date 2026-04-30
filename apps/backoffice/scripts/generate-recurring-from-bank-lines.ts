@@ -36,7 +36,10 @@ const MONTHLY_CATEGORIES_MAP: Record<string, "RENT" | "UTILITY" | "SAAS" | "PAYR
   SOFTWARE:           "SAAS",
   // Payroll
   EMPLOYEE_SALARY:    "PAYROLL_SUPPORT",
-  DIRECTORS_ALLOWANCE:"PAYROLL_SUPPORT",
+  // DIRECTORS_ALLOWANCE intentionally excluded — variable each month
+  // (depends on owner draw decisions), not a predictable recurring
+  // commitment. Falls through to bank-line OTHER catch-all in the
+  // projection.
   STATUTORY_PAYMENT:  "PAYROLL_SUPPORT",
   // Other recurring
   COMPLIANCE:         "OTHER",

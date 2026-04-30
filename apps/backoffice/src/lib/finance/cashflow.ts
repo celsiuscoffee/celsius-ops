@@ -246,51 +246,47 @@ async function projectMarketing(start: Date, end: Date): Promise<{ date: Date; a
 // category has no bank-line data (e.g. brand new bank account) the
 // caller falls back to the synthetic stream.
 
+// Sales channels — DOW-shaped projection (revenue varies by day-of-week)
 const SALES_INFLOW_CATEGORIES = [
   "CARD", "QR", "STOREHUB", "GRAB", "GRAB_PUTRAJAYA",
   "FOODPANDA", "MEETINGS_EVENTS", "GASTROHUB",
 ] as const;
 
-const PAYROLL_OUTFLOW_CATEGORIES = [
-  "DIRECTORS_ALLOWANCE", "EMPLOYEE_SALARY", "PARTIMER",
-  "STATUTORY_PAYMENT", "STAFF_CLAIM", "PETTY_CASH",
-] as const;
-
-const MARKETING_OUTFLOW_CATEGORIES = [
-  "DIGITAL_ADS", "KOL", "OTHER_MARKETING", "MARKETPLACE_FEE",
-] as const;
-
-const RECURRING_OUTFLOW_CATEGORIES = [
-  "RENT", "UTILITIES", "SOFTWARE", "CFS_FEE", "COMPLIANCE", "TAX",
-  "LICENSING_FEE", "ROYALTY_FEE", "LOAN", "BANK_FEE", "MAINTENANCE",
-] as const;
-
-// COGS — separate column for raw materials + delivery. These are
-// regular weekly costs (suppliers, ingredient runs) and large enough
-// to deserve their own line vs being lumped into "Other".
+// COGS — separate column for raw materials + delivery. Daily rate
+// smearing is the right model: suppliers paid throughout the week.
 const COGS_OUTFLOW_CATEGORIES = [
   "RAW_MATERIALS", "DELIVERY",
 ] as const;
 
-// Categories that are "other" — not sales, not payroll, not marketing,
-// not recurring, not COGS. Includes capex/investments and catch-alls.
-const OTHER_OUTFLOW_CATEGORIES = [
-  "EQUIPMENTS", "INVESTMENTS",
-  "TRANSFER_NOT_SUCCESSFUL", "OTHER_OUTFLOW",
-] as const;
+// Categories that are projected via RecurringExpense entries (exact
+// pulse timing, per outlet). The auto-generator at
+// scripts/generate-recurring-from-bank-lines.ts populates these.
+// Bank lines in these categories are EXCLUDED from the catch-all
+// daily-smear path to avoid double-counting (the RecurringExpense
+// expansion already fires them on the actual due date).
+const PULSE_CATEGORIES = new Set<string>([
+  "RENT", "UTILITIES", "SOFTWARE",
+  "EMPLOYEE_SALARY", "STATUTORY_PAYMENT",
+  "TAX", "COMPLIANCE", "MAINTENANCE",
+  "LICENSING_FEE", "ROYALTY_FEE", "BANK_FEE", "CFS_FEE",
+  "LOAN", "MANAGEMENT_FEE",
+]);
 
-const OTHER_INFLOW_CATEGORIES = [
-  "CAPITAL", "MANAGEMENT_FEE", "ADTD", "OTHER_INFLOW",
-] as const;
+// Everything else (DIRECTORS_ALLOWANCE, PARTIMER, STAFF_CLAIM,
+// PETTY_CASH, MARKETING categories, EQUIPMENTS, INVESTMENTS,
+// TRANSFER_NOT_SUCCESSFUL, OTHER_OUTFLOW) flows into the catch-all
+// "Other outflow" daily-rate stream. These are genuinely variable
+// (directors' draws, capex, marketing campaigns) — exact pulse
+// timing wouldn't be useful and a smoothed daily rate represents
+// the run-rate fairly.
 
 type BankLineProjection = {
   salesByDow: number[];          // [Sun..Sat] daily averages from sales categories
-  payrollPerDay: number;
-  marketingPerDay: number;
-  recurringPerDay: number;
   cogsPerDay: number;            // raw materials + delivery
-  otherInPerDay: number;
-  otherOutPerDay: number;        // capex/investments/transfer-failed/other catch-all (excludes COGS)
+  otherInPerDay: number;         // catch-all CR (LOAN inflow, refunds, OTHER_INFLOW, etc.)
+  otherOutPerDay: number;        // catch-all DR (directors, partimer, marketing, capex,
+                                 // OTHER_OUTFLOW, etc.) — excludes PULSE_CATEGORIES
+                                 // to avoid double-count with RecurringExpense pulses
   sampleDays: number;            // number of distinct calendar days the data covers
   hasData: boolean;
 };
@@ -319,20 +315,12 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
   const salesDistinctDaysByDow: Set<string>[] = [
     new Set(), new Set(), new Set(), new Set(), new Set(), new Set(), new Set(),
   ];
-  let payrollSum = 0;
-  let marketingSum = 0;
-  let recurringSum = 0;
   let cogsSum = 0;
   let otherInSum = 0;
   let otherOutSum = 0;
 
   const SALES_SET = new Set<string>(SALES_INFLOW_CATEGORIES as readonly string[]);
-  const PAYROLL_SET = new Set<string>(PAYROLL_OUTFLOW_CATEGORIES as readonly string[]);
-  const MARKETING_SET = new Set<string>(MARKETING_OUTFLOW_CATEGORIES as readonly string[]);
-  const RECURRING_SET = new Set<string>(RECURRING_OUTFLOW_CATEGORIES as readonly string[]);
   const COGS_SET = new Set<string>(COGS_OUTFLOW_CATEGORIES as readonly string[]);
-  const OTHER_OUT_SET = new Set<string>(OTHER_OUTFLOW_CATEGORIES as readonly string[]);
-  const OTHER_IN_SET = new Set<string>(OTHER_INFLOW_CATEGORIES as readonly string[]);
 
   for (const l of lines) {
     if (!l.category) continue;
@@ -346,18 +334,18 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
         salesSumByDow[dow] += amt;
         salesDistinctDaysByDow[dow].add(dayKey);
       } else {
-        // Catch-all: any unmatched CR (LOAN inflow, capital injections,
-        // refunds, OTHER_INFLOW) lands here so the projection doesn't
-        // silently drop money. Membership in OTHER_IN_SET kept for docs.
+        // Catch-all: refunds, LOAN inflow, OTHER_INFLOW etc.
         otherInSum += amt;
       }
     } else {
       // DR
-      if (PAYROLL_SET.has(cat)) payrollSum += amt;
-      else if (MARKETING_SET.has(cat)) marketingSum += amt;
-      else if (RECURRING_SET.has(cat)) recurringSum += amt;
-      else if (COGS_SET.has(cat)) cogsSum += amt;
-      else otherOutSum += amt;  // catch-all (EQUIPMENTS, INVESTMENTS, TRANSFER_NOT_SUCCESSFUL, OTHER_OUTFLOW)
+      if (COGS_SET.has(cat)) cogsSum += amt;
+      else if (PULSE_CATEGORIES.has(cat)) {
+        // Skip — these are projected via RecurringExpense expansion
+        // on their actual due dates. Including them here would
+        // double-count.
+      }
+      else otherOutSum += amt;  // directors, partimer, marketing, capex, catch-alls
     }
   }
 
@@ -369,9 +357,6 @@ async function bankLineProjection(outletIds: string[]): Promise<BankLineProjecti
 
   return {
     salesByDow,
-    payrollPerDay: payrollSum / sampleDays,
-    marketingPerDay: marketingSum / sampleDays,
-    recurringPerDay: recurringSum / sampleDays,
     cogsPerDay: cogsSum / sampleDays,
     otherInPerDay: otherInSum / sampleDays,
     otherOutPerDay: otherOutSum / sampleDays,
@@ -740,13 +725,14 @@ export async function computeCashflow(opts: {
     openingBalance: opening,
     bankFlowsPerDay: bankProj
       ? {
-          // Bank-line model — sum of all per-day rates on each side
+          // Bank-line daily averages — Sales DOW + Other inflow on the
+          // CR side; COGS + Other outflow on the DR side. Pulse-driven
+          // categories (rent/salary/etc.) aren't included here because
+          // they fire on specific dates, not daily.
           inflow: round2(
             (bankProj.salesByDow.reduce((a, b) => a + b, 0) / 7) + bankProj.otherInPerDay,
           ),
-          outflow: round2(
-            bankProj.payrollPerDay + bankProj.marketingPerDay + bankProj.recurringPerDay + bankProj.otherOutPerDay,
-          ),
+          outflow: round2(bankProj.cogsPerDay + bankProj.otherOutPerDay),
           sampleDays: bankProj.sampleDays,
         }
       : bankFlows
