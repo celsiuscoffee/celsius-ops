@@ -378,7 +378,7 @@ export default function ClaimsPage() {
           </p>
         </div>
 
-        {/* Hero Upload Zone */}
+        {/* Hero Upload Zone — primary "Take photo" target */}
         <Card
           className="relative cursor-pointer border-2 border-dashed border-terracotta/30 bg-terracotta/5 transition-colors hover:border-terracotta/50 hover:bg-terracotta/10 active:scale-[0.98]"
           onClick={() => fileInputRef.current?.click()}
@@ -397,20 +397,23 @@ export default function ClaimsPage() {
                   <Camera className="h-8 w-8 text-terracotta" />
                 </div>
                 <p className="mt-3 text-sm font-semibold text-terracotta-dark">
-                  {photos.length > 0 ? "Add More Photos" : "Snap or Upload Receipt"}
+                  {photos.length > 0 ? "Add Another Photo" : "Take Photo of Receipt"}
                 </p>
                 <p className="mt-1 text-xs text-gray-400">
-                  Tap to take a photo or choose from gallery
+                  Tap to open camera
                 </p>
               </>
             )}
           </div>
+          {/* Camera-only single-shot input. NO `multiple` (Chrome on
+              Android falls through to the file picker when both
+              `capture` and `multiple` are set) and NO gallery option
+              (audit/integrity — claims must be photographed live). */}
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
             capture="environment"
-            multiple
             onChange={handleFileChange}
             className="hidden"
           />

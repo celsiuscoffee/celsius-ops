@@ -667,13 +667,16 @@ export default function ReceivePage() {
         </div>
       )}
 
-      {/* Hidden file input for camera/gallery */}
+      {/* Camera-only single-shot input. NO `multiple` (Chrome on
+          Android falls through to the file picker when both
+          `capture` and `multiple` are set) and NO gallery option
+          (invoice integrity — must be photographed live). User
+          taps "Add Photo" again to capture additional shots. */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
         capture="environment"
-        multiple
         className="hidden"
         onChange={handlePhotoCapture}
       />
