@@ -539,12 +539,43 @@ function EmployeeBreakdown({
         {/* Earnings */}
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Earnings</p>
-          <Row label="Basic" value={item.basic_salary} />
-          {item.total_ot_hours > 0 && <Row label={`OT (${item.total_ot_hours.toFixed(1)} hrs)`} value={totalOT} />}
+          <EditableRow
+            label="Basic"
+            value={item.basic_salary}
+            field="basic_salary"
+            item={item}
+            editable={editable}
+            onItemUpdated={onItemUpdated}
+          />
+          {item.total_ot_hours > 0 && (
+            <>
+              {Number(item.ot_1x_amount || 0) > 0 && (
+                <EditableRow label="OT 1x" value={Number(item.ot_1x_amount || 0)} field="ot_1x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+              )}
+              {item.ot_1_5x_amount > 0 && (
+                <EditableRow label="OT 1.5x" value={item.ot_1_5x_amount} field="ot_1_5x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+              )}
+              {item.ot_2x_amount > 0 && (
+                <EditableRow label="OT 2x (Rest)" value={item.ot_2x_amount} field="ot_2x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+              )}
+              {item.ot_3x_amount > 0 && (
+                <EditableRow label="OT 3x (PH)" value={item.ot_3x_amount} field="ot_3x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+              )}
+              {totalOT === 0 && <Row label={`OT (${item.total_ot_hours.toFixed(1)} hrs)`} value={totalOT} />}
+            </>
+          )}
           {Object.entries(allowances)
             .filter(([k]) => hiddenAllowanceKeys.has(k))
             .map(([k, v]) => (
-              <Row key={k} label={prettyLabel(k)} value={Number(v?.amount || 0)} />
+              <EditableRow
+                key={k}
+                label={prettyLabel(k)}
+                value={Number(v?.amount || 0)}
+                field={`allowance:${k}`}
+                item={item}
+                editable={editable}
+                onItemUpdated={onItemUpdated}
+              />
             ))}
           <Row label="Gross" value={item.total_gross} bold />
           {item.prorate_reason && (
@@ -557,15 +588,25 @@ function EmployeeBreakdown({
         {/* Deductions */}
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Deductions (Employee)</p>
-          <Row label="EPF" value={item.epf_employee} />
-          <Row label="SOCSO" value={item.socso_employee} />
-          <Row label="EIS" value={item.eis_employee} />
-          <Row label="PCB Tax" value={item.pcb_tax} />
+          <EditableRow label="EPF" value={item.epf_employee} field="epf_employee" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+          <EditableRow label="SOCSO" value={item.socso_employee} field="socso_employee" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+          <EditableRow label="EIS" value={item.eis_employee} field="eis_employee" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+          <EditableRow label="PCB Tax" value={item.pcb_tax} field="pcb_tax" item={item} editable={editable} onItemUpdated={onItemUpdated} />
           {Object.entries(otherDeductions)
             .filter(([k]) => hiddenDeductionKeys.has(k))
             .map(([k, v]) => {
               const amt = typeof v === "number" ? v : Number((v as { amount?: number })?.amount || 0);
-              return amt > 0 ? <Row key={k} label={prettyLabel(k)} value={amt} /> : null;
+              return amt > 0 ? (
+                <EditableRow
+                  key={k}
+                  label={prettyLabel(k)}
+                  value={amt}
+                  field={`other_deduction:${k}`}
+                  item={item}
+                  editable={editable}
+                  onItemUpdated={onItemUpdated}
+                />
+              ) : null;
             })}
           <Row label="Total" value={item.total_deductions} bold />
           <p className="mt-2 font-semibold text-emerald-700">Net: RM {item.net_pay.toFixed(2)}</p>
@@ -579,9 +620,9 @@ function EmployeeBreakdown({
         {/* Employer + flags */}
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Employer Contributions</p>
-          <Row label="EPF" value={item.epf_employer} />
-          <Row label="SOCSO" value={item.socso_employer} />
-          <Row label="EIS" value={item.eis_employer} />
+          <EditableRow label="EPF" value={item.epf_employer} field="epf_employer" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+          <EditableRow label="SOCSO" value={item.socso_employer} field="socso_employer" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+          <EditableRow label="EIS" value={item.eis_employer} field="eis_employer" item={item} editable={editable} onItemUpdated={onItemUpdated} />
           {flags.length > 0 && (
             <div className="mt-2 space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-700">Flags</p>
@@ -626,6 +667,8 @@ function EmployeeBreakdown({
                   code={code}
                   amount={amt}
                   editable={editable}
+                  item={item}
+                  onItemUpdated={onItemUpdated}
                   onRemove={() => removeAdjustment({ runId, item, kind: "allowance", code, onItemUpdated })}
                 />
               );
@@ -642,6 +685,8 @@ function EmployeeBreakdown({
                   code={code}
                   amount={amt}
                   editable={editable}
+                  item={item}
+                  onItemUpdated={onItemUpdated}
                   onRemove={() => removeAdjustment({ runId, item, kind: "deduction", code, onItemUpdated })}
                 />
               );
@@ -689,23 +734,98 @@ async function removeAdjustment({
 }
 
 function AdjustmentRow({
-  kind, label, code, amount, editable, onRemove,
+  kind, label, code, amount, editable, item, onItemUpdated, onRemove,
 }: {
   kind: "allowance" | "deduction";
   label: string;
   code: string;
   amount: number;
   editable: boolean;
+  item: PayrollItem;
+  onItemUpdated: (item: PayrollItem) => void;
   onRemove: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(amount));
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const num = Number(draft);
+    if (isNaN(num) || num < 0) return alert("Enter a valid amount");
+    if (Math.abs(num - amount) < 0.005) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const body = kind === "allowance"
+        ? { allowance: { code, amount: num, label } }
+        : { other_deduction: { code, amount: num, label } };
+      const res = await fetch(`/api/hr/payroll/items/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Save failed");
+      onItemUpdated(json.item);
+      setEditing(false);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <li className="flex items-center gap-2 rounded border bg-gray-50/60 px-2 py-1.5 text-[11px]">
       <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
         kind === "allowance" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
       }`}>{kind === "allowance" ? "+" : "−"}</span>
       <span className="min-w-0 flex-1 truncate">{label} <span className="text-gray-400">· {code}</span></span>
-      <span className="font-mono font-semibold tabular-nums">RM {amount.toFixed(2)}</span>
-      {editable && (
+      {editing ? (
+        <span className="flex items-center gap-1">
+          <span className="text-[9px] text-gray-400">RM</span>
+          <input
+            autoFocus
+            type="number"
+            step="0.01"
+            min={0}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") save();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            disabled={saving}
+            className="w-20 rounded border bg-white px-1 py-0.5 text-right font-mono text-[10px]"
+          />
+          <button
+            onClick={save}
+            disabled={saving}
+            className="rounded bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-emerald-700"
+          >
+            {saving ? "…" : "✓"}
+          </button>
+          <button
+            onClick={() => setEditing(false)}
+            disabled={saving}
+            className="rounded border px-1.5 py-0.5 text-[9px] text-gray-600"
+          >
+            ✕
+          </button>
+        </span>
+      ) : (
+        <button
+          onClick={() => editable && setEditing(true)}
+          disabled={!editable}
+          className="rounded px-1 font-mono font-semibold tabular-nums hover:bg-amber-50 disabled:cursor-default disabled:hover:bg-transparent"
+          title={editable ? "Click to edit" : ""}
+        >
+          RM {amount.toFixed(2)}
+        </button>
+      )}
+      {editable && !editing && (
         <button
           onClick={onRemove}
           className="rounded border border-red-200 bg-red-50 p-0.5 text-red-600 hover:bg-red-100"
@@ -965,6 +1085,136 @@ function Row({ label, value, bold = false }: { label: string; value: number; bol
     <div className={`flex items-center justify-between ${bold ? "border-t pt-1 font-medium" : ""}`}>
       <span className="text-gray-500">{label}</span>
       <span className="font-mono">RM {value.toFixed(2)}</span>
+    </div>
+  );
+}
+
+// Inline-editable row. Click the amount → input → save → PATCH the item.
+// `field` selects which field is being edited:
+//   - "basic_salary" / "epf_employee" / etc. → direct numeric column
+//   - "allowance:CODE"        → patches allowances jsonb entry
+//   - "other_deduction:CODE"  → patches other_deductions jsonb entry
+function EditableRow({
+  label, value, field, item, editable, onItemUpdated,
+}: {
+  label: string;
+  value: number;
+  field: string;
+  item: PayrollItem;
+  editable: boolean;
+  onItemUpdated: (item: PayrollItem) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+  const [saving, setSaving] = useState(false);
+  const overrides = (item.computation_details as { manual_overrides?: Record<string, unknown> } | null)?.manual_overrides || {};
+  const wasOverridden = !!overrides[field];
+
+  if (!editable) {
+    return <Row label={label} value={value} />;
+  }
+
+  const startEdit = () => {
+    setDraft(String(value));
+    setEditing(true);
+  };
+  const cancel = () => {
+    setEditing(false);
+    setDraft(String(value));
+  };
+
+  const save = async () => {
+    const num = Number(draft);
+    if (isNaN(num) || num < 0) {
+      alert("Enter a valid amount");
+      return;
+    }
+    if (Math.abs(num - value) < 0.005) {
+      cancel();
+      return;
+    }
+    setSaving(true);
+    try {
+      let body: Record<string, unknown>;
+      if (field.startsWith("allowance:")) {
+        const code = field.slice("allowance:".length);
+        body = { allowance: { code, amount: num, label } };
+      } else if (field.startsWith("other_deduction:")) {
+        const code = field.slice("other_deduction:".length);
+        body = { other_deduction: { code, amount: num, label } };
+      } else {
+        body = { [field]: num };
+      }
+      const res = await fetch(`/api/hr/payroll/items/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Save failed");
+      onItemUpdated(json.item);
+      setEditing(false);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="group flex items-center justify-between">
+      <span className="flex items-center gap-1 text-gray-500">
+        {label}
+        {wasOverridden && (
+          <span
+            title="Manually overridden"
+            className="rounded bg-amber-100 px-1 py-0.5 text-[8px] font-bold uppercase text-amber-800"
+          >
+            edit
+          </span>
+        )}
+      </span>
+      {editing ? (
+        <span className="flex items-center gap-1">
+          <span className="text-[10px] text-gray-400">RM</span>
+          <input
+            autoFocus
+            type="number"
+            step="0.01"
+            min={0}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") save();
+              if (e.key === "Escape") cancel();
+            }}
+            disabled={saving}
+            className="w-20 rounded border bg-white px-1 py-0.5 text-right font-mono text-[11px] disabled:opacity-50"
+          />
+          <button
+            onClick={save}
+            disabled={saving}
+            className="rounded bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {saving ? "…" : "✓"}
+          </button>
+          <button
+            onClick={cancel}
+            disabled={saving}
+            className="rounded border px-1.5 py-0.5 text-[9px] text-gray-600 hover:bg-gray-50"
+          >
+            ✕
+          </button>
+        </span>
+      ) : (
+        <button
+          onClick={startEdit}
+          className="rounded px-1 font-mono text-gray-900 hover:bg-amber-50"
+          title="Click to edit"
+        >
+          RM {value.toFixed(2)}
+        </button>
+      )}
     </div>
   );
 }
