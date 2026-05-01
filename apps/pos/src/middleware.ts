@@ -6,11 +6,11 @@ const PUBLIC_PATHS = ["/login", "/api/auth/pin", "/api/auth/logout", "/api/auth/
 
 // POS runs in two contexts: a browser pointed at pos.celsiuscoffee.com
 // (manager workstation) and the SUNMI native wrapper which Capacitor
-// loads as capacitor://localhost. Both must be allowed.
+// loads as capacitor://localhost. https://localhost dropped — broader
+// than needed; SUNMI uses the capacitor scheme.
 const ALLOWED_ORIGINS = [
   "pos.celsiuscoffee.com",
   "capacitor://localhost",
-  "https://localhost",
   "ionic://localhost",
 ];
 

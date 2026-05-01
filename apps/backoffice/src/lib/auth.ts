@@ -10,9 +10,12 @@ const COOKIE_NAME = "celsius-session";
 
 // NOTE on session revocation:
 //
-// User.tokenRevokedAt + /api/auth/sign-out-all exist on the schema
-// but are NOT yet wired into requireAuth/requireRole. PR #130 tried
-// to wire them, which surfaced two problems:
+// User.tokenRevokedAt column exists on the schema but is unused.
+// /api/auth/sign-out-all was also reverted because shipping a
+// "panic button" that doesn't actually invalidate tokens is worse
+// than not shipping one — users believe their session is dead
+// when it isn't. PR #130 tried to wire freshness checks into
+// requireAuth, which surfaced two problems:
 //
 //   1. Adding a Prisma DB lookup on every auth check made the auth
 //      flow non-trivially fragile — any DB hiccup = mass 401s.

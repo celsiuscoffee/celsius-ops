@@ -3,15 +3,16 @@ import { createClient } from "@supabase/supabase-js";
 import { checkCsrf, applySecurityHeaders } from "@celsius/shared";
 
 // Browsers + the Capacitor wrapper (pickup native app) that legitimately
-// post to this app. Capacitor sends Origin: capacitor://localhost and
-// the iOS Capacitor variant can also send https://localhost. Add other
-// integrations here as they come on (DNS-restricted partners only).
+// post to this app. Capacitor on Android sends Origin: capacitor://localhost;
+// iOS sends ionic://localhost. We previously also allowed https://localhost
+// but that's broader than necessary — any browser tab visiting a local
+// server could pass the check. Drop it; we'll re-add only if a real device
+// actually fails after this lands.
 const ALLOWED_ORIGINS = [
   "order.celsiuscoffee.com",
   "celsiuscoffee.com",
   "www.celsiuscoffee.com",
   "capacitor://localhost",
-  "https://localhost",
   "ionic://localhost",
 ];
 

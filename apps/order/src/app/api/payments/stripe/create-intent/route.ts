@@ -1,11 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { checkRateLimit, RATE_LIMITS } from "@celsius/shared";
 
 export const preferredRegion = "iad1";
 
 // POST /api/payments/stripe/create-intent
 // Uses raw fetch instead of the Stripe Node SDK to avoid SDK networking issues on Vercel.
 export async function POST(request: NextRequest) {
+  // Rate limit — every PaymentIntent creation costs us a Stripe API
+  // call + a row write. Without this, an attacker can flood Stripe
+  // with intents and burn through our request budget.
+  // RATE_LIMITS.PAYMENT_CREATE is 20/min per identifier.
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const rate = await checkRateLimit(ip, RATE_LIMITS.PAYMENT_CREATE);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Too many payment attempts. Try again shortly." },
+      {
+        status: 429,
+        headers: rate.retryAfter
+          ? { "Retry-After": String(rate.retryAfter) }
+          : undefined,
+      },
+    );
+  }
+
   try {
     const { orderId, paymentMethod } = await request.json() as { orderId: string; paymentMethod?: string };
     if (!orderId) return NextResponse.json({ error: "Missing orderId" }, { status: 400 });

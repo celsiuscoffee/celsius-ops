@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { OrderRow } from "@/lib/supabase/types";
+import { checkRateLimit, RATE_LIMITS } from "@celsius/shared";
 
 // GET /api/orders?phone=+60123456789 — fetch orders by customer phone
 export async function GET(request: NextRequest) {
@@ -49,6 +50,23 @@ async function deductLoyaltyPoints(loyaltyId: string, rewardId: string, orderId:
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit by IP — without this an attacker can script the
+  // endpoint to flood the orders table + Stripe with fake intents.
+  // RATE_LIMITS.ORDER_CREATE is 10/min per identifier.
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const rate = await checkRateLimit(ip, RATE_LIMITS.ORDER_CREATE);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Too many order attempts. Try again in a minute." },
+      {
+        status: 429,
+        headers: rate.retryAfter
+          ? { "Retry-After": String(rate.retryAfter) }
+          : undefined,
+      },
+    );
+  }
+
   try {
     const body = await request.json();
     const {
