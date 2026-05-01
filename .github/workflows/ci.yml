@@ -18,12 +18,62 @@ jobs:
       - run: npm ci
       - run: npx vitest run
 
+  # Typecheck every app. Per-user memory: "Always typecheck before
+  # pushing." This enforces it in CI so the rule survives a forgotten
+  # local run. Runs in parallel via matrix; fails the PR if any app
+  # has a TS error.
+  typecheck:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [backoffice, staff, order, loyalty, pos]
+    env:
+      DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
+      DIRECT_URL: "postgresql://fake:fake@localhost:5432/fake"
+      JWT_SECRET: "ci-test-secret-not-for-production-minimum-32-chars"
+      NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-anon-key-for-ci-build"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Prisma generate happens via the apps' own postinstall hooks
+      # (where present). Run typecheck from the app directory so
+      # tsconfig.json paths resolve correctly.
+      - run: cd apps/${{ matrix.app }} && npx tsc --noEmit
+
+  # Lint every app. Catches unused imports / hooks-rule violations
+  # / known anti-patterns before they hit prod.
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [backoffice, staff, order, loyalty, pos]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: cd apps/${{ matrix.app }} && npx next lint --max-warnings 0 || npx eslint . --max-warnings 0
+
+  # Production build for every Next.js app. Catches build-time
+  # errors (server actions, route configs, missing env types) that
+  # typecheck alone misses. `staff` and `order` were not in this
+  # matrix before — easy regressions could land on prod.
   build:
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, typecheck]
     strategy:
+      fail-fast: false
       matrix:
-        app: [backoffice, loyalty, pos]
+        app: [backoffice, staff, order, loyalty, pos]
     env:
       DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
       DIRECT_URL: "postgresql://fake:fake@localhost:5432/fake"
