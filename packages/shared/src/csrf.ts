@@ -24,9 +24,27 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 // Anything matching these is exempted from the Origin check —
 // they have their own auth path.
 const DEFAULT_EXEMPT_PREFIXES = [
-  "/api/webhooks/",         // Stripe, Revenue Monster, GHL — HMAC verified
+  "/api/webhooks/",         // RESTful-style webhooks (future)
   "/api/cron/",             // Vercel crons — Bearer + IP-pinned
   "/api/ingest/",           // partner ingest endpoints — token auth
+];
+
+// Patterns for webhook routes that don't follow the /api/webhooks/
+// prefix convention. These are server-to-server callbacks from
+// payment providers (Stripe, Revenue Monster, GHL), delivery
+// platforms (Grab, FoodPanda), and OAuth providers — none send an
+// Origin header AND all authenticate via HMAC sig / Bearer token.
+//
+// Match any /api/.../webhook or /api/.../callback (with optional
+// trailing path) to cover the existing routes:
+//   /api/payments/stripe/webhook
+//   /api/payments/webhook         (Revenue Monster)
+//   /api/grab/webhook
+//   /api/delivery/webhook
+//   /api/auth/<provider>/callback (any OAuth integrations)
+const DEFAULT_EXEMPT_PATTERNS: RegExp[] = [
+  /^\/api\/.*\/webhook(\/.*)?$/i,
+  /^\/api\/.*\/callback(\/.*)?$/i,
 ];
 
 export type CsrfOptions = {
@@ -55,6 +73,7 @@ export function checkCsrf(
   const url = new URL(request.url);
   const exemptPrefixes = [...DEFAULT_EXEMPT_PREFIXES, ...(opts.exemptPrefixes ?? [])];
   if (exemptPrefixes.some((p) => url.pathname.startsWith(p))) return null;
+  if (DEFAULT_EXEMPT_PATTERNS.some((re) => re.test(url.pathname))) return null;
 
   const origin = request.headers.get("origin");
   const referer = request.headers.get("referer");
