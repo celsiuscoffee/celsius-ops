@@ -16,7 +16,7 @@ export { type SessionUser, type UserRole, AuthError } from "./types";
 export { COOKIE_NAME, SESSION_MAX_AGE } from "./constants";
 
 // JWT
-export { createToken, verifyToken } from "./jwt";
+export { createToken, verifyToken, verifyTokenWithFreshness } from "./jwt";
 
 // Session (requires next/headers — use in Server Components / Route Handlers)
 export { createSession, getSession, clearSession } from "./session";

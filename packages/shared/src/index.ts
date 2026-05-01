@@ -4,6 +4,10 @@ export { checkRateLimit, RATE_LIMITS } from "./rate-limit";
 export type { RateLimitConfig } from "./rate-limit";
 export { checkCronAuth } from "./cron-auth";
 export type { CronAuthResult } from "./cron-auth";
+export { checkCsrf } from "./csrf";
+export type { CsrfOptions } from "./csrf";
+export { applySecurityHeaders, buildCsp } from "./security-headers";
+export type { SecurityHeadersOptions } from "./security-headers";
 export { createSupabaseClient, createSupabaseAdmin } from "./supabase";
 export {
   formatPoints,

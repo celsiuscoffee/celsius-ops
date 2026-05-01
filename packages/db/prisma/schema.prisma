@@ -132,6 +132,11 @@ model User {
   bankAccountNumber String?
   bankAccountName   String?
   lastLoginAt  DateTime?
+  // Tokens issued before this timestamp are considered revoked.
+  // Set via /api/auth/sign-out-all when user suspects compromise or
+  // bumped automatically on password change. requireAuth checks the
+  // JWT's iat against this — older tokens 401 even if signed correctly.
+  tokenRevokedAt DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 

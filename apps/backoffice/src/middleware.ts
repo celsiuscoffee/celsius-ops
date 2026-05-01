@@ -1,9 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkCsrf, applySecurityHeaders } from "@celsius/shared";
 
 const COOKIE_NAME = "celsius-session";
 
+// Origins allowed to make state-changing requests. Includes the
+// canonical prod host plus the Vercel preview domain so PR previews
+// keep working. Extend if a partner integration legitimately POSTs
+// from a different origin.
+const ALLOWED_ORIGINS = [
+  "backoffice.celsiuscoffee.com",
+];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // CSRF protection — runs FIRST so state-changing API requests are
+  // checked even when we'd otherwise bypass middleware for /api/*.
+  // GET/HEAD/OPTIONS, /api/webhooks/*, and /api/cron/* are exempt
+  // (they have their own auth — HMAC sigs, Bearer tokens).
+  const csrfFail = checkCsrf(request, { allowedOrigins: ALLOWED_ORIGINS });
+  if (csrfFail) {
+    return NextResponse.json(
+      { error: `CSRF check failed: ${csrfFail.reason}` },
+      { status: 403 },
+    );
+  }
 
   // Skip static assets, auth, and internal routes
   if (
@@ -30,8 +51,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const response = NextResponse.next();
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("X-Frame-Options", "DENY");
+  applySecurityHeaders(response, { isApi: pathname.startsWith("/api/") });
   return response;
 }
 

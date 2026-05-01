@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkCsrf, applySecurityHeaders } from "@celsius/shared";
 
 const COOKIE_NAME = "celsius-session";
 
+const ALLOWED_ORIGINS = [
+  "staff.celsiuscoffee.com",
+];
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // CSRF protection — runs FIRST so state-changing API requests are
+  // checked. GET/HEAD/OPTIONS and /api/webhooks/, /api/cron/ paths
+  // are auto-exempt (they have their own auth).
+  const csrfFail = checkCsrf(request, { allowedOrigins: ALLOWED_ORIGINS });
+  if (csrfFail) {
+    return NextResponse.json(
+      { error: `CSRF check failed: ${csrfFail.reason}` },
+      { status: 403 },
+    );
+  }
 
   // Skip static assets, auth, and internal routes
   if (
@@ -27,10 +43,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Add security headers
+  // Add security headers + cache control
   const response = NextResponse.next();
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("X-Frame-Options", "DENY");
+  applySecurityHeaders(response, { isApi: pathname.startsWith("/api/") });
   return response;
 }
 
