@@ -13,11 +13,11 @@ const ALLOWED_ORIGINS = [
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const isApi = pathname.startsWith("/api/");
 
   // CSRF protection — runs FIRST so state-changing API requests are
   // checked even when we'd otherwise bypass middleware for /api/*.
-  // GET/HEAD/OPTIONS, /api/webhooks/*, and /api/cron/* are exempt
-  // (they have their own auth — HMAC sigs, Bearer tokens).
+  // GET/HEAD/OPTIONS, /api/webhooks/*, and /api/cron/* are exempt.
   const csrfFail = checkCsrf(request, { allowedOrigins: ALLOWED_ORIGINS });
   if (csrfFail) {
     return NextResponse.json(
@@ -26,7 +26,20 @@ export async function middleware(request: NextRequest) {
     );
   }
 
-  // Skip static assets, auth, and internal routes
+  // Build the response we'll return. We attach security headers ONCE
+  // at the end, regardless of which short-circuit path we take, so
+  // CSP/Cache-Control are guaranteed to ship on every response —
+  // including /api/* responses that previously skipped headers.
+  const buildResponse = (
+    inner: () => NextResponse,
+  ): NextResponse => {
+    const r = inner();
+    applySecurityHeaders(r, { isApi });
+    return r;
+  };
+
+  // Skip static assets, auth, and internal routes — but still apply
+  // headers via buildResponse() so API responses get CSP + no-store.
   if (
     pathname === "/login" ||
     pathname.startsWith("/r/") ||
@@ -41,18 +54,16 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/images/") ||
     pathname.startsWith("/fonts/")
   ) {
-    return NextResponse.next();
+    return buildResponse(() => NextResponse.next());
   }
 
-  // Just check cookie exists — don't verify JWT in middleware
+  // Authenticated pages: just check cookie exists, don't verify JWT
   const token = request.cookies.get(COOKIE_NAME)?.value;
   if (!token) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  const response = NextResponse.next();
-  applySecurityHeaders(response, { isApi: pathname.startsWith("/api/") });
-  return response;
+  return buildResponse(() => NextResponse.next());
 }
 
 export const config = {

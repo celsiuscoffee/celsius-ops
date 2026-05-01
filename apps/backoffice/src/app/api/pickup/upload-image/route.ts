@@ -53,12 +53,21 @@ export async function POST(req: NextRequest) {
   // strip anything that could escape the celsius-coffee/products/ path.
   const safeProductId = productId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 100);
 
-  const publicIdOverride = formData.get("publicId") as string | null;
+  // Sanitize the override too. A caller that specifies their own
+  // public_id can still control the leaf name + an optional sub-path,
+  // but only within celsius-coffee/products/. Without this, an
+  // authenticated user could overwrite ANY asset under our cloud
+  // (e.g. `celsius-coffee/banners/homepage`).
+  const publicIdRaw = formData.get("publicId") as string | null;
+  const safeOverride = publicIdRaw
+    ? `celsius-coffee/products/${publicIdRaw.replace(/[^a-zA-Z0-9_/-]/g, "_").slice(0, 200)}`
+    : null;
+
   const buffer = Buffer.from(await file.arrayBuffer());
   const base64 = `data:${file.type};base64,${buffer.toString("base64")}`;
 
   const result = await cloudinary.uploader.upload(base64, {
-    public_id:    publicIdOverride ?? `celsius-coffee/products/${safeProductId}`,
+    public_id:    safeOverride ?? `celsius-coffee/products/${safeProductId}`,
     overwrite:    true,
     resource_type: "image",
     transformation: [{ quality: "auto", fetch_format: "auto" }],

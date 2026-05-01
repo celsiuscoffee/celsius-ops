@@ -94,6 +94,13 @@ export function checkCsrf(
     allowed.add("localhost:3006");
   }
 
+  // Vercel preview deploys: VERCEL_ENV=preview during PR builds. The
+  // hostname is generated per-PR (celsius-<app>-<hash>-<scope>.vercel.app).
+  // Trust the request's own host (already in `allowed`) — preview
+  // requests POST to themselves, not cross-origin to prod. The match
+  // below also accepts any *.vercel.app suffix for redundancy.
+  const isPreview = process.env.VERCEL_ENV === "preview";
+
   // Prefer Origin header (most browsers set it on POST). Fall back to
   // Referer for older / non-browser clients. If both are missing on a
   // state-changing request, reject — we'd rather block a legitimate
@@ -106,8 +113,8 @@ export function checkCsrf(
   }
 
   if (!candidate) return { reason: "Missing Origin/Referer header" };
-  if (!allowed.has(candidate)) {
-    return { reason: `Origin "${candidate}" not in allow list` };
-  }
-  return null;
+  if (allowed.has(candidate)) return null;
+  // Wildcard fallback for Vercel preview deploys
+  if (isPreview && candidate.endsWith(".vercel.app")) return null;
+  return { reason: `Origin "${candidate}" not in allow list` };
 }

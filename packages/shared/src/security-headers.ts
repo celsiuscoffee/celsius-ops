@@ -35,6 +35,12 @@ const BASE_CONNECT_SRC = [
   "https://*.sentry.io",
   "https://api.cloudinary.com",
   "https://res.cloudinary.com",
+  // Stripe — JS SDK posts to api.stripe.com; analytics calls
+  // *.stripe.com. Without these, every Stripe Elements call XHR-fails.
+  "https://api.stripe.com",
+  "https://*.stripe.com",
+  // Vercel Speed Insights / Analytics beacon
+  "https://vitals.vercel-insights.com",
 ];
 
 const BASE_IMG_SRC = [
@@ -44,6 +50,23 @@ const BASE_IMG_SRC = [
   "https://*.supabase.co",
   "https://res.cloudinary.com",
   "https://lh3.googleusercontent.com",
+  "https://*.stripe.com",
+];
+
+// Hosts loaded as <script src="..."> from across the apps. Stripe.js
+// and Vercel's analytics scripts have to be allowlisted explicitly
+// once we move beyond 'self' + 'unsafe-inline'.
+const BASE_SCRIPT_SRC_HOSTS = [
+  "https://va.vercel-scripts.com",
+  "https://js.stripe.com",
+];
+
+// Hosts loaded into <iframe>. Stripe Elements renders card fields in
+// an iframe served from js.stripe.com / hooks.stripe.com.
+const BASE_FRAME_SRC = [
+  "'self'",
+  "https://js.stripe.com",
+  "https://hooks.stripe.com",
 ];
 
 export function buildCsp(opts: SecurityHeadersOptions = {}): string {
@@ -56,11 +79,12 @@ export function buildCsp(opts: SecurityHeadersOptions = {}): string {
     // 'unsafe-eval' is needed by some dev-mode hot-reload paths —
     // accept it. Tighten to nonces in a future pass when we wire
     // up Next.js' built-in CSP nonce support.
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com",
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${BASE_SCRIPT_SRC_HOSTS.join(" ")}`,
     "style-src 'self' 'unsafe-inline'",
     `img-src ${imgSrc.join(" ")}`,
     `connect-src ${connectSrc.join(" ")}`,
     "font-src 'self' data:",
+    `frame-src ${BASE_FRAME_SRC.join(" ")}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

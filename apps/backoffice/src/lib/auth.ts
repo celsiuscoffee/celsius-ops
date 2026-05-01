@@ -1,12 +1,54 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
 const SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET!,
 );
 
 const COOKIE_NAME = "celsius-session";
+
+// Cache User.tokenRevokedAt for 30s per user. Checking it on every
+// authenticated request is fine (one indexed PK lookup, ~1-2ms) but
+// the cache halves the burden on hot endpoints. Cache is per-process
+// so worst case is 30s of staleness — fine for "I just clicked
+// sign-out-all" UX. For instant revocation across all instances,
+// move to Redis.
+const REVOKED_CACHE_TTL_MS = 30_000;
+const revokedCache = new Map<string, { revokedAt: Date | null; expiresAt: number }>();
+
+async function getTokenRevokedAt(userId: string): Promise<Date | null> {
+  const cached = revokedCache.get(userId);
+  if (cached && Date.now() < cached.expiresAt) return cached.revokedAt;
+  const row = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { tokenRevokedAt: true },
+  });
+  const revokedAt = row?.tokenRevokedAt ?? null;
+  revokedCache.set(userId, { revokedAt, expiresAt: Date.now() + REVOKED_CACHE_TTL_MS });
+  return revokedAt;
+}
+
+/**
+ * Verify a token's signature AND that it wasn't issued before the
+ * user revoked all sessions. Returns null if either check fails.
+ * Used by getUserFromHeaders + requireAuth so /api/auth/sign-out-all
+ * actually invalidates existing cookies on the next request (within
+ * the 30s revocation cache window).
+ */
+async function verifyTokenFresh(token: string): Promise<SessionUser | null> {
+  try {
+    const { payload } = await jwtVerify(token, SECRET);
+    const user = payload as unknown as SessionUser & { iat?: number };
+    if (!user.iat) return null;     // pre-revocation tokens — reject
+    const revokedAt = await getTokenRevokedAt(user.id);
+    if (revokedAt && user.iat * 1000 < revokedAt.getTime()) return null;
+    return user;
+  } catch {
+    return null;
+  }
+}
 
 export type SessionUser = {
   id: string;
@@ -68,21 +110,15 @@ export async function verifyToken(token: string): Promise<SessionUser | null> {
   }
 }
 
-// Read user from JWT cookie only (for API routes)
+// Read user from JWT cookie only (for API routes). Includes the
+// session-revocation freshness check — if user hit sign-out-all
+// recently, even a valid signed token is rejected.
 export async function getUserFromHeaders(headers: Headers): Promise<SessionUser | null> {
   // Never trust x-user-* headers — always validate JWT
   const cookieHeader = headers.get("cookie") || "";
   const match = cookieHeader.match(/celsius-session=([^;]+)/);
-  if (match) {
-    try {
-      const { payload } = await jwtVerify(match[1], SECRET);
-      return payload as unknown as SessionUser;
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
+  if (!match) return null;
+  return verifyTokenFresh(match[1]);
 }
 
 type Role = "OWNER" | "ADMIN" | "MANAGER" | "STAFF";
@@ -149,15 +185,14 @@ export async function requireAuth(request: NextRequest): Promise<
       error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
     };
   }
-
-  try {
-    const { payload } = await jwtVerify(token, SECRET);
-    const user = payload as unknown as SessionUser;
-    return { user, error: null };
-  } catch {
+  // Routes through verifyTokenFresh so /api/auth/sign-out-all actually
+  // invalidates pre-revocation tokens (within the 30s cache window).
+  const user = await verifyTokenFresh(token);
+  if (!user) {
     return {
       user: null,
       error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
     };
   }
+  return { user, error: null };
 }

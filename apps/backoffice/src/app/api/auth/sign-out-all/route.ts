@@ -24,6 +24,10 @@ export async function POST(req: NextRequest) {
     data: { tokenRevokedAt: new Date() },
   });
 
+  // The revoked-at cache in @/lib/auth is per-process, so this
+  // user's existing sessions on OTHER lambda instances are still
+  // valid until the 30s TTL expires. For instant cross-instance
+  // revocation, move the cache to Redis.
   await clearSession();
 
   return NextResponse.json({ ok: true, revokedAt: new Date().toISOString() });

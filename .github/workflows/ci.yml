@@ -34,6 +34,15 @@ jobs:
       JWT_SECRET: "ci-test-secret-not-for-production-minimum-32-chars"
       NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-anon-key-for-ci-build"
+      NEXT_PUBLIC_LOYALTY_SUPABASE_URL: "https://placeholder.supabase.co"
+      LOYALTY_SUPABASE_SERVICE_ROLE_KEY: "placeholder-loyalty-service-role"
+      SUPABASE_SERVICE_ROLE_KEY: "placeholder-service-role"
+      CLOUDINARY_CLOUD_NAME: "placeholder"
+      CLOUDINARY_API_KEY: "placeholder"
+      CLOUDINARY_API_SECRET: "placeholder"
+      NEXT_PUBLIC_SENTRY_DSN: ""
+      UPSTASH_REDIS_REST_URL: ""
+      UPSTASH_REDIS_REST_TOKEN: ""
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -80,6 +89,15 @@ jobs:
       JWT_SECRET: "ci-test-secret-not-for-production-minimum-32-chars"
       NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-anon-key-for-ci-build"
+      NEXT_PUBLIC_LOYALTY_SUPABASE_URL: "https://placeholder.supabase.co"
+      LOYALTY_SUPABASE_SERVICE_ROLE_KEY: "placeholder-loyalty-service-role"
+      SUPABASE_SERVICE_ROLE_KEY: "placeholder-service-role"
+      CLOUDINARY_CLOUD_NAME: "placeholder"
+      CLOUDINARY_API_KEY: "placeholder"
+      CLOUDINARY_API_SECRET: "placeholder"
+      NEXT_PUBLIC_SENTRY_DSN: ""
+      UPSTASH_REDIS_REST_URL: ""
+      UPSTASH_REDIS_REST_TOKEN: ""
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

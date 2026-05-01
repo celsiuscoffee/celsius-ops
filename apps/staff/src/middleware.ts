@@ -9,10 +9,9 @@ const ALLOWED_ORIGINS = [
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const isApi = pathname.startsWith("/api/");
 
-  // CSRF protection — runs FIRST so state-changing API requests are
-  // checked. GET/HEAD/OPTIONS and /api/webhooks/, /api/cron/ paths
-  // are auto-exempt (they have their own auth).
+  // CSRF protection — runs FIRST.
   const csrfFail = checkCsrf(request, { allowedOrigins: ALLOWED_ORIGINS });
   if (csrfFail) {
     return NextResponse.json(
@@ -21,7 +20,14 @@ export function middleware(request: NextRequest) {
     );
   }
 
-  // Skip static assets, auth, and internal routes
+  // Apply headers regardless of short-circuit path so /api/* responses
+  // also get CSP + Cache-Control: no-store (was being skipped before).
+  const buildResponse = (inner: () => NextResponse): NextResponse => {
+    const r = inner();
+    applySecurityHeaders(r, { isApi });
+    return r;
+  };
+
   if (
     pathname === "/login" ||
     pathname.startsWith("/api/") ||
@@ -34,19 +40,15 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/images/") ||
     pathname.startsWith("/fonts/")
   ) {
-    return NextResponse.next();
+    return buildResponse(() => NextResponse.next());
   }
 
-  // Just check cookie exists — don't verify JWT in middleware (too slow for every nav)
   const token = request.cookies.get(COOKIE_NAME)?.value;
   if (!token) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Add security headers + cache control
-  const response = NextResponse.next();
-  applySecurityHeaders(response, { isApi: pathname.startsWith("/api/") });
-  return response;
+  return buildResponse(() => NextResponse.next());
 }
 
 export const config = {

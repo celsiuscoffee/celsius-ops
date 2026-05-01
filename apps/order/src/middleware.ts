@@ -31,6 +31,7 @@ async function isValidAdminToken(token: string): Promise<boolean> {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const isApi = pathname.startsWith("/api/");
 
   // CSRF protection — applies to ALL state-changing /api/* requests
   // except webhooks/cron (auto-exempt). Runs before the per-route
@@ -44,15 +45,24 @@ export async function middleware(request: NextRequest) {
     );
   }
 
+  // Apply headers on every return path. Previously the privileged-API
+  // guard short-circuited via plain NextResponse.next() and shipped
+  // no CSP / no-store on the bulk of /api/* responses.
+  const buildResponse = (inner: () => NextResponse): NextResponse => {
+    const r = inner();
+    applySecurityHeaders(r, { isApi });
+    return r;
+  };
+
   // ── API auth guard for the two privileged endpoints ──
   const isProtectedApi =
     pathname === "/api/push/blast" ||
     pathname === "/api/push/subscriber-count";
 
-  if (!isProtectedApi) return NextResponse.next();
+  if (!isProtectedApi) return buildResponse(() => NextResponse.next());
 
   // Skip preflight requests
-  if (request.method === "OPTIONS") return NextResponse.next();
+  if (request.method === "OPTIONS") return buildResponse(() => NextResponse.next());
 
   const authHeader = request.headers.get("Authorization");
   const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
@@ -66,9 +76,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const response = NextResponse.next();
-  applySecurityHeaders(response, { isApi: pathname.startsWith("/api/") });
-  return response;
+  return buildResponse(() => NextResponse.next());
 }
 
 // Matcher must include all /api/* routes so the CSRF check runs on

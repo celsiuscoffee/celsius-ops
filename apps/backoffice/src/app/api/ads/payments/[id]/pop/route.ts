@@ -8,6 +8,13 @@ export const maxDuration = 60;
 
 const BUCKET = "ads-pop";
 
+// Mime allowlist — POP receipts are images or PDFs only.
+const ALLOWED_MIME = new Set([
+  "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif",
+  "application/pdf",
+]);
+const MAX_BYTES = 15 * 1024 * 1024;
+
 function getStorage() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_LOYALTY_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.LOYALTY_SUPABASE_SERVICE_ROLE_KEY;
@@ -33,8 +40,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "file required" }, { status: 400 });
   }
 
-  if (file.size > 15 * 1024 * 1024) {
-    return NextResponse.json({ error: "File too large (max 15MB)" }, { status: 400 });
+  if (file.size > MAX_BYTES) {
+    return NextResponse.json({ error: "File too large (max 15MB)" }, { status: 413 });
+  }
+  if (!ALLOWED_MIME.has(file.type)) {
+    return NextResponse.json(
+      { error: `Unsupported file type: ${file.type || "unknown"}` },
+      { status: 415 },
+    );
   }
 
   const ext = file.name.split(".").pop() || "jpg";

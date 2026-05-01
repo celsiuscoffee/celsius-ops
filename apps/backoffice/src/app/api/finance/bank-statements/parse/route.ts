@@ -9,6 +9,18 @@ import { parseBankStatementBuffer } from "@/lib/finance/bank-statement-parser";
 
 export const runtime = "nodejs"; // xlsx needs Node, not edge
 
+// Server-side validation: xlsx parses arbitrary buffers and has had
+// CVEs (CVE-2023-30533 etc.) — capping size + restricting mime
+// limits attack surface even though the route is admin-only.
+const MAX_BYTES = 20 * 1024 * 1024; // 20 MB — bank statements can be heavy
+const ALLOWED_MIME = new Set([
+  "text/csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/octet-stream", // some browsers send this for .csv
+  "",                          // and some send empty type
+]);
+
 export async function POST(req: NextRequest) {
   try { await requireRole(req.headers, "ADMIN"); }
   catch (e) {
@@ -23,6 +35,19 @@ export async function POST(req: NextRequest) {
   const file = formData.get("file");
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Missing 'file' field" }, { status: 400 });
+  }
+
+  if (file.size > MAX_BYTES) {
+    return NextResponse.json(
+      { error: `File too large (max ${MAX_BYTES / 1024 / 1024} MB)` },
+      { status: 413 },
+    );
+  }
+  if (!ALLOWED_MIME.has(file.type) && !/\.(csv|xlsx?|tsv)$/i.test(file.name)) {
+    return NextResponse.json(
+      { error: `Unsupported file type: ${file.type || "unknown"}. Expected CSV or Excel.` },
+      { status: 415 },
+    );
   }
 
   const buf = Buffer.from(await file.arrayBuffer());
