@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
+import { checkCronAuth } from "@celsius/shared";
 
 // Runs every minute. Finds "pending" orders between 2 and 55 minutes old and
 // reconciles them against Stripe — covers wallet cancels where confirm-stripe
@@ -26,11 +27,8 @@ type OrderLite = {
 };
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const secret = process.env.CRON_SECRET;
-  if (secret && authHeader !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const cronAuth = checkCronAuth(request.headers);
+  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   const stripe = getStripe();
   if (!stripe) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
+import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +18,8 @@ export const dynamic = "force-dynamic";
 //
 // ai_flags gets "auto_closed_<reason>" so the manager review queue surfaces these.
 export async function GET(req: NextRequest) {
-  // Security: Vercel adds a bearer in production crons. In dev, allow any GET.
-  const auth = req.headers.get("authorization");
-  if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const cronAuth = checkCronAuth(req.headers);
+  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   const now = new Date();
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
+import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -11,10 +12,8 @@ export const maxDuration = 60;
 //
 // Auth: Bearer token in CRON_SECRET env var (Vercel auto-sets).
 export async function GET(req: NextRequest) {
-  const auth = req.headers.get("authorization");
-  if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const cronAuth = checkCronAuth(req.headers);
+  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   const today = new Date().toISOString().slice(0, 10);
 

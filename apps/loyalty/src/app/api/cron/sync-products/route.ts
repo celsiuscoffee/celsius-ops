@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { syncProducts } from '@/lib/storehub-products';
+import { checkCronAuth } from '@celsius/shared';
 
 /**
  * GET /api/cron/sync-products
@@ -10,11 +11,8 @@ import { syncProducts } from '@/lib/storehub-products';
  * Protected by CRON_SECRET header.
  */
 export async function GET(request: NextRequest) {
-  // Verify cron secret (Vercel sets this automatically for cron jobs)
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const cronAuth = checkCronAuth(request.headers);
+  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   try {
     // Get all active brands with their outlets

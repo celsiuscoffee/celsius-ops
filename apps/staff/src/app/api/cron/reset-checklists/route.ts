@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { checkCronAuth } from "@celsius/shared";
 
 /**
  * GET /api/cron/reset-checklists
@@ -13,10 +14,8 @@ import { prisma } from "@/lib/prisma";
  * Protected by CRON_SECRET to prevent unauthorized access.
  */
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const cronAuth = checkCronAuth(req.headers);
+  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   // 12am MYT = the start of the new MYT day
   const mytDateStr = new Date(Date.now() + 8 * 60 * 60 * 1000)

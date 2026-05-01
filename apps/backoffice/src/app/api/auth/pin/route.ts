@@ -6,7 +6,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  const { limited, retryAfterMs } = checkRateLimit(`pin:${ip}`, 10, 300_000);
+  const { limited, retryAfterMs } = await checkRateLimit(`pin:${ip}`, 10, 300_000);
   if (limited) {
     return NextResponse.json(
       { error: "Too many PIN attempts. Please try again later." },

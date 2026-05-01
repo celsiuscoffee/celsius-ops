@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncInvoices } from "@/lib/ads/sync-invoices";
 import { runSync } from "@/lib/ads/run-sync";
+import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -9,10 +10,8 @@ export const maxDuration = 300;
 // Runs on the 2nd of each month @ 4 AM MYT via Vercel Cron.
 // Pulls the previous month's invoices for every active account.
 export async function GET(req: NextRequest) {
-  const auth = req.headers.get("authorization");
-  if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const cronAuth = checkCronAuth(req.headers);
+  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   const settings = await prisma.adsSettings.findUnique({ where: { id: "singleton" } });
   if (settings && !settings.invoiceSyncEnabled) {

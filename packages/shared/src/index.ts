@@ -2,6 +2,8 @@
 export { cn } from "./cn";
 export { checkRateLimit, RATE_LIMITS } from "./rate-limit";
 export type { RateLimitConfig } from "./rate-limit";
+export { checkCronAuth } from "./cron-auth";
+export type { CronAuthResult } from "./cron-auth";
 export { createSupabaseClient, createSupabaseAdmin } from "./supabase";
 export {
   formatPoints,

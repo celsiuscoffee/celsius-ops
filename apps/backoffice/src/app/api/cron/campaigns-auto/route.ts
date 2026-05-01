@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
 import { sendSMS } from "@/lib/loyalty/sms";
+import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -170,13 +171,8 @@ async function findAlreadySentPhones(
 }
 
 export async function GET(req: NextRequest) {
-  const auth = req.headers.get("authorization");
-  if (
-    process.env.CRON_SECRET &&
-    auth !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const cronAuth = checkCronAuth(req.headers);
+  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   const nowIso = new Date().toISOString();
 

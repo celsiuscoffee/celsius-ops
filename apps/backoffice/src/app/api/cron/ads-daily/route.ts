@@ -4,6 +4,7 @@ import { syncAccounts } from "@/lib/ads/sync-accounts";
 import { syncCampaigns } from "@/lib/ads/sync-campaigns";
 import { syncMetrics } from "@/lib/ads/sync-metrics";
 import { runSync } from "@/lib/ads/run-sync";
+import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 min
@@ -12,10 +13,8 @@ export const maxDuration = 300; // 5 min
 // - Refreshes account list
 // - For each non-manager account: refreshes campaigns, then pulls yesterday's metrics.
 export async function GET(req: NextRequest) {
-  const auth = req.headers.get("authorization");
-  if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const cronAuth = checkCronAuth(req.headers);
+  if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   const settings = await prisma.adsSettings.findUnique({ where: { id: "singleton" } });
   if (settings && !settings.dailySyncEnabled) {
