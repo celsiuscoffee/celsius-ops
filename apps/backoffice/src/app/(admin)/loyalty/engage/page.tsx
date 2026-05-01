@@ -328,7 +328,7 @@ export default function NotificationsPage() {
   }, [activeSmsFilter?.value]);
 
   // Get target phones based on audience
-  function getTargetPhones(): string[] {
+  function getTargetMembers() {
     return allMembers
       .filter((m) => {
         // PDPA: Exclude members who opted out of SMS marketing
@@ -394,11 +394,24 @@ export default function NotificationsPage() {
           return true;
         }
         return true;
-      })
-      .map((m) => m.phone);
+      });
+  }
+
+  function getTargetPhones(): string[] {
+    return getTargetMembers().map((m) => m.phone);
   }
 
   const smsOptOutCount = allMembers.filter((m) => m.sms_opt_out === true).length;
+
+  // Template substitution warning: when the message contains {name}, count
+  // recipients in the audience who don't have a name on file. Those will
+  // see the "there" fallback instead of their own name.
+  const usesNamePlaceholder = /\{name\}/.test(formMessage);
+  const targetMembersForWarning = usesNamePlaceholder ? getTargetMembers() : [];
+  const missingNameCount = usesNamePlaceholder
+    ? targetMembersForWarning.filter((m) => !m.name || !m.name.trim()).length
+    : 0;
+  const targetCount = usesNamePlaceholder ? targetMembersForWarning.length : 0;
 
   // Send SMS blast
   async function handleSmsSend() {
@@ -1315,6 +1328,14 @@ export default function NotificationsPage() {
                         <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                         <p className="text-xs text-amber-700 dark:text-amber-300">
                           Insufficient SMS123 balance. <a href="https://www.sms123.net" target="_blank" rel="noopener noreferrer" className="underline font-medium">Top up on SMS123</a>
+                        </p>
+                      </div>
+                    )}
+                    {(formChannel === "sms" || formChannel === "both") && usesNamePlaceholder && missingNameCount > 0 && (
+                      <div className="mt-2 flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2.5">
+                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                        <p className="text-xs text-amber-700 dark:text-amber-300">
+                          <span className="font-medium">{missingNameCount.toLocaleString()}</span> of {targetCount.toLocaleString()} recipients don&apos;t have a name on file. They&apos;ll see &ldquo;there&rdquo; instead of their name (e.g. &ldquo;Hey there!&rdquo;).
                         </p>
                       </div>
                     )}
