@@ -20,8 +20,19 @@ export async function GET(req: NextRequest) {
     };
     if (outletId) salesWhere.outletId = outletId;
 
+    // Project only the columns we actually use (menuId, outletId,
+    // quantity, grossAmount). Without this, Prisma returns every
+    // column on every SalesTransaction in the date range — for
+    // 30-day windows that's been ~2M rows of unused payload, which
+    // was the single biggest disk-IO consumer per pg_stat_statements.
     const sales = await prisma.salesTransaction.findMany({
       where: salesWhere,
+      select: {
+        menuId: true,
+        outletId: true,
+        quantity: true,
+        grossAmount: true,
+      },
     });
 
     // 2. Fetch all menu ingredient records (recipes)

@@ -4,19 +4,19 @@
   "crons": [
     {
       "path": "/api/cron/sync-menu",
-      "schedule": "0,10,20,30,40,50 * * * *"
+      "schedule": "0,30 * * * *"
     },
     {
       "path": "/api/cron/auto-hours",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/cron/expire-orders",
-      "schedule": "*/10 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/reconcile-pending",
-      "schedule": "* * * * *"
+      "schedule": "*/5 * * * *"
     }
   ],
   "headers": [
