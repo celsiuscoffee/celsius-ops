@@ -114,7 +114,8 @@ export async function calculateWeeklyPayroll(
 
   for (const profile of profiles) {
     // Resigned before this cycle → don't include.
-    const resignDate = profile.resigned_at || profile.end_date || null;
+    // Use end_date (last working day) for payroll cutoff, not the letter-submission date.
+    const resignDate = profile.end_date || profile.resigned_at || null;
     if (resignDate && resignDate < periodStartStr) {
       continue;
     }

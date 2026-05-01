@@ -60,7 +60,9 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
 
   for (const p of profiles) {
     // Resigned before this cycle → don't include in this run at all.
-    const resignDate = p.resigned_at || p.end_date || null;
+    // Use end_date (last working day) for payroll cutoff. resigned_at is the
+    // letter-submission date and may be weeks before the actual last day.
+    const resignDate = p.end_date || p.resigned_at || null;
     if (resignDate && resignDate < cycleStartStr) {
       skippedUsers.set(p.user_id, `resigned ${resignDate}`);
       continue;
@@ -317,7 +319,7 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
           cycleStart,
           cycleEnd,
           joinDate: profile.join_date || null,
-          resignDate: profile.resigned_at || profile.end_date || null,
+          resignDate: profile.end_date || profile.resigned_at || null,
           unpaidLeaveDays: unpaidDays,
           fullSalary: basicSalary,
         });
@@ -525,7 +527,7 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         // line before confirming the run.
         final_payroll: prorate.reason === "resigner" || prorate.reason === "joiner_and_resigner",
         resignation_end_date: (prorate.reason === "resigner" || prorate.reason === "joiner_and_resigner")
-          ? (profile.resigned_at || profile.end_date)
+          ? (profile.end_date || profile.resigned_at)
           : null,
       },
     });

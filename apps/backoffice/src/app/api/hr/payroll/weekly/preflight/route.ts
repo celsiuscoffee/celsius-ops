@@ -102,7 +102,8 @@ export async function GET(req: NextRequest) {
   const rows = ((profiles || []) as Profile[]).map((p) => {
     const u = userMap.get(p.user_id);
     const issues: Issue[] = [];
-    const resignDate = p.resigned_at || p.end_date || null;
+    // Use end_date (last working day) for payroll cutoff, not letter-submission date.
+    const resignDate = p.end_date || p.resigned_at || null;
     const resignedBefore = resignDate && resignDate < periodStart;
     const isFinalCycle = !!resignDate && !resignedBefore && resignDate <= periodEnd;
     const shiftCount = shiftCountByUser.get(p.user_id) || 0;
