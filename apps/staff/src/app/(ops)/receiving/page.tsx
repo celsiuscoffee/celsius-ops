@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { CameraCaptureModal } from "@/components/camera-capture-modal";
 import { compressImage } from "@/lib/compress-image";
 import {
   Package,
@@ -131,7 +132,7 @@ export default function ReceivePage() {
   const [discrepancyReasons, setDiscrepancyReasons] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   /* ---- Fetch data ------------------------------------------------ */
 
@@ -197,21 +198,17 @@ export default function ReceivePage() {
 
   const [compressing, setCompressing] = useState(false);
 
-  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  // Compress + accumulate a freshly-captured photo blob from the camera modal
+  const handleCameraCapture = async (blob: Blob) => {
     setCompressing(true);
     try {
-      const compressed = await Promise.all(
-        Array.from(files).map((file) => compressImage(file)),
-      );
-      setInvoicePhotos((prev) => [...prev, ...compressed]);
+      const file = new File([blob], `invoice-${Date.now()}.jpg`, { type: "image/jpeg" });
+      const compressed = await compressImage(file);
+      setInvoicePhotos((prev) => [...prev, compressed]);
     } catch (err) {
       console.error("Failed to compress image:", err);
     } finally {
       setCompressing(false);
-      // Reset input so the same file can be re-selected
-      e.target.value = "";
     }
   };
 
@@ -383,7 +380,7 @@ export default function ReceivePage() {
             {/* Quick capture -- no PO linked */}
             <Card className="border-dashed border-gray-300">
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => setCameraOpen(true)}
                 className="flex w-full items-center gap-3 px-3 py-3"
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
@@ -629,7 +626,7 @@ export default function ReceivePage() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => setCameraOpen(true)}
                     className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 text-gray-400 hover:border-terracotta hover:text-terracotta"
                   >
                     <Camera className="h-5 w-5" />
@@ -667,18 +664,16 @@ export default function ReceivePage() {
         </div>
       )}
 
-      {/* Camera-only single-shot input. NO `multiple` (Chrome on
-          Android falls through to the file picker when both
-          `capture` and `multiple` are set) and NO gallery option
-          (invoice integrity — must be photographed live). User
-          taps "Add Photo" again to capture additional shots. */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handlePhotoCapture}
+      {/* Fullscreen camera modal — getUserMedia-based, 100% camera-
+          only with no gallery option. Replaces the legacy <input
+          type="file" capture> path which Android browsers handled
+          inconsistently. */}
+      <CameraCaptureModal
+        open={cameraOpen}
+        facingMode="environment"
+        title="Photograph Invoice"
+        onCapture={handleCameraCapture}
+        onClose={() => setCameraOpen(false)}
       />
     </>
   );

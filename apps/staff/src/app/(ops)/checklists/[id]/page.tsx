@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CameraCaptureModal } from "@/components/camera-capture-modal";
 import {
   ArrowLeft, CheckCircle2, Circle, Loader2, MessageSquare, Clock,
   Camera, X, Image as ImageIcon, RotateCcw,
@@ -54,8 +55,8 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
   const [notesOpen, setNotesOpen] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const activeItemRef = useRef<string | null>(null);
+  const [cameraOpenForItem, setCameraOpenForItem] = useState<string | null>(null);
 
   const toggleItem = async (item: ChecklistItem) => {
     if (!item.isCompleted && item.photoRequired && !item.photoUrl) {
@@ -110,7 +111,7 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
 
   const handlePhotoClick = (itemId: string) => {
     activeItemRef.current = itemId;
-    fileInputRef.current?.click();
+    setCameraOpenForItem(itemId);
   };
 
   const handleDeletePhoto = async (itemId: string) => {
@@ -128,16 +129,14 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  // Upload a captured photo blob and attach it to the active checklist item
+  const handleCameraCapture = async (blob: Blob) => {
     const itemId = activeItemRef.current;
-    if (!file || !itemId) return;
-
-    // Reset input
-    e.target.value = "";
+    if (!itemId) return;
 
     setUploadingItem(itemId);
     try {
+      const file = new File([blob], `checklist-${itemId}-${Date.now()}.jpg`, { type: "image/jpeg" });
       const formData = new FormData();
       formData.append("file", file);
 
@@ -180,14 +179,15 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="p-6 lg:p-8">
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleFileChange}
+      {/* Fullscreen camera modal — getUserMedia-based, 100% camera-only.
+          Replaces the legacy <input type="file" capture> path which
+          some Android browsers fell through to a gallery chooser. */}
+      <CameraCaptureModal
+        open={cameraOpenForItem !== null}
+        facingMode="environment"
+        title="Photo Proof"
+        onCapture={handleCameraCapture}
+        onClose={() => setCameraOpenForItem(null)}
       />
 
       {/* Photo preview modal */}

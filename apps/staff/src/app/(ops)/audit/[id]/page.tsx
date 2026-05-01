@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CameraCaptureModal } from "@/components/camera-capture-modal";
 import {
   ArrowLeft, CheckCircle2, Loader2, Camera, X, MessageSquare, RotateCcw,
   Image as ImageIcon, Star, ThumbsUp, ThumbsDown, Minus, Building2,
@@ -52,8 +53,8 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
   const [overallNotes, setOverallNotes] = useState("");
   const [showComplete, setShowComplete] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const activeItemRef = useRef<string | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const replacingPhotoRef = useRef<string | null>(null);
 
   const setRating = async (item: AuditItem, rating: number) => {
@@ -93,17 +94,17 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
 
   const handlePhotoClick = (itemId: string) => {
     activeItemRef.current = itemId;
-    fileInputRef.current?.click();
+    setCameraOpen(true);
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  // Upload a captured photo blob and attach it to the active audit item
+  const handleCameraCapture = async (blob: Blob) => {
     const itemId = activeItemRef.current;
-    if (!file || !itemId) return;
-    e.target.value = "";
+    if (!itemId) return;
 
     setUploadingItem(itemId);
     try {
+      const file = new File([blob], `audit-${itemId}-${Date.now()}.jpg`, { type: "image/jpeg" });
       const formData = new FormData();
       formData.append("file", file);
       const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
@@ -146,7 +147,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
   const handleRetakeAuditPhoto = (itemId: string, url: string) => {
     activeItemRef.current = itemId;
     replacingPhotoRef.current = url;
-    fileInputRef.current?.click();
+    setCameraOpen(true);
   };
 
   const handleComplete = async () => {
@@ -195,7 +196,15 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="p-4 lg:p-6">
-      <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
+      {/* Fullscreen camera modal — getUserMedia-based, 100% camera-only.
+          Replaces the legacy <input type="file" capture> path. */}
+      <CameraCaptureModal
+        open={cameraOpen}
+        facingMode="environment"
+        title="Audit Photo"
+        onCapture={handleCameraCapture}
+        onClose={() => setCameraOpen(false)}
+      />
 
       {/* Photo preview */}
       {photoPreview && (

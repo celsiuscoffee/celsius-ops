@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { CameraCaptureModal } from "@/components/camera-capture-modal";
 import { compressImage } from "@/lib/compress-image";
 import {
   Camera,
@@ -57,7 +58,7 @@ export default function ClaimsPage() {
   // Upload state
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   // AI extraction state
   const [extracting, setExtracting] = useState(false);
@@ -129,53 +130,36 @@ export default function ClaimsPage() {
       .catch(() => {});
   }, []);
 
-  // Handle file selection
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files?.length) return;
+  // Compress + upload one file, return the resulting URL
+  const uploadOne = async (file: File): Promise<string> => {
+    const dataUrl = await compressImage(file);
+    const blob = await fetch(dataUrl).then((r) => r.blob());
+    const compressedFile = new File([blob], file.name, { type: "image/jpeg" });
+    const formData = new FormData();
+    formData.append("file", compressedFile);
+    const res = await fetch("/api/upload", { method: "POST", body: formData });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Upload failed");
+    }
+    const { url } = await res.json();
+    return url as string;
+  };
 
+  // Handle a freshly-captured photo from the camera modal
+  const handleCameraCapture = async (blob: Blob) => {
     setUploading(true);
     setError("");
-
     try {
-      const uploadedUrls: string[] = [];
-
-      for (const file of Array.from(files)) {
-        // Compress image before uploading
-        const dataUrl = await compressImage(file);
-        const blob = await fetch(dataUrl).then((r) => r.blob());
-        const compressedFile = new File([blob], file.name, {
-          type: "image/jpeg",
-        });
-
-        const formData = new FormData();
-        formData.append("file", compressedFile);
-
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || "Upload failed");
-        }
-
-        const { url } = await res.json();
-        uploadedUrls.push(url);
-      }
-
-      const allPhotos = [...photos, ...uploadedUrls];
+      const file = new File([blob], `receipt-${Date.now()}.jpg`, { type: "image/jpeg" });
+      const url = await uploadOne(file);
+      const allPhotos = [...photos, url];
       setPhotos(allPhotos);
-
-      // Trigger AI extraction immediately
       triggerExtraction(allPhotos);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
-      // Reset file input
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -378,10 +362,10 @@ export default function ClaimsPage() {
           </p>
         </div>
 
-        {/* Hero Upload Zone — primary "Take photo" target */}
+        {/* Hero Upload Zone — opens fullscreen camera modal */}
         <Card
           className="relative cursor-pointer border-2 border-dashed border-terracotta/30 bg-terracotta/5 transition-colors hover:border-terracotta/50 hover:bg-terracotta/10 active:scale-[0.98]"
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => setCameraOpen(true)}
         >
           <div className="flex flex-col items-center justify-center py-10">
             {uploading ? (
@@ -408,15 +392,8 @@ export default function ClaimsPage() {
           {/* Camera-only single-shot input. NO `multiple` (Chrome on
               Android falls through to the file picker when both
               `capture` and `multiple` are set) and NO gallery option
-              (audit/integrity — claims must be photographed live). */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleFileChange}
-            className="hidden"
-          />
+              (audit/integrity — claims must be photographed live). The
+              CameraCaptureModal below is the actual capture mechanism. */}
         </Card>
 
         {/* Photo Thumbnails */}
@@ -777,6 +754,16 @@ export default function ClaimsPage() {
           </div>
         )}
       </div>
+
+      {/* Fullscreen camera modal — only camera, never gallery. Uses
+          getUserMedia so all Android browsers behave consistently. */}
+      <CameraCaptureModal
+        open={cameraOpen}
+        facingMode="environment"
+        title={photos.length > 0 ? "Add Another Receipt Photo" : "Photograph Receipt"}
+        onCapture={handleCameraCapture}
+        onClose={() => setCameraOpen(false)}
+      />
     </div>
   );
 }
