@@ -167,6 +167,8 @@ export async function GET(req: NextRequest) {
       paidVia: true,
       paymentRef: true,
       popShortLink: true,
+      depositPercent: true,
+      depositTermsDays: true,
       depositAmount: true,
       depositPaidAt: true,
       depositRef: true,
@@ -296,7 +298,10 @@ export async function GET(req: NextRequest) {
     } : null,
     expenseCategory: inv.expenseCategory,
     orderType: inv.order?.orderType ?? null,
-    depositPercent: inv.supplier?.depositPercent ?? null,
+    // Invoice override wins; supplier default is the fallback so legacy
+    // rows without an explicit override still render the deposit UI.
+    depositPercent: inv.depositPercent ?? inv.supplier?.depositPercent ?? null,
+    depositTermsDays: inv.depositTermsDays ?? null,
     depositAmount: inv.depositAmount ? Number(inv.depositAmount) : null,
     depositPaidAt: inv.depositPaidAt?.toISOString() ?? null,
     depositRef: inv.depositRef ?? null,
@@ -322,6 +327,11 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { orderId, outletId, supplierId, amount, invoiceNumber, issueDate, dueDate, photos } = body;
+    // Per-invoice deposit override. `undefined` → fall back to supplier
+    // default (typical case). `null` → explicitly no deposit on this invoice.
+    // Number → use as the percent.
+    const depositPercentInput: number | null | undefined = body.depositPercent;
+    const depositTermsInput: number | null | undefined = body.depositTermsDays;
 
     if (!outletId || !supplierId) {
       return NextResponse.json({ error: "outletId and supplierId are required" }, { status: 400 });
@@ -334,13 +344,33 @@ export async function POST(req: NextRequest) {
       invNumber = `INV-${String(invCount + 1).padStart(4, "0")}`;
     }
 
-    // Check if supplier requires deposit
-    let depositAmount = null;
-    if (supplierId && amount) {
-      const supplier = await prisma.supplier.findUnique({ where: { id: supplierId }, select: { depositPercent: true } });
-      if (supplier?.depositPercent && supplier.depositPercent > 0) {
-        depositAmount = Math.round((Number(amount) * supplier.depositPercent / 100) * 100) / 100;
+    // Resolve deposit policy: invoice override wins, else supplier default.
+    // We persist the effective percent on the invoice so future amount edits
+    // can recompute without re-reading the supplier (which may change).
+    let effectivePercent: number | null = null;
+    if (depositPercentInput === null) {
+      effectivePercent = null; // explicit off
+    } else if (typeof depositPercentInput === "number") {
+      effectivePercent = depositPercentInput > 0 ? depositPercentInput : null;
+    } else if (supplierId) {
+      const supplier = await prisma.supplier.findUnique({
+        where: { id: supplierId },
+        select: { depositPercent: true, depositTermsDays: true },
+      });
+      effectivePercent = supplier?.depositPercent && supplier.depositPercent > 0 ? supplier.depositPercent : null;
+      // If caller didn't pass terms, inherit from supplier too
+      if (depositTermsInput === undefined && supplier?.depositTermsDays) {
+        body.depositTermsDays = supplier.depositTermsDays;
       }
+    }
+    const effectiveTerms: number | null =
+      depositTermsInput === null ? null
+      : typeof depositTermsInput === "number" && depositTermsInput > 0 ? depositTermsInput
+      : (typeof body.depositTermsDays === "number" ? body.depositTermsDays : null);
+
+    let depositAmount: number | null = null;
+    if (effectivePercent && amount) {
+      depositAmount = Math.round((Number(amount) * effectivePercent / 100) * 100) / 100;
     }
 
     const flagsAtCreation = await detectCreationFlags({
@@ -361,6 +391,8 @@ export async function POST(req: NextRequest) {
         issueDate: issueDate ? new Date(issueDate) : new Date(),
         dueDate: dueDate ? new Date(dueDate) : null,
         photos: photos || [],
+        ...(effectivePercent ? { depositPercent: effectivePercent } : {}),
+        ...(effectiveTerms ? { depositTermsDays: effectiveTerms } : {}),
         ...(depositAmount ? { depositAmount } : {}),
         ...(flagsAtCreation.length > 0
           ? { flags: flagsAtCreation as unknown as Prisma.InputJsonValue }

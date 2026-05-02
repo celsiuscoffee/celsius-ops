@@ -27,6 +27,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params;
     const body = await req.json();
     const { status, invoiceNumber, issueDate, dueDate, notes, amount, photos, paidVia, paymentRef, depositRef } = body;
+    const depositPercentInput: number | null | undefined = body.depositPercent;
+    const depositTermsInput: number | null | undefined = body.depositTermsDays;
 
     const data: Record<string, unknown> = {};
     if (status !== undefined) data.status = status;
@@ -39,8 +41,41 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (paidVia !== undefined) data.paidVia = paidVia;
     if (paymentRef !== undefined) data.paymentRef = paymentRef;
     if (status === "PAID") data.paidAt = new Date();
+
+    // Deposit overrides — caller can set/clear deposit on this invoice.
+    // We always recompute depositAmount when percent or amount changes so
+    // they can never drift apart silently.
+    const willChangeDepositPolicy =
+      depositPercentInput !== undefined || amount !== undefined;
+    if (depositPercentInput === null) {
+      data.depositPercent = null;
+      data.depositAmount = null; // explicit "no deposit" → wipe the amount too
+    } else if (typeof depositPercentInput === "number") {
+      data.depositPercent = depositPercentInput > 0 ? depositPercentInput : null;
+    }
+    if (depositTermsInput === null) {
+      data.depositTermsDays = null;
+    } else if (typeof depositTermsInput === "number") {
+      data.depositTermsDays = depositTermsInput > 0 ? depositTermsInput : null;
+    }
+    if (willChangeDepositPolicy && depositPercentInput !== null) {
+      // Recompute depositAmount from the (possibly new) percent + amount.
+      // Read current row when one side wasn't supplied.
+      const current = await prisma.invoice.findUnique({
+        where: { id },
+        select: { amount: true, depositPercent: true },
+      });
+      const effPct = typeof depositPercentInput === "number"
+        ? depositPercentInput
+        : (current?.depositPercent ?? 0);
+      const effAmt = amount !== undefined ? Number(amount) : Number(current?.amount ?? 0);
+      if (effPct > 0 && effAmt > 0) {
+        data.depositAmount = Math.round((effAmt * effPct / 100) * 100) / 100;
+      }
+    }
+
     // Deposit payment handling — also compute balance due date from the
-    // supplier's depositTermsDays (e.g. "balance due 30 days after deposit")
+    // depositTermsDays on this invoice (or, for legacy rows, the supplier).
     if (status === "DEPOSIT_PAID") {
       const now = new Date();
       data.depositPaidAt = now;
@@ -50,9 +85,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (dueDate === undefined) {
         const inv = await prisma.invoice.findUnique({
           where: { id },
-          select: { supplier: { select: { depositTermsDays: true } } },
+          select: { depositTermsDays: true, supplier: { select: { depositTermsDays: true } } },
         });
-        const termsDays = inv?.supplier?.depositTermsDays;
+        const termsDays = inv?.depositTermsDays ?? inv?.supplier?.depositTermsDays;
         if (termsDays && termsDays > 0) {
           const balanceDue = new Date(now);
           balanceDue.setDate(balanceDue.getDate() + termsDays);

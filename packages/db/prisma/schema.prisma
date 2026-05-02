@@ -455,7 +455,13 @@ model Invoice {
   paidVia       String?
   paymentRef    String?
   popShortLink  String?
-  depositAmount Decimal?              // calculated: amount × supplier.depositPercent / 100
+  // Deposit overrides — per-invoice copies of the supplier's deposit policy
+  // (so a supplier with depositPercent=10 can still have one-off invoices
+  // with no deposit, or a different %, without editing the supplier).
+  // Auto-filled from supplier defaults on invoice creation, editable later.
+  depositPercent Int?                 // null = no deposit on this invoice
+  depositTermsDays Int?               // days until balance due after deposit paid
+  depositAmount Decimal?              // calculated: amount × depositPercent / 100
   depositPaidAt DateTime?             // when deposit was paid
   depositRef    String?               // payment reference for deposit
   // Claim batching — Finance groups small staff claims into one transfer.

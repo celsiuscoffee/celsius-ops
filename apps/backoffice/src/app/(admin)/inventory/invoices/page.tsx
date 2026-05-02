@@ -66,6 +66,7 @@ type Invoice = {
   orderType: string | null;
   transfer: { fromOutlet: string; toOutlet: string; items: { product: string; quantity: number }[] } | null;
   depositPercent: number | null;
+  depositTermsDays: number | null;
   depositAmount: number | null;
   depositPaidAt: string | null;
   depositRef: string | null;
@@ -191,7 +192,17 @@ export default function InvoicesPage() {
 
   // Edit invoice dialog
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
-  const [editForm, setEditForm] = useState({ invoiceNumber: "", issueDate: "", dueDate: "", notes: "", amount: "" });
+  const [editForm, setEditForm] = useState({
+    invoiceNumber: "",
+    issueDate: "",
+    dueDate: "",
+    notes: "",
+    amount: "",
+    // depositPercent/Terms: blank = no deposit. Saved as null → invoice
+    // deposit cleared. Numeric → applied as override.
+    depositPercent: "",
+    depositTermsDays: "",
+  });
   const [editPhotos, setEditPhotos] = useState<string[]>([]);
   const [editSaving, setEditSaving] = useState(false);
   const [editUploading, setEditUploading] = useState(false);
@@ -370,6 +381,8 @@ export default function InvoicesPage() {
       dueDate: inv.dueDate ?? "",
       notes: inv.notes ?? "",
       amount: inv.amount.toFixed(2),
+      depositPercent: inv.depositPercent != null ? String(inv.depositPercent) : "",
+      depositTermsDays: inv.depositTermsDays != null ? String(inv.depositTermsDays) : "",
     });
     setEditPhotos(inv.photos);
   };
@@ -398,6 +411,20 @@ export default function InvoicesPage() {
     if (!editingInvoice) return;
     setEditSaving(true);
     try {
+      // Empty deposit fields → null (clears the override). Numeric strings →
+      // parse and pass through. The PATCH route recomputes depositAmount.
+      const depositPercent =
+        editForm.depositPercent.trim() === ""
+          ? null
+          : Number.isFinite(parseFloat(editForm.depositPercent))
+            ? Math.round(parseFloat(editForm.depositPercent))
+            : null;
+      const depositTermsDays =
+        editForm.depositTermsDays.trim() === ""
+          ? null
+          : Number.isFinite(parseFloat(editForm.depositTermsDays))
+            ? Math.round(parseFloat(editForm.depositTermsDays))
+            : null;
       await fetch(`/api/inventory/invoices/${editingInvoice.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -408,6 +435,8 @@ export default function InvoicesPage() {
           notes: editForm.notes || null,
           amount: parseFloat(editForm.amount) || editingInvoice.amount,
           photos: editPhotos,
+          depositPercent,
+          depositTermsDays,
         }),
       });
       setEditingInvoice(null);
@@ -1260,6 +1289,72 @@ export default function InvoicesPage() {
                 <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
                 <Input value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} placeholder="Payment notes..." />
               </div>
+
+              {/* Deposit override — set per-invoice, supersedes supplier default.
+                  Leave % blank to disable deposit on this invoice. */}
+              {(() => {
+                const pct = parseFloat(editForm.depositPercent);
+                const amt = parseFloat(editForm.amount);
+                const validPct = Number.isFinite(pct) && pct > 0;
+                const validAmt = Number.isFinite(amt) && amt > 0;
+                const depAmt = validPct && validAmt
+                  ? Math.round((amt * pct / 100) * 100) / 100
+                  : 0;
+                const balance = validPct && validAmt
+                  ? Math.round((amt - depAmt) * 100) / 100
+                  : amt || 0;
+                return (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+                    <p className="mb-2 text-xs font-semibold text-amber-900">Deposit (optional)</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1 block text-[11px] font-medium text-amber-900/80">Deposit %</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          placeholder="e.g. 10"
+                          value={editForm.depositPercent}
+                          onChange={(e) => setEditForm({ ...editForm, depositPercent: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[11px] font-medium text-amber-900/80">Balance due (days after deposit)</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="e.g. 21"
+                          value={editForm.depositTermsDays}
+                          onChange={(e) => setEditForm({ ...editForm, depositTermsDays: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    {validPct && validAmt ? (
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded bg-white px-2 py-1.5">
+                          <span className="text-amber-700">Deposit</span>
+                          <p className="font-semibold text-amber-900">RM {depAmt.toFixed(2)}</p>
+                        </div>
+                        <div className="rounded bg-white px-2 py-1.5">
+                          <span className="text-amber-700">Balance</span>
+                          <p className="font-semibold text-amber-900">RM {balance.toFixed(2)}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-1.5 text-[11px] text-amber-800/70">
+                        Leave % blank for full payment. Set % to require a deposit before delivery — system splits the invoice into Pay Deposit + Pay Balance.
+                      </p>
+                    )}
+                    {editingInvoice?.depositPaidAt && (
+                      <p className="mt-2 text-[11px] text-amber-700">
+                        Deposit already paid on {new Date(editingInvoice.depositPaidAt).toLocaleDateString("en-MY")}. Editing the % won&apos;t reverse that — only adjusts what&apos;s recorded.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Photo upload */}
               <div>
