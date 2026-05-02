@@ -22,7 +22,7 @@ function checkRateLimit(storeId: string): boolean {
  * Body: { storeId: string; pin: string }
  *
  * Auth cascade:
- * 1. Prisma User table (backoffice-managed users) — bcrypt PIN
+ * 1. Backoffice "User" table via Supabase REST — bcrypt PIN
  * 2. Supabase staff_members table — plaintext PIN (legacy)
  * 3. outlet_settings.staff_pin — plaintext fallback
  *
@@ -59,61 +59,57 @@ export async function POST(request: NextRequest) {
 
     const storeName = (outletData.name as string) ?? storeId;
 
-    // ── 1. Prisma User table (backoffice-managed staff) ───────────────────
-    // Dynamic import: Prisma only loads if DATABASE_URL is set (safe for deploys without it).
-    // Force redeploy to pick up env var.
+    // ── 1. Backoffice User table (via Supabase REST) ──────────────────────
+    // We query the Prisma-managed "User" + "Outlet" tables directly through
+    // the Supabase service-role client so this route doesn't need Prisma /
+    // DATABASE_URL on the order app's Vercel project. The RLS-bypassing
+    // service role can read both tables.
     try {
-      const { prisma } = await import("@celsius/db");
-      // storeId here is the pickup slug (e.g. "conezion"). User.outletIds stores
-      // Outlet UUIDs, so resolve the slug → UUID before filtering.
-      const outlet = await prisma.outlet.findFirst({
-        where: { pickupStoreId: storeId },
-        select: { id: true },
-      });
-      const outletUuid = outlet?.id;
+      // storeId here is the pickup slug (e.g. "conezion"). User.outletIds
+      // stores Outlet UUIDs, so resolve slug → UUID first.
+      const { data: outletRow } = await supabase
+        .from("Outlet")
+        .select("id")
+        .eq("pickupStoreId", storeId)
+        .maybeSingle();
+      const outletUuid = (outletRow as { id?: string } | null)?.id;
 
-      const prismaUsers = outletUuid
-        ? await prisma.user.findMany({
-            where: {
-              status: "ACTIVE",
-              pin: { not: null },
-              outletIds: { has: outletUuid },
-              appAccess: { hasSome: ["kds", "staff_app", "order"] },
-            },
-            select: { id: true, name: true, pin: true },
-          })
-        : [];
+      if (outletUuid) {
+        const { data: users, error: usersErr } = await supabase
+          .from("User")
+          .select("id, name, pin")
+          .eq("status", "ACTIVE")
+          .not("pin", "is", null)
+          .contains("outletIds", [outletUuid])
+          .overlaps("appAccess", ["kds", "staff_app", "order"]);
 
-      for (const user of prismaUsers) {
-        const { match, needsRehash } = await verifyPin(pin, user.pin);
-        if (match) {
-          // Progressive rehash: upgrade plaintext PINs to bcrypt
-          if (needsRehash) {
-            const hashed = await hashPin(pin);
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { pin: hashed },
-            });
+        if (usersErr) {
+          console.error("[staff-auth] User lookup error:", usersErr.message);
+        } else if (users) {
+          for (const user of users as Array<{ id: string; name: string; pin: string | null }>) {
+            const { match, needsRehash } = await verifyPin(pin, user.pin);
+            if (match) {
+              // Progressive rehash: upgrade plaintext PINs to bcrypt
+              if (needsRehash) {
+                const hashed = await hashPin(pin);
+                await supabase.from("User").update({ pin: hashed }).eq("id", user.id);
+              }
+              attempts.delete(storeId);
+              return NextResponse.json({
+                ok:        true,
+                storeId,
+                storeName,
+                staffName: user.name,
+                staffId:   user.id,
+                source:    "backoffice",
+              });
+            }
           }
-          attempts.delete(storeId);
-          return NextResponse.json({
-            ok:        true,
-            storeId,
-            storeName,
-            staffName: user.name,
-            staffId:   user.id,
-            source:    "backoffice",
-          });
         }
       }
-    } catch (prismaErr) {
-      // If Prisma DB is unreachable, fall through to Supabase.
-      // Split fields onto separate log lines because Vercel truncates each message.
-      const e = prismaErr instanceof Error ? prismaErr : null;
-      console.error("[staff-auth] dburl-set:", Boolean(process.env.DATABASE_URL));
-      console.error("[staff-auth] err-name:", e?.name ?? typeof prismaErr);
-      console.error("[staff-auth] err-msg:", e?.message?.slice(0, 200) ?? String(prismaErr).slice(0, 200));
-      if (e?.stack) console.error("[staff-auth] err-stack:", e.stack.slice(0, 400));
+    } catch (lookupErr) {
+      const msg = lookupErr instanceof Error ? lookupErr.message : String(lookupErr);
+      console.error("[staff-auth] backoffice lookup failed:", msg.slice(0, 200));
     }
 
     // ── 2. Supabase staff_members (legacy) ────────────────────────────────
