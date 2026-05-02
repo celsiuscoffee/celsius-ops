@@ -132,7 +132,7 @@ export default function StaffLoginPage() {
       {/* PIN display */}
       <div className="text-center w-full">
         <p className="text-white/40 text-xs mb-4 font-semibold uppercase tracking-widest">
-          Enter PIN for {store?.name ?? ""}
+          Enter PIN for {(store?.name ?? "").replace(/^Celsius Coffee\s+/i, "") || (store?.name ?? "")}
         </p>
         <div className="flex items-center justify-center gap-4 mb-2 bg-white/8 border border-white/12 rounded-2xl px-8 py-5 mx-auto w-fit">
           {Array.from({ length: PIN_LENGTH }).map((_, i) => (
