@@ -106,9 +106,13 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (prismaErr) {
-      // If Prisma DB is unreachable, fall through to Supabase
-      const msg = prismaErr instanceof Error ? `${prismaErr.name}: ${prismaErr.message}` : String(prismaErr);
-      console.warn("Prisma lookup failed, falling back to Supabase:", msg);
+      // If Prisma DB is unreachable, fall through to Supabase.
+      // Split fields onto separate log lines because Vercel truncates each message.
+      const e = prismaErr instanceof Error ? prismaErr : null;
+      console.error("[staff-auth] dburl-set:", Boolean(process.env.DATABASE_URL));
+      console.error("[staff-auth] err-name:", e?.name ?? typeof prismaErr);
+      console.error("[staff-auth] err-msg:", e?.message?.slice(0, 200) ?? String(prismaErr).slice(0, 200));
+      if (e?.stack) console.error("[staff-auth] err-stack:", e.stack.slice(0, 400));
     }
 
     // ── 2. Supabase staff_members (legacy) ────────────────────────────────
