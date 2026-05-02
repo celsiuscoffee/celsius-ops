@@ -62,11 +62,18 @@ const BASE_SCRIPT_SRC_HOSTS = [
 ];
 
 // Hosts loaded into <iframe>. Stripe Elements renders card fields in
-// an iframe served from js.stripe.com / hooks.stripe.com.
+// an iframe served from js.stripe.com / hooks.stripe.com. PDFs from
+// Supabase storage (PO docs, POPs, invoice photos) are rendered via the
+// browser's built-in PDF viewer in an iframe — without supabase.co
+// here, every "View PDF" link surfaces the browser's CSP block page.
 const BASE_FRAME_SRC = [
   "'self'",
   "https://js.stripe.com",
   "https://hooks.stripe.com",
+  "https://*.supabase.co",
+  "https://*.supabase.in",
+  // Cloudinary delivers PDFs via the same iframe pattern (fl_attachment).
+  "https://res.cloudinary.com",
 ];
 
 export function buildCsp(opts: SecurityHeadersOptions = {}): string {
