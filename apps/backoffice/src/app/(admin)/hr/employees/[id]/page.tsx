@@ -84,6 +84,10 @@ type AllowanceData = {
 export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  // Profile is split into tabs so the page renders fast and isn't a wall of
+  // forms. Sections only mount (and only fire their fetches) when their tab
+  // is active.
+  const [tab, setTab] = useState<"profile" | "comp" | "records" | "access">("profile");
   const { data, mutate } = useFetch<{ employees: Employee[] }>("/api/hr/employees");
   const { data: me } = useFetch<{ role: string }>("/api/auth/me");
   const canSeeSalary = me?.role === "OWNER" || me?.role === "ADMIN";
@@ -639,8 +643,38 @@ export default function EmployeeDetailPage() {
         </section>
       )}
 
+      {/* Tab nav — splits the form into focused groups instead of a 2300-line wall */}
+      <div className="flex gap-1 overflow-x-auto border-b" role="tablist">
+        {([
+          { v: "profile", l: "Profile", admin: false },
+          { v: "comp", l: "Compensation", admin: true },
+          { v: "records", l: "Records", admin: false },
+          { v: "access", l: "Statutory & Access", admin: false },
+        ] as const).map((t) => {
+          if (t.admin && !canSeeSalary) return null;
+          const active = tab === t.v;
+          return (
+            <button
+              key={t.v}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(t.v as typeof tab)}
+              className={
+                "shrink-0 border-b-2 px-4 py-2 text-sm font-medium transition " +
+                (active
+                  ? "border-terracotta text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground")
+              }
+            >
+              {t.l}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Employment */}
+        {tab === "profile" && (
         <section className="rounded-xl border bg-card p-5">
           <h2 className="mb-4 font-semibold">Employment</h2>
           <div className="space-y-3">
@@ -682,9 +716,10 @@ export default function EmployeeDetailPage() {
             </label>
           </div>
         </section>
+        )}
 
         {/* Compensation — OWNER / ADMIN only (salary is restricted PII) */}
-        {canSeeSalary && (
+        {tab === "comp" && canSeeSalary && (
           <section className="rounded-xl border bg-card p-5">
             <h2 className="mb-4 font-semibold">Compensation</h2>
             <div className="space-y-3">
@@ -711,24 +746,25 @@ export default function EmployeeDetailPage() {
         )}
 
         {/* Recurring Items — per-employee allowances/deductions auto-applied each cycle */}
-        {canSeeSalary && id && <RecurringItemsSection userId={id} />}
+        {tab === "comp" && canSeeSalary && id && <RecurringItemsSection userId={id} />}
 
         {/* Tax Reliefs — per-employee per-year reliefs (reduces PCB taxable income) */}
-        {canSeeSalary && id && <TaxReliefsSection userId={id} />}
+        {tab === "comp" && canSeeSalary && id && <TaxReliefsSection userId={id} />}
 
         {/* Onboarding checklist — Day 1, Week 1, Month 1, Probation end */}
-        {canUploadDocs && id && <OnboardingSection userId={id} />}
+        {tab === "records" && canUploadDocs && id && <OnboardingSection userId={id} />}
 
         {/* Salary History — promotions, increments, restructures (audit trail) */}
-        {canSeeSalary && id && <SalaryHistorySection userId={id} />}
+        {tab === "comp" && canSeeSalary && id && <SalaryHistorySection userId={id} />}
 
         {/* Disciplinary — warnings, suspensions, PIPs */}
-        {canUploadDocs && id && <DisciplinarySection userId={id} />}
+        {tab === "records" && canUploadDocs && id && <DisciplinarySection userId={id} />}
 
         {/* Company Assets — laptops, uniforms, key cards (clearance on resign) */}
-        {canUploadDocs && id && <AssetsSection userId={id} />}
+        {tab === "records" && canUploadDocs && id && <AssetsSection userId={id} />}
 
         {/* Documents — LoE, contracts, confirmation letters, resignation letters, etc. */}
+        {tab === "records" && (
         <section className="rounded-xl border bg-card p-5">
           <h2 className="mb-3 flex items-center gap-2 font-semibold">
             <FileText className="h-4 w-4" />
@@ -856,8 +892,10 @@ export default function EmployeeDetailPage() {
             </div>
           )}
         </section>
+        )}
 
         {/* Personal */}
+        {tab === "profile" && (
         <section className="rounded-xl border bg-card p-5">
           <h2 className="mb-4 font-semibold">Personal</h2>
           <div className="space-y-3">
@@ -876,8 +914,10 @@ export default function EmployeeDetailPage() {
             </Field>
           </div>
         </section>
+        )}
 
         {/* Statutory */}
+        {tab === "access" && (
         <section className="rounded-xl border bg-card p-5">
           <h2 className="mb-4 font-semibold">Statutory</h2>
           <div className="space-y-3">
@@ -977,8 +1017,10 @@ export default function EmployeeDetailPage() {
             </Field>
           </div>
         </section>
+        )}
 
         {/* Emergency */}
+        {tab === "profile" && (
         <section className="rounded-xl border bg-card p-5">
           <h2 className="mb-4 font-semibold">Emergency Contact</h2>
           <div className="space-y-3">
@@ -990,8 +1032,10 @@ export default function EmployeeDetailPage() {
             </Field>
           </div>
         </section>
+        )}
 
         {/* Notes */}
+        {tab === "profile" && (
         <section className="rounded-xl border bg-card p-5">
           <h2 className="mb-4 font-semibold">Notes</h2>
           <textarea
@@ -1002,8 +1046,10 @@ export default function EmployeeDetailPage() {
             placeholder="Internal notes..."
           />
         </section>
+        )}
 
         {/* Bank & Identity */}
+        {tab === "comp" && (
         <section className="rounded-xl border bg-card p-5 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-semibold">Bank & Identity</h2>
@@ -1034,8 +1080,10 @@ export default function EmployeeDetailPage() {
             </Field>
           </div>
         </section>
+        )}
 
         {/* Login & Access */}
+        {tab === "access" && (
         <section className="rounded-xl border bg-card p-5 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 font-semibold">
@@ -1161,6 +1209,7 @@ export default function EmployeeDetailPage() {
             </button>
           </div>
         </section>
+        )}
       </div>
 
       {/* Probation banner — surfaces 3-month confirmation deadline */}
