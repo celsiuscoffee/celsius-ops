@@ -19,8 +19,13 @@ type Memo = {
   body: string;
   related_type: string | null;
   related_id: string | null;
-  acknowledged_at: string | null;
+  acknowledged_at: string | null;  // legacy; ignore in favour of acknowledged_count
   status: "active" | "rescinded";
+  // Per-recipient acknowledgement rollup from hr_memo_acknowledgements
+  acknowledged_count: number;
+  recipient_count: number;
+  acknowledgements: Array<{ user_id: string; user_name: string | null; acknowledged_at: string }>;
+  pending_recipients: Array<{ user_id: string; user_name: string | null }>;
 };
 
 type Employee = { id: string; name: string; fullName: string | null };
@@ -155,10 +160,25 @@ export default function MemosPage() {
                         <Icon className="h-3 w-3" /> {meta.label}
                       </span>
                       {m.severity === "major" && <span className="text-xs font-medium text-red-700">MAJOR</span>}
-                      {m.acknowledged_at ? (
-                        <span className="flex items-center gap-1 text-xs text-green-700"><CheckCircle2 className="h-3 w-3" /> Acknowledged</span>
-                      ) : (
-                        <span className="text-xs text-amber-600">Pending acknowledgement</span>
+                      {m.recipient_count > 0 && (
+                        <span
+                          className={`flex items-center gap-1 text-xs ${
+                            m.acknowledged_count >= m.recipient_count
+                              ? "text-green-700"
+                              : m.acknowledged_count > 0
+                                ? "text-amber-700"
+                                : "text-amber-600"
+                          }`}
+                          title={
+                            m.pending_recipients.length > 0
+                              ? `Pending: ${m.pending_recipients.map((r) => r.user_name || r.user_id.slice(0, 6)).join(", ")}`
+                              : "All recipients acknowledged"
+                          }
+                        >
+                          {m.acknowledged_count >= m.recipient_count
+                            ? <><CheckCircle2 className="h-3 w-3" /> Acknowledged ({m.acknowledged_count}/{m.recipient_count})</>
+                            : <>Acknowledged {m.acknowledged_count}/{m.recipient_count}</>}
+                        </span>
                       )}
                       {m.status === "rescinded" && <span className="flex items-center gap-1 text-xs text-gray-500"><XCircle className="h-3 w-3" /> Rescinded</span>}
                     </div>

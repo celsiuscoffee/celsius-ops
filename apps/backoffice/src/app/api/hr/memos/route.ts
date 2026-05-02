@@ -45,14 +45,47 @@ export async function GET(req: NextRequest) {
   const nameOf = (id: string | null | undefined) =>
     id ? (userMap.get(id)?.fullName || userMap.get(id)?.name || null) : null;
 
-  const enriched = (data || []).map((m) => ({
-    ...m,
-    user_names: (m.user_ids || []).map((id: string) => nameOf(id)).filter(Boolean),
-    // Back-compat single-recipient fields
-    user_id: m.user_ids?.[0] || m.user_id || null,
-    user_name: nameOf(m.user_ids?.[0] || m.user_id),
-    issued_by_name: nameOf(m.issued_by),
-  }));
+  // Per-recipient ack status — replaces the old single hr_memos.acknowledged_at
+  // which broke for multi-recipient memos. ackedByMemo[memo_id] = Set of user_ids
+  // that have acknowledged.
+  const memoIds = (data || []).map((m) => m.id);
+  const { data: acks } = memoIds.length
+    ? await hrSupabaseAdmin
+        .from("hr_memo_acknowledgements")
+        .select("memo_id, user_id, acknowledged_at")
+        .in("memo_id", memoIds)
+    : { data: [] as Array<{ memo_id: string; user_id: string; acknowledged_at: string }> };
+  const ackedByMemo = new Map<string, Array<{ user_id: string; acknowledged_at: string }>>();
+  for (const a of acks || []) {
+    const list = ackedByMemo.get(a.memo_id) || [];
+    list.push({ user_id: a.user_id, acknowledged_at: a.acknowledged_at });
+    ackedByMemo.set(a.memo_id, list);
+  }
+
+  const enriched = (data || []).map((m) => {
+    const recipients: string[] = m.user_ids || [];
+    const memoAcks = ackedByMemo.get(m.id) || [];
+    const ackedSet = new Set(memoAcks.map((a) => a.user_id));
+    return {
+      ...m,
+      user_names: recipients.map((id: string) => nameOf(id)).filter(Boolean),
+      // Back-compat single-recipient fields
+      user_id: m.user_ids?.[0] || m.user_id || null,
+      user_name: nameOf(m.user_ids?.[0] || m.user_id),
+      issued_by_name: nameOf(m.issued_by),
+      // Multi-recipient ack rollup
+      acknowledged_count: memoAcks.length,
+      recipient_count: recipients.length,
+      acknowledgements: memoAcks.map((a) => ({
+        user_id: a.user_id,
+        user_name: nameOf(a.user_id),
+        acknowledged_at: a.acknowledged_at,
+      })),
+      pending_recipients: recipients
+        .filter((id) => !ackedSet.has(id))
+        .map((id) => ({ user_id: id, user_name: nameOf(id) })),
+    };
+  });
 
   return NextResponse.json({ memos: enriched });
 }

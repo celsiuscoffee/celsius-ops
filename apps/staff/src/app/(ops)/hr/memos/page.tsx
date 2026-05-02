@@ -13,8 +13,11 @@ type Memo = {
   severity: "info" | "minor" | "major";
   title: string;
   body: string;
-  acknowledged_at: string | null;
-  acknowledgement_notes: string | null;
+  // Per-recipient ack — sourced from hr_memo_acknowledgements join table
+  // (the legacy hr_memos.acknowledged_at column is shared across recipients
+  // so it could not represent multi-recipient state).
+  my_acknowledged_at: string | null;
+  my_acknowledgement_notes: string | null;
 };
 
 const TYPE_META = {
@@ -83,9 +86,9 @@ export default function StaffMemosPage() {
                 <p className="mt-2 text-xs text-gray-500">
                   From {m.issued_by_name} · {new Date(m.issued_at).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}
                 </p>
-                {m.acknowledged_at ? (
+                {m.my_acknowledged_at ? (
                   <p className="mt-2 flex items-center gap-1 text-xs text-green-700">
-                    <CheckCircle2 className="h-3 w-3" /> Acknowledged on {new Date(m.acknowledged_at).toLocaleDateString("en-MY")}
+                    <CheckCircle2 className="h-3 w-3" /> Acknowledged on {new Date(m.my_acknowledged_at).toLocaleDateString("en-MY")}
                   </p>
                 ) : (
                   <button
