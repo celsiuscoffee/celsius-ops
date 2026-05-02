@@ -1473,7 +1473,7 @@ export default function NotificationsPage() {
                       {/* Message bubble */}
                       <div className="max-w-[90%] rounded-xl bg-blue-500 px-3 py-2 text-xs leading-relaxed text-white">
                         <p className="whitespace-pre-wrap">{previewText}</p>
-                        <p className="mt-1 text-right text-[9px] text-white/60">
+                        <p className="mt-1 text-right text-[9px] text-white/60" suppressHydrationWarning>
                           {new Date().toLocaleTimeString("en-MY", {
                             hour: "2-digit",
                             minute: "2-digit",

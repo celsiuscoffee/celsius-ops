@@ -295,19 +295,24 @@ function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
   const thisMonthStart = getMonthStart(today);
   const lastMonthEnd = addDays(thisMonthStart, -1);
   const lastMonthStart = getMonthStart(lastMonthEnd);
+  // Deterministic id counter — keeps server-rendered HTML byte-identical to
+  // the client's first render. Math.random() here was producing different
+  // ids on the server vs client and tripping React's hydration check.
+  let _id = 0;
+  const pid = () => `p${_id++}`;
 
   return [
     {
       label: "Today vs Same Day Last Week",
       slots: [
-        { id: uid(), from: today, to: today },
-        { id: uid(), from: addDays(today, -7), to: addDays(today, -7) },
+        { id: pid(), from: today, to: today },
+        { id: pid(), from: addDays(today, -7), to: addDays(today, -7) },
       ],
     },
     {
       label: "Last 7 Days (daily)",
       slots: Array.from({ length: 7 }, (_, i) => ({
-        id: uid(),
+        id: pid(),
         from: addDays(today, -6 + i),
         to: addDays(today, -6 + i),
       })),
@@ -315,29 +320,29 @@ function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
     {
       label: "This Week vs Last Week",
       slots: [
-        { id: uid(), from: thisMonday, to: getSunday(thisMonday) },
-        { id: uid(), from: addDays(thisMonday, -7), to: addDays(thisMonday, -1) },
+        { id: pid(), from: thisMonday, to: getSunday(thisMonday) },
+        { id: pid(), from: addDays(thisMonday, -7), to: addDays(thisMonday, -1) },
       ],
     },
     {
       label: "Last 4 Weeks",
       slots: Array.from({ length: 4 }, (_, i) => {
         const mon = addDays(thisMonday, -7 * i);
-        return { id: uid(), from: mon, to: getSunday(mon) };
+        return { id: pid(), from: mon, to: getSunday(mon) };
       }),
     },
     {
       label: "Last 8 Weeks",
       slots: Array.from({ length: 8 }, (_, i) => {
         const mon = addDays(thisMonday, -7 * i);
-        return { id: uid(), from: mon, to: getSunday(mon) };
+        return { id: pid(), from: mon, to: getSunday(mon) };
       }),
     },
     {
       label: "This Month vs Last Month",
       slots: [
-        { id: uid(), from: thisMonthStart, to: getMonthEnd(today) },
-        { id: uid(), from: lastMonthStart, to: lastMonthEnd },
+        { id: pid(), from: thisMonthStart, to: getMonthEnd(today) },
+        { id: pid(), from: lastMonthStart, to: lastMonthEnd },
       ],
     },
     {
@@ -345,7 +350,7 @@ function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
       slots: Array.from({ length: 3 }, (_, i) => {
         const mStart = getMonthStart(subtractMonths(today, i));
         const mEnd = i === 0 ? getMonthEnd(today) : getMonthEnd(mStart);
-        return { id: uid(), from: mStart, to: mEnd };
+        return { id: pid(), from: mStart, to: mEnd };
       }),
     },
     {
@@ -353,7 +358,7 @@ function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
       slots: Array.from({ length: 6 }, (_, i) => {
         const mStart = getMonthStart(subtractMonths(today, i));
         const mEnd = i === 0 ? getMonthEnd(today) : getMonthEnd(mStart);
-        return { id: uid(), from: mStart, to: mEnd };
+        return { id: pid(), from: mStart, to: mEnd };
       }),
     },
   ];
