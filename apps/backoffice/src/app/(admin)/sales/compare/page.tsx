@@ -787,7 +787,7 @@ export default function SalesComparePage() {
                     {proj && projVal !== null && metric !== "aov" && (
                       <div className="mt-1.5 pt-1.5 border-t border-gray-100">
                         <div className="text-[10px] text-gray-400">
-                          Projected ({proj.daysElapsed}/{proj.totalDays} days, {proj.method})
+                          Projected (day {proj.daysElapsed}/{proj.totalDays} · {proj.method})
                         </div>
                         <div className="text-sm font-semibold text-gray-600 tabular-nums">
                           {metric === "revenue" ? fmtRM(projVal) : `${projVal} orders`}

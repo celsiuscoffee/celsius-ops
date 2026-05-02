@@ -64,6 +64,21 @@ function mytDow(d: Date): number {
 }
 
 /**
+ * Shift a date by `delta` calendar months, clamping the day to the last
+ * valid day of the target month. Avoids JS's `setUTCMonth` rollover where
+ * "April 31" silently becomes May 1 — which would leak the current month
+ * into the prior-period window.
+ */
+function shiftMonth(d: Date, delta: number): Date {
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + delta;
+  const day = d.getUTCDate();
+  // Day 0 of next month = last day of target month.
+  const lastDayOfTarget = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m, Math.min(day, lastDayOfTarget)));
+}
+
+/**
  * Compute a DOW-aware projection for a period.
  *
  * Returns null if today is outside the period (no projection needed) or
@@ -92,7 +107,6 @@ export async function computeProjection(opts: {
 
   // ── 1. Pull completed-day revenue from local SalesTransaction ──────────
   // (period start → yesterday inclusive)
-  const yesterdayEnd = new Date(today.getTime() - 1); // last ms of "today - 1"
   const completedTxns = completedCount > 0 ? await prisma.salesTransaction.findMany({
     where: {
       outletId: { in: outletIds },
@@ -100,6 +114,20 @@ export async function computeProjection(opts: {
     },
     select: { grossAmount: true, quantity: true, transactedAt: true },
   }) : [];
+
+  // Pull today's in-progress transactions separately so the live signal
+  // can floor today's projection (we won't project less than what's
+  // already booked).
+  const tomorrow = addDays(today, 1);
+  const todayTxns = await prisma.salesTransaction.findMany({
+    where: {
+      outletId: { in: outletIds },
+      transactedAt: { gte: today, lt: tomorrow },
+    },
+    select: { grossAmount: true, quantity: true },
+  });
+  const todayActualRev = todayTxns.reduce((s, t) => s + Number(t.grossAmount), 0);
+  const todayActualOrd = todayTxns.reduce((s, t) => s + t.quantity, 0);
 
   let completedRev = 0;
   let completedOrd = 0;
@@ -153,20 +181,15 @@ export async function computeProjection(opts: {
   // ── 3. Cold-start anchor: same day-range, prior month ─────────────────
   // Used to dampen extreme day-1 projections. Falls back gracefully if no
   // history exists (new outlet, new product launch, etc.).
-  const priorFrom = (() => {
-    const d = new Date(fromD);
-    d.setUTCMonth(d.getUTCMonth() - 1);
-    return d;
-  })();
-  const priorTo = (() => {
-    const d = new Date(toD);
-    d.setUTCMonth(d.getUTCMonth() - 1);
-    return d;
-  })();
+  // shiftMonth clamps day-of-month so May 31 → April 30 (not May 1 via
+  // JS's setUTCMonth rollover, which would leak the current month into
+  // the prior window).
+  const priorFrom = shiftMonth(fromD, -1);
+  const priorTo = shiftMonth(toD, -1);
   const priorTxns = await prisma.salesTransaction.findMany({
     where: {
       outletId: { in: outletIds },
-      transactedAt: { gte: priorFrom, lte: addDays(priorTo, 1) },
+      transactedAt: { gte: priorFrom, lt: addDays(priorTo, 1) },
     },
     select: { grossAmount: true, quantity: true },
   });
@@ -175,7 +198,10 @@ export async function computeProjection(opts: {
 
   // ── 4. Project remaining days ──────────────────────────────────────────
   // For each remaining day, project using DOW avg if we have it; else fall
-  // back to overall completed-day mean.
+  // back to overall completed-day mean. Today is in-progress, so it sits
+  // at the start of this loop (i = daysElapsed - 1) and is special-cased:
+  // we floor today at actual-so-far so the live signal can't be ignored
+  // when it's already exceeded the DOW average.
   let remainRev = 0;
   let remainOrd = 0;
   const fallbackRev = completedCount > 0 ? completedRev / completedCount : 0;
@@ -183,8 +209,13 @@ export async function computeProjection(opts: {
   for (let i = daysElapsed - 1; i < totalDays; i++) {
     const day = addDays(fromD, i); // 0-indexed offset from period start
     const dow = mytDow(day);
-    const dRev = hasDowData && dowCount[dow] > 0 ? dowAvgRev[dow] : fallbackRev;
-    const dOrd = hasDowData && dowCount[dow] > 0 ? dowAvgOrd[dow] : fallbackOrd;
+    let dRev = hasDowData && dowCount[dow] > 0 ? dowAvgRev[dow] : fallbackRev;
+    let dOrd = hasDowData && dowCount[dow] > 0 ? dowAvgOrd[dow] : fallbackOrd;
+    if (i === daysElapsed - 1) {
+      // Today (partial). Use whichever is larger: DOW avg or actual-so-far.
+      dRev = Math.max(dRev, todayActualRev);
+      dOrd = Math.max(dOrd, todayActualOrd);
+    }
     remainRev += dRev;
     remainOrd += dOrd;
   }
