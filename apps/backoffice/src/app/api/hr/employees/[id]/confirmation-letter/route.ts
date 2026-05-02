@@ -48,6 +48,7 @@ async function loadLetterData(
     confirmation_signatory_name?: string | null; confirmation_signatory_title?: string | null;
     confirmation_signature_path?: string | null;
     officer_name?: string | null; officer_position?: string | null;
+    officer_email?: string | null; phone?: string | null;
   } | null;
 
   // Effective confirmation date: explicit probation_end_date OR join_date + 90d.
@@ -81,6 +82,8 @@ async function loadLetterData(
     companySSM: company?.ssm_number || null,
     companyAddress: [company?.address_line1, company?.address_line2, company?.postcode, company?.city, company?.country]
       .filter(Boolean).join(", ") || null,
+    companyEmail: company?.officer_email || null,
+    companyPhone: company?.phone || null,
     signatoryName: company?.confirmation_signatory_name || company?.officer_name || "Ammar Bin Shahrin",
     signatoryTitle: company?.confirmation_signatory_title || company?.officer_position || "Chief Executive Officer",
     signatureImageBytes,

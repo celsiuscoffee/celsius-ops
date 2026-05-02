@@ -151,6 +151,7 @@ async function handle(req: NextRequest) {
       periodYear: run.period_year,
       paymentDate: run.payment_date || null,
       basicSalary: Number(it.basic_salary || 0),
+      regularHours: Number(it.total_regular_hours || 0),
       otHours: Number(it.total_ot_hours || 0),
       ot1xAmount: Number(it.ot_1x_amount || 0),
       ot1_5xAmount: Number(it.ot_1_5x_amount || 0),
