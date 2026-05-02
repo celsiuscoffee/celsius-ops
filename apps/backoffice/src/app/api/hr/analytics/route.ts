@@ -21,6 +21,7 @@ export async function GET(_req: NextRequest) {
   const [
     profilesRes, recentLogsRes, recentRunsRes,
     pendingLeaveRes, pendingSwapsRes, pendingDiscRes, complianceRes,
+    onboardingTplRes, onboardingProgRes,
   ] = await Promise.all([
     hrSupabaseAdmin
       .from("hr_employee_profiles")
@@ -53,6 +54,13 @@ export async function GET(_req: NextRequest) {
       .neq("status", "done")
       .lte("due_date", new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10))
       .order("due_date"),
+    hrSupabaseAdmin
+      .from("hr_onboarding_templates")
+      .select("id", { count: "exact", head: true })
+      .eq("is_active", true),
+    hrSupabaseAdmin
+      .from("hr_onboarding_progress")
+      .select("user_id, completed_at"),
   ]);
 
   const profiles = profilesRes.data || [];
@@ -161,6 +169,26 @@ export async function GET(_req: NextRequest) {
       shift_swaps: pendingSwapsRes.count ?? 0,
       disciplinary_active: pendingDiscRes.count ?? 0,
     },
+    onboarding: (() => {
+      // Compute %-complete for active staff hired in the last 90 days.
+      const totalTemplates = onboardingTplRes.count ?? 0;
+      type Prog = { user_id: string; completed_at: string | null };
+      const completedByUser = new Map<string, number>();
+      for (const p of (onboardingProgRes.data || []) as Prog[]) {
+        if (p.completed_at) completedByUser.set(p.user_id, (completedByUser.get(p.user_id) || 0) + 1);
+      }
+      const newJoinersThreshold = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+      const newJoiners = (profiles as Profile[]).filter(
+        (p) => activeUserIds.has(p.user_id) && p.join_date && p.join_date >= newJoinersThreshold,
+      );
+      const incompletes = newJoiners.filter((p) => (completedByUser.get(p.user_id) || 0) < totalTemplates);
+      return {
+        new_joiners_90d: newJoiners.length,
+        incomplete_count: incompletes.length,
+        total_template_tasks: totalTemplates,
+        incomplete_user_ids: incompletes.map((p) => p.user_id).slice(0, 20),
+      };
+    })(),
     compliance_30d: complianceRes.data || [],
     generated_at: new Date().toISOString(),
     ytd_start: ytdStart,

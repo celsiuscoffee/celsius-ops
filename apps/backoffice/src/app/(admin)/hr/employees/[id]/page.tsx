@@ -3,6 +3,7 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
+import { useConfirm, toast } from "@celsius/ui";
 import { ArrowLeft, Save, Loader2, Lock, KeyRound, Shield, Eye, EyeOff, CheckCircle2, TrendingUp, Clock, Sparkles, AlertTriangle, Star, FileText, Upload, Trash2, Download, Plus, Repeat, Receipt } from "lucide-react";
 import Link from "next/link";
 import type { EmployeeProfile } from "@/lib/hr/types";
@@ -99,6 +100,8 @@ export default function EmployeeDetailPage() {
   const [newDocTitle, setNewDocTitle] = useState<string>("");
   const [newDocEffectiveDate, setNewDocEffectiveDate] = useState<string>("");
 
+  const { confirm, ConfirmDialog } = useConfirm();
+
   const handleUploadDoc = async (file: File) => {
     if (!id) return;
     setUploadingDoc(true);
@@ -112,11 +115,12 @@ export default function EmployeeDetailPage() {
       const res = await fetch("/api/hr/employee-documents", { method: "POST", body: fd });
       if (!res.ok) {
         const b = await res.json().catch(() => ({ error: "Upload failed" }));
-        alert(b?.error || "Upload failed");
+        toast.error(b?.error || "Upload failed");
         return;
       }
       setNewDocTitle("");
       setNewDocEffectiveDate("");
+      toast.success("Document uploaded");
       refetchDocs();
     } finally {
       setUploadingDoc(false);
@@ -124,13 +128,14 @@ export default function EmployeeDetailPage() {
   };
 
   const handleDeleteDoc = async (docId: string) => {
-    if (!confirm("Delete this document?")) return;
+    if (!(await confirm({ title: "Delete this document?", confirmLabel: "Delete", destructive: true }))) return;
     const res = await fetch(`/api/hr/employee-documents?id=${docId}`, { method: "DELETE" });
     if (!res.ok) {
       const b = await res.json().catch(() => ({ error: "Delete failed" }));
-      alert(b?.error || "Delete failed");
+      toast.error(b?.error || "Delete failed");
       return;
     }
+    toast.success("Document deleted");
     refetchDocs();
   };
   const [saving, setSaving] = useState(false);
@@ -166,8 +171,13 @@ export default function EmployeeDetailPage() {
   };
 
   const cancelResign = async () => {
-    if (!confirm("Cancel this resignation? Staff will be reactivated.")) return;
+    if (!(await confirm({
+      title: "Cancel this resignation?",
+      description: "Staff will be reactivated.",
+      confirmLabel: "Yes, cancel resignation",
+    }))) return;
     await fetch(`/api/hr/employees/${id}/resign`, { method: "DELETE" });
+    toast.success("Resignation cancelled");
     mutate();
   };
 
@@ -280,7 +290,7 @@ export default function EmployeeDetailPage() {
         setTimeout(() => setBankSaved(false), 2000);
       } else {
         const d = await res.json();
-        alert(d.error || "Failed to save bank details");
+        toast.error(d.error || "Failed to save bank details");
       }
     } finally {
       setSavingBank(false);
@@ -324,7 +334,7 @@ export default function EmployeeDetailPage() {
         setTimeout(() => setAccessSaved(false), 2000);
       } else {
         const data = await res.json();
-        alert(data.error || "Failed to save access");
+        toast.error(data.error || "Failed to save access");
       }
     } finally {
       setSavingAccess(false);
@@ -432,7 +442,7 @@ export default function EmployeeDetailPage() {
         setTimeout(() => setSaved(false), 2000);
       } else {
         const body = await res.json().catch(() => ({ error: "Save failed" }));
-        alert(body?.error || `Save failed (${res.status})`);
+        toast.error(body?.error || `Save failed (${res.status})`);
       }
     } finally {
       setSaving(false);
@@ -447,6 +457,7 @@ export default function EmployeeDetailPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+      <ConfirmDialog />
       <div className="flex items-center gap-3">
         <Link href="/hr/employees" className="rounded-lg p-1 hover:bg-gray-100">
           <ArrowLeft className="h-5 w-5" />
@@ -661,6 +672,9 @@ export default function EmployeeDetailPage() {
 
         {/* Tax Reliefs — per-employee per-year reliefs (reduces PCB taxable income) */}
         {canSeeSalary && id && <TaxReliefsSection userId={id} />}
+
+        {/* Onboarding checklist — Day 1, Week 1, Month 1, Probation end */}
+        {canUploadDocs && id && <OnboardingSection userId={id} />}
 
         {/* Salary History — promotions, increments, restructures (audit trail) */}
         {canSeeSalary && id && <SalaryHistorySection userId={id} />}
@@ -1127,6 +1141,15 @@ export default function EmployeeDetailPage() {
                   {" "}({daysLeft} day{daysLeft === 1 ? "" : "s"} left). Issue a confirmation letter, extend, or terminate before then.
                 </p>
               </div>
+              {canSeeSalary && (
+                <a
+                  href={`/api/hr/employees/${id}/confirmation-letter`}
+                  download
+                  className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50"
+                >
+                  Download Confirmation Letter
+                </a>
+              )}
             </div>
           </section>
         );
@@ -1273,6 +1296,7 @@ function RecurringItemsSection({ userId }: { userId: string }) {
   const items = data?.items || [];
   const catalog = (catalogData?.items || []).filter((c) => (c as { is_active?: boolean }).is_active !== false);
 
+  const { confirm, ConfirmDialog } = useConfirm();
   const [showAdd, setShowAdd] = useState(false);
   const [code, setCode] = useState("");
   const [amount, setAmount] = useState("");
@@ -1328,16 +1352,22 @@ function RecurringItemsSection({ userId }: { userId: string }) {
   };
 
   const handleDelete = async (itemId: string) => {
-    if (!confirm("Remove this recurring item?")) return;
+    if (!(await confirm({ title: "Remove this recurring item?", confirmLabel: "Remove", destructive: true }))) return;
     const res = await fetch(
       `/api/hr/employees/${userId}/recurring-items?item_id=${itemId}`,
       { method: "DELETE" },
     );
-    if (res.ok) mutate();
+    if (res.ok) {
+      toast.success("Item removed");
+      mutate();
+    } else {
+      toast.error("Failed to remove item");
+    }
   };
 
   return (
     <section className="rounded-xl border bg-card p-5">
+      <ConfirmDialog />
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold">
           <Repeat className="h-4 w-4" />
@@ -1485,6 +1515,7 @@ function TaxReliefsSection({ userId }: { userId: string }) {
   const reliefs = data?.reliefs || [];
   const catalog = catalogData?.items || [];
 
+  const { confirm, ConfirmDialog } = useConfirm();
   const [showAdd, setShowAdd] = useState(false);
   const [code, setCode] = useState("");
   const [amount, setAmount] = useState("");
@@ -1532,12 +1563,17 @@ function TaxReliefsSection({ userId }: { userId: string }) {
   };
 
   const handleDelete = async (reliefId: string) => {
-    if (!confirm("Remove this relief?")) return;
+    if (!(await confirm({ title: "Remove this relief?", confirmLabel: "Remove", destructive: true }))) return;
     const res = await fetch(
       `/api/hr/employees/${userId}/tax-reliefs?relief_id=${reliefId}`,
       { method: "DELETE" },
     );
-    if (res.ok) mutate();
+    if (res.ok) {
+      toast.success("Relief removed");
+      mutate();
+    } else {
+      toast.error("Failed to remove relief");
+    }
   };
 
   const claimedCodes = new Set(reliefs.map((r) => r.relief_code));
@@ -1545,6 +1581,7 @@ function TaxReliefsSection({ userId }: { userId: string }) {
 
   return (
     <section className="rounded-xl border bg-card p-5">
+      <ConfirmDialog />
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold">
           <Receipt className="h-4 w-4" />
@@ -1661,6 +1698,7 @@ type SalaryEntry = {
 function SalaryHistorySection({ userId }: { userId: string }) {
   const { data, mutate } = useFetch<{ entries: SalaryEntry[] }>(`/api/hr/employees/${userId}/salary-history`);
   const entries = data?.entries || [];
+  const { confirm, ConfirmDialog } = useConfirm();
   const [showAdd, setShowAdd] = useState(false);
   const [effective, setEffective] = useState(new Date().toISOString().slice(0, 10));
   const [type, setType] = useState<string>("base");
@@ -1697,13 +1735,19 @@ function SalaryHistorySection({ userId }: { userId: string }) {
   };
 
   const handleDelete = async (entryId: string) => {
-    if (!confirm("Remove this entry from salary history?")) return;
+    if (!(await confirm({ title: "Remove this entry from salary history?", confirmLabel: "Remove", destructive: true }))) return;
     const res = await fetch(`/api/hr/employees/${userId}/salary-history?entry_id=${entryId}`, { method: "DELETE" });
-    if (res.ok) mutate();
+    if (res.ok) {
+      toast.success("Entry removed");
+      mutate();
+    } else {
+      toast.error("Failed to remove entry");
+    }
   };
 
   return (
     <section className="rounded-xl border bg-card p-5">
+      <ConfirmDialog />
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold">
           <TrendingUp className="h-4 w-4" />
@@ -1815,6 +1859,7 @@ function DisciplinarySection({ userId }: { userId: string }) {
   const actions = data?.actions || [];
   const activeCount = actions.filter((a) => a.status === "active").length;
 
+  const { confirm, ConfirmDialog } = useConfirm();
   const [showAdd, setShowAdd] = useState(false);
   const [issuedAt, setIssuedAt] = useState(new Date().toISOString().slice(0, 10));
   const [category, setCategory] = useState("verbal_warning");
@@ -1864,13 +1909,19 @@ function DisciplinarySection({ userId }: { userId: string }) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this disciplinary record?")) return;
+    if (!(await confirm({ title: "Delete this disciplinary record?", confirmLabel: "Delete", destructive: true }))) return;
     const res = await fetch(`/api/hr/employees/${userId}/disciplinary?action_id=${id}`, { method: "DELETE" });
-    if (res.ok) mutate();
+    if (res.ok) {
+      toast.success("Record deleted");
+      mutate();
+    } else {
+      toast.error("Failed to delete record");
+    }
   };
 
   return (
     <section className="rounded-xl border bg-card p-5">
+      <ConfirmDialog />
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold">
           <AlertTriangle className="h-4 w-4 text-amber-600" />
@@ -2000,6 +2051,7 @@ function AssetsSection({ userId }: { userId: string }) {
   const assets = data?.assets || [];
   const outstandingCount = assets.filter((a) => a.status === "issued").length;
 
+  const { confirm, ConfirmDialog } = useConfirm();
   const [showAdd, setShowAdd] = useState(false);
   const [type, setType] = useState("laptop");
   const [description, setDescription] = useState("");
@@ -2053,13 +2105,19 @@ function AssetsSection({ userId }: { userId: string }) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this asset record?")) return;
+    if (!(await confirm({ title: "Delete this asset record?", confirmLabel: "Delete", destructive: true }))) return;
     const res = await fetch(`/api/hr/employees/${userId}/assets?asset_id=${id}`, { method: "DELETE" });
-    if (res.ok) mutate();
+    if (res.ok) {
+      toast.success("Asset record deleted");
+      mutate();
+    } else {
+      toast.error("Failed to delete asset record");
+    }
   };
 
   return (
     <section className="rounded-xl border bg-card p-5">
+      <ConfirmDialog />
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold">
           <Shield className="h-4 w-4" />
@@ -2160,5 +2218,111 @@ function ResignAssetWarning({ userId }: { userId: string }) {
       </ul>
       <p className="mt-1">Mark these as returned in the Assets section before final settlement, or proceed if clearance is happening separately.</p>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Onboarding Checklist
+// ─────────────────────────────────────────────────────────────────────────────
+
+type OnboardingTask = {
+  id: string;
+  stage: "day_1" | "week_1" | "month_1" | "probation_end";
+  title: string;
+  description: string | null;
+  is_required: boolean;
+  sort_order: number;
+  progress: { completed_at: string | null; completed_by: string | null; note: string | null } | null;
+};
+
+const STAGE_LABEL: Record<string, string> = {
+  day_1: "Day 1",
+  week_1: "Week 1",
+  month_1: "Month 1",
+  probation_end: "Probation end (3 months)",
+};
+
+function OnboardingSection({ userId }: { userId: string }) {
+  const { data, mutate } = useFetch<{ tasks: OnboardingTask[] }>(`/api/hr/employees/${userId}/onboarding`);
+  const tasks = data?.tasks || [];
+
+  const grouped = new Map<string, OnboardingTask[]>();
+  for (const t of tasks) {
+    const list = grouped.get(t.stage) || [];
+    list.push(t);
+    grouped.set(t.stage, list);
+  }
+
+  const total = tasks.length;
+  const done = tasks.filter((t) => t.progress?.completed_at).length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  const toggle = async (t: OnboardingTask) => {
+    const isCompleted = !!t.progress?.completed_at;
+    const res = await fetch(`/api/hr/employees/${userId}/onboarding`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template_id: t.id, completed: !isCompleted }),
+    });
+    if (res.ok) mutate();
+  };
+
+  return (
+    <section className="rounded-xl border bg-card p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 font-semibold">
+          <CheckCircle2 className="h-4 w-4" />
+          Onboarding
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+            pct === 100 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"
+          }`}>{done}/{total}</span>
+        </h2>
+        <span className="text-xs text-muted-foreground">{pct}% complete</span>
+      </div>
+      <div className="mb-4 h-1.5 w-full rounded-full bg-gray-100">
+        <div className="h-1.5 rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+      </div>
+
+      <div className="space-y-3">
+        {(["day_1", "week_1", "month_1", "probation_end"] as const).map((stage) => {
+          const list = grouped.get(stage) || [];
+          if (list.length === 0) return null;
+          const stageDone = list.filter((t) => t.progress?.completed_at).length;
+          return (
+            <div key={stage}>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                {STAGE_LABEL[stage]} <span className="text-gray-400">· {stageDone}/{list.length}</span>
+              </p>
+              <ul className="space-y-1">
+                {list.map((t) => {
+                  const completed = !!t.progress?.completed_at;
+                  return (
+                    <li key={t.id} className="flex items-start gap-2 rounded border bg-background p-2 text-xs">
+                      <button
+                        onClick={() => toggle(t)}
+                        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                          completed ? "border-emerald-500 bg-emerald-500 text-white" : "border-gray-300 bg-white"
+                        }`}
+                      >
+                        {completed && <CheckCircle2 className="h-3 w-3" />}
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <span className={`font-medium ${completed ? "line-through text-gray-400" : ""}`}>{t.title}</span>
+                        {t.description && <p className="mt-0.5 text-[10px] text-muted-foreground">{t.description}</p>}
+                        {completed && t.progress?.completed_at && (
+                          <p className="mt-0.5 text-[10px] text-emerald-700">
+                            Completed {new Date(t.progress.completed_at).toLocaleDateString("en-MY")}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }

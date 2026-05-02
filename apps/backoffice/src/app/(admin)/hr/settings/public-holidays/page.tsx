@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Loader2, Plus, Save, Trash2, CalendarDays } from "lucide-react";
+import { useConfirm, toast } from "@celsius/ui";
 import { SettingsNav } from "../_nav";
 
 type Holiday = {
@@ -26,6 +27,7 @@ export default function PublicHolidaysPage() {
   const [year, setYear] = useState(now.getFullYear());
   const { data, mutate } = useFetch<{ holidays: Holiday[] }>(`/api/hr/public-holidays?year=${year}`);
   const holidays = data?.holidays || [];
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const [showAdd, setShowAdd] = useState(false);
   const [date, setDate] = useState(`${year}-01-01`);
@@ -60,6 +62,7 @@ export default function PublicHolidaysPage() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || "Failed");
+      toast.success("Holiday added");
       mutate();
       reset();
     } catch (e) {
@@ -70,9 +73,12 @@ export default function PublicHolidaysPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Remove this holiday?")) return;
+    if (!(await confirm({ title: "Remove this holiday?", confirmLabel: "Remove", destructive: true }))) return;
     const res = await fetch(`/api/hr/public-holidays?id=${id}`, { method: "DELETE" });
-    if (res.ok) mutate();
+    if (res.ok) {
+      toast.success("Holiday removed");
+      mutate();
+    }
   };
 
   const grouped = new Map<string, Holiday[]>();
@@ -85,6 +91,7 @@ export default function PublicHolidaysPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+      <ConfirmDialog />
       <SettingsNav />
 
       <div className="flex items-center justify-between">

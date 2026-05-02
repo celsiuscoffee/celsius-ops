@@ -1,7 +1,7 @@
 "use client";
 
 import { useFetch } from "@/lib/use-fetch";
-import { AlertTriangle, Clock, CalendarOff, CalendarDays, Banknote, Bot, Loader2, ShieldAlert, ArrowLeftRight, BarChart3 } from "lucide-react";
+import { Clock, CalendarOff, CalendarDays, Banknote, Bot, Loader2, ShieldAlert, ArrowLeftRight, BarChart3, Cake, PartyPopper } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -133,6 +133,9 @@ export default function HRDashboardPage() {
         </Link>
       </div>
 
+      {/* Celebrations widget — birthdays + anniversaries */}
+      <CelebrationsWidget />
+
       {/* Last AI Run Info */}
       {data?.lastAgentRun && (
         <div className="rounded-xl border bg-card p-5">
@@ -162,6 +165,71 @@ export default function HRDashboardPage() {
               <p className="font-medium text-red-600">{data.lastAgentRun.items_flagged}</p>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type Celebration = {
+  user_id: string;
+  name: string;
+  outlet: string | null;
+  type: "birthday" | "anniversary";
+  on: string;
+  days_until: number;
+  years?: number;
+};
+
+function CelebrationsWidget() {
+  const { data } = useFetch<{ today: Celebration[]; upcoming: Celebration[] }>("/api/hr/celebrations?days=14");
+  const today = data?.today || [];
+  const upcoming = (data?.upcoming || []).slice(0, 8);
+  if (today.length === 0 && upcoming.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border bg-card p-5">
+      <h3 className="mb-3 flex items-center gap-2 font-semibold">
+        <PartyPopper className="h-5 w-5 text-pink-500" />
+        Celebrations
+      </h3>
+      {today.length > 0 && (
+        <div className="mb-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-pink-700">Today</p>
+          <div className="flex flex-wrap gap-2">
+            {today.map((c) => (
+              <Link
+                key={`${c.user_id}-${c.type}`}
+                href={`/hr/employees/${c.user_id}`}
+                className="flex items-center gap-2 rounded-full border border-pink-200 bg-pink-50 px-3 py-1.5 text-xs hover:bg-pink-100"
+              >
+                {c.type === "birthday" ? <Cake className="h-3 w-3 text-pink-600" /> : <PartyPopper className="h-3 w-3 text-amber-600" />}
+                <span className="font-semibold">{c.name}</span>
+                {c.type === "anniversary" && c.years && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">{c.years}y</span>
+                )}
+                {c.outlet && <span className="text-[10px] text-gray-500">· {c.outlet}</span>}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+      {upcoming.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Next 14 days</p>
+          <ul className="space-y-1 text-xs">
+            {upcoming.map((c) => (
+              <li key={`${c.user_id}-${c.type}-${c.on}`} className="flex items-center gap-2">
+                {c.type === "birthday" ? <Cake className="h-3 w-3 text-pink-500" /> : <PartyPopper className="h-3 w-3 text-amber-600" />}
+                <span className="font-mono text-gray-500 w-16">{c.on}</span>
+                <Link href={`/hr/employees/${c.user_id}`} className="font-medium text-blue-600 hover:underline">{c.name}</Link>
+                {c.type === "anniversary" && c.years && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">{c.years}y anniversary</span>
+                )}
+                <span className="text-gray-400">· in {c.days_until} day{c.days_until === 1 ? "" : "s"}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

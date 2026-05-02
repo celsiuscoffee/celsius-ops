@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
 import { ArrowLeft, Loader2, Plus, Save, Trash2, AlertTriangle, CheckCircle2, ShieldAlert, Calendar } from "lucide-react";
+import { useConfirm, toast } from "@celsius/ui";
 
 type Event = {
   id: string;
@@ -34,6 +35,7 @@ const CATEGORIES = [
 export default function CompliancePage() {
   const { data, mutate } = useFetch<{ events: Event[] }>(`/api/hr/compliance-events`);
   const events = data?.events || [];
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const today = new Date().toISOString().slice(0, 10);
   const overdue = events.filter((e) => e.status !== "done" && e.due_date < today);
@@ -63,6 +65,7 @@ export default function CompliancePage() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || "Failed");
+      toast.success("Event scheduled");
       mutate();
       reset();
     } catch (e) {
@@ -72,22 +75,45 @@ export default function CompliancePage() {
     }
   };
 
+  const [bootstrapping, setBootstrapping] = useState(false);
+  const bootstrap = async () => {
+    setBootstrapping(true);
+    try {
+      const res = await fetch("/api/hr/compliance-events/bootstrap", { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) toast.error(body.error || "Failed");
+      else {
+        toast.success(body.message || "Seeded");
+        mutate();
+      }
+    } finally {
+      setBootstrapping(false);
+    }
+  };
+
   const markDone = async (id: string) => {
     const res = await fetch("/api/hr/compliance-events", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ event_id: id, status: "done" }),
     });
-    if (res.ok) mutate();
+    if (res.ok) {
+      toast.success("Marked done");
+      mutate();
+    }
   };
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this event?")) return;
+    if (!(await confirm({ title: "Delete this event?", confirmLabel: "Delete", destructive: true }))) return;
     const res = await fetch(`/api/hr/compliance-events?id=${id}`, { method: "DELETE" });
-    if (res.ok) mutate();
+    if (res.ok) {
+      toast.success("Deleted");
+      mutate();
+    }
   };
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+      <ConfirmDialog />
       <div className="flex items-center justify-between">
         <div>
           <Link href="/hr" className="text-xs text-muted-foreground hover:underline">
@@ -97,11 +123,22 @@ export default function CompliancePage() {
             <ShieldAlert className="h-6 w-6 text-terracotta" /> Compliance Calendar
           </h1>
         </div>
-        {!showAdd && (
-          <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-sm font-medium text-white hover:bg-terracotta-dark">
-            <Plus className="h-4 w-4" /> Add event
+        <div className="flex gap-2">
+          <button
+            onClick={bootstrap}
+            disabled={bootstrapping}
+            className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
+            title="Seed standard MY statutory events (KWSP, PERKESO, CP39, HRDF, Form E, CP8D)"
+          >
+            {bootstrapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
+            Seed standard MY events
           </button>
-        )}
+          {!showAdd && (
+            <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-sm font-medium text-white hover:bg-terracotta-dark">
+              <Plus className="h-4 w-4" /> Add event
+            </button>
+          )}
+        </div>
       </div>
       <p className="text-sm text-muted-foreground">
         LHDN, KWSP, PERKESO, HRDF deadlines. Work-permit and license renewals. Recurring events auto-schedule the next occurrence on completion.

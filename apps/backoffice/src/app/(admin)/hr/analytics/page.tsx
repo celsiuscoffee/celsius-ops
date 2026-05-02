@@ -15,6 +15,12 @@ type Analytics = {
     period: string; gross: number; net: number; employer_cost: number; total_outflow: number;
   }>;
   pending_actions: { leave: number; shift_swaps: number; disciplinary_active: number };
+  onboarding: {
+    new_joiners_90d: number;
+    incomplete_count: number;
+    total_template_tasks: number;
+    incomplete_user_ids: string[];
+  };
   compliance_30d: Array<{ id: string; due_date: string; title: string; category: string; status: string }>;
   ytd_start: string;
 };
@@ -75,7 +81,7 @@ export default function HrAnalyticsPage() {
           <AlertTriangle className="h-4 w-4 text-amber-600" />
           Pending Actions
         </h2>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <ActionPill
             href="/hr/leave"
             label="Leave"
@@ -90,6 +96,12 @@ export default function HrAnalyticsPage() {
             href="/hr/employees"
             label="Active disciplinary"
             count={data.pending_actions.disciplinary_active}
+          />
+          <ActionPill
+            href="/hr/employees"
+            label="Onboarding incomplete"
+            count={data.onboarding.incomplete_count}
+            sub={`${data.onboarding.new_joiners_90d} joined 90d`}
           />
         </div>
       </div>
@@ -169,11 +181,12 @@ function Kpi({ icon, label, value, sub }: { icon: React.ReactNode; label: string
   );
 }
 
-function ActionPill({ href, label, count }: { href: string; label: string; count: number }) {
+function ActionPill({ href, label, count, sub }: { href: string; label: string; count: number; sub?: string }) {
   return (
     <Link href={href} className="rounded-lg border bg-background p-3 text-sm hover:bg-muted">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className={`mt-1 text-2xl font-bold ${count > 0 ? "text-red-600" : "text-gray-400"}`}>{count}</div>
+      {sub && <div className="mt-0.5 text-[10px] text-muted-foreground">{sub}</div>}
     </Link>
   );
 }

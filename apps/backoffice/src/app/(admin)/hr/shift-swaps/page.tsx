@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
 import { ArrowLeft, ArrowLeftRight, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { toast } from "@celsius/ui";
 
 type SwapRequest = {
   id: string;
@@ -42,8 +43,11 @@ export default function ShiftSwapsPage() {
         body: JSON.stringify({ swap_id: id, action, rejection_reason: rejectionReason }),
       });
       const body = await res.json();
-      if (!res.ok) alert(body.error || "Failed");
-      else mutate();
+      if (!res.ok) toast.error(body.error || "Failed");
+      else {
+        toast.success(action === "approve" ? "Swap approved — shifts updated" : "Swap rejected");
+        mutate();
+      }
     } finally {
       setActing(null);
     }
