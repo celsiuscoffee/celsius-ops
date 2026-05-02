@@ -130,8 +130,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         data.status = "DEPOSIT_PAID";
         data.depositPaidAt = new Date();
         if (paymentRef) data.depositRef = paymentRef;
+        // Defensive: caller may have passed status:"PAID" alongside
+        // paymentAmount. We're overriding status here, so clear any paidAt
+        // that the unconditional `if (status === "PAID")` branch above set.
+        data.paidAt = null;
       } else {
         data.status = "PARTIALLY_PAID";
+        data.paidAt = null; // same defensive override
       }
     } else if (status === "PAID") {
       // Mirror amountPaid to amount when status flips to PAID without an

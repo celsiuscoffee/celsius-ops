@@ -39,7 +39,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const blockingInvoice = await prisma.invoice.findFirst({
         where: {
           orderId: id,
-          status: { in: ["INITIATED", "DEPOSIT_PAID", "PAID"] },
+          // PARTIALLY_PAID added — if any payment has landed, money has
+          // already moved and we can't allow cancellation without an
+          // explicit reversal first.
+          status: { in: ["INITIATED", "PARTIALLY_PAID", "DEPOSIT_PAID", "PAID"] },
         },
         select: { invoiceNumber: true, status: true, amount: true },
       });
@@ -47,6 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const verb =
           blockingInvoice.status === "PAID" ? "is already paid" :
           blockingInvoice.status === "DEPOSIT_PAID" ? "has a paid deposit" :
+          blockingInvoice.status === "PARTIALLY_PAID" ? "has a partial payment recorded" :
           "has payment initiated";
         return NextResponse.json(
           {

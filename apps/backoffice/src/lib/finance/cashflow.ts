@@ -541,11 +541,11 @@ export async function computeCashflow(opts: {
   // Outflows — invoices in horizon (full-DB scope; outlet filter applies if set)
   const invoices = await prisma.invoice.findMany({
     where: {
-      status: { in: ["DRAFT", "PENDING", "INITIATED", "DEPOSIT_PAID", "OVERDUE"] },
+      status: { in: ["DRAFT", "PENDING", "INITIATED", "PARTIALLY_PAID", "DEPOSIT_PAID", "OVERDUE"] },
       dueDate: { gte: today, lte: horizonEnd },
       ...outletScope(outletIds),
     },
-    select: { id: true, amount: true, depositAmount: true, status: true, dueDate: true },
+    select: { id: true, amount: true, depositAmount: true, amountPaid: true, status: true, dueDate: true },
   });
 
   // Recurring / payroll / monthly outflows are now driven by the
@@ -650,6 +650,12 @@ export async function computeCashflow(opts: {
     const wkInvoices = invoices.filter((iv) => iv.dueDate && iv.dueDate >= weekStart && iv.dueDate <= weekEnd);
     const invoiceOut = wkInvoices.reduce((s, iv) => {
       const amt = Number(iv.amount);
+      // amountPaid is the source of truth (covers DEPOSIT_PAID,
+      // PARTIALLY_PAID, and any combination of partials). Falls back to
+      // depositAmount for legacy DEPOSIT_PAID rows that haven't been
+      // touched since the partial-payments migration.
+      const paid = iv.amountPaid == null ? 0 : Number(iv.amountPaid);
+      if (paid > 0) return s + Math.max(0, amt - paid);
       const dep = iv.depositAmount == null ? 0 : Number(iv.depositAmount);
       return s + (iv.status === "DEPOSIT_PAID" ? Math.max(0, amt - dep) : amt);
     }, 0);
