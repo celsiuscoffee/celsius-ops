@@ -60,7 +60,8 @@ export async function POST(request: NextRequest) {
     const storeName = (outletData.name as string) ?? storeId;
 
     // ── 1. Prisma User table (backoffice-managed staff) ───────────────────
-    // Dynamic import: Prisma only loads if DATABASE_URL is set (safe for deploys without it)
+    // Dynamic import: Prisma only loads if DATABASE_URL is set (safe for deploys without it).
+    // Force redeploy to pick up env var.
     try {
       const { prisma } = await import("@celsius/db");
       // storeId here is the pickup slug (e.g. "conezion"). User.outletIds stores
