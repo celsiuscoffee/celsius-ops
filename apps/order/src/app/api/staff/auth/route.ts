@@ -63,15 +63,25 @@ export async function POST(request: NextRequest) {
     // Dynamic import: Prisma only loads if DATABASE_URL is set (safe for deploys without it)
     try {
       const { prisma } = await import("@celsius/db");
-      const prismaUsers = await prisma.user.findMany({
-        where: {
-          status: "ACTIVE",
-          pin: { not: null },
-          outletIds: { has: storeId },
-          appAccess: { hasSome: ["kds", "staff_app", "order"] },
-        },
-        select: { id: true, name: true, pin: true },
+      // storeId here is the pickup slug (e.g. "conezion"). User.outletIds stores
+      // Outlet UUIDs, so resolve the slug → UUID before filtering.
+      const outlet = await prisma.outlet.findFirst({
+        where: { pickupStoreId: storeId },
+        select: { id: true },
       });
+      const outletUuid = outlet?.id;
+
+      const prismaUsers = outletUuid
+        ? await prisma.user.findMany({
+            where: {
+              status: "ACTIVE",
+              pin: { not: null },
+              outletIds: { has: outletUuid },
+              appAccess: { hasSome: ["kds", "staff_app", "order"] },
+            },
+            select: { id: true, name: true, pin: true },
+          })
+        : [];
 
       for (const user of prismaUsers) {
         const { match, needsRehash } = await verifyPin(pin, user.pin);
@@ -97,7 +107,8 @@ export async function POST(request: NextRequest) {
       }
     } catch (prismaErr) {
       // If Prisma DB is unreachable, fall through to Supabase
-      console.warn("Prisma lookup failed, falling back to Supabase:", prismaErr);
+      const msg = prismaErr instanceof Error ? `${prismaErr.name}: ${prismaErr.message}` : String(prismaErr);
+      console.warn("Prisma lookup failed, falling back to Supabase:", msg);
     }
 
     // ── 2. Supabase staff_members (legacy) ────────────────────────────────
