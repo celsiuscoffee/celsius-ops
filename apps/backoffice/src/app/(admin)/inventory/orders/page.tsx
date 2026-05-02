@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
 import { Card } from "@/components/ui/card";
+import { toast } from "@celsius/ui";
 import {
   Dialog,
   DialogContent,
@@ -84,6 +85,7 @@ type Order = {
   notes: string | null;
   photos: string[];
   deliveryDate: string | null;
+  deliveryCharge: number;
   createdBy: string;
   approvedBy: string | null;
   approvedAt: string | null;
@@ -227,7 +229,9 @@ export default function OrdersPage() {
     setConfirmOnSave(confirmMode);
     setDetectedSupplier(null);
     setAiUnmatched([]);
-    setAiDeliveryCharge(null);
+    // Pre-fill from saved value so re-opening the modal preserves the
+    // delivery charge instead of forcing a re-extract.
+    setAiDeliveryCharge(order.deliveryCharge > 0 ? order.deliveryCharge : null);
     setEditOrder(order);
     setEditItems(order.items.map((i) => ({ ...i, removed: false, qtyStr: String(i.quantity), priceStr: i.unitPrice.toFixed(2) })));
     setEditDeliveryDate(order.deliveryDate ?? "");
@@ -457,18 +461,31 @@ export default function OrdersPage() {
           : { id: i.id, quantity: parseFloat(i.qtyStr) || 0, unitPrice: parseFloat(i.priceStr) || 0 }
         );
 
-      // Update order (items + delivery date)
+      // Update order (items + delivery date + delivery charge). Sending
+      // deliveryCharge tells the API to recompute totalAmount = items +
+      // charge so the PO list shows the full obligation, not just items.
       const orderPayload: Record<string, unknown> = {};
       if (itemChanges.length > 0) orderPayload.items = itemChanges;
       if (editDeliveryDate !== (editOrder.deliveryDate ?? "")) {
         orderPayload.deliveryDate = editDeliveryDate || null;
       }
+      const newDeliveryCharge = aiDeliveryCharge ?? 0;
+      if (newDeliveryCharge !== editOrder.deliveryCharge) {
+        orderPayload.deliveryCharge = newDeliveryCharge;
+      }
       if (Object.keys(orderPayload).length > 0) {
-        await fetch(`/api/inventory/orders/${editOrder.id}`, {
+        const r = await fetch(`/api/inventory/orders/${editOrder.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(orderPayload),
         });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          toast.error(err?.error || `Order save failed (${r.status})`);
+          // Stop here — invoice update would race against an order in an
+          // unknown state.
+          return;
+        }
       }
 
       // Update or create invoice (include delivery charge if detected)
@@ -521,38 +538,57 @@ export default function OrdersPage() {
           invoicePayload.photos = [...(invData.photos || []), ...editInvoiceFiles.map((f) => f.url)];
         }
         if (Object.keys(invoicePayload).length > 0) {
-          await fetch(`/api/inventory/invoices/${editOrder.invoice.id}`, {
+          const r = await fetch(`/api/inventory/invoices/${editOrder.invoice.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(invoicePayload),
           });
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            toast.error(err?.error || `Invoice save failed (${r.status})`);
+            return; // keep the modal open so the user can retry
+          }
         }
       } else if (editInvoiceNumber || editInvoiceIssueDate || editInvoiceDueDate || editInvoiceFiles.length > 0) {
         const detailRes = await fetch(`/api/inventory/orders/${editOrder.id}`);
-        if (detailRes.ok) {
-          const detail = await detailRes.json();
-          await fetch("/api/inventory/invoices", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              orderId: editOrder.id,
-              outletId: detail.outletId,
-              supplierId: detail.supplierId,
-              amount: invoiceAmount,
-              invoiceNumber: editInvoiceNumber || null,
-              issueDate: editInvoiceIssueDate || null,
-              dueDate: editInvoiceDueDate || null,
-              deliveryDate: editDeliveryDate || null,
-              depositPercent: parsedDepositPercent,
-              depositTermsDays: parsedDepositTerms,
-              photos: editInvoiceFiles.map((f) => f.url),
-            }),
-          });
+        if (!detailRes.ok) {
+          toast.error("Could not load order detail to attach invoice");
+          return;
+        }
+        const detail = await detailRes.json();
+        const r = await fetch("/api/inventory/invoices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orderId: editOrder.id,
+            outletId: detail.outletId,
+            supplierId: detail.supplierId,
+            amount: invoiceAmount,
+            invoiceNumber: editInvoiceNumber || null,
+            issueDate: editInvoiceIssueDate || null,
+            dueDate: editInvoiceDueDate || null,
+            deliveryDate: editDeliveryDate || null,
+            depositPercent: parsedDepositPercent,
+            depositTermsDays: parsedDepositTerms,
+            photos: editInvoiceFiles.map((f) => f.url),
+          }),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          toast.error(err?.error || `Invoice create failed (${r.status})`);
+          return;
         }
       }
 
+      toast.success("Saved");
       setEditOrder(null);
-      loadOrders();
+      // Force a real revalidation — pass undefined to invalidate cache.
+      // SWR returns cached data first by default, which made saves look like
+      // they hadn't applied even when they had.
+      await loadOrders(undefined, { revalidate: true });
+    } catch (err) {
+      console.error("[orders save] exception:", err);
+      toast.error(err instanceof Error ? err.message : "Save failed unexpectedly");
     } finally {
       setEditSaving(false);
     }

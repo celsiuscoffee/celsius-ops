@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const tab = req.nextUrl.searchParams.get("tab") || "unpaid";
   const search = req.nextUrl.searchParams.get("search") || "";
 
-  const UNPAID_STATUSES = ["DRAFT", "INITIATED", "PENDING", "DEPOSIT_PAID", "OVERDUE"];
+  const UNPAID_STATUSES = ["DRAFT", "INITIATED", "PENDING", "PARTIALLY_PAID", "DEPOSIT_PAID", "OVERDUE"];
 
   const type = req.nextUrl.searchParams.get("type") || "all";
   // cardFilter narrows the result set the same way the summary cards do.
@@ -173,6 +173,7 @@ export async function GET(req: NextRequest) {
       depositPaidAt: true,
       depositRef: true,
       deliveryDate: true,
+      amountPaid: true,
     },
     // Paid invoices sort by paidAt desc (newest payment first). Unpaid rows
     // have paidAt=null and fall through to issueDate desc.
@@ -217,28 +218,31 @@ export async function GET(req: NextRequest) {
       // separately in the Pending Invoice card (and on the Payable card as
       // a soft sub-line) so cashflow planning still sees the full liability.
       where: {
-        status: { in: UNPAID_STATUSES as ("DRAFT" | "INITIATED" | "PENDING" | "DEPOSIT_PAID" | "OVERDUE")[] },
+        status: { in: UNPAID_STATUSES as ("DRAFT" | "INITIATED" | "PENDING" | "PARTIALLY_PAID" | "DEPOSIT_PAID" | "OVERDUE")[] },
         NOT: pendingInvoiceWhere,
       },
-      select: { id: true, amount: true, status: true, depositAmount: true },
+      select: { id: true, amount: true, status: true, depositAmount: true, amountPaid: true },
     }),
     prisma.invoice.findMany({
       where: {
-        status: { in: UNPAID_STATUSES as ("DRAFT" | "INITIATED" | "PENDING" | "DEPOSIT_PAID" | "OVERDUE")[] },
+        status: { in: UNPAID_STATUSES as ("DRAFT" | "INITIATED" | "PENDING" | "PARTIALLY_PAID" | "DEPOSIT_PAID" | "OVERDUE")[] },
         dueDate: { gte: todayStart, lt: todayEnd },
         NOT: pendingInvoiceWhere,
       },
-      select: { id: true, amount: true, status: true, depositAmount: true },
+      select: { id: true, amount: true, status: true, depositAmount: true, amountPaid: true },
     }),
     // Pending Invoice = goods received but supplier invoice not yet attached
     prisma.invoice.aggregate({ where: pendingInvoiceWhere, _sum: { amount: true }, _count: { _all: true } }),
   ]);
 
-  // Outstanding balance = full amount, minus deposit already paid for
-  // DEPOSIT_PAID rows (only the balance is still owed). All other unpaid
-  // statuses owe the full amount.
-  const outstanding = (i: { amount: { toNumber?: () => number } | number; status: string; depositAmount: { toNumber?: () => number } | number | null }) => {
+  // Outstanding balance = full amount minus what's already been paid.
+  // amountPaid is the source of truth — covers DEPOSIT_PAID, PARTIALLY_PAID,
+  // and any combination of partials. Falls back to the legacy depositAmount
+  // calculation if amountPaid is somehow zero on a DEPOSIT_PAID row.
+  const outstanding = (i: { amount: { toNumber?: () => number } | number; status: string; depositAmount: { toNumber?: () => number } | number | null; amountPaid?: { toNumber?: () => number } | number | null }) => {
     const amt = typeof i.amount === "number" ? i.amount : i.amount.toNumber?.() ?? 0;
+    const paid = i.amountPaid == null ? 0 : (typeof i.amountPaid === "number" ? i.amountPaid : i.amountPaid.toNumber?.() ?? 0);
+    if (paid > 0) return Math.max(0, amt - paid);
     const dep = i.depositAmount == null ? 0 : (typeof i.depositAmount === "number" ? i.depositAmount : i.depositAmount.toNumber?.() ?? 0);
     return i.status === "DEPOSIT_PAID" ? Math.max(0, amt - dep) : amt;
   };
@@ -305,6 +309,7 @@ export async function GET(req: NextRequest) {
     depositTermsDays: inv.depositTermsDays ?? null,
     depositAmount: inv.depositAmount ? Number(inv.depositAmount) : null,
     deliveryDate: inv.deliveryDate?.toISOString().split("T")[0] ?? null,
+    amountPaid: inv.amountPaid ? Number(inv.amountPaid) : 0,
     depositPaidAt: inv.depositPaidAt?.toISOString() ?? null,
     depositRef: inv.depositRef ?? null,
     flags: Array.isArray(inv.flags) ? inv.flags : [],

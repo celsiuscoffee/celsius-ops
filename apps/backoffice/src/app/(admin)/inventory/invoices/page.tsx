@@ -71,6 +71,7 @@ type Invoice = {
   depositPaidAt: string | null;
   depositRef: string | null;
   deliveryDate: string | null;
+  amountPaid: number;
   flags: InvoiceFlag[];
   isPendingInvoice: boolean;
   supplierPaymentTerms: string | null;
@@ -144,7 +145,7 @@ export default function InvoicesPage() {
   // Payment dialog
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   const [payingTargetStatus, setPayingTargetStatus] = useState<string>("");
-  const [payForm, setPayForm] = useState({ paidVia: "", paymentRef: "" });
+  const [payForm, setPayForm] = useState({ paidVia: "", paymentRef: "", partialAmount: "" });
   const [paySaving, setPaySaving] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [payReceipts, setPayReceipts] = useState<string[]>([]);
@@ -265,7 +266,7 @@ export default function InvoicesPage() {
   const openPayDialog = (inv: Invoice, targetStatus: string) => {
     setPayingInvoice(inv);
     setPayingTargetStatus(targetStatus);
-    setPayForm({ paidVia: "", paymentRef: "" });
+    setPayForm({ paidVia: "", paymentRef: "", partialAmount: "" });
     setPayReceipts([]);
     setCopiedField(null);
   };
@@ -323,11 +324,19 @@ export default function InvoicesPage() {
     if (!payingInvoice) return;
     setPaySaving(true);
     try {
+      // If user entered a partial amount, route through paymentAmount so the
+      // API recomputes status (PARTIALLY_PAID / DEPOSIT_PAID / PAID) from
+      // the running total. Otherwise use the legacy status-flip behaviour.
+      const partial = parseFloat(payForm.partialAmount);
+      const usingPartial = Number.isFinite(partial) && partial > 0;
+
       const res = await fetch(`/api/inventory/invoices/${payingInvoice.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          status: payingTargetStatus,
+          ...(usingPartial
+            ? { paymentAmount: partial }
+            : { status: payingTargetStatus }),
           ...(payForm.paymentRef ? {
             // For deposit payment, store ref in depositRef; for balance/full, in paymentRef
             ...(payingTargetStatus === "DEPOSIT_PAID" ? { depositRef: payForm.paymentRef } : { paymentRef: payForm.paymentRef }),
@@ -643,6 +652,7 @@ export default function InvoicesPage() {
       if (status === "PAID") return "settled";
     }
     if (status === "DEPOSIT_PAID") return "deposit paid";
+    if (status === "PARTIALLY_PAID") return "partial";
     return status.toLowerCase();
   };
 
@@ -651,6 +661,7 @@ export default function InvoicesPage() {
       case "PAID": return "bg-green-500";
       case "INITIATED": return "bg-blue-500";
       case "PENDING": return "bg-terracotta";
+      case "PARTIALLY_PAID": return "bg-amber-500";
       case "DEPOSIT_PAID": return "bg-amber-500";
       case "OVERDUE": return "bg-red-500";
       case "DRAFT": return "bg-gray-400";
@@ -1001,8 +1012,8 @@ export default function InvoicesPage() {
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="text-base font-bold text-gray-900">RM {inv.amount.toFixed(2)}</p>
-                  {inv.status === "DEPOSIT_PAID" && inv.depositAmount && (
-                    <p className="text-[10px] text-amber-600">Bal: RM {(inv.amount - inv.depositAmount).toFixed(2)}</p>
+                  {(inv.status === "PARTIALLY_PAID" || inv.status === "DEPOSIT_PAID") && inv.amountPaid > 0 && (
+                    <p className="text-[10px] text-amber-600">Bal: RM {(inv.amount - inv.amountPaid).toFixed(2)}</p>
                   )}
                 </div>
               </div>
@@ -1157,8 +1168,8 @@ export default function InvoicesPage() {
                     ) : (
                       <Badge className={`text-[10px] ${statusColor(inv.status)}`}>{statusLabel(inv.status, inv.paymentType)}</Badge>
                     )}
-                    {inv.status === "DEPOSIT_PAID" && inv.depositAmount && (
-                      <p className="text-[9px] text-amber-600 mt-0.5">Bal: RM {(inv.amount - inv.depositAmount).toFixed(2)}</p>
+                    {(inv.status === "PARTIALLY_PAID" || inv.status === "DEPOSIT_PAID") && inv.amountPaid > 0 && (
+                      <p className="text-[9px] text-amber-600 mt-0.5">Bal: RM {(inv.amount - inv.amountPaid).toFixed(2)}</p>
                     )}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{inv.issueDate}</td>
@@ -1807,6 +1818,46 @@ export default function InvoicesPage() {
                       </div>
                     )}
                   </div>
+                </div>
+              );
+            })()}
+
+            {/* Partial-amount entry — only on Mark Paid (or balance) flows.
+                If left blank, we keep the legacy behaviour (full balance).
+                Filling it routes through paymentAmount → API auto-flips
+                status to PARTIALLY_PAID / DEPOSIT_PAID / PAID. */}
+            {payingTargetStatus === "PAID" && payingInvoice && (() => {
+              const remaining = Math.max(0, payingInvoice.amount - (payingInvoice.amountPaid || 0));
+              const partial = parseFloat(payForm.partialAmount);
+              const validPartial = Number.isFinite(partial) && partial > 0;
+              const projectedPaid = (payingInvoice.amountPaid || 0) + (validPartial ? partial : remaining);
+              const projectedRemaining = Math.max(0, payingInvoice.amount - projectedPaid);
+              return (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-amber-900">Pay partial?</p>
+                    <p className="text-[11px] text-amber-700">Outstanding: RM {remaining.toFixed(2)}</p>
+                  </div>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={remaining}
+                    placeholder={`Leave blank to pay full RM ${remaining.toFixed(2)}`}
+                    value={payForm.partialAmount}
+                    onChange={(e) => setPayForm({ ...payForm, partialAmount: e.target.value })}
+                    className="mt-2"
+                  />
+                  {validPartial && partial < remaining && (
+                    <p className="mt-1.5 text-[11px] text-amber-800">
+                      After this: RM {projectedRemaining.toFixed(2)} still owed → status will become <strong>partial</strong>.
+                    </p>
+                  )}
+                  {validPartial && partial > remaining && (
+                    <p className="mt-1.5 text-[11px] text-red-700">
+                      Amount exceeds outstanding (RM {remaining.toFixed(2)}). Will cap at outstanding.
+                    </p>
+                  )}
                 </div>
               );
             })()}

@@ -27,6 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params;
     const body = await req.json();
     const { status, totalAmount, deliveryDate, items, invoicePhotos } = body;
+    const deliveryChargeInput: number | null | undefined = body.deliveryCharge;
 
     const data: Record<string, unknown> = {};
 
@@ -83,6 +84,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       data.deliveryDate = deliveryDate ? new Date(deliveryDate) : null;
     }
 
+    // Persist the supplier's delivery charge separately so we can re-edit
+    // it later without re-extracting the invoice. null/0 → no charge.
+    let effectiveDeliveryCharge: number | null = null;
+    if (deliveryChargeInput === null) {
+      data.deliveryCharge = 0;
+      effectiveDeliveryCharge = 0;
+    } else if (typeof deliveryChargeInput === "number" && deliveryChargeInput >= 0) {
+      data.deliveryCharge = deliveryChargeInput;
+      effectiveDeliveryCharge = deliveryChargeInput;
+    }
+
     // Update individual items (quantity, unitPrice, or remove)
     if (items && Array.isArray(items)) {
       for (const item of items as { id: string; quantity?: number; unitPrice?: number; remove?: boolean }[]) {
@@ -107,12 +119,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
       }
 
-      // Recalculate order total from remaining items
+      // Recalculate order total from remaining items + delivery charge.
+      // Pull the delivery charge from this PATCH if supplied, else from
+      // the existing row, so we don't accidentally reset it to 0 when
+      // someone edits items without touching delivery.
       const remaining = await prisma.orderItem.findMany({ where: { orderId: id } });
-      data.totalAmount = remaining.reduce((sum, i) => sum + Number(i.totalPrice), 0);
+      const itemsTotal = remaining.reduce((sum, i) => sum + Number(i.totalPrice), 0);
+      let dc = effectiveDeliveryCharge;
+      if (dc === null) {
+        const existing = await prisma.order.findUnique({ where: { id }, select: { deliveryCharge: true } });
+        dc = existing?.deliveryCharge ? Number(existing.deliveryCharge) : 0;
+      }
+      data.totalAmount = itemsTotal + dc;
     } else if (totalAmount !== undefined) {
       // Manual total override (only if no item edits)
       data.totalAmount = totalAmount;
+    } else if (effectiveDeliveryCharge !== null) {
+      // Delivery charge changed but items didn't — recompute total from
+      // current items + the new charge.
+      const remaining = await prisma.orderItem.findMany({ where: { orderId: id } });
+      const itemsTotal = remaining.reduce((sum, i) => sum + Number(i.totalPrice), 0);
+      data.totalAmount = itemsTotal + effectiveDeliveryCharge;
     }
 
     const order = await prisma.order.update({

@@ -361,6 +361,10 @@ model Order {
   supplier     Supplier?   @relation(fields: [supplierId], references: [id])
   status       OrderStatus @default(DRAFT)
   totalAmount  Decimal     @default(0)
+  // Delivery charge from the supplier (typically detected by AI on the
+  // uploaded invoice). totalAmount is the items subtotal + this charge, so
+  // the PO list and cashflow projections reflect the full obligation.
+  deliveryCharge Decimal   @default(0)
   notes        String?
   photos       String[]    @default([])
   deliveryDate DateTime?
@@ -455,6 +459,11 @@ model Invoice {
   paidVia       String?
   paymentRef    String?
   popShortLink  String?
+  // Running total of all payments applied to this invoice. Single field
+  // intentionally — covers deposit-then-balance flows AND ad-hoc partial
+  // payments. If audit-grade payment history becomes a need (multiple
+  // POPs, who-paid-when), promote to an InvoicePayment ledger table.
+  amountPaid    Decimal      @default(0)
   // Actual delivery date — captured from the supplier invoice (typically
   // via AI extraction). Distinct from Order.deliveryDate, which is the
   // PLANNED date. Used by the receivings/transfer flow to know when goods
@@ -505,6 +514,7 @@ enum InvoiceStatus {
   DRAFT
   INITIATED
   PENDING
+  PARTIALLY_PAID  // ad-hoc partial; deposit case still uses DEPOSIT_PAID
   DEPOSIT_PAID
   PAID
   OVERDUE
