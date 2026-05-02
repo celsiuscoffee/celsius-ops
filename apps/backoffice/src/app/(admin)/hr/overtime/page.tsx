@@ -3,7 +3,7 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useState, useEffect, useRef } from "react";
 import { Clock, CheckCircle2, XCircle, Loader2, Plus, AlertTriangle, Calendar, X, LogIn, LogOut } from "lucide-react";
-import { BackToHR } from "@/components/hr/back-to-hr";
+import { HrPageHeader } from "@/components/hr/page-header";
 
 type AttendanceLog = {
   id: string;
@@ -132,36 +132,35 @@ export default function OvertimeRequestsPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <BackToHR />
-          <h1 className="text-2xl font-bold">Overtime Requests</h1>
-          <p className="text-sm text-muted-foreground">Pre-approve planned OT, or retroactively approve OT hours logged during attendance review</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={async () => {
-              const res = await fetch("/api/hr/overtime-requests/sync", { method: "POST" });
-              const body = await res.json();
-              if (res.ok) {
-                alert(`Synced ${body.created} OT request${body.created === 1 ? "" : "s"} from attendance`);
-                mutate();
-              } else {
-                alert(body.error || "Sync failed");
-              }
-            }}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50"
-          >
-            Sync from Attendance
-          </button>
-          <button
-            onClick={() => setNewOT({ user_id: "", date: new Date().toISOString().slice(0, 10), hours: "", reason: "", ot_type: "1.5x" })}
-            className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark"
-          >
-            <Plus className="h-4 w-4" /> Post-hoc OT
-          </button>
-        </div>
-      </div>
+      <HrPageHeader
+        title="Overtime Requests"
+        description="Pre-approve planned OT, or retroactively approve OT hours logged during attendance review"
+        action={
+          <>
+            <button
+              onClick={async () => {
+                const res = await fetch("/api/hr/overtime-requests/sync", { method: "POST" });
+                const body = await res.json();
+                if (res.ok) {
+                  alert(`Synced ${body.created} OT request${body.created === 1 ? "" : "s"} from attendance`);
+                  mutate();
+                } else {
+                  alert(body.error || "Sync failed");
+                }
+              }}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50"
+            >
+              Sync from Attendance
+            </button>
+            <button
+              onClick={() => setNewOT({ user_id: "", date: new Date().toISOString().slice(0, 10), hours: "", reason: "", ot_type: "1.5x" })}
+              className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark"
+            >
+              <Plus className="h-4 w-4" /> Post-hoc OT
+            </button>
+          </>
+        }
+      />
 
       {/* Tabs */}
       <div className="flex gap-1 border-b">

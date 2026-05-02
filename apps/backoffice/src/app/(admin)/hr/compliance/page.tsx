@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { HrPageHeader } from "@/components/hr/page-header";
 import { useFetch } from "@/lib/use-fetch";
-import { ArrowLeft, Loader2, Plus, Save, Trash2, AlertTriangle, CheckCircle2, ShieldAlert, Calendar } from "lucide-react";
+import { Loader2, Plus, Save, Trash2, AlertTriangle, CheckCircle2, ShieldAlert, Calendar } from "lucide-react";
 import { useConfirm, toast } from "@celsius/ui";
 
 type Event = {
@@ -114,35 +114,29 @@ export default function CompliancePage() {
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <ConfirmDialog />
-      <div className="flex items-center justify-between">
-        <div>
-          <Link href="/hr" className="text-xs text-muted-foreground hover:underline">
-            <ArrowLeft className="inline h-3 w-3" /> HR
-          </Link>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <ShieldAlert className="h-6 w-6 text-terracotta" /> Compliance Calendar
-          </h1>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={bootstrap}
-            disabled={bootstrapping}
-            className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
-            title="Seed standard MY statutory events (KWSP, PERKESO, CP39, HRDF, Form E, CP8D)"
-          >
-            {bootstrapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
-            Seed standard MY events
-          </button>
-          {!showAdd && (
-            <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-sm font-medium text-white hover:bg-terracotta-dark">
-              <Plus className="h-4 w-4" /> Add event
+      <HrPageHeader
+        title="Compliance Calendar"
+        icon={<ShieldAlert className="h-6 w-6 text-terracotta" />}
+        description="LHDN, KWSP, PERKESO, HRDF deadlines. Work-permit and license renewals. Recurring events auto-schedule the next occurrence on completion."
+        action={
+          <>
+            <button
+              onClick={bootstrap}
+              disabled={bootstrapping}
+              className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
+              title="Seed standard MY statutory events (KWSP, PERKESO, CP39, HRDF, Form E, CP8D)"
+            >
+              {bootstrapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
+              Seed standard MY events
             </button>
-          )}
-        </div>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        LHDN, KWSP, PERKESO, HRDF deadlines. Work-permit and license renewals. Recurring events auto-schedule the next occurrence on completion.
-      </p>
+            {!showAdd && (
+              <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-sm font-medium text-white hover:bg-terracotta-dark">
+                <Plus className="h-4 w-4" /> Add event
+              </button>
+            )}
+          </>
+        }
+      />
 
       {showAdd && (
         <div className="rounded-xl border bg-card p-5">

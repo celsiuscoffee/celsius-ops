@@ -4,6 +4,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { TrendingUp, Star, Clock, CalendarOff, ClipboardCheck, MessageSquare, AlertTriangle, Trophy, Loader2, ShieldCheck, ThumbsUp, ThumbsDown } from "lucide-react";
+import { HrPageHeader } from "@/components/hr/page-header";
 
 type StaffPerf = {
   userId: string;
@@ -95,12 +96,11 @@ export default function HRPerformancePage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <TrendingUp className="h-6 w-6 text-terracotta" /> Staff Performance
-        </h1>
-        <p className="text-sm text-muted-foreground">Attendance, hours, leave, ops compliance & customer feedback — composite monthly score per staff</p>
-      </div>
+      <HrPageHeader
+        title="Staff Performance"
+        icon={<TrendingUp className="h-6 w-6 text-terracotta" />}
+        description="Attendance, hours, leave, ops compliance & customer feedback — composite monthly score per staff"
+      />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 rounded-xl border bg-card p-4">

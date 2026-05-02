@@ -8,6 +8,7 @@ import {
   Bot, CalendarDays, Send, Loader2, ArrowLeftRight,
   ChevronLeft, ChevronRight, RotateCcw, Trash2,
 } from "lucide-react";
+import { HrPageHeader } from "@/components/hr/page-header";
 
 type ShiftTemplate = {
   id: string;
@@ -482,42 +483,41 @@ export default function SchedulesPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4 sm:p-6 lg:p-8">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Schedules</h1>
-          <p className="text-sm text-muted-foreground">Click a cell to assign a shift</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleClearAll}
-            disabled={clearing || !grid?.schedule || isPublished}
-            className="flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-            title={isPublished ? "Unpublish first to clear" : "Clear all shifts for this week"}
-          >
-            {clearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            Clear Week
-          </button>
-          <button
-            onClick={handleAIFill}
-            disabled={generating || !selectedOutlet || isPublished}
-            className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
-          >
-            {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-            AI Fill
-          </button>
-          <button
-            onClick={handlePublish}
-            disabled={publishing || !grid?.schedule}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${
-              isPublished ? "bg-red-500 hover:bg-red-600" : "bg-green-600 hover:bg-green-700"
-            }`}
-          >
-            {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : isPublished ? <RotateCcw className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-            {isPublished ? "Unpublish" : "Publish"}
-          </button>
-        </div>
-      </div>
+      <HrPageHeader
+        title="Schedules"
+        description="Click a cell to assign a shift"
+        action={
+          <>
+            <button
+              onClick={handleClearAll}
+              disabled={clearing || !grid?.schedule || isPublished}
+              className="flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              title={isPublished ? "Unpublish first to clear" : "Clear all shifts for this week"}
+            >
+              {clearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Clear Week
+            </button>
+            <button
+              onClick={handleAIFill}
+              disabled={generating || !selectedOutlet || isPublished}
+              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
+            >
+              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+              AI Fill
+            </button>
+            <button
+              onClick={handlePublish}
+              disabled={publishing || !grid?.schedule}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${
+                isPublished ? "bg-red-500 hover:bg-red-600" : "bg-green-600 hover:bg-green-700"
+              }`}
+            >
+              {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : isPublished ? <RotateCcw className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+              {isPublished ? "Unpublish" : "Publish"}
+            </button>
+          </>
+        }
+      />
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">

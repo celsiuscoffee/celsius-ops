@@ -12,7 +12,7 @@
 import { useEffect, useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Loader2, Plus, Trash2, Clock, Star } from "lucide-react";
-import { BackToHR } from "@/components/hr/back-to-hr";
+import { HrPageHeader } from "@/components/hr/page-header";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -105,13 +105,10 @@ export default function AvailabilityPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div>
-        <BackToHR />
-        <h1 className="text-2xl font-bold">Part-Timer Availability</h1>
-        <p className="text-sm text-muted-foreground">
-          Hours each part-timer can work, per day of week. Schedule grid respects these windows when assigning shifts.
-        </p>
-      </div>
+      <HrPageHeader
+        title="Part-Timer Availability"
+        description="Hours each part-timer can work, per day of week. Schedule grid respects these windows when assigning shifts."
+      />
 
       <div className="rounded-lg border bg-card p-4">
         <label className="mb-1 block text-xs font-medium text-muted-foreground">Part-Timer</label>

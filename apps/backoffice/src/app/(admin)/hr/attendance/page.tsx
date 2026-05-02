@@ -4,7 +4,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, MapPinOff, Clock, Timer, Loader2, ImageOff } from "lucide-react";
 import { usePrompt } from "@celsius/ui";
-import { BackToHR } from "@/components/hr/back-to-hr";
+import { HrPageHeader } from "@/components/hr/page-header";
 import type { AttendanceLog } from "@/lib/hr/types";
 
 type EnrichedLog = AttendanceLog & {
@@ -58,31 +58,30 @@ export default function AttendanceReviewPage() {
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <PromptDialog />
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <BackToHR />
-          <h1 className="text-2xl font-bold">Attendance Review</h1>
-          <p className="text-sm text-muted-foreground">
-            {filter === "flagged"
-              ? `${logs.length} flagged item${logs.length !== 1 ? "s" : ""} need review`
-              : `${logs.length} attendance log${logs.length !== 1 ? "s" : ""}`}
-          </p>
-        </div>
-        <div className="flex gap-1 rounded-lg border bg-card p-1 text-sm">
-          <button
-            onClick={() => setFilter("flagged")}
-            className={`rounded-md px-3 py-1.5 font-medium ${filter === "flagged" ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
-          >
-            Flagged
-          </button>
-          <button
-            onClick={() => setFilter("all")}
-            className={`rounded-md px-3 py-1.5 font-medium ${filter === "all" ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
-          >
-            All
-          </button>
-        </div>
-      </div>
+      <HrPageHeader
+        title="Attendance Review"
+        description={
+          filter === "flagged"
+            ? `${logs.length} flagged item${logs.length !== 1 ? "s" : ""} need review`
+            : `${logs.length} attendance log${logs.length !== 1 ? "s" : ""}`
+        }
+        action={
+          <div className="flex gap-1 rounded-lg border bg-card p-1 text-sm">
+            <button
+              onClick={() => setFilter("flagged")}
+              className={`rounded-md px-3 py-1.5 font-medium ${filter === "flagged" ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
+            >
+              Flagged
+            </button>
+            <button
+              onClick={() => setFilter("all")}
+              className={`rounded-md px-3 py-1.5 font-medium ${filter === "all" ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
+            >
+              All
+            </button>
+          </div>
+        }
+      />
 
       {logs.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border bg-card py-16 text-center">

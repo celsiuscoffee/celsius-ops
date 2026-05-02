@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Star, Loader2, CheckCircle2, XCircle, RefreshCw, AlertTriangle } from "lucide-react";
-import { BackToHR } from "@/components/hr/back-to-hr";
+import { HrPageHeader } from "@/components/hr/page-header";
 
 type Attributed = { id: string; name: string | null; fullName: string | null };
 type Suggested = { user_id: string; name: string | null; fullName: string | null; source?: "attendance" | "schedule" };
@@ -120,20 +120,21 @@ export default function ReviewPenaltiesPage() {
 
   return (
     <div className="p-3 sm:p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <BackToHR />
-          <h1 className="text-2xl font-bold">Review Penalties</h1>
-          <p className="text-sm text-gray-600">Review 1–2★ Google reviews and attribute penalties to responsible staff.</p>
-        </div>
-        <button
-          onClick={sync}
-          disabled={syncing}
-          className="flex items-center gap-2 px-4 py-2 rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
-        >
-          {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          Sync from GBP
-        </button>
+      <div className="mb-6">
+        <HrPageHeader
+          title="Review Penalties"
+          description="Review 1–2★ Google reviews and attribute penalties to responsible staff."
+          action={
+            <button
+              onClick={sync}
+              disabled={syncing}
+              className="flex items-center gap-2 px-4 py-2 rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+            >
+              {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Sync from GBP
+            </button>
+          }
+        />
       </div>
 
       <div className="flex gap-2 mb-4 border-b">

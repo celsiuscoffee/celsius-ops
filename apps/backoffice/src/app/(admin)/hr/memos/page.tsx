@@ -4,7 +4,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import { AlertTriangle, Award, FileText, Loader2, Plus, X, CheckCircle2, XCircle, Megaphone, Bell } from "lucide-react";
 import { usePrompt } from "@celsius/ui";
-import { BackToHR } from "@/components/hr/back-to-hr";
+import { HrPageHeader } from "@/components/hr/page-header";
 
 type Memo = {
   id: string;
@@ -122,21 +122,18 @@ export default function MemosPage() {
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <PromptDialog />
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <BackToHR />
-          <h1 className="text-2xl font-bold">Memos</h1>
-          <p className="text-sm text-muted-foreground">
-            Announcements, reminders, commendations, or warnings for staff. They acknowledge from the staff app.
-          </p>
-        </div>
-        <button
-          onClick={() => setCreating(true)}
-          className="flex items-center gap-1.5 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta/90"
-        >
-          <Plus className="h-4 w-4" /> New Memo
-        </button>
-      </div>
+      <HrPageHeader
+        title="Memos"
+        description="Announcements, reminders, commendations, or warnings for staff. They acknowledge from the staff app."
+        action={
+          <button
+            onClick={() => setCreating(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta/90"
+          >
+            <Plus className="h-4 w-4" /> New Memo
+          </button>
+        }
+      />
 
       <div className="flex gap-1 rounded-lg border bg-card p-1 text-sm w-fit">
         {(["active", "rescinded", "all"] as const).map((s) => (

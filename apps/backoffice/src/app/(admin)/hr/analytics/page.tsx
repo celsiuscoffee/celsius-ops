@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { ArrowLeft, Users, TrendingDown, Clock, Banknote, AlertTriangle, ShieldAlert, Briefcase } from "lucide-react";
+import { Users, TrendingDown, Clock, Banknote, AlertTriangle, ShieldAlert, Briefcase } from "lucide-react";
+import { HrPageHeader } from "@/components/hr/page-header";
 
 type Analytics = {
   headcount: { active: number; by_type: Record<string, number>; in_probation: number };
@@ -37,15 +38,10 @@ export default function HrAnalyticsPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div>
-        <Link href="/hr" className="text-xs text-muted-foreground hover:underline">
-          <ArrowLeft className="inline h-3 w-3" /> HR
-        </Link>
-        <h1 className="text-2xl font-bold">Analytics</h1>
-        <p className="text-sm text-muted-foreground">
-          Headcount, turnover, attendance health, payroll cost trend. Year-to-date from {data.ytd_start}.
-        </p>
-      </div>
+      <HrPageHeader
+        title="Analytics"
+        description={`Headcount, turnover, attendance health, payroll cost trend. Year-to-date from ${data.ytd_start}.`}
+      />
 
       {/* Top KPIs */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

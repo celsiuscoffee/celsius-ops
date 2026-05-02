@@ -3,7 +3,7 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import { CalendarOff, CheckCircle2, XCircle, Loader2, Bot } from "lucide-react";
-import { BackToHR } from "@/components/hr/back-to-hr";
+import { HrPageHeader } from "@/components/hr/page-header";
 import type { LeaveRequest } from "@/lib/hr/types";
 
 type EnrichedLeaveRequest = LeaveRequest & { user_name?: string | null; outlet_name?: string | null };
@@ -31,25 +31,24 @@ export default function LeaveReviewPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <BackToHR />
-          <h1 className="text-2xl font-bold">Leave Requests</h1>
-          <p className="text-sm text-muted-foreground">{requests.length} request{requests.length !== 1 ? "s" : ""}</p>
-        </div>
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="rounded-lg border bg-background px-3 py-2 text-sm"
-        >
-          <option value="all">All</option>
-          <option value="ai_escalated">Escalated (need review)</option>
-          <option value="pending">Pending</option>
-          <option value="ai_approved">AI Approved</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-        </select>
-      </div>
+      <HrPageHeader
+        title="Leave Requests"
+        description={`${requests.length} request${requests.length !== 1 ? "s" : ""}`}
+        action={
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="rounded-lg border bg-background px-3 py-2 text-sm"
+          >
+            <option value="all">All</option>
+            <option value="ai_escalated">Escalated (need review)</option>
+            <option value="pending">Pending</option>
+            <option value="ai_approved">AI Approved</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        }
+      />
 
       {requests.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border bg-card py-16 text-center">

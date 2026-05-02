@@ -4,6 +4,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import { Bot, Banknote, Loader2, CheckCircle2, FileText, CalendarDays, Download, FileSpreadsheet, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { HrPageHeader } from "@/components/hr/page-header";
 
 type PayrollRun = {
   id: string;
@@ -114,16 +115,18 @@ export default function PayrollPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Payroll (Monthly · Full-Timers)</h1>
-        <Link
-          href="/hr/payroll/weekly"
-          className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
-        >
-          <CalendarDays className="h-4 w-4" />
-          Weekly (Part-Timers)
-        </Link>
-      </div>
+      <HrPageHeader
+        title="Payroll (Monthly · Full-Timers)"
+        action={
+          <Link
+            href="/hr/payroll/weekly"
+            className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+          >
+            <CalendarDays className="h-4 w-4" />
+            Weekly (Part-Timers)
+          </Link>
+        }
+      />
 
       {/* Compute Controls */}
       <div className="rounded-xl border bg-card p-5">

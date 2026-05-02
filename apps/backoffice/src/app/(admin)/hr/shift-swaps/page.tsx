@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { ArrowLeft, ArrowLeftRight, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { ArrowLeftRight, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { toast, usePrompt } from "@celsius/ui";
+import { HrPageHeader } from "@/components/hr/page-header";
 
 type SwapRequest = {
   id: string;
@@ -83,26 +83,20 @@ export default function ShiftSwapsPage() {
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <PromptDialog />
-      <div className="flex items-center justify-between">
-        <div>
-          <Link href="/hr" className="text-xs text-muted-foreground hover:underline">
-            <ArrowLeft className="inline h-3 w-3" /> HR
-          </Link>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <ArrowLeftRight className="h-6 w-6 text-terracotta" /> Shift Swap Requests
-          </h1>
-        </div>
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value as typeof STATUSES[number])}
-          className="rounded-lg border bg-background px-3 py-1.5 text-sm"
-        >
-          {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-        </select>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        Approving a request swaps the user_id on both shifts. Reject if the swap creates coverage gaps.
-      </p>
+      <HrPageHeader
+        title="Shift Swap Requests"
+        icon={<ArrowLeftRight className="h-6 w-6 text-terracotta" />}
+        description="Approving a request swaps the user_id on both shifts. Reject if the swap creates coverage gaps."
+        action={
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as typeof STATUSES[number])}
+            className="rounded-lg border bg-background px-3 py-1.5 text-sm"
+          >
+            {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+          </select>
+        }
+      />
 
       {requests.length === 0 ? (
         <p className="rounded-lg border bg-muted/10 p-12 text-center text-sm text-muted-foreground">

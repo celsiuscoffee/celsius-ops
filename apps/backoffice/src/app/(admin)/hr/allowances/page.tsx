@@ -4,7 +4,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import Link from "next/link";
 import { Wallet, Loader2, TrendingUp, AlertTriangle, Trophy } from "lucide-react";
-import { BackToHR } from "@/components/hr/back-to-hr";
+import { HrPageHeader } from "@/components/hr/page-header";
 import { AllowanceTabs } from "@/components/hr/allowance-tabs";
 
 type StaffSummary = {
@@ -62,13 +62,11 @@ export default function AllowancesPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div>
-        <BackToHR />
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Wallet className="h-6 w-6 text-terracotta" /> Allowances
-        </h1>
-        <p className="text-sm text-muted-foreground">Live attendance & performance allowances this month. Paid with the next salary cycle.</p>
-      </div>
+      <HrPageHeader
+        title="Allowances"
+        icon={<Wallet className="h-6 w-6 text-terracotta" />}
+        description="Live attendance & performance allowances this month. Paid with the next salary cycle."
+      />
       <AllowanceTabs />
 
       {/* Filters */}
