@@ -411,6 +411,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(invoice, { status: 201 });
   } catch (err) {
     console.error("[invoices POST]", err);
+    // Friendly handling for the (supplierId, invoiceNumber) unique constraint.
+    if (
+      typeof err === "object" && err !== null && "code" in err &&
+      (err as { code?: string }).code === "P2002"
+    ) {
+      const target = (err as { meta?: { target?: string[] } }).meta?.target;
+      if (target?.includes("invoiceNumber")) {
+        return NextResponse.json(
+          { error: "That invoice number is already in use for this supplier. Use a different number or attach the existing invoice." },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json({ error: "Duplicate value — that combination already exists." }, { status: 409 });
+    }
     const message = err instanceof Error ? err.message : "Failed to create invoice";
     return NextResponse.json({ error: message }, { status: 500 });
   }

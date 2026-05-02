@@ -430,7 +430,10 @@ model OrderItem {
 
 model Invoice {
   id            String        @id @default(uuid())
-  invoiceNumber String        @unique
+  // Invoice numbers come from the supplier and aren't globally unique —
+  // two suppliers can both legitimately issue "INV-001". Uniqueness is
+  // scoped per-supplier via the @@unique below.
+  invoiceNumber String
   orderId       String?
   order         Order?        @relation(fields: [orderId], references: [id])
   transferId    String?
@@ -487,6 +490,8 @@ model Invoice {
   flags         Json          @default("[]")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+
+  @@unique([supplierId, invoiceNumber])
 }
 
 // Groups staff-claim invoices for single-transfer reimbursement.

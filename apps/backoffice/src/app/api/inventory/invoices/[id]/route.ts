@@ -177,6 +177,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json(invoice);
   } catch (err) {
     console.error("[invoices/[id] PATCH]", err);
+    // Surface unique-constraint violations as a human message instead of
+    // the raw Postgres error. P2002 is Prisma's "unique constraint failed".
+    if (
+      typeof err === "object" && err !== null && "code" in err &&
+      (err as { code?: string }).code === "P2002"
+    ) {
+      const target = (err as { meta?: { target?: string[] } }).meta?.target;
+      if (target?.includes("invoiceNumber")) {
+        return NextResponse.json(
+          { error: "That invoice number is already in use for this supplier. Use a different number or attach the existing invoice." },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json({ error: "Duplicate value — that combination already exists." }, { status: 409 });
+    }
     const message = err instanceof Error ? err.message : "Failed to update invoice";
     return NextResponse.json({ error: message }, { status: 500 });
   }
