@@ -21,7 +21,7 @@ export default function StaffLoginLoading() {
       <div className="text-center w-full">
         <div className="h-3 w-36 bg-white/10 rounded mx-auto mb-4 animate-pulse" />
         <div className="flex items-center justify-center gap-4 mb-2 bg-white/8 border border-white/12 rounded-2xl px-8 py-5 mx-auto w-fit">
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2, 3, 4, 5, 6].map((i) => (
             <div key={i} className="w-4 h-4 rounded-full bg-white/20 animate-pulse" />
           ))}
         </div>

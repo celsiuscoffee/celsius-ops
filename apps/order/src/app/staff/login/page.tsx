@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { Delete } from "lucide-react";
 import { getSession, saveSession } from "@/lib/staff-auth";
 
-const PIN_LENGTH = 4;
+// 6-digit PIN matches backoffice staff records (Prisma User.pin).
+// Set staff PINs in Backoffice → Settings → Staff; KDS auth verifies via @celsius/auth.
+const PIN_LENGTH = 6;
 
 interface StoreOption { id: string; name: string }
 
