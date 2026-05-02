@@ -306,7 +306,16 @@ export default function InvoicesPage() {
   const openPayDialog = (inv: Invoice, targetStatus: string) => {
     setPayingInvoice(inv);
     setPayingTargetStatus(targetStatus);
-    setPayForm({ paidVia: "", paymentRef: "", partialAmount: "" });
+    // Pre-fill the partial-amount with the outstanding balance whenever
+    // there's already been a partial payment (deposit or ad-hoc). The user
+    // can override; default-filled means the common case (pay the rest)
+    // is one click away.
+    const outstanding = Math.max(0, inv.amount - (inv.amountPaid || 0));
+    const partialDefault =
+      (inv.amountPaid ?? 0) > 0 && targetStatus === "PAID"
+        ? outstanding.toFixed(2)
+        : "";
+    setPayForm({ paidVia: "", paymentRef: "", partialAmount: partialDefault });
     setPayReceipts([]);
     setCopiedField(null);
   };
@@ -321,6 +330,7 @@ export default function InvoicesPage() {
     const files = e.target.files;
     if (!files?.length) return;
     setPayUploading(true);
+    const newlyUploaded: string[] = [];
     try {
       for (const file of Array.from(files)) {
         const formData = new FormData();
@@ -346,6 +356,7 @@ export default function InvoicesPage() {
                 if (extractRes.ok) {
                   const { url: pageUrl } = await extractRes.json();
                   setPayReceipts((prev) => [...prev, pageUrl]);
+                  newlyUploaded.push(pageUrl);
                   continue;
                 }
               }
@@ -353,7 +364,31 @@ export default function InvoicesPage() {
           }
 
           setPayReceipts((prev) => [...prev, data.url]);
+          newlyUploaded.push(data.url);
         }
+      }
+
+      // After upload, ask the AI for the amount on the receipt and pre-fill
+      // the partial-amount field. Caps at the outstanding balance so a noisy
+      // OCR doesn't push amountPaid above the invoice total. User can edit.
+      if (newlyUploaded.length > 0 && payingInvoice) {
+        try {
+          const exRes = await fetch("/api/inventory/extract", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ urls: newlyUploaded, context: "proof_of_payment" }),
+          });
+          if (exRes.ok) {
+            const exData = await exRes.json();
+            const detected: number | null = typeof exData?.amount === "number" ? exData.amount : null;
+            if (detected && detected > 0) {
+              const outstanding = Math.max(0, payingInvoice.amount - (payingInvoice.amountPaid || 0));
+              const capped = Math.min(detected, outstanding);
+              setPayForm((f) => ({ ...f, partialAmount: capped.toFixed(2) }));
+              toast.success(`AI detected RM ${capped.toFixed(2)} on the receipt`);
+            }
+          }
+        } catch { /* AI extract is best-effort — user can type the amount */ }
       }
     } catch { /* ignore */ }
     setPayUploading(false);
@@ -714,7 +749,7 @@ export default function InvoicesPage() {
     const isTransfer = paymentType === "INTERNAL_TRANSFER";
     const hasDeposit = depositPercent && depositPercent > 0;
     const depositAmt = inv.depositAmount ?? Math.round(inv.amount * (depositPercent || 0) / 100 * 100) / 100;
-    const balanceAmt = Math.round((inv.amount - depositAmt) * 100) / 100;
+    const balanceAmt = Math.round((inv.amount - (inv.amountPaid || 0)) * 100) / 100;
 
     // GRNI placeholders shouldn't be paid until the supplier invoice arrives —
     // suppress payment actions so users go through "Attach Invoice" first.
@@ -729,6 +764,14 @@ export default function InvoicesPage() {
         { status: "INITIATED", label: initiateLabel, color: "bg-blue-500 hover:bg-blue-600" },
       ];
       case "INITIATED": {
+        // If a deposit has already been paid, this is the BALANCE leg of
+        // the payment cycle — show one "Mark Paid (Balance RM X)" button
+        // instead of the deposit-vs-full chooser.
+        if ((inv.amountPaid ?? 0) > 0) {
+          return [
+            { status: "PAID", label: `Mark Paid (Balance RM ${balanceAmt.toFixed(2)})`, color: "bg-green-500 hover:bg-green-600" },
+          ];
+        }
         if (hasDeposit) {
           return [
             { status: "DEPOSIT_PAID", label: `Pay Deposit (RM ${depositAmt.toFixed(2)})`, color: "bg-amber-500 hover:bg-amber-600" },
@@ -740,7 +783,14 @@ export default function InvoicesPage() {
         ];
       }
       case "DEPOSIT_PAID": return [
-        { status: "PAID", label: `Pay Balance (RM ${balanceAmt.toFixed(2)})`, color: "bg-green-500 hover:bg-green-600" },
+        // Used to flip directly to PAID. Now follows the standard two-step
+        // flow (Initiate Payment → POP upload → Mark Paid) so the supplier
+        // record stays consistent with non-deposit invoices.
+        { status: "INITIATED", label: initiateLabel, color: "bg-blue-500 hover:bg-blue-600" },
+      ];
+      case "PARTIALLY_PAID": return [
+        // Same flow for ad-hoc partials — initiate the next chunk of payment.
+        { status: "INITIATED", label: initiateLabel, color: "bg-blue-500 hover:bg-blue-600" },
       ];
       case "OVERDUE": return [
         { status: "INITIATED", label: initiateLabel, color: "bg-blue-500 hover:bg-blue-600" },
