@@ -1,5 +1,7 @@
 "use client";
 
+import { formatRM } from "@celsius/shared";
+
 import { useState, useEffect, useRef } from "react";
 import QRCode from "qrcode";
 import { listenToCustomerDisplay, type CustomerDisplayData } from "@/lib/customer-display-channel";
@@ -14,9 +16,8 @@ const MAYBANK_MERCHANT_IDS: Record<string, string> = {
   "outlet-tam": "MBBQR2430878",
 };
 
-function formatRM(sen: number) {
-  return `RM ${(sen / 100).toFixed(2)}`;
-}
+// Wrapper around the shared formatRM that converts sen → RM up front.
+const formatSen = (sen: number) => formatRM(sen / 100);
 
 export default function CustomerDisplayPage() {
   const [data, setData] = useState<CustomerDisplayData | null>(null);
@@ -90,7 +91,7 @@ export default function CustomerDisplayPage() {
                   <p className="mt-0.5 text-xs text-gray-500">{item.modifiers}</p>
                 )}
               </div>
-              <p className="ml-4 text-sm font-medium text-gray-300">{formatRM(item.amount)}</p>
+              <p className="ml-4 text-sm font-medium text-gray-300">{formatSen(item.amount)}</p>
             </div>
           ))}
         </div>
@@ -99,23 +100,23 @@ export default function CustomerDisplayPage() {
         <div className="mt-4 space-y-2 border-t border-gray-700 pt-4">
           <div className="flex justify-between text-sm text-gray-400">
             <span>Subtotal</span>
-            <span>{formatRM(data.subtotal)}</span>
+            <span>{formatSen(data.subtotal)}</span>
           </div>
           {data.serviceCharge > 0 && (
             <div className="flex justify-between text-sm text-gray-400">
               <span>Service Charge</span>
-              <span>{formatRM(data.serviceCharge)}</span>
+              <span>{formatSen(data.serviceCharge)}</span>
             </div>
           )}
           {data.discount > 0 && (
             <div className="flex justify-between text-sm text-green-400">
               <span>Discount</span>
-              <span>-{formatRM(data.discount)}</span>
+              <span>-{formatSen(data.discount)}</span>
             </div>
           )}
           <div className="flex justify-between border-t border-gray-700 pt-3 text-2xl font-bold">
             <span>Total</span>
-            <span className="text-amber-400">{formatRM(data.total)}</span>
+            <span className="text-amber-400">{formatSen(data.total)}</span>
           </div>
         </div>
       </div>
@@ -138,7 +139,7 @@ export default function CustomerDisplayPage() {
           <p className="mt-2 text-[10px] text-gray-600">{merchantId}</p>
         )}
         <div className="mt-6 text-center">
-          <p className="text-3xl font-bold text-amber-400">{formatRM(data.total)}</p>
+          <p className="text-3xl font-bold text-amber-400">{formatSen(data.total)}</p>
           <p className="mt-1 text-xs text-gray-500">Amount to pay</p>
         </div>
       </div>

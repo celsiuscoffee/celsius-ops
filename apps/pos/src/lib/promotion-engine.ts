@@ -1,4 +1,5 @@
 import type { CartItem, Promotion, AppliedPromotion } from "@/types/database";
+import { formatRM } from "@celsius/shared";
 import { memberMeetsEligibility, type LoyaltyMember } from "./customer-lookup";
 
 /**
@@ -171,7 +172,7 @@ function evaluateAmountOff(cart: CartItem[], promo: Promotion): AppliedPromotion
     promotion: promo,
     discountAmount,
     affectedItemIds: qualifying.map((i) => i.cartItemId),
-    description: `RM ${(discountAmount / 100).toFixed(2)} Off${promo.name ? ` (${promo.name})` : ""}`,
+    description: `${formatRM((discountAmount / 100))} Off${promo.name ? ` (${promo.name})` : ""}`,
   };
 }
 
@@ -231,7 +232,7 @@ function evaluateComboBundle(cart: CartItem[], promo: Promotion): AppliedPromoti
     promotion: promo,
     discountAmount,
     affectedItemIds: qualifying.map((i) => i.cartItemId),
-    description: `Combo: ${promo.name} (RM ${(comboPrice / 100).toFixed(2)})`,
+    description: `Combo: ${promo.name} (${formatRM((comboPrice / 100))})`,
   };
 }
 
@@ -266,6 +267,6 @@ function evaluateOverridePrice(cart: CartItem[], promo: Promotion): AppliedPromo
     promotion: promo,
     discountAmount: discountTotal,
     affectedItemIds: affectedIds,
-    description: `${promo.name} (RM ${(newPrice / 100).toFixed(2)} each)`,
+    description: `${promo.name} (${formatRM((newPrice / 100))} each)`,
   };
 }

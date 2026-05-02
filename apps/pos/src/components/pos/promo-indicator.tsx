@@ -1,5 +1,7 @@
 "use client";
 
+import { formatRM } from "@celsius/shared";
+
 import { useState } from "react";
 import type { AppliedPromotion, Promotion, CartItem } from "@/types/database";
 import { displayRM } from "@/types/database";
@@ -134,7 +136,7 @@ export function PromoIndicator({
                       {promo.promo_code && <p className="text-[9px] text-text-dim">Code: {promo.promo_code}</p>}
                     </div>
                     <span className="text-[10px] text-brand">
-                      {promo.discount_type === "percentage_off" ? `${(promo.discount_value ?? 0) / 100}% Off` : `RM ${((promo.discount_value ?? 0) / 100).toFixed(2)} Off`}
+                      {promo.discount_type === "percentage_off" ? `${(promo.discount_value ?? 0) / 100}% Off` : `${formatRM(((promo.discount_value ?? 0) / 100))} Off`}
                     </span>
                   </button>
                 ))}
