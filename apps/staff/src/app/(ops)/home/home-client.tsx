@@ -23,6 +23,7 @@ import {
   User,
   UserCircle2,
   X,
+  CalendarOff,
 } from "lucide-react";
 
 type UserProfile = {
@@ -131,6 +132,10 @@ export function HomeClient({
     percent: number;
   } | null>(null);
 
+  // Who's away today (and tomorrow). Scoped to user's outlet for non-managers.
+  type AwayItem = { user_id: string; name: string; leave_type: string; start_date: string; end_date: string; outlet: string | null };
+  const [whosAway, setWhosAway] = useState<{ today: AwayItem[]; tomorrow: AwayItem[] } | null>(null);
+
   useEffect(() => {
     fetch("/api/settings/stock-count").then((r) => r.ok ? r.json() : null).then((s) => { if (s) setStockSchedule(s); }).catch(() => {});
 
@@ -147,6 +152,12 @@ export function HomeClient({
         if (dismissed === today) return;
         setProfileReminder({ show: true, percent: d.completeness.percent });
       })
+      .catch(() => {});
+
+    // Who's away today/tomorrow — small widget at the bottom.
+    fetch("/api/hr/whos-away")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setWhosAway(d); })
       .catch(() => {});
   }, []);
 
@@ -633,6 +644,57 @@ export function HomeClient({
               </div>
             );
           })()}
+
+          {/* Who's away today (and tomorrow) — quick visibility for the
+              shift, especially handy for kitchen/floor leads planning
+              coverage on the fly. Only renders when there's actually
+              someone on leave. */}
+          {whosAway && (whosAway.today.length > 0 || whosAway.tomorrow.length > 0) && (
+            <div className="rounded-xl border bg-white px-4 py-3">
+              <div className="mb-2 flex items-center gap-2">
+                <CalendarOff className="h-4 w-4 text-amber-600" />
+                <p className="text-sm font-semibold text-gray-900">Who&apos;s away</p>
+              </div>
+              {whosAway.today.length > 0 && (
+                <div className="mb-2">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Today</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {whosAway.today.map((p) => (
+                      <span
+                        key={`today-${p.user_id}`}
+                        title={`${p.leave_type.replace(/_/g, " ")} · ${p.start_date} → ${p.end_date}${p.outlet ? ` · ${p.outlet}` : ""}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800"
+                      >
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-200 text-[9px] font-semibold text-amber-900">
+                          {p.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                        </span>
+                        {p.name.split(" ")[0]}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {whosAway.tomorrow.length > 0 && (
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Tomorrow</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {whosAway.tomorrow.map((p) => (
+                      <span
+                        key={`tomorrow-${p.user_id}`}
+                        title={`${p.leave_type.replace(/_/g, " ")} · ${p.start_date} → ${p.end_date}${p.outlet ? ` · ${p.outlet}` : ""}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700"
+                      >
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-gray-300 text-[9px] font-semibold text-gray-700">
+                          {p.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                        </span>
+                        {p.name.split(" ")[0]}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
