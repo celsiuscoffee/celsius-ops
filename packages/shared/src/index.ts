@@ -12,6 +12,7 @@ export { createSupabaseClient, createSupabaseAdmin } from "./supabase";
 export {
   formatPoints,
   formatCurrency,
+  formatRM,
   formatPhone,
   formatPhoneLocal,
   toStoragePhone,

@@ -12,6 +12,30 @@ export function formatCurrency(amount: number, currency = "MYR"): string {
   }).format(amount);
 }
 
+/**
+ * Malaysian Ringgit display format with thousand separators.
+ * formatRM(9500)      → "RM 9,500.00"
+ * formatRM(1234567.5) → "RM 1,234,567.50"
+ * formatRM(0.5)       → "RM 0.50"
+ *
+ * Always 2 decimals, comma thousand sep, "RM " prefix with a space.
+ * Use everywhere RM amounts are rendered — replaces ad-hoc
+ * `RM ${x.toFixed(2)}` which had no thousand separator.
+ *
+ * Pass `decimals: 0` for whole-ringgit displays (e.g. dashboards).
+ */
+export function formatRM(amount: number, opts: { decimals?: number; signed?: boolean } = {}): string {
+  const { decimals = 2, signed = false } = opts;
+  const safe = Number.isFinite(amount) ? amount : 0;
+  const sign = signed && safe > 0 ? "+ " : signed && safe < 0 ? "− " : "";
+  const abs = Math.abs(safe);
+  const body = abs.toLocaleString("en-MY", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  return `${sign}RM ${body}`;
+}
+
 // ─── Phone number utilities ──────────────────────────────
 // Database/CRM stores: +60123456789 (for SMS delivery)
 // Customer display:    012-3456 789 (local Malaysian format)
