@@ -174,16 +174,34 @@ export default function EmployeeDetailPage() {
   const [resignSaving, setResignSaving] = useState(false);
   const [resignErr, setResignErr] = useState<string | null>(null);
 
-  const submitResign = async () => {
+  const submitResign = async (force = false) => {
     setResignSaving(true);
     setResignErr(null);
     try {
       const res = await fetch(`/api/hr/employees/${id}/resign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resigned_at: resignedAt, end_date: endDate, reason: resignReason || undefined }),
+        body: JSON.stringify({
+          resigned_at: resignedAt,
+          end_date: endDate,
+          reason: resignReason || undefined,
+          force: force || undefined,
+        }),
       });
       const body = await res.json();
+      if (res.status === 409 && body.outstanding_assets) {
+        // Server is blocking on outstanding assets. Confirm the override
+        // through the dialog so HR explicitly chooses to proceed.
+        const proceed = await confirm({
+          title: `${body.outstanding_assets.length} outstanding asset(s)`,
+          description: "Mark resignation anyway? Clear in the Assets section if returned later.",
+          confirmLabel: "Proceed without clearance",
+          destructive: true,
+        });
+        if (proceed) return submitResign(true);
+        setResignErr("Cancelled — return assets first or override.");
+        return;
+      }
       if (!res.ok) throw new Error(body.error || "Failed");
       mutate();
       setResignOpen(false);
@@ -1258,7 +1276,7 @@ export default function EmployeeDetailPage() {
             <div className="mt-5 flex justify-end gap-2">
               <button onClick={() => setResignOpen(false)} className="rounded-md border px-4 py-2 text-sm hover:bg-gray-50">Cancel</button>
               <button
-                onClick={submitResign}
+                onClick={() => submitResign(false)}
                 disabled={resignSaving || !resignedAt || !endDate}
                 className="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >

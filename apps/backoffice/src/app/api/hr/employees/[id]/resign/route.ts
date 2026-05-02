@@ -19,10 +19,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id: userId } = await params;
   const body = await req.json();
-  const { resigned_at, end_date, reason } = body as {
+  const { resigned_at, end_date, reason, force } = body as {
     resigned_at: string;
     end_date: string;
     reason?: string;
+    force?: boolean;
   };
 
   if (!resigned_at || !end_date) {
@@ -30,6 +31,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   if (end_date < resigned_at) {
     return NextResponse.json({ error: "end_date must be on/after resigned_at" }, { status: 400 });
+  }
+
+  // Block on outstanding company assets unless explicitly forced. The UI shows
+  // a warning before this point; this enforces it server-side so a malicious
+  // direct API call can't bypass clearance.
+  if (!force) {
+    const { data: outstanding } = await hrSupabaseAdmin
+      .from("hr_company_assets")
+      .select("id, asset_type, description")
+      .eq("user_id", userId)
+      .eq("status", "issued");
+    if (outstanding && outstanding.length > 0) {
+      return NextResponse.json(
+        {
+          error: `${outstanding.length} outstanding asset(s) must be returned (or pass force:true to override).`,
+          outstanding_assets: outstanding,
+        },
+        { status: 409 },
+      );
+    }
   }
 
   // Load existing notes so we can append, not overwrite. Previous personal

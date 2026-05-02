@@ -11,13 +11,22 @@ export async function GET(req: NextRequest) {
   if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const status = new URL(req.url).searchParams.get("status") || "pending";
+  // Real workflow statuses (set by staff app /api/hr/swap):
+  //   pending_consent   — request sent, target hasn't accepted yet
+  //   pending_approval  — target consented, waiting for admin
+  //   approved / rejected / cancelled / consent_declined
+  // The admin queue defaults to "actionable" = both pending states.
+  const status = new URL(req.url).searchParams.get("status") || "actionable";
 
   let q = hrSupabaseAdmin
     .from("hr_shift_swap_requests")
     .select("*")
     .order("created_at", { ascending: false });
-  if (status !== "all") q = q.eq("status", status);
+  if (status === "actionable") {
+    q = q.in("status", ["pending_consent", "pending_approval"]);
+  } else if (status !== "all") {
+    q = q.eq("status", status);
+  }
   const { data: rows, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -72,7 +81,13 @@ export async function PATCH(req: NextRequest) {
     .eq("id", swap_id)
     .single();
   if (getErr || !swap) return NextResponse.json({ error: "Swap not found" }, { status: 404 });
-  if (!["pending", "consented"].includes(swap.status)) {
+  // Admin can only act on swaps the target has already consented to (pending_approval).
+  // pending_consent means the target hasn't even said yes yet — nothing to approve.
+  // Reject is also allowed from pending_consent so admin can short-circuit a bad request.
+  const reviewableForApprove = ["pending_approval"];
+  const reviewableForReject = ["pending_consent", "pending_approval"];
+  const reviewable = action === "approve" ? reviewableForApprove : reviewableForReject;
+  if (!reviewable.includes(swap.status)) {
     return NextResponse.json({ error: `Cannot ${action} swap in status ${swap.status}` }, { status: 400 });
   }
 

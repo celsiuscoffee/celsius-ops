@@ -115,6 +115,10 @@ export async function POST(req: NextRequest) {
   if (!date || !hours_requested || !reason || !request_type) {
     return NextResponse.json({ error: "date, hours_requested, reason, request_type required" }, { status: 400 });
   }
+  const hoursNum = Number(hours_requested);
+  if (!Number.isFinite(hoursNum) || hoursNum <= 0 || hoursNum > 24) {
+    return NextResponse.json({ error: "hours_requested must be between 0.25 and 24" }, { status: 400 });
+  }
 
   // Staff can only submit pre-approval for themselves. Managers/admins can submit post-hoc for their subtree (MANAGER) or anyone (OWNER/ADMIN).
   const targetUserId = user_id || session.id;
@@ -193,10 +197,19 @@ export async function PATCH(req: NextRequest) {
     updated_at: new Date().toISOString(),
   };
   if (status === "approved") {
-    updates.hours_approved = hours_approved ?? (await getHoursRequested(id));
+    const ha = hours_approved ?? (await getHoursRequested(id));
+    const haNum = Number(ha);
+    if (!Number.isFinite(haNum) || haNum <= 0 || haNum > 24) {
+      return NextResponse.json({ error: "hours_approved must be between 0.25 and 24" }, { status: 400 });
+    }
+    updates.hours_approved = haNum;
   } else if (status === "partial") {
     if (hours_approved == null) return NextResponse.json({ error: "hours_approved required for partial" }, { status: 400 });
-    updates.hours_approved = hours_approved;
+    const haNum = Number(hours_approved);
+    if (!Number.isFinite(haNum) || haNum <= 0 || haNum > 24) {
+      return NextResponse.json({ error: "hours_approved must be between 0.25 and 24" }, { status: 400 });
+    }
+    updates.hours_approved = haNum;
   } else if (status === "rejected") {
     updates.hours_approved = 0;
     updates.rejection_reason = rejection_reason || null;

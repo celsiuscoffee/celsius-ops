@@ -25,7 +25,7 @@ const STATES = [
 export default function PublicHolidaysPage() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
-  const { data, mutate } = useFetch<{ holidays: Holiday[] }>(`/api/hr/public-holidays?year=${year}`);
+  const { data, mutate } = useFetch<{ holidays: Holiday[] }>(`/api/hr/holidays?year=${year}`);
   const holidays = data?.holidays || [];
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -50,7 +50,7 @@ export default function PublicHolidaysPage() {
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/hr/public-holidays", {
+      const res = await fetch("/api/hr/holidays", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -74,7 +74,7 @@ export default function PublicHolidaysPage() {
 
   const handleDelete = async (id: string) => {
     if (!(await confirm({ title: "Remove this holiday?", confirmLabel: "Remove", destructive: true }))) return;
-    const res = await fetch(`/api/hr/public-holidays?id=${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/hr/holidays?id=${id}`, { method: "DELETE" });
     if (res.ok) {
       toast.success("Holiday removed");
       mutate();

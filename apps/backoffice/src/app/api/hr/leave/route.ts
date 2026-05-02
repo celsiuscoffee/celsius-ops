@@ -66,12 +66,21 @@ export async function PATCH(req: NextRequest) {
   const { id, action, reason } = body as { id: string; action: "approve" | "reject"; reason?: string };
 
   if (action === "approve") {
-    // Get the request to update balance
+    // Get the request to update balance + verify it's still actionable.
     const { data: request } = await hrSupabaseAdmin
       .from("hr_leave_requests")
-      .select("user_id, leave_type, total_days")
+      .select("user_id, leave_type, total_days, status, start_date")
       .eq("id", id)
       .single();
+    if (!request) return NextResponse.json({ error: "Request not found" }, { status: 404 });
+    // Guard: only re-approve from a pending state. Without this, double-clicks
+    // and stale UI state double-deduct used_days from the leave balance.
+    if (!["pending", "ai_escalated"].includes(request.status)) {
+      return NextResponse.json(
+        { error: `Cannot approve a request in status '${request.status}'` },
+        { status: 400 },
+      );
+    }
 
     // MANAGER can only act on their direct reports
     if (session.role === "MANAGER" && request) {
@@ -92,9 +101,11 @@ export async function PATCH(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // Update balance: move from pending to used
+    // Update balance: move from pending to used. Use the leave's start_date
+    // year so cross-year requests (e.g. Dec 28 – Jan 3 approved on Jan 1) hit
+    // the correct annual bucket — otherwise statutory days drift across years.
     if (request) {
-      const year = new Date().getFullYear();
+      const year = new Date(request.start_date).getFullYear();
       const { data: balance } = await hrSupabaseAdmin
         .from("hr_leave_balances")
         .select("*")
@@ -118,12 +129,22 @@ export async function PATCH(req: NextRequest) {
   }
 
   if (action === "reject") {
-    // Get the request to release pending balance
+    // Get the request to release pending balance.
     const { data: request } = await hrSupabaseAdmin
       .from("hr_leave_requests")
-      .select("user_id, leave_type, total_days")
+      .select("user_id, leave_type, total_days, status, start_date")
       .eq("id", id)
       .single();
+    if (!request) return NextResponse.json({ error: "Request not found" }, { status: 404 });
+    // Guard: rejecting an already-approved request must restore used_days back
+    // to the bank (otherwise we leak days). For now, only allow rejection from
+    // pending states — surface a clear error for the operator.
+    if (!["pending", "ai_escalated"].includes(request.status)) {
+      return NextResponse.json(
+        { error: `Cannot reject a request in status '${request.status}' — cancel/restore the approved request instead.` },
+        { status: 400 },
+      );
+    }
 
     // MANAGER can only act on their direct reports
     if (session.role === "MANAGER" && request) {
@@ -145,9 +166,10 @@ export async function PATCH(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // Release pending days
+    // Release pending days — using the leave's start_date year, not "today",
+    // so cross-year requests release from the correct annual bucket.
     if (request) {
-      const year = new Date().getFullYear();
+      const year = new Date(request.start_date).getFullYear();
       const { data: balance } = await hrSupabaseAdmin
         .from("hr_leave_balances")
         .select("*")

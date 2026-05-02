@@ -22,10 +22,29 @@ type SwapRequest = {
   approved_by: string | null;
 };
 
-const STATUSES = ["pending", "consented", "approved", "rejected", "cancelled", "all"] as const;
+const STATUSES = [
+  "actionable",       // pending_consent + pending_approval — default
+  "pending_consent",  // target hasn't replied yet
+  "pending_approval", // target consented, awaiting admin
+  "approved",
+  "rejected",
+  "consent_declined",
+  "cancelled",
+  "all",
+] as const;
+const STATUS_LABEL: Record<typeof STATUSES[number], string> = {
+  actionable: "Awaiting action",
+  pending_consent: "Awaiting target consent",
+  pending_approval: "Awaiting admin approval",
+  approved: "Approved",
+  rejected: "Rejected",
+  consent_declined: "Target declined",
+  cancelled: "Cancelled",
+  all: "All",
+};
 
 export default function ShiftSwapsPage() {
-  const [filter, setFilter] = useState<typeof STATUSES[number]>("pending");
+  const [filter, setFilter] = useState<typeof STATUSES[number]>("actionable");
   const { data, mutate } = useFetch<{ requests: SwapRequest[] }>(`/api/hr/shift-swaps?status=${filter}`);
   const requests = data?.requests || [];
 
@@ -69,7 +88,7 @@ export default function ShiftSwapsPage() {
           onChange={(e) => setFilter(e.target.value as typeof STATUSES[number])}
           className="rounded-lg border bg-background px-3 py-1.5 text-sm"
         >
-          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
       </div>
       <p className="text-sm text-muted-foreground">
@@ -78,7 +97,7 @@ export default function ShiftSwapsPage() {
 
       {requests.length === 0 ? (
         <p className="rounded-lg border bg-muted/10 p-12 text-center text-sm text-muted-foreground">
-          No {filter} requests.
+          No {STATUS_LABEL[filter].toLowerCase()} requests.
         </p>
       ) : (
         <div className="space-y-3">
@@ -95,10 +114,11 @@ export default function ShiftSwapsPage() {
                 </div>
                 <span className={`rounded-full px-3 py-1 text-xs font-medium ${
                   r.status === "approved" ? "bg-emerald-100 text-emerald-700"
-                  : r.status === "rejected" ? "bg-red-100 text-red-700"
-                  : r.status === "pending" ? "bg-amber-100 text-amber-800"
+                  : (r.status === "rejected" || r.status === "consent_declined") ? "bg-red-100 text-red-700"
+                  : r.status === "pending_approval" ? "bg-amber-100 text-amber-800"
+                  : r.status === "pending_consent" ? "bg-blue-100 text-blue-800"
                   : "bg-gray-100 text-gray-600"
-                }`}>{r.status}</span>
+                }`}>{r.status.replace(/_/g, " ")}</span>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
@@ -119,7 +139,7 @@ export default function ShiftSwapsPage() {
               {r.reason && <p className="mt-2 text-xs text-muted-foreground">Reason: {r.reason}</p>}
               {r.rejection_reason && <p className="mt-2 text-xs text-red-600">Rejected: {r.rejection_reason}</p>}
 
-              {(r.status === "pending" || r.status === "consented") && (
+              {(r.status === "pending_consent" || r.status === "pending_approval") && (
                 <div className="mt-3 flex justify-end gap-2">
                   <button
                     onClick={() => decide(r.id, "reject")}
@@ -129,14 +149,17 @@ export default function ShiftSwapsPage() {
                     {acting === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
                     Reject
                   </button>
-                  <button
-                    onClick={() => decide(r.id, "approve")}
-                    disabled={acting === r.id}
-                    className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    {acting === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                    Approve & Swap
-                  </button>
+                  {/* Approve only after target consents — otherwise the swap isn't bilateral. */}
+                  {r.status === "pending_approval" && (
+                    <button
+                      onClick={() => decide(r.id, "approve")}
+                      disabled={acting === r.id}
+                      className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {acting === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                      Approve & Swap
+                    </button>
+                  )}
                 </div>
               )}
             </div>

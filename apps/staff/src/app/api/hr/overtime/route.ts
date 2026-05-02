@@ -31,6 +31,10 @@ export async function POST(req: NextRequest) {
   if (!date || !hours_requested || !reason) {
     return NextResponse.json({ error: "date, hours_requested, reason required" }, { status: 400 });
   }
+  const hoursNum = Number(hours_requested);
+  if (!Number.isFinite(hoursNum) || hoursNum <= 0 || hoursNum > 24) {
+    return NextResponse.json({ error: "hours_requested must be between 0.25 and 24" }, { status: 400 });
+  }
 
   const { data, error } = await supabase
     .from("hr_overtime_requests")
@@ -39,7 +43,7 @@ export async function POST(req: NextRequest) {
       outlet_id: session.outletId || null,
       date,
       request_type: "pre_approval",
-      hours_requested: Number(hours_requested),
+      hours_requested: hoursNum,
       ot_type: ot_type || "1.5x",
       reason,
       shift_start_time: shift_start_time || null,
