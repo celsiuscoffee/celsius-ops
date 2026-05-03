@@ -314,7 +314,7 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     const cycleEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
     const unpaidDays = unpaidLeaveByUser.get(profile.user_id) || 0;
     const prorate = isPartTime
-      ? ({ reason: null, daysWorked: 0, daysTotal: 0, factor: 1, explanation: null } as ReturnType<typeof computeProrate>)
+      ? ({ reason: null, daysWorked: 0, daysTotal: 0, factor: 1, explanation: null, basis: "calendar" as const } as ReturnType<typeof computeProrate>)
       : computeProrate({
           cycleStart,
           cycleEnd,
@@ -322,6 +322,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
           resignDate: profile.end_date || profile.resigned_at || null,
           unpaidLeaveDays: unpaidDays,
           fullSalary: basicSalary,
+          // Per-employee proration formula: HQ staff use Mon-Fri working
+          // days (Section 60I(1C) with contractual denominator), outlet
+          // staff use calendar days (Section 60I(1B) statutory default).
+          basis: profile.proration_basis ?? "calendar",
         });
 
     // Base pay

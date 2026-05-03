@@ -24,6 +24,9 @@ export type EmployeeProfile = {
   emergency_contact_phone: string | null;
   notes: string | null;
   schedule_required: boolean;
+  // Proration basis (Section 60I): 'calendar' | 'working_5day' | 'working_6day' | 'fixed_26'.
+  // HQ staff default to working_5day (Mon-Fri), outlet staff to calendar.
+  proration_basis?: "calendar" | "working_5day" | "working_6day" | "fixed_26";
   // Self-reported fields — staff fills these via the staff-app profile page.
   // Show as read-only on the backoffice; HR can ask the staff to correct.
   address_line1?: string | null;
