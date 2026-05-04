@@ -38,6 +38,40 @@ type Form = {
   endsAt: string;
 };
 
+// Resize splash images to a max long-edge of 1440px and re-encode as JPEG
+// at quality 0.85. iPhones at 3x are ~1290 wide; bigger source images burn
+// upload bandwidth without visible benefit. Skip the resize if the input
+// is already small enough or not a raster format the canvas can handle.
+async function resizeForSplash(file: File): Promise<File> {
+  const MAX = 1440;
+  const QUALITY = 0.85;
+
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return file;
+  if (file.size < 200 * 1024) return file; // already small
+
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) return file;
+
+  const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return file;
+  ctx.drawImage(bitmap, 0, 0, w, h);
+
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/jpeg", QUALITY)
+  );
+  if (!blob) return file;
+
+  const name = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+  return new File([blob], name, { type: "image/jpeg" });
+}
+
 const empty: Form = {
   id: "",
   imageUrl: "",
@@ -57,6 +91,7 @@ export default function SplashPostersPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -99,8 +134,11 @@ export default function SplashPostersPage() {
   const handleUpload = async (file: File) => {
     setUploading(true);
     try {
+      // Auto-resize big images on the client before upload — keeps Cloudinary
+      // usage reasonable + uploads finish faster on slow connections.
+      const resized = await resizeForSplash(file);
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", resized);
       const res = await adminFetch("/api/pickup/upload-image", {
         method: "POST",
         body: fd,
@@ -114,6 +152,18 @@ export default function SplashPostersPage() {
     } finally {
       setUploading(false);
     }
+  };
+
+  const onDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Drop an image file");
+      return;
+    }
+    handleUpload(file);
   };
 
   const save = async () => {
@@ -314,7 +364,7 @@ export default function SplashPostersPage() {
             <div className="space-y-4">
               <div>
                 <label className="text-xs font-medium text-gray-700">
-                  Image (9:16 portrait, ≤8MB)
+                  Image (9:16 portrait — auto-resized to 1440px max)
                 </label>
                 <div className="mt-1 flex items-start gap-3">
                   {form.imageUrl ? (
@@ -322,7 +372,7 @@ export default function SplashPostersPage() {
                       <img
                         src={form.imageUrl}
                         alt=""
-                        className="h-40 w-24 rounded-lg object-cover"
+                        className="h-56 w-32 rounded-lg object-cover"
                       />
                       <button
                         onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))}
@@ -332,21 +382,37 @@ export default function SplashPostersPage() {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      type="button"
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragOver(true);
+                      }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={onDrop}
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                      className="flex h-40 w-24 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 text-xs text-gray-500 hover:border-terracotta"
+                      className={`flex h-56 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed text-xs transition-colors ${
+                        dragOver
+                          ? "border-terracotta bg-terracotta/5 text-terracotta"
+                          : "border-gray-300 text-gray-500 hover:border-terracotta hover:bg-gray-50"
+                      }`}
                     >
                       {uploading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <>
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                          <span>Resizing & uploading…</span>
+                        </>
                       ) : (
                         <>
-                          <ImagePlus className="h-5 w-5" />
-                          <span>Upload</span>
+                          <ImagePlus className="h-6 w-6" />
+                          <span className="font-medium">
+                            {dragOver ? "Drop to upload" : "Drop an image or click to browse"}
+                          </span>
+                          <span className="text-[10px] text-gray-400">
+                            JPG / PNG / WEBP · auto-resized
+                          </span>
                         </>
                       )}
-                    </button>
+                    </div>
                   )}
                   <input
                     type="file"
