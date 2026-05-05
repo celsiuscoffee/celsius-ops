@@ -1,5 +1,5 @@
 import "../global.css";
-import { Stack } from "expo-router";
+import { Stack, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -8,9 +8,12 @@ import { useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import * as SystemUI from "expo-system-ui";
+import * as Notifications from "expo-notifications";
 import { useFonts } from "expo-font";
 import { SplashPoster } from "../components/SplashPoster";
 import { MaintenanceBanner } from "../components/MaintenanceBanner";
+import { registerForPush } from "../lib/notifications";
+import { useApp } from "../lib/store";
 import {
   SpaceGrotesk_400Regular,
   SpaceGrotesk_500Medium,
@@ -71,6 +74,27 @@ export default function RootLayout() {
       SystemUI.setBackgroundColorAsync("#f5f5f5");
     }
   }, [loaded]);
+
+  // Push notifications: register the device with the server so order-ready
+  // pushes can target this user. Re-runs whenever the signed-in phone
+  // changes; cached fingerprint inside registerForPush prevents redundant
+  // network calls. Subscribe to taps so notifications deep-link into the
+  // order page.
+  const phone = useApp((s) => s.phone);
+  const member = useApp((s) => s.member);
+  useEffect(() => {
+    registerForPush({ phone, memberId: member?.id ?? null }).catch(() => {});
+  }, [phone, member?.id]);
+
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((res) => {
+      const data = res.notification.request.content.data as { orderId?: string } | undefined;
+      if (data?.orderId) {
+        router.push({ pathname: "/order/[id]", params: { id: data.orderId } });
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   return (
     <SafeAreaProvider>

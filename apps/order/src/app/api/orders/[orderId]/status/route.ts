@@ -19,35 +19,71 @@ function initVapid() {
   }
 }
 
-async function sendReadyPush(orderId: string, orderNumber: string) {
+async function sendReadyPush(orderId: string, orderNumber: string, customerPhone: string | null) {
   try {
     initVapid();
     const supabase = getSupabaseAdmin();
-    const { data: subs } = await supabase
+
+    // ── 1. Web Push (PWA browser subscriptions, scoped to this order) ─────
+    const { data: webSubs } = await supabase
       .from("push_subscriptions")
       .select("*")
       .eq("order_id", orderId);
 
-    if (!subs?.length) return;
+    if (webSubs?.length) {
+      const payload = JSON.stringify({
+        title: "🎉 Order Ready!",
+        body:  `Your order #${orderNumber} is ready for pickup!`,
+        icon:  "/icons/icon-192.png",
+        badge: "/icons/badge-72.png",
+        tag:   `order-${orderId}`,
+        requireInteraction: true,
+        data: { orderId },
+      });
 
-    const payload = JSON.stringify({
-      title: "🎉 Order Ready!",
-      body:  `Your order #${orderNumber} is ready for pickup!`,
-      icon:  "/icons/icon-192.png",
-      badge: "/icons/badge-72.png",
-      tag:   `order-${orderId}`,
-      requireInteraction: true,
-      data: { orderId },
-    });
-
-    await Promise.allSettled(
-      subs.map((sub) =>
-        webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          payload
+      await Promise.allSettled(
+        webSubs.map((sub) =>
+          webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload
+          )
         )
-      )
-    );
+      );
+    }
+
+    // ── 2. Native push via Expo (iOS APNs / Android FCM) ──────────────────
+    // Tokens are member-scoped (persist across orders), so we look them up
+    // by the order's customer_phone — that's how the native app registers.
+    if (customerPhone) {
+      const { data: nativeTokens } = await supabase
+        .from("expo_push_tokens")
+        .select("token")
+        .eq("phone", customerPhone);
+
+      const tokens = (nativeTokens ?? [])
+        .map((r) => r.token as string)
+        .filter((t) => t?.startsWith("ExponentPushToken["));
+
+      if (tokens.length > 0) {
+        await fetch("https://exp.host/--/api/v2/push/send", {
+          method:  "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept:         "application/json",
+            "Accept-Encoding": "gzip, deflate",
+          },
+          body: JSON.stringify(
+            tokens.map((to) => ({
+              to,
+              title: "🎉 Order Ready!",
+              body:  `Your order #${orderNumber} is ready for pickup`,
+              sound: "default",
+              data:  { orderId, type: "order_ready" },
+            }))
+          ),
+        }).catch((err) => console.warn("Expo push fetch failed:", err));
+      }
+    }
   } catch (err) {
     console.warn("Push send failed:", err);
   }
@@ -69,7 +105,7 @@ export async function PATCH(
 
     const { data, error: fetchError } = await supabase
       .from("orders")
-      .select("status, order_number")
+      .select("status, order_number, customer_phone")
       .eq("id", orderId)
       .single();
 
@@ -77,7 +113,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const order   = data as Pick<OrderRow, "status" | "order_number">;
+    const order = data as Pick<OrderRow, "status" | "order_number" | "customer_phone">;
     const allowed = VALID_TRANSITIONS[order.status] ?? [];
 
     if (!allowed.includes(newStatus)) {
@@ -98,7 +134,7 @@ export async function PATCH(
 
     // Fire push notification when order becomes ready
     if (newStatus === "ready") {
-      sendReadyPush(orderId, order.order_number); // fire-and-forget
+      sendReadyPush(orderId, order.order_number, order.customer_phone ?? null); // fire-and-forget
     }
 
     return NextResponse.json({ ok: true, status: newStatus });
