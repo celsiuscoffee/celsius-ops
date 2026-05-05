@@ -505,15 +505,15 @@ export default function Home() {
                     Haptics.selectionAsync();
                     router.push("/rewards");
                   }}
-                  className="w-28 bg-surface rounded-xl border border-border overflow-hidden active:opacity-70"
+                  className="w-36 bg-surface rounded-2xl border border-border overflow-hidden active:opacity-70"
                   style={{
                     shadowColor: "#000",
-                    shadowOpacity: 0.04,
-                    shadowRadius: 3,
-                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.05,
+                    shadowRadius: 6,
+                    shadowOffset: { width: 0, height: 2 },
                   }}
                 >
-                  <View className="aspect-square bg-primary/5">
+                  <View className="aspect-[4/3] bg-primary/5">
                     {r.image_url ? (
                       <Image
                         source={{ uri: r.image_url }}
@@ -522,27 +522,18 @@ export default function Home() {
                       />
                     ) : (
                       <View className="flex-1 items-center justify-center">
-                        <Gift size={18} color="#C05040" strokeWidth={1.5} />
+                        <Gift size={26} color="#C05040" strokeWidth={1.5} />
                       </View>
                     )}
                   </View>
-                  <View className="px-2 py-1.5">
+                  <View className="px-3 py-2.5">
                     <Text
-                      className="text-espresso text-[11px]"
+                      className="text-espresso text-[13px]"
                       style={{ fontFamily: "Peachi-Bold" }}
                       numberOfLines={1}
                     >
                       {r.name}
                     </Text>
-                    <View className="flex-row items-center gap-0.5 mt-0.5">
-                      <Sparkles size={8} color="#C05040" strokeWidth={2.5} fill="#FBBF24" />
-                      <Text
-                        className="text-primary text-[9px]"
-                        style={{ fontFamily: "Peachi-Bold" }}
-                      >
-                        {r.points_required.toLocaleString()} pts
-                      </Text>
-                    </View>
                   </View>
                 </Pressable>
               ))}
