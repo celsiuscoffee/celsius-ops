@@ -47,8 +47,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (err: unknown) {
     console.error("Create payment intent error:", err);
-    // Surface the underlying Stripe error so the client can show a useful
-    // message instead of "Failed to create payment intent".
     const message =
       err instanceof Error ? err.message : "Failed to create payment intent";
     const code =
@@ -59,8 +57,40 @@ export async function POST(request: NextRequest) {
       typeof err === "object" && err !== null && "type" in err
         ? (err as { type: string }).type
         : undefined;
+    const keyPrefix = (process.env.STRIPE_SECRET_KEY ?? "").slice(0, 7);
+    const keyLen    = (process.env.STRIPE_SECRET_KEY ?? "").length;
     return NextResponse.json(
-      { error: message, code, type: stripeType },
+      { error: message, code, type: stripeType, keyPrefix, keyLen },
+      { status: 500 }
+    );
+  }
+}
+
+// GET probe — quick connectivity sanity check from the deployed runtime.
+// Pings Stripe's account endpoint with the configured key and reports
+// what's actually reachable.
+export async function GET() {
+  const keyPrefix = (process.env.STRIPE_SECRET_KEY ?? "").slice(0, 7);
+  const keyLen    = (process.env.STRIPE_SECRET_KEY ?? "").length;
+  try {
+    const stripe = getStripe();
+    const acct = await stripe.accounts.retrieve();
+    return NextResponse.json({
+      ok: true,
+      keyPrefix,
+      keyLen,
+      account: acct.id,
+      country: acct.country,
+      defaultCurrency: acct.default_currency,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    const stripeType =
+      typeof err === "object" && err !== null && "type" in err
+        ? (err as { type: string }).type
+        : undefined;
+    return NextResponse.json(
+      { ok: false, keyPrefix, keyLen, error: message, type: stripeType },
       { status: 500 }
     );
   }
