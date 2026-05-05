@@ -16,6 +16,10 @@ export type Settings = {
     headline?: string;
     highlight?: string;
     description?: string;
+    image_url?: string;
+    cta_text?: string;
+    cta_target?: "menu" | "store" | "rewards" | "url";
+    cta_url?: string;
   };
   payments_enabled: { enabled: boolean };
 };

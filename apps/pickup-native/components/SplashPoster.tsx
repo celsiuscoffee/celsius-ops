@@ -9,10 +9,13 @@ type Props = { onDone: () => void };
 export function SplashPoster({ onDone }: Props) {
   const [poster, setPoster] = useState<Poster | null>(null);
   const [loading, setLoading] = useState(true);
+  const [secondsLeft, setSecondsLeft] = useState<number>(0);
   const { width: w, height: h } = useWindowDimensions();
 
   useEffect(() => {
     let cancelled = false;
+    let countdownInterval: ReturnType<typeof setInterval> | undefined;
+    let dismissTimeout: ReturnType<typeof setTimeout> | undefined;
     (async () => {
       const p = await getSplashPoster();
       if (cancelled) return;
@@ -22,11 +25,18 @@ export function SplashPoster({ onDone }: Props) {
       }
       setPoster(p);
       setLoading(false);
-      const t = setTimeout(onDone, p.durationMs);
-      return () => clearTimeout(t);
+
+      const totalSec = Math.max(1, Math.ceil(p.durationMs / 1000));
+      setSecondsLeft(totalSec);
+      countdownInterval = setInterval(() => {
+        setSecondsLeft((s) => (s > 1 ? s - 1 : 0));
+      }, 1000);
+      dismissTimeout = setTimeout(onDone, p.durationMs);
     })();
     return () => {
       cancelled = true;
+      if (countdownInterval) clearInterval(countdownInterval);
+      if (dismissTimeout) clearTimeout(dismissTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -67,15 +77,29 @@ export function SplashPoster({ onDone }: Props) {
           position: "absolute",
           top: 60,
           right: 20,
-          width: 32,
           height: 32,
+          paddingHorizontal: 12,
           borderRadius: 16,
-          backgroundColor: "rgba(0,0,0,0.5)",
+          backgroundColor: "rgba(0,0,0,0.55)",
+          flexDirection: "row",
           alignItems: "center",
-          justifyContent: "center",
+          gap: 6,
         }}
       >
-        <X size={16} color="#FFFFFF" strokeWidth={2.5} />
+        {secondsLeft > 0 && (
+          <Text
+            style={{
+              color: "#FFFFFF",
+              fontFamily: "SpaceGrotesk_700Bold",
+              fontSize: 12,
+              minWidth: 10,
+              textAlign: "center",
+            }}
+          >
+            {secondsLeft}
+          </Text>
+        )}
+        <X size={14} color="#FFFFFF" strokeWidth={2.5} />
       </Pressable>
       {poster.deeplink && (
         <View

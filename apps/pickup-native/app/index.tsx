@@ -1,13 +1,21 @@
+import { useEffect, useState } from "react";
 import { View, Text, ActivityIndicator, Pressable, ScrollView, Image } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { MapPin, Clock, ChevronRight, Coffee, Navigation, Sparkles } from "lucide-react-native";
+import { MapPin, ChevronRight, Coffee, Navigation, Sparkles, Gift, Clock4 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { supabase, type Outlet } from "../lib/supabase";
 import { useApp, cartCount } from "../lib/store";
 import { fetchMenu } from "../lib/menu";
-import { fetchRecentItems } from "../lib/rewards";
+import {
+  fetchRecentItems,
+  fetchOrderHistory,
+  fetchRewards,
+  formatRewardValue,
+  type Reward,
+  type OrderHistoryEntry,
+} from "../lib/rewards";
+import { getSetting, type Settings } from "../lib/settings";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { Card } from "../components/Card";
 import { BottomNav } from "../components/BottomNav";
@@ -45,6 +53,58 @@ export default function Home() {
     staleTime: 60_000,
   });
 
+  // Active orders — pulled from full order history, filtered to in-progress
+  // statuses. Polled every 30s while the screen is mounted so the banner
+  // updates without manual refresh.
+  const orders = useQuery({
+    queryKey: ["order-history-home", phone],
+    queryFn: () => (phone ? fetchOrderHistory(phone, 5) : Promise.resolve([])),
+    enabled: !!phone,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+  const activeOrder = (() => {
+    const list = orders.data ?? [];
+    const ACTIVE = new Set(["pending", "paid", "preparing", "ready"]);
+    const STALE_PENDING_MS = 10 * 60 * 1000;
+    return list.find((o: OrderHistoryEntry) => {
+      const s = (o.status ?? "").toLowerCase();
+      if (!ACTIVE.has(s)) return false;
+      if (s === "pending") {
+        const age = Date.now() - new Date(o.created_at).getTime();
+        if (age > STALE_PENDING_MS) return false;
+      }
+      return true;
+    });
+  })();
+
+  // Rewards the customer can redeem right now with current points balance.
+  const rewardsQ = useQuery({
+    queryKey: ["rewards-home", phone],
+    queryFn: () => fetchRewards(phone ?? null),
+    staleTime: 60_000,
+  });
+  const points = member?.pointsBalance ?? rewardsQ.data?.pointsBalance ?? 0;
+  const affordableRewards = (rewardsQ.data?.rewards ?? [])
+    .filter((r: Reward) => r.is_active && r.points_required <= points)
+    .slice(0, 6);
+
+  // Hero promo content driven by backoffice setting; falls back to a baked-in
+  // launch promo if the setting hasn't been configured yet.
+  const [promo, setPromo] = useState<Settings["promo_banner"]>({
+    enabled: true,
+    label: "New App Promo",
+    headline: "Buy 1",
+    highlight: "Free 1",
+    description: "First app order · Any drink · Any size",
+  });
+  useEffect(() => {
+    getSetting("promo_banner").then((v) => {
+      if (v && v.enabled) setPromo(v);
+      else setPromo((p) => ({ ...p, enabled: false }));
+    });
+  }, []);
+
   const greeting = (() => {
     const h = new Date().getHours();
     if (h < 12) return "Good morning";
@@ -62,6 +122,29 @@ export default function Home() {
     if (cartCount(cart) > 0) router.push("/cart");
     else if (outletId) router.push("/menu");
     else router.push("/store");
+  };
+
+  const onPromoTap = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    switch (promo.cta_target) {
+      case "store":
+        router.push("/store");
+        return;
+      case "rewards":
+        router.push("/rewards");
+        return;
+      case "url":
+        // External URLs handled by deep linking the user out of the app —
+        // not implemented yet, fall back to menu so taps still feel responsive.
+        if (outletId) router.push("/menu");
+        else router.push("/store");
+        return;
+      case "menu":
+      default:
+        if (cartCount(cart) > 0) router.push("/cart");
+        else if (outletId) router.push("/menu");
+        else router.push("/store");
+    }
   };
 
   return (
@@ -116,67 +199,40 @@ export default function Home() {
       </View>
 
       <ScrollView contentContainerClassName="pb-40">
-        {/* Hero promo */}
-        <View className="bg-espresso mx-0 relative overflow-hidden">
-          <View className="px-5 pt-6 pb-7">
-            <Text className="text-amber-400 text-[10px] font-bold uppercase tracking-widest">
-              New App Promo
-            </Text>
-            <View className="flex-row items-end gap-3 mt-1">
-              <Text
-                className="text-white text-5xl leading-none"
-                style={{ fontFamily: "Peachi-Bold" }}
-              >
-                Buy 1{"\n"}
-                <Text className="text-amber-400">Free 1</Text>
-              </Text>
+        {/* Active order tracker — sits above everything else when present */}
+        {activeOrder && (
+          <Pressable
+            onPress={() => router.push({ pathname: "/order/[id]", params: { id: activeOrder.id } })}
+            className="mx-4 mt-4 bg-emerald-50 border border-emerald-200 rounded-2xl active:opacity-80"
+            style={{ paddingHorizontal: 14, paddingVertical: 12 }}
+          >
+            <View className="flex-row items-center gap-3">
+              <View className="w-9 h-9 rounded-full bg-emerald-500/15 items-center justify-center">
+                <Clock4 size={18} color="#16A34A" strokeWidth={2} />
+              </View>
+              <View className="flex-1">
+                <Text
+                  className="text-emerald-900 text-[10px] uppercase tracking-widest"
+                  style={{ fontFamily: "SpaceGrotesk_700Bold" }}
+                >
+                  {statusLabel(activeOrder.status)}
+                </Text>
+                <Text
+                  className="text-emerald-950 text-[14px] mt-0.5"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                  numberOfLines={1}
+                >
+                  Order #{activeOrder.order_number} · tap to track
+                </Text>
+              </View>
+              <ChevronRight size={16} color="#15803D" />
             </View>
-            <Text className="text-white/60 text-sm mt-2">
-              First app order · Any drink · Any size
-            </Text>
-            <Pressable
-              onPress={onOrderNow}
-              className="self-start mt-4 bg-white rounded-full px-5 py-2.5 flex-row items-center gap-1.5 active:opacity-80"
-            >
-              <Text className="text-primary text-sm font-bold">Order Now</Text>
-              <ChevronRight size={16} color="#C05040" />
-            </Pressable>
-          </View>
-        </View>
+          </Pressable>
+        )}
 
-        {/* Quick Actions */}
-        <View className="flex-row gap-3 px-4 mt-4">
-          <View className="flex-1">
-            <Card onPress={onOrderNow}>
-              <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
-                <Coffee size={20} color="#C05040" strokeWidth={1.5} />
-              </View>
-              <Text className="text-espresso font-bold text-sm mt-2.5">
-                {cartCount(cart) > 0 ? "Review Cart" : "Order Now"}
-              </Text>
-              <Text className="text-muted-fg text-xs mt-0.5">
-                {cartCount(cart) > 0
-                  ? `${cartCount(cart)} item${cartCount(cart) === 1 ? "" : "s"} waiting`
-                  : "Browse full menu"}
-              </Text>
-            </Card>
-          </View>
-          <View className="flex-1">
-            <Card onPress={() => router.push("/store")}>
-              <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
-                <Navigation size={20} color="#C05040" strokeWidth={1.5} />
-              </View>
-              <Text className="text-espresso font-bold text-sm mt-2.5">Our Outlets</Text>
-              <Text className="text-muted-fg text-xs mt-0.5" numberOfLines={1}>
-                Shah Alam · Conezion · Tamarind
-              </Text>
-            </Card>
-          </View>
-        </View>
-
-        {/* Your usual — most-ordered products from this customer's history */}
+        {/* Your usual — pulls regulars straight to checkout, retention-led */}
         {phone && (recent.data?.length ?? 0) > 0 && (
-          <View className="px-4 mt-6">
+          <View className="px-4 mt-5">
             <View className="flex-row items-center justify-between mb-3">
               <Text
                 className="text-espresso text-base"
@@ -260,6 +316,211 @@ export default function Home() {
             </View>
           </View>
         )}
+
+        {/* Rewards available — only show what user can redeem right now */}
+        {affordableRewards.length > 0 && (
+          <View className="mt-6">
+            <View className="flex-row items-center justify-between mb-3 px-4">
+              <View className="flex-row items-center gap-2">
+                <Gift size={16} color="#C05040" strokeWidth={2} />
+                <Text
+                  className="text-espresso text-base"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Available rewards
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => router.push("/rewards")}
+                className="flex-row items-center gap-0.5 active:opacity-70"
+              >
+                <Text className="text-primary text-xs font-bold">All</Text>
+                <ChevronRight size={14} color="#C05040" />
+              </Pressable>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerClassName="gap-3 px-4"
+            >
+              {affordableRewards.map((r) => (
+                <Pressable
+                  key={r.id}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    router.push("/rewards");
+                  }}
+                  className="w-44 bg-surface rounded-2xl border border-border overflow-hidden active:opacity-70"
+                  style={{
+                    shadowColor: "#000",
+                    shadowOpacity: 0.04,
+                    shadowRadius: 6,
+                    shadowOffset: { width: 0, height: 2 },
+                  }}
+                >
+                  <View className="aspect-[4/3] bg-primary/5">
+                    {r.image_url ? (
+                      <Image
+                        source={{ uri: r.image_url }}
+                        style={{ width: "100%", height: "100%" }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View className="flex-1 items-center justify-center">
+                        <Gift size={28} color="#C05040" strokeWidth={1.5} />
+                      </View>
+                    )}
+                  </View>
+                  <View className="p-3">
+                    <Text
+                      className="text-espresso text-[13px]"
+                      style={{ fontFamily: "Peachi-Bold" }}
+                      numberOfLines={1}
+                    >
+                      {r.name}
+                    </Text>
+                    <Text
+                      className="text-muted-fg text-[11px] mt-0.5"
+                      numberOfLines={1}
+                      style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                    >
+                      {formatRewardValue(r)}
+                    </Text>
+                    <View className="flex-row items-center gap-1 mt-2">
+                      <Sparkles size={10} color="#C05040" strokeWidth={2.5} fill="#FBBF24" />
+                      <Text
+                        className="text-primary text-[11px]"
+                        style={{ fontFamily: "Peachi-Bold" }}
+                      >
+                        {r.points_required.toLocaleString()} pts
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Hero promo — backoffice-driven via promo_banner setting. Trimmed
+            from the previous full-bleed hero so retention sections breathe. */}
+        {promo.enabled && (promo.headline || promo.image_url) && (
+          <Pressable
+            onPress={onPromoTap}
+            className="mx-4 mt-6 bg-espresso rounded-3xl overflow-hidden active:opacity-90"
+            style={{
+              shadowColor: "#160800",
+              shadowOpacity: 0.12,
+              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 4 },
+            }}
+          >
+            {promo.image_url ? (
+              <View>
+                <Image
+                  source={{ uri: promo.image_url }}
+                  style={{ width: "100%", aspectRatio: 16 / 9 }}
+                  resizeMode="cover"
+                />
+                <View className="px-4 py-3 flex-row items-center justify-between">
+                  <View className="flex-1 pr-3">
+                    {promo.label && (
+                      <Text
+                        className="text-amber-400 text-[10px] uppercase tracking-widest"
+                        style={{ fontFamily: "SpaceGrotesk_700Bold" }}
+                      >
+                        {promo.label}
+                      </Text>
+                    )}
+                    <Text
+                      className="text-white text-[16px] mt-0.5"
+                      style={{ fontFamily: "Peachi-Bold" }}
+                      numberOfLines={1}
+                    >
+                      {promo.headline} {promo.highlight && (
+                        <Text className="text-amber-400">{promo.highlight}</Text>
+                      )}
+                    </Text>
+                  </View>
+                  <View className="bg-white rounded-full px-4 py-2 flex-row items-center gap-1">
+                    <Text className="text-primary text-[13px] font-bold">
+                      {promo.cta_text || "Order"}
+                    </Text>
+                    <ChevronRight size={14} color="#C05040" />
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <View className="px-5 py-5">
+                {promo.label && (
+                  <Text
+                    className="text-amber-400 text-[10px] uppercase tracking-widest"
+                    style={{ fontFamily: "SpaceGrotesk_700Bold" }}
+                  >
+                    {promo.label}
+                  </Text>
+                )}
+                <View className="flex-row items-end justify-between mt-1">
+                  <View className="flex-1 pr-3">
+                    <Text
+                      className="text-white text-3xl leading-tight"
+                      style={{ fontFamily: "Peachi-Bold" }}
+                    >
+                      {promo.headline}
+                      {promo.highlight && (
+                        <>
+                          {" "}
+                          <Text className="text-amber-400">{promo.highlight}</Text>
+                        </>
+                      )}
+                    </Text>
+                    {promo.description && (
+                      <Text className="text-white/60 text-[12px] mt-1.5">
+                        {promo.description}
+                      </Text>
+                    )}
+                  </View>
+                  <View className="bg-white rounded-full px-4 py-2 flex-row items-center gap-1">
+                    <Text className="text-primary text-[13px] font-bold">
+                      {promo.cta_text || "Order"}
+                    </Text>
+                    <ChevronRight size={14} color="#C05040" />
+                  </View>
+                </View>
+              </View>
+            )}
+          </Pressable>
+        )}
+
+        {/* Quick Actions */}
+        <View className="flex-row gap-3 px-4 mt-4">
+          <View className="flex-1">
+            <Card onPress={onOrderNow}>
+              <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
+                <Coffee size={20} color="#C05040" strokeWidth={1.5} />
+              </View>
+              <Text className="text-espresso font-bold text-sm mt-2.5">
+                {cartCount(cart) > 0 ? "Review Cart" : "Order Now"}
+              </Text>
+              <Text className="text-muted-fg text-xs mt-0.5">
+                {cartCount(cart) > 0
+                  ? `${cartCount(cart)} item${cartCount(cart) === 1 ? "" : "s"} waiting`
+                  : "Browse full menu"}
+              </Text>
+            </Card>
+          </View>
+          <View className="flex-1">
+            <Card onPress={() => router.push("/store")}>
+              <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
+                <Navigation size={20} color="#C05040" strokeWidth={1.5} />
+              </View>
+              <Text className="text-espresso font-bold text-sm mt-2.5">Our Outlets</Text>
+              <Text className="text-muted-fg text-xs mt-0.5" numberOfLines={1}>
+                Shah Alam · Conezion · Tamarind
+              </Text>
+            </Card>
+          </View>
+        </View>
 
         {/* Best Sellers */}
         {featured.length > 0 && (
@@ -373,4 +634,19 @@ export default function Home() {
       <BottomNav />
     </View>
   );
+}
+
+function statusLabel(status: string | null | undefined): string {
+  switch ((status ?? "").toLowerCase()) {
+    case "pending":
+      return "Awaiting payment";
+    case "paid":
+      return "Payment confirmed";
+    case "preparing":
+      return "Being prepared";
+    case "ready":
+      return "Ready for pickup";
+    default:
+      return "In progress";
+  }
 }

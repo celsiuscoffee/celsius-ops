@@ -29,6 +29,10 @@ type PromoBanner = {
   headline?: string;
   highlight?: string;
   description?: string;
+  image_url?: string;
+  cta_text?: string;
+  cta_target?: "menu" | "store" | "rewards" | "url";
+  cta_url?: string;
 };
 type PaymentsEnabled = { enabled: boolean };
 
@@ -266,6 +270,43 @@ export default function SystemSettingsPage() {
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
               placeholder="First app order · Any drink · Any size" />
           </Field>
+          <Field label="Hero image URL (optional · 16:9 recommended)">
+            <input type="text"
+              value={promo.image_url ?? ""}
+              onChange={(e) => setPromo({ ...promo, image_url: e.target.value })}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              placeholder="https://...campaign-hero.jpg" />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="CTA text">
+              <input type="text"
+                value={promo.cta_text ?? ""}
+                onChange={(e) => setPromo({ ...promo, cta_text: e.target.value })}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                placeholder="Order Now" />
+            </Field>
+            <Field label="CTA target">
+              <select
+                value={promo.cta_target ?? "menu"}
+                onChange={(e) => setPromo({ ...promo, cta_target: e.target.value as PromoBanner["cta_target"] })}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              >
+                <option value="menu">Menu</option>
+                <option value="store">Pick outlet</option>
+                <option value="rewards">Rewards</option>
+                <option value="url">External URL</option>
+              </select>
+            </Field>
+          </div>
+          {promo.cta_target === "url" && (
+            <Field label="External URL">
+              <input type="text"
+                value={promo.cta_url ?? ""}
+                onChange={(e) => setPromo({ ...promo, cta_url: e.target.value })}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                placeholder="https://..." />
+            </Field>
+          )}
           <SaveBtn busy={saving === "promo_banner"} onClick={() => save("promo_banner", promo)} />
         </Card>
 
