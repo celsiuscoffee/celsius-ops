@@ -9,10 +9,12 @@ import {
 } from "react-native";
 import { Stack, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CreditCard, Smartphone, Check, AlertCircle, Building2 } from "lucide-react-native";
+import { CreditCard, Smartphone, Check, AlertCircle, Building2, Coffee, MapPin, Clock } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useStripe } from "@stripe/stripe-react-native";
-import { useApp, cartTotal } from "../lib/store";
+import { useQuery } from "@tanstack/react-query";
+import { supabase, type Outlet } from "../lib/supabase";
+import { useApp, cartTotal, cartCount } from "../lib/store";
 import { api, formatPrice } from "../lib/api";
 import { calcRewardDiscount } from "../lib/rewards";
 import { getSetting } from "../lib/settings";
@@ -41,6 +43,22 @@ export default function Checkout() {
     getSetting("sst").then(setSstConfig);
     getSetting("payments_enabled").then((v) => setPaymentsEnabled(v.enabled));
   }, []);
+
+  // Pull live outlet record so the pickup card shows status + ETA — same
+  // info the home page surfaces, kept consistent here so the customer
+  // confirms exactly what they're committing to.
+  const outlets = useQuery({
+    queryKey: ["outlets"],
+    queryFn: async (): Promise<Outlet[]> => {
+      const { data, error } = await supabase
+        .from("outlet_settings")
+        .select("store_id,name,address,lat,lng,is_open,is_busy,pickup_time_mins")
+        .eq("is_active", true);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const currentOutlet = (outlets.data ?? []).find((o) => o.store_id === outletId) ?? null;
 
   const subtotal = cartTotal(cart);
   const rewardDiscount = calcRewardDiscount(appliedReward, cart, subtotal);
@@ -225,12 +243,12 @@ export default function Checkout() {
           Haptics.selectionAsync();
           setPaymentMethod(method);
         }}
-        className={`px-4 py-3 rounded-xl border flex-row items-center gap-3 active:opacity-70 ${
+        className={`px-4 py-3 rounded-2xl border flex-row items-center gap-3 active:opacity-70 ${
           selected ? "bg-primary/8 border-primary" : "bg-surface border-border"
         }`}
       >
         <View
-          className={`w-9 h-9 rounded-lg items-center justify-center ${
+          className={`w-9 h-9 rounded-xl items-center justify-center ${
             selected ? "bg-primary/15" : "bg-background"
           }`}
         >
@@ -247,12 +265,50 @@ export default function Checkout() {
     );
   };
 
+  // Empty cart guard — covers deep-link / back-nav cases where the user
+  // lands here with nothing to pay for.
+  if (cartCount(cart) === 0) {
+    return (
+      <View className="flex-1 bg-background">
+        <Stack.Screen options={{ headerShown: false }} />
+        <EspressoHeader title="Checkout" showBack showCart={false} />
+        <View className="flex-1 items-center justify-center px-6">
+          <Coffee size={48} color="#8E8E93" strokeWidth={1.25} />
+          <Text
+            className="text-espresso text-base mt-4"
+            style={{ fontFamily: "Peachi-Bold" }}
+          >
+            Your cart is empty
+          </Text>
+          <Text
+            className="text-muted-fg text-sm text-center mt-1"
+            style={{ fontFamily: "SpaceGrotesk_400Regular" }}
+          >
+            Add a drink first, then we'll get you to pickup quick.
+          </Text>
+          <Pressable
+            onPress={() => router.replace(outletId ? "/menu" : "/store")}
+            className="mt-6 bg-espresso rounded-full active:opacity-80"
+            style={{ paddingHorizontal: 22, paddingVertical: 11 }}
+          >
+            <Text
+              className="text-white text-[14px]"
+              style={{ fontFamily: "Peachi-Bold" }}
+            >
+              Browse menu
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
       <EspressoHeader title="Checkout" showBack showCart={false} />
 
-      <ScrollView contentContainerClassName="px-4 py-4 pb-12 gap-6">
+      <ScrollView contentContainerClassName="px-4 py-4 pb-32 gap-4">
         {step === "phone" && (
           <View className="bg-surface rounded-2xl border border-border p-5">
             <Text className="text-espresso text-xs font-bold uppercase tracking-wider">
@@ -303,19 +359,84 @@ export default function Checkout() {
 
         {step === "review" && (
           <>
-            <View className="bg-surface rounded-2xl border border-border p-4">
-              <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
-                Pickup
-              </Text>
-              <Text className="text-espresso font-bold text-[15px] mt-1">{outletName}</Text>
-            </View>
+            <Pressable
+              onPress={() => router.push("/store")}
+              className="bg-surface rounded-2xl border border-border p-4 active:opacity-70"
+            >
+              <View className="flex-row items-center justify-between">
+                <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
+                  Pickup at
+                </Text>
+                <Text
+                  className="text-primary text-[11px]"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Change
+                </Text>
+              </View>
+              <View className="flex-row items-center gap-2 mt-1">
+                <MapPin size={14} color="#160800" />
+                <Text className="text-espresso font-bold text-[15px] flex-1" numberOfLines={1}>
+                  {outletName ?? "Select outlet"}
+                </Text>
+              </View>
+              {currentOutlet && (
+                <View className="flex-row items-center gap-1.5 mt-2">
+                  <View
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: !currentOutlet.is_open
+                        ? "#EF4444"
+                        : currentOutlet.is_busy
+                        ? "#F59E0B"
+                        : "#22C55E",
+                    }}
+                  />
+                  <Text
+                    className="text-muted-fg text-[12px]"
+                    style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
+                  >
+                    {!currentOutlet.is_open
+                      ? "Closed now"
+                      : currentOutlet.is_busy
+                      ? "Busy"
+                      : "Open"}
+                    {currentOutlet.is_open && currentOutlet.pickup_time_mins
+                      ? ` · ready in ~${currentOutlet.pickup_time_mins} min`
+                      : ""}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
 
-            <View className="bg-surface rounded-2xl border border-border p-4">
-              <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
-                Contact
+            <Pressable
+              onPress={() => setStep("phone")}
+              className="bg-surface rounded-2xl border border-border p-4 active:opacity-70"
+            >
+              <View className="flex-row items-center justify-between">
+                <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
+                  Contact
+                </Text>
+                <Text
+                  className="text-primary text-[11px]"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Edit
+                </Text>
+              </View>
+              <View className="flex-row items-center gap-2 mt-1">
+                <Clock size={14} color="#160800" />
+                <Text className="text-espresso font-bold text-[15px]">{phoneInput}</Text>
+              </View>
+              <Text
+                className="text-muted-fg text-[11px] mt-1"
+                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+              >
+                We'll SMS you when it's ready.
               </Text>
-              <Text className="text-espresso font-bold text-[15px] mt-1">{phoneInput}</Text>
-            </View>
+            </Pressable>
 
             <View>
               <Text className="text-muted-fg text-[11px] font-bold uppercase tracking-wider px-1 mb-2">
@@ -353,10 +474,14 @@ export default function Checkout() {
                     <Text className="text-primary">−{formatPrice(rewardDiscount)}</Text>
                   </View>
                 )}
-                <View className="flex-row justify-between">
-                  <Text className="text-muted-fg text-[13px]">SST (6%)</Text>
-                  <Text className="text-muted-fg text-[13px]">{formatPrice(sst)}</Text>
-                </View>
+                {sstConfig.enabled && (
+                  <View className="flex-row justify-between">
+                    <Text className="text-muted-fg text-[13px]">
+                      SST ({Math.round(sstConfig.rate * 100)}%)
+                    </Text>
+                    <Text className="text-muted-fg text-[13px]">{formatPrice(sst)}</Text>
+                  </View>
+                )}
                 <View className="flex-row justify-between mt-2 pt-2 border-t border-border">
                   <Text className="text-espresso font-bold">Total</Text>
                   <Text
@@ -388,21 +513,33 @@ export default function Checkout() {
                 </View>
               </View>
             )}
-
-            <PrimaryButton
-              label={
-                paymentsEnabled
-                  ? `Place order · ${formatPrice(grandTotal)}`
-                  : "Online ordering paused"
-              }
-              onPress={onPlaceOrder}
-              loading={busy}
-              disabled={!paymentsEnabled}
-            />
           </>
         )}
-        <View style={{ height: insets.bottom }} />
       </ScrollView>
+
+      {/* Sticky bottom Place Order — visible without scrolling, total stays
+          in view as customer scrolls through the summary above. */}
+      {step === "review" && (
+        <View
+          className="bg-surface border-t border-border"
+          style={{
+            paddingHorizontal: 16,
+            paddingTop: 12,
+            paddingBottom: insets.bottom + 12,
+          }}
+        >
+          <PrimaryButton
+            label={
+              paymentsEnabled
+                ? `Place order · ${formatPrice(grandTotal)}`
+                : "Online ordering paused"
+            }
+            onPress={onPlaceOrder}
+            loading={busy}
+            disabled={!paymentsEnabled}
+          />
+        </View>
+      )}
     </View>
   );
 }
