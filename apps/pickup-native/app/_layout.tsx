@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { StripeProvider } from "@stripe/stripe-react-native";
 import { useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
@@ -73,24 +74,30 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <StatusBar style="light" />
-        <View style={{ flex: 1, backgroundColor: "#160800" }}>
-          {loaded && (
-            <>
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: "#f5f5f5" },
-                  animation: "slide_from_right",
-                }}
-              />
-              <MaintenanceBanner />
-            </>
-          )}
-          {showSplash && <SplashPoster onDone={() => setShowSplash(false)} />}
-        </View>
-      </QueryClientProvider>
+      <StripeProvider
+        publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? ""}
+        merchantIdentifier={process.env.EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER}
+        urlScheme="celsiuscoffee"
+      >
+        <QueryClientProvider client={queryClient}>
+          <StatusBar style="light" />
+          <View style={{ flex: 1, backgroundColor: "#160800" }}>
+            {loaded && (
+              <>
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: "#f5f5f5" },
+                    animation: "slide_from_right",
+                  }}
+                />
+                <MaintenanceBanner />
+              </>
+            )}
+            {showSplash && <SplashPoster onDone={() => setShowSplash(false)} />}
+          </View>
+        </QueryClientProvider>
+      </StripeProvider>
     </SafeAreaProvider>
   );
 }

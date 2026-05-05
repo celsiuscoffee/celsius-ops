@@ -11,7 +11,7 @@ import { Stack, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CreditCard, Smartphone, Check, AlertCircle } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
-import * as WebBrowser from "expo-web-browser";
+import { useStripe } from "@stripe/stripe-react-native";
 import { useApp, cartTotal } from "../lib/store";
 import { api, formatPrice } from "../lib/api";
 import { calcRewardDiscount } from "../lib/rewards";
@@ -23,6 +23,7 @@ type Step = "phone" | "otp" | "review";
 
 export default function Checkout() {
   const insets = useSafeAreaInsets();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const cart = useApp((s) => s.cart);
   const outletId = useApp((s) => s.outletId);
   const outletName = useApp((s) => s.outletName);
@@ -120,57 +121,75 @@ export default function Checkout() {
         rewardDiscountSen: Math.round(rewardDiscount * 100),
       });
 
-      // 2. Card / ewallet — open the dedicated pay page in an in-app browser.
-      //    That page mints a Stripe PaymentIntent for this orderId and renders
-      //    Stripe Elements (card / Apple Pay / Google Pay / FPX). On success the
-      //    page itself POSTs /confirm-stripe so the order advances to
-      //    "preparing" before we get the user back. We still poll on return
-      //    because the WebBrowser dismissal type can't be trusted.
-      const payUrl = `https://order.celsiuscoffee.com/order/${encodeURIComponent(res.orderId)}/pay?from=app`;
-      await WebBrowser.openBrowserAsync(payUrl, {
-        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-        dismissButtonStyle: "close",
-        toolbarColor: "#160800",
-        controlsColor: "#FFFFFF",
-      });
-
-      // Poll for up to 8 seconds to see if payment confirmed via webhook
-      let paid = false;
-      for (let i = 0; i < 4; i++) {
-        try {
-          const statusRes = await fetch(
-            `https://order.celsiuscoffee.com/api/orders/${encodeURIComponent(res.orderId)}`,
-            { headers: { Origin: "https://order.celsiuscoffee.com", Referer: "https://order.celsiuscoffee.com/" } }
-          );
-          if (statusRes.ok) {
-            const order = await statusRes.json();
-            if (
-              order.status === "paid" ||
-              order.status === "preparing" ||
-              order.status === "ready" ||
-              order.status === "completed" ||
-              order.payment_status === "succeeded"
-            ) {
-              paid = true;
-              break;
-            }
-          }
-        } catch {
-          // network blip — try again
+      // 2. Card / ewallet — Stripe native PaymentSheet. The server mints a
+      //    PaymentIntent for this orderId; we hand the clientSecret to the
+      //    native sheet which slides up over the app and handles card entry,
+      //    Apple Pay, and SCA inline. On success Stripe also posts a webhook
+      //    that flips the order to "preparing"; we additionally call
+      //    /confirm-stripe ourselves so the user lands on a moving order
+      //    immediately, no polling needed.
+      const piRes = await fetch(
+        `https://order.celsiuscoffee.com/api/checkout/create-payment-intent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: res.orderId }),
         }
-        if (i < 3) await new Promise((r) => setTimeout(r, 2000));
+      );
+      const piJson = (await piRes.json()) as {
+        clientSecret?: string;
+        error?: string;
+      };
+      if (!piRes.ok || !piJson.clientSecret) {
+        throw new Error(piJson.error || "Couldn't start Stripe payment");
       }
 
-      if (paid) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        clearCart();
-        router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
-      } else {
-        // Payment didn't confirm. Don't clear cart — let user retry from
-        // order detail page (which has a "Complete payment" button).
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
+      const initRes = await initPaymentSheet({
+        merchantDisplayName: "Celsius Coffee",
+        paymentIntentClientSecret: piJson.clientSecret,
+        applePay: { merchantCountryCode: "MY" },
+        googlePay: { merchantCountryCode: "MY", currencyCode: "myr", testEnv: false },
+        defaultBillingDetails: { phone: phoneInput.trim() },
+        returnURL: "celsiuscoffee://stripe-redirect",
+        allowsDelayedPaymentMethods: false,
+      });
+      if (initRes.error) {
+        throw new Error(initRes.error.message);
       }
+
+      const presentRes = await presentPaymentSheet();
+      if (presentRes.error) {
+        // User cancelled or payment failed. Order stays pending; cron will
+        // expire it after 10 min if no retry.
+        if (presentRes.error.code !== "Canceled") {
+          Alert.alert("Payment failed", presentRes.error.message);
+        }
+        // Always route to the order page so customer can retry from there.
+        router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
+        return;
+      }
+
+      // Payment succeeded — confirm server-side immediately so the order is
+      // already "preparing" by the time we navigate.
+      try {
+        await fetch(
+          `https://order.celsiuscoffee.com/api/orders/${encodeURIComponent(res.orderId)}/confirm-stripe`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            // confirm-stripe extracts paymentIntent.id from the order via
+            // metadata; we don't have it client-side after the sheet so the
+            // server fallback re-resolves it. (See reconcile-pending.)
+            body: JSON.stringify({ paymentIntentId: piJson.clientSecret.split("_secret_")[0] }),
+          }
+        );
+      } catch {
+        // Webhook is the backstop if this fails.
+      }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      clearCart();
+      router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
     } catch (e: any) {
       Alert.alert("Couldn't place order", e?.message ?? String(e));
     } finally {
