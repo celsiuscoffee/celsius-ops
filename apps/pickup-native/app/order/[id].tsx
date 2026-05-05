@@ -1,9 +1,10 @@
-import { View, Text, Pressable, ScrollView, ActivityIndicator } from "react-native";
+import { useState } from "react";
+import { View, Text, Pressable, ScrollView, ActivityIndicator, Alert } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Clock, Coffee, ShoppingBag, CreditCard } from "lucide-react-native";
-import * as WebBrowser from "expo-web-browser";
 import * as Haptics from "expo-haptics";
+import { useStripe } from "@stripe/stripe-react-native";
 import { fetchOrder } from "../../lib/menu";
 import { formatPrice } from "../../lib/api";
 import { useApp } from "../../lib/store";
@@ -39,27 +40,91 @@ export default function OrderStatus() {
 
   const statusIdx = STATUS_INDEX[data?.status ?? "pending"] ?? -1;
   const clearCart = useApp((s) => s.clearCart);
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  const [retrying, setRetrying] = useState(false);
 
+  // Re-mints a PaymentIntent for this pending order and re-opens the native
+  // Stripe PaymentSheet. Same flow checkout.tsx uses on first place — this
+  // is the retry path when the customer cancels the sheet or the first
+  // attempt fails.
   const reopenStripe = async () => {
     if (!id) return;
     Haptics.selectionAsync();
-    await WebBrowser.openBrowserAsync(
-      `https://order.celsiuscoffee.com/order/pending?orderId=${encodeURIComponent(id)}&from=app`,
-      {
-        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-        dismissButtonStyle: "close",
-        toolbarColor: "#160800",
-        controlsColor: "#FFFFFF",
+    setRetrying(true);
+    try {
+      const piRes = await fetch(
+        `https://order.celsiuscoffee.com/api/checkout/create-payment-intent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Origin: "https://order.celsiuscoffee.com",
+            Referer: "https://order.celsiuscoffee.com/",
+          },
+          body: JSON.stringify({ orderId: id }),
+        }
+      );
+      const piJson = (await piRes.json()) as {
+        clientSecret?: string;
+        paymentIntentId?: string;
+        error?: string;
+      };
+      if (!piRes.ok || !piJson.clientSecret) {
+        throw new Error(piJson.error || "Couldn't start Stripe payment");
       }
-    );
-    // Cart already cleared if previously paid; if status flips to paid on
-    // next refetch, clear again as safety. React Query is polling at 5s.
-    if (data?.status !== "pending") clearCart();
+
+      const initRes = await initPaymentSheet({
+        merchantDisplayName: "Celsius Coffee",
+        paymentIntentClientSecret: piJson.clientSecret,
+        applePay: { merchantCountryCode: "MY" },
+        googlePay: { merchantCountryCode: "MY", currencyCode: "myr", testEnv: false },
+        returnURL: "celsiuscoffee://stripe-redirect",
+        allowsDelayedPaymentMethods: false,
+      });
+      if (initRes.error) throw new Error(initRes.error.message);
+
+      const presentRes = await presentPaymentSheet();
+      if (presentRes.error) {
+        if (presentRes.error.code !== "Canceled") {
+          Alert.alert("Payment failed", presentRes.error.message);
+        }
+        return;
+      }
+
+      // Success — call confirm-stripe so the order moves to preparing
+      // before the next 5s React Query poll refetches.
+      try {
+        await fetch(
+          `https://order.celsiuscoffee.com/api/orders/${encodeURIComponent(id)}/confirm-stripe`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Origin: "https://order.celsiuscoffee.com",
+              Referer: "https://order.celsiuscoffee.com/",
+            },
+            body: JSON.stringify({
+              paymentIntentId:
+                piJson.paymentIntentId ?? piJson.clientSecret.split("_secret_")[0],
+            }),
+          }
+        );
+      } catch {
+        // Webhook is the backstop.
+      }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      clearCart();
+    } catch (e: any) {
+      Alert.alert("Couldn't retry payment", e?.message ?? String(e));
+    } finally {
+      setRetrying(false);
+    }
   };
 
   const isPendingPayment =
     data?.status === "pending" &&
-    (data?.payment_method === "card" || data?.payment_method === "ewallet");
+    ["card", "ewallet", "fpx"].includes(String(data?.payment_method));
 
   return (
     <View className="flex-1 bg-background">
@@ -117,15 +182,24 @@ export default function OrderStatus() {
                 {isPendingPayment && (
                   <Pressable
                     onPress={reopenStripe}
+                    disabled={retrying}
                     className="mt-4 bg-primary rounded-full flex-row items-center gap-2 active:opacity-80"
-                    style={{ paddingHorizontal: 18, paddingVertical: 12 }}
+                    style={{
+                      paddingHorizontal: 18,
+                      paddingVertical: 12,
+                      opacity: retrying ? 0.5 : 1,
+                    }}
                   >
-                    <CreditCard size={16} color="#FFFFFF" strokeWidth={2} />
+                    {retrying ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <CreditCard size={16} color="#FFFFFF" strokeWidth={2} />
+                    )}
                     <Text
                       className="text-white text-[14px]"
                       style={{ fontFamily: "Peachi-Bold" }}
                     >
-                      Complete payment
+                      {retrying ? "Opening Stripe…" : "Complete payment"}
                     </Text>
                   </Pressable>
                 )}

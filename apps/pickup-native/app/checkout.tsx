@@ -434,7 +434,7 @@ export default function Checkout() {
                 className="text-muted-fg text-[11px] mt-1"
                 style={{ fontFamily: "SpaceGrotesk_500Medium" }}
               >
-                We'll SMS you when it's ready.
+                We'll notify you in the app when it's ready.
               </Text>
             </Pressable>
 
