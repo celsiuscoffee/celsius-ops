@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
       rewardName,
       loyaltyPhone,
       loyaltyId,
+      tipAmountSen,
     } = body;
 
     if (!items?.length || !selectedStore || !paymentMethod) {
@@ -96,10 +97,12 @@ export async function POST(request: NextRequest) {
     const { data: settingsRows } = await supabase
       .from("app_settings")
       .select("key, value")
-      .in("key", ["points_per_rm", "min_order_value"]);
-    const settingsMap = new Map((settingsRows ?? []).map((r) => [r.key, r.value as Record<string, number>]));
-    const pointsPerRm  = Number(settingsMap.get("points_per_rm")?.rate ?? 1);
-    const minOrderRm   = Number(settingsMap.get("min_order_value")?.rm ?? 0);
+      .in("key", ["points_per_rm", "min_order_value", "first_order_discount"]);
+    const settingsMap = new Map((settingsRows ?? []).map((r) => [r.key, r.value]));
+    const pointsPerRm  = Number((settingsMap.get("points_per_rm") as any)?.rate ?? 1);
+    const minOrderRm   = Number((settingsMap.get("min_order_value") as any)?.rm ?? 0);
+    const fodConfig    = settingsMap.get("first_order_discount") as
+      { enabled: boolean; type: "percent" | "fixed"; amount: number } | undefined;
 
     if (minOrderRm > 0 && total < minOrderRm) {
       return NextResponse.json(
@@ -131,10 +134,28 @@ export async function POST(request: NextRequest) {
     const subtotalSen        = Math.round(total * 100);
     const voucherDiscountSen = Math.round(discountSen ?? 0);
     const rewardDiscountSenAmt = Math.round(rewardDiscountSen ?? 0);
-    const totalDiscountSen   = voucherDiscountSen + rewardDiscountSenAmt;
+
+    // First-order discount: server validates independently — checks the orders
+    // table for prior completed orders on this phone.
+    let fodDiscountSen = 0;
+    if (fodConfig?.enabled && loyaltyPhone) {
+      const { count } = await supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("loyalty_phone", loyaltyPhone)
+        .in("status", ["completed", "preparing", "ready", "paid"]);
+      if ((count ?? 0) === 0) {
+        fodDiscountSen = fodConfig.type === "percent"
+          ? Math.round(subtotalSen * (fodConfig.amount / 100))
+          : Math.round(fodConfig.amount * 100);
+      }
+    }
+
+    const totalDiscountSen   = voucherDiscountSen + rewardDiscountSenAmt + fodDiscountSen;
     const afterDiscount      = Math.max(0, subtotalSen - totalDiscountSen);
     const sstSen             = Math.round(sst != null ? sst * 100 : afterDiscount * 0.06);
-    const totalSen           = afterDiscount + sstSen;
+    const tipSen             = Math.max(0, Math.round(tipAmountSen ?? 0));
+    const totalSen           = afterDiscount + sstSen + tipSen;
 
     // Points = pointsPerRm × RM of after-discount subtotal (configurable per brand)
     const pointsToEarn = loyaltyId ? Math.floor((afterDiscount / 100) * pointsPerRm) : 0;
@@ -153,6 +174,8 @@ export async function POST(request: NextRequest) {
         reward_id:              rewardId ?? null,
         reward_name:            rewardName ?? null,
         sst_amount:             sstSen,
+        tip_amount:             tipSen,
+        first_order_discount_amount: fodDiscountSen,
         total:                  totalSen,
         customer_phone:         loyaltyPhone ?? null,
         loyalty_phone:          loyaltyPhone ?? null,

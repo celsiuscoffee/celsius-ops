@@ -68,6 +68,7 @@ export const api = {
     rewardName?: string | null;
     rewardPointsCost?: number;
     rewardDiscountSen?: number;
+    tipAmountSen?: number;
   }) =>
     post<{ orderId: string; orderNumber: string }>("/api/orders", payload),
 };
