@@ -169,24 +169,44 @@ export async function POST(request: NextRequest) {
 
     const order = data as OrderRow;
 
-    const orderItems = (items as Array<{
-      product: { id: string; name: string };
-      modifiers: { selections: { groupId: string; groupName: string; optionId: string; label: string; priceDelta: number }[]; specialInstructions?: string };
-      quantity: number;
-      totalPrice: number;
-    }>).map((item) => ({
-      order_id:     order.id,
-      product_id:   item.product.id,
-      product_name: item.product.name,
-      variant_name: null,
-      unit_price:   Math.round((item.totalPrice / item.quantity) * 100),
-      quantity:     item.quantity,
-      item_total:   Math.round(item.totalPrice * 100),
-      modifiers:    {
-        selections:           item.modifiers.selections ?? [],
-        specialInstructions:  item.modifiers.specialInstructions ?? undefined,
-      },
-    }));
+    // Normalises both call shapes the order endpoint receives:
+    //   PWA  : { product: { id, name }, modifiers: { selections: [...], specialInstructions } }
+    //   Native: { productId, name,        modifiers: [...],            specialInstructions }
+    type AnyItem = {
+      product?:    { id?: string; name?: string };
+      productId?:  string;
+      name?:       string;
+      modifiers?:  unknown;
+      specialInstructions?: string;
+      quantity:    number;
+      totalPrice:  number;
+    };
+    const orderItems = (items as AnyItem[]).map((item) => {
+      const productId   = item.product?.id ?? item.productId ?? "";
+      const productName = item.product?.name ?? item.name ?? "";
+      let selections:    Array<Record<string, unknown>> = [];
+      let specialInstructions: string | undefined;
+      if (Array.isArray(item.modifiers)) {
+        selections = item.modifiers as Array<Record<string, unknown>>;
+        specialInstructions = item.specialInstructions;
+      } else if (item.modifiers && typeof item.modifiers === "object") {
+        const m = item.modifiers as { selections?: Array<Record<string, unknown>>; specialInstructions?: string };
+        selections = m.selections ?? [];
+        specialInstructions = m.specialInstructions ?? item.specialInstructions;
+      } else {
+        specialInstructions = item.specialInstructions;
+      }
+      return {
+        order_id:     order.id,
+        product_id:   productId,
+        product_name: productName,
+        variant_name: null,
+        unit_price:   Math.round((item.totalPrice / item.quantity) * 100),
+        quantity:     item.quantity,
+        item_total:   Math.round(item.totalPrice * 100),
+        modifiers:    { selections, specialInstructions },
+      };
+    });
 
     const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
     if (itemsError) console.error("Order items error:", itemsError);
