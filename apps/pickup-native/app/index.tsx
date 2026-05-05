@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, Pressable, ScrollView, Image, RefreshControl } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { MapPin, ChevronRight, Coffee, Navigation, Sparkles, Gift, Clock4, ShoppingCart } from "lucide-react-native";
+import { MapPin, ChevronRight, Coffee, Sparkles, Gift, Clock4, ShoppingCart } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { supabase, type Outlet } from "../lib/supabase";
 import { useApp, cartCount } from "../lib/store";
@@ -15,7 +15,6 @@ import {
   type OrderHistoryEntry,
 } from "../lib/rewards";
 import { getSetting, type Settings } from "../lib/settings";
-import { Card } from "../components/Card";
 import { BottomNav } from "../components/BottomNav";
 import { formatPrice } from "../lib/api";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -234,7 +233,7 @@ export default function Home() {
               {greeting}
             </Text>
             <Text
-              className="text-white text-[18px] mt-0.5"
+              className="text-white text-[22px] mt-0.5"
               style={{ fontFamily: "Peachi-Bold" }}
               numberOfLines={1}
             >
@@ -310,9 +309,9 @@ export default function Home() {
           }}
           className="flex-row items-center gap-1.5 mt-2.5 self-start active:opacity-70"
         >
-          <MapPin size={13} color="rgba(255,255,255,0.7)" />
+          <MapPin size={15} color="rgba(255,255,255,0.7)" />
           <Text
-            className="text-white text-[13px]"
+            className="text-white text-[15px]"
             style={{ fontFamily: "Peachi-Bold" }}
           >
             {outletName ?? "Select pickup outlet"}
@@ -743,9 +742,9 @@ export default function Home() {
               {[0, 1, 2, 3].map((i) => (
                 <View
                   key={i}
-                  className="w-36 bg-surface rounded-2xl border border-border overflow-hidden"
+                  className="w-44 bg-surface rounded-2xl border border-border overflow-hidden"
                 >
-                  <View className="aspect-[4/3] bg-background" />
+                  <View className="aspect-[4/5] bg-background" />
                   <View className="p-3 gap-2">
                     <View
                       className="bg-background rounded-md"
@@ -793,18 +792,18 @@ export default function Home() {
                     if (!outletId) router.push("/store");
                     else router.push({ pathname: "/product/[id]", params: { id: p.id } });
                   }}
-                  className="w-36 active:opacity-70"
+                  className="w-44 active:opacity-70"
                 >
                   <View
                     className="bg-surface rounded-2xl overflow-hidden border border-border"
                     style={{
                       shadowColor: "#000",
-                      shadowOpacity: 0.05,
-                      shadowRadius: 6,
-                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.06,
+                      shadowRadius: 8,
+                      shadowOffset: { width: 0, height: 3 },
                     }}
                   >
-                    <View className="aspect-[4/3] bg-background">
+                    <View className="aspect-[4/5] bg-background">
                       {p.image_url && (
                         <Image
                           source={{ uri: p.image_url }}
@@ -842,38 +841,6 @@ export default function Home() {
             </ScrollView>
           </View>
         )}
-
-        {/* Quick actions — demoted to lowest priority. Sticky cart pill +
-            header outlet picker cover the same intents above the fold for
-            most sessions; this row is a fallback for menu/outlet entry. */}
-        <View className="flex-row gap-3 px-4 mt-5">
-          <View className="flex-1">
-            <Card onPress={onOrderNow}>
-              <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
-                <Coffee size={20} color="#C05040" strokeWidth={1.5} />
-              </View>
-              <Text className="text-espresso font-bold text-sm mt-2.5">
-                {cartCount(cart) > 0 ? "Review Cart" : "Order Now"}
-              </Text>
-              <Text className="text-muted-fg text-xs mt-0.5">
-                {cartCount(cart) > 0
-                  ? `${cartCount(cart)} item${cartCount(cart) === 1 ? "" : "s"} waiting`
-                  : "Browse full menu"}
-              </Text>
-            </Card>
-          </View>
-          <View className="flex-1">
-            <Card onPress={() => router.push("/store")}>
-              <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
-                <Navigation size={20} color="#C05040" strokeWidth={1.5} />
-              </View>
-              <Text className="text-espresso font-bold text-sm mt-2.5">Our Outlets</Text>
-              <Text className="text-muted-fg text-xs mt-0.5" numberOfLines={1}>
-                Shah Alam · Conezion · Tamarind
-              </Text>
-            </Card>
-          </View>
-        </View>
 
       </ScrollView>
 
