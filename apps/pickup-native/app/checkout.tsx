@@ -120,13 +120,13 @@ export default function Checkout() {
         rewardDiscountSen: Math.round(rewardDiscount * 100),
       });
 
-      // 2. Card / ewallet — open the PWA's hosted payment page in an in-app browser.
-      //    PWA handles Stripe Elements (card, FPX, Apple Pay). When the sheet
-      //    closes we don't trust its return type — Stripe can succeed even
-      //    when the user dismissed manually after payment, and can fail when
-      //    they hit the close button mid-flow. Always poll the order status
-      //    on return to see what actually happened.
-      const payUrl = `https://order.celsiuscoffee.com/order/pending?orderId=${encodeURIComponent(res.orderId)}&from=app`;
+      // 2. Card / ewallet — open the dedicated pay page in an in-app browser.
+      //    That page mints a Stripe PaymentIntent for this orderId and renders
+      //    Stripe Elements (card / Apple Pay / Google Pay / FPX). On success the
+      //    page itself POSTs /confirm-stripe so the order advances to
+      //    "preparing" before we get the user back. We still poll on return
+      //    because the WebBrowser dismissal type can't be trusted.
+      const payUrl = `https://order.celsiuscoffee.com/order/${encodeURIComponent(res.orderId)}/pay?from=app`;
       await WebBrowser.openBrowserAsync(payUrl, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
         dismissButtonStyle: "close",
