@@ -143,17 +143,24 @@ export default function OrdersTab() {
                 />
               }
             >
-              {active.length > 0 && (
-                <>
-                  <SectionHeader label="In progress" />
-                  {active.map((order) => (
-                    <OrderRow
-                      key={order.id}
-                      order={order}
-                      onReorder={() => reorder(order)}
-                    />
-                  ))}
-                </>
+              <SectionHeader label="In progress" />
+              {active.length > 0 ? (
+                active.map((order) => (
+                  <OrderRow
+                    key={order.id}
+                    order={order}
+                    onReorder={() => reorder(order)}
+                  />
+                ))
+              ) : (
+                <View className="bg-surface rounded-2xl border border-border px-4 py-5 items-center">
+                  <Text
+                    className="text-muted-fg text-[12px] text-center"
+                    style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                  >
+                    No active orders right now
+                  </Text>
+                </View>
               )}
               {past.length > 0 && (
                 <>
