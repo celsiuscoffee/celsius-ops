@@ -138,6 +138,8 @@ export const demoMemberBrands: MemberBrand[] = [
     total_spent: 1250,
     joined_at: "2026-01-10T00:00:00Z",
     last_visit_at: "2026-03-25T14:30:00Z",
+    current_tier_id: null,
+    tier_evaluated_at: null,
   },
   {
     id: "mb-2",
@@ -150,6 +152,8 @@ export const demoMemberBrands: MemberBrand[] = [
     total_spent: 1800,
     joined_at: "2026-01-15T00:00:00Z",
     last_visit_at: "2026-03-26T10:15:00Z",
+    current_tier_id: null,
+    tier_evaluated_at: null,
   },
   {
     id: "mb-3",
@@ -162,6 +166,8 @@ export const demoMemberBrands: MemberBrand[] = [
     total_spent: 520,
     joined_at: "2026-02-01T00:00:00Z",
     last_visit_at: "2026-03-27T09:00:00Z",
+    current_tier_id: null,
+    tier_evaluated_at: null,
   },
   {
     id: "mb-4",
@@ -174,6 +180,8 @@ export const demoMemberBrands: MemberBrand[] = [
     total_spent: 680,
     joined_at: "2026-02-14T00:00:00Z",
     last_visit_at: "2026-03-20T16:45:00Z",
+    current_tier_id: null,
+    tier_evaluated_at: null,
   },
   {
     id: "mb-5",
@@ -186,6 +194,8 @@ export const demoMemberBrands: MemberBrand[] = [
     total_spent: 190,
     joined_at: "2026-03-01T00:00:00Z",
     last_visit_at: "2026-03-27T08:30:00Z",
+    current_tier_id: null,
+    tier_evaluated_at: null,
   },
 ];
 
