@@ -505,7 +505,7 @@ export default function Home() {
           <View className="mt-5">
             <View className="flex-row items-center justify-between mb-2 px-4">
               <Text
-                className="text-espresso text-base"
+                className="text-espresso text-[18px]"
                 style={{ fontFamily: "Peachi-Bold" }}
               >
                 Your usual
@@ -579,7 +579,7 @@ export default function Home() {
                     </Text>
                     <View className="flex-row items-center justify-between mt-2">
                       <Text
-                        className="text-primary text-[14px]"
+                        className="text-primary text-[16px]"
                         style={{ fontFamily: "Peachi-Bold" }}
                       >
                         {formatPrice(item.price)}
@@ -605,7 +605,7 @@ export default function Home() {
               <View className="flex-row items-center gap-2">
                 <Gift size={16} color="#C05040" strokeWidth={2} />
                 <Text
-                  className="text-espresso text-base"
+                  className="text-espresso text-[18px]"
                   style={{ fontFamily: "Peachi-Bold" }}
                 >
                   Available rewards
@@ -676,7 +676,7 @@ export default function Home() {
                   </View>
                   <View className="px-3 py-2">
                     <Text
-                      className="text-espresso text-[13px]"
+                      className="text-espresso text-[14px]"
                       style={{ fontFamily: "Peachi-Bold" }}
                       numberOfLines={1}
                     >
@@ -765,7 +765,7 @@ export default function Home() {
           <View className="px-4 mt-5">
             <View className="flex-row items-center justify-between mb-2">
               <Text
-                className="text-espresso text-base"
+                className="text-espresso text-[18px]"
                 style={{ fontFamily: "Peachi-Bold" }}
               >
                 Best Sellers
@@ -823,7 +823,7 @@ export default function Home() {
                       </Text>
                       <View className="flex-row items-center justify-between mt-2">
                         <Text
-                          className="text-primary text-[14px]"
+                          className="text-primary text-[16px]"
                           style={{ fontFamily: "Peachi-Bold" }}
                         >
                           {formatPrice(p.price)}
