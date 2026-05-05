@@ -11,6 +11,7 @@ import * as SystemUI from "expo-system-ui";
 import * as Notifications from "expo-notifications";
 import { useFonts } from "expo-font";
 import { SplashPoster } from "../components/SplashPoster";
+import { LogoIntro } from "../components/LogoIntro";
 import { MaintenanceBanner } from "../components/MaintenanceBanner";
 import { registerForPush } from "../lib/notifications";
 import { useApp } from "../lib/store";
@@ -57,9 +58,11 @@ export default function RootLayout() {
     SpaceGrotesk_700Bold,
   });
 
-  // Show the backoffice-managed promo poster on cold launch only.
-  // Mounts immediately (covers font + JS bundle load), dismisses after
-  // duration_ms or on user tap.
+  // Cold-launch sequence:
+  //   1. <LogoIntro />     ← brand animation (~1.7s)
+  //   2. <SplashPoster />  ← backoffice-managed promo image
+  //   3. App content
+  const [showLogo, setShowLogo] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
@@ -127,7 +130,10 @@ export default function RootLayout() {
                 <MaintenanceBanner />
               </>
             )}
-            {showSplash && <SplashPoster onDone={() => setShowSplash(false)} />}
+            {!showLogo && showSplash && (
+              <SplashPoster onDone={() => setShowSplash(false)} />
+            )}
+            {showLogo && <LogoIntro onDone={() => setShowLogo(false)} />}
           </View>
         </QueryClientProvider>
       </StripeProvider>
