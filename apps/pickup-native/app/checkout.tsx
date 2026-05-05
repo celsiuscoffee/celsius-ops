@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { Stack, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Wallet, CreditCard, Smartphone, Check } from "lucide-react-native";
+import { CreditCard, Smartphone, Check, AlertCircle } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
 import { useApp, cartTotal } from "../lib/store";
@@ -35,8 +35,10 @@ export default function Checkout() {
   // SST is config-driven via /api/settings?key=sst — admin can toggle/adjust
   // from backoffice without redeploy.
   const [sstConfig, setSstConfig] = useState({ rate: 0.06, enabled: true });
+  const [paymentsEnabled, setPaymentsEnabled] = useState(true);
   useEffect(() => {
     getSetting("sst").then(setSstConfig);
+    getSetting("payments_enabled").then((v) => setPaymentsEnabled(v.enabled));
   }, []);
 
   const subtotal = cartTotal(cart);
@@ -49,7 +51,7 @@ export default function Checkout() {
   const [phoneInput, setPhoneInput] = useState(phoneFromStore ?? "");
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "ewallet">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "ewallet">("card");
 
   const onSendOtp = async () => {
     const normalized = phoneInput.trim().replace(/\s/g, "");
@@ -118,15 +120,7 @@ export default function Checkout() {
         rewardDiscountSen: Math.round(rewardDiscount * 100),
       });
 
-      // 2. If cash (pay at counter) — done. Skip Stripe.
-      if (paymentMethod === "cash") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        clearCart();
-        router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
-        return;
-      }
-
-      // 3. Card / ewallet — open the PWA's hosted payment page in an in-app browser.
+      // 2. Card / ewallet — open the PWA's hosted payment page in an in-app browser.
       //    PWA handles Stripe Elements (card, FPX, Apple Pay). When the sheet
       //    closes we don't trust its return type — Stripe can succeed even
       //    when the user dismissed manually after payment, and can fail when
@@ -299,8 +293,7 @@ export default function Checkout() {
                 Payment
               </Text>
               <View className="gap-2">
-                <PaymentRow method="cash" icon={Wallet} label="Pay at counter" sub="Cash or card on pickup" />
-                <PaymentRow method="card" icon={CreditCard} label="Card" sub="Pay now with card" />
+                <PaymentRow method="card" icon={CreditCard} label="Card / Apple Pay" sub="Pay now via Stripe" />
                 <PaymentRow method="ewallet" icon={Smartphone} label="E-wallet" sub="GrabPay · TNG · Boost" />
               </View>
             </View>
@@ -346,10 +339,35 @@ export default function Checkout() {
               </View>
             </View>
 
+            {!paymentsEnabled && (
+              <View className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex-row gap-3">
+                <AlertCircle size={18} color="#B45309" />
+                <View className="flex-1">
+                  <Text
+                    className="text-amber-900 text-[14px]"
+                    style={{ fontFamily: "Peachi-Bold" }}
+                  >
+                    Online ordering paused
+                  </Text>
+                  <Text
+                    className="text-amber-800 text-[12px] mt-0.5"
+                    style={{ fontFamily: "SpaceGrotesk_400Regular" }}
+                  >
+                    We're not taking online payments right now. Please order at the counter.
+                  </Text>
+                </View>
+              </View>
+            )}
+
             <PrimaryButton
-              label={`Place order · ${formatPrice(grandTotal)}`}
+              label={
+                paymentsEnabled
+                  ? `Place order · ${formatPrice(grandTotal)}`
+                  : "Online ordering paused"
+              }
               onPress={onPlaceOrder}
               loading={busy}
+              disabled={!paymentsEnabled}
             />
           </>
         )}

@@ -17,6 +17,7 @@ export type Settings = {
     highlight?: string;
     description?: string;
   };
+  payments_enabled: { enabled: boolean };
 };
 
 const DEFAULTS: Settings = {
@@ -26,6 +27,7 @@ const DEFAULTS: Settings = {
   maintenance: { enabled: false, message: "" },
   min_app_version: { ios: "1.0.0", android: "1.0.0", forceUpdate: false },
   promo_banner: { enabled: false },
+  payments_enabled: { enabled: true },
 };
 
 // Read cached value first, return immediately, and refresh in background.

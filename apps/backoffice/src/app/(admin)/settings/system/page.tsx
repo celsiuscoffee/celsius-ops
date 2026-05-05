@@ -10,6 +10,7 @@ import {
   AppWindow,
   MessageSquare,
   Megaphone,
+  CreditCard,
   Save,
   Loader2,
 } from "lucide-react";
@@ -29,6 +30,7 @@ type PromoBanner = {
   highlight?: string;
   description?: string;
 };
+type PaymentsEnabled = { enabled: boolean };
 
 const SETTINGS_API = "/api/settings";
 
@@ -40,6 +42,7 @@ export default function SystemSettingsPage() {
   const [appVer, setAppVer] = useState<MinAppVersion>({ ios: "1.0.0", android: "1.0.0", forceUpdate: false });
   const [orderReady, setOrderReady] = useState<OrderReadySms>({ template: "" });
   const [promo, setPromo] = useState<PromoBanner>({ enabled: false });
+  const [payments, setPayments] = useState<PaymentsEnabled>({ enabled: true });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -55,6 +58,7 @@ export default function SystemSettingsPage() {
           "min_app_version",
           "order_ready_sms",
           "promo_banner",
+          "payments_enabled",
         ];
         const results = await Promise.all(
           keys.map((k) =>
@@ -70,6 +74,7 @@ export default function SystemSettingsPage() {
         if (results[4]) setAppVer(results[4]);
         if (results[5]) setOrderReady(results[5]);
         if (results[6]) setPromo(results[6]);
+        if (results[7]) setPayments(results[7]);
       } finally {
         setLoading(false);
       }
@@ -113,6 +118,16 @@ export default function SystemSettingsPage() {
       </div>
 
       <div className="max-w-2xl space-y-4">
+        {/* Payments kill-switch */}
+        <Card icon={<CreditCard className="h-4.5 w-4.5 text-emerald-600" />} bg="bg-emerald-50"
+              title="Online payments"
+              sub="Master switch for Stripe checkout. Off = customer app shows 'ordering paused'.">
+          <Field label="Enabled">
+            <Toggle checked={payments.enabled} onChange={(v) => setPayments({ enabled: v })} />
+          </Field>
+          <SaveBtn busy={saving === "payments_enabled"} onClick={() => save("payments_enabled", payments)} />
+        </Card>
+
         {/* SST */}
         <Card icon={<Percent className="h-4.5 w-4.5 text-amber-600" />} bg="bg-amber-50"
               title="SST (Sales & Service Tax)"

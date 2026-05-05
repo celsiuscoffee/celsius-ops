@@ -130,24 +130,89 @@ export default function OrdersTab() {
           </Pressable>
         </View>
       ) : (
-        <ScrollView
-          contentContainerClassName="px-4 py-4 pb-32 gap-3"
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefetching}
-              onRefresh={() => refetch()}
-              tintColor="#C05040"
-            />
-          }
-        >
-          {data!.map((order) => (
-            <OrderRow key={order.id} order={order} onReorder={() => reorder(order)} />
-          ))}
-        </ScrollView>
+        (() => {
+          const { active, past } = splitOrders(data!);
+          return (
+            <ScrollView
+              contentContainerClassName="px-4 py-4 pb-32 gap-3"
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefetching}
+                  onRefresh={() => refetch()}
+                  tintColor="#C05040"
+                />
+              }
+            >
+              {active.length > 0 && (
+                <>
+                  <SectionHeader label="In progress" />
+                  {active.map((order) => (
+                    <OrderRow
+                      key={order.id}
+                      order={order}
+                      onReorder={() => reorder(order)}
+                    />
+                  ))}
+                </>
+              )}
+              {past.length > 0 && (
+                <>
+                  <SectionHeader label="Past orders" />
+                  {past.map((order) => (
+                    <OrderRow
+                      key={order.id}
+                      order={order}
+                      onReorder={() => reorder(order)}
+                    />
+                  ))}
+                </>
+              )}
+            </ScrollView>
+          );
+        })()
       )}
 
       <BottomNav />
     </View>
+  );
+}
+
+// Pending orders older than this with no payment confirmation are treated as
+// abandoned and grouped with past orders. Server-side cron eventually marks
+// them "failed", but the customer view shouldn't wait for that round-trip.
+const STALE_PENDING_MS = 10 * 60 * 1000;
+
+function effectiveStatus(order: OrderHistoryEntry): string {
+  const raw = (order.status ?? "pending").toLowerCase();
+  if (raw === "pending") {
+    const ageMs = Date.now() - new Date(order.created_at).getTime();
+    if (ageMs > STALE_PENDING_MS) return "failed";
+  }
+  return raw;
+}
+
+function splitOrders(orders: OrderHistoryEntry[]) {
+  const active: OrderHistoryEntry[] = [];
+  const past: OrderHistoryEntry[] = [];
+  for (const order of orders) {
+    const status = effectiveStatus(order);
+    if (status === "pending" || status === "paid" || status === "preparing" || status === "ready") {
+      active.push(order);
+    } else {
+      past.push(order);
+    }
+  }
+  return { active, past };
+}
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <Text
+      className="text-muted-fg text-[11px] uppercase tracking-wider px-1 mt-2 mb-1"
+      style={{ fontFamily: "SpaceGrotesk_700Bold" }}
+    >
+      {label}
+    </Text>
   );
 }
 
@@ -158,11 +223,11 @@ function OrderRow({
   order: OrderHistoryEntry;
   onReorder: () => void;
 }) {
-  const status = (order.status ?? "pending").toLowerCase();
+  const status = effectiveStatus(order);
   const StatusIcon =
     status === "completed" || status === "ready"
       ? CheckCircle2
-      : status === "cancelled"
+      : status === "cancelled" || status === "failed"
       ? XCircle
       : status === "preparing" || status === "paid"
       ? Coffee
@@ -170,7 +235,7 @@ function OrderRow({
   const statusColor =
     status === "completed" || status === "ready"
       ? "#16A34A"
-      : status === "cancelled"
+      : status === "cancelled" || status === "failed"
       ? "#C05040"
       : "#8E8E93";
 

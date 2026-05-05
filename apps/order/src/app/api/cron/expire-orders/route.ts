@@ -4,8 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { checkCronAuth } from "@celsius/shared";
 
-// Runs every 10 minutes. Marks any "pending" order older than 60 minutes as "failed".
+// Runs every 15 minutes. Marks any "pending" order older than 10 minutes as "failed".
 // This cleans up abandoned payments (user left FPX page, browser closed, etc.).
+// reconcile-pending runs every 5 min and resolves Stripe-known cases earlier.
 
 export async function GET(request: NextRequest) {
   const cronAuth = checkCronAuth(request.headers);
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = getSupabaseAdmin();
-    const cutoff   = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1 hour ago
+    const cutoff   = new Date(Date.now() - 10 * 60 * 1000).toISOString(); // 10 minutes ago
 
     const { data, error } = await supabase
       .from("orders")
