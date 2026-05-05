@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { Stack, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CreditCard, Smartphone, Check, AlertCircle, Building2, Coffee, MapPin, Clock, Heart, Tag } from "lucide-react-native";
+import { CreditCard, Smartphone, Check, AlertCircle, Building2, Coffee, MapPin, Clock, Tag } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useStripe } from "@stripe/stripe-react-native";
 import { useQuery } from "@tanstack/react-query";
@@ -38,21 +38,14 @@ export default function Checkout() {
   // Settings — all config-driven, no redeploy needed.
   const [sstConfig, setSstConfig] = useState({ rate: 0.06, enabled: true });
   const [paymentsEnabled, setPaymentsEnabled] = useState(true);
-  const [tipJarConfig, setTipJarConfig] = useState<{ enabled: boolean; amounts: number[]; allow_custom: boolean }>(
-    { enabled: false, amounts: [1, 2, 3, 5], allow_custom: true }
-  );
   const [fodConfig, setFodConfig] = useState<{ enabled: boolean; type: "percent" | "fixed"; amount: number; label: string }>(
     { enabled: false, type: "percent", amount: 0, label: "" }
   );
-  const [tipAmount, setTipAmount] = useState(0);
-  const [customTipInput, setCustomTipInput] = useState("");
-  const [showCustomTip, setShowCustomTip] = useState(false);
   const [isFirstOrder, setIsFirstOrder] = useState(false);
 
   useEffect(() => {
     getSetting("sst").then(setSstConfig);
     getSetting("payments_enabled").then((v) => setPaymentsEnabled(v.enabled));
-    getSetting("tip_jar").then(setTipJarConfig);
     getSetting("first_order_discount").then(setFodConfig);
   }, []);
 
@@ -81,7 +74,7 @@ export default function Checkout() {
     : 0;
   const afterDiscount = Math.max(0, subtotal - rewardDiscount - fodDiscount);
   const sst = sstConfig.enabled ? +(afterDiscount * sstConfig.rate).toFixed(2) : 0;
-  const grandTotal = +(afterDiscount + sst + tipAmount).toFixed(2);
+  const grandTotal = +(afterDiscount + sst).toFixed(2);
 
   const [step, setStep] = useState<Step>(phoneFromStore ? "review" : "phone");
   const [phoneInput, setPhoneInput] = useState(phoneFromStore ?? "");
@@ -167,7 +160,6 @@ export default function Checkout() {
         rewardName: appliedReward?.name ?? null,
         rewardPointsCost: appliedReward?.points_required ?? 0,
         rewardDiscountSen: Math.round(rewardDiscount * 100),
-        tipAmountSen: Math.round(tipAmount * 100),
       });
 
       stage = "create-payment-intent";
@@ -486,62 +478,6 @@ export default function Checkout() {
               </Text>
             </Pressable>
 
-            {tipJarConfig.enabled && (
-              <View>
-                <Text className="text-muted-fg text-[11px] font-bold uppercase tracking-wider px-1 mb-2">
-                  Add a tip
-                </Text>
-                <View className="bg-surface rounded-2xl border border-border p-4">
-                  <View className="flex-row gap-2 flex-wrap">
-                    {tipJarConfig.amounts.map((amt) => (
-                      <Pressable
-                        key={amt}
-                        onPress={() => { setTipAmount(tipAmount === amt ? 0 : amt); setShowCustomTip(false); setCustomTipInput(""); }}
-                        className={`rounded-xl px-4 py-2 border ${tipAmount === amt ? "bg-purple-600 border-purple-600" : "bg-white border-border"}`}
-                      >
-                        <Text className={tipAmount === amt ? "text-white text-[13px] font-semibold" : "text-espresso text-[13px]"}>
-                          RM {amt}
-                        </Text>
-                      </Pressable>
-                    ))}
-                    {tipJarConfig.allow_custom && (
-                      <Pressable
-                        onPress={() => { setShowCustomTip(!showCustomTip); setTipAmount(0); setCustomTipInput(""); }}
-                        className={`rounded-xl px-4 py-2 border ${showCustomTip ? "bg-purple-600 border-purple-600" : "bg-white border-border"}`}
-                      >
-                        <Text className={showCustomTip ? "text-white text-[13px] font-semibold" : "text-espresso text-[13px]"}>
-                          Custom
-                        </Text>
-                      </Pressable>
-                    )}
-                    <Pressable
-                      onPress={() => { setTipAmount(0); setShowCustomTip(false); setCustomTipInput(""); }}
-                      className={`rounded-xl px-4 py-2 border ${tipAmount === 0 && !showCustomTip ? "bg-gray-100 border-gray-200" : "bg-white border-border"}`}
-                    >
-                      <Text className="text-muted-fg text-[13px]">No tip</Text>
-                    </Pressable>
-                  </View>
-                  {showCustomTip && (
-                    <View className="mt-3 flex-row items-center gap-2">
-                      <Text className="text-muted-fg text-[13px]">RM</Text>
-                      <TextInput
-                        className="flex-1 rounded-xl border border-border bg-white px-3 py-2 text-[14px] text-espresso"
-                        keyboardType="decimal-pad"
-                        placeholder="0.00"
-                        value={customTipInput}
-                        onChangeText={(t) => {
-                          setCustomTipInput(t);
-                          const v = parseFloat(t);
-                          setTipAmount(isNaN(v) || v < 0 ? 0 : +v.toFixed(2));
-                        }}
-                        returnKeyType="done"
-                      />
-                    </View>
-                  )}
-                </View>
-              </View>
-            )}
-
             <View>
               <Text className="text-muted-fg text-[11px] font-bold uppercase tracking-wider px-1 mb-2">
                 Payment
@@ -595,15 +531,6 @@ export default function Checkout() {
                       SST ({Math.round(sstConfig.rate * 100)}%)
                     </Text>
                     <Text className="text-muted-fg text-[13px]">{formatPrice(sst)}</Text>
-                  </View>
-                )}
-                {tipAmount > 0 && (
-                  <View className="flex-row justify-between">
-                    <View className="flex-row items-center gap-1">
-                      <Heart size={12} color="#9333ea" />
-                      <Text className="text-purple-700 text-[13px]">Tip</Text>
-                    </View>
-                    <Text className="text-purple-700 text-[13px]">{formatPrice(tipAmount)}</Text>
                   </View>
                 )}
                 <View className="flex-row justify-between mt-2 pt-2 border-t border-border">

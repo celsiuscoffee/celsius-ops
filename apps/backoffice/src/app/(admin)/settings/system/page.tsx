@@ -15,7 +15,6 @@ import {
   Loader2,
   Clock,
   Tag,
-  Coffee,
   Bell,
   Send,
 } from "lucide-react";
@@ -45,7 +44,6 @@ type OutletHours = { open: string; close: string; daysOpen: number[] };
 type OutletHoursMap = Record<string, OutletHours>;
 
 type FirstOrderDiscount = { enabled: boolean; type: "percent" | "fixed"; amount: number; label: string };
-type TipJar = { enabled: boolean; amounts: number[]; allow_custom: boolean };
 
 const OUTLET_LABELS: Record<string, string> = {
   conezion:   "Putrajaya (Conezion)",
@@ -56,7 +54,6 @@ const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 
 const DEFAULT_OUTLET_HOURS: OutletHours = { open: "08:00", close: "22:00", daysOpen: [1, 2, 3, 4, 5, 6, 7] };
 const DEFAULT_FIRST_ORDER: FirstOrderDiscount = { enabled: false, type: "percent", amount: 10, label: "" };
-const DEFAULT_TIP_JAR: TipJar = { enabled: false, amounts: [1, 2, 3, 5], allow_custom: true };
 
 const SETTINGS_API = "/api/settings";
 
@@ -75,7 +72,6 @@ export default function SystemSettingsPage() {
     tamarind:    { ...DEFAULT_OUTLET_HOURS },
   });
   const [firstOrder, setFirstOrder] = useState<FirstOrderDiscount>(DEFAULT_FIRST_ORDER);
-  const [tipJar, setTipJar] = useState<TipJar>(DEFAULT_TIP_JAR);
 
   // Push blast (action — not a persisted setting)
   const [blastTitle, setBlastTitle] = useState("");
@@ -100,7 +96,6 @@ export default function SystemSettingsPage() {
           "payments_enabled",
           "outlet_hours",
           "first_order_discount",
-          "tip_jar",
         ];
         const [settingsResults, tokenCountRes] = await Promise.all([
           Promise.all(
@@ -123,7 +118,6 @@ export default function SystemSettingsPage() {
         if (results[7]) setPayments(results[7]);
         if (results[8]) setOutletHours(results[8]);
         if (results[9]) setFirstOrder(results[9]);
-        if (results[10]) setTipJar(results[10]);
         if (tokenCountRes?.count !== undefined) setBlastTokenCount(tokenCountRes.count);
       } finally {
         setLoading(false);
@@ -462,29 +456,6 @@ export default function SystemSettingsPage() {
               placeholder="Welcome — 10% off your first order" />
           </Field>
           <SaveBtn busy={saving === "first_order_discount"} onClick={() => save("first_order_discount", firstOrder)} />
-        </Card>
-
-        {/* Tip jar */}
-        <Card icon={<Coffee className="h-4.5 w-4.5 text-yellow-600" />} bg="bg-yellow-50"
-              title="Tip jar"
-              sub="Optional tip step shown at checkout before payment">
-          <Field label="Enabled">
-            <Toggle checked={tipJar.enabled} onChange={(v) => setTipJar({ ...tipJar, enabled: v })} />
-          </Field>
-          <Field label="Preset amounts (RM, comma-separated)">
-            <input type="text"
-              value={tipJar.amounts.join(", ")}
-              onChange={(e) => {
-                const vals = e.target.value.split(",").map((s) => Number(s.trim())).filter((n) => !isNaN(n) && n > 0);
-                setTipJar({ ...tipJar, amounts: vals });
-              }}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              placeholder="1, 2, 3, 5" />
-          </Field>
-          <Field label="Allow custom amount">
-            <Toggle checked={tipJar.allow_custom} onChange={(v) => setTipJar({ ...tipJar, allow_custom: v })} />
-          </Field>
-          <SaveBtn busy={saving === "tip_jar"} onClick={() => save("tip_jar", tipJar)} />
         </Card>
 
         {/* Push blast */}

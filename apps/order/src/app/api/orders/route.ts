@@ -83,7 +83,6 @@ export async function POST(request: NextRequest) {
       rewardName,
       loyaltyPhone,
       loyaltyId,
-      tipAmountSen,
     } = body;
 
     if (!items?.length || !selectedStore || !paymentMethod) {
@@ -154,8 +153,7 @@ export async function POST(request: NextRequest) {
     const totalDiscountSen   = voucherDiscountSen + rewardDiscountSenAmt + fodDiscountSen;
     const afterDiscount      = Math.max(0, subtotalSen - totalDiscountSen);
     const sstSen             = Math.round(sst != null ? sst * 100 : afterDiscount * 0.06);
-    const tipSen             = Math.max(0, Math.round(tipAmountSen ?? 0));
-    const totalSen           = afterDiscount + sstSen + tipSen;
+    const totalSen           = afterDiscount + sstSen;
 
     // Points = pointsPerRm × RM of after-discount subtotal (configurable per brand)
     const pointsToEarn = loyaltyId ? Math.floor((afterDiscount / 100) * pointsPerRm) : 0;
@@ -174,7 +172,6 @@ export async function POST(request: NextRequest) {
         reward_id:              rewardId ?? null,
         reward_name:            rewardName ?? null,
         sst_amount:             sstSen,
-        tip_amount:             tipSen,
         first_order_discount_amount: fodDiscountSen,
         total:                  totalSen,
         customer_phone:         loyaltyPhone ?? null,

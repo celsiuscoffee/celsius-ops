@@ -22,12 +22,10 @@ export type Settings = {
     cta_url?: string;
   };
   payments_enabled: { enabled: boolean };
-  tip_jar: { enabled: boolean; amounts: number[]; allow_custom: boolean };
   first_order_discount: { enabled: boolean; type: "percent" | "fixed"; amount: number; label: string };
 };
 
 const DEFAULTS: Settings = {
-  tip_jar: { enabled: false, amounts: [1, 2, 3, 5], allow_custom: true },
   first_order_discount: { enabled: false, type: "percent", amount: 0, label: "" },
   sst: { rate: 0.06, enabled: true },
   points_per_rm: { rate: 1 },
