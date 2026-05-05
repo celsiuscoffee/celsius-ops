@@ -74,6 +74,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f22119f6-5337-49ea-a4b1-a12d5f811531"
+      }
+    },
+    "owner": "celsiuscoffee"
   }
 }
