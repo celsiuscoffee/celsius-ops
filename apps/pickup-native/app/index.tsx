@@ -11,7 +11,6 @@ import {
   fetchRecentItems,
   fetchOrderHistory,
   fetchRewards,
-  formatRewardValue,
   type Reward,
   type OrderHistoryEntry,
 } from "../lib/rewards";
@@ -350,15 +349,15 @@ export default function Home() {
                     Haptics.selectionAsync();
                     router.push("/rewards");
                   }}
-                  className="w-44 bg-surface rounded-2xl border border-border overflow-hidden active:opacity-70"
+                  className="w-32 bg-surface rounded-xl border border-border overflow-hidden active:opacity-70"
                   style={{
                     shadowColor: "#000",
                     shadowOpacity: 0.04,
-                    shadowRadius: 6,
-                    shadowOffset: { width: 0, height: 2 },
+                    shadowRadius: 4,
+                    shadowOffset: { width: 0, height: 1 },
                   }}
                 >
-                  <View className="aspect-[4/3] bg-primary/5">
+                  <View className="aspect-square bg-primary/5">
                     {r.image_url ? (
                       <Image
                         source={{ uri: r.image_url }}
@@ -367,29 +366,22 @@ export default function Home() {
                       />
                     ) : (
                       <View className="flex-1 items-center justify-center">
-                        <Gift size={28} color="#C05040" strokeWidth={1.5} />
+                        <Gift size={20} color="#C05040" strokeWidth={1.5} />
                       </View>
                     )}
                   </View>
-                  <View className="p-3">
+                  <View className="px-2.5 py-2">
                     <Text
-                      className="text-espresso text-[13px]"
+                      className="text-espresso text-[12px]"
                       style={{ fontFamily: "Peachi-Bold" }}
                       numberOfLines={1}
                     >
                       {r.name}
                     </Text>
-                    <Text
-                      className="text-muted-fg text-[11px] mt-0.5"
-                      numberOfLines={1}
-                      style={{ fontFamily: "SpaceGrotesk_500Medium" }}
-                    >
-                      {formatRewardValue(r)}
-                    </Text>
-                    <View className="flex-row items-center gap-1 mt-2">
-                      <Sparkles size={10} color="#C05040" strokeWidth={2.5} fill="#FBBF24" />
+                    <View className="flex-row items-center gap-0.5 mt-1">
+                      <Sparkles size={9} color="#C05040" strokeWidth={2.5} fill="#FBBF24" />
                       <Text
-                        className="text-primary text-[11px]"
+                        className="text-primary text-[10px]"
                         style={{ fontFamily: "Peachi-Bold" }}
                       >
                         {r.points_required.toLocaleString()} pts
