@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { View, Text, ActivityIndicator, Pressable, ScrollView, Image } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useState } from "react";
+import { View, Text, Pressable, ScrollView, Image, RefreshControl } from "react-native";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { MapPin, ChevronRight, Coffee, Navigation, Sparkles, Gift, Clock4, ShoppingCart } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
@@ -32,6 +32,7 @@ async function fetchOutlets(): Promise<Outlet[]> {
 
 export default function Home() {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const outlets = useQuery({ queryKey: ["outlets"], queryFn: fetchOutlets });
   const menu = useQuery({ queryKey: ["menu"], queryFn: fetchMenu });
   const outletId = useApp((s) => s.outletId);
@@ -41,6 +42,7 @@ export default function Home() {
   const member = useApp((s) => s.member);
   const phone = useApp((s) => s.phone);
   const addToCart = useApp((s) => s.addToCart);
+  const [refreshing, setRefreshing] = useState(false);
 
   // "Your usual" — top 3 most-ordered products. Only fires for signed-in
   // customers; returns empty for first-time users.
@@ -87,6 +89,23 @@ export default function Home() {
     .filter((r: Reward) => r.is_active && r.points_required <= points)
     .slice(0, 6);
 
+  // Cheapest reward they can't yet afford — used to show "X pts to <name>"
+  // under the points pill so the loyalty loop has visible forward momentum.
+  const nextReward = (() => {
+    const unaffordable = (rewardsQ.data?.rewards ?? [])
+      .filter((r: Reward) => r.is_active && r.points_required > points)
+      .sort((a, b) => a.points_required - b.points_required);
+    return unaffordable[0];
+  })();
+  const pointsToNext = nextReward ? Math.max(0, nextReward.points_required - points) : 0;
+  const progressPct = nextReward
+    ? Math.min(1, points / nextReward.points_required)
+    : 0;
+
+  // Resolve the live outlet record so the picker can show its open/busy
+  // state and ETA (data we already pulled in fetchOutlets).
+  const currentOutlet = (outlets.data ?? []).find((o) => o.store_id === outletId) ?? null;
+
   // Hero promo content driven by backoffice setting; falls back to a baked-in
   // launch promo if the setting hasn't been configured yet.
   const [promo, setPromo] = useState<Settings["promo_banner"]>({
@@ -121,6 +140,22 @@ export default function Home() {
     else if (outletId) router.push("/menu");
     else router.push("/store");
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    Haptics.selectionAsync();
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["outlets"] }),
+        queryClient.invalidateQueries({ queryKey: ["menu"] }),
+        queryClient.invalidateQueries({ queryKey: ["recent-items", phone] }),
+        queryClient.invalidateQueries({ queryKey: ["order-history-home", phone] }),
+        queryClient.invalidateQueries({ queryKey: ["rewards-home", phone] }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [queryClient, phone]);
 
   const onPromoTap = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -176,16 +211,38 @@ export default function Home() {
                 Haptics.selectionAsync();
                 router.push("/rewards");
               }}
-              className="flex-row items-center gap-1 bg-white/10 rounded-full active:opacity-80"
-              style={{ paddingHorizontal: 10, paddingVertical: 5 }}
+              className="bg-white/10 rounded-2xl active:opacity-80"
+              style={{ paddingHorizontal: 10, paddingVertical: 5, minWidth: 88 }}
             >
-              <Sparkles size={11} color="#FBBF24" strokeWidth={2} fill="#FBBF24" />
-              <Text
-                className="text-white text-[12px]"
-                style={{ fontFamily: "Peachi-Bold" }}
-              >
-                {(member.pointsBalance ?? 0).toLocaleString()}
-              </Text>
+              <View className="flex-row items-center gap-1">
+                <Sparkles size={11} color="#FBBF24" strokeWidth={2} fill="#FBBF24" />
+                <Text
+                  className="text-white text-[12px]"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  {(member.pointsBalance ?? 0).toLocaleString()}
+                </Text>
+              </View>
+              {nextReward && pointsToNext > 0 && (
+                <>
+                  <View
+                    className="bg-white/15 rounded-full mt-1 overflow-hidden"
+                    style={{ height: 3 }}
+                  >
+                    <View
+                      className="bg-amber-400 rounded-full"
+                      style={{ height: 3, width: `${progressPct * 100}%` }}
+                    />
+                  </View>
+                  <Text
+                    className="text-white/60 text-[9px] mt-0.5"
+                    style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                    numberOfLines={1}
+                  >
+                    {pointsToNext} to next
+                  </Text>
+                </>
+              )}
             </Pressable>
           )}
           <Pressable
@@ -224,11 +281,66 @@ export default function Home() {
           >
             {outletName ?? "Select pickup outlet"}
           </Text>
+          {currentOutlet && (
+            <>
+              {(() => {
+                // Open + idle  → green, Open + busy → amber, Closed → red.
+                const dot = !currentOutlet.is_open
+                  ? { bg: "#EF4444", label: "Closed" }
+                  : currentOutlet.is_busy
+                  ? { bg: "#F59E0B", label: "Busy" }
+                  : { bg: "#22C55E", label: null };
+                const eta =
+                  currentOutlet.is_open && currentOutlet.pickup_time_mins
+                    ? `~${currentOutlet.pickup_time_mins} min`
+                    : null;
+                return (
+                  <>
+                    <View
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor: dot.bg,
+                        marginLeft: 4,
+                      }}
+                    />
+                    {dot.label && (
+                      <Text
+                        className="text-white/70 text-[11px]"
+                        style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
+                      >
+                        {dot.label}
+                      </Text>
+                    )}
+                    {eta && (
+                      <Text
+                        className="text-white/70 text-[11px]"
+                        style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
+                      >
+                        · {eta}
+                      </Text>
+                    )}
+                  </>
+                );
+              })()}
+            </>
+          )}
           <ChevronRight size={14} color="rgba(255,255,255,0.55)" />
         </Pressable>
       </View>
 
-      <ScrollView contentContainerClassName="pb-40">
+      <ScrollView
+        contentContainerClassName="pb-40"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#C05040"
+            colors={["#C05040"]}
+          />
+        }
+      >
         {/* Active order tracker — sits above everything else when present */}
         {activeOrder && (
           <Pressable
@@ -304,7 +416,7 @@ export default function Home() {
                       totalPrice: item.price,
                     });
                   }}
-                  className="w-44 bg-surface rounded-3xl border border-border overflow-hidden active:opacity-70"
+                  className="w-40 bg-surface rounded-3xl border border-border overflow-hidden active:opacity-70"
                   style={{
                     shadowColor: "#000",
                     shadowOpacity: 0.05,
@@ -312,7 +424,7 @@ export default function Home() {
                     shadowOffset: { width: 0, height: 3 },
                   }}
                 >
-                  <View className="aspect-[4/3] bg-primary/5">
+                  <View className="aspect-[4/5] bg-primary/5">
                     {item.image_url ? (
                       <Image
                         source={{ uri: item.image_url }}
@@ -567,7 +679,39 @@ export default function Home() {
             </View>
           )}
 
-        {/* Best Sellers */}
+        {/* Best Sellers (skeleton while menu loads, real cards once data is in) */}
+        {menu.isLoading && featured.length === 0 ? (
+          <View className="px-4 mt-6">
+            <View
+              className="bg-surface/60 rounded-md mb-3"
+              style={{ height: 16, width: 110 }}
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerClassName="gap-3"
+            >
+              {[0, 1, 2, 3].map((i) => (
+                <View
+                  key={i}
+                  className="w-40 bg-surface rounded-3xl border border-border overflow-hidden"
+                >
+                  <View className="aspect-[4/5] bg-background" />
+                  <View className="p-3 gap-2">
+                    <View
+                      className="bg-background rounded-md"
+                      style={{ height: 12, width: "80%" }}
+                    />
+                    <View
+                      className="bg-background rounded-md"
+                      style={{ height: 14, width: "40%" }}
+                    />
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
         {featured.length > 0 && (
           <View className="px-4 mt-6">
             <View className="flex-row items-center justify-between mb-3">
@@ -611,7 +755,7 @@ export default function Home() {
                       shadowOffset: { width: 0, height: 2 },
                     }}
                   >
-                    <View className="aspect-[3/4] bg-background">
+                    <View className="aspect-[4/5] bg-background">
                       {p.image_url && (
                         <Image
                           source={{ uri: p.image_url }}
@@ -622,17 +766,26 @@ export default function Home() {
                     </View>
                     <View className="p-3">
                       <Text
-                        className="text-espresso font-bold text-[13px]"
-                        numberOfLines={2}
+                        className="text-espresso text-[14px]"
+                        style={{ fontFamily: "Peachi-Bold" }}
+                        numberOfLines={1}
                       >
                         {p.name}
                       </Text>
-                      <Text
-                        className="text-primary font-black text-sm mt-1.5"
-                        style={{ fontFamily: "Peachi-Bold" }}
-                      >
-                        {formatPrice(p.price)}
-                      </Text>
+                      <View className="flex-row items-center justify-between mt-2">
+                        <Text
+                          className="text-primary text-[14px]"
+                          style={{ fontFamily: "Peachi-Bold" }}
+                        >
+                          {formatPrice(p.price)}
+                        </Text>
+                        <View
+                          className="bg-espresso rounded-full items-center justify-center"
+                          style={{ width: 28, height: 28 }}
+                        >
+                          <ChevronRight size={16} color="#FFFFFF" />
+                        </View>
+                      </View>
                     </View>
                   </View>
                 </Pressable>
@@ -673,11 +826,6 @@ export default function Home() {
           </View>
         </View>
 
-        {(outlets.isLoading || menu.isLoading) && (
-          <View className="py-10 items-center">
-            <ActivityIndicator color="#C05040" />
-          </View>
-        )}
       </ScrollView>
 
       {cartCount(cart) > 0 && (
