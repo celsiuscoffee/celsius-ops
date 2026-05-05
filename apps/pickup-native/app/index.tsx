@@ -492,35 +492,44 @@ export default function Home() {
           </Pressable>
         )}
 
-        {/* Quick Actions */}
-        <View className="flex-row gap-3 px-4 mt-4">
-          <View className="flex-1">
-            <Card onPress={onOrderNow}>
-              <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
-                <Coffee size={20} color="#C05040" strokeWidth={1.5} />
+        {/* Empty-state nudge — only when no personalized sections fired and
+            user hasn't yet got a cart going. Keeps first-time users from
+            staring at a sparse home. */}
+        {!activeOrder &&
+          !(phone && (recent.data?.length ?? 0) > 0) &&
+          affordableRewards.length === 0 &&
+          !(promo.enabled && (promo.headline || promo.image_url)) &&
+          cartCount(cart) === 0 && (
+            <View className="mx-4 mt-6 bg-surface border border-border rounded-2xl p-5 items-center">
+              <View className="w-12 h-12 rounded-2xl bg-primary/10 items-center justify-center">
+                <Coffee size={24} color="#C05040" strokeWidth={1.5} />
               </View>
-              <Text className="text-espresso font-bold text-sm mt-2.5">
-                {cartCount(cart) > 0 ? "Review Cart" : "Order Now"}
+              <Text
+                className="text-espresso text-[16px] mt-3"
+                style={{ fontFamily: "Peachi-Bold" }}
+              >
+                Ready for your first cup?
               </Text>
-              <Text className="text-muted-fg text-xs mt-0.5">
-                {cartCount(cart) > 0
-                  ? `${cartCount(cart)} item${cartCount(cart) === 1 ? "" : "s"} waiting`
-                  : "Browse full menu"}
+              <Text
+                className="text-muted-fg text-[12px] text-center mt-1"
+                style={{ fontFamily: "SpaceGrotesk_400Regular" }}
+              >
+                Browse the menu and we'll have it waiting at pickup.
               </Text>
-            </Card>
-          </View>
-          <View className="flex-1">
-            <Card onPress={() => router.push("/store")}>
-              <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
-                <Navigation size={20} color="#C05040" strokeWidth={1.5} />
-              </View>
-              <Text className="text-espresso font-bold text-sm mt-2.5">Our Outlets</Text>
-              <Text className="text-muted-fg text-xs mt-0.5" numberOfLines={1}>
-                Shah Alam · Conezion · Tamarind
-              </Text>
-            </Card>
-          </View>
-        </View>
+              <Pressable
+                onPress={onOrderNow}
+                className="bg-espresso rounded-full mt-4 active:opacity-80"
+                style={{ paddingHorizontal: 22, paddingVertical: 10 }}
+              >
+                <Text
+                  className="text-white text-[13px]"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Browse menu
+                </Text>
+              </Pressable>
+            </View>
+          )}
 
         {/* Best Sellers */}
         {featured.length > 0 && (
@@ -595,6 +604,38 @@ export default function Home() {
             </ScrollView>
           </View>
         )}
+
+        {/* Quick actions — demoted to lowest priority. Sticky cart pill +
+            header outlet picker cover the same intents above the fold for
+            most sessions; this row is a fallback for menu/outlet entry. */}
+        <View className="flex-row gap-3 px-4 mt-6">
+          <View className="flex-1">
+            <Card onPress={onOrderNow}>
+              <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
+                <Coffee size={20} color="#C05040" strokeWidth={1.5} />
+              </View>
+              <Text className="text-espresso font-bold text-sm mt-2.5">
+                {cartCount(cart) > 0 ? "Review Cart" : "Order Now"}
+              </Text>
+              <Text className="text-muted-fg text-xs mt-0.5">
+                {cartCount(cart) > 0
+                  ? `${cartCount(cart)} item${cartCount(cart) === 1 ? "" : "s"} waiting`
+                  : "Browse full menu"}
+              </Text>
+            </Card>
+          </View>
+          <View className="flex-1">
+            <Card onPress={() => router.push("/store")}>
+              <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
+                <Navigation size={20} color="#C05040" strokeWidth={1.5} />
+              </View>
+              <Text className="text-espresso font-bold text-sm mt-2.5">Our Outlets</Text>
+              <Text className="text-muted-fg text-xs mt-0.5" numberOfLines={1}>
+                Shah Alam · Conezion · Tamarind
+              </Text>
+            </Card>
+          </View>
+        </View>
 
         {(outlets.isLoading || menu.isLoading) && (
           <View className="py-10 items-center">
