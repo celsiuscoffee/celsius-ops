@@ -44,7 +44,9 @@ export function BottomNav() {
             onPress={() => {
               Haptics.selectionAsync();
               if (active) return;
-              router.push(tab.href as any);
+              // replace, not push — tab switches shouldn't accumulate
+              // back-history. Each tab is a sibling, not a deeper level.
+              router.replace(tab.href as any);
             }}
             className="flex-1 items-center gap-1 py-1 active:opacity-60"
             hitSlop={8}

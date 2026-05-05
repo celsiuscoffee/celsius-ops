@@ -114,7 +114,16 @@ export default function RootLayout() {
                     contentStyle: { backgroundColor: "#f5f5f5" },
                     animation: "slide_from_right",
                   }}
-                />
+                >
+                  {/* Bottom-tab roots cross-fade — sibling routes shouldn't
+                      slide as if hierarchical. Drill-down pushes (product
+                      detail, order detail, etc.) keep the default slide. */}
+                  <Stack.Screen name="index" options={{ animation: "fade" }} />
+                  <Stack.Screen name="menu" options={{ animation: "fade" }} />
+                  <Stack.Screen name="orders" options={{ animation: "fade" }} />
+                  <Stack.Screen name="rewards" options={{ animation: "fade" }} />
+                  <Stack.Screen name="account" options={{ animation: "fade" }} />
+                </Stack>
                 <MaintenanceBanner />
               </>
             )}
