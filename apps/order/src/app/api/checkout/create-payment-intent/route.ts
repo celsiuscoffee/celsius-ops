@@ -43,8 +43,23 @@ export async function POST(request: NextRequest) {
       clientSecret:    paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id,
     });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("Create payment intent error:", err);
-    return NextResponse.json({ error: "Failed to create payment intent" }, { status: 500 });
+    // Surface the underlying Stripe error so the client can show a useful
+    // message instead of "Failed to create payment intent".
+    const message =
+      err instanceof Error ? err.message : "Failed to create payment intent";
+    const code =
+      typeof err === "object" && err !== null && "code" in err
+        ? (err as { code: string }).code
+        : undefined;
+    const stripeType =
+      typeof err === "object" && err !== null && "type" in err
+        ? (err as { type: string }).type
+        : undefined;
+    return NextResponse.json(
+      { error: message, code, type: stripeType },
+      { status: 500 }
+    );
   }
 }
