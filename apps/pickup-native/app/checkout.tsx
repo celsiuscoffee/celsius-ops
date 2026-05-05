@@ -71,6 +71,7 @@ export default function Checkout() {
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"card" | "ewallet" | "fpx">("card");
+  const [lastError, setLastError] = useState<string | null>(null);
 
   const onSendOtp = async () => {
     const normalized = phoneInput.trim().replace(/\s/g, "");
@@ -111,7 +112,10 @@ export default function Checkout() {
       return;
     }
     setBusy(true);
+    setLastError(null);
+    let stage = "init";
     try {
+      stage = "create-order";
       // 1. Create the order on the server.
       //    Server expects: selectedStore (object), loyaltyPhone, total (RM), items, paymentMethod.
       const res = await api.placeOrder({
@@ -139,6 +143,7 @@ export default function Checkout() {
         rewardDiscountSen: Math.round(rewardDiscount * 100),
       });
 
+      stage = "create-payment-intent";
       // 2. Card / ewallet — Stripe native PaymentSheet. The server mints a
       //    PaymentIntent for this orderId; we hand the clientSecret to the
       //    native sheet which slides up over the app and handles card entry,
@@ -165,9 +170,12 @@ export default function Checkout() {
         error?:           string;
       };
       if (!piRes.ok || !piJson.clientSecret) {
-        throw new Error(piJson.error || "Couldn't start Stripe payment");
+        throw new Error(
+          `${stage} HTTP ${piRes.status}: ${piJson.error || "no clientSecret"}`
+        );
       }
 
+      stage = "init-payment-sheet";
       const initRes = await initPaymentSheet({
         merchantDisplayName: "Celsius Coffee",
         paymentIntentClientSecret: piJson.clientSecret,
@@ -178,9 +186,12 @@ export default function Checkout() {
         allowsDelayedPaymentMethods: false,
       });
       if (initRes.error) {
-        throw new Error(initRes.error.message);
+        throw new Error(
+          `${stage} [${initRes.error.code ?? "?"}]: ${initRes.error.message}`
+        );
       }
 
+      stage = "present-payment-sheet";
       const presentRes = await presentPaymentSheet();
       if (presentRes.error) {
         // User cancelled or payment failed. Order stays pending; cron will
@@ -219,7 +230,10 @@ export default function Checkout() {
       clearCart();
       router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
     } catch (e: any) {
-      Alert.alert("Couldn't place order", e?.message ?? String(e));
+      const detail = `[${stage}] ${e?.message ?? String(e)}`;
+      setLastError(detail);
+      Alert.alert("Couldn't place order", detail);
+      console.warn("[checkout]", detail, e);
     } finally {
       setBusy(false);
     }
@@ -528,6 +542,21 @@ export default function Checkout() {
             paddingBottom: insets.bottom + 12,
           }}
         >
+          {lastError && (
+            <Pressable
+              onPress={() => setLastError(null)}
+              className="bg-red-50 border border-red-200 rounded-2xl px-3 py-2 mb-2 flex-row items-start gap-2"
+            >
+              <AlertCircle size={14} color="#B91C1C" />
+              <Text
+                className="text-red-800 text-[11px] flex-1"
+                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                selectable
+              >
+                {lastError}
+              </Text>
+            </Pressable>
+          )}
           <PrimaryButton
             label={
               paymentsEnabled
