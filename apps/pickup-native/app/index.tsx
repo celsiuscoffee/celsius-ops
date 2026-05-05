@@ -413,7 +413,7 @@ export default function Home() {
         {promo.enabled && (promo.headline || promo.image_url) && (
           <Pressable
             onPress={onPromoTap}
-            className="mx-4 mt-4 bg-espresso rounded-3xl overflow-hidden active:opacity-90"
+            className="mx-4 mt-4 bg-espresso rounded-2xl overflow-hidden active:opacity-90"
             style={{
               shadowColor: "#160800",
               shadowOpacity: 0.12,
@@ -732,7 +732,7 @@ export default function Home() {
         {menu.isLoading && featured.length === 0 ? (
           <View className="px-4 mt-5">
             <View
-              className="bg-surface/60 rounded-md mb-3"
+              className="bg-surface/60 rounded-md mb-2"
               style={{ height: 16, width: 110 }}
             />
             <ScrollView
@@ -743,9 +743,9 @@ export default function Home() {
               {[0, 1, 2, 3].map((i) => (
                 <View
                   key={i}
-                  className="w-40 bg-surface rounded-3xl border border-border overflow-hidden"
+                  className="w-36 bg-surface rounded-2xl border border-border overflow-hidden"
                 >
-                  <View className="aspect-[4/5] bg-background" />
+                  <View className="aspect-[4/3] bg-background" />
                   <View className="p-3 gap-2">
                     <View
                       className="bg-background rounded-md"
@@ -793,18 +793,18 @@ export default function Home() {
                     if (!outletId) router.push("/store");
                     else router.push({ pathname: "/product/[id]", params: { id: p.id } });
                   }}
-                  className="w-40 active:opacity-70"
+                  className="w-36 active:opacity-70"
                 >
                   <View
-                    className="bg-surface rounded-3xl overflow-hidden border border-border"
+                    className="bg-surface rounded-2xl overflow-hidden border border-border"
                     style={{
                       shadowColor: "#000",
-                      shadowOpacity: 0.04,
+                      shadowOpacity: 0.05,
                       shadowRadius: 6,
                       shadowOffset: { width: 0, height: 2 },
                     }}
                   >
-                    <View className="aspect-[4/5] bg-background">
+                    <View className="aspect-[4/3] bg-background">
                       {p.image_url && (
                         <Image
                           source={{ uri: p.image_url }}
