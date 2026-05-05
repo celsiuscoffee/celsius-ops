@@ -28,6 +28,11 @@ export type Reward = {
   bogo_buy_qty: number;
   bogo_free_qty: number;
   fulfillment_type: string[] | null;
+  valid_from?: string | null;
+  valid_until?: string | null;
+  stock?: number | null;
+  max_redemptions_per_member?: number | null;
+  redemption_count?: number;
 };
 
 export type RewardsResponse = {

@@ -104,10 +104,47 @@ export async function GET(request: NextRequest) {
     const brandData = member.brand_data ?? {};
     const pointsBalance: number = brandData.points_balance ?? 0;
 
+    // Hydrate eligibility from our DB rewards table (loyalty service can
+    // omit some columns) and attach a per-member redemption count so the
+    // client can enforce max_redemptions_per_member without an extra trip.
+    const rewardIds = rewards.map((r) => r.id);
+    const [{ data: dbRewards }, { data: redemptions }] = await Promise.all([
+      supabase
+        .from("rewards")
+        .select(
+          "id, valid_from, valid_until, stock, max_redemptions_per_member, fulfillment_type"
+        )
+        .in("id", rewardIds),
+      supabase
+        .from("redemptions")
+        .select("reward_id")
+        .eq("member_id", member.id)
+        .in("reward_id", rewardIds),
+    ]);
+    const dbMap = new Map((dbRewards ?? []).map((r) => [r.id as string, r]));
+    const redemptionCounts = new Map<string, number>();
+    for (const r of redemptions ?? []) {
+      const k = r.reward_id as string;
+      redemptionCounts.set(k, (redemptionCounts.get(k) ?? 0) + 1);
+    }
+
+    const rewardsWithEligibility = rewards.map((r) => {
+      const db = dbMap.get(r.id) as Record<string, unknown> | undefined;
+      return {
+        ...r,
+        valid_from:                 db?.valid_from ?? null,
+        valid_until:                db?.valid_until ?? null,
+        stock:                      (db?.stock as number | null) ?? r.stock ?? null,
+        max_redemptions_per_member: (db?.max_redemptions_per_member as number | null) ?? r.max_redemptions_per_member ?? null,
+        fulfillment_type:           db?.fulfillment_type ?? r.fulfillment_type ?? null,
+        redemption_count:           redemptionCounts.get(r.id) ?? 0,
+      };
+    });
+
     return NextResponse.json({
       memberId: member.id,
       pointsBalance,
-      rewards,
+      rewards: rewardsWithEligibility,
     });
   } catch (err) {
     console.error("Loyalty rewards fetch error:", err);

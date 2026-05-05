@@ -85,9 +85,45 @@ export default function Home() {
     staleTime: 60_000,
   });
   const points = member?.pointsBalance ?? rewardsQ.data?.pointsBalance ?? 0;
+  // Eligibility — active + affordable + valid date window + has stock +
+  // pickup-capable + member hasn't hit max redemption. The server attaches
+  // redemption_count, so this stays cheap on the client.
   const affordableRewards = (rewardsQ.data?.rewards ?? [])
-    .filter((r: Reward) => r.is_active && r.points_required <= points)
+    .filter((r: Reward) => {
+      if (!r.is_active) return false;
+      if (r.points_required > points) return false;
+      const now = Date.now();
+      if (r.valid_from && new Date(r.valid_from).getTime() > now) return false;
+      if (r.valid_until && new Date(r.valid_until).getTime() < now) return false;
+      if (r.stock != null && r.stock <= 0) return false;
+      if (
+        r.max_redemptions_per_member != null &&
+        (r.redemption_count ?? 0) >= r.max_redemptions_per_member
+      ) {
+        return false;
+      }
+      const ft = r.fulfillment_type;
+      if (Array.isArray(ft) && ft.length > 0 && !ft.includes("pickup")) return false;
+      return true;
+    })
     .slice(0, 6);
+
+  // Urgency label for a reward: "Ends today" / "Ends in N days" if it
+  // expires within a week, "Last 1 left" if stock is the last unit. Returns
+  // null when nothing is urgent so we don't visually clutter healthy cards.
+  const urgencyLabel = (r: Reward): string | null => {
+    if (r.stock != null && r.stock > 0 && r.stock <= 3) {
+      return r.stock === 1 ? "Last one!" : `Only ${r.stock} left`;
+    }
+    if (r.valid_until) {
+      const ms = new Date(r.valid_until).getTime() - Date.now();
+      if (ms <= 0) return null;
+      const days = Math.ceil(ms / (24 * 60 * 60 * 1000));
+      if (days <= 1) return "Ends today";
+      if (days <= 7) return `Ends in ${days}d`;
+    }
+    return null;
+  };
 
   // Cheapest reward they can't yet afford — used to show "X pts to <name>"
   // under the points pill so the loyalty loop has visible forward momentum.
@@ -372,12 +408,102 @@ export default function Home() {
           </Pressable>
         )}
 
+        {/* Hero promo — moved above Your Usual so it lands within the first
+            viewport. Backoffice-driven via promo_banner setting. */}
+        {promo.enabled && (promo.headline || promo.image_url) && (
+          <Pressable
+            onPress={onPromoTap}
+            className="mx-4 mt-4 bg-espresso rounded-3xl overflow-hidden active:opacity-90"
+            style={{
+              shadowColor: "#160800",
+              shadowOpacity: 0.12,
+              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 4 },
+            }}
+          >
+            {promo.image_url ? (
+              <View>
+                <Image
+                  source={{ uri: promo.image_url }}
+                  style={{ width: "100%", aspectRatio: 16 / 9 }}
+                  resizeMode="cover"
+                />
+                <View className="px-4 py-3 flex-row items-center justify-between">
+                  <View className="flex-1 pr-3">
+                    {promo.label && (
+                      <Text
+                        className="text-amber-400 text-[10px] uppercase tracking-widest"
+                        style={{ fontFamily: "SpaceGrotesk_700Bold" }}
+                      >
+                        {promo.label}
+                      </Text>
+                    )}
+                    <Text
+                      className="text-white text-[16px] mt-0.5"
+                      style={{ fontFamily: "Peachi-Bold" }}
+                      numberOfLines={1}
+                    >
+                      {promo.headline} {promo.highlight && (
+                        <Text className="text-amber-400">{promo.highlight}</Text>
+                      )}
+                    </Text>
+                  </View>
+                  <View className="bg-white rounded-full px-4 py-2 flex-row items-center gap-1">
+                    <Text className="text-primary text-[13px] font-bold">
+                      {promo.cta_text || "Order"}
+                    </Text>
+                    <ChevronRight size={14} color="#C05040" />
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <View className="px-5 py-5">
+                {promo.label && (
+                  <Text
+                    className="text-amber-400 text-[10px] uppercase tracking-widest"
+                    style={{ fontFamily: "SpaceGrotesk_700Bold" }}
+                  >
+                    {promo.label}
+                  </Text>
+                )}
+                <View className="flex-row items-end justify-between mt-1">
+                  <View className="flex-1 pr-3">
+                    <Text
+                      className="text-white text-3xl leading-tight"
+                      style={{ fontFamily: "Peachi-Bold" }}
+                    >
+                      {promo.headline}
+                      {promo.highlight && (
+                        <>
+                          {" "}
+                          <Text className="text-amber-400">{promo.highlight}</Text>
+                        </>
+                      )}
+                    </Text>
+                    {promo.description && (
+                      <Text className="text-white/60 text-[12px] mt-1.5">
+                        {promo.description}
+                      </Text>
+                    )}
+                  </View>
+                  <View className="bg-white rounded-full px-4 py-2 flex-row items-center gap-1">
+                    <Text className="text-primary text-[13px] font-bold">
+                      {promo.cta_text || "Order"}
+                    </Text>
+                    <ChevronRight size={14} color="#C05040" />
+                  </View>
+                </View>
+              </View>
+            )}
+          </Pressable>
+        )}
+
         {/* Your usual — pulls regulars straight to checkout, retention-led.
             Horizontal scroll with big imagery so multiple products fit on the
             fold without each tile feeling cramped. */}
         {phone && (recent.data?.length ?? 0) > 0 && (
           <View className="mt-5">
-            <View className="flex-row items-center justify-between mb-3 px-4">
+            <View className="flex-row items-center justify-between mb-2 px-4">
               <Text
                 className="text-espresso text-base"
                 style={{ fontFamily: "Peachi-Bold" }}
@@ -474,8 +600,8 @@ export default function Home() {
 
         {/* Rewards available — only show what user can redeem right now */}
         {affordableRewards.length > 0 && (
-          <View className="mt-6">
-            <View className="flex-row items-center justify-between mb-3 px-4">
+          <View className="mt-5">
+            <View className="flex-row items-center justify-between mb-2 px-4">
               <View className="flex-row items-center gap-2">
                 <Gift size={16} color="#C05040" strokeWidth={2} />
                 <Text
@@ -525,6 +651,28 @@ export default function Home() {
                         <Gift size={26} color="#C05040" strokeWidth={1.5} />
                       </View>
                     )}
+                    {(() => {
+                      const label = urgencyLabel(r);
+                      if (!label) return null;
+                      return (
+                        <View
+                          className="absolute bg-primary rounded-full"
+                          style={{
+                            top: 8,
+                            left: 8,
+                            paddingHorizontal: 7,
+                            paddingVertical: 2,
+                          }}
+                        >
+                          <Text
+                            className="text-white text-[10px]"
+                            style={{ fontFamily: "Peachi-Bold" }}
+                          >
+                            {label}
+                          </Text>
+                        </View>
+                      );
+                    })()}
                   </View>
                   <View className="px-3 py-2.5">
                     <Text
@@ -541,96 +689,6 @@ export default function Home() {
           </View>
         )}
 
-        {/* Hero promo — backoffice-driven via promo_banner setting. Trimmed
-            from the previous full-bleed hero so retention sections breathe. */}
-        {promo.enabled && (promo.headline || promo.image_url) && (
-          <Pressable
-            onPress={onPromoTap}
-            className="mx-4 mt-6 bg-espresso rounded-3xl overflow-hidden active:opacity-90"
-            style={{
-              shadowColor: "#160800",
-              shadowOpacity: 0.12,
-              shadowRadius: 12,
-              shadowOffset: { width: 0, height: 4 },
-            }}
-          >
-            {promo.image_url ? (
-              <View>
-                <Image
-                  source={{ uri: promo.image_url }}
-                  style={{ width: "100%", aspectRatio: 16 / 9 }}
-                  resizeMode="cover"
-                />
-                <View className="px-4 py-3 flex-row items-center justify-between">
-                  <View className="flex-1 pr-3">
-                    {promo.label && (
-                      <Text
-                        className="text-amber-400 text-[10px] uppercase tracking-widest"
-                        style={{ fontFamily: "SpaceGrotesk_700Bold" }}
-                      >
-                        {promo.label}
-                      </Text>
-                    )}
-                    <Text
-                      className="text-white text-[16px] mt-0.5"
-                      style={{ fontFamily: "Peachi-Bold" }}
-                      numberOfLines={1}
-                    >
-                      {promo.headline} {promo.highlight && (
-                        <Text className="text-amber-400">{promo.highlight}</Text>
-                      )}
-                    </Text>
-                  </View>
-                  <View className="bg-white rounded-full px-4 py-2 flex-row items-center gap-1">
-                    <Text className="text-primary text-[13px] font-bold">
-                      {promo.cta_text || "Order"}
-                    </Text>
-                    <ChevronRight size={14} color="#C05040" />
-                  </View>
-                </View>
-              </View>
-            ) : (
-              <View className="px-5 py-5">
-                {promo.label && (
-                  <Text
-                    className="text-amber-400 text-[10px] uppercase tracking-widest"
-                    style={{ fontFamily: "SpaceGrotesk_700Bold" }}
-                  >
-                    {promo.label}
-                  </Text>
-                )}
-                <View className="flex-row items-end justify-between mt-1">
-                  <View className="flex-1 pr-3">
-                    <Text
-                      className="text-white text-3xl leading-tight"
-                      style={{ fontFamily: "Peachi-Bold" }}
-                    >
-                      {promo.headline}
-                      {promo.highlight && (
-                        <>
-                          {" "}
-                          <Text className="text-amber-400">{promo.highlight}</Text>
-                        </>
-                      )}
-                    </Text>
-                    {promo.description && (
-                      <Text className="text-white/60 text-[12px] mt-1.5">
-                        {promo.description}
-                      </Text>
-                    )}
-                  </View>
-                  <View className="bg-white rounded-full px-4 py-2 flex-row items-center gap-1">
-                    <Text className="text-primary text-[13px] font-bold">
-                      {promo.cta_text || "Order"}
-                    </Text>
-                    <ChevronRight size={14} color="#C05040" />
-                  </View>
-                </View>
-              </View>
-            )}
-          </Pressable>
-        )}
-
         {/* Empty-state nudge — only when no personalized sections fired and
             user hasn't yet got a cart going. Keeps first-time users from
             staring at a sparse home. */}
@@ -639,7 +697,7 @@ export default function Home() {
           affordableRewards.length === 0 &&
           !(promo.enabled && (promo.headline || promo.image_url)) &&
           cartCount(cart) === 0 && (
-            <View className="mx-4 mt-6 bg-surface border border-border rounded-2xl p-5 items-center">
+            <View className="mx-4 mt-5 bg-surface border border-border rounded-2xl p-5 items-center">
               <View className="w-12 h-12 rounded-2xl bg-primary/10 items-center justify-center">
                 <Coffee size={24} color="#C05040" strokeWidth={1.5} />
               </View>
@@ -672,7 +730,7 @@ export default function Home() {
 
         {/* Best Sellers (skeleton while menu loads, real cards once data is in) */}
         {menu.isLoading && featured.length === 0 ? (
-          <View className="px-4 mt-6">
+          <View className="px-4 mt-5">
             <View
               className="bg-surface/60 rounded-md mb-3"
               style={{ height: 16, width: 110 }}
@@ -704,8 +762,8 @@ export default function Home() {
           </View>
         ) : null}
         {featured.length > 0 && (
-          <View className="px-4 mt-6">
-            <View className="flex-row items-center justify-between mb-3">
+          <View className="px-4 mt-5">
+            <View className="flex-row items-center justify-between mb-2">
               <Text
                 className="text-espresso text-base"
                 style={{ fontFamily: "Peachi-Bold" }}
@@ -788,7 +846,7 @@ export default function Home() {
         {/* Quick actions — demoted to lowest priority. Sticky cart pill +
             header outlet picker cover the same intents above the fold for
             most sessions; this row is a fallback for menu/outlet entry. */}
-        <View className="flex-row gap-3 px-4 mt-6">
+        <View className="flex-row gap-3 px-4 mt-5">
           <View className="flex-1">
             <Card onPress={onOrderNow}>
               <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
