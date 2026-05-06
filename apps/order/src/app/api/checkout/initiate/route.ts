@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { createPayment } from "@/lib/revenue-monster/client";
 import { earnLoyaltyPoints, deductLoyaltyPoints, getTierMultiplier } from "@/lib/loyalty/points";
+import {
+  evaluatePromotions,
+  recordPromotionApplications,
+  type CartLine,
+} from "@/lib/loyalty/promotions";
 import type { OrderRow } from "@/lib/supabase/types";
 
 // All active payment methods route through Stripe (live keys, MYR).
@@ -38,6 +43,7 @@ export async function POST(request: NextRequest) {
       rewardPointsCost,
       loyaltyPhone,
       loyaltyId,
+      promoCode,
       notes,
       orderType,
       tableNumber,
@@ -189,11 +195,44 @@ export async function POST(request: NextRequest) {
       if (val.rate != null) sstRate = val.rate;
     }
 
+    // ── Resolve member tier (used for promo eligibility and points) ───────
+    let memberTierId: string | null = null;
+    if (loyaltyId) {
+      const { data: mb } = await supabase
+        .from("member_brands")
+        .select("current_tier_id, tiers(multiplier)")
+        .eq("member_id", loyaltyId)
+        .eq("brand_id", "brand-celsius")
+        .single();
+      memberTierId = (mb as { current_tier_id?: string | null } | null)?.current_tier_id ?? null;
+    }
+
+    // ── Evaluate promotion engine ─────────────────────────────────────────
+    // Auto-apply, code, tier-perk, and reward-link promotions all flow
+    // through here. Voucher (legacy) and reward discounts stay separate
+    // for now since they predate the engine.
+    const cartLines: CartLine[] = typedItems.map((item) => ({
+      product_id: (item.product?.id ?? item.product_id) as string,
+      quantity: item.quantity,
+      unit_price: priceMap.get((item.product?.id ?? item.product_id) as string) ?? 0,
+    }));
+    const evaluated = await evaluatePromotions({
+      lines: cartLines,
+      member_id: loyaltyId,
+      outlet_id: selectedStore.id,
+      member_tier_id: memberTierId,
+      promo_code: promoCode ?? null,
+    });
+    const promoDiscountSen = Math.round(evaluated.total_discount * 100);
+
     // ── Compute totals server-side ─────────────────────────────────────────
     const orderNumber          = generateOrderNumber();
     const subtotalSen          = serverSubtotalSen;
     const voucherDiscountSen   = Math.round(discountSen ?? 0);
-    const afterDiscount        = Math.max(0, subtotalSen - voucherDiscountSen - rewardDiscountSenAmt);
+    const afterDiscount        = Math.max(
+      0,
+      subtotalSen - voucherDiscountSen - rewardDiscountSenAmt - promoDiscountSen
+    );
     const sstSen               = sstEnabled ? Math.round(afterDiscount * sstRate) : 0;
     const totalSen             = afterDiscount + sstSen;
     // Base points = RM spent (afterDiscount is in sen). Then multiply by
@@ -268,6 +307,18 @@ export async function POST(request: NextRequest) {
     if (voucherId) {
       await supabase.rpc("increment_voucher_count", { voucher_id: voucherId });
     }
+
+    // Record applied promotions to the loyalty ledger so usage caps and
+    // reporting work. Fire-and-forget — order success isn't gated on this.
+    void recordPromotionApplications({
+      evaluated,
+      member_id: loyaltyId ?? null,
+      outlet_id: selectedStore.id,
+      reference_id: order.id,
+      lines: cartLines,
+      member_tier_id: memberTierId,
+      promo_code: promoCode ?? null,
+    });
 
     // Points deduction (reward) happens post-payment in webhook/confirm-stripe
     // to avoid deducting on abandoned payments.

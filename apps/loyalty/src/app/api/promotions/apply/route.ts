@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { isAuthorizedCron } from '@/lib/benefits';
 import {
   evaluateCart,
   recordApplications,
@@ -16,8 +17,12 @@ import {
 // reporting work correctly.
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireAuth(request);
-    if (auth.error) return auth.error;
+    // Either staff-session auth (admin UI) or server-secret auth (the
+    // pickup web app calling us server-to-server at order commit).
+    if (!isAuthorizedCron(request)) {
+      const auth = await requireAuth(request);
+      if (auth.error) return auth.error;
+    }
 
     const body = await request.json();
 
