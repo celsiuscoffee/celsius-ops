@@ -5,6 +5,14 @@
     {
       "path": "/api/cron/sync-products",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/loyalty/benefits/grant-birthday",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/loyalty/benefits/grant-monthly",
+      "schedule": "0 1 1 * *"
     }
   ]
 }
