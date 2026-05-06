@@ -981,7 +981,7 @@ export default function PortalPage() {
 
         {/* ── Redeem Rewards mode ── */}
         {mode === "redeem" && (
-          <div className="flex flex-1 flex-col bg-neutral-900">
+          <div className="flex min-h-0 flex-1 flex-col bg-neutral-900">
             {/* Step 1: Phone Entry */}
             {redeemStep === "phone" && (
               <div className="flex flex-1 flex-col items-center justify-center gap-4 px-5">
@@ -1183,7 +1183,7 @@ export default function PortalPage() {
 
             {/* Step 3: Customer Profile + Rewards Catalog */}
             {redeemStep === "rewards" && redeemMember && (
-              <div className="flex flex-1 flex-col px-4 py-4 overflow-y-auto">
+              <div className="flex min-h-0 flex-1 flex-col px-4 py-4 overflow-y-auto">
                 <div className="mx-auto w-full max-w-md">
                   {/* Customer Info Card */}
                   <div className="mb-4 overflow-hidden rounded-2xl bg-neutral-800">

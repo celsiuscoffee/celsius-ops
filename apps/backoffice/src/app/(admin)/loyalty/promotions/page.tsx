@@ -21,6 +21,8 @@ interface Promotion {
     | "override_price";
   discount_value: number | null;
   max_discount_value: number | null;
+  combo_price: number | null;
+  override_price: number | null;
   min_order_value: number | null;
   valid_from: string | null;
   valid_until: string | null;
@@ -113,9 +115,9 @@ export default function PromotionsPage() {
       case "bogo":
         return "Buy + free";
       case "combo_price":
-        return "Combo";
+        return p.combo_price != null ? `RM${p.combo_price} combo` : "Combo";
       case "override_price":
-        return `RM${p.combo_price ?? 0} each`;
+        return p.override_price != null ? `RM${p.override_price} each` : "Override";
     }
   }
 
