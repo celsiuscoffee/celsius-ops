@@ -29,7 +29,8 @@ import { EspressoHeader } from "../components/EspressoHeader";
 import { BottomNav } from "../components/BottomNav";
 import { useApp } from "../lib/store";
 import { api } from "../lib/api";
-import { fetchMember } from "../lib/rewards";
+import { fetchMember, fetchTier, type MemberTier } from "../lib/rewards";
+import { TierCard } from "../components/TierCard";
 
 function normalisePhone(input: string): string {
   const digits = input.replace(/\D/g, "");
@@ -87,6 +88,7 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
   const member = useApp((s) => s.member);
   const setMember = useApp((s) => s.setMember);
   const [editing, setEditing] = useState(false);
+  const [tier, setTier] = useState<MemberTier | null>(null);
 
   // Refetch on screen focus so points balance stays current
   useEffect(() => {
@@ -102,6 +104,8 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
             totalVisits: m.totalVisits,
             totalPointsEarned: m.totalPointsEarned,
           });
+          // Fetch tier info in parallel — fail silently if missing.
+          fetchTier(m.id).then(setTier).catch(() => {});
         }
       })
       .catch(() => {});
@@ -157,6 +161,8 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
             />
           </View>
         </View>
+
+        {tier ? <TierCard tier={tier} /> : null}
 
         <NavRow
           icon={ShoppingBag}

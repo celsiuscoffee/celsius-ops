@@ -21,8 +21,33 @@ async function resolveOutletId(storeId: string): Promise<string> {
 }
 
 /**
+ * Look up the points multiplier for a member based on their current tier.
+ * Returns 1.0 if no tier or no member. Cheap call used at order-create time
+ * so the displayed "points to earn" matches what the member actually receives.
+ */
+export async function getTierMultiplier(loyaltyId: string): Promise<number> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data } = await supabase
+      .from("member_brands")
+      .select("tiers(multiplier)")
+      .eq("member_id", loyaltyId)
+      .eq("brand_id", BRAND_ID)
+      .single();
+    const tier = (data as { tiers?: { multiplier?: number } | null } | null)?.tiers;
+    return tier?.multiplier ?? 1.0;
+  } catch {
+    return 1.0;
+  }
+}
+
+/**
  * Earn loyalty points for a completed pickup order.
  * Fire-and-forget — never throws.
+ *
+ * `points` is expected to ALREADY include the tier multiplier (computed at
+ * order-create time so the receipt matches). This function applies any
+ * active post-purchase coupon multiplier on top, then burns the coupon.
  */
 export async function earnLoyaltyPoints(
   loyaltyId: string,
@@ -34,6 +59,29 @@ export async function earnLoyaltyPoints(
   try {
     const supabase  = getSupabaseAdmin();
     const outletId  = await resolveOutletId(storeId);
+
+    // Post-purchase coupon multiplier — set when a member has an active
+    // post_purchase issued_reward (e.g. "2× points on next visit").
+    const now = new Date().toISOString();
+    const { data: activeCoupons } = await supabase
+      .from("issued_rewards")
+      .select("id, reward:rewards(discount_value, reward_type)")
+      .eq("member_id", loyaltyId)
+      .eq("brand_id", BRAND_ID)
+      .eq("status", "active")
+      .gt("expires_at", now)
+      .eq("rewards.reward_type", "post_purchase")
+      .limit(1);
+
+    const activeCoupon = activeCoupons?.[0] ?? null;
+    const couponReward =
+      (activeCoupon?.reward as unknown as { discount_value: number | null } | null) ?? null;
+    const couponMultiplier = couponReward?.discount_value ?? 1.0;
+
+    // Apply coupon to the already-tier-multiplied input. Cap at 20× of input
+    // to be defensive against bad coupon data.
+    const cappedCouponMul = Math.min(couponMultiplier, 20);
+    const effectivePoints = Math.max(0, Math.round(points * cappedCouponMul));
 
     // Fetch member_brands row
     const { data: member, error: memberErr } = await supabase
@@ -49,14 +97,14 @@ export async function earnLoyaltyPoints(
     }
 
     const currentBalance = member.points_balance as number;
-    const newBalance     = currentBalance + points;
+    const newBalance     = currentBalance + effectivePoints;
 
     // Optimistic-concurrency update
     const { data: updated, error: updateErr } = await supabase
       .from("member_brands")
       .update({
         points_balance:      newBalance,
-        total_points_earned: (member.total_points_earned as number) + points,
+        total_points_earned: (member.total_points_earned as number) + effectivePoints,
         total_visits:        (member.total_visits as number) + 1,
         last_visit_at:       new Date().toISOString(),
       })
@@ -85,12 +133,12 @@ export async function earnLoyaltyPoints(
         return;
       }
 
-      const retryBalance    = (fresh.points_balance as number) + points;
+      const retryBalance    = (fresh.points_balance as number) + effectivePoints;
       const { error: retryErr } = await supabase
         .from("member_brands")
         .update({
           points_balance:      retryBalance,
-          total_points_earned: (fresh.total_points_earned as number) + points,
+          total_points_earned: (fresh.total_points_earned as number) + effectivePoints,
           total_visits:        (fresh.total_visits as number) + 1,
           last_visit_at:       new Date().toISOString(),
         })
@@ -111,16 +159,33 @@ export async function earnLoyaltyPoints(
       brand_id:    BRAND_ID,
       outlet_id:   outletId,
       type:        "earn",
-      points,
+      points:      effectivePoints,
       balance_after: newBalance,
       description: "Points earned for pickup order",
       reference_id: orderId,
-      multiplier:  1,
+      multiplier:  cappedCouponMul,
     });
 
     if (txnErr) {
       console.error("[loyalty] earnLoyaltyPoints: transaction insert error", txnErr.message);
     }
+
+    // Burn the post-purchase coupon if it was applied.
+    if (activeCoupon && couponMultiplier > 1) {
+      await supabase
+        .from("issued_rewards")
+        .update({ status: "used" })
+        .eq("id", activeCoupon.id);
+    }
+
+    // Fire-and-forget tier re-evaluation so a member who just crossed
+    // a threshold gets bumped immediately.
+    void Promise.resolve(
+      supabase.rpc("evaluate_member_tier", {
+        p_member_id: loyaltyId,
+        p_brand_id:  BRAND_ID,
+      })
+    ).catch(() => {/* non-critical */});
   } catch (err) {
     console.error("[loyalty] earnLoyaltyPoints unexpected error:", err);
   }

@@ -59,6 +59,38 @@ export async function fetchMember(phone: string): Promise<Member | null> {
   return data.member;
 }
 
+export type MemberTier = {
+  tier_id: string | null;
+  tier_name: string | null;
+  tier_slug: string | null;
+  tier_color: string | null;
+  tier_icon: string | null;
+  tier_multiplier: number | null;
+  tier_benefits: string[] | null;
+  tier_qualification: "visits" | "spend" | "spend_lifetime" | "either" | null;
+  visits_this_period: number;
+  spend_this_period: number;
+  spend_lifetime: number;
+  period_days: number;
+  next_tier_id: string | null;
+  next_tier_name: string | null;
+  next_tier_min_visits: number | null;
+  next_tier_min_spend: number | null;
+  next_tier_qualification: string | null;
+  visits_to_next_tier: number;
+  spend_to_next_tier: number;
+};
+
+export async function fetchTier(memberId: string): Promise<MemberTier | null> {
+  try {
+    return await get<MemberTier>(
+      `/api/loyalty/member-tier?member_id=${encodeURIComponent(memberId)}`
+    );
+  } catch {
+    return null;
+  }
+}
+
 export type RecentItem = {
   id: string;
   name: string;

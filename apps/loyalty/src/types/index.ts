@@ -58,6 +58,49 @@ export interface MemberBrand {
   total_spent: number;
   joined_at: string;
   last_visit_at: string | null;
+  current_tier_id: string | null;
+  tier_evaluated_at: string | null;
+}
+
+export interface Tier {
+  id: string;
+  brand_id: string;
+  name: string;
+  slug: string;
+  min_visits: number;
+  period_days: number;
+  color: string;
+  icon: string;
+  benefits: string[];
+  multiplier: number;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface MemberTierStatus {
+  tier_id: string;
+  tier_name: string;
+  tier_slug: string;
+  tier_color: string;
+  tier_icon: string;
+  tier_multiplier: number;
+  tier_benefits: string[];
+  visits_this_period: number;
+  period_days: number;
+  next_tier_id: string | null;
+  next_tier_name: string | null;
+  next_tier_min_visits: number | null;
+  visits_to_next_tier: number;
+  active_post_purchase?: ActivePostPurchase | null;
+}
+
+export interface ActivePostPurchase {
+  id: string;
+  reward_name: string;
+  multiplier: number;
+  expires_at: string;
+  hours_remaining: number;
 }
 
 export interface PointTransaction {

@@ -9,14 +9,14 @@ import {
 } from "react-native";
 import { Stack, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CreditCard, Smartphone, Check, AlertCircle, Building2, Coffee, MapPin, Clock, Tag } from "lucide-react-native";
+import { CreditCard, Smartphone, Check, AlertCircle, Building2, Coffee, MapPin, Clock } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useStripe } from "@stripe/stripe-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type Outlet } from "../lib/supabase";
 import { useApp, cartTotal, cartCount } from "../lib/store";
 import { api, formatPrice } from "../lib/api";
-import { calcRewardDiscount } from "../lib/rewards";
+import { calcRewardDiscount, fetchTier, type MemberTier } from "../lib/rewards";
 import { getSetting } from "../lib/settings";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -35,19 +35,25 @@ export default function Checkout() {
   const appliedReward = useApp((s) => s.appliedReward);
   const loyaltyId = useApp((s) => s.loyaltyId);
 
-  // Settings — all config-driven, no redeploy needed.
+  // SST is config-driven via /api/settings?key=sst — admin can toggle/adjust
+  // from backoffice without redeploy.
   const [sstConfig, setSstConfig] = useState({ rate: 0.06, enabled: true });
   const [paymentsEnabled, setPaymentsEnabled] = useState(true);
-  const [fodConfig, setFodConfig] = useState<{ enabled: boolean; type: "percent" | "fixed"; amount: number; label: string }>(
-    { enabled: false, type: "percent", amount: 0, label: "" }
-  );
-  const [isFirstOrder, setIsFirstOrder] = useState(false);
-
+  const [tier, setTier] = useState<MemberTier | null>(null);
   useEffect(() => {
     getSetting("sst").then(setSstConfig);
     getSetting("payments_enabled").then((v) => setPaymentsEnabled(v.enabled));
-    getSetting("first_order_discount").then(setFodConfig);
   }, []);
+
+  // Fetch tier whenever loyaltyId is known so we can show the points-earning
+  // line with the right multiplier ("Gold member · earning 1.5× = 12 pts").
+  useEffect(() => {
+    if (!loyaltyId) {
+      setTier(null);
+      return;
+    }
+    fetchTier(loyaltyId).then(setTier).catch(() => setTier(null));
+  }, [loyaltyId]);
 
   // Pull live outlet record so the pickup card shows status + ETA — same
   // info the home page surfaces, kept consistent here so the customer
@@ -67,12 +73,7 @@ export default function Checkout() {
 
   const subtotal = cartTotal(cart);
   const rewardDiscount = calcRewardDiscount(appliedReward, cart, subtotal);
-  const fodDiscount = (isFirstOrder && fodConfig.enabled)
-    ? fodConfig.type === "percent"
-      ? +(subtotal * (fodConfig.amount / 100)).toFixed(2)
-      : fodConfig.amount
-    : 0;
-  const afterDiscount = Math.max(0, subtotal - rewardDiscount - fodDiscount);
+  const afterDiscount = Math.max(0, subtotal - rewardDiscount);
   const sst = sstConfig.enabled ? +(afterDiscount * sstConfig.rate).toFixed(2) : 0;
   const grandTotal = +(afterDiscount + sst).toFixed(2);
 
@@ -109,15 +110,6 @@ export default function Checkout() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setPhone(phoneInput.trim());
       setStep("review");
-      // Check first-order eligibility in the background after OTP passes.
-      if (fodConfig.enabled) {
-        fetch(`https://order.celsiuscoffee.com/api/members/order-count?phone=${encodeURIComponent(phoneInput.trim())}`, {
-          headers: { Origin: "https://order.celsiuscoffee.com", Referer: "https://order.celsiuscoffee.com/" },
-        })
-          .then((r) => r.json())
-          .then((j) => { if (j.count === 0) setIsFirstOrder(true); })
-          .catch(() => {});
-      }
     } catch (e) {
       Alert.alert("Couldn't verify", String(e));
     } finally {
@@ -514,17 +506,6 @@ export default function Checkout() {
                     <Text className="text-primary">−{formatPrice(rewardDiscount)}</Text>
                   </View>
                 )}
-                {isFirstOrder && fodDiscount > 0 && (
-                  <View className="flex-row justify-between">
-                    <View className="flex-row items-center gap-1">
-                      <Tag size={12} color="#16a34a" />
-                      <Text className="text-green-700 text-[13px]">
-                        {fodConfig.label || `First order ${fodConfig.type === "percent" ? `${fodConfig.amount}% off` : `RM${fodConfig.amount} off`}`}
-                      </Text>
-                    </View>
-                    <Text className="text-green-700">−{formatPrice(fodDiscount)}</Text>
-                  </View>
-                )}
                 {sstConfig.enabled && (
                   <View className="flex-row justify-between">
                     <Text className="text-muted-fg text-[13px]">
@@ -542,6 +523,19 @@ export default function Checkout() {
                     {formatPrice(grandTotal)}
                   </Text>
                 </View>
+                {tier && tier.tier_name && (
+                  <View className="flex-row justify-between mt-2">
+                    <Text className="text-muted-fg text-[13px]" numberOfLines={1}>
+                      {tier.tier_icon} {tier.tier_name} · earning {tier.tier_multiplier}×
+                    </Text>
+                    <Text
+                      className="text-[13px]"
+                      style={{ color: tier.tier_color ?? "#92400e" }}
+                    >
+                      +{Math.round(afterDiscount * (tier.tier_multiplier ?? 1))} pts
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
 

@@ -377,6 +377,32 @@ export async function fetchPointsLog(
   }
 }
 
+// ─── Tiers ───────────────────────────────────────────
+import type { Tier, MemberTierStatus } from '@/types';
+
+export async function fetchTiers(brandId: string = 'brand-celsius'): Promise<Tier[]> {
+  try {
+    const res = await fetch(`/api/tiers?brand_id=${brandId}`);
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchMemberTierStatus(
+  memberId: string,
+  brandId: string = 'brand-celsius',
+): Promise<MemberTierStatus | null> {
+  try {
+    const res = await fetch(`/api/member-tier?member_id=${memberId}&brand_id=${brandId}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 // ─── Staff ───────────────────────────────────────────
 export async function verifyStaffPin(
   outletId: string,
