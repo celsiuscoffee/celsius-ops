@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { OrderRow } from "@/lib/supabase/types";
 import { checkRateLimit, RATE_LIMITS } from "@celsius/shared";
+import { getTierMultiplier } from "@/lib/loyalty/points";
 
 // GET /api/orders?phone=+60123456789 — fetch orders by customer phone
 export async function GET(request: NextRequest) {
@@ -136,8 +137,12 @@ export async function POST(request: NextRequest) {
     const sstSen             = Math.round(sst != null ? sst * 100 : afterDiscount * 0.06);
     const totalSen           = afterDiscount + sstSen;
 
-    // Points = pointsPerRm × RM of after-discount subtotal (configurable per brand)
-    const pointsToEarn = loyaltyId ? Math.floor((afterDiscount / 100) * pointsPerRm) : 0;
+    // Points = pointsPerRm × RM of after-discount subtotal × tier multiplier.
+    // Coupon multiplier (post-purchase) is applied at earn-time inside
+    // earnLoyaltyPoints since it can change between create and pay.
+    const basePoints   = loyaltyId ? Math.floor((afterDiscount / 100) * pointsPerRm) : 0;
+    const tierMul      = loyaltyId ? await getTierMultiplier(loyaltyId) : 1;
+    const pointsToEarn = Math.round(basePoints * tierMul);
 
     const { data, error: orderError } = await supabase
       .from("orders")

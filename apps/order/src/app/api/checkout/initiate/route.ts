@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { createPayment } from "@/lib/revenue-monster/client";
-import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
+import { earnLoyaltyPoints, deductLoyaltyPoints, getTierMultiplier } from "@/lib/loyalty/points";
 import type { OrderRow } from "@/lib/supabase/types";
 
 // All active payment methods route through Stripe (live keys, MYR).
@@ -196,7 +196,13 @@ export async function POST(request: NextRequest) {
     const afterDiscount        = Math.max(0, subtotalSen - voucherDiscountSen - rewardDiscountSenAmt);
     const sstSen               = sstEnabled ? Math.round(afterDiscount * sstRate) : 0;
     const totalSen             = afterDiscount + sstSen;
-    const pointsToEarn         = loyaltyId ? Math.floor(afterDiscount / 100) : 0;
+    // Base points = RM spent (afterDiscount is in sen). Then multiply by
+    // the member's tier multiplier so the displayed "+X pts" matches the
+    // actual award. Post-purchase coupon multiplier is applied later in
+    // earnLoyaltyPoints (it can change between order create and payment).
+    const basePoints           = loyaltyId ? Math.floor(afterDiscount / 100) : 0;
+    const tierMul              = loyaltyId ? await getTierMultiplier(loyaltyId) : 1;
+    const pointsToEarn         = Math.round(basePoints * tierMul);
 
     // ── Create order ───────────────────────────────────────────────────────
     const storedPaymentMethod = (paymentMethod === "apple_pay" || paymentMethod === "google_pay")
