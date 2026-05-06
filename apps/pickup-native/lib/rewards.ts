@@ -91,6 +91,56 @@ export async function fetchTier(memberId: string): Promise<MemberTier | null> {
   }
 }
 
+export type AppliedDiscount = {
+  promotion_id: string;
+  promotion_name: string;
+  discount_type:
+    | "percentage_off"
+    | "fixed_amount_off"
+    | "free_item"
+    | "bogo"
+    | "combo_price"
+    | "override_price";
+  discount_amount: number;
+  affected_lines: number[];
+  reason: "auto" | "code" | "tier_perk" | "reward_link";
+};
+
+export type EvaluatedCart = {
+  subtotal: number;
+  discounts: AppliedDiscount[];
+  total_discount: number;
+  total: number;
+};
+
+export type PromoLine = {
+  product_id: string;
+  category?: string;
+  tags?: string[];
+  quantity: number;
+  unit_price: number;
+};
+
+export async function evaluatePromotions(input: {
+  lines: PromoLine[];
+  member_id?: string | null;
+  outlet_id?: string | null;
+  member_tier_id?: string | null;
+  promo_code?: string | null;
+}): Promise<EvaluatedCart | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/loyalty/promotions/evaluate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 export type RecentItem = {
   id: string;
   name: string;

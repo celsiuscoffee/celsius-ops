@@ -3,6 +3,11 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { OrderRow } from "@/lib/supabase/types";
 import { checkRateLimit, RATE_LIMITS } from "@celsius/shared";
 import { getTierMultiplier } from "@/lib/loyalty/points";
+import {
+  evaluatePromotions,
+  recordPromotionApplications,
+  type CartLine,
+} from "@/lib/loyalty/promotions";
 
 // GET /api/orders?phone=+60123456789 — fetch orders by customer phone
 export async function GET(request: NextRequest) {
@@ -84,6 +89,7 @@ export async function POST(request: NextRequest) {
       rewardName,
       loyaltyPhone,
       loyaltyId,
+      promoCode,
     } = body;
 
     if (!items?.length || !selectedStore || !paymentMethod) {
@@ -151,7 +157,43 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const totalDiscountSen   = voucherDiscountSen + rewardDiscountSenAmt + fodDiscountSen;
+    // Promotion engine: auto, code, tier-perk, reward-link discounts.
+    let memberTierId: string | null = null;
+    if (loyaltyId) {
+      const { data: mb } = await supabase
+        .from("member_brands")
+        .select("current_tier_id")
+        .eq("member_id", loyaltyId)
+        .eq("brand_id", "brand-celsius")
+        .single();
+      memberTierId = (mb as { current_tier_id?: string | null } | null)?.current_tier_id ?? null;
+    }
+
+    type IncomingItem = {
+      product?: { id?: string; name?: string };
+      productId?: string;
+      product_id?: string;
+      quantity: number;
+      basePrice?: number;
+      totalPrice?: number;
+    };
+    const cartLines: CartLine[] = (items as IncomingItem[]).map((i) => {
+      const pid = i.product?.id ?? i.productId ?? i.product_id ?? "";
+      const unit = i.basePrice != null
+        ? i.basePrice
+        : (i.totalPrice ?? 0) / Math.max(1, i.quantity);
+      return { product_id: pid, quantity: i.quantity, unit_price: unit };
+    });
+    const evaluated = await evaluatePromotions({
+      lines: cartLines,
+      member_id: loyaltyId,
+      outlet_id: selectedStore.id,
+      member_tier_id: memberTierId,
+      promo_code: promoCode ?? null,
+    });
+    const promoDiscountSen = Math.round(evaluated.total_discount * 100);
+
+    const totalDiscountSen   = voucherDiscountSen + rewardDiscountSenAmt + fodDiscountSen + promoDiscountSen;
     const afterDiscount      = Math.max(0, subtotalSen - totalDiscountSen);
     const sstSen             = Math.round(sst != null ? sst * 100 : afterDiscount * 0.06);
     const totalSen           = afterDiscount + sstSen;
@@ -249,6 +291,17 @@ export async function POST(request: NextRequest) {
         deductLoyaltyPoints(loyaltyId, rewardId, order.id, rewardPointsCost);
       }
     }
+
+    // Record applied promotions to the loyalty ledger (fire-and-forget).
+    void recordPromotionApplications({
+      evaluated,
+      member_id: loyaltyId ?? null,
+      outlet_id: selectedStore.id,
+      reference_id: order.id,
+      lines: cartLines,
+      member_tier_id: memberTierId,
+      promo_code: promoCode ?? null,
+    });
 
     return NextResponse.json({
       orderId:     order.id,

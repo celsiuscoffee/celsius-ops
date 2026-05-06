@@ -16,7 +16,14 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase, type Outlet } from "../lib/supabase";
 import { useApp, cartTotal, cartCount } from "../lib/store";
 import { api, formatPrice } from "../lib/api";
-import { calcRewardDiscount, fetchTier, type MemberTier } from "../lib/rewards";
+import {
+  calcRewardDiscount,
+  fetchTier,
+  evaluatePromotions,
+  type MemberTier,
+  type EvaluatedCart,
+  type PromoLine,
+} from "../lib/rewards";
 import { getSetting } from "../lib/settings";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -55,6 +62,40 @@ export default function Checkout() {
     fetchTier(loyaltyId).then(setTier).catch(() => setTier(null));
   }, [loyaltyId]);
 
+  // ── Promotion preview ──────────────────────────────────────────────────
+  // Hits the loyalty engine through the order-app proxy whenever the cart,
+  // promo code, tier, or outlet changes. Debounced so the typing of a
+  // promo code doesn't fire one request per keystroke.
+  const [promoCode, setPromoCode] = useState("");
+  const [promoCodeOpen, setPromoCodeOpen] = useState(false);
+  const [promoEval, setPromoEval] = useState<EvaluatedCart | null>(null);
+
+  useEffect(() => {
+    if (cart.length === 0) {
+      setPromoEval(null);
+      return;
+    }
+    const lines: PromoLine[] = cart.map((c) => ({
+      product_id: c.id,
+      quantity: c.quantity,
+      unit_price: c.totalPrice / c.quantity,
+    }));
+    const handle = setTimeout(() => {
+      evaluatePromotions({
+        lines,
+        member_id: loyaltyId,
+        outlet_id: outletId,
+        member_tier_id: tier?.tier_id ?? null,
+        promo_code: promoCode.trim() || null,
+      })
+        .then(setPromoEval)
+        .catch(() => setPromoEval(null));
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [cart, loyaltyId, outletId, tier?.tier_id, promoCode]);
+
+  const promoDiscount = promoEval?.total_discount ?? 0;
+
   // Pull live outlet record so the pickup card shows status + ETA — same
   // info the home page surfaces, kept consistent here so the customer
   // confirms exactly what they're committing to.
@@ -73,7 +114,7 @@ export default function Checkout() {
 
   const subtotal = cartTotal(cart);
   const rewardDiscount = calcRewardDiscount(appliedReward, cart, subtotal);
-  const afterDiscount = Math.max(0, subtotal - rewardDiscount);
+  const afterDiscount = Math.max(0, subtotal - rewardDiscount - promoDiscount);
   const sst = sstConfig.enabled ? +(afterDiscount * sstConfig.rate).toFixed(2) : 0;
   const grandTotal = +(afterDiscount + sst).toFixed(2);
 
@@ -152,6 +193,7 @@ export default function Checkout() {
         rewardName: appliedReward?.name ?? null,
         rewardPointsCost: appliedReward?.points_required ?? 0,
         rewardDiscountSen: Math.round(rewardDiscount * 100),
+        promoCode: promoCode.trim() || undefined,
       });
 
       stage = "create-payment-intent";
@@ -481,6 +523,46 @@ export default function Checkout() {
               </View>
             </View>
 
+            {/* Promo code — collapsed by default; opens to a single input */}
+            <View className="bg-surface rounded-2xl border border-border p-4">
+              {!promoCodeOpen ? (
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setPromoCodeOpen(true);
+                  }}
+                  className="flex-row items-center justify-between active:opacity-70"
+                >
+                  <Text className="text-espresso text-[13px] font-semibold">
+                    🏷️ Have a promo code?
+                  </Text>
+                  <Text className="text-muted-fg text-[12px]">Add</Text>
+                </Pressable>
+              ) : (
+                <View className="gap-2">
+                  <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
+                    Promo code
+                  </Text>
+                  <TextInput
+                    value={promoCode}
+                    onChangeText={(t) => setPromoCode(t.toUpperCase())}
+                    placeholder="WELCOME10"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    className="rounded-xl border border-border px-3 py-2.5 text-espresso"
+                    style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                  />
+                  {promoCode.trim().length > 0 &&
+                    promoEval &&
+                    !promoEval.discounts.some((d) => d.reason === "code") && (
+                      <Text className="text-[12px] text-red-500">
+                        Code not recognised or not eligible.
+                      </Text>
+                    )}
+                </View>
+              )}
+            </View>
+
             <View className="bg-surface rounded-2xl border border-border p-4">
               <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
                 Order
@@ -506,6 +588,21 @@ export default function Checkout() {
                     <Text className="text-primary">−{formatPrice(rewardDiscount)}</Text>
                   </View>
                 )}
+                {promoEval?.discounts.map((d) => (
+                  <View key={d.promotion_id} className="flex-row justify-between">
+                    <Text className="text-primary text-[13px]" numberOfLines={1}>
+                      {d.reason === "tier_perk"
+                        ? "🎁 "
+                        : d.reason === "code"
+                        ? "🏷️ "
+                        : ""}
+                      {d.promotion_name}
+                    </Text>
+                    <Text className="text-primary">
+                      −{formatPrice(d.discount_amount)}
+                    </Text>
+                  </View>
+                ))}
                 {sstConfig.enabled && (
                   <View className="flex-row justify-between">
                     <Text className="text-muted-fg text-[13px]">
