@@ -32,6 +32,13 @@ type RewardType =
   | "post_purchase"
   | "tier_perk";
 
+type DistributionMethod =
+  | { method: "points_shop"; points_cost: number }
+  | { method: "auto_new_member" }
+  | { method: "auto_birthday" }
+  | { method: "auto_post_purchase" }
+  | { method: "auto_tier"; tier_id?: string; frequency?: "monthly" | "weekly" | "once" };
+
 interface Reward {
   id: string;
   brand_id: string;
@@ -47,7 +54,24 @@ interface Reward {
   max_redemptions_per_member: number | null;
   auto_issue: boolean;
   linked_promotion_id: string | null;
+  distribution_methods: DistributionMethod[];
 }
+
+const distributionLabels: Record<DistributionMethod["method"], string> = {
+  points_shop: "Points shop",
+  auto_new_member: "New member",
+  auto_birthday: "Birthday",
+  auto_post_purchase: "Post-purchase",
+  auto_tier: "Tier perk",
+};
+
+const distributionColors: Record<DistributionMethod["method"], string> = {
+  points_shop: "bg-blue-50 text-blue-700",
+  auto_new_member: "bg-green-50 text-green-700",
+  auto_birthday: "bg-pink-50 text-pink-700",
+  auto_post_purchase: "bg-amber-50 text-amber-700",
+  auto_tier: "bg-purple-50 text-purple-700",
+};
 
 interface Promotion {
   id: string;
@@ -79,16 +103,15 @@ const rewardTypeLabels: Record<RewardType, string> = {
   tier_perk: "Tier perk",
 };
 
-type Filter = "all" | RewardType;
+type Filter = "all" | DistributionMethod["method"];
 
 const filters: { key: Filter; label: string }[] = [
   { key: "all", label: "All" },
-  { key: "standard", label: "Standard" },
   { key: "points_shop", label: "Points shop" },
-  { key: "new_member", label: "New member" },
-  { key: "birthday", label: "Birthday" },
-  { key: "post_purchase", label: "Post-purchase" },
-  { key: "tier_perk", label: "Tier perk" },
+  { key: "auto_new_member", label: "New member" },
+  { key: "auto_birthday", label: "Birthday" },
+  { key: "auto_post_purchase", label: "Post-purchase" },
+  { key: "auto_tier", label: "Tier perk" },
 ];
 
 export default function RewardsPage() {
@@ -146,7 +169,9 @@ export default function RewardsPage() {
   }
 
   const filtered = rewards.filter(
-    (r) => filter === "all" || r.reward_type === filter,
+    (r) =>
+      filter === "all" ||
+      (r.distribution_methods ?? []).some((d) => d.method === filter),
   );
 
   return (
@@ -201,7 +226,7 @@ export default function RewardsPage() {
             <thead className="bg-muted/50 text-left">
               <tr>
                 <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium">Type</th>
+                <th className="px-4 py-3 font-medium">Distribution</th>
                 <th className="px-4 py-3 font-medium text-right">Points</th>
                 <th className="px-4 py-3 font-medium">Linked promo</th>
                 <th className="px-4 py-3 font-medium">Status</th>
@@ -237,12 +262,30 @@ export default function RewardsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-muted">
-                        {rewardTypeLabels[r.reward_type]}
-                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {(r.distribution_methods ?? []).length === 0 ? (
+                          <span className="text-xs text-muted-foreground italic">
+                            (none)
+                          </span>
+                        ) : (
+                          (r.distribution_methods ?? []).map((d, i) => (
+                            <span
+                              key={i}
+                              className={cn(
+                                "text-[11px] px-2 py-0.5 rounded-full font-medium",
+                                distributionColors[d.method] ?? "bg-muted",
+                              )}
+                            >
+                              {distributionLabels[d.method] ?? d.method}
+                              {d.method === "points_shop" &&
+                                ` · ${d.points_cost ?? 0}pt`}
+                            </span>
+                          ))
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium">
-                      {r.points_required.toLocaleString()}
+                      {(r.points_required ?? 0).toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-xs">
                       {linked ? (
@@ -332,7 +375,7 @@ function RewardModal({
     reward ?? {
       name: "",
       description: "",
-      points_required: 100,
+      points_required: 0,
       category: "drink",
       reward_type: "standard",
       stock: null,
@@ -340,8 +383,39 @@ function RewardModal({
       validity_days: null,
       max_redemptions_per_member: null,
       linked_promotion_id: null,
+      distribution_methods: [{ method: "points_shop", points_cost: 100 }],
     },
   );
+
+  const methods = draft.distribution_methods ?? [];
+
+  function addMethod(method: DistributionMethod["method"]) {
+    if (methods.some((m) => m.method === method)) return;
+    let next: DistributionMethod;
+    if (method === "points_shop") next = { method, points_cost: 100 };
+    else if (method === "auto_tier") next = { method, frequency: "monthly" };
+    else next = { method } as DistributionMethod;
+    setDraft({ ...draft, distribution_methods: [...methods, next] });
+  }
+
+  function removeMethod(method: DistributionMethod["method"]) {
+    setDraft({
+      ...draft,
+      distribution_methods: methods.filter((m) => m.method !== method),
+    });
+  }
+
+  function updateMethod(
+    method: DistributionMethod["method"],
+    patch: Partial<DistributionMethod>,
+  ) {
+    setDraft({
+      ...draft,
+      distribution_methods: methods.map((m) =>
+        m.method === method ? ({ ...m, ...patch } as DistributionMethod) : m,
+      ) as DistributionMethod[],
+    });
+  }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -349,11 +423,20 @@ function RewardModal({
     setSaving(true);
     setError(null);
     try {
+      // Derive legacy fields from distribution_methods so storefront /
+      // cron readers keep working until they're migrated. The first
+      // method wins for the single-valued reward_type column.
+      const legacy = deriveLegacyFromMethods(methods);
+      const payload = {
+        ...draft,
+        ...legacy,
+        distribution_methods: methods,
+      };
       const res = await fetch("/api/loyalty/rewards", {
         method: reward ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(draft),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -428,26 +511,109 @@ function RewardModal({
                 <option value="merch">Merch</option>
               </select>
             </Field>
-            <Field label="Reward type">
-              <select
-                className="w-full px-3 py-2 rounded-md border bg-background"
-                value={draft.reward_type ?? "standard"}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    reward_type: e.target.value as RewardType,
-                  })
-                }
-              >
-                <option value="standard">Standard</option>
-                <option value="points_shop">Points shop</option>
-                <option value="new_member">New member</option>
-                <option value="birthday">Birthday</option>
-                <option value="post_purchase">Post-purchase</option>
-                <option value="tier_perk">Tier perk</option>
-              </select>
-            </Field>
           </div>
+
+          <Field label="Distribution methods (how members get this reward)">
+            <div className="space-y-2">
+              {methods.map((m) => (
+                <div
+                  key={m.method}
+                  className={cn(
+                    "flex items-center justify-between gap-3 rounded-md border p-2.5",
+                    distributionColors[m.method] ?? "bg-muted",
+                  )}
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <span className="text-sm font-semibold">
+                      {distributionLabels[m.method]}
+                    </span>
+                    {m.method === "points_shop" && (
+                      <input
+                        type="number"
+                        min={0}
+                        className="w-24 px-2 py-1 rounded border bg-background text-sm"
+                        value={m.points_cost ?? 0}
+                        onChange={(e) =>
+                          updateMethod("points_shop", {
+                            method: "points_shop",
+                            points_cost: Number(e.target.value),
+                          })
+                        }
+                      />
+                    )}
+                    {m.method === "points_shop" && (
+                      <span className="text-xs text-muted-foreground">pts</span>
+                    )}
+                    {m.method === "auto_tier" && (
+                      <>
+                        <select
+                          className="px-2 py-1 rounded border bg-background text-sm"
+                          value={m.tier_id ?? ""}
+                          onChange={(e) =>
+                            updateMethod("auto_tier", {
+                              method: "auto_tier",
+                              tier_id: e.target.value || undefined,
+                              frequency: m.frequency ?? "monthly",
+                            })
+                          }
+                        >
+                          <option value="">— Select tier —</option>
+                          <option value="tier-celsius-bronze">☕ Bronze</option>
+                          <option value="tier-celsius-silver">⭐ Silver</option>
+                          <option value="tier-celsius-gold">🌟 Gold</option>
+                          <option value="tier-celsius-elite">👑 Elite</option>
+                        </select>
+                        <select
+                          className="px-2 py-1 rounded border bg-background text-sm"
+                          value={m.frequency ?? "monthly"}
+                          onChange={(e) =>
+                            updateMethod("auto_tier", {
+                              method: "auto_tier",
+                              tier_id: m.tier_id,
+                              frequency: e.target.value as "monthly" | "weekly" | "once",
+                            })
+                          }
+                        >
+                          <option value="once">Once</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeMethod(m.method)}
+                    className="p-1 rounded hover:bg-black/10"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    "points_shop",
+                    "auto_new_member",
+                    "auto_birthday",
+                    "auto_post_purchase",
+                    "auto_tier",
+                  ] as DistributionMethod["method"][]
+                )
+                  .filter((m) => !methods.some((x) => x.method === m))
+                  .map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => addMethod(m)}
+                      className="text-xs px-2.5 py-1 rounded-full border border-dashed hover:bg-muted"
+                    >
+                      + {distributionLabels[m]}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          </Field>
 
           <Field label="Linked promotion (applies discount at checkout)">
             <select
@@ -583,4 +749,34 @@ function Field({
       {children}
     </div>
   );
+}
+
+// Derive legacy single-valued columns from the new distribution_methods
+// array so old readers (storefront, cron) keep working during the
+// transition. Priority: explicit auto_* methods over points_shop.
+function deriveLegacyFromMethods(
+  methods: DistributionMethod[],
+): {
+  reward_type: RewardType;
+  auto_issue: boolean;
+  points_required: number;
+} {
+  const has = (m: DistributionMethod["method"]) =>
+    methods.some((x) => x.method === m);
+  if (has("auto_birthday"))
+    return { reward_type: "birthday", auto_issue: true, points_required: 0 };
+  if (has("auto_new_member"))
+    return { reward_type: "new_member", auto_issue: true, points_required: 0 };
+  if (has("auto_post_purchase"))
+    return { reward_type: "post_purchase", auto_issue: true, points_required: 0 };
+  if (has("auto_tier"))
+    return { reward_type: "tier_perk", auto_issue: false, points_required: 0 };
+  const ps = methods.find((x) => x.method === "points_shop");
+  if (ps && ps.method === "points_shop")
+    return {
+      reward_type: "points_shop",
+      auto_issue: false,
+      points_required: ps.points_cost ?? 0,
+    };
+  return { reward_type: "standard", auto_issue: false, points_required: 0 };
 }

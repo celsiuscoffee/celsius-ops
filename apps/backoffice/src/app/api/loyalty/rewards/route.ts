@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseAdmin
       .from('rewards')
-      .select('id, brand_id, name, description, points_required, category, stock, is_active, image_url, reward_type, validity_days, max_redemptions_per_member, auto_issue, linked_promotion_id, discount_type, discount_value, max_discount_value, override_price, combo_product_ids, combo_price, min_order_value, applicable_products, applicable_categories, applicable_tags, free_product_ids, free_product_name, bogo_buy_qty, bogo_free_qty, fulfillment_type')
+      .select('id, brand_id, name, description, points_required, category, stock, is_active, image_url, reward_type, validity_days, max_redemptions_per_member, auto_issue, linked_promotion_id, distribution_methods, discount_type, discount_value, max_discount_value, override_price, combo_product_ids, combo_price, min_order_value, applicable_products, applicable_categories, applicable_tags, free_product_ids, free_product_name, bogo_buy_qty, bogo_free_qty, fulfillment_type')
       .eq('brand_id', brandId)
       .order('points_required', { ascending: true });
 
@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
       auto_issue,
       linked_promotion_id,
       is_active,
+      distribution_methods,
     } = body;
 
     // points_required CAN be 0 (birthday rewards, tier perks). Treat
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
         auto_issue: auto_issue ?? false,
         linked_promotion_id: linked_promotion_id ?? null,
         is_active: is_active ?? true,
+        distribution_methods: Array.isArray(distribution_methods) ? distribution_methods : [],
       })
       .select()
       .single();
@@ -125,6 +127,8 @@ export async function PUT(request: NextRequest) {
       'max_redemptions_per_member', 'auto_issue',
       // Optional link to promotion engine (preferred for discount mechanics).
       'linked_promotion_id',
+      // Structured distribution methods (preferred over reward_type+auto_issue).
+      'distribution_methods',
       // Legacy inline discount fields — still editable for back-compat,
       // but new rewards should use linked_promotion_id instead.
       'discount_type', 'discount_value', 'max_discount_value', 'override_price',
