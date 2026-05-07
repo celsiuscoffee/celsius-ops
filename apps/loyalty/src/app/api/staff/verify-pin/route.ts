@@ -59,33 +59,39 @@ export async function POST(request: NextRequest) {
 
     console.log(`[verify-pin] Found ${users?.length ?? 0} users with PINs, checking outlet ${outlet_id} -> central ${centralOutletIds.join(',')}`);
 
-    // Filter users who have loyalty access, outlet access, and matching PIN
-    let matchedUser = null;
+    // Two passes so the error message can tell the admin WHICH gate fired.
+    // Pass 1: any user (regardless of appAccess) whose PIN matches at this
+    // outlet. If we find one but they lack loyalty access, surface that
+    // explicitly — saves hours of "Invalid PIN" head-scratching when the
+    // real issue is missing scope. Pass 2 actually completes the login if
+    // both gates pass.
+    type StaffRow = NonNullable<typeof users>[number];
+    let pinMatchedUser: StaffRow | null = null;
+    let matchedUser: StaffRow | null = null;
     const outletName = outlets[0]?.name || '';
 
     for (const user of users || []) {
-      // Check appAccess includes "loyalty"
-      const appAccess = user.appAccess as string[] | null;
-      if (!appAccess || !appAccess.includes('loyalty')) continue;
-
-      // Check if user is assigned to any of the central outlets
       const userOutletIds = (user.outletIds as string[]) || [];
       const hasOutletAccess =
         centralOutletIds.includes(user.outletId) ||
         userOutletIds.some((id: string) => centralOutletIds.includes(id));
-
       if (!hasOutletAccess) continue;
 
-      // Verify PIN — supports both bcrypt hashes and legacy plaintext
       const { match, needsRehash } = await verifyPin(pin, user.pin as string);
-      if (match) {
-        // Progressive rehash: upgrade plaintext PINs to bcrypt
+      if (!match) continue;
+
+      // PIN matched + outlet matched. Now check loyalty appAccess.
+      const appAccess = user.appAccess as string[] | null;
+      const hasLoyalty = !!appAccess?.includes('loyalty');
+      // OWNER/ADMIN bypass — consistent with staff + backoffice PIN gates.
+      const role = (user.role as string)?.toUpperCase();
+      const roleBypass = role === 'OWNER' || role === 'ADMIN';
+
+      if (!pinMatchedUser) pinMatchedUser = user;
+      if (hasLoyalty || roleBypass) {
         if (needsRehash && supabaseAdmin) {
           const hashed = await hashPin(pin);
-          await supabaseAdmin
-            .from('User')
-            .update({ pin: hashed })
-            .eq('id', user.id);
+          await supabaseAdmin.from('User').update({ pin: hashed }).eq('id', user.id);
         }
         matchedUser = user;
         break;
@@ -93,6 +99,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (!matchedUser) {
+      if (pinMatchedUser) {
+        // PIN was correct but user lacks the loyalty appAccess scope.
+        console.log('[verify-pin] PIN matched but loyalty access missing:', (pinMatchedUser as { id: string }).id);
+        return NextResponse.json(
+          { error: 'PIN ok but no loyalty access — ask an admin to enable Loyalty for your account.' },
+          { status: 403 }
+        );
+      }
       console.log('[verify-pin] No matching user found for PIN at outlet', outlet_id);
       return NextResponse.json(
         { error: 'Invalid PIN or outlet' },

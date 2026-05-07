@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders, hasModulePermission, type SessionUser } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
 import { hashPin, verifyPin } from "@celsius/auth";
+import { logActivity, diffFields } from "@/lib/activity-log";
 
 // Authorise a staff-management action.
 // ADMIN/OWNER → always allowed.
@@ -139,10 +140,41 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       data.moduleAccess = JSON.parse(JSON.stringify(data.moduleAccess));
     }
 
+    // Snapshot the audit-worthy fields before the update so we can diff
+    // them after. PIN/password aren't logged as values — just whether they
+    // were set/cleared — so a leaked log can't be replayed.
+    const auditFields = ["name", "phone", "email", "role", "status", "outletId", "outletIds", "username", "appAccess", "moduleAccess"] as const;
+    const before = await prisma.user.findUnique({
+      where: { id },
+      select: { name: true, phone: true, email: true, role: true, status: true, outletId: true, outletIds: true, username: true, appAccess: true, moduleAccess: true, pin: true, passwordHash: true },
+    });
+
     const user = await prisma.user.update({
       where: { id },
       data: data as never,
     });
+
+    // Write an audit row covering every field that actually changed. Best-
+    // effort — failures inside logActivity don't fail the PATCH.
+    if (before) {
+      const fieldDiff = diffFields(before as Record<string, unknown>, data, [...auditFields]);
+      const credChanges: Record<string, { from: unknown; to: unknown }> = {};
+      if (data.pin !== undefined) credChanges.pin = { from: before.pin ? "(set)" : "(unset)", to: data.pin ? "(set)" : "(unset)" };
+      if (data.passwordHash !== undefined) credChanges.password = { from: before.passwordHash ? "(set)" : "(unset)", to: "(set)" };
+      const fullDiff = { ...fieldDiff, ...credChanges };
+      if (Object.keys(fullDiff).length > 0) {
+        await logActivity({
+          actorId: caller.id,
+          action: "user.update",
+          module: "settings:staff",
+          targetId: id,
+          targetName: user.name ?? before.name ?? null,
+          details: { changes: fullDiff },
+          request: req,
+        });
+      }
+    }
+
     return NextResponse.json({ ok: true, id: user.id });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -170,9 +202,21 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const authz = await authorizeStaffAction(caller, id);
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
 
+  const before = await prisma.user.findUnique({ where: { id }, select: { name: true, status: true } });
   await prisma.user.update({
     where: { id },
     data: { status: "DEACTIVATED" },
   });
+  if (before) {
+    await logActivity({
+      actorId: caller.id,
+      action: "user.deactivate",
+      module: "settings:staff",
+      targetId: id,
+      targetName: before.name,
+      details: { changes: { status: { from: before.status, to: "DEACTIVATED" } } },
+      request: req,
+    });
+  }
   return NextResponse.json({ ok: true });
 }

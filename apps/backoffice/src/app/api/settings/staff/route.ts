@@ -4,6 +4,7 @@ import { getUserFromHeaders, hasModulePermission, AuthError } from "@/lib/auth";
 import { getAccessibleOutletIds } from "@/lib/hr/scope";
 import { hashPassword } from "@/lib/password";
 import { hashPin, verifyPin } from "@celsius/auth";
+import { logActivity } from "@/lib/activity-log";
 import type { Prisma } from "@prisma/client";
 
 /** Check if a plaintext PIN is already used by another active staff at the same outlet */
@@ -125,5 +126,23 @@ export async function POST(req: NextRequest) {
   }
 
   const user = await prisma.user.create({ data: data as never });
+  await logActivity({
+    actorId: caller.id,
+    action: "user.create",
+    module: "settings:staff",
+    targetId: user.id,
+    targetName: user.name,
+    details: {
+      created: {
+        role: user.role,
+        outletId: data.outletId,
+        outletIds: data.outletIds,
+        appAccess: data.appAccess,
+        hasPin: !!data.pin,
+        hasPassword: !!data.passwordHash,
+      },
+    },
+    request: req,
+  });
   return NextResponse.json({ id: user.id, name: user.name, role: user.role }, { status: 201 });
 }

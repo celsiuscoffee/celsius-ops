@@ -281,8 +281,12 @@ export default function StaffPage() {
 
   const isAdminOrManager = form.role === "OWNER" || form.role === "ADMIN" || form.role === "MANAGER";
 
-  const availableApps = ["backoffice", "inventory", "sales", "loyalty", "pickup", "ops"] as const;
-  const appLabel: Record<string, string> = { backoffice: "BO", inventory: "INV", sales: "SALES", loyalty: "LOY", pickup: "PU", ops: "OPS" };
+  // Keep aligned with every `appAccess.includes("…")` gate in the monorepo.
+  // Each entry MUST be toggleable here, otherwise admins can't grant what an
+  // app actually requires. kds/staff_app/order belong to the order/KDS app
+  // (apps/order/src/app/api/staff/auth/route.ts).
+  const availableApps = ["backoffice", "inventory", "sales", "loyalty", "pickup", "ops", "kds", "staff_app", "order"] as const;
+  const appLabel: Record<string, string> = { backoffice: "BO", inventory: "INV", sales: "SALES", loyalty: "LOY", pickup: "PU", ops: "OPS", kds: "KDS", staff_app: "STAFF", order: "ORDER" };
   const appColor: Record<string, string> = {
     backoffice: "bg-slate-100 text-slate-600",
     inventory: "bg-emerald-50 text-emerald-600",
@@ -290,6 +294,9 @@ export default function StaffPage() {
     loyalty: "bg-purple-50 text-purple-600",
     pickup: "bg-orange-50 text-orange-600",
     ops: "bg-terracotta/10 text-terracotta",
+    kds: "bg-cyan-50 text-cyan-600",
+    staff_app: "bg-yellow-50 text-yellow-700",
+    order: "bg-rose-50 text-rose-600",
   };
   const isOwnerOrAdmin = form.role === "OWNER" || form.role === "ADMIN";
 
