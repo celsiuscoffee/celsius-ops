@@ -212,7 +212,7 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
                 backgroundColor: "#FFFFFF",
                 borderRadius: 16,
                 borderWidth: 1,
-                borderColor: "#ECECEC",
+                borderColor: "#E8E2D6",
                 paddingHorizontal: 16,
                 paddingVertical: 6,
                 marginBottom: 16,
@@ -245,7 +245,7 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
                   style={{
                     paddingVertical: 10,
                     borderTopWidth: 1,
-                    borderTopColor: "#F2F2F2",
+                    borderTopColor: "#EFE9DD",
                   }}
                 >
                   <Text
@@ -267,7 +267,7 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
             backgroundColor: "#FFFFFF",
             borderRadius: 16,
             borderWidth: 1,
-            borderColor: "#ECECEC",
+            borderColor: "#E8E2D6",
             paddingHorizontal: 16,
           }}
         >
@@ -304,7 +304,7 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
             backgroundColor: "#FFFFFF",
             borderRadius: 16,
             borderWidth: 1,
-            borderColor: "#ECECEC",
+            borderColor: "#E8E2D6",
             padding: 14,
             marginTop: 12,
             flexDirection: "row",
@@ -354,7 +354,7 @@ function ActionRow({
         paddingVertical: 14,
         gap: 12,
         borderTopWidth: isFirst ? 0 : 1,
-        borderTopColor: "#F2F2F2",
+        borderTopColor: "#EFE9DD",
       }}
     >
       <Icon size={18} color="#160800" strokeWidth={1.75} />

@@ -174,7 +174,7 @@ export default function RewardsTab() {
                       style={{
                         paddingVertical: 12,
                         borderTopWidth: i === 0 ? 0 : 1,
-                        borderTopColor: "#F2F2F2",
+                        borderTopColor: "#EFE9DD",
                       }}
                     >
                       <Text
@@ -245,7 +245,7 @@ function Card({ children }: { children: React.ReactNode }) {
         backgroundColor: "#FFFFFF",
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: "#ECECEC",
+        borderColor: "#E8E2D6",
         paddingHorizontal: 16,
       }}
     >
@@ -282,7 +282,7 @@ function ClaimRow({ reward, isFirst }: { reward: Reward; isFirst: boolean }) {
         paddingVertical: 14,
         gap: 12,
         borderTopWidth: isFirst ? 0 : 1,
-        borderTopColor: "#F2F2F2",
+        borderTopColor: "#EFE9DD",
       }}
     >
       <View style={{ flex: 1 }}>
@@ -343,7 +343,7 @@ function RedeemRow({
       style={{
         paddingVertical: 14,
         borderTopWidth: isFirst ? 0 : 1,
-        borderTopColor: "#F2F2F2",
+        borderTopColor: "#EFE9DD",
         opacity: 0.55,
       }}
     >

@@ -5,8 +5,10 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: "#f5f5f5",
-        surface: "#ffffff",
+        // Warm cream palette — Blank Street-inspired. Reads as
+        // hand-roasted / specialty rather than tech-grey.
+        background: "#F7F2EA",   // body bg — warm cream (was #f5f5f5)
+        surface: "#FFFEFB",      // card bg — slightly warmer white
         espresso: "#160800",
         primary: {
           DEFAULT: "#C05040",
@@ -15,10 +17,10 @@ module.exports = {
           900: "#5A1F16",
         },
         muted: {
-          DEFAULT: "#8E8E93",
-          fg: "#6E6E73",
+          DEFAULT: "#8E8A82",    // warm grey (was #8E8E93)
+          fg: "#6E6A60",         // warm grey-brown (was #6E6E73)
         },
-        border: "#E5E5E5",
+        border: "#E8E2D6",       // warm hairline (was #E5E5E5)
         amber: {
           400: "#FBBF24",
           500: "#F59E0B",

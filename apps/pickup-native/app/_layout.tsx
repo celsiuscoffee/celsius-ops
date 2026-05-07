@@ -77,7 +77,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (loaded) {
       applyDefaultFont();
-      SystemUI.setBackgroundColorAsync("#f5f5f5");
+      SystemUI.setBackgroundColorAsync("#F7F2EA");
     }
   }, [loaded]);
 
@@ -123,7 +123,7 @@ export default function RootLayout() {
                   <Stack
                     screenOptions={{
                       headerShown: false,
-                      contentStyle: { backgroundColor: "#f5f5f5" },
+                      contentStyle: { backgroundColor: "#F7F2EA" },
                       animation: "slide_from_right",
                     }}
                   >

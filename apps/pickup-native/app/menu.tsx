@@ -395,7 +395,7 @@ function ProductRow({
           resizeMode="cover"
         />
       ) : (
-        <View style={{ width: 88, height: 88, borderRadius: 24, backgroundColor: "#f5f5f5" }} />
+        <View style={{ width: 88, height: 88, borderRadius: 24, backgroundColor: "#F7F2EA" }} />
       )}
       <View className="flex-1 justify-between py-0.5 min-w-0">
         <View>
