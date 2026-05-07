@@ -5,22 +5,26 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Warm cream palette — Blank Street-inspired. Reads as
-        // hand-roasted / specialty rather than tech-grey.
-        background: "#F7F2EA",   // body bg — warm cream (was #f5f5f5)
-        surface: "#FFFEFB",      // card bg — slightly warmer white
-        espresso: "#160800",
+        // Brand-system aligned: #1A0200 is the safe "Celsius black"
+        // (terracotta-tinged, earthy, not bright), terracotta primary
+        // #C05040 is the brand's signature warm accent. Body stays
+        // soft so the espresso/terracotta tones can breathe.
+        background: "#F5F1E8",   // soft cream — sits warm against terracotta
+        surface: "#FFFFFF",      // card bg — clean white
+        espresso: "#1A0200",     // BRAND BLACK from CC Brand System v2026
         primary: {
-          DEFAULT: "#C05040",
+          DEFAULT: "#C05040",    // terracotta — brand primary
           50: "#FBEBE8",
           100: "#F5D2CC",
           900: "#5A1F16",
         },
         muted: {
-          DEFAULT: "#8E8A82",    // warm grey (was #8E8E93)
-          fg: "#6E6A60",         // warm grey-brown (was #6E6E73)
+          DEFAULT: "#8B7E72",    // warm earthy grey
+          fg: "#6B5E54",         // deeper earthy grey-brown
         },
-        border: "#E8E2D6",       // warm hairline (was #E5E5E5)
+        // Retro touch — borders are 1.5×-thick terracotta at low alpha
+        // rather than cool grey hairlines. Tints every card with brand.
+        border: "#D9CFC2",
         amber: {
           400: "#FBBF24",
           500: "#F59E0B",

@@ -199,6 +199,8 @@ export default function RewardsTab() {
 
 // ─── building blocks ───
 
+// Retro section header — Peachii display title + a thick terracotta-tinted
+// rule across the row. Reads like an old-school newspaper sub-head.
 function Section({
   title,
   rightLabel,
@@ -209,25 +211,44 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <View style={{ marginBottom: 20 }}>
+    <View style={{ marginBottom: 22 }}>
       <View
-        className="flex-row items-baseline justify-between"
-        style={{ paddingHorizontal: 4, marginBottom: 10 }}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 4,
+          marginBottom: 10,
+        }}
       >
         <Text
-          className="text-[10px] uppercase"
           style={{
-            color: "#160800",
-            fontFamily: "SpaceGrotesk_700Bold",
-            letterSpacing: 2.5,
+            color: "#1A0200",
+            fontFamily: "Peachi-Bold",
+            fontSize: 18,
+            letterSpacing: 0.2,
           }}
         >
           {title}
         </Text>
+        <View
+          style={{
+            flex: 1,
+            height: 2,
+            backgroundColor: "#1A0200",
+            marginLeft: 12,
+            opacity: 0.85,
+          }}
+        />
         {rightLabel ? (
           <Text
-            className="text-[11px]"
-            style={{ color: "#8E8E93", fontFamily: "SpaceGrotesk_500Medium" }}
+            style={{
+              color: "#1A0200",
+              fontFamily: "SpaceGrotesk_700Bold",
+              fontSize: 10,
+              letterSpacing: 1.5,
+              marginLeft: 12,
+              textTransform: "uppercase",
+            }}
           >
             {rightLabel}
           </Text>
@@ -238,14 +259,16 @@ function Section({
   );
 }
 
+// Retro card — thicker terracotta-tinted border, slightly less rounded
+// (12px feels more 70s diner than 24px feels too soft / Apple).
 function Card({ children }: { children: React.ReactNode }) {
   return (
     <View
       style={{
         backgroundColor: "#FFFFFF",
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: "#E8E2D6",
+        borderRadius: 12,
+        borderWidth: 1.5,
+        borderColor: "#1A0200",
         paddingHorizontal: 16,
       }}
     >
