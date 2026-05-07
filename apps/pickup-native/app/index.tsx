@@ -17,6 +17,7 @@ import {
   type MemberTier,
 } from "../lib/rewards";
 import { SafeBoundary } from "../components/SafeBoundary";
+import { TierHero } from "../components/TierHero";
 import { tierStyle } from "../lib/tier-styles";
 import { getSetting, type Settings } from "../lib/settings";
 import { BottomNav } from "../components/BottomNav";
@@ -239,48 +240,45 @@ export default function Home() {
     }
   };
 
-  // Tier-driven palette for the home header. Defaults to the espresso
-  // baseline when signed-out / tier hasn't loaded.
+  // Tier-driven palette — gradient + accent. Falls back to the
+  // espresso baseline when no tier is loaded (signed out / fetch
+  // pending / fetch failed).
   const ts = tierStyle(tier);
-  const tierProgress = (() => {
-    if (!tier || !tier.next_tier_id) return 0;
-    const minVisits = tier.next_tier_min_visits ?? 0;
-    const v = tier.visits_this_period ?? 0;
-    if (minVisits <= 0) return 0;
-    return Math.min(1, Math.max(0, v / minVisits));
-  })();
-  const visitsLeft = Math.max(0, tier?.visits_to_next_tier ?? 0);
+  const showTierEyebrow = !!tier?.tier_slug;
 
   return (
     <View className="flex-1 bg-background">
-      {/* Flat espresso header — tier identity is carried entirely by
-          the tier card below, so the header stays consistent and the
-          greeting reads cleanly regardless of tier or signed-out
-          state. No gradient, no sparkles, no radial glow — those
-          added visual noise that washed out the typography. */}
-      <View
-        style={{
-          backgroundColor: "#160800",
-          paddingTop: insets.top + 8,
-          paddingHorizontal: 16,
-          paddingBottom: 14,
-        }}
+      {/* Tier-themed hero — gradient + ghosted bean ornament + curved
+          bottom edge that drapes into the body. Tier identity carries
+          through the eyebrow ("PLATINUM · 2× PTS") rather than via a
+          separate card, keeping the header dense and clean. */}
+      <TierHero
+        style={ts}
+        paddingTop={insets.top + 8}
+        paddingBottom={28}
+        variant="compact"
       >
         <View className="flex-row items-center gap-3">
           <View className="flex-1">
+            {/* Eyebrow swaps from time-of-day greeting to tier identity
+                once the tier loads — no extra block, no extra height. */}
             <Text
               className="text-[10px] tracking-widest uppercase"
               style={{
-                color: "rgba(255,255,255,0.55)",
-                fontFamily: "SpaceGrotesk_600SemiBold",
+                color: ts.eyebrowColor,
+                fontFamily: "SpaceGrotesk_700Bold",
+                letterSpacing: 3,
               }}
+              numberOfLines={1}
             >
-              {greeting}
+              {showTierEyebrow
+                ? `${ts.displayName} · ${tier?.tier_multiplier ?? 1}× PTS`
+                : greeting}
             </Text>
             <Text
-              className="text-[24px] mt-0.5"
+              className="text-[24px] mt-1"
               style={{
-                color: "#FFFFFF",
+                color: ts.textColor,
                 fontFamily: "Peachi-Bold",
               }}
               numberOfLines={1}
@@ -296,17 +294,17 @@ export default function Home() {
               }}
               className="rounded-2xl active:opacity-80"
               style={{
-                backgroundColor: "rgba(255,255,255,0.10)",
+                backgroundColor: ts.pointsPillBg,
                 paddingHorizontal: 10,
                 paddingVertical: 5,
                 minWidth: 88,
               }}
             >
               <View className="flex-row items-center gap-1">
-                <Sparkles size={11} color="#FBBF24" strokeWidth={2} fill="#FBBF24" />
+                <Sparkles size={11} color={ts.accentColor} strokeWidth={2} fill={ts.accentColor} />
                 <Text
                   className="text-[12px]"
-                  style={{ color: "#FFFFFF", fontFamily: "Peachi-Bold" }}
+                  style={{ color: ts.pointsTextColor, fontFamily: "Peachi-Bold" }}
                 >
                   {(member.pointsBalance ?? 0).toLocaleString()}
                 </Text>
@@ -315,16 +313,16 @@ export default function Home() {
                 <>
                   <View
                     className="rounded-full mt-1 overflow-hidden"
-                    style={{ height: 3, backgroundColor: "rgba(255,255,255,0.15)" }}
+                    style={{ height: 3, backgroundColor: "rgba(255,255,255,0.18)" }}
                   >
                     <View
                       className="rounded-full"
-                      style={{ height: 3, width: `${progressPct * 100}%`, backgroundColor: "#FBBF24" }}
+                      style={{ height: 3, width: `${progressPct * 100}%`, backgroundColor: ts.accentColor }}
                     />
                   </View>
                   <Text
                     className="text-[9px] mt-0.5"
-                    style={{ color: "rgba(255,255,255,0.65)", fontFamily: "SpaceGrotesk_500Medium" }}
+                    style={{ color: ts.mutedColor, fontFamily: "SpaceGrotesk_500Medium" }}
                     numberOfLines={1}
                   >
                     {pointsToNext} to next
@@ -338,15 +336,15 @@ export default function Home() {
             className="relative p-1 active:opacity-60"
             hitSlop={12}
           >
-            <ShoppingCart size={22} color="rgba(255,255,255,0.85)" />
+            <ShoppingCart size={22} color={ts.textColor === "#FFFFFF" ? "rgba(255,255,255,0.85)" : ts.textColor} />
             {cartCount(cart) > 0 && (
               <View
-                className="absolute bg-white rounded-full items-center justify-center"
-                style={{ top: -2, right: -2, width: 16, height: 16 }}
+                className="absolute rounded-full items-center justify-center"
+                style={{ top: -2, right: -2, width: 16, height: 16, backgroundColor: ts.textColor }}
               >
                 <Text
-                  className="text-primary text-[9px]"
-                  style={{ fontFamily: "Peachi-Bold" }}
+                  className="text-[9px]"
+                  style={{ fontFamily: "Peachi-Bold", color: ts.gradient[1] }}
                 >
                   {cartCount(cart)}
                 </Text>
@@ -355,114 +353,23 @@ export default function Home() {
           </Pressable>
         </View>
 
-        {/* Celebratory tier card — solid, readable, prominent. Each
-            tier ships its own card bg + border + accent so the strip
-            feels distinct on every gradient. Skipped when signed-out
-            so anonymous users still see the espresso baseline. */}
-        <SafeBoundary name="home-tier-strip">
-          {tier && tier.tier_name ? (
-            <Pressable
-              onPress={() => {
-                Haptics.selectionAsync();
-                router.push("/account");
-              }}
-              className="mt-4 active:opacity-90"
-              style={{
-                paddingVertical: 14,
-                paddingHorizontal: 14,
-                borderRadius: 16,
-                backgroundColor: ts.cardBg,
-                borderWidth: 1,
-                borderColor: ts.cardBorder,
-              }}
-            >
-              <View className="flex-row items-center" style={{ gap: 14 }}>
-                <Text style={{ fontSize: 36, lineHeight: 40 }}>
-                  {tier.tier_icon || "☕"}
-                </Text>
-                <View className="flex-1">
-                  <Text
-                    style={{
-                      color: ts.cardName,
-                      fontFamily: "Peachi-Bold",
-                      fontSize: 22,
-                      letterSpacing: 0.6,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {tier.tier_name}
-                  </Text>
-                  <Text
-                    style={{
-                      color: ts.cardSub,
-                      fontFamily: "SpaceGrotesk_600SemiBold",
-                      fontSize: 12,
-                      marginTop: 2,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {tier.next_tier_id
-                      ? `${visitsLeft} ${visitsLeft === 1 ? "visit" : "visits"} to ${tier.next_tier_name}`
-                      : ts.tagline}
-                  </Text>
-                </View>
-                <View
-                  style={{
-                    backgroundColor: ts.multiplierPillBg,
-                    paddingHorizontal: 10,
-                    paddingVertical: 6,
-                    borderRadius: 999,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: ts.multiplierPillFg,
-                      fontFamily: "Peachi-Bold",
-                      fontSize: 13,
-                      letterSpacing: 0.3,
-                    }}
-                  >
-                    {tier.tier_multiplier ?? 1}× pts
-                  </Text>
-                </View>
-              </View>
-              {tier.next_tier_id ? (
-                <View
-                  className="rounded-full mt-3 overflow-hidden"
-                  style={{ height: 5, backgroundColor: ts.progressBg }}
-                >
-                  <View
-                    className="rounded-full"
-                    style={{
-                      height: 5,
-                      width: `${Math.round(tierProgress * 100)}%`,
-                      backgroundColor: ts.progressFg,
-                    }}
-                  />
-                </View>
-              ) : null}
-            </Pressable>
-          ) : null}
-        </SafeBoundary>
-
         <Pressable
           onPress={() => {
             Haptics.selectionAsync();
             router.push("/store");
           }}
-          className="flex-row items-center gap-1.5 mt-2.5 self-start active:opacity-70"
+          className="flex-row items-center gap-1.5 mt-3 self-start active:opacity-70"
         >
-          <MapPin size={15} color="rgba(255,255,255,0.7)" />
+          <MapPin size={15} color={ts.mutedColor} />
           <Text
-            className="text-white text-[15px]"
-            style={{ fontFamily: "Peachi-Bold" }}
+            className="text-[15px]"
+            style={{ fontFamily: "Peachi-Bold", color: ts.textColor }}
           >
             {outletName ?? "Select pickup outlet"}
           </Text>
           {currentOutlet && (
             <>
               {(() => {
-                // Open + idle  → green, Open + busy → amber, Closed → red.
                 const dot = !currentOutlet.is_open
                   ? { bg: "#EF4444", label: "Closed" }
                   : currentOutlet.is_busy
@@ -485,16 +392,16 @@ export default function Home() {
                     />
                     {dot.label && (
                       <Text
-                        className="text-white/70 text-[11px]"
-                        style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
+                        className="text-[11px]"
+                        style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: ts.mutedColor }}
                       >
                         {dot.label}
                       </Text>
                     )}
                     {eta && (
                       <Text
-                        className="text-white/70 text-[11px]"
-                        style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
+                        className="text-[11px]"
+                        style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: ts.mutedColor }}
                       >
                         · {eta}
                       </Text>
@@ -504,9 +411,9 @@ export default function Home() {
               })()}
             </>
           )}
-          <ChevronRight size={14} color="rgba(255,255,255,0.55)" />
+          <ChevronRight size={14} color={ts.mutedColor} />
         </Pressable>
-      </View>
+      </TierHero>
 
       <ScrollView
         contentContainerClassName="pb-40"

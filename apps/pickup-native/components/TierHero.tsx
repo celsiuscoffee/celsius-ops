@@ -3,10 +3,10 @@ import { View, StyleSheet, Dimensions } from "react-native";
 import Svg, {
   Defs,
   LinearGradient as SvgLinearGradient,
-  RadialGradient as SvgRadialGradient,
+  Path,
   Rect,
   Stop,
-  Circle,
+  Ellipse,
 } from "react-native-svg";
 import type { TierStyle } from "../lib/tier-styles";
 
@@ -14,27 +14,40 @@ type Props = {
   style: TierStyle;
   paddingTop: number;
   paddingBottom?: number;
+  /** Tall hero (Rewards/Account) vs compact (Home). */
+  variant?: "compact" | "tall";
   children: ReactNode;
 };
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
 /**
- * Full-bleed gradient background for the home header. Drives a
- * tier-specific palette via lib/tier-styles. Optional radial glow in
- * the upper-right and a subtle sparkle field for higher tiers.
+ * Tier-themed hero header. Three layers:
  *
- * Renders SVG at native dimensions; layout-wise the children render
- * on top in a regular RN View so flex / safe-area continue to work.
+ *   1. Multi-stop linear gradient — the tier color signature.
+ *      Platinum: [#3A3D45 → #0A0C12 → #000000] (black metallic)
+ *      Gold:     [#FFF8DC → #FFD700 → #5C3A0A] (true gold)
+ *      Silver:   [#F8F9FA → #C0C0C0 → #3F4751] (polished silver)
+ *      Member:   [#F2A88E → #E2725B → #A04A35] (terracotta)
+ *   2. One ghosted coffee-bean ornament off the top-right edge —
+ *      coffee motif without becoming a literal product photo.
+ *   3. Curved bottom edge that drapes into the page below.
+ *
+ * Children render in a normal RN View on top. SVG layers fill behind
+ * via absoluteFill. Compact variant ~140px (Home), tall ~220px
+ * (Rewards / Account where a hero statement needs more room).
  */
 export function TierHero({
   style,
   paddingTop,
-  paddingBottom = 12,
+  paddingBottom = 28,
+  variant = "compact",
   children,
 }: Props) {
-  // Height grows with safe-area inset; SVG is positioned absolutely so
-  // it stretches to the View's measured size via flex absoluteFill.
+  const [g0, g1, g2] = style.gradient;
+  // Light tiers (Silver/Member) skip the bean — it muddies the gradient.
+  const showBean = g0 !== "#F8F9FA" && g0 !== "#F2A88E";
+
   return (
     <View
       style={{
@@ -42,9 +55,11 @@ export function TierHero({
         paddingBottom,
         paddingHorizontal: 16,
         overflow: "hidden",
+        minHeight: variant === "tall" ? 200 : undefined,
+        position: "relative",
       }}
     >
-      {/* Background — absolute positioned so children determine height */}
+      {/* Background gradient + ornament */}
       <Svg
         height="100%"
         width="100%"
@@ -52,65 +67,59 @@ export function TierHero({
         preserveAspectRatio="none"
       >
         <Defs>
-          <SvgLinearGradient id="tierGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={style.gradient[0]} />
-            <Stop offset="1" stopColor={style.gradient[1]} />
+          <SvgLinearGradient id="tierGrad" x1="0" y1="0" x2="0.5" y2="1">
+            {(g2
+              ? [
+                  <Stop key="0" offset="0" stopColor={g0} />,
+                  <Stop key="1" offset="0.55" stopColor={g1} />,
+                  <Stop key="2" offset="1" stopColor={g2} />,
+                ]
+              : [
+                  <Stop key="0" offset="0" stopColor={g0} />,
+                  <Stop key="1" offset="1" stopColor={g1} />,
+                ])}
           </SvgLinearGradient>
-          {style.glow ? (
-            <SvgRadialGradient
-              id="tierGlow"
-              cx="85%"
-              cy="0%"
-              rx="70%"
-              ry="80%"
-              fx="85%"
-              fy="0%"
-            >
-              <Stop offset="0" stopColor={style.glow} stopOpacity="1" />
-              <Stop offset="1" stopColor={style.glow} stopOpacity="0" />
-            </SvgRadialGradient>
-          ) : null}
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill="url(#tierGrad)" />
-        {style.glow ? (
-          <Rect x="0" y="0" width="100%" height="100%" fill="url(#tierGlow)" />
-        ) : null}
-
-        {/* Sparkle field — fixed-seed coordinates so it's deterministic
-            without bringing in a randomness lib. Sparkles fade with
-            distance from the upper-right glow. */}
-        {style.sparkles ? (
-          <>
-            {SPARKLES.map((s, i) => (
-              <Circle
-                key={i}
-                cx={s.x * SCREEN_W}
-                cy={s.y * 140}
-                r={s.r}
-                fill={style.ornamentColor}
-                opacity={s.o}
-              />
-            ))}
-          </>
+        {showBean ? (
+          <Ellipse
+            cx={SCREEN_W * 0.92}
+            cy={70}
+            rx={56}
+            ry={82}
+            fill="rgba(180, 140, 80, 0.16)"
+            transform={`rotate(-22 ${SCREEN_W * 0.92} 70)`}
+          />
         ) : null}
       </Svg>
 
       {children}
+
+      {/* Curved bottom — sits at the bottom edge, fills exactly to the
+          page background colour so the body below "peeks out" under
+          the hero (Luckin / Manner pattern). */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          bottom: -1,
+          left: 0,
+          right: 0,
+          height: 22,
+        }}
+      >
+        <Svg
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${SCREEN_W} 22`}
+          preserveAspectRatio="none"
+        >
+          <Path
+            d={`M0,22 L0,12 C${SCREEN_W * 0.25},-4 ${SCREEN_W * 0.75},-4 ${SCREEN_W},12 L${SCREEN_W},22 Z`}
+            fill="#f5f5f5"
+          />
+        </Svg>
+      </View>
     </View>
   );
 }
-
-// Hand-tuned, deterministic — keeps the same look across sessions and
-// avoids re-render thrash that runtime randomness would cause.
-const SPARKLES: { x: number; y: number; r: number; o: number }[] = [
-  { x: 0.10, y: 0.18, r: 1.2, o: 0.55 },
-  { x: 0.22, y: 0.62, r: 0.9, o: 0.40 },
-  { x: 0.35, y: 0.30, r: 1.1, o: 0.50 },
-  { x: 0.48, y: 0.78, r: 0.8, o: 0.35 },
-  { x: 0.60, y: 0.20, r: 1.3, o: 0.65 },
-  { x: 0.72, y: 0.55, r: 1.0, o: 0.45 },
-  { x: 0.83, y: 0.35, r: 1.4, o: 0.70 },
-  { x: 0.92, y: 0.72, r: 0.9, o: 0.45 },
-  { x: 0.15, y: 0.88, r: 0.7, o: 0.30 },
-  { x: 0.55, y: 0.05, r: 1.0, o: 0.55 },
-];
