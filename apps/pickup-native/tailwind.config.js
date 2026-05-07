@@ -5,13 +5,13 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Brand-system aligned: #1A0200 is the safe "Celsius black"
-        // (terracotta-tinged, earthy, not bright), terracotta primary
-        // #C05040 is the brand's signature warm accent. Body stays
-        // soft so the espresso/terracotta tones can breathe.
-        background: "#F5F1E8",   // soft cream — sits warm against terracotta
-        surface: "#FFFFFF",      // card bg — clean white
-        espresso: "#1A0200",     // BRAND BLACK from CC Brand System v2026
+        // Brand-system aligned (CC Brand System v2026 §1.4). The book
+        // sanctions four backgrounds: terracotta panels, brand black
+        // #1A0200, white, or photo+overlay. Cream isn't in the system
+        // and was an off-brand choice — reverted.
+        background: "#FFFFFF",   // body bg — clean white per brand book
+        surface: "#FFFFFF",
+        espresso: "#1A0200",     // BRAND BLACK — terracotta-tinged, earthy
         primary: {
           DEFAULT: "#C05040",    // terracotta — brand primary
           50: "#FBEBE8",
@@ -19,12 +19,12 @@ module.exports = {
           900: "#5A1F16",
         },
         muted: {
-          DEFAULT: "#8B7E72",    // warm earthy grey
-          fg: "#6B5E54",         // deeper earthy grey-brown
+          DEFAULT: "#6B6B6B",    // neutral grey for secondary text
+          fg: "#4A4A4A",
         },
-        // Retro touch — borders are 1.5×-thick terracotta at low alpha
-        // rather than cool grey hairlines. Tints every card with brand.
-        border: "#D9CFC2",
+        // Retro touch — hairlines are brand-black at low alpha so
+        // every divider carries a hint of brand without screaming.
+        border: "rgba(26, 2, 0, 0.10)",
         amber: {
           400: "#FBBF24",
           500: "#F59E0B",

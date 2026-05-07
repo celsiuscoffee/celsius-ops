@@ -293,24 +293,18 @@ export default function Home() {
                 router.push("/rewards");
               }}
               className="active:opacity-80"
-              style={{
-                backgroundColor: ts.pointsPillBg,
-                borderWidth: 1,
-                borderColor: `${ts.accentColor}55`,
-                paddingHorizontal: 12,
-                paddingTop: 8,
-                paddingBottom: 7,
-                borderRadius: 14,
-                minWidth: 100,
-              }}
+              hitSlop={6}
             >
-              <View className="flex-row items-center" style={{ gap: 5 }}>
-                <Sparkles size={10} color={ts.accentColor} strokeWidth={2} fill={ts.accentColor} />
+              {/* Pillless — typographic only. Brand panels are flat
+                  rectangular blocks of colour, so the points read as
+                  text on the panel rather than a chrome'd button.
+                  Tap target preserved by hitSlop. */}
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 5 }}>
                 <Text
-                  className="text-[15px]"
                   style={{
-                    color: ts.pointsTextColor,
+                    color: ts.textColor,
                     fontFamily: "Peachi-Bold",
+                    fontSize: 18,
                     letterSpacing: 0.2,
                   }}
                 >
@@ -318,42 +312,29 @@ export default function Home() {
                 </Text>
                 <Text
                   style={{
-                    color: ts.accentColor,
+                    color: ts.mutedColor,
                     fontFamily: "SpaceGrotesk_700Bold",
-                    fontSize: 8,
+                    fontSize: 9,
                     letterSpacing: 1.5,
-                    marginLeft: 1,
                   }}
                 >
                   PTS
                 </Text>
               </View>
-              {nextReward && pointsToNext > 0 && (
-                <>
-                  <View
-                    className="rounded-full mt-1.5 overflow-hidden"
-                    style={{ height: 3, backgroundColor: `${ts.accentColor}22` }}
-                  >
-                    <View
-                      className="rounded-full"
-                      style={{ height: 3, width: `${progressPct * 100}%`, backgroundColor: ts.accentColor }}
-                    />
-                  </View>
-                  <Text
-                    style={{
-                      color: ts.accentColor,
-                      fontFamily: "SpaceGrotesk_500Medium",
-                      fontSize: 9,
-                      letterSpacing: 0.3,
-                      marginTop: 4,
-                      opacity: 0.75,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {pointsToNext} to next
-                  </Text>
-                </>
-              )}
+              {nextReward && pointsToNext > 0 ? (
+                <Text
+                  style={{
+                    color: ts.mutedColor,
+                    fontFamily: "SpaceGrotesk_500Medium",
+                    fontSize: 10,
+                    marginTop: 2,
+                    textAlign: "right",
+                  }}
+                  numberOfLines={1}
+                >
+                  {pointsToNext} to next
+                </Text>
+              ) : null}
             </Pressable>
           )}
           <Pressable
