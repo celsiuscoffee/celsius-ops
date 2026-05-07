@@ -17,7 +17,6 @@ import {
   type MemberTier,
 } from "../lib/rewards";
 import { SafeBoundary } from "../components/SafeBoundary";
-import { TierHero } from "../components/TierHero";
 import { tierStyle } from "../lib/tier-styles";
 import { getSetting, type Settings } from "../lib/settings";
 import { BottomNav } from "../components/BottomNav";
@@ -254,25 +253,34 @@ export default function Home() {
 
   return (
     <View className="flex-1 bg-background">
-      {/* Tier-celebrating home header — gradient + ornaments per tier
-          (Bronze warm, Silver cool, Gold golden, Elite deep obsidian).
-          Falls back to the espresso baseline when no tier is loaded. */}
-      <TierHero style={ts} paddingTop={insets.top + 10}>
+      {/* Flat espresso header — tier identity is carried entirely by
+          the tier card below, so the header stays consistent and the
+          greeting reads cleanly regardless of tier or signed-out
+          state. No gradient, no sparkles, no radial glow — those
+          added visual noise that washed out the typography. */}
+      <View
+        style={{
+          backgroundColor: "#160800",
+          paddingTop: insets.top + 8,
+          paddingHorizontal: 16,
+          paddingBottom: 14,
+        }}
+      >
         <View className="flex-row items-center gap-3">
           <View className="flex-1">
             <Text
               className="text-[10px] tracking-widest uppercase"
               style={{
-                color: ts.eyebrowColor,
+                color: "rgba(255,255,255,0.55)",
                 fontFamily: "SpaceGrotesk_600SemiBold",
               }}
             >
               {greeting}
             </Text>
             <Text
-              className="text-[22px] mt-0.5"
+              className="text-[24px] mt-0.5"
               style={{
-                color: ts.nameColor,
+                color: "#FFFFFF",
                 fontFamily: "Peachi-Bold",
               }}
               numberOfLines={1}
@@ -288,17 +296,17 @@ export default function Home() {
               }}
               className="rounded-2xl active:opacity-80"
               style={{
-                backgroundColor: ts.pointsPillBg,
+                backgroundColor: "rgba(255,255,255,0.10)",
                 paddingHorizontal: 10,
                 paddingVertical: 5,
                 minWidth: 88,
               }}
             >
               <View className="flex-row items-center gap-1">
-                <Sparkles size={11} color={ts.ornamentColor} strokeWidth={2} fill={ts.ornamentColor} />
+                <Sparkles size={11} color="#FBBF24" strokeWidth={2} fill="#FBBF24" />
                 <Text
                   className="text-[12px]"
-                  style={{ color: ts.pointsTextColor, fontFamily: "Peachi-Bold" }}
+                  style={{ color: "#FFFFFF", fontFamily: "Peachi-Bold" }}
                 >
                   {(member.pointsBalance ?? 0).toLocaleString()}
                 </Text>
@@ -311,7 +319,7 @@ export default function Home() {
                   >
                     <View
                       className="rounded-full"
-                      style={{ height: 3, width: `${progressPct * 100}%`, backgroundColor: ts.ornamentColor }}
+                      style={{ height: 3, width: `${progressPct * 100}%`, backgroundColor: "#FBBF24" }}
                     />
                   </View>
                   <Text
@@ -498,7 +506,7 @@ export default function Home() {
           )}
           <ChevronRight size={14} color="rgba(255,255,255,0.55)" />
         </Pressable>
-      </TierHero>
+      </View>
 
       <ScrollView
         contentContainerClassName="pb-40"
