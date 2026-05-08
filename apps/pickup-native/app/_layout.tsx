@@ -74,6 +74,39 @@ export default function RootLayout() {
     SplashScreen.hideAsync().catch(() => {});
   }, []);
 
+  // Eager OTA fetch + reload on cold launch.
+  //
+  // Expo's default ON_LOAD behavior fetches the new bundle in the
+  // background and applies it on the NEXT cold launch — meaning users
+  // need to restart the app twice after a publish to see changes. That
+  // confuses customers and turned shipping iterations into a "cold-launch
+  // twice" call-and-response. With this hook, we proactively check on
+  // mount, fetch if there's a newer bundle, then reload so the user
+  // boots into the new code on this same launch.
+  //
+  // Lazy require + try/catch keeps dev / Expo Go safe (no native module).
+  // RootErrorBoundary handles the "new bundle is broken" case by reverting.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const Updates = require("expo-updates") as typeof import("expo-updates");
+        if (__DEV__) return;
+        const check = await Updates.checkForUpdateAsync();
+        if (cancelled || !check.isAvailable) return;
+        const fetched = await Updates.fetchUpdateAsync();
+        if (cancelled || !fetched.isNew) return;
+        await Updates.reloadAsync();
+      } catch {
+        // No expo-updates available / network down / etc. — fall back to
+        // Expo's default ON_LOAD behavior which applies on next cold launch.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (loaded) {
       applyDefaultFont();

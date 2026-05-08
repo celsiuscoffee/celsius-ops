@@ -18,7 +18,10 @@
       "supportsTablet": false,
       "buildNumber": "1",
       "entitlements": {
-        "aps-environment": "production"
+        "aps-environment": "production",
+        "com.apple.developer.in-app-payments": [
+          "merchant.com.celsiuscoffee.pickup"
+        ]
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
