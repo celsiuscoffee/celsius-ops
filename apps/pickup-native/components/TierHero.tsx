@@ -1,6 +1,6 @@
-import { ReactNode } from "react";
-import { View, StyleSheet } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { ReactNode, useState } from "react";
+import { View, type LayoutChangeEvent } from "react-native";
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from "react-native-svg";
 import type { TierStyle } from "../lib/tier-styles";
 
 type Props = {
@@ -15,15 +15,17 @@ type Props = {
 /**
  * Tier-themed hero header.
  *
- * Two stacked gradient layers on top of a solid base:
+ * Two stacked gradients on top of a solid base, painted via
+ * react-native-svg (already in the installed native binary, so this
+ * is OTA-safe — expo-linear-gradient would have required a rebuild).
+ *
  *   1. Base panel — deepest gradient stop, owns the tier identity colour.
  *   2. Tier gradient — the 3-stop linear from tier-styles, vertical
  *      (top-light → bottom-deep). Gives Platinum a brushed-metal
  *      sheen, Gold real richness, Silver a cool curve.
- *   3. Top-edge highlight — a thin transparent-to-white-4% gradient
- *      capped at ~30% of the height. Reads as a polished light catch
- *      on the panel rather than a flat slab. Tier-agnostic since
- *      white-on-anything reads as light.
+ *   3. Top-edge highlight — transparent-to-white-6% gradient over the
+ *      top ~35% of the panel, simulating a polished light catch.
+ *      Tier-agnostic.
  *
  * No curves, no draping, no ornaments — the rectangular brand-block
  * intent (CC Brand System v2026) is preserved; we're just letting
@@ -36,19 +38,19 @@ export function TierHero({
   variant = "compact",
   children,
 }: Props) {
-  // Solid fallback colour, in case the gradient layers fail to paint
-  // for any reason (Android edge cases, low-end devices). Customers
-  // still see the tier identity colour underneath.
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setSize({ w: width, h: height });
+  };
+
   const [g0, g1, g2] = style.gradient;
   const baseBg = g2 ?? g1 ?? g0;
-
-  // Whether to direction the gradient with a hint of warmth. We let
-  // tier-styles define the stops directly — Platinum, Gold, Silver,
-  // Member each have their own curve baked in.
-  const stops = (g2 ? [g0, g1, g2] : [g0, g1]) as [string, string, ...string[]];
+  const stops = g2 ? [g0, g1, g2] : [g0, g1, g1];
 
   return (
     <View
+      onLayout={onLayout}
       style={{
         paddingTop,
         paddingBottom,
@@ -59,22 +61,28 @@ export function TierHero({
         overflow: "hidden",
       }}
     >
-      <LinearGradient
-        colors={stops}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      {/* Top-edge highlight — soft white wash that fades out a third
-          of the way down. Reads as light catching the panel rather
-          than a flat coloured slab. Tier-agnostic. */}
-      <LinearGradient
-        colors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0)"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 0.35 }}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
+      {size && (
+        <Svg
+          width={size.w}
+          height={size.h}
+          style={{ position: "absolute", top: 0, left: 0 }}
+          pointerEvents="none"
+        >
+          <Defs>
+            <SvgLinearGradient id="tierGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={stops[0]} stopOpacity="1" />
+              <Stop offset="0.5" stopColor={stops[1]} stopOpacity="1" />
+              <Stop offset="1" stopColor={stops[2]} stopOpacity="1" />
+            </SvgLinearGradient>
+            <SvgLinearGradient id="topHighlight" x1="0" y1="0" x2="0" y2="0.35">
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.06" />
+              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+            </SvgLinearGradient>
+          </Defs>
+          <Rect x="0" y="0" width={size.w} height={size.h} fill="url(#tierGrad)" />
+          <Rect x="0" y="0" width={size.w} height={size.h} fill="url(#topHighlight)" />
+        </Svg>
+      )}
       <View>{children}</View>
     </View>
   );
