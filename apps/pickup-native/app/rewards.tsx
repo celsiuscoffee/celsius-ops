@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { View, Text, ScrollView, Pressable, Image, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, Pressable } from "react-native";
 import { Stack, router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Gift, ChevronRight } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../components/BottomNav";
 import { TierHero } from "../components/TierHero";
+import { CelsiusLoader } from "../components/CelsiusLoader";
 import { tierStyle } from "../lib/tier-styles";
 import * as Haptics from "expo-haptics";
 import { useApp } from "../lib/store";
@@ -139,7 +140,7 @@ export default function RewardsTab() {
 
             {isLoading && rewards.length === 0 && (
               <View className="py-12 items-center">
-                <ActivityIndicator color="#C05040" />
+                <CelsiusLoader size="md" />
               </View>
             )}
 

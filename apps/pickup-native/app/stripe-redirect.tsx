@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { View, ActivityIndicator } from "react-native";
+import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStripe } from "@stripe/stripe-react-native";
+import { CelsiusLoader } from "../components/CelsiusLoader";
 
 /**
  * Stripe redirect interceptor.
@@ -51,7 +52,7 @@ export default function StripeRedirect() {
 
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF" }}>
-      <ActivityIndicator color="#C05040" />
+      <CelsiusLoader size="md" />
     </View>
   );
 }

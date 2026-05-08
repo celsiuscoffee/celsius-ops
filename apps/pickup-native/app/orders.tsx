@@ -3,7 +3,6 @@ import {
   Text,
   ScrollView,
   Pressable,
-  ActivityIndicator,
   RefreshControl,
   Alert,
 } from "react-native";
@@ -21,6 +20,7 @@ import {
 import * as Haptics from "expo-haptics";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { BottomNav } from "../components/BottomNav";
+import { CelsiusLoader } from "../components/CelsiusLoader";
 import { useApp } from "../lib/store";
 import { fetchOrderHistory, type OrderHistoryEntry } from "../lib/rewards";
 import { formatPrice } from "../lib/api";
@@ -128,7 +128,7 @@ export default function OrdersTab() {
         </View>
       ) : isLoading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#C05040" />
+          <CelsiusLoader size="md" />
         </View>
       ) : (data?.length ?? 0) === 0 ? (
         <View className="flex-1 items-center justify-center px-6">

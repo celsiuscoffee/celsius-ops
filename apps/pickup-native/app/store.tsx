@@ -1,4 +1,4 @@
-import { View, Text, ActivityIndicator, ScrollView, Pressable } from "react-native";
+import { View, Text, ScrollView, Pressable } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { MapPin, Clock, Users, CheckCircle2 } from "lucide-react-native";
@@ -6,6 +6,7 @@ import * as Haptics from "expo-haptics";
 import { supabase, type Outlet } from "../lib/supabase";
 import { useApp, cartCount } from "../lib/store";
 import { EspressoHeader } from "../components/EspressoHeader";
+import { CelsiusLoader } from "../components/CelsiusLoader";
 
 async function fetchOutlets(): Promise<Outlet[]> {
   const { data, error } = await supabase
@@ -62,7 +63,7 @@ export default function StorePicker() {
 
         {isLoading && (
           <View className="py-12 items-center">
-            <ActivityIndicator color="#C05040" />
+            <CelsiusLoader size="md" />
           </View>
         )}
 

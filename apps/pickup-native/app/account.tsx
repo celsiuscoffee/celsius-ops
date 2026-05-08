@@ -34,6 +34,7 @@ import { api } from "../lib/api";
 import { fetchMember, fetchTier, type MemberTier } from "../lib/rewards";
 import { SafeBoundary } from "../components/SafeBoundary";
 import { useQuery } from "@tanstack/react-query";
+import { CelsiusLoader } from "../components/CelsiusLoader";
 
 function normalisePhone(input: string): string {
   const digits = input.replace(/\D/g, "");
@@ -150,17 +151,36 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
       >
         <View className="flex-row items-start justify-between">
           <View className="flex-1">
-            <Text
-              className="text-[10px] uppercase"
-              style={{
-                color: ts.eyebrowColor,
-                fontFamily: "SpaceGrotesk_700Bold",
-                letterSpacing: 3.5,
-              }}
-              numberOfLines={1}
-            >
-              {showTierEyebrow ? `${ts.displayName} MEMBER` : "MEMBER"}
-            </Text>
+            {showTierEyebrow ? (
+              <Text
+                className="text-[10px] uppercase"
+                style={{
+                  color: ts.eyebrowColor,
+                  fontFamily: "SpaceGrotesk_700Bold",
+                  letterSpacing: 3.5,
+                }}
+                numberOfLines={1}
+              >
+                {`${ts.displayName} MEMBER`}
+              </Text>
+            ) : tierQ.isLoading ? (
+              // Cold cache: tier query hasn't resolved yet. Show the
+              // brand spinner in the eyebrow slot so we never print a
+              // tier name we'd have to swap a moment later.
+              <CelsiusLoader size="sm" style={{ alignItems: "flex-start" }} />
+            ) : (
+              <Text
+                className="text-[10px] uppercase"
+                style={{
+                  color: ts.eyebrowColor,
+                  fontFamily: "SpaceGrotesk_700Bold",
+                  letterSpacing: 3.5,
+                }}
+                numberOfLines={1}
+              >
+                MEMBER
+              </Text>
+            )}
             <Text
               className="text-[26px] mt-2"
               style={{ color: ts.textColor, fontFamily: "Peachi-Bold" }}

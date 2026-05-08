@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
-  ActivityIndicator,
   Pressable,
   ScrollView,
   Image,
@@ -42,6 +41,7 @@ import { fetchMenu, type Product } from "../lib/menu";
 import { useApp, cartCount, cartTotal } from "../lib/store";
 import { formatPrice } from "../lib/api";
 import { BottomNav } from "../components/BottomNav";
+import { CelsiusLoader } from "../components/CelsiusLoader";
 import { fetchRecentItems } from "../lib/rewards";
 
 const BEST_SELLERS_ID = "__best_sellers__";
@@ -186,7 +186,7 @@ export default function Menu() {
   if (isLoading || !data) {
     return (
       <View className="flex-1 bg-background items-center justify-center">
-        <ActivityIndicator color="#C05040" />
+        <CelsiusLoader size="md" />
       </View>
     );
   }

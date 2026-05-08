@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
-  ActivityIndicator,
   Pressable,
   ScrollView,
   Image,
@@ -17,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fetchMenu, type ModifierGroup } from "../../lib/menu";
 import { useApp, type ModifierSelection } from "../../lib/store";
 import { formatPrice } from "../../lib/api";
+import { CelsiusLoader } from "../../components/CelsiusLoader";
 
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -72,7 +72,7 @@ export default function ProductScreen() {
   if (isLoading || !product) {
     return (
       <View className="flex-1 bg-background items-center justify-center">
-        <ActivityIndicator color="#C05040" />
+        <CelsiusLoader size="md" />
       </View>
     );
   }

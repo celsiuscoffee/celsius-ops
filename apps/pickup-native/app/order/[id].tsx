@@ -11,6 +11,7 @@ import { useApp } from "../../lib/store";
 import { EspressoHeader } from "../../components/EspressoHeader";
 import { SwipeToCollect } from "../../components/SwipeToCollect";
 import { OrderStepper } from "../../components/OrderStepper";
+import { CelsiusLoader } from "../../components/CelsiusLoader";
 
 const STATUS_INDEX: Record<string, number> = {
   pending: -1,
@@ -163,7 +164,7 @@ export default function OrderStatus() {
 
       {isLoading && (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#C05040" />
+          <CelsiusLoader size="md" />
         </View>
       )}
 
