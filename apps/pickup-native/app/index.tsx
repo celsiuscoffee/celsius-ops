@@ -103,6 +103,64 @@ export default function Home() {
     });
   })();
 
+  // Recently-collected order — drives the "How was it?" prompt on home
+  // for 24h after pickup. Client-side detection (no push backend) so the
+  // affordance survives app reopens and lets the customer re-order with
+  // one tap. Only shown when there's no active order in flight (so the
+  // active-order banner takes priority).
+  const recentlyCollected = (() => {
+    if (activeOrder) return null;
+    const list = orders.data ?? [];
+    const TWENTY_FOUR_H = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    // Walk newest-first looking for a completed/ready that finished in
+    // the last 24h. We treat completed_at when present, else fall back
+    // to created_at + a fudge (some orders only have created_at on the
+    // history shape).
+    for (const o of list) {
+      const s = (o.status ?? "").toLowerCase();
+      if (s !== "completed" && s !== "ready") continue;
+      const finishedAt = (o as { completed_at?: string }).completed_at
+        ? new Date((o as { completed_at: string }).completed_at).getTime()
+        : new Date(o.created_at).getTime();
+      if (now - finishedAt < TWENTY_FOUR_H) return o;
+    }
+    return null;
+  })();
+
+  const onReorderRecent = () => {
+    if (!recentlyCollected) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // Prefill cart with the same items, then route to /cart so the
+    // customer can review/edit before placing the new order.
+    if (cart.length > 0) {
+      // Cart non-empty — route to orders page where they'll get the
+      // confirm-replace prompt we already wired in. Avoids a second
+      // confirmation flow here on home.
+      router.push("/orders");
+      return;
+    }
+    for (const it of recentlyCollected.order_items) {
+      addToCart({
+        productId: it.product_id ?? "",
+        name: it.product_name ?? "Item",
+        image: undefined,
+        basePrice: (it.unit_price ?? 0) / 100,
+        quantity: it.quantity ?? 1,
+        modifiers: (it.modifiers ?? []).map((m) => ({
+          groupId: "",
+          groupName: m.groupName ?? "",
+          optionId: "",
+          label: m.label ?? "",
+          priceDelta: (m.priceDelta ?? 0) / 100,
+        })),
+        specialInstructions: undefined,
+        totalPrice: (it.item_total ?? it.unit_price ?? 0) / 100,
+      });
+    }
+    router.push("/cart");
+  };
+
   // Rewards the customer can redeem right now with current points balance.
   const rewardsQ = useQuery({
     queryKey: ["rewards-home", phone],
@@ -523,6 +581,67 @@ export default function Home() {
           </Pressable>
         )}
 
+        {/* "How was it?" — visible for 24h after a pickup is collected.
+            Replaces the dead air between collected order and the next
+            visit; one-tap reorder repopulates the cart with the same
+            items so the customer can re-confirm and place again. Hidden
+            when an active order exists (active banner takes priority). */}
+        {recentlyCollected && (
+          <View
+            className="mx-4 mt-4 rounded-2xl"
+            style={{
+              backgroundColor: "#FBEBE8",
+              borderWidth: 1,
+              borderColor: "rgba(192, 80, 64, 0.18)",
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+            }}
+          >
+            <View className="flex-row items-center gap-3">
+              <View
+                className="w-9 h-9 rounded-full items-center justify-center"
+                style={{ backgroundColor: "rgba(192, 80, 64, 0.15)" }}
+              >
+                <Coffee size={18} color="#C05040" strokeWidth={2} />
+              </View>
+              <View className="flex-1">
+                <Text
+                  className="text-[10px] uppercase"
+                  style={{
+                    fontFamily: "SpaceGrotesk_700Bold",
+                    color: "#C05040",
+                    letterSpacing: 1.5,
+                  }}
+                >
+                  How was it?
+                </Text>
+                <Text
+                  className="text-espresso text-[14px] mt-0.5"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                  numberOfLines={1}
+                >
+                  Reorder · #{recentlyCollected.order_number}
+                </Text>
+              </View>
+              <Pressable
+                onPress={onReorderRecent}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel={`Reorder #${recentlyCollected.order_number}`}
+                className="bg-espresso rounded-full active:opacity-80"
+                style={{ paddingHorizontal: 14, paddingVertical: 7 }}
+              >
+                <Text
+                  className="text-white text-[12px]"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Order again
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         {/* Hero promo — moved above Your Usual so it lands within the first
             viewport. Backoffice-driven via promo_banner setting. */}
         {promo.enabled && (promo.headline || promo.image_url) && (
@@ -803,43 +922,75 @@ export default function Home() {
           </View>
         )}
 
-        {/* Empty-state nudge — only when no personalized sections fired and
-            user hasn't yet got a cart going. Keeps first-time users from
-            staring at a sparse home. */}
+        {/* First-launch poster — replaces the small empty-state nudge
+            when the home would otherwise be sparse (no orders, no
+            promos, no rewards, no cart). Full-bleed espresso panel
+            with brand poster typography ("Slow down. / Coffee is
+            here.") to make a stronger first impression than a 3-line
+            card. Same trigger conditions as the prior nudge. */}
         {!activeOrder &&
+          !recentlyCollected &&
           !(phone && (recent.data?.length ?? 0) > 0) &&
           affordableRewards.length === 0 &&
           !(promo.enabled && (promo.headline || promo.image_url)) &&
           cartCount(cart) === 0 && (
-            <View className="mx-4 mt-5 bg-surface border border-border rounded-2xl p-5 items-center">
-              <View className="w-12 h-12 rounded-2xl bg-primary/10 items-center justify-center">
-                <Coffee size={24} color="#C05040" strokeWidth={1.5} />
-              </View>
-              <Text
-                className="text-espresso text-[16px] mt-3"
-                style={{ fontFamily: "Peachi-Bold" }}
-              >
-                Ready for your first cup?
-              </Text>
-              <Text
-                className="text-muted-fg text-[12px] text-center mt-1"
-                style={{ fontFamily: "SpaceGrotesk_400Regular" }}
-              >
-                Browse the menu and we'll have it waiting at pickup.
-              </Text>
-              <Pressable
-                onPress={onOrderNow}
-                className="bg-espresso rounded-full mt-4 active:opacity-80"
-                style={{ paddingHorizontal: 22, paddingVertical: 10 }}
-              >
-                <Text
-                  className="text-white text-[13px]"
-                  style={{ fontFamily: "Peachi-Bold" }}
+            <Pressable
+              onPress={onOrderNow}
+              className="mx-4 mt-5 bg-espresso rounded-2xl overflow-hidden active:opacity-90"
+              style={{
+                shadowColor: "#160800",
+                shadowOpacity: 0.18,
+                shadowRadius: 14,
+                shadowOffset: { width: 0, height: 6 },
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Browse menu"
+            >
+              <View className="px-6 pt-7 pb-6">
+                <View
+                  className="bg-primary items-center justify-center mb-4"
+                  style={{ width: 52, height: 52, borderRadius: 26 }}
                 >
-                  Browse menu
+                  <Coffee size={26} color="#FFFFFF" strokeWidth={2} />
+                </View>
+                <Text
+                  className="text-amber-400 text-[10px] uppercase"
+                  style={{
+                    fontFamily: "SpaceGrotesk_700Bold",
+                    letterSpacing: 2,
+                  }}
+                >
+                  Welcome to Celsius
                 </Text>
-              </Pressable>
-            </View>
+                <Text
+                  className="text-white text-[28px] mt-1"
+                  style={{ fontFamily: "Peachi-Bold", lineHeight: 32 }}
+                >
+                  Slow down.{"\n"}Coffee is here.
+                </Text>
+                <Text
+                  className="text-white/70 text-[13px] mt-2"
+                  style={{
+                    fontFamily: "SpaceGrotesk_500Medium",
+                    lineHeight: 18,
+                  }}
+                >
+                  Order ahead, skip the queue. Pick a stool — we'll have it ready.
+                </Text>
+                <View
+                  className="bg-white rounded-full mt-5 self-start flex-row items-center gap-1.5"
+                  style={{ paddingHorizontal: 18, paddingVertical: 10 }}
+                >
+                  <Text
+                    className="text-espresso text-[13px]"
+                    style={{ fontFamily: "Peachi-Bold" }}
+                  >
+                    See what's brewing
+                  </Text>
+                  <ChevronRight size={14} color="#1A0200" />
+                </View>
+              </View>
+            </Pressable>
           )}
 
         {/* Best Sellers (skeleton while menu loads, real cards once data is in) */}
