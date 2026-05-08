@@ -114,7 +114,7 @@ export default function ProductScreen() {
               onPress={() => router.back()}
               className="absolute left-4 w-10 h-10 rounded-full bg-white items-center justify-center active:opacity-80"
               style={{ top: insets.top + 8, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 6 }}
-              hitSlop={8}
+              hitSlop={12}
             >
               <ArrowLeft size={20} color="#160800" />
             </Pressable>
@@ -155,7 +155,7 @@ export default function ProductScreen() {
                     <Pressable
                       key={opt.id}
                       onPress={() => toggleOption(g, opt.id)}
-                      className={`px-4 py-3 rounded-xl border flex-row justify-between items-center active:opacity-70 ${
+                      className={`px-4 py-3 rounded-2xl border flex-row justify-between items-center active:opacity-70 ${
                         selected
                           ? "bg-primary/8 border-primary"
                           : "bg-surface border-border"
@@ -186,7 +186,7 @@ export default function ProductScreen() {
               onChangeText={setNotes}
               placeholder="Anything we should know?"
               placeholderTextColor="#8E8E93"
-              className="mt-2 bg-surface border border-border rounded-xl px-4 py-3 text-espresso"
+              className="mt-2 bg-surface border border-border rounded-2xl px-4 py-3 text-espresso"
               multiline
             />
           </View>

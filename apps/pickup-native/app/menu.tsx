@@ -199,7 +199,7 @@ export default function Menu() {
                 style={{ fontFamily: "SpaceGrotesk_500Medium" }}
               />
               {query.length > 0 && (
-                <Pressable onPress={() => setQuery("")} hitSlop={8}>
+                <Pressable onPress={() => setQuery("")} hitSlop={12}>
                   <X size={16} color="#8E8E93" />
                 </Pressable>
               )}
@@ -219,7 +219,7 @@ export default function Menu() {
               if (searchOpen) setQuery("");
             }}
             className="p-1 active:opacity-60"
-            hitSlop={8}
+            hitSlop={12}
             accessibilityRole="button"
             accessibilityLabel={searchOpen ? "Close search" : "Search menu"}
           >
@@ -232,7 +232,7 @@ export default function Menu() {
           <Pressable
             onPress={() => router.push("/cart")}
             className="p-1 relative active:opacity-60"
-            hitSlop={8}
+            hitSlop={12}
             accessibilityRole="button"
             accessibilityLabel={
               cartCount(cart) > 0

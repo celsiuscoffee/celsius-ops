@@ -111,7 +111,7 @@ export function Toast() {
               current.action?.onPress();
               dismiss();
             }}
-            hitSlop={8}
+            hitSlop={12}
             accessibilityLabel={current.action.label}
           >
             <Text

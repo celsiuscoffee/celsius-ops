@@ -382,7 +382,7 @@ export default function Checkout() {
         }`}
       >
         <View
-          className={`w-9 h-9 rounded-xl items-center justify-center ${
+          className={`w-9 h-9 rounded-2xl items-center justify-center ${
             selected ? "bg-primary/15" : "bg-background"
           }`}
         >
@@ -458,7 +458,7 @@ export default function Checkout() {
               placeholderTextColor="#8E8E93"
               keyboardType="phone-pad"
               autoFocus
-              className="mt-3 bg-background border border-border rounded-xl px-4 py-3 text-espresso text-lg"
+              className="mt-3 bg-background border border-border rounded-2xl px-4 py-3 text-espresso text-lg"
             />
             <View className="mt-5">
               <PrimaryButton label="Text me the code" onPress={onSendOtp} loading={busy} />
@@ -480,7 +480,7 @@ export default function Checkout() {
               keyboardType="number-pad"
               autoFocus
               maxLength={6}
-              className="mt-3 bg-background border border-border rounded-xl px-4 py-3 text-espresso text-2xl tracking-widest text-center"
+              className="mt-3 bg-background border border-border rounded-2xl px-4 py-3 text-espresso text-2xl tracking-widest text-center"
             />
             <View className="mt-5">
               <PrimaryButton label="Let me in" onPress={onVerifyOtp} loading={busy} />
@@ -609,7 +609,7 @@ export default function Checkout() {
                     placeholder="WELCOME10"
                     autoCapitalize="characters"
                     autoCorrect={false}
-                    className="rounded-xl border border-border px-3 py-2.5 text-espresso"
+                    className="rounded-2xl border border-border px-3 py-2.5 text-espresso"
                     style={{ fontFamily: "SpaceGrotesk_500Medium" }}
                   />
                   {promoCode.trim().length > 0 &&

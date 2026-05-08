@@ -49,7 +49,7 @@ export function BottomNav() {
               router.replace(tab.href as any);
             }}
             className="flex-1 items-center gap-1 py-1.5 active:opacity-60"
-            hitSlop={8}
+            hitSlop={12}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
             accessibilityLabel={`${tab.label} tab`}

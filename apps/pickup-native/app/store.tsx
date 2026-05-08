@@ -89,7 +89,7 @@ export default function StorePicker() {
                 shadowOffset: { width: 0, height: 2 },
               }}
             >
-              <View className={`rounded-xl p-2.5 mt-0.5 ${selected ? "bg-primary/15" : "bg-primary/10"}`}>
+              <View className={`rounded-2xl p-2.5 mt-0.5 ${selected ? "bg-primary/15" : "bg-primary/10"}`}>
                 <MapPin size={20} color="#C05040" />
               </View>
               <View className="flex-1">

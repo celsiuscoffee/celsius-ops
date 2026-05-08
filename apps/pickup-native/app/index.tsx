@@ -281,7 +281,7 @@ export default function Home() {
                 router.push("/rewards");
               }}
               className="active:opacity-80"
-              hitSlop={6}
+              hitSlop={12}
             >
               {/* Pillless — typographic only. Brand panels are flat
                   rectangular blocks of colour, so the points read as
@@ -1086,7 +1086,7 @@ function ForYouStrip({
           </Text>
           <Pressable
             onPress={onSeeAll}
-            hitSlop={6}
+            hitSlop={12}
             className="flex-row items-center gap-0.5 active:opacity-70"
           >
             <Text className="text-primary text-[12px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
@@ -1107,7 +1107,7 @@ function ForYouStrip({
                   Haptics.selectionAsync();
                   setActive(t);
                 }}
-                hitSlop={8}
+                hitSlop={12}
                 className="active:opacity-70"
               >
                 <View style={{ paddingBottom: 6, borderBottomWidth: 2, borderBottomColor: isActive ? "#C05040" : "transparent" }}>

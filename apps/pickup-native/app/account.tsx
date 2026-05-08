@@ -394,7 +394,9 @@ function Stat({ label, value }: { label: string; value: string }) {
       </Text>
       <Text
         style={{
-          color: "rgba(255,255,255,0.55)",
+          // Bumped 0.55 → 0.72 — 9pt uppercase eyebrows need more contrast
+          // than body text. Below 0.65 they read as decorative noise.
+          color: "rgba(255,255,255,0.72)",
           fontFamily: "SpaceGrotesk_700Bold",
           fontSize: 9,
           letterSpacing: 2,
@@ -465,7 +467,7 @@ function ProfileEditModal({
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View className="flex-1 bg-background">
         <View className="flex-row items-center justify-between p-4 border-b border-border">
-          <Pressable onPress={onClose} hitSlop={8}>
+          <Pressable onPress={onClose} hitSlop={12}>
             <X size={20} color="#160800" />
           </Pressable>
           <Text
@@ -490,7 +492,7 @@ function ProfileEditModal({
               onChangeText={setName}
               placeholder="What should we call you?"
               placeholderTextColor="#8E8E93"
-              className="bg-surface border border-border rounded-xl px-4 py-3 text-espresso text-base"
+              className="bg-surface border border-border rounded-2xl px-4 py-3 text-espresso text-base"
               style={{ fontFamily: "SpaceGrotesk_500Medium" }}
               autoCapitalize="words"
             />
@@ -509,7 +511,7 @@ function ProfileEditModal({
               placeholderTextColor="#8E8E93"
               keyboardType="email-address"
               autoCapitalize="none"
-              className="bg-surface border border-border rounded-xl px-4 py-3 text-espresso text-base"
+              className="bg-surface border border-border rounded-2xl px-4 py-3 text-espresso text-base"
               style={{ fontFamily: "SpaceGrotesk_500Medium" }}
             />
           </View>
@@ -525,7 +527,7 @@ function ProfileEditModal({
               onChangeText={setBirthday}
               placeholder="1990-01-31"
               placeholderTextColor="#8E8E93"
-              className="bg-surface border border-border rounded-xl px-4 py-3 text-espresso text-base"
+              className="bg-surface border border-border rounded-2xl px-4 py-3 text-espresso text-base"
               style={{ fontFamily: "SpaceGrotesk_500Medium" }}
             />
             <Text
@@ -784,7 +786,7 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                 router.replace("/");
               }}
               className="mt-4 self-center active:opacity-60"
-              hitSlop={8}
+              hitSlop={12}
             >
               <Text
                 className="text-muted-fg text-sm"
@@ -803,7 +805,7 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                 setError(null);
               }}
               className="flex-row items-center gap-1 active:opacity-60 mb-4 -ml-1 self-start"
-              hitSlop={8}
+              hitSlop={12}
               accessibilityLabel="Back to phone number"
             >
               <ArrowLeft size={16} color="#6E6E73" />
@@ -915,7 +917,7 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                     onPress={handleSend}
                     disabled={loading}
                     className="active:opacity-60"
-                    hitSlop={8}
+                    hitSlop={12}
                     accessibilityLabel="Resend verification code"
                   >
                     <Text
@@ -935,7 +937,7 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                     onPress={handleChangeNumber}
                     disabled={loading}
                     className="active:opacity-60"
-                    hitSlop={8}
+                    hitSlop={12}
                     accessibilityLabel="Use a different phone number"
                   >
                     <Text

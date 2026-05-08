@@ -35,7 +35,7 @@ export default function AccountDelete() {
                 "mailto:barista@celsiuscoffee.com?subject=Delete%20my%20account"
               )
             }
-            className="mt-3 bg-surface rounded-xl border border-border p-3 flex-row items-center gap-3 active:opacity-70"
+            className="mt-3 bg-surface rounded-2xl border border-border p-3 flex-row items-center gap-3 active:opacity-70"
           >
             <View className="w-10 h-10 rounded-lg bg-primary/10 items-center justify-center">
               <Mail size={18} color="#C05040" strokeWidth={1.75} />
@@ -50,7 +50,7 @@ export default function AccountDelete() {
             </View>
           </Pressable>
 
-          <View className="mt-2 bg-surface rounded-xl border border-border p-3 flex-row items-center gap-3">
+          <View className="mt-2 bg-surface rounded-2xl border border-border p-3 flex-row items-center gap-3">
             <View className="w-10 h-10 rounded-lg bg-primary/10 items-center justify-center">
               <MapPin size={18} color="#C05040" strokeWidth={1.75} />
             </View>

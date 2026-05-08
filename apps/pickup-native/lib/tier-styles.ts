@@ -29,9 +29,11 @@ export type TierStyle = {
 const FALLBACK: TierStyle = {
   displayName: "MEMBER",
   gradient: ["#160800", "#160800"],
-  eyebrowColor: "rgba(255,255,255,0.45)",
+  // Bumped eyebrow 0.45 → 0.62 and muted 0.65 → 0.78 — both were
+  // borderline at 11–12pt on the brand-black panel.
+  eyebrowColor: "rgba(255,255,255,0.62)",
   textColor: "#FFFFFF",
-  mutedColor: "rgba(255,255,255,0.65)",
+  mutedColor: "rgba(255,255,255,0.78)",
   accentColor: "#FBBF24",
   pointsPillBg: "rgba(255,255,255,0.10)",
   pointsTextColor: "#FFFFFF",
@@ -75,7 +77,10 @@ const STYLES: Record<string, TierStyle> = {
     gradient: ["#3A3D45", "#0A0C12", "#000000"],
     eyebrowColor: "#FBBF24",
     textColor: "#FFFFFF",
-    mutedColor: "rgba(255,255,255,0.55)",
+    // Bumped from 0.55 → 0.72 for WCAG AA on the obsidian gradient.
+    // 0.55 was visually nice but failed contrast on the lighter top
+    // stop (#3A3D45) — small text rendering as a low-contrast smudge.
+    mutedColor: "rgba(255,255,255,0.72)",
     accentColor: "#FBBF24",
     pointsPillBg: "rgba(251,191,36,0.18)",
     pointsTextColor: "#FBBF24",

@@ -60,7 +60,7 @@ export default function Settings() {
                 Haptics.selectionAsync();
                 router.push(r.href as never);
               }}
-              hitSlop={4}
+              hitSlop={12}
               className="flex-row items-center gap-3 active:opacity-70"
               style={{
                 paddingVertical: 14,

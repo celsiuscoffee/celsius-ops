@@ -272,7 +272,7 @@ export default function Cart() {
                           updateQuantity(item.cartId, item.quantity - 1);
                         }}
                         className="w-7 h-7 rounded-full bg-background border border-border items-center justify-center active:opacity-70"
-                        hitSlop={6}
+                        hitSlop={12}
                       >
                         <Text className="text-espresso">−</Text>
                       </Pressable>
@@ -285,7 +285,7 @@ export default function Cart() {
                           updateQuantity(item.cartId, item.quantity + 1);
                         }}
                         className="w-7 h-7 rounded-full bg-espresso items-center justify-center active:opacity-70"
-                        hitSlop={6}
+                        hitSlop={12}
                       >
                         <Text className="text-white">+</Text>
                       </Pressable>
@@ -296,7 +296,7 @@ export default function Cart() {
                         removeFromCart(item.cartId);
                       }}
                       className="active:opacity-70 p-1"
-                      hitSlop={8}
+                      hitSlop={12}
                     >
                       <Trash2 size={16} color="#8E8E93" />
                     </Pressable>
@@ -311,7 +311,7 @@ export default function Cart() {
             style={{ paddingBottom: insets.bottom + 12 }}
           >
             {appliedReward ? (
-              <View className="bg-primary/10 rounded-xl px-3 py-2 mb-3 flex-row items-center gap-2">
+              <View className="bg-primary/10 rounded-2xl px-3 py-2 mb-3 flex-row items-center gap-2">
                 <View className="w-8 h-8 rounded-full bg-primary items-center justify-center">
                   <Gift size={14} color="#FFFFFF" strokeWidth={2} />
                 </View>
@@ -335,7 +335,7 @@ export default function Cart() {
                     Haptics.selectionAsync();
                     setAppliedReward(null);
                   }}
-                  hitSlop={8}
+                  hitSlop={12}
                   className="active:opacity-70"
                 >
                   <X size={16} color="#C05040" />
@@ -347,7 +347,7 @@ export default function Cart() {
                   Haptics.selectionAsync();
                   router.push("/rewards");
                 }}
-                className="bg-surface border border-dashed border-primary/40 rounded-xl px-3 py-2 mb-3 flex-row items-center gap-2 active:opacity-70"
+                className="bg-surface border border-dashed border-primary/40 rounded-2xl px-3 py-2 mb-3 flex-row items-center gap-2 active:opacity-70"
               >
                 <Gift size={16} color="#C05040" strokeWidth={1.75} />
                 <Text
@@ -424,7 +424,7 @@ export default function Cart() {
                 </View>
                 <Pressable
                   onPress={() => router.push("/store")}
-                  hitSlop={6}
+                  hitSlop={12}
                   accessibilityLabel="Pick another outlet"
                   className="active:opacity-70"
                 >

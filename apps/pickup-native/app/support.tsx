@@ -34,7 +34,7 @@ export default function Support() {
 
           <Pressable
             onPress={() => Linking.openURL("mailto:barista@celsiuscoffee.com")}
-            className="bg-surface rounded-xl border border-border p-3 flex-row items-center gap-3 active:opacity-70"
+            className="bg-surface rounded-2xl border border-border p-3 flex-row items-center gap-3 active:opacity-70"
           >
             <View className="w-10 h-10 rounded-lg bg-primary/10 items-center justify-center">
               <Mail size={18} color="#C05040" strokeWidth={1.75} />
@@ -52,7 +52,7 @@ export default function Support() {
 
           <Pressable
             onPress={() => Linking.openURL("https://instagram.com/celsius.coffee")}
-            className="mt-2 bg-surface rounded-xl border border-border p-3 flex-row items-center gap-3 active:opacity-70"
+            className="mt-2 bg-surface rounded-2xl border border-border p-3 flex-row items-center gap-3 active:opacity-70"
           >
             <View className="w-10 h-10 rounded-lg bg-primary/10 items-center justify-center">
               <AtSign size={18} color="#C05040" strokeWidth={1.75} />
@@ -139,7 +139,7 @@ function FAQ({
   return (
     <Wrapper
       onPress={onPress}
-      className={`bg-surface rounded-xl border border-border p-3 mb-2 ${
+      className={`bg-surface rounded-2xl border border-border p-3 mb-2 ${
         onPress ? "active:opacity-70" : ""
       }`}
     >
