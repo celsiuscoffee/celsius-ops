@@ -620,6 +620,7 @@ export default function InvoicesPage() {
     const files = e.target.files;
     if (!files?.length) return;
     setAttachUploading(true);
+    const newlyUploaded: string[] = [];
     try {
       for (const file of Array.from(files)) {
         const formData = new FormData();
@@ -629,7 +630,65 @@ export default function InvoicesPage() {
         if (res.ok) {
           const data = await res.json();
           setAttachPhotos((prev) => [...prev, data.url]);
+          newlyUploaded.push(data.url);
         }
+      }
+
+      // After upload, run the same AI extractor used by the deposit POP
+      // dialog. Fills any blank field on the form with what the AI reads
+      // off the supplier invoice — invoice number, dates, amount. Manual
+      // edits are preserved (we don't overwrite a value the user has
+      // typed).
+      if (newlyUploaded.length > 0 && attachingInvoice) {
+        try {
+          const exRes = await fetch("/api/inventory/extract", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ urls: newlyUploaded, context: "supplier_invoice" }),
+          });
+          if (exRes.ok) {
+            const ex = await exRes.json() as {
+              invoiceNumber: string | null;
+              issueDate: string | null;
+              dueDate: string | null;
+              amount: number | null;
+              confidence: "high" | "medium" | "low";
+            };
+            const filled: string[] = [];
+            setAttachForm((prev) => {
+              const next = { ...prev };
+              if (ex.invoiceNumber && !prev.invoiceNumber.trim()) {
+                next.invoiceNumber = ex.invoiceNumber;
+                filled.push("Invoice No.");
+              }
+              if (ex.issueDate && /^\d{4}-\d{2}-\d{2}$/.test(ex.issueDate) && !prev.issueDate) {
+                next.issueDate = ex.issueDate;
+                filled.push("Issue Date");
+              }
+              if (ex.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(ex.dueDate) && !prev.dueDate) {
+                next.dueDate = ex.dueDate;
+                filled.push("Due Date");
+              }
+              // Only overwrite the prefilled PO total if confidence is high —
+              // supplier may have billed a different amount and the AI is
+              // surfacing the bill, not the PO.
+              if (
+                ex.confidence === "high" &&
+                typeof ex.amount === "number" &&
+                ex.amount > 0 &&
+                (!prev.amount ||
+                  Math.abs(parseFloat(prev.amount) - (attachingInvoice?.amount ?? 0)) < 0.01)
+              ) {
+                next.amount = ex.amount.toFixed(2);
+                filled.push("Amount");
+              }
+              return next;
+            });
+            if (filled.length > 0) {
+              toast.success(`AI filled ${filled.join(", ")} from the invoice — review before attaching.`);
+            }
+          }
+        } catch { /* AI extract is best-effort */ }
       }
     } catch { /* ignore */ }
     setAttachUploading(false);
