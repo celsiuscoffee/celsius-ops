@@ -307,6 +307,14 @@ export default function Home() {
       >
         <View className="flex-row items-start gap-3">
           <View className="flex-1">
+            {/* Brand mark above the eyebrow — small Celsius cup logo
+                anchors the panel as the brand surface without competing
+                with the greeting. */}
+            <Image
+              source={require("../assets/icon.png")}
+              style={{ width: 28, height: 28, borderRadius: 6, marginBottom: 8 }}
+              resizeMode="cover"
+            />
             {/* Eyebrow swaps from time-of-day greeting to tier identity
                 once the tier loads — no extra block, no extra height. */}
             <Text
@@ -792,15 +800,19 @@ export default function Home() {
                     if (!outletId) router.push("/store");
                     else router.push({ pathname: "/menu", params: { tab: "usual" } });
                   }}
-                  className="w-44 bg-surface rounded-2xl border border-border overflow-hidden active:opacity-70"
+                  className="w-32 bg-surface rounded-2xl border border-border overflow-hidden active:opacity-70"
                   style={{
                     shadowColor: "#000",
                     shadowOpacity: 0.06,
-                    shadowRadius: 8,
-                    shadowOffset: { width: 0, height: 3 },
+                    shadowRadius: 6,
+                    shadowOffset: { width: 0, height: 2 },
                   }}
                 >
-                  <View className="aspect-[4/5] bg-primary/5">
+                  {/* Square image keeps the card visually rich but caps
+                      the height. Down from aspect 4/5 + width 176 (image
+                      alone was 220pt) to 128sq, saves ~90pt per card so
+                      the strip clears the bottom nav on first viewport. */}
+                  <View className="aspect-square bg-primary/5">
                     {item.image_url ? (
                       <Image
                         source={{ uri: item.image_url }}
@@ -809,36 +821,30 @@ export default function Home() {
                       />
                     ) : (
                       <View className="flex-1 items-center justify-center">
-                        <Coffee size={32} color="#C05040" strokeWidth={1.5} />
+                        <Coffee size={26} color="#C05040" strokeWidth={1.5} />
                       </View>
                     )}
                   </View>
-                  <View className="p-3">
+                  <View style={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: 8 }}>
                     <Text
-                      className="text-espresso text-[14px]"
+                      className="text-espresso text-[12px]"
                       style={{ fontFamily: "Peachi-Bold" }}
                       numberOfLines={1}
                     >
                       {item.name}
                     </Text>
-                    <Text
-                      className="text-muted-fg text-[10px] mt-0.5"
-                      style={{ fontFamily: "SpaceGrotesk_500Medium" }}
-                    >
-                      Ordered {item.timesOrdered}×
-                    </Text>
-                    <View className="flex-row items-center justify-between mt-2">
+                    <View className="flex-row items-center justify-between mt-1">
                       <Text
-                        className="text-primary text-[16px]"
+                        className="text-primary text-[13px]"
                         style={{ fontFamily: "Peachi-Bold" }}
                       >
                         {formatPrice(item.price)}
                       </Text>
                       <View
                         className="bg-espresso rounded-full items-center justify-center"
-                        style={{ width: 28, height: 28 }}
+                        style={{ width: 22, height: 22 }}
                       >
-                        <Text className="text-white text-base leading-none">+</Text>
+                        <Text className="text-white text-[14px] leading-none">+</Text>
                       </View>
                     </View>
                   </View>
