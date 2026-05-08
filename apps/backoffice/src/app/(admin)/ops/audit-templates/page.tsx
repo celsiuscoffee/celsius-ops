@@ -15,6 +15,8 @@ type AuditTemplate = {
   name: string;
   description: string | null;
   roleType: string;
+  auditTarget: "OUTLET" | "STAFF";
+  jobRoleFilter: string | null;
   isActive: boolean;
   version: number;
   createdBy: { id: string; name: string };
@@ -37,8 +39,10 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default function AuditTemplatesPage() {
   const { data: templates, isLoading, mutate } = useFetch<AuditTemplate[]>("/api/ops/audit-templates");
+  const { data: jobRoles } = useFetch<string[]>("/api/ops/audit-templates/job-roles");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
+  const [targetFilter, setTargetFilter] = useState<"ALL" | "OUTLET" | "STAFF">("ALL");
 
   // New template form
   const [showCreate, setShowCreate] = useState(false);
@@ -46,9 +50,12 @@ export default function AuditTemplatesPage() {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newRole, setNewRole] = useState("area_manager");
+  const [newTarget, setNewTarget] = useState<"OUTLET" | "STAFF">("OUTLET");
+  const [newJobRole, setNewJobRole] = useState("");
 
   const filtered = (templates ?? []).filter((t) => {
     if (roleFilter !== "ALL" && t.roleType !== roleFilter) return false;
+    if (targetFilter !== "ALL" && t.auditTarget !== targetFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       return t.name.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q);
@@ -73,6 +80,10 @@ export default function AuditTemplatesPage() {
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
+    if (newTarget === "STAFF" && !newJobRole) {
+      alert("Choose a job role for staff-skills templates");
+      return;
+    }
     setCreating(true);
     try {
       const res = await fetch("/api/ops/audit-templates", {
@@ -82,6 +93,8 @@ export default function AuditTemplatesPage() {
           name: newName.trim(),
           description: newDesc.trim() || null,
           roleType: newRole,
+          auditTarget: newTarget,
+          jobRoleFilter: newTarget === "STAFF" ? newJobRole : null,
           sections: [],
         }),
       });
@@ -89,6 +102,8 @@ export default function AuditTemplatesPage() {
         setShowCreate(false);
         setNewName("");
         setNewDesc("");
+        setNewTarget("OUTLET");
+        setNewJobRole("");
         mutate();
       }
     } finally {
@@ -120,11 +135,55 @@ export default function AuditTemplatesPage() {
             <h3 className="text-sm font-semibold">Create Template</h3>
             <Input placeholder="Template name" value={newName} onChange={(e) => setNewName(e.target.value)} />
             <Input placeholder="Description (optional)" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
-            <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
-              <option value="area_manager">Area Manager</option>
-              <option value="chef_head">Head of Chef</option>
-              <option value="barista_head">Head of Barista</option>
-            </select>
+
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Audit target</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNewTarget("OUTLET")}
+                  className={`rounded-md border px-3 py-2 text-sm ${newTarget === "OUTLET" ? "border-terracotta bg-terracotta/5 text-terracotta" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
+                >
+                  Outlet (SOP / Quality)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewTarget("STAFF")}
+                  className={`rounded-md border px-3 py-2 text-sm ${newTarget === "STAFF" ? "border-terracotta bg-terracotta/5 text-terracotta" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
+                >
+                  Staff Skills
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Auditor role</label>
+              <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
+                <option value="area_manager">Area Manager</option>
+                <option value="chef_head">Head of Chef</option>
+                <option value="barista_head">Head of Barista</option>
+              </select>
+            </div>
+
+            {newTarget === "STAFF" && (
+              <div>
+                <label className="block text-[11px] font-medium text-gray-500 mb-1">Staff job role to audit</label>
+                <select
+                  value={newJobRole}
+                  onChange={(e) => setNewJobRole(e.target.value)}
+                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                >
+                  <option value="">Select a role…</option>
+                  {(jobRoles ?? []).map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[10px] text-gray-400">
+                  Pulled live from HR profiles. Templates only match staff with this exact position.
+                </p>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setShowCreate(false)} className="flex-1">Cancel</Button>
               <Button onClick={handleCreate} disabled={!newName.trim() || creating} className="flex-1 bg-terracotta hover:bg-terracotta-dark">
@@ -141,6 +200,11 @@ export default function AuditTemplatesPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input placeholder="Search templates..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
+        <select value={targetFilter} onChange={(e) => setTargetFilter(e.target.value as "ALL" | "OUTLET" | "STAFF")} className="rounded-md border border-gray-200 px-3 py-2 text-sm">
+          <option value="ALL">All Targets</option>
+          <option value="OUTLET">Outlet</option>
+          <option value="STAFF">Staff Skills</option>
+        </select>
         <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="rounded-md border border-gray-200 px-3 py-2 text-sm">
           <option value="ALL">All Roles</option>
           <option value="area_manager">Area Manager</option>
@@ -180,6 +244,11 @@ export default function AuditTemplatesPage() {
                     <Badge className={`text-[10px] ${ROLE_COLORS[t.roleType] || "bg-gray-100 text-gray-600"}`}>
                       {ROLE_LABELS[t.roleType] || t.roleType}
                     </Badge>
+                    {t.auditTarget === "STAFF" && (
+                      <Badge className="text-[10px] bg-purple-100 text-purple-700">
+                        Staff Skills{t.jobRoleFilter ? ` · ${t.jobRoleFilter}` : ""}
+                      </Badge>
+                    )}
                     {!t.isActive && <Badge className="text-[10px] bg-gray-100 text-gray-500">Inactive</Badge>}
                   </div>
                   {t.description && <p className="text-xs text-gray-500 mt-0.5 truncate">{t.description}</p>}

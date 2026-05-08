@@ -28,6 +28,8 @@ type Template = {
   name: string;
   description: string | null;
   roleType: string;
+  auditTarget: "OUTLET" | "STAFF";
+  jobRoleFilter: string | null;
   isActive: boolean;
   version: number;
   sections: (Section & { id: string; items: (SectionItem & { id: string })[] })[];
@@ -48,10 +50,13 @@ const RATING_LABELS: Record<string, string> = {
 export default function EditTemplatePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: template, isLoading, mutate } = useFetch<Template>(`/api/ops/audit-templates/${id}`);
+  const { data: jobRoles } = useFetch<string[]>("/api/ops/audit-templates/job-roles");
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [roleType, setRoleType] = useState("area_manager");
+  const [auditTarget, setAuditTarget] = useState<"OUTLET" | "STAFF">("OUTLET");
+  const [jobRoleFilter, setJobRoleFilter] = useState("");
   const [sections, setSections] = useState<Section[]>([]);
   const [saving, setSaving] = useState(false);
   const [expandedSec, setExpandedSec] = useState<number | null>(0);
@@ -62,6 +67,8 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
       setName(template.name);
       setDescription(template.description || "");
       setRoleType(template.roleType);
+      setAuditTarget(template.auditTarget);
+      setJobRoleFilter(template.jobRoleFilter || "");
       setSections(
         template.sections.map((s) => ({
           name: s.name,
@@ -77,12 +84,23 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
   }, [template]);
 
   const handleSave = async () => {
+    if (auditTarget === "STAFF" && !jobRoleFilter) {
+      alert("Choose a job role for staff-skills templates");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(`/api/ops/audit-templates/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description: description || null, roleType, sections }),
+        body: JSON.stringify({
+          name,
+          description: description || null,
+          roleType,
+          auditTarget,
+          jobRoleFilter: auditTarget === "STAFF" ? jobRoleFilter : null,
+          sections,
+        }),
       });
       if (res.ok) mutate();
     } finally {
@@ -161,13 +179,50 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
             <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional description" />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Role</label>
+            <label className="text-xs font-medium text-gray-500 mb-1 block">Audit target</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setAuditTarget("OUTLET")}
+                className={`rounded-md border px-3 py-2 text-sm ${auditTarget === "OUTLET" ? "border-terracotta bg-terracotta/5 text-terracotta" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
+              >
+                Outlet (SOP / Quality)
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuditTarget("STAFF")}
+                className={`rounded-md border px-3 py-2 text-sm ${auditTarget === "STAFF" ? "border-terracotta bg-terracotta/5 text-terracotta" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
+              >
+                Staff Skills
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500 mb-1 block">Auditor role</label>
             <select value={roleType} onChange={(e) => setRoleType(e.target.value)} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
               <option value="area_manager">Area Manager</option>
               <option value="chef_head">Head of Chef</option>
               <option value="barista_head">Head of Barista</option>
             </select>
           </div>
+          {auditTarget === "STAFF" && (
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Staff job role to audit</label>
+              <select
+                value={jobRoleFilter}
+                onChange={(e) => setJobRoleFilter(e.target.value)}
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+              >
+                <option value="">Select a role…</option>
+                {(jobRoles ?? []).map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+                {jobRoleFilter && !(jobRoles ?? []).includes(jobRoleFilter) && (
+                  <option value={jobRoleFilter}>{jobRoleFilter} (legacy)</option>
+                )}
+              </select>
+            </div>
+          )}
           <p className="text-xs text-gray-400">{sections.length} sections, {totalItems} items</p>
         </CardContent>
       </Card>

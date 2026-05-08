@@ -27,10 +27,18 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { name, description, roleType, sections } = body;
+  const { name, description, roleType, auditTarget, jobRoleFilter, sections } = body;
 
   if (!name || !roleType) {
     return NextResponse.json({ error: "name and roleType required" }, { status: 400 });
+  }
+
+  const target = auditTarget === "STAFF" ? "STAFF" : "OUTLET";
+  if (target === "STAFF" && !jobRoleFilter) {
+    return NextResponse.json(
+      { error: "jobRoleFilter required when auditTarget is STAFF" },
+      { status: 400 },
+    );
   }
 
   const template = await prisma.auditTemplate.create({
@@ -38,6 +46,8 @@ export async function POST(req: NextRequest) {
       name,
       description: description || null,
       roleType,
+      auditTarget: target,
+      jobRoleFilter: target === "STAFF" ? jobRoleFilter : null,
       createdById: session.id,
       sections: sections?.length
         ? {

@@ -33,7 +33,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await req.json();
-  const { name, description, roleType, isActive, sections } = body;
+  const { name, description, roleType, auditTarget, jobRoleFilter, isActive, sections } = body;
 
   // Update template fields
   const data: Record<string, unknown> = {};
@@ -41,6 +41,29 @@ export async function PATCH(
   if (description !== undefined) data.description = description;
   if (roleType !== undefined) data.roleType = roleType;
   if (isActive !== undefined) data.isActive = isActive;
+  if (auditTarget !== undefined) {
+    const target = auditTarget === "STAFF" ? "STAFF" : "OUTLET";
+    data.auditTarget = target;
+    // Clear filter when reverting to OUTLET so we don't carry stale role data.
+    if (target === "OUTLET") data.jobRoleFilter = null;
+  }
+  if (jobRoleFilter !== undefined) data.jobRoleFilter = jobRoleFilter || null;
+
+  // Cross-field validation: STAFF templates always need a jobRoleFilter.
+  // Need to consider both the incoming patch and the persisted state.
+  const targetAfter =
+    (data.auditTarget as string | undefined) ??
+    (await prisma.auditTemplate.findUnique({ where: { id }, select: { auditTarget: true } }))?.auditTarget;
+  const filterAfter =
+    data.jobRoleFilter !== undefined
+      ? (data.jobRoleFilter as string | null)
+      : (await prisma.auditTemplate.findUnique({ where: { id }, select: { jobRoleFilter: true } }))?.jobRoleFilter;
+  if (targetAfter === "STAFF" && !filterAfter) {
+    return NextResponse.json(
+      { error: "jobRoleFilter required when auditTarget is STAFF" },
+      { status: 400 },
+    );
+  }
 
   await prisma.auditTemplate.update({ where: { id }, data });
 

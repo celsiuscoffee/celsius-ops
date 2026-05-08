@@ -20,6 +20,8 @@ export async function GET(req: Request) {
       name: true,
       description: true,
       roleType: true,
+      auditTarget: true,
+      jobRoleFilter: true,
       sections: {
         orderBy: { sortOrder: "asc" },
         select: {

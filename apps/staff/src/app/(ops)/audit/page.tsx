@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  ClipboardCheck, Loader2, CheckCircle2, Clock, Plus, ChevronRight, Building2,
+  ClipboardCheck, Loader2, CheckCircle2, Clock, Plus, ChevronRight, Building2, Target,
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
@@ -15,8 +15,11 @@ type UserProfile = { id: string; name: string; role: string; outletId: string | 
 type Outlet = { id: string; name: string; code: string };
 type Template = {
   id: string; name: string; description: string | null; roleType: string;
+  auditTarget: "OUTLET" | "STAFF";
+  jobRoleFilter: string | null;
   sections: { id: string; name: string; _count: { items: number } }[];
 };
+type Auditee = { id: string; name: string; position: string | null };
 type AuditSummary = {
   id: string; date: string; status: string; overallScore: number | null;
   completedAt: string | null;
@@ -36,7 +39,18 @@ export default function AuditPage() {
   const [showNew, setShowNew] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [selectedOutlet, setSelectedOutlet] = useState("");
+  const [selectedAuditee, setSelectedAuditee] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Auditee list — only relevant for STAFF templates. Re-fetched whenever
+  // template or outlet changes so the list always matches the current pick.
+  const tpl = (templates ?? []).find((t) => t.id === selectedTemplate);
+  const isStaffTemplate = tpl?.auditTarget === "STAFF";
+  const auditeesUrl =
+    isStaffTemplate && selectedTemplate && selectedOutlet
+      ? `/api/audits/auditees?templateId=${selectedTemplate}&outletId=${selectedOutlet}`
+      : null;
+  const { data: auditees, isLoading: loadingAuditees } = useFetch<Auditee[]>(auditeesUrl);
 
   // /api/audits/outlets is already scoped to what the user is allowed to
   // audit (OWNER/ADMIN → all; everyone else → assigned outlets only).
@@ -57,12 +71,17 @@ export default function AuditPage() {
 
   const handleCreate = async () => {
     if (!selectedTemplate || !selectedOutlet) return;
+    if (isStaffTemplate && !selectedAuditee) return;
     setCreating(true);
     try {
       const res = await fetch("/api/audits", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateId: selectedTemplate, outletId: selectedOutlet }),
+        body: JSON.stringify({
+          templateId: selectedTemplate,
+          outletId: selectedOutlet,
+          auditeeId: isStaffTemplate ? selectedAuditee : undefined,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -70,6 +89,7 @@ export default function AuditPage() {
         setShowNew(false);
         setSelectedTemplate("");
         setSelectedOutlet("");
+        setSelectedAuditee("");
         router.push(`/audit/${data.id}`);
       }
     } finally {
@@ -91,6 +111,22 @@ export default function AuditPage() {
           <Plus className="mr-1 h-3.5 w-3.5" /> New Audit
         </Button>
       </div>
+
+      {/* My Skills shortcut — surfaces audits *of* this user (improvement view) */}
+      <Link href="/audit/my-skills">
+        <Card className="px-3 py-2.5 transition-all active:bg-gray-50 border-terracotta/20">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-terracotta/10">
+              <Target className="h-4 w-4 text-terracotta" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-900">My Skills</p>
+              <p className="text-[10px] text-gray-400">See your scores and progress over time</p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-gray-300" />
+          </div>
+        </Card>
+      </Link>
 
 
       {/* New Audit Form */}
@@ -125,7 +161,7 @@ export default function AuditPage() {
             ) : (
               <select
                 value={selectedOutlet}
-                onChange={(e) => setSelectedOutlet(e.target.value)}
+                onChange={(e) => { setSelectedOutlet(e.target.value); setSelectedAuditee(""); }}
                 disabled={singleOutlet}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white disabled:bg-gray-50"
               >
@@ -137,6 +173,35 @@ export default function AuditPage() {
             )}
           </div>
 
+          {/* Staff picker — only for STAFF templates */}
+          {isStaffTemplate && selectedOutlet && (
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">
+                Staff to audit{tpl?.jobRoleFilter ? ` (${tpl.jobRoleFilter})` : ""}
+              </label>
+              {loadingAuditees ? (
+                <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading staff…
+                </div>
+              ) : (auditees ?? []).length === 0 ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  No staff at this outlet match the role &quot;{tpl?.jobRoleFilter}&quot;. Check HR profiles.
+                </p>
+              ) : (
+                <select
+                  value={selectedAuditee}
+                  onChange={(e) => setSelectedAuditee(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                >
+                  <option value="">Select staff...</option>
+                  {(auditees ?? []).map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowNew(false)} className="text-xs flex-1">
               Cancel
@@ -144,7 +209,7 @@ export default function AuditPage() {
             <Button
               size="sm"
               onClick={handleCreate}
-              disabled={!selectedTemplate || !selectedOutlet || creating}
+              disabled={!selectedTemplate || !selectedOutlet || (isStaffTemplate && !selectedAuditee) || creating}
               className="bg-terracotta hover:bg-terracotta-dark text-xs flex-1"
             >
               {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}

@@ -158,6 +158,7 @@ model User {
   activityLogs       ActivityLog[]
   auditTemplatesCreated AuditTemplate[] @relation("AuditTemplateCreatedBy")
   auditReports          AuditReport[]   @relation("AuditReportAuditor")
+  auditReportsAsAuditee AuditReport[]   @relation("AuditReportAuditee")
   bankStatements        BankStatement[]
 }
 
@@ -1052,7 +1053,13 @@ model AuditTemplate {
   id          String   @id @default(uuid())
   name        String
   description String?
-  roleType    String   // "barista_head", "chef_head", "area_manager"
+  roleType    String   // auditor role: "barista_head", "chef_head", "area_manager"
+  // What the template audits. "OUTLET" templates score the outlet (existing SOP/quality
+  // audits). "STAFF" templates score an individual staff member's skills — when used,
+  // the audit report must include an auditeeId and the auditee's hr position must
+  // match jobRoleFilter.
+  auditTarget    String  @default("OUTLET") // "OUTLET" | "STAFF"
+  jobRoleFilter  String? // matches hr_employee_profiles.position; required when auditTarget = "STAFF"
   isActive    Boolean  @default(true)
   version     Int      @default(1)
   createdById String
@@ -1064,6 +1071,7 @@ model AuditTemplate {
   reports  AuditReport[]
 
   @@index([roleType])
+  @@index([auditTarget])
   @@index([isActive])
 }
 
@@ -1100,6 +1108,10 @@ model AuditReport {
   outlet       Outlet        @relation(fields: [outletId], references: [id])
   auditorId    String
   auditor      User          @relation("AuditReportAuditor", fields: [auditorId], references: [id])
+  // Staff being audited. Required when template.auditTarget = "STAFF"; null otherwise.
+  // Indexed to power the per-staff improvement view.
+  auditeeId    String?
+  auditee      User?         @relation("AuditReportAuditee", fields: [auditeeId], references: [id])
   date         DateTime      @db.Date
   status       String        @default("IN_PROGRESS") // "IN_PROGRESS", "COMPLETED"
   overallScore Decimal?
@@ -1112,6 +1124,7 @@ model AuditReport {
 
   @@index([outletId, date])
   @@index([auditorId, date])
+  @@index([auditeeId, date])
   @@index([templateId])
   @@index([status])
 }

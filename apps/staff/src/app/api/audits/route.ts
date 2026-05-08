@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase";
 
 // Check if user has access to a specific module
 // moduleAccess format: { ops: ["audit", "checklists"], inventory: true }
@@ -123,7 +124,7 @@ export async function POST(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { templateId, outletId } = body;
+  const { templateId, outletId, auditeeId } = body;
 
   if (!templateId || !outletId) {
     return NextResponse.json({ error: "templateId and outletId required" }, { status: 400 });
@@ -163,6 +164,53 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Template not found" }, { status: 404 });
   }
 
+  // STAFF templates score an individual; OUTLET templates score the outlet.
+  // For STAFF: require auditeeId, confirm the auditee is a STAFF user
+  // assigned to this outlet, and that their hr position matches the
+  // template's jobRoleFilter.
+  if (template.auditTarget === "STAFF") {
+    if (!auditeeId) {
+      return NextResponse.json(
+        { error: "auditeeId required for staff-skills audits" },
+        { status: 400 },
+      );
+    }
+
+    const auditee = await prisma.user.findUnique({
+      where: { id: auditeeId },
+      select: { id: true, role: true, outletId: true, outletIds: true, status: true },
+    });
+    if (!auditee || auditee.status !== "ACTIVE") {
+      return NextResponse.json({ error: "Auditee not found" }, { status: 404 });
+    }
+    const auditeeOutlets = new Set<string>([
+      ...(auditee.outletId ? [auditee.outletId] : []),
+      ...(auditee.outletIds ?? []),
+    ]);
+    if (!auditeeOutlets.has(outletId)) {
+      return NextResponse.json(
+        { error: "Auditee is not assigned to this outlet" },
+        { status: 400 },
+      );
+    }
+
+    if (template.jobRoleFilter) {
+      const { data: profile } = await supabaseAdmin
+        .from("hr_employee_profiles")
+        .select("position")
+        .eq("user_id", auditeeId)
+        .maybeSingle();
+      if (!profile || profile.position !== template.jobRoleFilter) {
+        return NextResponse.json(
+          {
+            error: `Auditee's role (${profile?.position ?? "unknown"}) does not match template (${template.jobRoleFilter})`,
+          },
+          { status: 400 },
+        );
+      }
+    }
+  }
+
   // Build flat list of report items from template sections
   const reportItems: {
     sectionName: string;
@@ -193,6 +241,7 @@ export async function POST(req: Request) {
       templateId,
       outletId,
       auditorId: session.id,
+      auditeeId: template.auditTarget === "STAFF" ? auditeeId : null,
       date: dateOnly,
       status: "IN_PROGRESS",
       items: { create: reportItems },

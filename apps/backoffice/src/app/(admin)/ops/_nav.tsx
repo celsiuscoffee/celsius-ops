@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, ClipboardList, ClipboardCheck, BookOpen } from "lucide-react";
+import { FileText, ClipboardList, ClipboardCheck, BookOpen, Users } from "lucide-react";
 
 // Templates intentionally omitted from AUDIT_TABS — audit templates live in
 // the SOPs tab set (SopNav) to avoid duplication.
 const AUDIT_TABS = [
   { href: "/ops/audit", label: "Checklist Audit", icon: FileText },
   { href: "/ops/audit-reports", label: "Reports", icon: ClipboardCheck },
+  { href: "/ops/staff-skills", label: "Staff Skills", icon: Users },
 ];
 
 const SOP_TABS = [
