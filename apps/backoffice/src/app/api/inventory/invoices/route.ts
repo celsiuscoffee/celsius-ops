@@ -91,6 +91,14 @@ export async function GET(req: NextRequest) {
   if (outletIds.length === 1) where.outletId = outletIds[0];
   else if (outletIds.length > 1) where.outletId = { in: outletIds };
 
+  // Multi-select supplier filter — repeated `?supplier=<id>` params, OR'd
+  // together via Prisma `in`. Only applies to supplier-type invoices; staff
+  // claims and payment requests skip this filter naturally because they
+  // have null supplierId.
+  const supplierIds = req.nextUrl.searchParams.getAll("supplier").filter(Boolean);
+  if (supplierIds.length === 1) where.supplierId = supplierIds[0];
+  else if (supplierIds.length > 1) where.supplierId = { in: supplierIds };
+
   const dueDateFrom = req.nextUrl.searchParams.get("dueDateFrom") || "";
   const dueDateTo = req.nextUrl.searchParams.get("dueDateTo") || "";
   if (dueDateFrom || dueDateTo) {
@@ -185,6 +193,14 @@ export async function GET(req: NextRequest) {
 
   // Fetch distinct outlets for filter dropdown
   const outlets = await prisma.outlet.findMany({
+    where: { invoices: { some: {} } },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+
+  // Distinct suppliers that appear on at least one invoice — same shape
+  // as outlets, used to populate the Suppliers filter card.
+  const suppliers = await prisma.supplier.findMany({
     where: { invoices: { some: {} } },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
@@ -342,7 +358,7 @@ export async function GET(req: NextRequest) {
     supplierPaymentTerms: inv.supplier?.paymentTerms ?? null,
   }));
 
-  return NextResponse.json({ invoices: mapped, outlets, dueTodayCount, dueTodayAmount, summary });
+  return NextResponse.json({ invoices: mapped, outlets, suppliers, dueTodayCount, dueTodayAmount, summary });
 }
 
 export async function POST(req: NextRequest) {

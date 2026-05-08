@@ -132,6 +132,8 @@ export default function InvoicesPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [outletFilter, setOutletFilter] = useState<string[]>([]);
+  const [supplierFilter, setSupplierFilter] = useState<string[]>([]);
+  const [supplierSearch, setSupplierSearch] = useState("");
   const [bankFilter, setBankFilter] = useState<"all" | "maybank" | "non-maybank">("all");
   const [dueDateFrom, setDueDateFrom] = useState("");
   const [dueDateTo, setDueDateTo] = useState("");
@@ -290,6 +292,7 @@ export default function InvoicesPage() {
   const params = new URLSearchParams({ tab, type: typeFilter });
   if (debouncedSearch) params.set("search", debouncedSearch);
   outletFilter.forEach((id) => params.append("outlet", id));
+  supplierFilter.forEach((id) => params.append("supplier", id));
   if (dueDateFrom) params.set("dueDateFrom", dueDateFrom);
   if (dueDateTo) params.set("dueDateTo", dueDateTo);
   if (paidDateFrom) params.set("paidDateFrom", paidDateFrom);
@@ -304,6 +307,10 @@ export default function InvoicesPage() {
   const { data, isLoading: loading, mutate: loadInvoices } = useFetch<InvoicesResponse>(url);
   const allInvoices = data?.invoices ?? [];
   const outletOptions = data?.outlets ?? [];
+  const supplierOptions = (data as { suppliers?: { id: string; name: string }[] } | null)?.suppliers ?? [];
+  const filteredSupplierOptions = supplierSearch
+    ? supplierOptions.filter((s) => s.name.toLowerCase().includes(supplierSearch.toLowerCase()))
+    : supplierOptions;
   const dueTodayCount = data?.dueTodayCount ?? 0;
   const dueTodayAmount = data?.dueTodayAmount ?? 0;
 
@@ -320,7 +327,7 @@ export default function InvoicesPage() {
     return true;
   });
 
-  const activeFilterCount = [outletFilter.length > 0, bankFilter !== "all", dueDateFrom, dueDateTo, paidDateFrom, paidDateTo].filter(Boolean).length;
+  const activeFilterCount = [outletFilter.length > 0, supplierFilter.length > 0, bankFilter !== "all", dueDateFrom, dueDateTo, paidDateFrom, paidDateTo].filter(Boolean).length;
 
   const openPayDialog = (inv: Invoice, targetStatus: string) => {
     setPayingInvoice(inv);
@@ -971,7 +978,7 @@ export default function InvoicesPage() {
         </button>
         {activeFilterCount > 0 && (
           <button
-            onClick={() => { setOutletFilter([]); setBankFilter("all"); setDueDateFrom(""); setDueDateTo(""); }}
+            onClick={() => { setOutletFilter([]); setSupplierFilter([]); setSupplierSearch(""); setBankFilter("all"); setDueDateFrom(""); setDueDateTo(""); setPaidDateFrom(""); setPaidDateTo(""); }}
             className="flex items-center gap-1 rounded-full border border-gray-200 px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-50"
           >
             <X className="h-3 w-3" /> Clear filters
@@ -1006,6 +1013,49 @@ export default function InvoicesPage() {
                     {o.name}
                   </label>
                 ))}
+              </div>
+            </div>
+
+            {/* Suppliers — multi-select with search box. Suppliers list comes
+                from the API (only suppliers that appear on at least one
+                invoice). Search filters client-side because the list is
+                small enough that a roundtrip per keystroke isn't worth it. */}
+            <div>
+              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+                <Building2 className="h-3 w-3" /> Suppliers
+                {supplierFilter.length > 0 && (
+                  <span className="ml-1 rounded-full bg-blue-100 px-1.5 text-[10px] text-blue-700">{supplierFilter.length}</span>
+                )}
+                {supplierFilter.length > 0 && (
+                  <button onClick={() => setSupplierFilter([])} className="ml-auto text-[10px] text-blue-500 hover:underline">Clear</button>
+                )}
+              </label>
+              <div className="rounded-md border border-gray-200 bg-white">
+                <input
+                  type="text"
+                  placeholder="Search suppliers…"
+                  value={supplierSearch}
+                  onChange={(e) => setSupplierSearch(e.target.value)}
+                  className="w-full rounded-t-md border-b border-gray-200 px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:outline-none"
+                />
+                <div className="max-h-[110px] overflow-y-auto p-1.5 space-y-0.5">
+                  {filteredSupplierOptions.length === 0 ? (
+                    <p className="px-2 py-1 text-[11px] text-gray-400">No matches</p>
+                  ) : filteredSupplierOptions.map((s) => (
+                    <label key={s.id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={supplierFilter.includes(s.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) setSupplierFilter((prev) => [...prev, s.id]);
+                          else setSupplierFilter((prev) => prev.filter((id) => id !== s.id));
+                        }}
+                        className="rounded border-gray-300 text-blue-500 focus:ring-blue-400 h-3.5 w-3.5"
+                      />
+                      <span className="truncate">{s.name}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
 
