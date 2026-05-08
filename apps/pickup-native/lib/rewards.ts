@@ -121,13 +121,25 @@ export type PromoLine = {
   unit_price: number;
 };
 
+/**
+ * Result discriminator so callers can tell "no discounts apply" from
+ * "we couldn't reach the discount engine". Previously we returned null
+ * on every failure — silent — which is exactly how the Boss promo was
+ * masked for weeks (CSRF blocked the POST and customers saw zero
+ * discount, no error). With this shape callers can show a toast on
+ * "error" without complicating the happy path.
+ */
+export type EvaluateResult =
+  | { kind: "ok"; data: EvaluatedCart }
+  | { kind: "error"; reason: string };
+
 export async function evaluatePromotions(input: {
   lines: PromoLine[];
   member_id?: string | null;
   outlet_id?: string | null;
   member_tier_id?: string | null;
   promo_code?: string | null;
-}): Promise<EvaluatedCart | null> {
+}): Promise<EvaluateResult> {
   try {
     // Two gotchas the order app's middleware imposes:
     //
@@ -145,10 +157,16 @@ export async function evaluatePromotions(input: {
       },
       body: JSON.stringify({ ...input, brand_id: "brand-celsius" }),
     });
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
+    if (!res.ok) {
+      return { kind: "error", reason: `evaluate ${res.status}` };
+    }
+    const data = (await res.json()) as EvaluatedCart;
+    return { kind: "ok", data };
+  } catch (e) {
+    return {
+      kind: "error",
+      reason: e instanceof Error ? e.message : "network",
+    };
   }
 }
 

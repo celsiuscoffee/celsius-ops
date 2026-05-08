@@ -19,12 +19,14 @@ import { api, formatPrice } from "../lib/api";
 import {
   calcRewardDiscount,
   fetchTier,
+  fetchRewards,
   evaluatePromotions,
   type MemberTier,
   type EvaluatedCart,
   type PromoLine,
 } from "../lib/rewards";
 import { getSetting } from "../lib/settings";
+import { showToast } from "../lib/toast";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { PrimaryButton } from "../components/PrimaryButton";
 
@@ -40,6 +42,7 @@ export default function Checkout() {
   const setPhone = useApp((s) => s.setPhone);
   const clearCart = useApp((s) => s.clearCart);
   const appliedReward = useApp((s) => s.appliedReward);
+  const setAppliedReward = useApp((s) => s.setAppliedReward);
   const loyaltyId = useApp((s) => s.loyaltyId);
 
   // SST is config-driven via /api/settings?key=sst — admin can toggle/adjust
@@ -70,9 +73,15 @@ export default function Checkout() {
   const [promoCodeOpen, setPromoCodeOpen] = useState(false);
   const [promoEval, setPromoEval] = useState<EvaluatedCart | null>(null);
 
+  // Track whether the last evaluate call failed so we can surface a
+  // toast once. We only fire the toast on the *transition* into an
+  // error state — repeating it on every debounced call would spam.
+  const [promoEvalError, setPromoEvalError] = useState(false);
+
   useEffect(() => {
     if (cart.length === 0) {
       setPromoEval(null);
+      setPromoEvalError(false);
       return;
     }
     const lines: PromoLine[] = cart.map((c) => ({
@@ -87,12 +96,26 @@ export default function Checkout() {
         outlet_id: outletId,
         member_tier_id: tier?.tier_id ?? null,
         promo_code: promoCode.trim() || null,
-      })
-        .then(setPromoEval)
-        .catch(() => setPromoEval(null));
+      }).then((res) => {
+        if (res.kind === "ok") {
+          setPromoEval(res.data);
+          setPromoEvalError(false);
+        } else {
+          setPromoEval(null);
+          if (!promoEvalError) {
+            setPromoEvalError(true);
+            // Non-blocking — checkout still proceeds at full price if the
+            // discount engine is genuinely unreachable.
+            showToast({
+              message: "Couldn't check for discounts. Pull to retry.",
+              variant: "info",
+            });
+          }
+        }
+      });
     }, 300);
     return () => clearTimeout(handle);
-  }, [cart, loyaltyId, outletId, tier?.tier_id, promoCode]);
+  }, [cart, loyaltyId, outletId, tier?.tier_id, promoCode, promoEvalError]);
 
   const promoDiscount = promoEval?.total_discount ?? 0;
 
@@ -163,6 +186,43 @@ export default function Checkout() {
       Alert.alert("No outlet selected", "Pick an outlet first.");
       return;
     }
+
+    // Guard: re-validate the applied reward right before submitting.
+    // Customers can sit on the cart screen for hours; a reward that
+    // was eligible at add-time may have expired, hit its
+    // max_redemptions cap, or been deactivated. Catching it client-
+    // side is friendlier than the server-side 422 surprise.
+    if (appliedReward) {
+      try {
+        const fresh = await fetchRewards(phoneInput.trim() || phoneFromStore || null);
+        const live = fresh.rewards.find((r) => r.id === appliedReward.id);
+        const now = Date.now();
+        const stillValid =
+          live &&
+          live.is_active !== false &&
+          (!live.valid_until || new Date(live.valid_until).getTime() > now) &&
+          (live.stock == null || live.stock > 0) &&
+          (live.max_redemptions_per_member == null ||
+            (live.redemption_count ?? 0) < live.max_redemptions_per_member);
+        if (!stillValid) {
+          // Clear the stale reward, surface a toast, bounce out so
+          // the customer sees the corrected total before tapping
+          // place-order again.
+          setAppliedReward(null);
+          showToast({
+            message: "Your reward expired. Updated total below.",
+            variant: "info",
+            durationMs: 3500,
+          });
+          return;
+        }
+      } catch {
+        // Network failure on the re-check is non-blocking — let the
+        // server be the final arbiter rather than holding up the
+        // order over a transient connectivity blip.
+      }
+    }
+
     setBusy(true);
     setLastError(null);
     let stage = "init";
@@ -401,7 +461,7 @@ export default function Checkout() {
               className="mt-3 bg-background border border-border rounded-xl px-4 py-3 text-espresso text-lg"
             />
             <View className="mt-5">
-              <PrimaryButton label="Send code" onPress={onSendOtp} loading={busy} />
+              <PrimaryButton label="Text me the code" onPress={onSendOtp} loading={busy} />
             </View>
           </View>
         )}
@@ -423,7 +483,7 @@ export default function Checkout() {
               className="mt-3 bg-background border border-border rounded-xl px-4 py-3 text-espresso text-2xl tracking-widest text-center"
             />
             <View className="mt-5">
-              <PrimaryButton label="Verify" onPress={onVerifyOtp} loading={busy} />
+              <PrimaryButton label="Let me in" onPress={onVerifyOtp} loading={busy} />
             </View>
             <Pressable onPress={() => setStep("phone")} className="mt-3 items-center active:opacity-70">
               <Text className="text-muted-fg text-sm">Wrong number? Edit</Text>

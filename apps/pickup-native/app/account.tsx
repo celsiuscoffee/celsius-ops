@@ -18,9 +18,7 @@ import {
   Phone,
   ArrowLeft,
   ShoppingBag,
-  HelpCircle,
-  Shield,
-  Trash2,
+  Settings as SettingsIcon,
   Pencil,
   X,
 } from "lucide-react-native";
@@ -283,20 +281,13 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
           label="My orders"
           onPress={() => router.push("/orders")}
         />
+        {/* Support / Privacy / Delete moved into a dedicated Settings
+            sub-screen — they're low-frequency and the wall of rows
+            made the signed-in profile feel like an admin panel. */}
         <ActionRow
-          icon={HelpCircle}
-          label="Support"
-          onPress={() => router.push("/support")}
-        />
-        <ActionRow
-          icon={Shield}
-          label="Privacy policy"
-          onPress={() => router.push("/privacy")}
-        />
-        <ActionRow
-          icon={Trash2}
-          label="Delete account"
-          onPress={() => router.push("/account-delete")}
+          icon={SettingsIcon}
+          label="Settings"
+          onPress={() => router.push("/settings")}
         />
 
         <View
@@ -780,7 +771,7 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                   className="text-white text-base"
                   style={{ fontFamily: "Peachi-Bold" }}
                 >
-                  Send code
+                  Text me the code
                 </Text>
               )}
             </Pressable>
@@ -896,7 +887,7 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                   className="text-white text-base"
                   style={{ fontFamily: "Peachi-Bold" }}
                 >
-                  Verify
+                  Let me in
                 </Text>
               )}
             </Pressable>
