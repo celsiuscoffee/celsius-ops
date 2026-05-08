@@ -1,4 +1,4 @@
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, Image } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Gift } from "lucide-react-native";
 import { rewardUrgencyLabel, type Reward } from "../lib/rewards";
@@ -62,6 +62,23 @@ export function RewardTicket({ reward, onPress, accent }: Props) {
           the customer the type at a glance ("BOGO" / "DISCOUNT" /
           "GIFT"). Urgency pill floats top-right when relevant. */}
       <View style={{ backgroundColor: topBg, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 14, minHeight: 92 }}>
+        {/* Celsius cup mark anchored bottom-right of the top stub —
+            same brand-anchor pattern Zus uses on its home tiles. Sits
+            below the headline so it doesn't compete with the value
+            ("Buy 1 Free 1") but reads as identity at a glance. */}
+        <Image
+          source={require("../assets/icon.png")}
+          style={{
+            position: "absolute",
+            right: -6,
+            bottom: -6,
+            width: 44,
+            height: 44,
+            borderRadius: 8,
+            opacity: 0.85,
+          }}
+          resizeMode="cover"
+        />
         <View className="flex-row items-center justify-between">
           <Text
             style={{
@@ -85,6 +102,7 @@ export function RewardTicket({ reward, onPress, accent }: Props) {
             fontSize: 19,
             lineHeight: 21,
             marginTop: 5,
+            paddingRight: 36,
           }}
           numberOfLines={2}
         >
