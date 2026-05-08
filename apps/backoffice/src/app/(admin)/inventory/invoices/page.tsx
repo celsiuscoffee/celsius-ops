@@ -603,8 +603,15 @@ export default function InvoicesPage() {
     return d.toISOString().split("T")[0];
   };
 
+  type ReconLine = { productId: string; product: string; uom: string; ordered: number; received: number; unitPrice: number; orderedTotal: number; receivedLineTotal: number; qtyVariance: number };
+  type ReconData = { hasOrder: boolean; orderNumber?: string; lines: ReconLine[]; poTotal: number; receivedTotal: number; billedTotal: number };
+  const [attachRecon, setAttachRecon] = useState<ReconData | null>(null);
+  const [showVariances, setShowVariances] = useState(false);
+
   const openAttach = (inv: Invoice) => {
     setAttachingInvoice(inv);
+    setAttachRecon(null);
+    setShowVariances(false);
     const today = new Date().toISOString().split("T")[0];
     const termDays = parsePaymentTermDays(inv.supplierPaymentTerms);
     setAttachForm({
@@ -614,6 +621,12 @@ export default function InvoicesPage() {
       amount: inv.amount.toFixed(2),
     });
     setAttachPhotos(inv.photos || []);
+    // Pull the reconciliation breakdown — PO line items + received qty per
+    // line — so we can show ordered/received/billed totals at-a-glance.
+    fetch(`/api/inventory/invoices/${inv.id}/recon`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setAttachRecon(d))
+      .catch(() => setAttachRecon(null));
   };
 
   const [attachDragging, setAttachDragging] = useState(false);
@@ -706,6 +719,20 @@ export default function InvoicesPage() {
       return;
     }
     setAttachSaving(true);
+    // Reconciliation flag — if the supplier-billed amount diverges from
+    // the received total by > RM 0.50, surface it on the invoice's
+    // flags array so the AP queue can highlight it. Procurement is
+    // implicitly accepting the variance by clicking Attach.
+    const billed = parseFloat(attachForm.amount) || attachingInvoice.amount;
+    const reconFlag =
+      attachRecon?.hasOrder && Math.abs(billed - attachRecon.receivedTotal) > 0.5
+        ? {
+            code: "BILLED_VS_RECEIVED",
+            message: `Supplier billed RM ${billed.toFixed(2)} vs received total RM ${attachRecon.receivedTotal.toFixed(2)} (Δ RM ${(billed - attachRecon.receivedTotal).toFixed(2)})`,
+            detectedAt: new Date().toISOString(),
+            qtyVariances: attachRecon.lines.filter((l) => Math.abs(l.qtyVariance) > 0.0001).map((l) => ({ product: l.product, ordered: l.ordered, received: l.received })),
+          }
+        : null;
     try {
       const res = await fetch(`/api/inventory/invoices/${attachingInvoice.id}`, {
         method: "PATCH",
@@ -714,8 +741,9 @@ export default function InvoicesPage() {
           invoiceNumber: attachForm.invoiceNumber.trim(),
           issueDate: attachForm.issueDate || null,
           dueDate: attachForm.dueDate || null,
-          amount: parseFloat(attachForm.amount) || attachingInvoice.amount,
+          amount: billed,
           photos: attachPhotos,
+          ...(reconFlag ? { addFlag: reconFlag } : {}),
         }),
       });
       if (!res.ok) {
@@ -1763,6 +1791,73 @@ export default function InvoicesPage() {
                   <span className="ml-2 rounded bg-yellow-100 px-1.5 py-0.5 text-[10px] font-medium text-yellow-800">Terms: {attachingInvoice.supplierPaymentTerms}</span>
                 )}
               </div>
+
+              {/* Reconciliation panel — three-row totals strip. Surfaces
+                  qty mismatches between what the PO ordered, what staff
+                  actually received, and what the supplier is billing for.
+                  Catches gross billing errors without forcing line-by-line
+                  data entry. */}
+              {attachRecon?.hasOrder && (() => {
+                const billed = parseFloat(attachForm.amount) || attachRecon.billedTotal;
+                const billedVsReceived = billed - attachRecon.receivedTotal;
+                const hasVariance = Math.abs(billedVsReceived) > 0.5;
+                const lineVariances = attachRecon.lines.filter((l) => Math.abs(l.qtyVariance) > 0.0001);
+                return (
+                  <div className={`rounded-lg border px-3 py-2 text-xs ${hasVariance ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-700">Reconciliation</span>
+                      {!hasVariance && lineVariances.length === 0 && (
+                        <span className="text-[10px] font-medium text-emerald-700">✓ All aligned</span>
+                      )}
+                      {hasVariance && (
+                        <span className="text-[10px] font-medium text-red-700">⚠ Billed {billedVsReceived >= 0 ? "+" : ""}{formatRM(billedVsReceived)} vs received</span>
+                      )}
+                    </div>
+                    <dl className="mt-1.5 space-y-0.5">
+                      <div className="flex items-baseline justify-between text-gray-600">
+                        <dt>PO ordered</dt>
+                        <dd className="tabular-nums">{formatRM(attachRecon.poTotal)}</dd>
+                      </div>
+                      <div className="flex items-baseline justify-between text-gray-600">
+                        <dt>Received total</dt>
+                        <dd className="tabular-nums">{formatRM(attachRecon.receivedTotal)}</dd>
+                      </div>
+                      <div className="flex items-baseline justify-between text-gray-700 font-medium">
+                        <dt>Supplier billed</dt>
+                        <dd className="tabular-nums">{formatRM(billed)}</dd>
+                      </div>
+                    </dl>
+                    {(hasVariance || lineVariances.length > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => setShowVariances((v) => !v)}
+                        className="mt-1.5 text-[11px] font-medium text-red-700 underline-offset-2 hover:underline"
+                      >
+                        {showVariances ? "Hide" : "Show"} variance lines ({lineVariances.length} qty mismatch{lineVariances.length === 1 ? "" : "es"})
+                      </button>
+                    )}
+                    {showVariances && lineVariances.length > 0 && (
+                      <table className="mt-2 w-full text-[11px]">
+                        <thead className="text-gray-500">
+                          <tr><th className="text-left font-normal">Item</th><th className="text-right font-normal">Ordered</th><th className="text-right font-normal">Received</th><th className="text-right font-normal">Δ</th></tr>
+                        </thead>
+                        <tbody>
+                          {lineVariances.map((l) => (
+                            <tr key={l.productId} className="border-t border-red-100">
+                              <td className="py-0.5 text-gray-700">{l.product}</td>
+                              <td className="text-right tabular-nums">{l.ordered.toFixed(2)} {l.uom}</td>
+                              <td className="text-right tabular-nums">{l.received.toFixed(2)} {l.uom}</td>
+                              <td className={`text-right tabular-nums font-medium ${l.qtyVariance < 0 ? "text-red-600" : "text-amber-600"}`}>
+                                {l.qtyVariance >= 0 ? "+" : ""}{l.qtyVariance.toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>

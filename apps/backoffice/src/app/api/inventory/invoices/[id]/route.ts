@@ -46,6 +46,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (paidVia !== undefined) data.paidVia = paidVia;
     if (paymentRef !== undefined) data.paymentRef = paymentRef;
     if (status === "PAID") data.paidAt = new Date();
+    // Append a single flag (e.g. BILLED_VS_RECEIVED reconciliation flag
+    // surfaced by the Attach Supplier Invoice dialog). Idempotent against
+    // re-saves of the same code.
+    if (body.addFlag && typeof body.addFlag === "object" && body.addFlag.code) {
+      const existing = await prisma.invoice.findUnique({ where: { id }, select: { flags: true } });
+      const currentFlags = Array.isArray(existing?.flags) ? (existing!.flags as Array<{ code?: string }>) : [];
+      const dedup = currentFlags.filter((f) => f?.code !== body.addFlag.code);
+      data.flags = [...dedup, body.addFlag];
+    }
     // Confirm/clear the AI prefill marker. Pass `confirmAiPrefill: true` to
     // explicitly accept the AI's suggestions and drop the "verify" banner.
     // Manual edits to invoiceNumber/dueDate/issueDate/amount also clear it
