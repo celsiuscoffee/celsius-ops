@@ -23,6 +23,7 @@ import { BottomNav } from "../components/BottomNav";
 import { useApp } from "../lib/store";
 import { fetchOrderHistory, type OrderHistoryEntry } from "../lib/rewards";
 import { formatPrice } from "../lib/api";
+import { showToast } from "../lib/toast";
 
 export default function OrdersTab() {
   const phone = useApp((s) => s.phone);
@@ -43,13 +44,16 @@ export default function OrdersTab() {
       // Wipe current cart so reordered items aren't double-added on top
       clearCart();
     }
+    let totalQty = 0;
     for (const it of order.order_items) {
+      const q = it.quantity ?? 1;
+      totalQty += q;
       addToCart({
         productId: it.product_id,
         name: it.product_name,
         image: undefined, // not stored on order_items; will fall back to placeholder
         basePrice: (it.unit_price ?? 0) / 100,
-        quantity: it.quantity ?? 1,
+        quantity: q,
         modifiers: (it.modifiers ?? []).map((m) => ({
           groupId: "",
           groupName: m.groupName ?? "",
@@ -61,7 +65,17 @@ export default function OrdersTab() {
         totalPrice: (it.item_total ?? it.unit_price ?? 0) / 100,
       });
     }
-    router.push("/cart");
+    // Stay on the orders list rather than yanking the customer to /cart —
+    // some reorders are exploratory ("did I order anything weird?"). A
+    // toast with a Review-cart action lets them choose whether to go.
+    showToast({
+      message: `${totalQty} ${totalQty === 1 ? "item" : "items"} added to cart`,
+      action: {
+        label: "Review",
+        onPress: () => router.push("/cart"),
+      },
+      variant: "success",
+    });
   };
 
   return (

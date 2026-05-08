@@ -35,6 +35,7 @@ import {
   Plus,
   Check,
   Heart,
+  ChevronRight,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fetchMenu, type Product } from "../lib/menu";
@@ -219,6 +220,8 @@ export default function Menu() {
             }}
             className="p-1 active:opacity-60"
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={searchOpen ? "Close search" : "Search menu"}
           >
             {searchOpen ? (
               <Text className="text-primary text-sm font-medium">Cancel</Text>
@@ -230,6 +233,12 @@ export default function Menu() {
             onPress={() => router.push("/cart")}
             className="p-1 relative active:opacity-60"
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={
+              cartCount(cart) > 0
+                ? `Cart, ${cartCount(cart)} ${cartCount(cart) === 1 ? "item" : "items"}`
+                : "Cart, empty"
+            }
           >
             <ShoppingCart size={20} color="#160800" />
             {cartCount(cart) > 0 && (
@@ -246,6 +255,7 @@ export default function Menu() {
             router.push("/store");
           }}
           className="flex-row items-center gap-2 px-4 pb-3 active:opacity-70"
+          accessibilityLabel={`Pickup outlet: ${outletName ?? "not selected"}. Tap to change.`}
         >
           <MapPin size={14} color="#C05040" />
           <Text className="text-espresso font-bold text-sm flex-1" numberOfLines={1}>
@@ -253,6 +263,42 @@ export default function Menu() {
           </Text>
           <ChevronDown size={14} color="#8E8E93" />
         </Pressable>
+
+        {/* Guest banner — gentle pull to sign in. Sits below the outlet
+            row so it never blocks the cart icon. Only shown when the
+            user isn't signed in yet. */}
+        {!phone && (
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/account");
+            }}
+            className="active:opacity-90"
+            style={{ backgroundColor: "#1A0200" }}
+          >
+            <View className="flex-row items-center justify-between px-4 py-2.5">
+              <View className="flex-row items-center gap-2 flex-1">
+                <Text style={{ fontSize: 14 }}>🎁</Text>
+                <Text
+                  className="text-white text-[12px] flex-1"
+                  style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
+                  numberOfLines={1}
+                >
+                  Sign in for a free welcome drink
+                </Text>
+              </View>
+              <View className="flex-row items-center gap-1">
+                <Text
+                  className="text-amber-400 text-[11px] uppercase"
+                  style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1 }}
+                >
+                  Sign in
+                </Text>
+                <ChevronRight size={12} color="#FBBF24" />
+              </View>
+            </View>
+          </Pressable>
+        )}
       </View>
 
       {/* Side category pills + product list */}
@@ -492,11 +538,19 @@ function ProductRow({
                 onAdd();
               }
             }}
-            hitSlop={8}
+            hitSlop={12}
             className={`rounded-full items-center justify-center active:opacity-70 ${
               recentlyAdded ? "bg-green-600" : "bg-espresso"
             }`}
             style={{ width: 28, height: 28 }}
+            accessibilityRole="button"
+            accessibilityLabel={
+              hasModifiers
+                ? `Customise ${product.name}`
+                : recentlyAdded
+                ? `Added ${product.name} to cart`
+                : `Add ${product.name} to cart`
+            }
           >
             {recentlyAdded ? (
               <Check size={14} color="#FFFFFF" strokeWidth={3} />

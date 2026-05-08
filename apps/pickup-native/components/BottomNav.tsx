@@ -50,6 +50,9 @@ export function BottomNav() {
             }}
             className="flex-1 items-center gap-1 py-1.5 active:opacity-60"
             hitSlop={8}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={`${tab.label} tab`}
           >
             <Icon
               size={26}

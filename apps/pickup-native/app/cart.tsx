@@ -10,6 +10,7 @@ import { formatPrice } from "../lib/api";
 import { calcRewardDiscount } from "../lib/rewards";
 import { fetchMenu } from "../lib/menu";
 import { getSetting } from "../lib/settings";
+import { supabase, type Outlet } from "../lib/supabase";
 import { EspressoHeader } from "../components/EspressoHeader";
 
 export default function Cart() {
@@ -17,9 +18,31 @@ export default function Cart() {
   const cart = useApp((s) => s.cart);
   const updateQuantity = useApp((s) => s.updateQuantity);
   const removeFromCart = useApp((s) => s.removeFromCart);
+  const outletId = useApp((s) => s.outletId);
   const outletName = useApp((s) => s.outletName);
   const appliedReward = useApp((s) => s.appliedReward);
   const setAppliedReward = useApp((s) => s.setAppliedReward);
+
+  // Re-poll the chosen outlet's open/busy state every 30s while this
+  // screen is mounted. If they flipped to closed mid-cart, we surface
+  // a banner so the customer knows BEFORE they hit checkout and get a
+  // 422 from the order API. Cheap query — single row by store_id.
+  const outletQ = useQuery<Outlet | null>({
+    queryKey: ["outlet-status", outletId],
+    queryFn: async () => {
+      if (!outletId) return null;
+      const { data } = await supabase
+        .from("outlet_settings")
+        .select("store_id,name,address,lat,lng,is_open,is_busy,pickup_time_mins")
+        .eq("store_id", outletId)
+        .maybeSingle();
+      return (data as Outlet | null) ?? null;
+    },
+    enabled: !!outletId && cart.length > 0,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+  const outletClosed = outletQ.data && outletQ.data.is_open === false;
 
   const subtotal = cartTotal(cart);
   const discount = calcRewardDiscount(appliedReward, cart, subtotal);
@@ -367,6 +390,53 @@ export default function Cart() {
                 {formatPrice(grandTotal)}
               </Text>
             </View>
+            {/* Outlet flipped to closed mid-cart — show a banner + block
+                checkout. Customers got a 422 from /api/orders before
+                without ever knowing the outlet had closed since they
+                started shopping. */}
+            {outletClosed && (
+              <View
+                className="rounded-2xl mb-3 px-3 py-3 flex-row items-start gap-2.5"
+                style={{ backgroundColor: "rgba(192, 80, 64, 0.10)", borderWidth: 1, borderColor: "rgba(192, 80, 64, 0.25)" }}
+              >
+                <View
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 3,
+                    backgroundColor: "#C05040",
+                    marginTop: 6,
+                  }}
+                />
+                <View className="flex-1">
+                  <Text
+                    className="text-espresso text-[13px]"
+                    style={{ fontFamily: "Peachi-Bold" }}
+                  >
+                    {outletName ?? "This outlet"} just closed
+                  </Text>
+                  <Text
+                    className="text-muted-fg text-[11px] mt-0.5"
+                    style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                  >
+                    Pick another outlet to continue, or come back when we open.
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => router.push("/store")}
+                  hitSlop={6}
+                  accessibilityLabel="Pick another outlet"
+                  className="active:opacity-70"
+                >
+                  <Text
+                    className="text-primary text-[12px]"
+                    style={{ fontFamily: "SpaceGrotesk_700Bold" }}
+                  >
+                    Switch
+                  </Text>
+                </Pressable>
+              </View>
+            )}
             {belowMin && (
               <Text
                 className="text-primary text-[12px] text-center mb-2"
@@ -376,16 +446,18 @@ export default function Cart() {
               </Text>
             )}
             <Pressable
-              disabled={belowMin}
+              disabled={belowMin || !!outletClosed}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 router.push("/checkout");
               }}
               className={`rounded-full py-4 items-center ${
-                belowMin ? "bg-primary/40" : "bg-primary active:opacity-80"
+                belowMin || outletClosed ? "bg-primary/40" : "bg-primary active:opacity-80"
               }`}
             >
-              <Text className="text-white font-bold text-base">Continue to checkout</Text>
+              <Text className="text-white font-bold text-base">
+                {outletClosed ? "Outlet closed" : "Continue to checkout"}
+              </Text>
             </Pressable>
           </View>
         </>

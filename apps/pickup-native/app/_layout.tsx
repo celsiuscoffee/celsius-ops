@@ -16,6 +16,7 @@ import { LogoIntro } from "../components/LogoIntro";
 import { MaintenanceBanner } from "../components/MaintenanceBanner";
 import { StripeUrlHandler } from "../components/StripeUrlHandler";
 import { RootErrorBoundary } from "../components/RootErrorBoundary";
+import { Toast } from "../components/Toast";
 import { registerForPush } from "../lib/notifications";
 import { useApp } from "../lib/store";
 import {
@@ -170,6 +171,10 @@ export default function RootLayout() {
                     <Stack.Screen name="account" options={{ animation: "fade" }} />
                   </Stack>
                   <MaintenanceBanner />
+                  {/* Global toast layer — sits above stack content but below
+                      the cold-launch logo / splash so it doesn't jitter the
+                      first-launch sequence. */}
+                  <Toast />
                 </>
               )}
               {!showLogo && showSplash && (

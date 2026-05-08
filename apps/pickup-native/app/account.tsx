@@ -607,6 +607,30 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
   const [normalised, setNormalised] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // After we send the OTP, count up so the "Didn't get it? Resend"
+  // affordance only reveals once enough time has passed for SMS
+  // delivery to plausibly have failed (~30s). Avoids triggering an
+  // immediate retry loop that hammers our SMS provider's per-second
+  // rate limit when customers thumb-tap "resend" twice.
+  const [secondsSince, setSecondsSince] = useState(0);
+  useEffect(() => {
+    if (step !== "code") {
+      setSecondsSince(0);
+      return;
+    }
+    const id = setInterval(() => setSecondsSince((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [step]);
+
+  // Live preview of the normalised number as the user types — turns
+  // "0123456789" into "+60 12 345 6789" so they can see exactly which
+  // number we'll text before they tap Send.
+  const livePreview = (() => {
+    const digits = phoneInput.replace(/\D/g, "");
+    if (digits.length < 9) return null;
+    const norm = normalisePhone(phoneInput);
+    return norm.replace(/^(\+\d{2})(\d{2})(\d{3})(\d{4})$/, "$1 $2 $3 $4");
+  })();
 
   const handleSend = async () => {
     if (!isValidLocalPhone(phoneInput)) {
@@ -627,6 +651,17 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Reset to phone step with the same number pre-filled — used by the
+  // "Use a different number" link on the code step. Different from the
+  // simple Back arrow because we don't pre-fill on Back; from here the
+  // customer is correcting a typo and needs the input editable.
+  const handleChangeNumber = () => {
+    Haptics.selectionAsync();
+    setStep("phone");
+    setCode("");
+    setError(null);
   };
 
   const handleVerify = async () => {
@@ -704,16 +739,29 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                 className="flex-1 text-espresso text-base"
                 style={{ fontFamily: "SpaceGrotesk_500Medium" }}
                 maxLength={11}
+                accessibilityLabel="Phone number"
               />
             </View>
-            {error && (
-              <Text
-                className="text-primary text-xs mt-2 px-1"
-                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
-              >
-                {error}
-              </Text>
-            )}
+            {/* Show either the live preview (good state) or the error
+                (bad state). They occupy the same vertical slot so the
+                Send button doesn't shift when the user starts typing. */}
+            <View style={{ minHeight: 18, marginTop: 8 }}>
+              {error ? (
+                <Text
+                  className="text-primary text-xs px-1"
+                  style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                >
+                  {error}
+                </Text>
+              ) : livePreview ? (
+                <Text
+                  className="text-muted-fg text-xs px-1"
+                  style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                >
+                  We'll text {livePreview}
+                </Text>
+              ) : null}
+            </View>
 
             <Pressable
               disabled={loading || !isValidLocalPhone(phoneInput)}
@@ -765,6 +813,7 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
               }}
               className="flex-row items-center gap-1 active:opacity-60 mb-4 -ml-1 self-start"
               hitSlop={8}
+              accessibilityLabel="Back to phone number"
             >
               <ArrowLeft size={16} color="#6E6E73" />
               <Text
@@ -781,12 +830,26 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
             >
               Enter the code
             </Text>
-            <Text
-              className="text-muted-fg text-sm mt-1.5 mb-6"
-              style={{ fontFamily: "SpaceGrotesk_400Regular" }}
-            >
-              Sent to {normalised}. Should arrive in a few seconds.
-            </Text>
+            {/* Format the normalised phone for readability ("+60 12 345
+                6789" vs "+60123456789"). Customers spot a typo faster
+                in the spaced version. */}
+            {(() => {
+              const formatted = normalised
+                ? normalised.replace(/^(\+\d{2})(\d{2})(\d{3})(\d{4})$/, "$1 $2 $3 $4")
+                : null;
+              return (
+                <Text
+                  className="text-muted-fg text-sm mt-1.5 mb-6"
+                  style={{ fontFamily: "SpaceGrotesk_400Regular" }}
+                >
+                  Sent to{" "}
+                  <Text style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#1A0200" }}>
+                    {formatted}
+                  </Text>
+                  . Should arrive in a few seconds.
+                </Text>
+              );
+            })()}
 
             <View className="bg-surface rounded-2xl border border-border px-4 py-3">
               <TextInput
@@ -803,6 +866,8 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                 textAlign="center"
                 className="text-espresso text-2xl tracking-[8px]"
                 style={{ fontFamily: "Peachi-Bold" }}
+                accessibilityLabel="6-digit verification code"
+                textContentType="oneTimeCode"
               />
             </View>
             {error && (
@@ -836,19 +901,62 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
               )}
             </Pressable>
 
-            <Pressable
-              onPress={handleSend}
-              disabled={loading}
-              className="mt-3 self-center active:opacity-60"
-              hitSlop={8}
+            {/* "Didn't get it?" stays muted until 30s have passed —
+                stops customers from spamming our SMS provider in the
+                first 5 seconds because the SMS is "slow". After 30s
+                we surface Resend + Use a different number side-by-
+                side so the right answer is obvious whether the issue
+                is delivery (resend) or a typo (change number). */}
+            <View
+              className="flex-row items-center justify-center mt-4"
+              style={{ gap: 16 }}
             >
-              <Text
-                className="text-muted-fg text-sm"
-                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
-              >
-                Resend code
-              </Text>
-            </Pressable>
+              {secondsSince < 30 ? (
+                <Text
+                  className="text-muted-fg text-xs text-center"
+                  style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                >
+                  {`Didn't get it? You can resend in ${30 - secondsSince}s`}
+                </Text>
+              ) : (
+                <>
+                  <Pressable
+                    onPress={handleSend}
+                    disabled={loading}
+                    className="active:opacity-60"
+                    hitSlop={8}
+                    accessibilityLabel="Resend verification code"
+                  >
+                    <Text
+                      className="text-primary text-sm"
+                      style={{ fontFamily: "SpaceGrotesk_700Bold" }}
+                    >
+                      Resend code
+                    </Text>
+                  </Pressable>
+                  <Text
+                    className="text-muted-fg text-sm"
+                    style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                  >
+                    ·
+                  </Text>
+                  <Pressable
+                    onPress={handleChangeNumber}
+                    disabled={loading}
+                    className="active:opacity-60"
+                    hitSlop={8}
+                    accessibilityLabel="Use a different phone number"
+                  >
+                    <Text
+                      className="text-primary text-sm"
+                      style={{ fontFamily: "SpaceGrotesk_700Bold" }}
+                    >
+                      Use a different number
+                    </Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
           </>
         )}
       </View>
