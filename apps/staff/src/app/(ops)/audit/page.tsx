@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  ClipboardCheck, Loader2, CheckCircle2, Clock, Plus, ChevronRight, Building2, Target,
+  ClipboardCheck, Loader2, CheckCircle2, Clock, Plus, ChevronRight, Building2,
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
@@ -112,21 +112,6 @@ export default function AuditPage() {
         </Button>
       </div>
 
-      {/* My Skills shortcut — surfaces audits *of* this user (improvement view) */}
-      <Link href="/audit/my-skills">
-        <Card className="px-3 py-2.5 transition-all active:bg-gray-50 border-terracotta/20">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-terracotta/10">
-              <Target className="h-4 w-4 text-terracotta" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">My Skills</p>
-              <p className="text-[10px] text-gray-400">See your scores and progress over time</p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-gray-300" />
-          </div>
-        </Card>
-      </Link>
 
 
       {/* New Audit Form */}

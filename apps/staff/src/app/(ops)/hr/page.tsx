@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, CalendarDays, CalendarOff, ChevronRight, CheckCircle2, History, Wallet, Sparkles, AlertTriangle, MapPin, FileText, Star } from "lucide-react";
+import { Clock, CalendarDays, CalendarOff, ChevronRight, CheckCircle2, History, Wallet, Sparkles, AlertTriangle, MapPin, FileText, Star, Target } from "lucide-react";
 import { useLocationPing } from "@/lib/hr/use-location-ping";
 
 type HRStatus = {
@@ -95,6 +95,14 @@ export default function HRHomePage() {
       subtitle: reviewsCount > 0 ? `${reviewsCount} review${reviewsCount === 1 ? "" : "s"} during your shifts` : "Reviews during your shifts",
       color: "text-amber-600",
       bgColor: "bg-amber-50",
+    },
+    {
+      href: "/hr/my-skills",
+      icon: Target,
+      label: "My Skills",
+      subtitle: "Skill audit scores & progress over time",
+      color: "text-terracotta",
+      bgColor: "bg-terracotta/10",
     },
   ];
 
