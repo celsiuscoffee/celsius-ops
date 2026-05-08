@@ -5,20 +5,26 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: "#f5f5f5",
-        surface: "#ffffff",
-        espresso: "#160800",
+        // Brand-system aligned (CC Brand System v2026 §1.4). The book
+        // sanctions four backgrounds: terracotta panels, brand black
+        // #1A0200, white, or photo+overlay. Cream isn't in the system
+        // and was an off-brand choice — reverted.
+        background: "#FFFFFF",   // body bg — clean white per brand book
+        surface: "#FFFFFF",
+        espresso: "#1A0200",     // BRAND BLACK — terracotta-tinged, earthy
         primary: {
-          DEFAULT: "#C05040",
+          DEFAULT: "#C05040",    // terracotta — brand primary
           50: "#FBEBE8",
           100: "#F5D2CC",
           900: "#5A1F16",
         },
         muted: {
-          DEFAULT: "#8E8E93",
-          fg: "#6E6E73",
+          DEFAULT: "#6B6B6B",    // neutral grey for secondary text
+          fg: "#4A4A4A",
         },
-        border: "#E5E5E5",
+        // Retro touch — hairlines are brand-black at low alpha so
+        // every divider carries a hint of brand without screaming.
+        border: "rgba(26, 2, 0, 0.10)",
         amber: {
           400: "#FBBF24",
           500: "#F59E0B",

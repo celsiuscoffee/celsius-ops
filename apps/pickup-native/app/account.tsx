@@ -25,12 +25,15 @@ import {
   X,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ScrollView } from "react-native";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { BottomNav } from "../components/BottomNav";
+import { TierHero } from "../components/TierHero";
+import { tierStyle } from "../lib/tier-styles";
 import { useApp } from "../lib/store";
 import { api } from "../lib/api";
 import { fetchMember, fetchTier, type MemberTier } from "../lib/rewards";
-import { TierCard } from "../components/TierCard";
 import { SafeBoundary } from "../components/SafeBoundary";
 
 function normalisePhone(input: string): string {
@@ -86,6 +89,7 @@ export default function AccountTab() {
 }
 
 function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }) {
+  const insets = useSafeAreaInsets();
   const member = useApp((s) => s.member);
   const setMember = useApp((s) => s.setMember);
   const [editing, setEditing] = useState(false);
@@ -106,95 +110,202 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
             totalPointsEarned: m.totalPointsEarned,
           });
           // Fetch tier info in parallel — fail silently if missing.
-          fetchTier(m.id)
-            .then((t) => {
-              try {
-                console.warn("[account] tier payload", JSON.stringify(t));
-              } catch {}
-              setTier(t);
-            })
-            .catch((e) => {
-              console.warn("[account] tier fetch failed", e?.message ?? String(e));
-            });
+          fetchTier(m.id).then(setTier).catch(() => {});
         }
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const ts = tierStyle(tier);
+  const showTierEyebrow = !!tier?.tier_slug;
+  const memberName = member?.name || "Add your name";
+  // Format phone to "+60 10 933 5369" — visual breathing room.
+  const formattedPhone = phone.replace(/^(\+\d{2})(\d{2})(\d{3})(\d{4})$/, "$1 $2 $3 $4");
+
   return (
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
-      <EspressoHeader title="Account" showCart={false} />
-      <View className="px-4 pt-4 gap-3">
-        {/* Profile card */}
-        <View className="bg-espresso rounded-2xl p-5">
-          <View className="flex-row items-center gap-3">
-            <View className="w-14 h-14 rounded-full bg-white/10 items-center justify-center">
-              <User size={26} color="#FFFFFF" />
-            </View>
-            <View className="flex-1">
-              <Text
-                className="text-white text-lg"
-                style={{ fontFamily: "Peachi-Bold" }}
-                numberOfLines={1}
-              >
-                {member?.name || "Add your name"}
-              </Text>
-              <Text
-                className="text-white/60 text-xs mt-0.5"
-                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
-              >
-                {phone}
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => {
-                Haptics.selectionAsync();
-                setEditing(true);
+
+      {/* Tier-themed hero — eyebrow + name + phone. Curve drapes into
+          the body. Replaces both the old EspressoHeader and the
+          standalone profile card. */}
+      <TierHero
+        style={ts}
+        paddingTop={insets.top + 12}
+        paddingBottom={36}
+        variant="tall"
+      >
+        <View className="flex-row items-start justify-between">
+          <View className="flex-1">
+            <Text
+              className="text-[10px] uppercase"
+              style={{
+                color: ts.eyebrowColor,
+                fontFamily: "SpaceGrotesk_700Bold",
+                letterSpacing: 3.5,
               }}
-              hitSlop={10}
-              className="active:opacity-70"
+              numberOfLines={1}
             >
-              <Pencil size={18} color="#FFFFFF" />
-            </Pressable>
+              {showTierEyebrow ? `${ts.displayName} MEMBER` : "MEMBER"}
+            </Text>
+            <Text
+              className="text-[26px] mt-2"
+              style={{ color: ts.textColor, fontFamily: "Peachi-Bold" }}
+              numberOfLines={1}
+            >
+              {memberName}
+            </Text>
+            <Text
+              className="text-[11px] mt-1.5"
+              style={{ color: ts.mutedColor, fontFamily: "SpaceGrotesk_400Regular" }}
+              numberOfLines={1}
+            >
+              {formattedPhone}
+            </Text>
           </View>
-          <View className="flex-row gap-3 mt-4 pt-4 border-t border-white/10">
-            <Stat
-              label="Points"
-              value={(member?.pointsBalance ?? 0).toLocaleString()}
-            />
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync();
+              setEditing(true);
+            }}
+            hitSlop={10}
+            className="active:opacity-70"
+          >
+            <Pencil size={18} color={ts.textColor} />
+          </Pressable>
+        </View>
+      </TierHero>
+
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 100 }}
+      >
+        {/* Stats card — espresso bg with 3 numerals. Same content as
+            the old profile card's bottom row, lifted out so it stands
+            alone now that the hero shows name + phone. */}
+        <View
+          className="rounded-2xl"
+          style={{
+            backgroundColor: "#160800",
+            paddingVertical: 16,
+            paddingHorizontal: 8,
+            marginBottom: 16,
+          }}
+        >
+          <View className="flex-row items-center justify-around">
+            <Stat label="Points" value={(member?.pointsBalance ?? 0).toLocaleString()} />
+            <View style={{ width: 1, height: 40, backgroundColor: "rgba(255,255,255,0.10)" }} />
             <Stat label="Visits" value={String(member?.totalVisits ?? 0)} />
-            <Stat
-              label="Earned"
-              value={(member?.totalPointsEarned ?? 0).toLocaleString()}
-            />
+            <View style={{ width: 1, height: 40, backgroundColor: "rgba(255,255,255,0.10)" }} />
+            <Stat label="Earned" value={(member?.totalPointsEarned ?? 0).toLocaleString()} />
           </View>
         </View>
 
-        <SafeBoundary name="account-tier-card">
-          {tier ? <TierCard tier={tier} /> : null}
+        {/* Tier benefits — sectioned list per the brand poster, with
+            big Peachii lines like "Birthday drink" / "Free monthly". */}
+        <SafeBoundary name="account-tier-benefits">
+          {tier && tier.tier_benefits && tier.tier_benefits.length > 0 ? (
+            <View>
+              <Pressable
+                onPress={() => router.push("/rewards")}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  marginTop: 8,
+                  marginBottom: 8,
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#1A0200",
+                    fontFamily: "SpaceGrotesk_700Bold",
+                    fontSize: 10,
+                    letterSpacing: 2.5,
+                  }}
+                >
+                  {ts.displayName} BENEFITS
+                </Text>
+                <Text
+                  style={{
+                    color: "#C05040",
+                    fontFamily: "Peachi-Bold",
+                    fontSize: 12,
+                  }}
+                >
+                  See all
+                </Text>
+              </Pressable>
+              {tier.tier_benefits.slice(0, 3).map((b, i) => (
+                <View key={i} style={{ paddingVertical: 8 }}>
+                  <Text
+                    style={{
+                      color: "#1A0200",
+                      fontFamily: "SpaceGrotesk_500Medium",
+                      fontSize: 16,
+                      letterSpacing: 0.1,
+                    }}
+                  >
+                    {b}
+                  </Text>
+                </View>
+              ))}
+              <View
+                style={{
+                  height: 1,
+                  backgroundColor: "rgba(26, 2, 0, 0.12)",
+                  marginTop: 18,
+                  marginBottom: 8,
+                }}
+              />
+            </View>
+          ) : null}
         </SafeBoundary>
 
-        <NavRow
+        {/* Action rows — same big-Peachii-on-cream rhythm. No card
+            chrome, just the row label + chevron, divider after the
+            block. Matches the brand poster's "WAZE / GOOGLE MAPS"
+            address block aesthetic. */}
+        <Text
+          style={{
+            color: "#1A0200",
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 10,
+            letterSpacing: 2.5,
+            marginTop: 16,
+            marginBottom: 8,
+          }}
+        >
+          ACCOUNT
+        </Text>
+        <ActionRow
           icon={ShoppingBag}
           label="My orders"
           onPress={() => router.push("/orders")}
         />
-        <NavRow
+        <ActionRow
           icon={HelpCircle}
           label="Support"
           onPress={() => router.push("/support")}
         />
-        <NavRow
+        <ActionRow
           icon={Shield}
           label="Privacy policy"
           onPress={() => router.push("/privacy")}
         />
-        <NavRow
+        <ActionRow
           icon={Trash2}
           label="Delete account"
           onPress={() => router.push("/account-delete")}
+        />
+
+        <View
+          style={{
+            height: 1,
+            backgroundColor: "rgba(26, 2, 0, 0.12)",
+            marginTop: 18,
+            marginBottom: 8,
+          }}
         />
 
         <Pressable
@@ -202,20 +313,29 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             onSignOut();
           }}
-          className="bg-surface rounded-2xl border border-border p-4 flex-row items-center gap-3 active:opacity-70 mt-2"
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingVertical: 14,
+            gap: 14,
+          }}
+          className="active:opacity-70"
         >
-          <View className="w-9 h-9 rounded-lg bg-background items-center justify-center">
-            <LogOut size={18} color="#C05040" />
-          </View>
+          <LogOut size={20} color="#C05040" />
           <Text
-            className="text-primary flex-1"
-            style={{ fontFamily: "Peachi-Bold" }}
+            style={{
+              color: "#C05040",
+              fontFamily: "SpaceGrotesk_700Bold",
+              fontSize: 16,
+              letterSpacing: 0.1,
+              flex: 1,
+            }}
           >
             Sign out
           </Text>
-          <ChevronRight size={18} color="#8E8E93" />
         </Pressable>
-      </View>
+      </ScrollView>
+
       <BottomNav />
 
       <ProfileEditModal
@@ -228,18 +348,68 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
   );
 }
 
+function ActionRow({
+  icon: Icon,
+  label,
+  onPress,
+}: {
+  icon: any;
+  label: string;
+  onPress: () => void;
+  isFirst?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="active:opacity-70"
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: 14,
+        gap: 14,
+      }}
+    >
+      <Icon size={20} color="#1A0200" strokeWidth={1.5} />
+      <Text
+        style={{
+          color: "#1A0200",
+          // Functional menu rows — Space Grotesk Medium per the brand
+          // poster's address-block treatment ("Persiaran Korporat...").
+          fontFamily: "SpaceGrotesk_500Medium",
+          fontSize: 16,
+          letterSpacing: 0.1,
+          flex: 1,
+        }}
+      >
+        {label}
+      </Text>
+      <ChevronRight size={18} color="rgba(26, 2, 0, 0.35)" />
+    </Pressable>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <View className="flex-1 items-center">
+    <View className="items-center" style={{ flex: 1 }}>
       <Text
-        className="text-white text-base"
-        style={{ fontFamily: "Peachi-Bold" }}
+        style={{
+          color: "#FFFFFF",
+          fontFamily: "Peachi-Bold",
+          fontSize: 22,
+          letterSpacing: 0.3,
+        }}
       >
         {value}
       </Text>
       <Text
-        className="text-white/50 text-[10px] tracking-widest uppercase mt-0.5"
-        style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
+        style={{
+          color: "rgba(255,255,255,0.55)",
+          fontFamily: "SpaceGrotesk_700Bold",
+          fontSize: 9,
+          letterSpacing: 2,
+          textTransform: "uppercase",
+          marginTop: 4,
+        }}
       >
         {label}
       </Text>
@@ -486,7 +656,11 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
       className="bg-background"
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <EspressoHeader title="Sign in" showCart={false} />
+      {/* showBack lets users escape the sign-in flow even when the keyboard
+          is up and the bottom tab bar is offscreen. router.back() returns
+          to wherever they came from (home / rewards), and we ensure home is
+          always reachable via the "Continue browsing" link below too. */}
+      <EspressoHeader title="Sign in" showCart={false} showBack />
 
       <View className="flex-1 px-5 pt-8">
         {step === "phone" ? (
@@ -561,6 +735,24 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                   Send code
                 </Text>
               )}
+            </Pressable>
+
+            {/* Escape hatch — guests should never be trapped in the OTP
+                flow. Routes home regardless of nav stack state. */}
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                router.replace("/");
+              }}
+              className="mt-4 self-center active:opacity-60"
+              hitSlop={8}
+            >
+              <Text
+                className="text-muted-fg text-sm"
+                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+              >
+                Continue browsing →
+              </Text>
             </Pressable>
           </>
         ) : (

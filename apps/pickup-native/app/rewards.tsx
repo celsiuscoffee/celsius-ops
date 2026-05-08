@@ -1,18 +1,33 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View, Text, ScrollView, Pressable, Image, ActivityIndicator } from "react-native";
 import { Stack, router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { Gift, Lock, Sparkles, ChevronRight } from "lucide-react-native";
-import { EspressoHeader } from "../components/EspressoHeader";
+import { Gift, ChevronRight } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../components/BottomNav";
+import { TierHero } from "../components/TierHero";
+import { tierStyle } from "../lib/tier-styles";
 import * as Haptics from "expo-haptics";
 import { useApp } from "../lib/store";
-import { fetchRewards, formatRewardValue, type Reward } from "../lib/rewards";
+import { fetchRewards, fetchTier, formatRewardValue, type MemberTier, type Reward } from "../lib/rewards";
 
 export default function RewardsTab() {
   const phone = useApp((s) => s.phone);
+  const loyaltyId = useApp((s) => s.loyaltyId);
+  const insets = useSafeAreaInsets();
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  // Tier — fetched alongside rewards. Drives the hero theme + the
+  // benefits card.
+  const [tier, setTier] = useState<MemberTier | null>(null);
+  useEffect(() => {
+    if (!loyaltyId) {
+      setTier(null);
+      return;
+    }
+    fetchTier(loyaltyId).then(setTier).catch(() => setTier(null));
+  }, [loyaltyId]);
+
+  const { data, isLoading } = useQuery({
     queryKey: ["rewards", phone ?? "anonymous"],
     queryFn: () => fetchRewards(phone),
     staleTime: 30_000,
@@ -20,11 +35,10 @@ export default function RewardsTab() {
 
   const balance = data?.pointsBalance ?? 0;
   const rewards = data?.rewards ?? [];
+  const ts = tierStyle(tier);
 
   const { claimable, locked } = useMemo(() => {
-    const sorted = [...rewards].sort(
-      (a, b) => a.points_required - b.points_required
-    );
+    const sorted = [...rewards].sort((a, b) => a.points_required - b.points_required);
     return {
       claimable: sorted.filter((r) => balance >= r.points_required),
       locked: sorted.filter((r) => balance < r.points_required),
@@ -34,18 +48,83 @@ export default function RewardsTab() {
   return (
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
-      <EspressoHeader title="Rewards" showCart={false} />
+
+      {/* Tier-themed hero — eyebrow + balance numerals + status sub. */}
+      <TierHero
+        style={ts}
+        paddingTop={insets.top + 12}
+        paddingBottom={36}
+        variant="tall"
+      >
+        <Text
+          className="text-[10px] uppercase"
+          style={{
+            color: ts.eyebrowColor,
+            fontFamily: "SpaceGrotesk_700Bold",
+            letterSpacing: 4,
+          }}
+        >
+          {tier?.tier_slug ? ts.displayName : "REWARDS"}
+        </Text>
+        <View className="flex-row items-baseline mt-3.5" style={{ gap: 10 }}>
+          <Text
+            style={{
+              color: ts.textColor,
+              fontFamily: "Peachi-Bold",
+              fontSize: 42,
+              lineHeight: 44,
+            }}
+          >
+            {isLoading && balance === 0 ? "—" : balance.toLocaleString()}
+          </Text>
+          <Text
+            style={{
+              color: ts.mutedColor,
+              fontFamily: "SpaceGrotesk_700Bold",
+              fontSize: 11,
+              letterSpacing: 1.5,
+            }}
+          >
+            POINTS
+          </Text>
+        </View>
+        {tier ? (
+          <Text
+            className="mt-2 text-[11px]"
+            style={{ color: ts.mutedColor, fontFamily: "SpaceGrotesk_400Regular" }}
+          >
+            {`Earning ${tier.tier_multiplier ?? 1}× on every order`}
+          </Text>
+        ) : null}
+      </TierHero>
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pb-32"
+        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
       >
         {!phone ? (
           <SignInPrompt />
         ) : (
           <>
-            <BalanceHero balance={balance} memberId={data?.memberId ?? null} loading={isLoading} />
+            {/* Empty state — only when fetch is done and no rewards */}
+            {!isLoading && rewards.length === 0 && (
+              <View className="py-12 items-center">
+                <Gift size={36} color="#C05040" strokeWidth={1.25} />
+                <Text
+                  className="text-[15px] mt-3"
+                  style={{ color: "#160800", fontFamily: "Peachi-Bold" }}
+                >
+                  No rewards yet
+                </Text>
+                <Text
+                  className="text-[12px] text-center mt-1.5"
+                  style={{ color: "#8E8E93", fontFamily: "SpaceGrotesk_400Regular" }}
+                >
+                  Check back soon — new rewards drop regularly.
+                </Text>
+              </View>
+            )}
 
             {isLoading && rewards.length === 0 && (
               <View className="py-12 items-center">
@@ -53,38 +132,60 @@ export default function RewardsTab() {
               </View>
             )}
 
+            {/* CLAIM NOW — affordable rewards in a single card */}
             {claimable.length > 0 && (
-              <Section title="Ready to claim" icon={Sparkles}>
-                {claimable.map((r) => (
-                  <ClaimableRewardRow key={r.id} reward={r} balance={balance} />
-                ))}
+              <Section title="Claim now" rightLabel={`${claimable.length} active`}>
+                <Card>
+                  {claimable.map((r, i) => (
+                    <ClaimRow
+                      key={r.id}
+                      reward={r}
+                      isFirst={i === 0}
+                    />
+                  ))}
+                </Card>
               </Section>
             )}
 
+            {/* REDEEM — points cost rewards (still claimable + locked
+                merged into one list, locked ones faded with "X to go") */}
             {locked.length > 0 && (
-              <Section title="Earn more" icon={Lock}>
-                {locked.map((r) => (
-                  <RewardRow key={r.id} reward={r} canClaim={false} balance={balance} />
-                ))}
+              <Section title="Redeem" rightLabel={`${balance.toLocaleString()} available`}>
+                <Card>
+                  {locked.map((r, i) => (
+                    <RedeemRow
+                      key={r.id}
+                      reward={r}
+                      balance={balance}
+                      isFirst={i === 0}
+                    />
+                  ))}
+                </Card>
               </Section>
             )}
 
-            {!isLoading && rewards.length === 0 && (
-              <View className="px-6 py-12 items-center">
-                <Gift size={40} color="#C05040" strokeWidth={1.25} />
-                <Text
-                  className="text-espresso text-base mt-3"
-                  style={{ fontFamily: "Peachi-Bold" }}
-                >
-                  No rewards yet
-                </Text>
-                <Text
-                  className="text-muted-fg text-sm text-center mt-1"
-                  style={{ fontFamily: "SpaceGrotesk_400Regular" }}
-                >
-                  Check back soon — new rewards drop regularly.
-                </Text>
-              </View>
+            {/* TIER BENEFITS — only when tier is loaded with benefits */}
+            {tier && tier.tier_benefits && tier.tier_benefits.length > 0 && (
+              <Section
+                title={`${ts.displayName.toLowerCase()} benefits`}
+                eyebrow={`${ts.displayName} BENEFITS`}
+                trailingRule={false}
+              >
+                {tier.tier_benefits.map((b, i) => (
+                  <View key={i} style={{ paddingVertical: 10 }}>
+                    <Text
+                      style={{
+                        color: "#1A0200",
+                        fontFamily: "SpaceGrotesk_500Medium",
+                        fontSize: 16,
+                        letterSpacing: 0.1,
+                      }}
+                    >
+                      {b}
+                    </Text>
+                  </View>
+                ))}
+              </Section>
             )}
           </>
         )}
@@ -95,153 +196,94 @@ export default function RewardsTab() {
   );
 }
 
-function BalanceHero({
-  balance,
-  memberId,
-  loading,
-}: {
-  balance: number;
-  memberId: string | null;
-  loading: boolean;
-}) {
-  return (
-    <View className="mx-4 mt-4 rounded-3xl bg-espresso p-5">
-      <Text
-        className="text-white/60 text-[11px] tracking-widest uppercase"
-        style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
-      >
-        Your balance
-      </Text>
-      <View className="flex-row items-baseline mt-1">
-        <Text
-          className="text-white text-[44px] leading-[48px]"
-          style={{ fontFamily: "Peachi-Bold" }}
-        >
-          {loading ? "—" : balance.toLocaleString()}
-        </Text>
-        <Text
-          className="text-white/70 text-base ml-2"
-          style={{ fontFamily: "SpaceGrotesk_500Medium" }}
-        >
-          pts
-        </Text>
-      </View>
-      {!memberId && !loading && (
-        <Text
-          className="text-white/60 text-xs mt-2"
-          style={{ fontFamily: "SpaceGrotesk_400Regular" }}
-        >
-          We don't see an account for this phone yet — earn points on your next order to unlock rewards.
-        </Text>
-      )}
-    </View>
-  );
-}
+// ─── building blocks ───
 
+// Brand-poster section header — small caps eyebrow stacked above a
+// large Peachii display title. Optional right-aligned meta sits next
+// to the eyebrow row in matching small caps. Pattern from the
+// "BREWING HOURS / Monday—Thursday" outlet poster (CC Brand System).
 function Section({
   title,
-  icon: Icon,
+  rightLabel,
+  eyebrow,
   children,
+  trailingRule = true,
 }: {
   title: string;
-  icon: any;
+  rightLabel?: string;
+  /** Tiny caps line above the Peachii title. Falls back to the title's
+   *  small-caps form (e.g. "CLAIM NOW") if not provided. */
+  eyebrow?: string;
   children: React.ReactNode;
+  /** Render a thin rule below this section to divide it from the next.
+   *  Match the poster: one hairline between sections, not around cards. */
+  trailingRule?: boolean;
 }) {
+  const eb = eyebrow ?? title.toUpperCase();
   return (
-    <View className="mt-6 px-4">
-      <View className="flex-row items-center gap-2 mb-3">
-        <Icon size={14} color="#160800" strokeWidth={2} />
+    <View>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          marginTop: 24,
+          marginBottom: 10,
+        }}
+      >
         <Text
-          className="text-espresso text-[11px] tracking-widest uppercase"
-          style={{ fontFamily: "SpaceGrotesk_700Bold" }}
+          style={{
+            color: "#1A0200",
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 10,
+            letterSpacing: 2.5,
+          }}
         >
-          {title}
+          {eb}
         </Text>
+        {rightLabel ? (
+          <Text
+            style={{
+              color: "rgba(26, 2, 0, 0.55)",
+              fontFamily: "SpaceGrotesk_500Medium",
+              fontSize: 10,
+              letterSpacing: 1.5,
+              textTransform: "uppercase",
+            }}
+          >
+            {rightLabel}
+          </Text>
+        ) : null}
       </View>
-      <View className="gap-2">{children}</View>
+      {children}
+      {trailingRule ? (
+        <View
+          style={{
+            height: 1,
+            backgroundColor: "rgba(26, 2, 0, 0.12)",
+            marginTop: 18,
+          }}
+        />
+      ) : null}
     </View>
   );
 }
 
-function RewardRow({
-  reward,
-  canClaim,
-  balance,
-}: {
-  reward: Reward;
-  canClaim: boolean;
-  balance: number;
-}) {
-  const pointsShort = Math.max(0, reward.points_required - balance);
-  return (
-    <Pressable
-      className={`bg-surface rounded-2xl border border-border p-3 flex-row items-center gap-3 active:opacity-70 ${
-        canClaim ? "" : "opacity-70"
-      }`}
-      style={{
-        shadowColor: "#000",
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 2 },
-      }}
-    >
-      {reward.image_url ? (
-        <Image
-          source={{ uri: reward.image_url }}
-          style={{ width: 56, height: 56, borderRadius: 12 }}
-          resizeMode="cover"
-        />
-      ) : (
-        <View
-          className="bg-primary/10 items-center justify-center"
-          style={{ width: 56, height: 56, borderRadius: 12 }}
-        >
-          <Gift size={24} color="#C05040" strokeWidth={1.5} />
-        </View>
-      )}
-      <View className="flex-1">
-        <Text
-          className="text-espresso text-[15px]"
-          style={{ fontFamily: "Peachi-Bold" }}
-          numberOfLines={1}
-        >
-          {reward.name}
-        </Text>
-        <Text
-          className="text-muted-fg text-[12px] mt-0.5"
-          style={{ fontFamily: "SpaceGrotesk_400Regular" }}
-          numberOfLines={1}
-        >
-          {formatRewardValue(reward)}
-        </Text>
-      </View>
-      <View className="items-end">
-        <Text
-          className={`text-[13px] ${canClaim ? "text-primary" : "text-muted-fg"}`}
-          style={{ fontFamily: "Peachi-Bold" }}
-        >
-          {reward.points_required} pts
-        </Text>
-        {!canClaim && (
-          <Text
-            className="text-muted-fg text-[10px] mt-0.5"
-            style={{ fontFamily: "SpaceGrotesk_500Medium" }}
-          >
-            {pointsShort} to go
-          </Text>
-        )}
-      </View>
-    </Pressable>
-  );
+// Cardless layout — content sits directly on the cream body, divided
+// only by thin rules. Matches the brand poster aesthetic where the
+// page is a single vertical column with breathing room, not a stack
+// of bordered rectangles.
+function Card({ children }: { children: React.ReactNode }) {
+  return <View>{children}</View>;
 }
 
-function ClaimableRewardRow({ reward, balance }: { reward: Reward; balance: number }) {
+function ClaimRow({ reward, isFirst }: { reward: Reward; isFirst: boolean }) {
   const appliedReward = useApp((s) => s.appliedReward);
   const setAppliedReward = useApp((s) => s.setAppliedReward);
   const cart = useApp((s) => s.cart);
   const isApplied = appliedReward?.id === reward.id;
 
-  const handleApply = () => {
+  const onApply = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setAppliedReward({
       id: reward.id,
@@ -257,61 +299,139 @@ function ClaimableRewardRow({ reward, balance }: { reward: Reward; balance: numb
   };
 
   return (
-    <Pressable
-      onPress={handleApply}
-      disabled={isApplied}
-      className="bg-surface rounded-2xl border border-border p-3 flex-row items-center gap-3 active:opacity-70"
+    <View
       style={{
-        shadowColor: "#000",
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 2 },
+        flexDirection: "row",
+        alignItems: "flex-end",
+        gap: 12,
+        paddingVertical: 12,
       }}
     >
-      {reward.image_url ? (
-        <Image
-          source={{ uri: reward.image_url }}
-          style={{ width: 56, height: 56, borderRadius: 12 }}
-          resizeMode="cover"
-        />
-      ) : (
-        <View
-          className="bg-primary/10 items-center justify-center"
-          style={{ width: 56, height: 56, borderRadius: 12 }}
-        >
-          <Gift size={24} color="#C05040" strokeWidth={1.5} />
-        </View>
-      )}
-      <View className="flex-1">
+      <View style={{ flex: 1 }}>
         <Text
-          className="text-espresso text-[15px]"
-          style={{ fontFamily: "Peachi-Bold" }}
+          style={{
+            color: "#1A0200",
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 17,
+            letterSpacing: 0.1,
+          }}
           numberOfLines={1}
         >
           {reward.name}
         </Text>
         <Text
-          className="text-muted-fg text-[12px] mt-0.5"
-          style={{ fontFamily: "SpaceGrotesk_400Regular" }}
+          style={{
+            color: "rgba(26, 2, 0, 0.55)",
+            fontFamily: "SpaceGrotesk_400Regular",
+            fontSize: 12,
+            marginTop: 3,
+          }}
           numberOfLines={1}
         >
-          {formatRewardValue(reward)} · {reward.points_required} pts
+          {formatRewardValue(reward)}
         </Text>
       </View>
-      <View
-        className={`rounded-full items-center justify-center ${
-          isApplied ? "bg-green-600" : "bg-espresso"
-        }`}
-        style={{ paddingHorizontal: 14, paddingVertical: 8 }}
+      <Pressable
+        onPress={onApply}
+        disabled={isApplied}
+        className="active:opacity-80"
+        style={{
+          backgroundColor: isApplied ? "#16A34A" : "#1A0200",
+          paddingHorizontal: 16,
+          paddingVertical: 9,
+          borderRadius: 999,
+        }}
       >
         <Text
-          className="text-white text-[12px]"
-          style={{ fontFamily: "Peachi-Bold" }}
+          style={{
+            color: "#FFFFFF",
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 11,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+          }}
         >
           {isApplied ? "Applied" : "Apply"}
         </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function RedeemRow({
+  reward,
+  balance,
+  isFirst,
+}: {
+  reward: Reward;
+  balance: number;
+  isFirst: boolean;
+}) {
+  const pointsShort = Math.max(0, reward.points_required - balance);
+  const canClaim = pointsShort === 0;
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "flex-end",
+        justifyContent: "space-between",
+        paddingVertical: 12,
+        opacity: canClaim ? 1 : 0.45,
+      }}
+    >
+      <View style={{ flex: 1 }}>
+        <Text
+          style={{
+            color: "#1A0200",
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 17,
+            letterSpacing: 0.1,
+          }}
+          numberOfLines={1}
+        >
+          {reward.name}
+        </Text>
+        {!canClaim ? (
+          <Text
+            style={{
+              color: "rgba(26, 2, 0, 0.55)",
+              fontFamily: "SpaceGrotesk_400Regular",
+              fontSize: 12,
+              marginTop: 3,
+            }}
+            numberOfLines={1}
+          >
+            {pointsShort.toLocaleString()} points to go
+          </Text>
+        ) : null}
       </View>
-    </Pressable>
+      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 5 }}>
+        <Text
+          style={{
+            color: "#1A0200",
+            // Numbers stay Peachii — the brand poster keeps numerals
+            // ("12:30 PM") in Space Grotesk but in our points list
+            // the number IS the value being weighed, so it gets the
+            // hero treatment. Keeps a Peachii beat in every section.
+            fontFamily: "Peachi-Bold",
+            fontSize: 22,
+            lineHeight: 26,
+          }}
+        >
+          {reward.points_required.toLocaleString()}
+        </Text>
+        <Text
+          style={{
+            color: "rgba(26, 2, 0, 0.55)",
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 10,
+            letterSpacing: 1.5,
+          }}
+        >
+          PTS
+        </Text>
+      </View>
+    </View>
   );
 }
 

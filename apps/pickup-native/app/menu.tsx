@@ -8,7 +8,7 @@ import {
   Image,
   TextInput,
 } from "react-native";
-import { Stack, router } from "expo-router";
+import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import {
@@ -34,14 +34,17 @@ import {
   Star,
   Plus,
   Check,
+  Heart,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fetchMenu, type Product } from "../lib/menu";
 import { useApp, cartCount, cartTotal } from "../lib/store";
 import { formatPrice } from "../lib/api";
 import { BottomNav } from "../components/BottomNav";
+import { fetchRecentItems } from "../lib/rewards";
 
 const BEST_SELLERS_ID = "__best_sellers__";
+const USUAL_ID = "__usual__";
 
 const CAT_ICON: Record<string, any> = {
   "artisan-choc": Candy,
@@ -67,12 +70,29 @@ const HIDDEN_CATEGORIES = new Set(["bottles"]);
 
 export default function Menu() {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ tab?: string }>();
   const { data, isLoading } = useQuery({ queryKey: ["menu"], queryFn: fetchMenu });
   const cart = useApp((s) => s.cart);
   const outletName = useApp((s) => s.outletName);
   const outletId = useApp((s) => s.outletId);
   const addToCart = useApp((s) => s.addToCart);
-  const [active, setActive] = useState<string>(BEST_SELLERS_ID);
+  const phone = useApp((s) => s.phone);
+
+  // Recent items power the "Usual" pill — loaded only for signed-in users.
+  // Cached for 60s so coming back from a product detail doesn't refetch.
+  const recent = useQuery({
+    queryKey: ["recent-items", phone],
+    queryFn: () => (phone ? fetchRecentItems(phone, 12) : Promise.resolve([])),
+    enabled: !!phone,
+    staleTime: 60_000,
+  });
+  const hasUsual = !!phone && (recent.data?.length ?? 0) > 0;
+
+  // Default tab respects the inbound `?tab=usual` deep link from Home, falling
+  // back to Best Sellers. We only honor "usual" if the user actually has one.
+  const initialTab =
+    params.tab === "usual" && hasUsual ? USUAL_ID : BEST_SELLERS_ID;
+  const [active, setActive] = useState<string>(initialTab);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [recentlyAdded, setRecentlyAdded] = useState<Record<string, boolean>>({});
@@ -87,6 +107,17 @@ export default function Menu() {
   );
   const hasBestSellers = bestSellers.length > 0;
 
+  // Resolve recent items back to full Product records so the Usual tab uses
+  // the same ProductRow rendering (with modifiers, description, etc.) as
+  // every other category. Order preserved by recent.data ordering.
+  const usualProducts = useMemo(() => {
+    if (!data || !recent.data) return [];
+    const byId = new Map(data.products.map((p) => [p.id, p]));
+    return recent.data
+      .map((r) => byId.get(r.id))
+      .filter((p): p is Product => !!p && p.is_available);
+  }, [data, recent.data]);
+
   const filtered = useMemo(() => {
     if (!data) return [];
     if (query) {
@@ -95,9 +126,10 @@ export default function Menu() {
         (p) => p.is_available && p.name.toLowerCase().includes(q)
       );
     }
+    if (active === USUAL_ID) return usualProducts;
     if (active === BEST_SELLERS_ID) return bestSellers;
     return data.products.filter((p) => p.is_available && p.category === active);
-  }, [data, active, query, bestSellers]);
+  }, [data, active, query, bestSellers, usualProducts]);
 
   const addSimple = (p: Product) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -224,6 +256,21 @@ export default function Menu() {
             contentContainerStyle={{ width: 80, paddingHorizontal: 4, paddingTop: 8, paddingBottom: 180, gap: 6 }}
             showsVerticalScrollIndicator={false}
           >
+            {/* "Usual" sits above Best Sellers because retention beats discovery
+                — once a customer has a regular order, that's the fastest path
+                back to the cart. Only renders for signed-in users with history. */}
+            {hasUsual && (
+              <SideCategoryPill
+                active={active === USUAL_ID}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setActive(USUAL_ID);
+                }}
+                icon={Heart}
+                label="Usual"
+                fill={active === USUAL_ID}
+              />
+            )}
             {hasBestSellers && (
               <SideCategoryPill
                 active={active === BEST_SELLERS_ID}
@@ -395,7 +442,7 @@ function ProductRow({
           resizeMode="cover"
         />
       ) : (
-        <View style={{ width: 88, height: 88, borderRadius: 24, backgroundColor: "#f5f5f5" }} />
+        <View style={{ width: 88, height: 88, borderRadius: 24, backgroundColor: "#F5F5F5" }} />
       )}
       <View className="flex-1 justify-between py-0.5 min-w-0">
         <View>

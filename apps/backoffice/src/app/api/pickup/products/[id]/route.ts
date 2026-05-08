@@ -21,6 +21,13 @@ export async function PATCH(
   if (typeof body.is_available === "boolean") update.is_available = body.is_available;
   if (typeof body.is_popular === "boolean")  update.is_featured  = body.is_popular;
 
+  // Soft-blacklist of modifier group IDs / option IDs the merchant wants to
+  // hide from customers. Stored as jsonb array; sync from StoreHub leaves
+  // this field alone, so deletions persist across re-syncs.
+  if (Array.isArray(body.hidden_modifier_ids)) {
+    update.hidden_modifier_ids = body.hidden_modifier_ids.filter((x): x is string => typeof x === "string");
+  }
+
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ ok: true });
   }
