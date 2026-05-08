@@ -5,6 +5,10 @@ const ALLOWED_ORIGINS = [
   'members.celsiuscoffee.com',
   'celsiuscoffee.com',
   'www.celsiuscoffee.com',
+  // The order app proxies promotions/evaluate (and other loyalty calls)
+  // for the customer-facing pickup app. Without this entry, the proxy
+  // hits CSRF rejection on every POST.
+  'order.celsiuscoffee.com',
 ];
 
 /**

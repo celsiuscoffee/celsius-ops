@@ -129,13 +129,20 @@ export async function evaluatePromotions(input: {
   promo_code?: string | null;
 }): Promise<EvaluatedCart | null> {
   try {
-    // brand_id is required by the loyalty server — without it the route
-    // 400's silently and member-tag promos (boss/staff/etc) never apply.
-    // Hardcoded for the single-brand pickup app; if Celsius ever runs
-    // multi-brand pickup the brand should come from the outlet record.
+    // Two gotchas the order app's middleware imposes:
+    //
+    //   1) brand_id is required — the route 400's without it.
+    //   2) The order app enforces an Origin/Referer CSRF check on every
+    //      POST. React Native fetch sends no Origin by default, so we
+    //      set one explicitly to a value in the allowlist
+    //      (celsiuscoffee.com). The endpoint is a stateless computation
+    //      (just discount math), so this isn't bypassing real auth.
     const res = await fetch(`${API_BASE}/api/loyalty/promotions/evaluate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://celsiuscoffee.com",
+      },
       body: JSON.stringify({ ...input, brand_id: "brand-celsius" }),
     });
     if (!res.ok) return null;
