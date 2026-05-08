@@ -279,7 +279,24 @@ export async function evaluateCart(
   }
 
   const applied: AppliedDiscount[] = [];
-  let nonStackableTaken = false;
+
+  // Two-pass evaluation:
+  //   1. Compute discount for every eligible promo (stackable + non-stackable).
+  //   2. Apply ALL stackable ones, plus the SINGLE best non-stackable.
+  //
+  // Previously this loop ran in priority order and the first non-stackable
+  // it saw won — meaning a customer who's both Elite (10% off, priority 20)
+  // and Boss-tagged (50% off, priority 0) only ever got the 10%, because
+  // Elite came first and blocked Boss. With this rewrite, the customer
+  // gets the bigger of the two automatically. priority now only matters as
+  // a tiebreaker when two non-stackables yield identical discounts.
+  type Candidate = {
+    promo: Promotion;
+    amount: number;
+    affected: number[];
+  };
+  const stackable: Candidate[] = [];
+  const nonStackable: Candidate[] = [];
 
   for (const p of promos as Promotion[]) {
     const elig = isPromoEligible(p, ctx, subtotal);
@@ -290,21 +307,32 @@ export async function evaluateCart(
       if (used >= p.max_uses_per_member) continue;
     }
 
-    if (!p.stackable && nonStackableTaken) continue;
-
     const { amount, affected } = computeDiscount(p, lines);
     if (amount <= 0) continue;
 
-    applied.push({
-      promotion_id: p.id,
-      promotion_name: p.name,
-      discount_type: p.discount_type,
-      discount_amount: amount,
-      affected_lines: affected,
-      reason: p.trigger_type,
-    });
+    (p.stackable ? stackable : nonStackable).push({ promo: p, amount, affected });
+  }
 
-    if (!p.stackable) nonStackableTaken = true;
+  // Pick the single best non-stackable. Tiebreaker: higher priority wins;
+  // if priority is also tied, the first one encountered (DB order) wins.
+  const bestNonStackable = nonStackable.reduce<Candidate | null>((best, cur) => {
+    if (!best) return cur;
+    if (cur.amount > best.amount) return cur;
+    if (cur.amount === best.amount && cur.promo.priority > best.promo.priority) return cur;
+    return best;
+  }, null);
+
+  const winners = bestNonStackable ? [...stackable, bestNonStackable] : stackable;
+
+  for (const c of winners) {
+    applied.push({
+      promotion_id: c.promo.id,
+      promotion_name: c.promo.name,
+      discount_type: c.promo.discount_type,
+      discount_amount: c.amount,
+      affected_lines: c.affected,
+      reason: c.promo.trigger_type,
+    });
   }
 
   const totalDiscount = applied.reduce((s, d) => s + d.discount_amount, 0);
