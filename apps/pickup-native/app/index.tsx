@@ -553,6 +553,55 @@ export default function Home() {
           </Pressable>
         )}
 
+        {/* Join rewards — only shown to logged-out customers. The hero promo
+            already grabs attention; this sits below it as the explicit
+            value-prop pitch ("collect points → unlock free drinks") plus a
+            single tap into the account/OTP flow. Hidden once signed in
+            because the rewards section + tier eyebrow take over. */}
+        {!phone && (
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/account");
+            }}
+            className="mx-4 mt-4 bg-primary/10 border border-primary/20 rounded-2xl active:opacity-80"
+            style={{ paddingHorizontal: 16, paddingVertical: 14 }}
+          >
+            <View className="flex-row items-center gap-3">
+              <View
+                className="bg-primary items-center justify-center"
+                style={{ width: 40, height: 40, borderRadius: 20 }}
+              >
+                <Gift size={20} color="#FFFFFF" strokeWidth={2} />
+              </View>
+              <View className="flex-1">
+                <Text
+                  className="text-espresso text-[15px]"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Join Celsius Rewards
+                </Text>
+                <Text
+                  className="text-muted-fg text-[12px] mt-0.5"
+                  style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                  numberOfLines={1}
+                >
+                  Earn points on every order. Free drinks await.
+                </Text>
+              </View>
+              <View className="flex-row items-center gap-1">
+                <Text
+                  className="text-primary text-[13px]"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Sign in
+                </Text>
+                <ChevronRight size={14} color="#C05040" />
+              </View>
+            </View>
+          </Pressable>
+        )}
+
         {/* Rewards lead the fold — what's redeemable right now is the most
             time-sensitive surface (urgency labels, stock countdowns), so it
             beats Usual to the user's eye. Usual still ranks above discovery

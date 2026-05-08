@@ -56,7 +56,7 @@ export function LogoIntro({ onDone }: Props) {
       <Animated.View style={logoStyle}>
         <Image
           source={require("../assets/icon.png")}
-          style={{ width: 120, height: 120, borderRadius: 24 }}
+          style={{ width: 200, height: 200, borderRadius: 40 }}
           resizeMode="cover"
         />
       </Animated.View>
