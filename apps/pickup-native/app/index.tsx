@@ -432,6 +432,66 @@ export default function Home() {
           />
         }
       >
+        {/* Guest sign-in CTA — surfaces FIRST for logged-out users so the
+            membership ask lands the moment the app opens. Espresso panel
+            with terracotta gift icon mirrors brand promo styling, so it
+            visually outweighs everything below it without feeling foreign.
+            Hidden once signed in. */}
+        {!phone && (
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              router.push("/account");
+            }}
+            className="mx-4 mt-4 bg-espresso rounded-2xl overflow-hidden active:opacity-90"
+            style={{
+              shadowColor: "#160800",
+              shadowOpacity: 0.18,
+              shadowRadius: 14,
+              shadowOffset: { width: 0, height: 6 },
+            }}
+          >
+            <View className="px-5 py-4 flex-row items-center gap-3">
+              <View
+                className="bg-primary items-center justify-center"
+                style={{ width: 48, height: 48, borderRadius: 24 }}
+              >
+                <Gift size={24} color="#FFFFFF" strokeWidth={2} />
+              </View>
+              <View className="flex-1">
+                <Text
+                  className="text-amber-400 text-[10px] uppercase tracking-widest"
+                  style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 2 }}
+                >
+                  Free to join
+                </Text>
+                <Text
+                  className="text-white text-[17px] mt-0.5"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Become a member
+                </Text>
+                <Text
+                  className="text-white/70 text-[12px] mt-0.5"
+                  style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                  numberOfLines={1}
+                >
+                  Earn points · unlock free drinks · members-only deals
+                </Text>
+              </View>
+              <View className="bg-white rounded-full px-3.5 py-2 flex-row items-center gap-1">
+                <Text
+                  className="text-espresso text-[12px]"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Sign in
+                </Text>
+                <ChevronRight size={13} color="#1A0200" />
+              </View>
+            </View>
+          </Pressable>
+        )}
+
         {/* Active order tracker — sits above everything else when present */}
         {activeOrder && (
           <Pressable
@@ -550,55 +610,6 @@ export default function Home() {
                 </View>
               </View>
             )}
-          </Pressable>
-        )}
-
-        {/* Join rewards — only shown to logged-out customers. The hero promo
-            already grabs attention; this sits below it as the explicit
-            value-prop pitch ("collect points → unlock free drinks") plus a
-            single tap into the account/OTP flow. Hidden once signed in
-            because the rewards section + tier eyebrow take over. */}
-        {!phone && (
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/account");
-            }}
-            className="mx-4 mt-4 bg-primary/10 border border-primary/20 rounded-2xl active:opacity-80"
-            style={{ paddingHorizontal: 16, paddingVertical: 14 }}
-          >
-            <View className="flex-row items-center gap-3">
-              <View
-                className="bg-primary items-center justify-center"
-                style={{ width: 40, height: 40, borderRadius: 20 }}
-              >
-                <Gift size={20} color="#FFFFFF" strokeWidth={2} />
-              </View>
-              <View className="flex-1">
-                <Text
-                  className="text-espresso text-[15px]"
-                  style={{ fontFamily: "Peachi-Bold" }}
-                >
-                  Join Celsius Rewards
-                </Text>
-                <Text
-                  className="text-muted-fg text-[12px] mt-0.5"
-                  style={{ fontFamily: "SpaceGrotesk_500Medium" }}
-                  numberOfLines={1}
-                >
-                  Earn points on every order. Free drinks await.
-                </Text>
-              </View>
-              <View className="flex-row items-center gap-1">
-                <Text
-                  className="text-primary text-[13px]"
-                  style={{ fontFamily: "Peachi-Bold" }}
-                >
-                  Sign in
-                </Text>
-                <ChevronRight size={14} color="#C05040" />
-              </View>
-            </View>
           </Pressable>
         )}
 
