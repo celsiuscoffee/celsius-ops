@@ -32,11 +32,15 @@ export default function OrdersTab() {
   const addToCart = useApp((s) => s.addToCart);
   const clearCart = useApp((s) => s.clearCart);
 
+  // staleTime 5min so the prefetched cache from _layout serves the
+  // first-paint instantly. Background refetch still happens; the
+  // pull-to-refresh affordance below force-fetches when the user
+  // wants the latest.
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["order-history", phone],
     queryFn: () => (phone ? fetchOrderHistory(phone, 20) : Promise.resolve([])),
     enabled: !!phone,
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
   });
 
   const reorder = (order: OrderHistoryEntry) => {

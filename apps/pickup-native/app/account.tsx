@@ -33,6 +33,7 @@ import { useApp } from "../lib/store";
 import { api } from "../lib/api";
 import { fetchMember, fetchTier, type MemberTier } from "../lib/rewards";
 import { SafeBoundary } from "../components/SafeBoundary";
+import { useQuery } from "@tanstack/react-query";
 
 function normalisePhone(input: string): string {
   const digits = input.replace(/\D/g, "");
@@ -90,26 +91,39 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
   const insets = useSafeAreaInsets();
   const member = useApp((s) => s.member);
   const setMember = useApp((s) => s.setMember);
+  const loyaltyId = useApp((s) => s.loyaltyId);
   const [editing, setEditing] = useState(false);
-  const [tier, setTier] = useState<MemberTier | null>(null);
 
-  // Refetch on screen focus so points balance stays current
+  // Tier is read via React Query so the prefetch warm-up in _layout.tsx
+  // (fired the moment we know loyaltyId) populates this view's cache —
+  // tier eyebrow + benefits render on first paint instead of after a
+  // 500ms round-trip. The 5-min staleTime keeps it from refetching on
+  // every tab visit; cacheTime (default) keeps it warm across nav.
+  const tierQ = useQuery({
+    queryKey: ["tier", loyaltyId],
+    queryFn: () => (loyaltyId ? fetchTier(loyaltyId) : Promise.resolve(null)),
+    enabled: !!loyaltyId,
+    staleTime: 5 * 60_000,
+  });
+  const tier = tierQ.data ?? null;
+
+  // Refresh member fields (points balance, name, etc.) on screen focus.
+  // Member is in zustand for write-through to the rest of the app, so
+  // we keep the imperative fetch here. fetchTier runs through the
+  // queryClient now so we don't need to call it here too.
   useEffect(() => {
     fetchMember(phone)
       .then((m) => {
-        if (m) {
-          setMember({
-            id: m.id,
-            name: m.name,
-            email: null,
-            birthday: null,
-            pointsBalance: m.pointsBalance,
-            totalVisits: m.totalVisits,
-            totalPointsEarned: m.totalPointsEarned,
-          });
-          // Fetch tier info in parallel — fail silently if missing.
-          fetchTier(m.id).then(setTier).catch(() => {});
-        }
+        if (!m) return;
+        setMember({
+          id: m.id,
+          name: m.name,
+          email: null,
+          birthday: null,
+          pointsBalance: m.pointsBalance,
+          totalVisits: m.totalVisits,
+          totalPointsEarned: m.totalPointsEarned,
+        });
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -19,6 +19,7 @@ import { RootErrorBoundary } from "../components/RootErrorBoundary";
 import { Toast } from "../components/Toast";
 import { registerForPush } from "../lib/notifications";
 import { useApp } from "../lib/store";
+import { fetchRewards, fetchTier, fetchOrderHistory } from "../lib/rewards";
 import {
   SpaceGrotesk_400Regular,
   SpaceGrotesk_500Medium,
@@ -123,6 +124,42 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
+  // Pre-fetch the data the rewards / account / orders tabs need the
+  // moment we know who the customer is — turns "tap tab → spinner →
+  // detail" into "tap tab → detail already there". Fires once when
+  // phone becomes available, then again whenever the loyalty member
+  // id resolves (tier needs that, not just the phone).
+  //
+  // staleTime is left at the per-query default for these — what we're
+  // doing here is *priming* the cache, not pinning it. The tab will
+  // still refetch on its own poll cadence; we just gave it a head start.
+  const phoneForPrefetch = useApp((s) => s.phone);
+  const loyaltyIdForPrefetch = useApp((s) => s.loyaltyId);
+  useEffect(() => {
+    if (!phoneForPrefetch) return;
+    queryClient
+      .prefetchQuery({
+        queryKey: ["rewards", phoneForPrefetch],
+        queryFn: () => fetchRewards(phoneForPrefetch),
+      })
+      .catch(() => {});
+    queryClient
+      .prefetchQuery({
+        queryKey: ["order-history", phoneForPrefetch],
+        queryFn: () => fetchOrderHistory(phoneForPrefetch, 20),
+      })
+      .catch(() => {});
+  }, [phoneForPrefetch]);
+  useEffect(() => {
+    if (!loyaltyIdForPrefetch) return;
+    queryClient
+      .prefetchQuery({
+        queryKey: ["tier", loyaltyIdForPrefetch],
+        queryFn: () => fetchTier(loyaltyIdForPrefetch),
+      })
+      .catch(() => {});
+  }, [loyaltyIdForPrefetch]);
+
   // Push notifications: register the device with the server so order-ready
   // pushes can target this user. Re-runs whenever the signed-in phone
   // changes; cached fingerprint inside registerForPush prevents redundant
@@ -169,14 +206,18 @@ export default function RootLayout() {
                       animation: "slide_from_right",
                     }}
                   >
-                    {/* Bottom-tab roots cross-fade — sibling routes shouldn't
-                        slide as if hierarchical. Drill-down pushes (product
-                        detail, order detail, etc.) keep the default slide. */}
-                    <Stack.Screen name="index" options={{ animation: "fade" }} />
-                    <Stack.Screen name="menu" options={{ animation: "fade" }} />
-                    <Stack.Screen name="orders" options={{ animation: "fade" }} />
-                    <Stack.Screen name="rewards" options={{ animation: "fade" }} />
-                    <Stack.Screen name="account" options={{ animation: "fade" }} />
+                    {/* Bottom-tab roots — instant swap. Sibling routes
+                        shouldn't animate at all; the prior fade looked
+                        like lag because the new screen had to wait for
+                        the cross-fade timeline before its data could
+                        even start rendering. Drill-down pushes (product
+                        detail, order detail, etc.) keep the default
+                        slide so hierarchy still feels right. */}
+                    <Stack.Screen name="index" options={{ animation: "none" }} />
+                    <Stack.Screen name="menu" options={{ animation: "none" }} />
+                    <Stack.Screen name="orders" options={{ animation: "none" }} />
+                    <Stack.Screen name="rewards" options={{ animation: "none" }} />
+                    <Stack.Screen name="account" options={{ animation: "none" }} />
                   </Stack>
                   <MaintenanceBanner />
                   {/* Global toast layer — sits above stack content but below

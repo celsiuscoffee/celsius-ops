@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { View, Text, ScrollView, Pressable, Image, ActivityIndicator } from "react-native";
 import { Stack, router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -23,21 +23,25 @@ export default function RewardsTab() {
   const loyaltyId = useApp((s) => s.loyaltyId);
   const insets = useSafeAreaInsets();
 
-  // Tier — fetched alongside rewards. Drives the hero theme + the
-  // benefits card.
-  const [tier, setTier] = useState<MemberTier | null>(null);
-  useEffect(() => {
-    if (!loyaltyId) {
-      setTier(null);
-      return;
-    }
-    fetchTier(loyaltyId).then(setTier).catch(() => setTier(null));
-  }, [loyaltyId]);
+  // Tier — drives the hero theme + benefits card. Read via React Query
+  // so the _layout.tsx prefetch (fired on loyaltyId resolve) populates
+  // this view's cache. First-paint instead of post-RTT spinner.
+  const tierQ = useQuery({
+    queryKey: ["tier", loyaltyId],
+    queryFn: () => (loyaltyId ? fetchTier(loyaltyId) : Promise.resolve(null)),
+    enabled: !!loyaltyId,
+    staleTime: 5 * 60_000,
+  });
+  const tier = tierQ.data ?? null;
 
+  // Bumped staleTime 30s → 5min so React Query serves the prefetched
+  // cache instantly when the customer taps Rewards. Background refetch
+  // still happens on stale, just no spinner. Pull-to-refresh (if added)
+  // can force-fetch via refetch().
   const { data, isLoading } = useQuery({
     queryKey: ["rewards", phone ?? "anonymous"],
     queryFn: () => fetchRewards(phone),
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
   });
 
   const balance = data?.pointsBalance ?? 0;
