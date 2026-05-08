@@ -4,8 +4,25 @@ import { useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Loader2, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Target } from "lucide-react";
+import { ArrowLeft, Loader2, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Target, Sparkles } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
+
+type CoachInsights = {
+  summary: string;
+  strengths: string[];
+  focus_areas: string[];
+  coaching_actions: string[];
+  needs_more_data: boolean;
+};
+
+type CoachResult = {
+  insights: CoachInsights | null;
+  generated_at: string | null;
+  model: string | null;
+  cached: boolean;
+  audit_count: number;
+  reason?: "no_audits" | "insufficient_data";
+};
 
 type Me = { id: string; name: string };
 
@@ -84,6 +101,7 @@ function Sparkline({ values }: { values: (number | null)[] }) {
 export default function MySkillsPage() {
   const { data: me } = useFetch<Me>("/api/auth/me");
   const { data, isLoading } = useFetch<Response>(me ? `/api/audits/staff/${me.id}` : null);
+  const { data: coach } = useFetch<CoachResult>(me ? `/api/audits/staff/${me.id}/coach` : null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   return (
@@ -112,6 +130,50 @@ export default function MySkillsPage() {
           <p className="mt-1 text-xs text-gray-400">
             Once a manager audits you, your scores will show up here.
           </p>
+        </Card>
+      )}
+
+      {/* AI Coach card — second-person framing ("your", "focus on") since
+          this is the staff seeing their own data. */}
+      {coach?.insights && !coach.insights.needs_more_data && (
+        <Card className="px-3 py-3 border-terracotta/30 bg-gradient-to-br from-amber-50 to-orange-50">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="rounded-full bg-terracotta/15 p-1">
+              <Sparkles className="h-3.5 w-3.5 text-terracotta" />
+            </div>
+            <p className="text-sm font-semibold text-gray-900">Coach insights</p>
+          </div>
+          <p className="text-xs text-gray-800 mb-2">{coach.insights.summary}</p>
+          {coach.insights.strengths.length > 0 && (
+            <div className="mb-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-green-700 mb-1">Doing well</p>
+              <ul className="space-y-0.5 text-[11px] text-gray-700">
+                {coach.insights.strengths.map((s, i) => (
+                  <li key={i}>• {s}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {coach.insights.focus_areas.length > 0 && (
+            <div className="mb-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-red-700 mb-1">Focus on</p>
+              <ul className="space-y-0.5 text-[11px] text-gray-700">
+                {coach.insights.focus_areas.map((s, i) => (
+                  <li key={i}>• {s}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {coach.insights.coaching_actions.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-terracotta mb-1">This week</p>
+              <ul className="space-y-0.5 text-[11px] text-gray-700">
+                {coach.insights.coaching_actions.map((s, i) => (
+                  <li key={i}>• {s}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </Card>
       )}
 

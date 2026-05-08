@@ -4,8 +4,25 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Loader2, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Loader2, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
+
+type CoachInsights = {
+  summary: string;
+  strengths: string[];
+  focus_areas: string[];
+  coaching_actions: string[];
+  needs_more_data: boolean;
+};
+
+type CoachResult = {
+  insights: CoachInsights | null;
+  generated_at: string | null;
+  model: string | null;
+  cached: boolean;
+  audit_count: number;
+  reason?: "no_audits" | "insufficient_data";
+};
 
 type AuditEntry = {
   id: string;
@@ -89,6 +106,7 @@ function Sparkline({ values }: { values: (number | null)[] }) {
 export default function StaffSkillsDetailPage({ params }: { params: Promise<{ userId: string }> }) {
   const { userId } = use(params);
   const { data, isLoading } = useFetch<Response>(`/api/ops/audit-reports/staff/${userId}`);
+  const { data: coach, isLoading: coachLoading } = useFetch<CoachResult>(`/api/ops/audit-reports/staff/${userId}/coach`);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   if (isLoading) {
@@ -117,6 +135,71 @@ export default function StaffSkillsDetailPage({ params }: { params: Promise<{ us
           {templates.length} skill template{templates.length !== 1 ? "s" : ""} audited
         </p>
       </div>
+
+      {/* AI Coach card — surfaces strengths, focus areas, and concrete coaching
+          actions. Cached server-side per latest audit so this card is cheap. */}
+      {(coachLoading || coach?.insights) && (
+        <Card className="border-terracotta/30 bg-gradient-to-br from-amber-50 to-orange-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="rounded-full bg-terracotta/15 p-1.5">
+                <Sparkles className="h-4 w-4 text-terracotta" />
+              </div>
+              <h3 className="text-sm font-semibold text-gray-900">Coach insights</h3>
+              {coach?.cached && (
+                <span className="text-[10px] text-gray-400">(cached)</span>
+              )}
+            </div>
+
+            {coachLoading && (
+              <div className="flex items-center gap-2 text-xs text-gray-500 py-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analysing audit history…
+              </div>
+            )}
+
+            {coach?.insights && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-800">{coach.insights.summary}</p>
+
+                {coach.insights.needs_more_data ? null : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {coach.insights.strengths.length > 0 && (
+                      <div className="rounded-lg bg-white/70 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-green-700 mb-1.5">Strengths</p>
+                        <ul className="space-y-1 text-xs text-gray-700">
+                          {coach.insights.strengths.map((s, i) => (
+                            <li key={i} className="leading-snug">• {s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {coach.insights.focus_areas.length > 0 && (
+                      <div className="rounded-lg bg-white/70 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-red-700 mb-1.5">Focus areas</p>
+                        <ul className="space-y-1 text-xs text-gray-700">
+                          {coach.insights.focus_areas.map((s, i) => (
+                            <li key={i} className="leading-snug">• {s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {coach.insights.coaching_actions.length > 0 && (
+                      <div className="rounded-lg bg-white/70 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-terracotta mb-1.5">This week</p>
+                        <ul className="space-y-1 text-xs text-gray-700">
+                          {coach.insights.coaching_actions.map((s, i) => (
+                            <li key={i} className="leading-snug">• {s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {templates.length === 0 && (
         <Card>
