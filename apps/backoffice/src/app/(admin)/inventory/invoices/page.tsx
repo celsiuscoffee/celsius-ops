@@ -607,11 +607,13 @@ export default function InvoicesPage() {
   type ReconData = { hasOrder: boolean; orderNumber?: string; lines: ReconLine[]; poTotal: number; receivedTotal: number; billedTotal: number };
   const [attachRecon, setAttachRecon] = useState<ReconData | null>(null);
   const [showVariances, setShowVariances] = useState(false);
+  const [attachVarianceReason, setAttachVarianceReason] = useState("");
 
   const openAttach = (inv: Invoice) => {
     setAttachingInvoice(inv);
     setAttachRecon(null);
     setShowVariances(false);
+    setAttachVarianceReason("");
     const today = new Date().toISOString().split("T")[0];
     const termDays = parsePaymentTermDays(inv.supplierPaymentTerms);
     setAttachForm({
@@ -718,21 +720,26 @@ export default function InvoicesPage() {
       toast.error("Supplier invoice number is required");
       return;
     }
-    setAttachSaving(true);
     // Reconciliation flag — if the supplier-billed amount diverges from
     // the received total by > RM 0.50, surface it on the invoice's
-    // flags array so the AP queue can highlight it. Procurement is
-    // implicitly accepting the variance by clicking Attach.
+    // flags array so the AP queue can highlight it. Procurement must
+    // explain WHY they're attaching despite the variance.
     const billed = parseFloat(attachForm.amount) || attachingInvoice.amount;
-    const reconFlag =
-      attachRecon?.hasOrder && Math.abs(billed - attachRecon.receivedTotal) > 0.5
-        ? {
-            code: "BILLED_VS_RECEIVED",
-            message: `Supplier billed RM ${billed.toFixed(2)} vs received total RM ${attachRecon.receivedTotal.toFixed(2)} (Δ RM ${(billed - attachRecon.receivedTotal).toFixed(2)})`,
-            detectedAt: new Date().toISOString(),
-            qtyVariances: attachRecon.lines.filter((l) => Math.abs(l.qtyVariance) > 0.0001).map((l) => ({ product: l.product, ordered: l.ordered, received: l.received })),
-          }
-        : null;
+    const hasVariance = !!attachRecon?.hasOrder && Math.abs(billed - attachRecon.receivedTotal) > 0.5;
+    if (hasVariance && !attachVarianceReason.trim()) {
+      toast.error("Reason for variance is required when supplier-billed differs from received");
+      return;
+    }
+    setAttachSaving(true);
+    const reconFlag = hasVariance && attachRecon
+      ? {
+          code: "BILLED_VS_RECEIVED",
+          message: `Supplier billed RM ${billed.toFixed(2)} vs received total RM ${attachRecon.receivedTotal.toFixed(2)} (Δ RM ${(billed - attachRecon.receivedTotal).toFixed(2)})`,
+          reason: attachVarianceReason.trim(),
+          detectedAt: new Date().toISOString(),
+          qtyVariances: attachRecon.lines.filter((l) => Math.abs(l.qtyVariance) > 0.0001).map((l) => ({ product: l.product, ordered: l.ordered, received: l.received })),
+        }
+      : null;
     try {
       const res = await fetch(`/api/inventory/invoices/${attachingInvoice.id}`, {
         method: "PATCH",
@@ -1835,6 +1842,22 @@ export default function InvoicesPage() {
                       >
                         {showVariances ? "Hide" : "Show"} variance lines ({lineVariances.length} qty mismatch{lineVariances.length === 1 ? "" : "es"})
                       </button>
+                    )}
+                    {hasVariance && (
+                      <div className="mt-2">
+                        <label className="block text-[11px] font-medium text-red-800">
+                          Reason for variance <span className="text-red-500">*</span>
+                        </label>
+                        <Input
+                          value={attachVarianceReason}
+                          onChange={(e) => setAttachVarianceReason(e.target.value)}
+                          placeholder="e.g. supplier discount, damaged goods credit, billing error — accepted as-is"
+                          className="mt-1 text-xs"
+                        />
+                        <p className="mt-1 text-[10px] text-red-700">
+                          Required when supplier billed amount differs from received total. Saved on the invoice for audit.
+                        </p>
+                      </div>
                     )}
                     {showVariances && lineVariances.length > 0 && (
                       <table className="mt-2 w-full text-[11px]">
