@@ -616,13 +616,18 @@ export default function InvoicesPage() {
     setAttachPhotos(inv.photos || []);
   };
 
+  const [attachDragging, setAttachDragging] = useState(false);
   const handleAttachPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files?.length) return;
+    if (e.target.files) await processAttachFiles(e.target.files);
+    e.target.value = "";
+  };
+  const processAttachFiles = async (files: FileList | File[]) => {
+    const list = Array.from(files);
+    if (!list.length) return;
     setAttachUploading(true);
     const newlyUploaded: string[] = [];
     try {
-      for (const file of Array.from(files)) {
+      for (const file of list) {
         const formData = new FormData();
         formData.append("file", file);
         formData.append("folder", "invoices");
@@ -692,7 +697,6 @@ export default function InvoicesPage() {
       }
     } catch { /* ignore */ }
     setAttachUploading(false);
-    e.target.value = "";
   };
 
   const submitAttach = async () => {
@@ -1852,11 +1856,30 @@ export default function InvoicesPage() {
                     ))}
                   </div>
                 )}
-                <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-4 py-3 text-sm transition-colors hover:border-yellow-400 hover:bg-yellow-50/30 ${attachUploading ? "opacity-50 pointer-events-none" : ""}`}>
+                <label
+                  onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setAttachDragging(true); }}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setAttachDragging(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setAttachDragging(false); }}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setAttachDragging(false);
+                    if (attachUploading) return;
+                    const files = e.dataTransfer.files;
+                    if (files?.length) await processAttachFiles(files);
+                  }}
+                  className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-3 text-sm transition-colors ${
+                    attachUploading ? "opacity-50 pointer-events-none border-gray-300" :
+                    attachDragging ? "border-yellow-500 bg-yellow-50" :
+                    "border-gray-300 hover:border-yellow-400 hover:bg-yellow-50/30"
+                  }`}
+                >
                   {attachUploading ? (
                     <><Loader2 className="h-4 w-4 animate-spin text-yellow-500" /> Uploading...</>
+                  ) : attachDragging ? (
+                    <><Upload className="h-4 w-4 text-yellow-600" /> <span className="text-yellow-700 font-medium">Drop to upload</span></>
                   ) : (
-                    <><Upload className="h-4 w-4 text-gray-400" /> <span className="text-gray-500">Upload supplier invoice</span></>
+                    <><Upload className="h-4 w-4 text-gray-400" /> <span className="text-gray-500">Upload supplier invoice — or drag &amp; drop</span></>
                   )}
                   <input type="file" accept="image/*,.pdf" multiple className="hidden" onChange={handleAttachPhotoUpload} />
                 </label>
