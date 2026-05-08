@@ -19,6 +19,7 @@ import {
 } from "../lib/rewards";
 import { SafeBoundary } from "../components/SafeBoundary";
 import { TierHero } from "../components/TierHero";
+import { RewardTicket } from "../components/RewardTicket";
 import { tierStyle } from "../lib/tier-styles";
 import { getSetting, type Settings } from "../lib/settings";
 import { BottomNav } from "../components/BottomNav";
@@ -765,65 +766,11 @@ export default function Home() {
               contentContainerClassName="gap-3 px-4"
             >
               {affordableRewards.map((r) => (
-                <Pressable
+                <RewardTicket
                   key={r.id}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    router.push("/rewards");
-                  }}
-                  className="w-36 bg-surface rounded-2xl border border-border overflow-hidden active:opacity-70"
-                  style={{
-                    shadowColor: "#000",
-                    shadowOpacity: 0.05,
-                    shadowRadius: 6,
-                    shadowOffset: { width: 0, height: 2 },
-                  }}
-                >
-                  <View className="aspect-[16/9] bg-primary/5">
-                    {r.image_url ? (
-                      <Image
-                        source={{ uri: r.image_url }}
-                        style={{ width: "100%", height: "100%" }}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View className="flex-1 items-center justify-center">
-                        <Gift size={22} color="#C05040" strokeWidth={1.5} />
-                      </View>
-                    )}
-                    {(() => {
-                      const label = urgencyLabel(r);
-                      if (!label) return null;
-                      return (
-                        <View
-                          className="absolute bg-primary rounded-full"
-                          style={{
-                            top: 8,
-                            left: 8,
-                            paddingHorizontal: 7,
-                            paddingVertical: 2,
-                          }}
-                        >
-                          <Text
-                            className="text-white text-[10px]"
-                            style={{ fontFamily: "Peachi-Bold" }}
-                          >
-                            {label}
-                          </Text>
-                        </View>
-                      );
-                    })()}
-                  </View>
-                  <View className="px-3 py-2">
-                    <Text
-                      className="text-espresso text-[14px]"
-                      style={{ fontFamily: "Peachi-Bold" }}
-                      numberOfLines={1}
-                    >
-                      {r.name}
-                    </Text>
-                  </View>
-                </Pressable>
+                  reward={r}
+                  onPress={() => router.push("/rewards")}
+                />
               ))}
             </ScrollView>
           </View>
