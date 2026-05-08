@@ -656,7 +656,11 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
       className="bg-background"
     >
       <Stack.Screen options={{ headerShown: false }} />
-      <EspressoHeader title="Sign in" showCart={false} />
+      {/* showBack lets users escape the sign-in flow even when the keyboard
+          is up and the bottom tab bar is offscreen. router.back() returns
+          to wherever they came from (home / rewards), and we ensure home is
+          always reachable via the "Continue browsing" link below too. */}
+      <EspressoHeader title="Sign in" showCart={false} showBack />
 
       <View className="flex-1 px-5 pt-8">
         {step === "phone" ? (
@@ -731,6 +735,24 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                   Send code
                 </Text>
               )}
+            </Pressable>
+
+            {/* Escape hatch — guests should never be trapped in the OTP
+                flow. Routes home regardless of nav stack state. */}
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                router.replace("/");
+              }}
+              className="mt-4 self-center active:opacity-60"
+              hitSlop={8}
+            >
+              <Text
+                className="text-muted-fg text-sm"
+                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+              >
+                Continue browsing →
+              </Text>
             </Pressable>
           </>
         ) : (

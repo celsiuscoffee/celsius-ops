@@ -7,13 +7,15 @@ export async function GET() {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, category, price, image_url, is_available, is_featured, modifiers, track_stock, synced_at")
+    .select("id, name, category, price, image_url, is_available, is_featured, modifiers, hidden_modifier_ids, track_stock, synced_at")
     .eq("brand_id", "brand-celsius")
     .order("name");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Map loyalty schema -> DbProduct shape expected by the menu page
+  // Map loyalty schema -> DbProduct shape expected by the menu page.
+  // We surface raw modifiers + hidden_modifier_ids and let the menu page
+  // render strikethrough/restore for hidden ones — keeps undo cheap.
   const mapped = (data ?? []).map((p, i) => ({
     id:           p.id,
     category_id:  p.category ?? "",
@@ -27,6 +29,7 @@ export async function GET() {
     is_new:       false,
     variants:     [],
     modifiers:    Array.isArray(p.modifiers) ? p.modifiers : [],
+    hidden_modifier_ids: Array.isArray(p.hidden_modifier_ids) ? p.hidden_modifier_ids : [],
     position:     i + 1,
   }));
 

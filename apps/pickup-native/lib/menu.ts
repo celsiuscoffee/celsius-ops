@@ -33,12 +33,14 @@ export type Product = {
   modifiers: ModifierGroup[];
 };
 
+type RawProduct = Product & { hidden_modifier_ids?: string[] };
+
 export async function fetchMenu(): Promise<{ categories: Category[]; products: Product[] }> {
   const [{ data: cats, error: catErr }, { data: prods, error: prodErr }] = await Promise.all([
     supabase.from("categories").select("id,name,slug,position").order("position"),
     supabase
       .from("products")
-      .select("id,name,category,description,price,image_url,is_available,is_featured,modifiers")
+      .select("id,name,category,description,price,image_url,is_available,is_featured,modifiers,hidden_modifier_ids")
       .eq("brand_id", "brand-celsius")
       .order("name"),
   ]);
@@ -46,10 +48,25 @@ export async function fetchMenu(): Promise<{ categories: Category[]; products: P
   if (prodErr) throw prodErr;
   return {
     categories: (cats ?? []) as Category[],
-    products: ((prods ?? []) as Product[]).map((p) => ({
-      ...p,
-      modifiers: Array.isArray(p.modifiers) ? p.modifiers : [],
-    })),
+    // Backoffice can soft-hide noisy modifier groups or specific options
+    // (think "ice level: cold", "cup type", etc) without losing the StoreHub
+    // source data. Customers shouldn't see them — strip both at read time.
+    products: ((prods ?? []) as RawProduct[]).map((p) => {
+      const hidden = new Set(Array.isArray(p.hidden_modifier_ids) ? p.hidden_modifier_ids : []);
+      const modifiers = Array.isArray(p.modifiers) ? p.modifiers : [];
+      return {
+        ...p,
+        modifiers: modifiers
+          .filter((g) => !hidden.has(g.id))
+          .map((g) => ({
+            ...g,
+            options: g.options.filter((opt) => !hidden.has(opt.id)),
+          }))
+          // Drop a group entirely if every option got hidden — empty
+          // selectors confuse the product detail screen.
+          .filter((g) => g.options.length > 0),
+      };
+    }),
   };
 }
 

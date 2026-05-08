@@ -32,6 +32,7 @@ interface DbProduct {
   is_new: boolean;
   variants: { id: string; name: string; price: number }[];
   modifiers: ModifierGroup[];
+  hidden_modifier_ids: string[];
   position: number;
 }
 
@@ -186,6 +187,32 @@ export default function PickupMenu() {
       body: JSON.stringify({ is_popular: !p.is_popular }),
     });
     setTogglingPopular(null);
+  }
+
+  // Hide / restore a single modifier group or option ID. Updates the local
+  // product immediately, then PATCHes the full hidden list to the server so
+  // the change survives a re-sync from StoreHub.
+  async function toggleHideModifier(productId: string, modifierId: string) {
+    const prod = products.find((p) => p.id === productId);
+    if (!prod) return;
+    const current = prod.hidden_modifier_ids ?? [];
+    const next = current.includes(modifierId)
+      ? current.filter((x) => x !== modifierId)
+      : [...current, modifierId];
+    // Optimistic update on both the list and the open editor view.
+    setProducts((prev) => prev.map((x) => x.id === productId ? { ...x, hidden_modifier_ids: next } : x));
+    setEditing((cur) => (cur && cur.id === productId ? { ...cur, hidden_modifier_ids: next } : cur));
+    const res = await adminFetch(`/api/pickup/products/${productId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hidden_modifier_ids: next }),
+    });
+    if (!res.ok) {
+      toast.error("Failed to save");
+      // Rollback
+      setProducts((prev) => prev.map((x) => x.id === productId ? { ...x, hidden_modifier_ids: current } : x));
+      setEditing((cur) => (cur && cur.id === productId ? { ...cur, hidden_modifier_ids: current } : cur));
+    }
   }
 
   async function moveProduct(p: DbProduct, direction: "up" | "down", categoryItems: DbProduct[]) {
@@ -630,30 +657,74 @@ export default function PickupMenu() {
                 ))}
               </div>
 
-              {/* Modifier groups — read-only, synced from StoreHub */}
+              {/* Modifier groups — synced from StoreHub. Each group + option
+                  can be hidden from customers without losing the underlying
+                  StoreHub data; sync re-pulls all modifiers but the hidden
+                  list survives. Hidden items render with a strikethrough +
+                  "Restore" affordance instead of "Hide". */}
               {editing && editing.modifiers.length > 0 && (
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">
                     Modifiers (from StoreHub)
                   </label>
                   <div className="space-y-2">
-                    {editing.modifiers.map((group) => (
-                      <div key={group.id} className="border rounded-xl p-3 bg-muted/20">
-                        <p className="text-xs font-semibold text-[#160800] mb-1.5">
-                          {group.name} {group.multiSelect ? "(multi-select)" : "(single-select)"}
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {group.options.map((opt) => (
-                            <span key={opt.id} className="text-xs bg-white border rounded-full px-2.5 py-1 text-muted-foreground">
-                              {opt.label}{opt.priceDelta > 0 ? ` +RM${opt.priceDelta.toFixed(2)}` : ""}
-                            </span>
-                          ))}
+                    {editing.modifiers.map((group) => {
+                      const hidden = editing.hidden_modifier_ids ?? [];
+                      const groupHidden = hidden.includes(group.id);
+                      return (
+                        <div
+                          key={group.id}
+                          className={`border rounded-xl p-3 ${groupHidden ? "bg-red-50/40 border-red-200/60" : "bg-muted/20"}`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <p className={`text-xs font-semibold ${groupHidden ? "text-red-600 line-through" : "text-[#160800]"}`}>
+                              {group.name} {group.multiSelect ? "(multi-select)" : "(single-select)"}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => toggleHideModifier(editing.id, group.id)}
+                              className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full transition-colors ${
+                                groupHidden
+                                  ? "bg-white border border-[#160800]/20 text-[#160800] hover:bg-[#160800]/5"
+                                  : "bg-white border border-red-200 text-red-600 hover:bg-red-50"
+                              }`}
+                            >
+                              {groupHidden ? <RefreshCw className="h-3 w-3" /> : <Trash2 className="h-3 w-3" />}
+                              {groupHidden ? "Restore" : "Hide group"}
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {group.options.map((opt) => {
+                              const optHidden = groupHidden || hidden.includes(opt.id);
+                              return (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  onClick={() => !groupHidden && toggleHideModifier(editing.id, opt.id)}
+                                  disabled={groupHidden}
+                                  className={`group flex items-center gap-1 text-xs border rounded-full px-2.5 py-1 transition-colors ${
+                                    optHidden
+                                      ? "bg-red-50/70 border-red-200 text-red-500 line-through"
+                                      : "bg-white border-border text-muted-foreground hover:border-red-300 hover:text-red-600"
+                                  } ${groupHidden ? "opacity-60 cursor-not-allowed" : ""}`}
+                                  title={groupHidden ? "Restore the group first" : optHidden ? "Click to restore" : "Click to hide this option"}
+                                >
+                                  <span>{opt.label}{opt.priceDelta > 0 ? ` +RM${opt.priceDelta.toFixed(2)}` : ""}</span>
+                                  {!groupHidden && (
+                                    optHidden
+                                      ? <RefreshCw className="h-3 w-3" />
+                                      : <X className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1.5">
-                    To update modifiers, use &ldquo;Sync StoreHub&rdquo; from the menu page.
+                    Hide noisy or off-menu modifiers. Sync StoreHub keeps the underlying data fresh; your hidden list is preserved.
                   </p>
                 </div>
               )}
