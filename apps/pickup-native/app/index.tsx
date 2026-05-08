@@ -514,19 +514,12 @@ export default function Home() {
                     <Text style={{ color: ts.accentColor }}>{` ${promo.highlight}`}</Text>
                   ) : null}
                 </Text>
-                {promo.description && (
-                  <Text
-                    style={{
-                      color: ts.mutedColor,
-                      fontFamily: "SpaceGrotesk_400Regular",
-                      fontSize: 11,
-                      marginTop: 3,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {promo.description}
-                  </Text>
-                )}
+                {/* Description intentionally hidden inline. The strip
+                    is already eyebrow + headline + CTA — adding the
+                    long description ("First app order · Any drink ·
+                    Any size") read as a wall of text. Customers tap
+                    Order to surface T&Cs; the headline carries the
+                    promise on its own. */}
               </View>
               <View
                 className="bg-white rounded-full flex-row items-center gap-1"
