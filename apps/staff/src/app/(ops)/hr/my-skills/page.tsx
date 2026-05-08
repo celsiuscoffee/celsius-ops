@@ -90,10 +90,10 @@ export default function MySkillsPage() {
     <div className="px-4 py-4 space-y-4">
       <div>
         <Link
-          href="/audit"
+          href="/hr"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3"
         >
-          <ArrowLeft className="h-4 w-4" />Back to Audits
+          <ArrowLeft className="h-4 w-4" />Back to HR
         </Link>
         <h1 className="font-heading text-lg font-bold text-brand-dark">My Skills</h1>
         <p className="text-sm text-gray-500">Your audit scores and how you&apos;re tracking over time.</p>
