@@ -601,52 +601,107 @@ export default function Home() {
           </Pressable>
         )}
 
-        {/* "For you" tabbed strip — collapses Vouchers + Usual + Best Sellers
-            into a single horizontally-scrolling area with sub-tabs. Saves
-            ~200vpx on the first viewport vs. three stacked sections, and
-            consolidates personalisation into one mental block. Tab order
-            and visibility adapt to who's looking:
-              - Logged-out: only Best Sellers tab visible
-              - Logged-in, no usual yet: Vouchers (if any) + Best Sellers
-              - Logged-in regular: Vouchers + Usual + Best Sellers
-            Default tab picks the most personal data they have. */}
-        <ForYouStrip
-          phone={phone}
-          outletId={outletId}
-          rewards={affordableRewards}
-          usual={recent.data ?? []}
-          featured={featured}
-          urgencyLabel={urgencyLabel}
-          onRewardTap={(r) => {
-            Haptics.selectionAsync();
-            router.push("/rewards");
-          }}
-          onUsualTap={() => {
-            Haptics.selectionAsync();
-            if (!outletId) router.push("/store");
-            else router.push({ pathname: "/menu", params: { tab: "usual" } });
-          }}
-          onFeaturedTap={(p) => {
-            Haptics.selectionAsync();
-            if (!outletId) router.push("/store");
-            else router.push({ pathname: "/product/[id]", params: { id: p.id } });
-          }}
-          onUsualSeeAll={() => {
-            Haptics.selectionAsync();
-            if (!outletId) router.push("/store");
-            else router.push({ pathname: "/menu", params: { tab: "usual" } });
-          }}
-          onRewardsSeeAll={() => router.push("/rewards")}
-          onFeaturedSeeAll={() => {
-            if (!outletId) router.push("/store");
-            else router.push("/menu");
-          }}
-        />
+        {/* Rewards lead the fold — what's redeemable right now is the most
+            time-sensitive surface (urgency labels, stock countdowns), so it
+            beats Usual to the user's eye. Usual still ranks above discovery
+            (Best Sellers) since retention beats acquisition.
+            (Reverted from the consolidated <ForYouStrip /> after testing
+            preferred the separate sections — kept that component in the
+            tree as dead code for now in case we revisit.) */}
+        {affordableRewards.length > 0 && (
+          <View className="mt-5">
+            <View className="flex-row items-center justify-between mb-2 px-4">
+              <View className="flex-row items-center gap-2">
+                <Gift size={16} color="#C05040" strokeWidth={2} />
+                <Text
+                  className="text-espresso text-[18px]"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Available rewards
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => router.push("/rewards")}
+                className="flex-row items-center gap-0.5 active:opacity-70"
+              >
+                <Text className="text-primary text-xs font-bold">All</Text>
+                <ChevronRight size={14} color="#C05040" />
+              </Pressable>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerClassName="gap-3 px-4"
+            >
+              {affordableRewards.map((r) => (
+                <Pressable
+                  key={r.id}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    router.push("/rewards");
+                  }}
+                  className="w-36 bg-surface rounded-2xl border border-border overflow-hidden active:opacity-70"
+                  style={{
+                    shadowColor: "#000",
+                    shadowOpacity: 0.05,
+                    shadowRadius: 6,
+                    shadowOffset: { width: 0, height: 2 },
+                  }}
+                >
+                  <View className="aspect-[16/9] bg-primary/5">
+                    {r.image_url ? (
+                      <Image
+                        source={{ uri: r.image_url }}
+                        style={{ width: "100%", height: "100%" }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View className="flex-1 items-center justify-center">
+                        <Gift size={22} color="#C05040" strokeWidth={1.5} />
+                      </View>
+                    )}
+                    {(() => {
+                      const label = urgencyLabel(r);
+                      if (!label) return null;
+                      return (
+                        <View
+                          className="absolute bg-primary rounded-full"
+                          style={{
+                            top: 8,
+                            left: 8,
+                            paddingHorizontal: 7,
+                            paddingVertical: 2,
+                          }}
+                        >
+                          <Text
+                            className="text-white text-[10px]"
+                            style={{ fontFamily: "Peachi-Bold" }}
+                          >
+                            {label}
+                          </Text>
+                        </View>
+                      );
+                    })()}
+                  </View>
+                  <View className="px-3 py-2">
+                    <Text
+                      className="text-espresso text-[14px]"
+                      style={{ fontFamily: "Peachi-Bold" }}
+                      numberOfLines={1}
+                    >
+                      {r.name}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
-        {/* Legacy "Your usual" cards (kept temporarily as a stub we can
-            re-enable if the consolidated strip needs A/B comparison —
-            normally hidden behind `false`). */}
-        {false && phone && (recent.data?.length ?? 0) > 0 && (
+        {/* Your usual — surfaces regulars with a one-tap path into the menu's
+            "Usual" tab, so customers land on a focused list of their go-tos
+            with full modifier flow available. */}
+        {phone && (recent.data?.length ?? 0) > 0 && (
           <View className="mt-5">
             <Pressable
               onPress={() => {
@@ -775,8 +830,8 @@ export default function Home() {
             </View>
           )}
 
-        {/* Legacy Best Sellers skeleton (also handled inside <ForYouStrip />). */}
-        {false && menu.isLoading && featured.length === 0 ? (
+        {/* Best Sellers (skeleton while menu loads, real cards once data is in) */}
+        {menu.isLoading && featured.length === 0 ? (
           <View className="px-4 mt-5">
             <View
               className="bg-surface/60 rounded-md mb-2"
@@ -808,10 +863,7 @@ export default function Home() {
             </ScrollView>
           </View>
         ) : null}
-        {/* Legacy Best Sellers section (now part of <ForYouStrip /> above).
-            Kept under `false` so we can A/B compare quickly without a
-            full revert. */}
-        {false && featured.length > 0 && (
+        {featured.length > 0 && (
           <View className="px-4 mt-5">
             <View className="flex-row items-center justify-between mb-2">
               <Text
