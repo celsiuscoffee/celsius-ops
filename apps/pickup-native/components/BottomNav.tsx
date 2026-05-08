@@ -1,6 +1,6 @@
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, Image } from "react-native";
 import { router, usePathname } from "expo-router";
-import { Home, ClipboardList, Gift, User, BookOpen } from "lucide-react-native";
+import { Home, ClipboardList, Gift, User } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 
@@ -8,13 +8,15 @@ type Tab = {
   key: string;
   label: string;
   href: string;
-  icon: any;
+  /** Lucide icon component, or null for tabs that render their own
+   *  custom mark (e.g. Menu, which uses the Celsius cup logo). */
+  icon: any | null;
   matches: (path: string) => boolean;
 };
 
 const TABS: Tab[] = [
   { key: "home", label: "Home", href: "/", icon: Home, matches: (p) => p === "/" },
-  { key: "menu", label: "Menu", href: "/menu", icon: BookOpen, matches: (p) => p.startsWith("/menu") || p.startsWith("/product") },
+  { key: "menu", label: "Menu", href: "/menu", icon: null, matches: (p) => p.startsWith("/menu") || p.startsWith("/product") },
   { key: "orders", label: "Orders", href: "/orders", icon: ClipboardList, matches: (p) => p.startsWith("/orders") || p.startsWith("/order/") },
   { key: "rewards", label: "Rewards", href: "/rewards", icon: Gift, matches: (p) => p === "/rewards" },
   { key: "account", label: "Account", href: "/account", icon: User, matches: (p) => p === "/account" },
@@ -54,13 +56,30 @@ export function BottomNav() {
             accessibilityState={{ selected: active }}
             accessibilityLabel={`${tab.label} tab`}
           >
-            <Icon
-              size={26}
-              color={active ? "#160800" : "#8E8E93"}
-              strokeWidth={active ? 2.4 : 1.75}
-              fill={active ? "#160800" : "transparent"}
-              fillOpacity={active ? 0.08 : 0}
-            />
+            {Icon ? (
+              <Icon
+                size={26}
+                color={active ? "#160800" : "#8E8E93"}
+                strokeWidth={active ? 2.4 : 1.75}
+                fill={active ? "#160800" : "transparent"}
+                fillOpacity={active ? 0.08 : 0}
+              />
+            ) : (
+              // Custom Menu mark — Celsius cup logo so the menu tab
+              // carries brand identity (matches the hero/reward-ticket
+              // anchor pattern). Slight desaturation when inactive
+              // keeps it visually subordinate to the active tab.
+              <Image
+                source={require("../assets/icon.png")}
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 6,
+                  opacity: active ? 1 : 0.55,
+                }}
+                resizeMode="cover"
+              />
+            )}
             <Text
               className={`text-[11px] ${active ? "text-espresso font-bold" : "text-muted-fg font-medium"}`}
             >
