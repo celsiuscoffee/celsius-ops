@@ -305,7 +305,7 @@ export default function Home() {
         paddingBottom={28}
         variant="compact"
       >
-        <View className="flex-row items-center gap-3">
+        <View className="flex-row items-start gap-3">
           <View className="flex-1">
             {/* Eyebrow swaps from time-of-day greeting to tier identity
                 once the tier loads — no extra block, no extra height. */}
@@ -332,58 +332,46 @@ export default function Home() {
             >
               {firstName ? `Hi, ${firstName}` : "Welcome"}
             </Text>
-          </View>
-          {member && (
-            <Pressable
-              onPress={() => {
-                Haptics.selectionAsync();
-                router.push("/rewards");
-              }}
-              className="active:opacity-80"
-              hitSlop={12}
-            >
-              {/* Pillless — typographic only. Brand panels are flat
-                  rectangular blocks of colour, so the points read as
-                  text on the panel rather than a chrome'd button.
-                  Tap target preserved by hitSlop. */}
-              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 5 }}>
+            {member && (
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  router.push("/rewards");
+                }}
+                hitSlop={6}
+                className="active:opacity-70 self-start"
+                style={{ flexDirection: "row", alignItems: "baseline", marginTop: 4 }}
+              >
+                {/* Identity-row stats: balance + nearest unaffordable
+                    reward on a single line. Lives under the greeting
+                    instead of floating right so the hero reads as one
+                    left-aligned block. */}
                 <Text
                   style={{
                     color: ts.textColor,
-                    fontFamily: "Peachi-Bold",
-                    fontSize: 18,
-                    letterSpacing: 0.2,
-                  }}
-                >
-                  {(member.pointsBalance ?? 0).toLocaleString()}
-                </Text>
-                <Text
-                  style={{
-                    color: ts.mutedColor,
                     fontFamily: "SpaceGrotesk_700Bold",
-                    fontSize: 9,
+                    fontSize: 11,
                     letterSpacing: 1.5,
                   }}
                 >
-                  PTS
+                  {(member.pointsBalance ?? 0).toLocaleString()} PTS
                 </Text>
-              </View>
-              {nextReward && pointsToNext > 0 ? (
-                <Text
-                  style={{
-                    color: ts.mutedColor,
-                    fontFamily: "SpaceGrotesk_500Medium",
-                    fontSize: 10,
-                    marginTop: 2,
-                    textAlign: "right",
-                  }}
-                  numberOfLines={1}
-                >
-                  {pointsToNext} to next
-                </Text>
-              ) : null}
-            </Pressable>
-          )}
+                {nextReward && pointsToNext > 0 ? (
+                  <Text
+                    style={{
+                      color: ts.mutedColor,
+                      fontFamily: "SpaceGrotesk_500Medium",
+                      fontSize: 11,
+                      marginLeft: 6,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {`· ${pointsToNext.toLocaleString()} to ${nextReward.name}`}
+                  </Text>
+                ) : null}
+              </Pressable>
+            )}
+          </View>
           <Pressable
             onPress={() => router.push("/cart")}
             className="relative p-1 active:opacity-60"
