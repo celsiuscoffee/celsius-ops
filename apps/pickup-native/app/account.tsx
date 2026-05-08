@@ -32,7 +32,6 @@ import { tierStyle } from "../lib/tier-styles";
 import { useApp } from "../lib/store";
 import { api } from "../lib/api";
 import { fetchMember, fetchTier, type MemberTier } from "../lib/rewards";
-import { SafeBoundary } from "../components/SafeBoundary";
 import { useQuery } from "@tanstack/react-query";
 import { CelsiusLoader } from "../components/CelsiusLoader";
 
@@ -233,66 +232,11 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
           </View>
         </View>
 
-        {/* Tier benefits — sectioned list per the brand poster, with
-            big Peachii lines like "Birthday drink" / "Free monthly". */}
-        <SafeBoundary name="account-tier-benefits">
-          {tier && tier.tier_benefits && tier.tier_benefits.length > 0 ? (
-            <View>
-              <Pressable
-                onPress={() => router.push("/rewards")}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  marginTop: 8,
-                  marginBottom: 8,
-                }}
-              >
-                <Text
-                  style={{
-                    color: "#1A0200",
-                    fontFamily: "SpaceGrotesk_700Bold",
-                    fontSize: 10,
-                    letterSpacing: 2.5,
-                  }}
-                >
-                  {ts.displayName} BENEFITS
-                </Text>
-                <Text
-                  style={{
-                    color: "#C05040",
-                    fontFamily: "Peachi-Bold",
-                    fontSize: 12,
-                  }}
-                >
-                  See all
-                </Text>
-              </Pressable>
-              {tier.tier_benefits.slice(0, 3).map((b, i) => (
-                <View key={i} style={{ paddingVertical: 8 }}>
-                  <Text
-                    style={{
-                      color: "#1A0200",
-                      fontFamily: "SpaceGrotesk_500Medium",
-                      fontSize: 16,
-                      letterSpacing: 0.1,
-                    }}
-                  >
-                    {b}
-                  </Text>
-                </View>
-              ))}
-              <View
-                style={{
-                  height: 1,
-                  backgroundColor: "rgba(26, 2, 0, 0.12)",
-                  marginTop: 18,
-                  marginBottom: 8,
-                }}
-              />
-            </View>
-          ) : null}
-        </SafeBoundary>
+        {/* Tier benefits live on the Rewards screen — keeping a
+            duplicate here just made customers compare the two lists.
+            Tier identity is still surfaced via the eyebrow on the
+            hero ("PLATINUM MEMBER"); curious customers tap into
+            Rewards for the full benefits sheet. */}
 
         {/* Action rows — same big-Peachii-on-cream rhythm. No card
             chrome, just the row label + chevron, divider after the
