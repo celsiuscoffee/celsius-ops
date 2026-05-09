@@ -289,29 +289,33 @@ export default function Home() {
       >
         <View className="flex-row items-start gap-3">
           <View className="flex-1">
-            {/* Brand mark above the eyebrow — small Celsius cup logo
-                anchors the panel as the brand surface without competing
-                with the greeting. */}
-            <Image
-              source={require("../assets/icon.png")}
-              style={{ width: 28, height: 28, borderRadius: 6, marginBottom: 8 }}
-              resizeMode="cover"
-            />
-            {/* Eyebrow swaps from time-of-day greeting to tier identity
-                once the tier loads — no extra block, no extra height. */}
-            <Text
-              className="text-[10px] tracking-widest uppercase"
-              style={{
-                color: ts.eyebrowColor,
-                fontFamily: "SpaceGrotesk_700Bold",
-                letterSpacing: 3,
-              }}
-              numberOfLines={1}
-            >
-              {showTierEyebrow
-                ? `${ts.displayName} · ${tier?.tier_multiplier ?? 1}× PTS`
-                : greeting}
-            </Text>
+            {/* Brand mark sits inline with the eyebrow instead of
+                stacked above it — saves ~36pt of vertical space on
+                the hero, which is the only screen real estate that
+                competes with first-fold "Your usual" cards. */}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Image
+                source={require("../assets/icon.png")}
+                style={{ width: 22, height: 22, borderRadius: 5 }}
+                resizeMode="cover"
+              />
+              {/* Eyebrow swaps from time-of-day greeting to tier identity
+                  once the tier loads. */}
+              <Text
+                className="text-[10px] tracking-widest uppercase"
+                style={{
+                  color: ts.eyebrowColor,
+                  fontFamily: "SpaceGrotesk_700Bold",
+                  letterSpacing: 3,
+                  flex: 1,
+                }}
+                numberOfLines={1}
+              >
+                {showTierEyebrow
+                  ? `${ts.displayName} · ${tier?.tier_multiplier ?? 1}× PTS`
+                  : greeting}
+              </Text>
+            </View>
             <Text
               className="text-[24px] mt-1"
               style={{
@@ -707,18 +711,20 @@ export default function Home() {
                     if (!outletId) router.push("/store");
                     else router.push({ pathname: "/menu", params: { tab: "usual" } });
                   }}
-                  className="w-32 bg-surface rounded-2xl border border-border overflow-hidden active:opacity-70"
+                  className="bg-surface rounded-2xl border border-border overflow-hidden active:opacity-70"
                   style={{
+                    width: 144,
                     shadowColor: "#000",
                     shadowOpacity: 0.06,
                     shadowRadius: 6,
                     shadowOffset: { width: 0, height: 2 },
                   }}
                 >
-                  {/* Square image keeps the card visually rich but caps
-                      the height. Down from aspect 4/5 + width 176 (image
-                      alone was 220pt) to 128sq, saves ~90pt per card so
-                      the strip clears the bottom nav on first viewport. */}
+                  {/* Standardised at 144w to match the Available rewards
+                      RewardTicket card width — both strips now share the
+                      same horizontal rhythm. Square image caps the height
+                      so the card clears the bottom nav on first viewport
+                      without scrolling. */}
                   <View className="aspect-square bg-primary/5">
                     {item.image_url ? (
                       <Image
