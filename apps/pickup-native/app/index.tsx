@@ -618,15 +618,12 @@ export default function Home() {
         {affordableRewards.length > 0 && (
           <View className="mt-5">
             <View className="flex-row items-center justify-between mb-2 px-4">
-              <View className="flex-row items-center gap-2">
-                <Gift size={16} color="#C05040" strokeWidth={2} />
-                <Text
-                  className="text-espresso text-[18px]"
-                  style={{ fontFamily: "Peachi-Bold" }}
-                >
-                  Available rewards
-                </Text>
-              </View>
+              <Text
+                className="text-espresso text-[18px]"
+                style={{ fontFamily: "Peachi-Bold" }}
+              >
+                Available rewards
+              </Text>
               <Pressable
                 onPress={() => router.push("/rewards")}
                 className="flex-row items-center gap-0.5 active:opacity-70"
