@@ -23,33 +23,36 @@ type Props = {
  */
 export function CelsiusGift({ size = 28, color = "#C05040", fill = "transparent", knockout }: Props) {
   const isFilled = fill !== "transparent";
+  // Scaled to fill ~y=2..22 of the 24-unit canvas, matching the
+  // visual presence of the lucide outline icons and the resized
+  // CelsiusCup so the brand-icon family stays consistent.
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      {/* Bow — two loops above the box */}
+      {/* Bow — two loops above the box, taller and wider */}
       <Path
-        d="M12 6 C9 4 7 4 7.5 6.4 C8 8.2 10.5 7.4 12 6 C13.5 7.4 16 8.2 16.5 6.4 C17 4 15 4 12 6 Z"
+        d="M12 5 C8 2 5.5 2 6.2 5.5 C6.8 7.8 10.5 6.8 12 5 C13.5 6.8 17.2 7.8 17.8 5.5 C18.5 2 16 2 12 5 Z"
         fill={isFilled ? fill : "transparent"}
         stroke={color}
-        strokeWidth="1.3"
+        strokeWidth="1.6"
         strokeLinejoin="round"
       />
       {/* Box body */}
       <Rect
-        x="3.5"
-        y="9"
-        width="17"
-        height="11"
-        rx="1.6"
+        x="2.5"
+        y="8"
+        width="19"
+        height="14"
+        rx="1.8"
         fill={isFilled ? fill : "transparent"}
         stroke={color}
-        strokeWidth="1.4"
+        strokeWidth="1.6"
       />
       {/* Vertical ribbon down the middle */}
       <Rect
-        x="11"
-        y="9"
-        width="2"
-        height="11"
+        x="10.7"
+        y="8"
+        width="2.6"
+        height="14"
         fill={color}
       />
       {/* "C" wordmark on the box face (left of ribbon) — Peachi-Bold
@@ -57,13 +60,13 @@ export function CelsiusGift({ size = 28, color = "#C05040", fill = "transparent"
           extra-bold weight (the font file only ships Regular/Medium/
           Bold, so this gets us heavier without a fourth file). */}
       <SvgText
-        x="7.4"
-        y="17"
-        fontSize="7"
+        x="6.6"
+        y="17.4"
+        fontSize="8.5"
         textAnchor="middle"
         fill={isFilled ? (knockout ?? "#FFFFFF") : color}
         stroke={isFilled ? (knockout ?? "#FFFFFF") : color}
-        strokeWidth="0.4"
+        strokeWidth="0.5"
         fontFamily="Peachi-Bold"
       >
         C

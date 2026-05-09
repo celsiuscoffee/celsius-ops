@@ -41,24 +41,27 @@ export function CelsiusCup({ size = 28, color = "#C05040", fill = "transparent",
   // already explicitly filled (e.g. on a reward ticket's espresso stub).
   const bodyFill = isFilled ? fill : active ? color : "transparent";
   const bodyFillOpacity = isFilled ? 1 : active ? 0.08 : 0;
-  // 24-unit canvas; the icon sits comfortably inside a [2..22] frame.
+  // 24-unit canvas; the cup is scaled to fill ~y=1.5..22.5 so it
+  // matches the visual presence of lucide outline icons in the same
+  // 24x24 viewBox (which fill ~y=2..22). Earlier draft only filled
+  // ~y=3.5..22.2 and read smaller than the surrounding tab icons.
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       {/* Lid — slightly wider than the cup mouth */}
       <Rect
-        x="4.5"
-        y="3.5"
-        width="15"
-        height="2.5"
-        rx="0.8"
+        x="3.5"
+        y="2"
+        width="17"
+        height="3"
+        rx="0.9"
         fill={bodyFill}
         fillOpacity={bodyFillOpacity}
         stroke={color}
         strokeWidth={strokeWidth}
       />
-      {/* Cup body — tapered trapezoid via cubic path */}
+      {/* Cup body — tapered trapezoid via path with rounded base */}
       <Path
-        d="M5.5 6.5 H18.5 L17 21 a1.4 1.4 0 0 1 -1.4 1.2 H8.4 a1.4 1.4 0 0 1 -1.4 -1.2 Z"
+        d="M4 5.5 H20 L18.3 22 a1.5 1.5 0 0 1 -1.5 1.3 H7.2 a1.5 1.5 0 0 1 -1.5 -1.3 Z"
         fill={bodyFill}
         fillOpacity={bodyFillOpacity}
         stroke={color}
@@ -71,12 +74,12 @@ export function CelsiusCup({ size = 28, color = "#C05040", fill = "transparent",
           since the font file only ships Regular/Medium/Bold. */}
       <SvgText
         x="12"
-        y="16.4"
-        fontSize="9"
+        y="17"
+        fontSize="11"
         textAnchor="middle"
         fill={isFilled ? (knockout ?? "#FFFFFF") : color}
         stroke={isFilled ? (knockout ?? "#FFFFFF") : color}
-        strokeWidth="0.5"
+        strokeWidth="0.55"
         fontFamily="Peachi-Bold"
       >
         C

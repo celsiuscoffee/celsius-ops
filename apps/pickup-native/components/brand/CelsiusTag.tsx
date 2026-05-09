@@ -24,14 +24,17 @@ type Props = {
  */
 export function CelsiusTag({ size = 28, color = "#C05040", fill = "transparent", knockout }: Props) {
   const isFilled = fill !== "transparent";
+  // Scaled to fill ~y=2..22 of the 24-unit canvas, matching cup and
+  // gift so the brand-icon family stays visually consistent at any
+  // size (28px in nav, 36px on reward tickets, etc.).
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       {/* Tag string — small angled line connecting the grommet to
           an imaginary anchor point off the top edge. */}
       <Path
-        d="M16.5 4.5 L19 2"
+        d="M17.5 3.5 L20.5 1"
         stroke={color}
-        strokeWidth="1.4"
+        strokeWidth="1.6"
         strokeLinecap="round"
       />
       {/* Tag body — slanted rectangle with a notched left tip pointing
@@ -39,31 +42,31 @@ export function CelsiusTag({ size = 28, color = "#C05040", fill = "transparent",
           pentagon: notch tip → top-right → bottom-right → bottom-left
           → notch tip. */}
       <Path
-        d="M9.5 3.5 L20.5 3.5 L20.5 14.5 L9.5 14.5 L4 9 Z"
+        d="M9 2.5 L21.5 2.5 L21.5 17 L9 17 L2 9.75 Z"
         fill={isFilled ? fill : "transparent"}
         stroke={color}
-        strokeWidth="1.4"
+        strokeWidth="1.6"
         strokeLinejoin="round"
       />
       {/* Grommet hole — small ring near the notch tip */}
       <Circle
-        cx="11"
-        cy="9"
-        r="1.4"
+        cx="10.5"
+        cy="9.75"
+        r="1.7"
         fill={isFilled ? (knockout ?? "#FFFFFF") : "transparent"}
         stroke={color}
-        strokeWidth="1.2"
+        strokeWidth="1.3"
       />
       {/* "C" wordmark on the tag face — Peachi-Bold + stroke for the
           same synthetic extra-bold weight cup/gift use. */}
       <SvgText
-        x="16.5"
-        y="11.6"
-        fontSize="6.5"
+        x="17"
+        y="12.6"
+        fontSize="8"
         textAnchor="middle"
         fill={isFilled ? (knockout ?? "#FFFFFF") : color}
         stroke={isFilled ? (knockout ?? "#FFFFFF") : color}
-        strokeWidth="0.4"
+        strokeWidth="0.5"
         fontFamily="Peachi-Bold"
       >
         C
