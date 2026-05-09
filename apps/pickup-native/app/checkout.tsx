@@ -276,6 +276,7 @@ export default function Checkout() {
       let piJson = (await piRes.json()) as {
         clientSecret?:    string;
         paymentIntentId?: string;
+        skipPayment?:     boolean;
         error?:           string;
         type?:            string;
       };
@@ -288,6 +289,15 @@ export default function Checkout() {
         await new Promise((r) => setTimeout(r, 1200));
         piRes = await fetchIntent();
         piJson = (await piRes.json()) as typeof piJson;
+      }
+      // Zero-amount orders (free-drink reward, etc.) — server already
+      // moved the order to "preparing" and ran earn/deduct hooks.
+      // Skip Stripe PaymentSheet and route straight to the order page.
+      if (piRes.ok && piJson.skipPayment) {
+        clearCart();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
+        return;
       }
       if (!piRes.ok || !piJson.clientSecret) {
         throw new Error(
