@@ -320,18 +320,33 @@ export default function Home() {
         paddingBottom={32}
         variant="compact"
       >
-        {/* Premium hero treatment — single editorial moment ("Hi, Ammar")
-            with everything else demoted into one quiet meta line. Brand
-            mark gets its own row at full presence; cart sits alone
-            top-right. More breathing room (paddings ↑) so the hero
-            feels considered rather than packed. */}
-        <View className="flex-row items-start">
+        {/* Top row — brand mark + greeting on one line (left), cart
+            on the right. Putting "Hi, Ammar." next to the °C logo
+            saves a row of vertical space and keeps the editorial
+            moment in the brand's eyeline rather than below it. */}
+        <View className="flex-row items-center">
           <Image
             source={require("../assets/icon.png")}
-            style={{ width: 28, height: 28, borderRadius: 6 }}
+            style={{ width: 30, height: 30, borderRadius: 7 }}
             resizeMode="cover"
           />
-          <View style={{ flex: 1 }} />
+          <Text
+            numberOfLines={1}
+            style={{
+              flex: 1,
+              marginLeft: 10,
+              color: ts.textColor,
+              fontFamily: "Peachi-Bold",
+              fontSize: 22,
+              lineHeight: 26,
+            }}
+          >
+            {firstName
+              ? `Hi, ${firstName}.`
+              : showTierEyebrow
+              ? "Welcome."
+              : `${greeting}.`}
+          </Text>
           <Pressable
             onPress={() => router.push("/cart")}
             className="relative p-1 active:opacity-60"
@@ -354,104 +369,108 @@ export default function Home() {
           </Pressable>
         </View>
 
-        {/* Greeting — Peachi with a trailing period to mirror the
-            website's display headline ("A Malaysian Specialty Coffee
-            Company."). Pulled from 28 → 26 — the website's voice is
-            confident in the curves, not in the scale. */}
-        <Text
-          className="mt-6"
-          style={{
-            color: ts.textColor,
-            fontFamily: "Peachi-Bold",
-            fontSize: 26,
-            lineHeight: 30,
-          }}
-          numberOfLines={1}
-        >
-          {firstName
-            ? `Hi, ${firstName}.`
-            : showTierEyebrow
-            ? "Welcome."
-            : `${greeting}.`}
-        </Text>
+        {/* Tier badge — distinct treatment per tier so the loyalty
+            status reads as "earned" rather than incidental copy. Filled
+            chip in the tier's accent palette: white text on terracotta
+            for Member, ink on cream for Gold, ink on silver for Silver,
+            gold on obsidian for Platinum. tier_icon (emoji from the API)
+            sits ahead of the displayName so each tier has its own glyph. */}
+        {showTierEyebrow && tier && (
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync();
+              router.push("/rewards");
+            }}
+            hitSlop={6}
+            className="flex-row items-center self-start active:opacity-80"
+            style={{
+              marginTop: 18,
+              paddingHorizontal: 11,
+              paddingVertical: 5,
+              borderRadius: 999,
+              backgroundColor: ts.accentColor,
+              gap: 6,
+            }}
+          >
+            {tier.tier_icon ? (
+              <Text style={{ fontSize: 12 }}>{tier.tier_icon}</Text>
+            ) : (
+              <Sparkles size={11} color={ts.gradient[1]} fill={ts.gradient[1]} />
+            )}
+            <Text
+              style={{
+                fontFamily: "SpaceGrotesk_700Bold",
+                fontSize: 11,
+                letterSpacing: 1.4,
+                // Pick a color that contrasts with accentColor — the
+                // gradient's mid stop is the inverse of accentColor on
+                // every tier (cream→ink, white→terracotta, etc.) so
+                // it's the safe inverse pick.
+                color: ts.gradient[1],
+              }}
+            >
+              {ts.displayName} · {tier.tier_multiplier ?? 1}× POINTS
+            </Text>
+          </Pressable>
+        )}
 
-        {/* Lowercase subhead — echoes celsiuscoffee.com's "great taste
-            and authentic hospitality." Brand voice, not a slogan. The
-            page below carries everything functional; the hero just
-            sets tone. */}
-        <Text
-          className="mt-1"
-          style={{
-            color: ts.mutedColor,
-            fontFamily: "SpaceGrotesk_400Regular",
-            fontSize: 13,
-            lineHeight: 18,
-          }}
-          numberOfLines={1}
-        >
-          specialty coffee, made with care.
-        </Text>
-
-        {/* Bordered outlet pill — modeled on the website's "Open Daily ·
-            08:00 – 23:00" terracotta-bordered chip. The accent border
-            gives the row presence on the gradient without resorting to
-            big type, which the customer found bland. */}
+        {/* Outlet row — plain (no border, no pill background). Just
+            the icon, name, and status dot. Lets the tier badge above
+            be the only chip on the screen, which makes it feel earned. */}
         <Pressable
           onPress={() => {
             Haptics.selectionAsync();
             router.push("/store");
           }}
           className="flex-row items-center self-start active:opacity-75"
-          style={{
-            marginTop: 18,
-            paddingHorizontal: 12,
-            paddingVertical: 7,
-            borderRadius: 999,
-            borderWidth: 1,
-            borderColor: ts.accentColor,
-            gap: 6,
-          }}
+          style={{ marginTop: 14, gap: 6 }}
         >
-          <MapPin size={13} color={ts.accentColor} />
+          <MapPin size={14} color={ts.mutedColor} />
           <Text
             style={{
-              fontFamily: "SpaceGrotesk_500Medium",
-              fontSize: 12.5,
+              fontFamily: "Peachi-Bold",
+              fontSize: 15,
               color: ts.textColor,
             }}
+            numberOfLines={1}
           >
             {outletName ?? "Select pickup outlet"}
           </Text>
           {currentOutlet && (() => {
-            const status = !currentOutlet.is_open
-              ? "Closed"
+            const dot = !currentOutlet.is_open
+              ? { bg: "#EF4444", label: "Closed" }
               : currentOutlet.is_busy
-              ? "Busy"
-              : currentOutlet.pickup_time_mins
-              ? `~${currentOutlet.pickup_time_mins} min`
-              : "Open";
+              ? { bg: "#F59E0B", label: "Busy" }
+              : { bg: "#22C55E", label: currentOutlet.pickup_time_mins ? `~${currentOutlet.pickup_time_mins} min` : "Open" };
             return (
               <>
-                <Text style={{ color: ts.mutedColor, fontSize: 12.5 }}>·</Text>
+                <View
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 3,
+                    backgroundColor: dot.bg,
+                    marginLeft: 4,
+                  }}
+                />
                 <Text
                   style={{
                     fontFamily: "SpaceGrotesk_500Medium",
-                    fontSize: 12.5,
+                    fontSize: 12,
                     color: ts.mutedColor,
                   }}
                 >
-                  {status}
+                  {dot.label}
                 </Text>
               </>
             );
           })()}
-          <ChevronRight size={12} color={ts.mutedColor} />
+          <ChevronRight size={13} color={ts.mutedColor} />
         </Pressable>
 
-        {/* Quiet loyalty line — single tappable row mirroring the
-            website's "Explore our story →" affordance: small, muted,
-            arrow-led. Carries the points balance + next-reward
-            distance without competing for the headline. */}
+        {/* Quiet loyalty link — small, muted, chevron-led. Mirrors the
+            website's "Explore our story →" affordance for the points
+            balance + next-reward distance. */}
         {member && (
           <Pressable
             onPress={() => {
@@ -460,7 +479,7 @@ export default function Home() {
             }}
             hitSlop={6}
             className="self-start active:opacity-70 flex-row items-center"
-            style={{ marginTop: 10, gap: 4 }}
+            style={{ marginTop: 8, gap: 4 }}
           >
             <Text
               style={{
@@ -472,11 +491,8 @@ export default function Home() {
             >
               {(() => {
                 const balance = (member.pointsBalance ?? 0).toLocaleString();
-                if (showTierEyebrow && tier?.tier_name) {
-                  if (nextReward && pointsToNext > 0) {
-                    return `${balance} pts · ${pointsToNext.toLocaleString()} to ${nextReward.name}`;
-                  }
-                  return `${balance} pts · ${ts.displayName.toLowerCase()} member`;
+                if (nextReward && pointsToNext > 0) {
+                  return `${balance} pts · ${pointsToNext.toLocaleString()} to ${nextReward.name}`;
                 }
                 return `${balance} pts`;
               })()}
