@@ -107,6 +107,47 @@ export default function OutletsPage() {
     }
   };
 
+  /** Manual Open/Closed flip — distinct from Active/Deactivated. The
+   *  auto-hours cron flips this on schedule, but managers need an
+   *  explicit kill-switch for unexpected closures (equipment failure,
+   *  staff shortage). Read by the customer pickup app at runtime. */
+  const toggleIsOpen = async (outlet: Outlet) => {
+    const next = !outlet.isOpen;
+    if (!next && !(await confirm({
+      title: `Close ${outlet.name} now?`,
+      description: "Customers will see the outlet as closed in the pickup app until you re-open it.",
+      confirmLabel: "Close outlet",
+    }))) return;
+    const res = await fetch(`/api/settings/outlets/${outlet.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isOpen: next }),
+    });
+    if (res.ok) {
+      toast.success(`${outlet.name} marked ${next ? "open" : "closed"}`);
+      loadOutlets();
+    } else {
+      toast.error("Failed to update outlet");
+    }
+  };
+
+  /** Manual Busy flag — pickup app shows "Busy" badge and slows ETA.
+   *  Use during staffing crunches; doesn't block ordering. */
+  const toggleIsBusy = async (outlet: Outlet) => {
+    const next = !outlet.isBusy;
+    const res = await fetch(`/api/settings/outlets/${outlet.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isBusy: next }),
+    });
+    if (res.ok) {
+      toast.success(`${outlet.name} marked ${next ? "busy" : "not busy"}`);
+      loadOutlets();
+    } else {
+      toast.error("Failed to update outlet");
+    }
+  };
+
   const deleteOutlet = async (outlet: Outlet) => {
     if (!(await confirm({
       title: `Delete "${outlet.name}"?`,
@@ -204,11 +245,28 @@ export default function OutletsPage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-1">
-                    {/* Open/Closed indicator */}
-                    <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${outlet.isOpen ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                    {/* Open/Closed — manual toggle (was display-only).
+                        Auto-hours cron flips this on schedule too;
+                        managers need an explicit kill-switch for
+                        unexpected closures. */}
+                    <button
+                      onClick={() => toggleIsOpen(outlet)}
+                      className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${outlet.isOpen ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                      title={outlet.isOpen ? "Click to close outlet" : "Click to open outlet"}
+                    >
                       <span className={`inline-block h-1.5 w-1.5 rounded-full ${outlet.isOpen ? "bg-green-500" : "bg-gray-400"}`} />
                       {outlet.isOpen ? "Open" : "Closed"}
-                    </span>
+                    </button>
+                    {/* Busy — manual flag for staffing surges. Doesn't
+                        block ordering; pickup app shows a badge + slower
+                        ETA. */}
+                    <button
+                      onClick={() => toggleIsBusy(outlet)}
+                      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${outlet.isBusy ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "bg-gray-50 text-gray-400 hover:bg-gray-100"}`}
+                      title={outlet.isBusy ? "Click to clear busy flag" : "Click to mark as busy"}
+                    >
+                      {outlet.isBusy ? "Busy" : "Not busy"}
+                    </button>
                     {/* Pickup time */}
                     <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
                       {outlet.pickupTimeMins}m

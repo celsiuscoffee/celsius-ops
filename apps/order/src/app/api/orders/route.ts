@@ -35,12 +35,24 @@ function generateOrderNumber(): string {
   return `C-${String(Math.floor(Math.random() * 9999)).padStart(4, "0")}`;
 }
 
-/** Deduct points for a redeemed reward. Fire-and-forget — order succeeds regardless. */
-async function deductLoyaltyPoints(loyaltyId: string, rewardId: string, orderId: string, points: number) {
+/** Deduct points for a redeemed reward. Awaited so callers can log
+ *  the failure — used to be fire-and-forget which let the ledger
+ *  drift (customer redeems reward, points never deducted, reward
+ *  re-redeemable). Returns true on success so the caller can flag
+ *  the order for manual reconciliation if it failed. */
+async function deductLoyaltyPoints(
+  loyaltyId: string,
+  rewardId: string,
+  orderId: string,
+  points: number,
+): Promise<boolean> {
   try {
-    await fetch(`${LOYALTY_BASE}/api/transactions`, {
+    const res = await fetch(`${LOYALTY_BASE}/api/transactions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://celsiuscoffee.com",
+      },
       body: JSON.stringify({
         brand_id:     LOYALTY_BRAND_ID,
         member_id:    loyaltyId,
@@ -50,9 +62,74 @@ async function deductLoyaltyPoints(loyaltyId: string, rewardId: string, orderId:
         description:  `Reward redeemed: ${rewardId}`,
       }),
     });
+    if (!res.ok) {
+      console.error(`[loyalty] deduct points HTTP ${res.status} for order=${orderId} reward=${rewardId}`);
+      return false;
+    }
+    return true;
   } catch (err) {
-    console.error("Loyalty deduct points error:", err);
+    console.error("[loyalty] deduct points error:", err);
+    return false;
   }
+}
+
+/** Server-side reward validation + price recompute. Was: trust the
+ *  client's `rewardDiscountSen`. Now: fetch the reward, gate it on
+ *  is_active / valid_until / stock, and bound the discount at the
+ *  cart subtotal so a malicious or stale client can't drain the
+ *  order to RM0. Full client/server discount-math parity is a
+ *  separate refactor; for now we trust the client's number IF it
+ *  passes these gates. */
+async function validateAppliedReward(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  args: {
+    rewardId: string;
+    rewardDiscountSen: number;
+    subtotalSen: number;
+    minOrderRm: number;
+    totalRm: number;
+  },
+): Promise<{ ok: true; discountSen: number } | { ok: false; error: string }> {
+  const { data: reward } = await supabase
+    .from("rewards")
+    .select("id, is_active, valid_from, valid_until, stock, min_order_value")
+    .eq("id", args.rewardId)
+    .single<{
+      id: string;
+      is_active: boolean | null;
+      valid_from: string | null;
+      valid_until: string | null;
+      stock: number | null;
+      min_order_value: number | null;
+    }>();
+
+  if (!reward) {
+    return { ok: false, error: "Reward no longer available" };
+  }
+  if (!reward.is_active) {
+    return { ok: false, error: "Reward is no longer active" };
+  }
+  const now = Date.now();
+  if (reward.valid_from && new Date(reward.valid_from).getTime() > now) {
+    return { ok: false, error: "Reward not yet active" };
+  }
+  if (reward.valid_until && new Date(reward.valid_until).getTime() < now) {
+    return { ok: false, error: "Reward has expired" };
+  }
+  if (reward.stock != null && reward.stock <= 0) {
+    return { ok: false, error: "Reward is out of stock" };
+  }
+  if (reward.min_order_value != null && args.totalRm < reward.min_order_value) {
+    return {
+      ok: false,
+      error: `Reward needs a minimum order of RM${reward.min_order_value.toFixed(2)}`,
+    };
+  }
+
+  // Sanity-bound the client-supplied discount: never negative,
+  // never larger than the cart subtotal.
+  const clamped = Math.max(0, Math.min(args.subtotalSen, Math.round(args.rewardDiscountSen ?? 0)));
+  return { ok: true, discountSen: clamped };
 }
 
 export async function POST(request: NextRequest) {
@@ -139,7 +216,25 @@ export async function POST(request: NextRequest) {
     const orderNumber        = generateOrderNumber();
     const subtotalSen        = Math.round(total * 100);
     const voucherDiscountSen = Math.round(discountSen ?? 0);
-    const rewardDiscountSenAmt = Math.round(rewardDiscountSen ?? 0);
+
+    // Server-side reward validation + bound. Was: trust the client's
+    // rewardDiscountSen blindly. A stale or malicious client could
+    // claim a discount on an expired / inactive / out-of-stock reward,
+    // or claim a value larger than the cart subtotal.
+    let rewardDiscountSenAmt = 0;
+    if (rewardId) {
+      const validated = await validateAppliedReward(supabase, {
+        rewardId,
+        rewardDiscountSen,
+        subtotalSen,
+        minOrderRm,
+        totalRm: total,
+      });
+      if (!validated.ok) {
+        return NextResponse.json({ error: validated.error }, { status: 400 });
+      }
+      rewardDiscountSenAmt = validated.discountSen;
+    }
 
     // First-order discount: server validates independently — checks the orders
     // table for prior completed orders on this phone.
@@ -283,25 +378,44 @@ export async function POST(request: NextRequest) {
       await supabase.rpc("increment_voucher_count", { voucher_id: voucherId });
     }
 
-    // Deduct loyalty points for redeemed reward (fire-and-forget)
+    // Deduct loyalty points for redeemed reward — awaited so a silent
+    // ledger drift (customer redeems reward, points never deducted,
+    // reward re-redeemable) shows up in logs. Order has already been
+    // committed at this point, so we don't roll back on a points-API
+    // failure; we log it for manual reconciliation. Future: move both
+    // calls into the payment-success webhook so points only burn on
+    // confirmed payment.
     if (rewardId && loyaltyId && rewardDiscountSenAmt > 0) {
-      // Find the reward points cost from the request body (passed as rewardPointsCost)
       const rewardPointsCost: number = body.rewardPointsCost ?? 0;
       if (rewardPointsCost > 0) {
-        deductLoyaltyPoints(loyaltyId, rewardId, order.id, rewardPointsCost);
+        const ok = await deductLoyaltyPoints(loyaltyId, rewardId, order.id, rewardPointsCost);
+        if (!ok) {
+          console.error(
+            `[loyalty] FAILED to deduct ${rewardPointsCost} pts for order=${order.id} member=${loyaltyId} reward=${rewardId} — RECONCILE MANUALLY`,
+          );
+        }
       }
     }
 
-    // Record applied promotions to the loyalty ledger (fire-and-forget).
-    void recordPromotionApplications({
-      evaluated,
-      member_id: loyaltyId ?? null,
-      outlet_id: selectedStore.id,
-      reference_id: order.id,
-      lines: cartLines,
-      member_tier_id: memberTierId,
-      promo_code: promoCode ?? null,
-    });
+    // Record applied promotions to the loyalty ledger — awaited for
+    // the same reason. uses_count never bumping = customer can re-
+    // claim the same code-driven promo.
+    try {
+      await recordPromotionApplications({
+        evaluated,
+        member_id: loyaltyId ?? null,
+        outlet_id: selectedStore.id,
+        reference_id: order.id,
+        lines: cartLines,
+        member_tier_id: memberTierId,
+        promo_code: promoCode ?? null,
+      });
+    } catch (err) {
+      console.error(
+        `[loyalty] FAILED to record promo applications for order=${order.id} — RECONCILE MANUALLY`,
+        err,
+      );
+    }
 
     return NextResponse.json({
       orderId:     order.id,

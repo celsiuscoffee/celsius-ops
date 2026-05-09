@@ -249,17 +249,36 @@ export async function fetchRewards(phone?: string | null): Promise<RewardsRespon
 }
 
 export function calcRewardDiscount(
-  reward: { discount_type?: string | null; discount_value?: number | null; bogo_buy_qty?: number; bogo_free_qty?: number } | null,
+  reward: {
+    discount_type?: string | null;
+    discount_value?: number | null;
+    bogo_buy_qty?: number;
+    bogo_free_qty?: number;
+    min_order_value?: number | null;
+  } | null,
   cartItems: { totalPrice: number; quantity: number }[],
   subtotal: number
 ): number {
   if (!reward) return 0;
+  // min_order_value gate — server enforces this too (rejects the order
+  // with a 400 if subtotal is below); checking here keeps the cart
+  // total honest so the customer doesn't see a discount that won't
+  // actually land at checkout.
+  if (reward.min_order_value != null && subtotal < reward.min_order_value) {
+    return 0;
+  }
   const t = reward.discount_type;
   if (t === "free_item") {
     const prices = cartItems.map((i) => i.totalPrice / i.quantity);
     return prices.length > 0 ? Math.min(...prices) : 0;
   }
   if (t === "bogo") {
+    // Pair items by quantity and free the cheaper of each pair. With
+    // n units sorted descending, we keep p1 (paid) and free p2; with
+    // 4+ units, this currently only frees one — which matches the
+    // client-side preview legacy. The loyalty engine evaluates BOGO
+    // against `bogo_buy_qty` / `bogo_free_qty` on its own pass and
+    // is the authoritative path; this client number is a preview.
     const unitPrices = cartItems.flatMap((i) => Array(i.quantity).fill(i.totalPrice / i.quantity)) as number[];
     unitPrices.sort((a, b) => b - a);
     return unitPrices[1] ?? 0;
