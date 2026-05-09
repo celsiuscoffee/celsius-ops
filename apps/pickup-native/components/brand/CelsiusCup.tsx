@@ -41,19 +41,20 @@ export function CelsiusCup({ size = 28, color = "#C05040", fill = "transparent",
   // already explicitly filled (e.g. on a reward ticket's espresso stub).
   const bodyFill = isFilled ? fill : active ? color : "transparent";
   const bodyFillOpacity = isFilled ? 1 : active ? 0.08 : 0;
-  // 24-unit canvas; the cup is scaled to fill ~y=1.5..22.5 so it
-  // matches the visual presence of lucide outline icons in the same
-  // 24x24 viewBox (which fill ~y=2..22). Earlier draft only filled
-  // ~y=3.5..22.2 and read smaller than the surrounding tab icons.
+  // 24-unit canvas — the cup now spans ~x=2.5..21.5 horizontally
+  // (lid) and ~x=3..21 (body top), matching lucide's typical
+  // x=2..22 silhouette width. Earlier draft only spanned x=3.5..20.5,
+  // so the icon read narrower than its tab-row neighbours even at
+  // identical size={26}.
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       {/* Lid — slightly wider than the cup mouth */}
       <Rect
-        x="3.5"
+        x="2.5"
         y="2"
-        width="17"
+        width="19"
         height="3"
-        rx="0.9"
+        rx="1"
         fill={bodyFill}
         fillOpacity={bodyFillOpacity}
         stroke={color}
@@ -61,7 +62,7 @@ export function CelsiusCup({ size = 28, color = "#C05040", fill = "transparent",
       />
       {/* Cup body — tapered trapezoid via path with rounded base */}
       <Path
-        d="M4 5.5 H20 L18.3 22 a1.5 1.5 0 0 1 -1.5 1.3 H7.2 a1.5 1.5 0 0 1 -1.5 -1.3 Z"
+        d="M3 5.5 H21 L19.3 22 a1.5 1.5 0 0 1 -1.5 1.3 H6.2 a1.5 1.5 0 0 1 -1.5 -1.3 Z"
         fill={bodyFill}
         fillOpacity={bodyFillOpacity}
         stroke={color}
@@ -74,12 +75,12 @@ export function CelsiusCup({ size = 28, color = "#C05040", fill = "transparent",
           since the font file only ships Regular/Medium/Bold. */}
       <SvgText
         x="12"
-        y="17"
-        fontSize="11"
+        y="17.5"
+        fontSize="12"
         textAnchor="middle"
         fill={isFilled ? (knockout ?? "#FFFFFF") : color}
         stroke={isFilled ? (knockout ?? "#FFFFFF") : color}
-        strokeWidth="0.55"
+        strokeWidth="0.6"
         fontFamily="Peachi-Bold"
       >
         C
