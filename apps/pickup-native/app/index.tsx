@@ -337,8 +337,8 @@ export default function Home() {
               marginLeft: 10,
               color: ts.textColor,
               fontFamily: "Peachi-Bold",
-              fontSize: 22,
-              lineHeight: 26,
+              fontSize: 17,
+              lineHeight: 22,
             }}
           >
             {firstName
