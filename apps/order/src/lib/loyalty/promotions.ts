@@ -60,7 +60,18 @@ export async function evaluatePromotions(
   try {
     const res = await fetch(`${LOYALTY_BASE}/api/promotions/evaluate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        // Server-to-server calls don't set Origin by default, but the
+        // loyalty app's CSRF middleware enforces an Origin allowlist on
+        // every POST and silently 403s without one — which is exactly
+        // why tag-based discounts (Boss promo, etc.) silently dropped
+        // out at checkout while the client preview kept showing them
+        // (preview goes through /api/loyalty/promotions/evaluate which
+        // already injects this header). celsiuscoffee.com is on the
+        // loyalty CSRF allowlist.
+        Origin: "https://celsiuscoffee.com",
+      },
       body: JSON.stringify({ brand_id: BRAND_ID, ...input }),
     });
     if (!res.ok) return empty;
@@ -98,6 +109,10 @@ export async function recordPromotionApplications(args: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        // Same CSRF allowlist applies — without an Origin header the
+        // loyalty middleware 403s and the ledger never records the
+        // promo application (so uses_count never bumps).
+        Origin: "https://celsiuscoffee.com",
         Authorization: `Bearer ${CRON_SECRET}`,
       },
       body: JSON.stringify({
