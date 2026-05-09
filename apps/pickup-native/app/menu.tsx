@@ -83,10 +83,16 @@ const HIDDEN_CATEGORIES = new Set([
 export default function Menu() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ tab?: string }>();
-  const { data, isLoading } = useQuery({ queryKey: ["menu"], queryFn: fetchMenu });
   const cart = useApp((s) => s.cart);
   const outletName = useApp((s) => s.outletName);
   const outletId = useApp((s) => s.outletId);
+  // Menu is keyed by outlet so per-outlet OOS overrides land — switching
+  // outlets (or signing in to an outlet for the first time) refetches
+  // and applies that outlet's OOS list.
+  const { data, isLoading } = useQuery({
+    queryKey: ["menu", outletId],
+    queryFn: () => fetchMenu(outletId),
+  });
   const addToCart = useApp((s) => s.addToCart);
   const phone = useApp((s) => s.phone);
 

@@ -35,38 +35,64 @@ export type Product = {
 
 type RawProduct = Product & { hidden_modifier_ids?: string[] };
 
-export async function fetchMenu(): Promise<{ categories: Category[]; products: Product[] }> {
-  const [{ data: cats, error: catErr }, { data: prods, error: prodErr }] = await Promise.all([
-    supabase.from("categories").select("id,name,slug,position").order("position"),
-    supabase
-      .from("products")
-      .select("id,name,category,description,price,image_url,is_available,is_featured,modifiers,hidden_modifier_ids")
-      .eq("brand_id", "brand-celsius")
-      .order("name"),
-  ]);
+export async function fetchMenu(
+  outletId?: string | null,
+): Promise<{ categories: Category[]; products: Product[] }> {
+  const productsQuery = supabase
+    .from("products")
+    .select("id,name,category,description,price,image_url,is_available,is_featured,modifiers,hidden_modifier_ids")
+    .eq("brand_id", "brand-celsius")
+    .order("name");
+
+  // Per-outlet OOS overrides — sparse table populated by KDS staff
+  // when something runs out at their outlet only. We fetch the
+  // unavailable rows for the customer's selected outlet (if any)
+  // and filter them out of the product list. Absence of a row =
+  // use the product's global is_available.
+  const overridesQuery = outletId
+    ? supabase
+        .from("outlet_product_availability")
+        .select("product_id")
+        .eq("outlet_id", outletId)
+        .eq("is_available", false)
+    : Promise.resolve({ data: [] as { product_id: string }[] });
+
+  const [{ data: cats, error: catErr }, { data: prods, error: prodErr }, ovs] =
+    await Promise.all([
+      supabase.from("categories").select("id,name,slug,position").order("position"),
+      productsQuery,
+      overridesQuery,
+    ]);
   if (catErr) throw catErr;
   if (prodErr) throw prodErr;
+
+  const oosAtOutlet = new Set(
+    ((ovs as { data: { product_id: string }[] | null }).data ?? []).map((o) => o.product_id),
+  );
+
   return {
     categories: (cats ?? []) as Category[],
     // Backoffice can soft-hide noisy modifier groups or specific options
     // (think "ice level: cold", "cup type", etc) without losing the StoreHub
     // source data. Customers shouldn't see them — strip both at read time.
-    products: ((prods ?? []) as RawProduct[]).map((p) => {
-      const hidden = new Set(Array.isArray(p.hidden_modifier_ids) ? p.hidden_modifier_ids : []);
-      const modifiers = Array.isArray(p.modifiers) ? p.modifiers : [];
-      return {
-        ...p,
-        modifiers: modifiers
-          .filter((g) => !hidden.has(g.id))
-          .map((g) => ({
-            ...g,
-            options: g.options.filter((opt) => !hidden.has(opt.id)),
-          }))
-          // Drop a group entirely if every option got hidden — empty
-          // selectors confuse the product detail screen.
-          .filter((g) => g.options.length > 0),
-      };
-    }),
+    products: ((prods ?? []) as RawProduct[])
+      .filter((p) => !oosAtOutlet.has(p.id))
+      .map((p) => {
+        const hidden = new Set(Array.isArray(p.hidden_modifier_ids) ? p.hidden_modifier_ids : []);
+        const modifiers = Array.isArray(p.modifiers) ? p.modifiers : [];
+        return {
+          ...p,
+          modifiers: modifiers
+            .filter((g) => !hidden.has(g.id))
+            .map((g) => ({
+              ...g,
+              options: g.options.filter((opt) => !hidden.has(opt.id)),
+            }))
+            // Drop a group entirely if every option got hidden — empty
+            // selectors confuse the product detail screen.
+            .filter((g) => g.options.length > 0),
+        };
+      }),
   };
 }
 

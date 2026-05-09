@@ -59,8 +59,8 @@ export default function Cart() {
   // targets. Only loaded when the cart is actually empty so we don't
   // pay for the menu fetch on every cart visit.
   const menu = useQuery({
-    queryKey: ["menu"],
-    queryFn: fetchMenu,
+    queryKey: ["menu", outletId],
+    queryFn: () => fetchMenu(outletId),
     enabled: cart.length === 0,
     staleTime: 5 * 60_000,
   });

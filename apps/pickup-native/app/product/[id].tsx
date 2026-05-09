@@ -22,7 +22,11 @@ export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
-  const { data, isLoading } = useQuery({ queryKey: ["menu"], queryFn: fetchMenu });
+  const outletId = useApp((s) => s.outletId);
+  const { data, isLoading } = useQuery({
+    queryKey: ["menu", outletId],
+    queryFn: () => fetchMenu(outletId),
+  });
   const product = data?.products.find((p) => p.id === id);
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [qty, setQty] = useState(1);

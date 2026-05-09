@@ -40,8 +40,11 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const outlets = useQuery({ queryKey: ["outlets"], queryFn: fetchOutlets });
-  const menu = useQuery({ queryKey: ["menu"], queryFn: fetchMenu });
   const outletId = useApp((s) => s.outletId);
+  const menu = useQuery({
+    queryKey: ["menu", outletId],
+    queryFn: () => fetchMenu(outletId),
+  });
   const outletName = useApp((s) => s.outletName);
   const cart = useApp((s) => s.cart);
   const setOutlet = useApp((s) => s.setOutlet);

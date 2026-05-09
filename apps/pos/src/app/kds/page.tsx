@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
+import { AlertTriangle } from "lucide-react";
 import { createClient } from "@/lib/supabase-browser";
 
 type KDSOrder = {
@@ -219,8 +221,22 @@ export default function KDSPage() {
             </button>
           ))}
         </div>
-        <div className="text-sm text-text-muted">
-          {pendingOrders.length} active order{pendingOrders.length !== 1 ? "s" : ""}
+        <div className="flex items-center gap-3">
+          {/* Quick "86" toggle — barista taps when something runs out
+              and needs to be hidden from the customer-facing pickup
+              menu at this outlet. /oos is a sibling page that lists
+              every product with an availability toggle. */}
+          <Link
+            href="/oos"
+            className="flex items-center gap-1.5 rounded-lg bg-surface-raised px-3 py-1.5 text-sm font-medium text-text-muted hover:bg-surface-hover"
+            title="Mark a product out of stock at this outlet"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Out of stock
+          </Link>
+          <div className="text-sm text-text-muted">
+            {pendingOrders.length} active order{pendingOrders.length !== 1 ? "s" : ""}
+          </div>
         </div>
       </div>
 
