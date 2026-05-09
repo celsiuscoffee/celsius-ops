@@ -1039,15 +1039,22 @@ export default function InvoicesPage() {
           </button>
         ))}
       </div>
-      {cardFilter && (
-        <div className="mt-2 flex items-center gap-2">
+      {(cardFilter || activeFilterCount > 0 || search || tab !== "unpaid" || typeFilter !== "all") && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-xs text-gray-500">
-            Showing: <span className="font-medium text-gray-700">{cardFilter === "due_today" ? "Due Today" : cardFilter === "pending_invoice" ? "Pending Invoice" : cardFilter === "payable" ? "Payable" : cardFilter === "all" ? "All" : cardFilter.charAt(0).toUpperCase() + cardFilter.slice(1)}</span>
-            {" "}({invoices.length} invoice{invoices.length !== 1 ? "s" : ""})
+            Showing:{" "}
+            <span className="font-medium text-gray-700">
+              {cardFilter === "due_today" ? "Due Today" : cardFilter === "pending_invoice" ? "Pending Invoice" : cardFilter === "payable" ? "Payable" : cardFilter === "all" ? "All" : cardFilter ? cardFilter.charAt(0).toUpperCase() + cardFilter.slice(1) : "Filtered"}
+            </span>
+            {" "}({invoices.length} invoice{invoices.length !== 1 ? "s" : ""}
+            {invoices.length > 0 && <> · <span className="font-medium text-gray-700 tabular-nums">{formatRM(invoices.reduce((a, i) => a + i.amount, 0))}</span></>}
+            )
           </span>
-          <button onClick={() => setCardFilter(null)} className="flex items-center gap-0.5 rounded-full border border-gray-200 px-2 py-0.5 text-[10px] text-gray-500 hover:bg-gray-50">
-            <X className="h-3 w-3" /> Clear
-          </button>
+          {cardFilter && (
+            <button onClick={() => setCardFilter(null)} className="flex items-center gap-0.5 rounded-full border border-gray-200 px-2 py-0.5 text-[10px] text-gray-500 hover:bg-gray-50">
+              <X className="h-3 w-3" /> Clear card
+            </button>
+          )}
         </div>
       )}
 
