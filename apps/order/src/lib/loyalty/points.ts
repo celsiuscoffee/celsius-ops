@@ -223,7 +223,7 @@ export async function deductLoyaltyPoints(
     // Fetch reward
     const { data: reward, error: rewardErr } = await supabase
       .from("rewards")
-      .select("id, name, points_required")
+      .select("id, name, points_required, auto_issue, reward_type")
       .eq("id", rewardId)
       .eq("brand_id", BRAND_ID)
       .eq("is_active", true)
@@ -234,22 +234,59 @@ export async function deductLoyaltyPoints(
       return false;
     }
 
-    // Deduct via RPC
-    const { data: rpcData, error: rpcErr } = await supabase.rpc("deduct_points", {
-      p_member_id: loyaltyId,
-      p_brand_id:  BRAND_ID,
-      p_points:    reward.points_required as number,
-    });
+    // Voucher path: if the member has an active issued_reward for this
+    // reward (auto-issued at signup, post-purchase coupon, manual grant),
+    // consume that instead of going through the points-shop flow. This
+    // is what gates "0-pt" rewards like Welcome BOGO to entitled members
+    // only — without this check anyone could redeem the BOGO repeatedly.
+    const nowIso = new Date().toISOString();
+    const { data: voucher } = await supabase
+      .from("issued_rewards")
+      .select("id, expires_at")
+      .eq("member_id", loyaltyId)
+      .eq("brand_id", BRAND_ID)
+      .eq("reward_id", rewardId)
+      .eq("status", "active")
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+      .order("issued_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-    if (rpcErr) {
-      console.error("[loyalty] deductLoyaltyPoints: RPC error", rpcErr.message);
+    // Auto-issue rewards (BOGO, post-purchase, birthday) MUST be
+    // consumed via a voucher. If the member is trying to redeem one
+    // without an active issued_reward row, refuse — they aren't
+    // entitled. Standard points-shop rewards fall through.
+    if (reward.auto_issue && !voucher) {
+      console.warn(
+        `[loyalty] deductLoyaltyPoints: ${reward.reward_type} reward ${rewardId} requires an active voucher for member ${loyaltyId} — refusing`,
+      );
       return false;
     }
 
-    const newBalance = rpcData as number;
-    if (newBalance < 0) {
-      console.warn("[loyalty] deductLoyaltyPoints: insufficient points for member");
-      return false;
+    const isVoucherRedemption = !!voucher;
+    // For voucher redemptions the points cost is whatever the underlying
+    // reward says (usually 0 for BOGO/free-item). Standard rewards
+    // deduct points_required from the balance.
+    const pointsToSpend = (reward.points_required as number) ?? 0;
+
+    let newBalance: number;
+    if (pointsToSpend > 0) {
+      const { data: rpcData, error: rpcErr } = await supabase.rpc("deduct_points", {
+        p_member_id: loyaltyId,
+        p_brand_id:  BRAND_ID,
+        p_points:    pointsToSpend,
+      });
+      if (rpcErr) {
+        console.error("[loyalty] deductLoyaltyPoints: RPC error", rpcErr.message);
+        return false;
+      }
+      newBalance = rpcData as number;
+      if (newBalance < 0) {
+        console.warn("[loyalty] deductLoyaltyPoints: insufficient points for member");
+        return false;
+      }
+    } else {
+      newBalance = member.points_balance as number;
     }
 
     // Generate redemption code — 8 chars from unambiguous charset
@@ -262,14 +299,15 @@ export async function deductLoyaltyPoints(
     const now          = new Date().toISOString();
     const redemptionId = `rdm-pickup-${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}`;
 
-    // Insert redemption
+    // Insert redemption — points_spent reflects what actually came off
+    // the member's balance (0 for voucher redemptions).
     const { error: rdmErr } = await supabase.from("redemptions").insert({
       id:              redemptionId,
       member_id:       loyaltyId,
       reward_id:       rewardId,
       brand_id:        BRAND_ID,
       outlet_id:       outletId,
-      points_spent:    reward.points_required as number,
+      points_spent:    pointsToSpend,
       status:          "confirmed",
       code:            redemptionCode,
       redemption_type: "pickup",
@@ -282,26 +320,47 @@ export async function deductLoyaltyPoints(
       return false;
     }
 
-    // Insert point_transaction
-    const txnId = `txn-rdm-pickup-${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}`;
-    const { error: txnErr } = await supabase.from("point_transactions").insert({
-      id:           txnId,
-      member_id:    loyaltyId,
-      brand_id:     BRAND_ID,
-      outlet_id:    outletId,
-      type:         "redeem",
-      points:       -(reward.points_required as number),
-      balance_after: newBalance,
-      description:  `Redeemed: ${reward.name as string}`,
-      reference_id: redemptionId,
-      multiplier:   1,
-    });
+    // Mark the voucher consumed so it disappears from the member's app
+    // and can't be re-redeemed. Done after the redemption row is in so
+    // we don't burn the voucher on a partial failure.
+    if (isVoucherRedemption && voucher) {
+      const { error: voucherErr } = await supabase
+        .from("issued_rewards")
+        .update({ status: "used" })
+        .eq("id", voucher.id);
+      if (voucherErr) {
+        console.error(
+          `[loyalty] deductLoyaltyPoints: failed to mark voucher ${voucher.id} used — RECONCILE MANUALLY`,
+          voucherErr.message,
+        );
+        // Don't return false — the redemption is already booked. Manual
+        // cleanup is safer than re-deducting points.
+      }
+    }
 
-    if (txnErr) {
-      console.error("[loyalty] deductLoyaltyPoints: transaction insert error", txnErr.message);
-      // Points were already deducted — return true so the caller
-      // doesn't double-flag. The transaction-log gap is a separate
-      // recoverable issue (we have the redemption row + new balance).
+    // Insert point_transaction only if points actually moved. A voucher
+    // redemption with 0 cost shouldn't add a noise row to the ledger.
+    if (pointsToSpend > 0) {
+      const txnId = `txn-rdm-pickup-${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}`;
+      const { error: txnErr } = await supabase.from("point_transactions").insert({
+        id:           txnId,
+        member_id:    loyaltyId,
+        brand_id:     BRAND_ID,
+        outlet_id:    outletId,
+        type:         "redeem",
+        points:       -pointsToSpend,
+        balance_after: newBalance,
+        description:  `Redeemed: ${reward.name as string}`,
+        reference_id: redemptionId,
+        multiplier:   1,
+      });
+
+      if (txnErr) {
+        console.error("[loyalty] deductLoyaltyPoints: transaction insert error", txnErr.message);
+        // Points already deducted — return true so the caller doesn't
+        // double-flag. The transaction-log gap is a separate recoverable
+        // issue (we have the redemption row + new balance).
+      }
     }
     return true;
   } catch (err) {
