@@ -47,7 +47,11 @@ export default function OrdersTab() {
     queryKey: ["order-history", phone],
     queryFn: () => (phone ? fetchOrderHistory(phone, 20) : Promise.resolve([])),
     enabled: !!phone,
-    staleTime: 5 * 60_000,
+    // Always refetch on tab focus — customers expect a just-placed order
+    // to appear in In progress immediately. The 5-min staleTime that
+    // used to live here masked the new order until pull-to-refresh.
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const reorder = (order: OrderHistoryEntry) => {

@@ -268,7 +268,13 @@ export default function Checkout() {
       setAppliedReward(null);
       queryClient.invalidateQueries({ queryKey: ["tier", loyaltyId] });
       queryClient.invalidateQueries({ queryKey: ["rewards", phoneInput.trim() || phoneFromStore || "anonymous"] });
-      queryClient.invalidateQueries({ queryKey: ["orderHistory"] });
+      // Order list query keys to wipe — the screen uses kebab-case
+      // ["order-history", phone]; the home page uses ["recent-orders"].
+      // Both need to refetch so the just-placed order shows up
+      // immediately in In progress / Recents instead of waiting out
+      // the 5-min staleTime.
+      queryClient.invalidateQueries({ queryKey: ["order-history"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-orders"] });
 
       stage = "create-payment-intent";
       // 2. Card / ewallet — Stripe native PaymentSheet. The server mints a
