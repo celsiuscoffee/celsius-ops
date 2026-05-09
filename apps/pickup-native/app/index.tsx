@@ -264,28 +264,10 @@ export default function Home() {
     }
   }, [queryClient, phone]);
 
-  const onPromoTap = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    switch (promo.cta_target) {
-      case "store":
-        router.push("/store");
-        return;
-      case "rewards":
-        router.push("/rewards");
-        return;
-      case "url":
-        // External URLs handled by deep linking the user out of the app —
-        // not implemented yet, fall back to menu so taps still feel responsive.
-        if (outletId) router.push("/menu");
-        else router.push("/store");
-        return;
-      case "menu":
-      default:
-        if (cartCount(cart) > 0) router.push("/cart");
-        else if (outletId) router.push("/menu");
-        else router.push("/store");
-    }
-  };
+  // onPromoTap removed alongside the in-hero promo strip. The promo
+  // setting still drives the empty-state hero copy further down; if we
+  // ever bring back an inline promo CTA, restore the cta_target switch
+  // from git (commit ffef593 has the last version).
 
   // Tier-driven palette — gradient + accent. Falls back to the
   // espresso baseline when no tier is loaded (signed out / fetch
@@ -463,79 +445,11 @@ export default function Home() {
           <ChevronRight size={14} color={ts.mutedColor} />
         </Pressable>
 
-        {/* In-hero promo strip — replaces the standalone espresso card
-            that used to sit below the hero. Stacking two espresso panels
-            read as redundant, so the promo lives on the hero surface,
-            divided by a single hairline. Tier-aware colours so it adapts
-            on Silver/Gold (lighter heroes) without going invisible. */}
-        {promo.enabled && promo.headline && (
-          <>
-            <View
-              style={{
-                height: 1,
-                backgroundColor: "rgba(255,255,255,0.10)",
-                marginTop: 14,
-                marginBottom: 12,
-              }}
-            />
-            <Pressable
-              onPress={onPromoTap}
-              className="flex-row items-center gap-3 active:opacity-80"
-              accessibilityRole="button"
-              accessibilityLabel={`${promo.label ?? "Promo"}: ${promo.headline}${promo.highlight ? ` ${promo.highlight}` : ""}`}
-            >
-              <View className="flex-1">
-                {promo.label && (
-                  <Text
-                    style={{
-                      color: ts.accentColor,
-                      fontFamily: "SpaceGrotesk_700Bold",
-                      fontSize: 10,
-                      letterSpacing: 2.5,
-                      textTransform: "uppercase",
-                    }}
-                    numberOfLines={1}
-                  >
-                    {promo.label}
-                  </Text>
-                )}
-                <Text
-                  style={{
-                    color: ts.textColor,
-                    fontFamily: "Peachi-Bold",
-                    fontSize: 20,
-                    lineHeight: 24,
-                    marginTop: promo.label ? 2 : 0,
-                  }}
-                  numberOfLines={1}
-                >
-                  {promo.headline}
-                  {promo.highlight ? (
-                    <Text style={{ color: ts.accentColor }}>{` ${promo.highlight}`}</Text>
-                  ) : null}
-                </Text>
-                {/* Description intentionally hidden inline. The strip
-                    is already eyebrow + headline + CTA — adding the
-                    long description ("First app order · Any drink ·
-                    Any size") read as a wall of text. Customers tap
-                    Order to surface T&Cs; the headline carries the
-                    promise on its own. */}
-              </View>
-              <View
-                className="bg-white rounded-full flex-row items-center gap-1"
-                style={{ paddingHorizontal: 14, paddingVertical: 8 }}
-              >
-                <Text
-                  className="text-primary"
-                  style={{ fontFamily: "Peachi-Bold", fontSize: 12 }}
-                >
-                  {promo.cta_text || "Order"}
-                </Text>
-                <ChevronRight size={13} color="#C05040" />
-              </View>
-            </Pressable>
-          </>
-        )}
+        {/* Promo strip removed — the hero now ends at the outlet pill.
+            Promo content from backoffice still drives the standalone
+            empty-state hero further down (when nothing else fills the
+            screen) and the future image-led campaign card if we add
+            one. Customers reach offers via Rewards or in-cart prompts. */}
       </TierHero>
 
       <ScrollView

@@ -1,7 +1,9 @@
-import { View, Text, Pressable, Image } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Gift } from "lucide-react-native";
 import { rewardUrgencyLabel, type Reward } from "../lib/rewards";
+import { CelsiusCup } from "./brand/CelsiusCup";
+import { CelsiusGift } from "./brand/CelsiusGift";
 
 type Props = {
   reward: Reward;
@@ -62,23 +64,27 @@ export function RewardTicket({ reward, onPress, accent }: Props) {
           the customer the type at a glance ("BOGO" / "DISCOUNT" /
           "GIFT"). Urgency pill floats top-right when relevant. */}
       <View style={{ backgroundColor: topBg, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 14, minHeight: 92 }}>
-        {/* Celsius cup mark anchored bottom-right of the top stub —
-            same brand-anchor pattern Zus uses on its home tiles. Sits
-            below the headline so it doesn't compete with the value
-            ("Buy 1 Free 1") but reads as identity at a glance. */}
-        <Image
-          source={require("../assets/icon.png")}
+        {/* Context-aware brand mark anchored bottom-right of the top
+            stub — gift silhouette for auto-issued rewards (welcome /
+            birthday), cup silhouette for discount-style rewards. Both
+            carry the Celsius "C" so the ticket reads as ours at a
+            glance. Recoloured per tone so it stays visible on the
+            espresso (gold-tone) and terracotta (default) backgrounds. */}
+        <View
           style={{
             position: "absolute",
-            right: -6,
-            bottom: -6,
-            width: 44,
-            height: 44,
-            borderRadius: 8,
+            right: 6,
+            bottom: 6,
             opacity: 0.85,
           }}
-          resizeMode="cover"
-        />
+          pointerEvents="none"
+        >
+          {tone === "gold" ? (
+            <CelsiusGift size={36} color={topAccent} knockout={topBg} />
+          ) : (
+            <CelsiusCup size={36} color={topAccent} knockout={topBg} />
+          )}
+        </View>
         <View className="flex-row items-center justify-between">
           <Text
             style={{

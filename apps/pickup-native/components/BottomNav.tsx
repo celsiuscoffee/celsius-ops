@@ -1,8 +1,9 @@
-import { View, Text, Pressable, Image } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { router, usePathname } from "expo-router";
 import { Home, ClipboardList, Gift, User } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import { CelsiusCup } from "./brand/CelsiusCup";
 
 type Tab = {
   key: string;
@@ -65,19 +66,14 @@ export function BottomNav() {
                 fillOpacity={active ? 0.08 : 0}
               />
             ) : (
-              // Custom Menu mark — Celsius cup logo so the menu tab
-              // carries brand identity (matches the hero/reward-ticket
-              // anchor pattern). Slight desaturation when inactive
-              // keeps it visually subordinate to the active tab.
-              <Image
-                source={require("../assets/icon.png")}
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 6,
-                  opacity: active ? 1 : 0.55,
-                }}
-                resizeMode="cover"
+              // Custom Menu mark — hand-authored Celsius cup with the
+              // "C" wordmark baked in. Recolours per active state
+              // (espresso when active, neutral grey when inactive) so
+              // it stays visually consistent with the lucide outlines
+              // on the other tabs.
+              <CelsiusCup
+                size={26}
+                color={active ? "#160800" : "#8E8E93"}
               />
             )}
             <Text
