@@ -43,11 +43,30 @@ export async function POST(request: NextRequest) {
 
       if (order?.loyalty_id) {
         const outletId = order.store_id as string;
+        // Awaited so Vercel doesn't kill the function mid-write —
+        // returning the 200 to Stripe before the points actually
+        // persist used to leave silent ledger gaps. The order-row
+        // update above is gated on status="pending" so duplicate
+        // webhook deliveries skip these calls (idempotent).
         if ((order.loyalty_points_earned as number) > 0) {
-          earnLoyaltyPoints(order.loyalty_id, orderId, order.loyalty_points_earned as number, outletId);
+          await earnLoyaltyPoints(
+            order.loyalty_id,
+            orderId,
+            order.loyalty_points_earned as number,
+            outletId,
+          );
         }
         if (order.reward_id) {
-          deductLoyaltyPoints(order.loyalty_id, order.reward_id as string, outletId);
+          const ok = await deductLoyaltyPoints(
+            order.loyalty_id,
+            order.reward_id as string,
+            outletId,
+          );
+          if (!ok) {
+            console.error(
+              `[loyalty] Stripe webhook: FAILED to deduct points for order=${orderId} reward=${order.reward_id} — RECONCILE MANUALLY`,
+            );
+          }
         }
       }
     }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { OrderRow } from "@/lib/supabase/types";
 import { checkRateLimit, RATE_LIMITS } from "@celsius/shared";
-import { getTierMultiplier, deductLoyaltyPoints } from "@/lib/loyalty/points";
+import { getTierMultiplier } from "@/lib/loyalty/points";
 import {
   evaluatePromotions,
   recordPromotionApplications,
@@ -336,27 +336,13 @@ export async function POST(request: NextRequest) {
       await supabase.rpc("increment_voucher_count", { voucher_id: voucherId });
     }
 
-    // Deduct loyalty points for redeemed reward — awaited so a silent
-    // ledger drift (customer redeems reward, points never deducted,
-    // reward re-redeemable) shows up in logs. Order has already been
-    // committed at this point, so we don't roll back on a points-API
-    // failure; we log it for manual reconciliation. Future: move both
-    // calls into the payment-success webhook so points only burn on
-    // confirmed payment.
-    //
-    // Uses the direct-Supabase deductLoyaltyPoints in lib/loyalty/points.ts
-    // (writes to redemptions + point_transactions atomically) — the
-    // previous local HTTP-based version POSTed to /api/transactions
-    // which doesn't accept POST, so every reward redemption since the
-    // route was added has been silently 405'ing.
-    if (rewardId && loyaltyId && rewardDiscountSenAmt > 0) {
-      const ok = await deductLoyaltyPoints(loyaltyId, rewardId, selectedStore.id);
-      if (!ok) {
-        console.error(
-          `[loyalty] FAILED to deduct points for order=${order.id} member=${loyaltyId} reward=${rewardId} — RECONCILE MANUALLY`,
-        );
-      }
-    }
+    // Reward-points deduction has moved to the payment-success
+    // webhooks (apps/order/src/app/api/payments/stripe/webhook and
+    // /api/payments/webhook for Revenue Monster). Calling it here
+    // would double-deduct, AND would burn points on orders the
+    // customer abandons before paying — both are wrong. The webhook
+    // gates on `status="pending" → "preparing"` so it's idempotent
+    // even if Stripe fires the event twice.
 
     // Record applied promotions to the loyalty ledger — awaited for
     // the same reason. uses_count never bumping = customer can re-
