@@ -45,16 +45,21 @@ export function CelsiusCup({ size = 28, color = "#C05040", fill = "transparent",
         strokeWidth="1.4"
         strokeLinejoin="round"
       />
-      {/* "C" wordmark on the cup face — uses Peachi-Bold to match the
+      {/* "C" wordmark on the cup face — Peachi-Bold to match the
           rest of the app's brand typography (greeting, headlines,
-          prices). Knockout colour when the cup body is filled,
-          stroke colour when it's outlined. */}
+          prices). The font ships in three weights only (Regular /
+          Medium / Bold), so we synthesize an extra-bold by stroking
+          the path in the same colour as the fill — adds ~0.5px of
+          visual heft per side without forcing a heavier weight that
+          doesn't exist in the file. */}
       <SvgText
         x="12"
         y="16.4"
         fontSize="9"
         textAnchor="middle"
         fill={isFilled ? (knockout ?? "#FFFFFF") : color}
+        stroke={isFilled ? (knockout ?? "#FFFFFF") : color}
+        strokeWidth="0.5"
         fontFamily="Peachi-Bold"
       >
         C

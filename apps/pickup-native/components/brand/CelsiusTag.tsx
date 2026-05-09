@@ -54,13 +54,16 @@ export function CelsiusTag({ size = 28, color = "#C05040", fill = "transparent",
         stroke={color}
         strokeWidth="1.2"
       />
-      {/* "C" wordmark on the tag face — Peachi-Bold to match cup/gift */}
+      {/* "C" wordmark on the tag face — Peachi-Bold + stroke for the
+          same synthetic extra-bold weight cup/gift use. */}
       <SvgText
         x="16.5"
         y="11.6"
         fontSize="6.5"
         textAnchor="middle"
         fill={isFilled ? (knockout ?? "#FFFFFF") : color}
+        stroke={isFilled ? (knockout ?? "#FFFFFF") : color}
+        strokeWidth="0.4"
         fontFamily="Peachi-Bold"
       >
         C

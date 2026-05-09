@@ -53,14 +53,17 @@ export function CelsiusGift({ size = 28, color = "#C05040", fill = "transparent"
         fill={color}
       />
       {/* "C" wordmark on the box face (left of ribbon) — Peachi-Bold
-          so the brand letterform matches the cup mark and the rest
-          of the app's typography. */}
+          stroked in the same colour as the fill to synthesize an
+          extra-bold weight (the font file only ships Regular/Medium/
+          Bold, so this gets us heavier without a fourth file). */}
       <SvgText
         x="7.4"
         y="17"
         fontSize="7"
         textAnchor="middle"
         fill={isFilled ? (knockout ?? "#FFFFFF") : color}
+        stroke={isFilled ? (knockout ?? "#FFFFFF") : color}
+        strokeWidth="0.4"
         fontFamily="Peachi-Bold"
       >
         C
