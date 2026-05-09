@@ -354,45 +354,15 @@ export default function Home() {
           </Pressable>
         </View>
 
-        {/* Tier chip — small pill so the loyalty status reads at a
-            glance up top, before the greeting. Pre-greeting placement
-            keeps the editorial flow ("badge → greeting → progress")
-            and gives visual variety the previous all-text hero lacked. */}
-        {showTierEyebrow && member && (
-          <View
-            className="flex-row items-center self-start"
-            style={{
-              marginTop: 14,
-              paddingHorizontal: 9,
-              paddingVertical: 4,
-              borderRadius: 999,
-              backgroundColor: ts.pointsPillBg,
-              gap: 5,
-            }}
-          >
-            <Sparkles size={11} color={ts.accentColor} fill={ts.accentColor} />
-            <Text
-              style={{
-                color: ts.textColor,
-                fontFamily: "SpaceGrotesk_700Bold",
-                fontSize: 10.5,
-                letterSpacing: 1.4,
-              }}
-            >
-              {ts.displayName} · {tier?.tier_multiplier ?? 1}× EARNING
-            </Text>
-          </View>
-        )}
-
-        {/* Greeting — editorial Peachi. Tightened the marginTop now
-            that the tier chip sits above and carries the eyebrow weight. */}
+        {/* Greeting — the editorial moment. Bigger Peachi, more
+            vertical room above and below than the earlier draft. */}
         <Text
-          className="mt-3"
+          className="mt-5"
           style={{
             color: ts.textColor,
             fontFamily: "Peachi-Bold",
-            fontSize: 30,
-            lineHeight: 34,
+            fontSize: 28,
+            lineHeight: 32,
           }}
           numberOfLines={1}
         >
@@ -403,103 +373,42 @@ export default function Home() {
             : greeting}
         </Text>
 
-        {/* Points feature + progress to next reward — replaces the
-            quiet meta line. The number is the visual anchor of the
-            hero; the bar makes the loyalty loop tangible instead of
-            buried in small caps. The whole block is one tap into
-            /rewards so the affordance is bigger than before. */}
+        {/* Demoted meta line — tier · multiplier · balance · next-reward
+            all in one quiet small-caps row. Tappable into Rewards so
+            the loyalty affordance survives the demotion. */}
         {member && (
           <Pressable
             onPress={() => {
               Haptics.selectionAsync();
               router.push("/rewards");
             }}
-            className="active:opacity-80"
-            style={{ marginTop: 16 }}
+            hitSlop={6}
+            className="active:opacity-70 self-start"
+            style={{ marginTop: 6 }}
           >
-            <View className="flex-row items-baseline" style={{ gap: 6 }}>
-              <Text
-                style={{
-                  color: ts.textColor,
-                  fontFamily: "Peachi-Bold",
-                  fontSize: 36,
-                  lineHeight: 36,
-                }}
-              >
-                {points.toLocaleString()}
-              </Text>
-              <Text
-                style={{
-                  color: ts.mutedColor,
-                  fontFamily: "SpaceGrotesk_700Bold",
-                  fontSize: 11,
-                  letterSpacing: 1.6,
-                }}
-              >
-                PTS
-              </Text>
-            </View>
-
-            {nextReward && pointsToNext > 0 ? (
-              <>
-                <View
-                  className="overflow-hidden"
-                  style={{
-                    marginTop: 10,
-                    height: 5,
-                    borderRadius: 3,
-                    backgroundColor: ts.pointsPillBg,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: `${Math.max(4, progressPct * 100)}%`,
-                      height: "100%",
-                      backgroundColor: ts.accentColor,
-                      borderRadius: 3,
-                    }}
-                  />
-                </View>
-                <Text
-                  className="mt-2"
-                  style={{
-                    color: ts.mutedColor,
-                    fontFamily: "SpaceGrotesk_500Medium",
-                    fontSize: 12,
-                  }}
-                  numberOfLines={1}
-                >
-                  {pointsToNext.toLocaleString()} pts to {nextReward.name}
-                </Text>
-              </>
-            ) : nextReward ? (
-              // Edge case: pointsToNext is 0 but reward isn't redeemed yet
-              // (just hit the threshold). Show a celebratory line instead
-              // of a 100% progress bar that risks looking buggy.
-              <Text
-                className="mt-2"
-                style={{
-                  color: ts.accentColor,
-                  fontFamily: "Peachi-Bold",
-                  fontSize: 13,
-                }}
-                numberOfLines={1}
-              >
-                {nextReward.name} unlocked — tap to redeem
-              </Text>
-            ) : (
-              <Text
-                className="mt-2"
-                style={{
-                  color: ts.mutedColor,
-                  fontFamily: "SpaceGrotesk_500Medium",
-                  fontSize: 12,
-                }}
-                numberOfLines={1}
-              >
-                Keep ordering to unlock more rewards
-              </Text>
-            )}
+            <Text
+              style={{
+                color: ts.mutedColor,
+                fontFamily: "SpaceGrotesk_500Medium",
+                fontSize: 11,
+                letterSpacing: 1.4,
+                textTransform: "uppercase",
+              }}
+              numberOfLines={1}
+            >
+              {(() => {
+                const parts: string[] = [];
+                if (showTierEyebrow) {
+                  parts.push(ts.displayName);
+                  parts.push(`${tier?.tier_multiplier ?? 1}×`);
+                }
+                parts.push(`${(member.pointsBalance ?? 0).toLocaleString()} pts`);
+                if (nextReward && pointsToNext > 0) {
+                  parts.push(`${pointsToNext.toLocaleString()} to ${nextReward.name}`);
+                }
+                return parts.join(" · ");
+              })()}
+            </Text>
           </Pressable>
         )}
 
