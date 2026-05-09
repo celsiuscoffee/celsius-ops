@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -26,11 +27,17 @@ import { fetchOrderHistory, type OrderHistoryEntry } from "../lib/rewards";
 import { formatPrice } from "../lib/api";
 import { showToast } from "../lib/toast";
 
+type OrdersTabKey = "active" | "past";
+
 export default function OrdersTab() {
   const phone = useApp((s) => s.phone);
   const cart = useApp((s) => s.cart);
   const addToCart = useApp((s) => s.addToCart);
   const clearCart = useApp((s) => s.clearCart);
+  // Tab state — default to "active" so customers with a live order
+  // land on the tracking view first; they'll switch to "past" when
+  // they want history.
+  const [activeTab, setActiveTab] = useState<OrdersTabKey>("active");
 
   // staleTime 5min so the prefetched cache from _layout serves the
   // first-paint instantly. Background refetch still happens; the
@@ -137,7 +144,7 @@ export default function OrdersTab() {
             className="text-espresso text-base mt-4"
             style={{ fontFamily: "Peachi-Bold" }}
           >
-            No past orders yet
+            No orders yet
           </Text>
           <Text
             className="text-muted-fg text-sm text-center mt-1"
@@ -159,53 +166,14 @@ export default function OrdersTab() {
           </Pressable>
         </View>
       ) : (
-        (() => {
-          const { active, past } = splitOrders(data!);
-          return (
-            <ScrollView
-              contentContainerClassName="px-4 py-4 pb-32 gap-3"
-              refreshControl={
-                <RefreshControl
-                  refreshing={isRefetching}
-                  onRefresh={() => refetch()}
-                  tintColor="#C05040"
-                />
-              }
-            >
-              <SectionHeader label="In progress" />
-              {active.length > 0 ? (
-                active.map((order) => (
-                  <OrderRow
-                    key={order.id}
-                    order={order}
-                    onReorder={() => reorder(order)}
-                  />
-                ))
-              ) : (
-                <View className="bg-surface rounded-2xl border border-border px-4 py-5 items-center">
-                  <Text
-                    className="text-muted-fg text-[12px] text-center"
-                    style={{ fontFamily: "SpaceGrotesk_500Medium" }}
-                  >
-                    No active orders right now
-                  </Text>
-                </View>
-              )}
-              {past.length > 0 && (
-                <>
-                  <SectionHeader label="Past orders" />
-                  {past.map((order) => (
-                    <OrderRow
-                      key={order.id}
-                      order={order}
-                      onReorder={() => reorder(order)}
-                    />
-                  ))}
-                </>
-              )}
-            </ScrollView>
-          );
-        })()
+        <OrdersTabView
+          orders={data!}
+          activeTab={activeTab}
+          onChangeTab={setActiveTab}
+          isRefetching={isRefetching}
+          onRefresh={() => refetch()}
+          onReorder={reorder}
+        />
       )}
 
       <BottomNav />
@@ -241,14 +209,142 @@ function splitOrders(orders: OrderHistoryEntry[]) {
   return { active, past };
 }
 
-function SectionHeader({ label }: { label: string }) {
+function OrdersTabView({
+  orders,
+  activeTab,
+  onChangeTab,
+  isRefetching,
+  onRefresh,
+  onReorder,
+}: {
+  orders: OrderHistoryEntry[];
+  activeTab: OrdersTabKey;
+  onChangeTab: (t: OrdersTabKey) => void;
+  isRefetching: boolean;
+  onRefresh: () => void;
+  onReorder: (o: OrderHistoryEntry) => void;
+}) {
+  const { active, past } = useMemo(() => splitOrders(orders), [orders]);
+  const list = activeTab === "active" ? active : past;
+  const emptyCopy =
+    activeTab === "active"
+      ? "No active orders right now."
+      : "No past orders yet.";
+
   return (
-    <Text
-      className="text-muted-fg text-[11px] uppercase tracking-wider px-1 mt-2 mb-1"
-      style={{ fontFamily: "SpaceGrotesk_700Bold" }}
+    <View className="flex-1">
+      {/* Tab bar — terracotta underline marks the active tab, matching
+          the pattern used elsewhere in the app. The "In progress" tab
+          carries a count badge so customers spot a live order at a
+          glance without having to switch tabs. */}
+      <View className="flex-row border-b border-border px-4">
+        <TabPill
+          label="In progress"
+          count={active.length}
+          active={activeTab === "active"}
+          onPress={() => onChangeTab("active")}
+        />
+        <TabPill
+          label="Past orders"
+          count={null}
+          active={activeTab === "past"}
+          onPress={() => onChangeTab("past")}
+        />
+      </View>
+
+      {list.length > 0 ? (
+        <ScrollView
+          contentContainerClassName="px-4 py-4 pb-32 gap-3"
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={onRefresh}
+              tintColor="#C05040"
+            />
+          }
+        >
+          {list.map((order) => (
+            <OrderRow
+              key={order.id}
+              order={order}
+              onReorder={() => onReorder(order)}
+            />
+          ))}
+        </ScrollView>
+      ) : (
+        <View className="flex-1 items-center justify-center px-6">
+          <ClipboardList size={40} color="#8E8E93" strokeWidth={1.25} />
+          <Text
+            className="text-muted-fg text-[13px] mt-3 text-center"
+            style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+          >
+            {emptyCopy}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function TabPill({
+  label,
+  count,
+  active,
+  onPress,
+}: {
+  label: string;
+  count: number | null;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={() => {
+        Haptics.selectionAsync();
+        onPress();
+      }}
+      className="flex-row items-center gap-1.5 active:opacity-70"
+      style={{
+        paddingVertical: 12,
+        paddingHorizontal: 4,
+        marginRight: 18,
+        borderBottomWidth: 2,
+        borderBottomColor: active ? "#C05040" : "transparent",
+      }}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
     >
-      {label}
-    </Text>
+      <Text
+        className="text-[13px]"
+        style={{
+          fontFamily: "Peachi-Bold",
+          color: active ? "#1A0200" : "#8E8E93",
+        }}
+      >
+        {label}
+      </Text>
+      {count !== null && count > 0 && (
+        <View
+          className="rounded-full items-center justify-center"
+          style={{
+            minWidth: 18,
+            height: 18,
+            paddingHorizontal: 5,
+            backgroundColor: active ? "#C05040" : "rgba(192, 80, 64, 0.15)",
+          }}
+        >
+          <Text
+            className="text-[10px] leading-none"
+            style={{
+              fontFamily: "SpaceGrotesk_700Bold",
+              color: active ? "#FFFFFF" : "#C05040",
+            }}
+          >
+            {count}
+          </Text>
+        </View>
+      )}
+    </Pressable>
   );
 }
 
