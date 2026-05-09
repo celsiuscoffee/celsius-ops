@@ -354,28 +354,104 @@ export default function Home() {
           </Pressable>
         </View>
 
-        {/* Greeting — the editorial moment. Bigger Peachi, more
-            vertical room above and below than the earlier draft. */}
+        {/* Greeting — Peachi with a trailing period to mirror the
+            website's display headline ("A Malaysian Specialty Coffee
+            Company."). Pulled from 28 → 26 — the website's voice is
+            confident in the curves, not in the scale. */}
         <Text
-          className="mt-5"
+          className="mt-6"
           style={{
             color: ts.textColor,
             fontFamily: "Peachi-Bold",
-            fontSize: 28,
-            lineHeight: 32,
+            fontSize: 26,
+            lineHeight: 30,
           }}
           numberOfLines={1}
         >
           {firstName
-            ? `Hi, ${firstName}`
+            ? `Hi, ${firstName}.`
             : showTierEyebrow
-            ? "Welcome"
-            : greeting}
+            ? "Welcome."
+            : `${greeting}.`}
         </Text>
 
-        {/* Demoted meta line — tier · multiplier · balance · next-reward
-            all in one quiet small-caps row. Tappable into Rewards so
-            the loyalty affordance survives the demotion. */}
+        {/* Lowercase subhead — echoes celsiuscoffee.com's "great taste
+            and authentic hospitality." Brand voice, not a slogan. The
+            page below carries everything functional; the hero just
+            sets tone. */}
+        <Text
+          className="mt-1"
+          style={{
+            color: ts.mutedColor,
+            fontFamily: "SpaceGrotesk_400Regular",
+            fontSize: 13,
+            lineHeight: 18,
+          }}
+          numberOfLines={1}
+        >
+          specialty coffee, made with care.
+        </Text>
+
+        {/* Bordered outlet pill — modeled on the website's "Open Daily ·
+            08:00 – 23:00" terracotta-bordered chip. The accent border
+            gives the row presence on the gradient without resorting to
+            big type, which the customer found bland. */}
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync();
+            router.push("/store");
+          }}
+          className="flex-row items-center self-start active:opacity-75"
+          style={{
+            marginTop: 18,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: ts.accentColor,
+            gap: 6,
+          }}
+        >
+          <MapPin size={13} color={ts.accentColor} />
+          <Text
+            style={{
+              fontFamily: "SpaceGrotesk_500Medium",
+              fontSize: 12.5,
+              color: ts.textColor,
+            }}
+          >
+            {outletName ?? "Select pickup outlet"}
+          </Text>
+          {currentOutlet && (() => {
+            const status = !currentOutlet.is_open
+              ? "Closed"
+              : currentOutlet.is_busy
+              ? "Busy"
+              : currentOutlet.pickup_time_mins
+              ? `~${currentOutlet.pickup_time_mins} min`
+              : "Open";
+            return (
+              <>
+                <Text style={{ color: ts.mutedColor, fontSize: 12.5 }}>·</Text>
+                <Text
+                  style={{
+                    fontFamily: "SpaceGrotesk_500Medium",
+                    fontSize: 12.5,
+                    color: ts.mutedColor,
+                  }}
+                >
+                  {status}
+                </Text>
+              </>
+            );
+          })()}
+          <ChevronRight size={12} color={ts.mutedColor} />
+        </Pressable>
+
+        {/* Quiet loyalty line — single tappable row mirroring the
+            website's "Explore our story →" affordance: small, muted,
+            arrow-led. Carries the points balance + next-reward
+            distance without competing for the headline. */}
         {member && (
           <Pressable
             onPress={() => {
@@ -383,81 +459,31 @@ export default function Home() {
               router.push("/rewards");
             }}
             hitSlop={6}
-            className="active:opacity-70 self-start"
-            style={{ marginTop: 6 }}
+            className="self-start active:opacity-70 flex-row items-center"
+            style={{ marginTop: 10, gap: 4 }}
           >
             <Text
               style={{
                 color: ts.mutedColor,
                 fontFamily: "SpaceGrotesk_500Medium",
-                fontSize: 11,
-                letterSpacing: 1.4,
-                textTransform: "uppercase",
+                fontSize: 12,
               }}
               numberOfLines={1}
             >
               {(() => {
-                const parts: string[] = [];
-                if (showTierEyebrow) {
-                  parts.push(ts.displayName);
-                  parts.push(`${tier?.tier_multiplier ?? 1}×`);
+                const balance = (member.pointsBalance ?? 0).toLocaleString();
+                if (showTierEyebrow && tier?.tier_name) {
+                  if (nextReward && pointsToNext > 0) {
+                    return `${balance} pts · ${pointsToNext.toLocaleString()} to ${nextReward.name}`;
+                  }
+                  return `${balance} pts · ${ts.displayName.toLowerCase()} member`;
                 }
-                parts.push(`${(member.pointsBalance ?? 0).toLocaleString()} pts`);
-                if (nextReward && pointsToNext > 0) {
-                  parts.push(`${pointsToNext.toLocaleString()} to ${nextReward.name}`);
-                }
-                return parts.join(" · ");
+                return `${balance} pts`;
               })()}
             </Text>
+            <ChevronRight size={12} color={ts.mutedColor} />
           </Pressable>
         )}
-
-        {/* Outlet pill — extra breathing room above; ETA dropped per
-            redesign so the row is shorter and reads at a glance. */}
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync();
-            router.push("/store");
-          }}
-          className="flex-row items-center gap-1.5 mt-5 self-start active:opacity-70"
-        >
-          <MapPin size={15} color={ts.mutedColor} />
-          <Text
-            className="text-[15px]"
-            style={{ fontFamily: "Peachi-Bold", color: ts.textColor }}
-          >
-            {outletName ?? "Select pickup outlet"}
-          </Text>
-          {currentOutlet && (() => {
-            const dot = !currentOutlet.is_open
-              ? { bg: "#EF4444", label: "Closed" }
-              : currentOutlet.is_busy
-              ? { bg: "#F59E0B", label: "Busy" }
-              : { bg: "#22C55E", label: null };
-            return (
-              <>
-                <View
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: 3,
-                    backgroundColor: dot.bg,
-                    marginLeft: 4,
-                  }}
-                />
-                {dot.label && (
-                  <Text
-                    className="text-[11px]"
-                    style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: ts.mutedColor }}
-                  >
-                    {dot.label}
-                  </Text>
-                )}
-              </>
-            );
-          })()}
-          <ChevronRight size={14} color={ts.mutedColor} />
-        </Pressable>
 
         {/* Promo strip removed — the hero now ends at the outlet pill.
             Promo content from backoffice still drives the standalone
