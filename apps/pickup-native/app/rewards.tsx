@@ -7,6 +7,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../components/BottomNav";
 import { TierHero } from "../components/TierHero";
 import { CelsiusLoader } from "../components/CelsiusLoader";
+import { CelsiusCup } from "../components/brand/CelsiusCup";
+import { CelsiusGift } from "../components/brand/CelsiusGift";
+import { CelsiusTag } from "../components/brand/CelsiusTag";
 import { tierStyle } from "../lib/tier-styles";
 import * as Haptics from "expo-haptics";
 import { useApp } from "../lib/store";
@@ -15,9 +18,13 @@ import {
   fetchTier,
   formatRewardValue,
   rewardUrgencyLabel,
-  type MemberTier,
   type Reward,
 } from "../lib/rewards";
+
+// Locked rewards within this much of the customer's balance get a
+// visible progress bar + "X to go" sub-line. Anything further out
+// stays minimal so the list doesn't read as an unreachable ladder.
+const PROGRESS_VISIBLE_THRESHOLD = 0.3;
 
 export default function RewardsTab() {
   const phone = useApp((s) => s.phone);
@@ -35,10 +42,6 @@ export default function RewardsTab() {
   });
   const tier = tierQ.data ?? null;
 
-  // Bumped staleTime 30s → 5min so React Query serves the prefetched
-  // cache instantly when the customer taps Rewards. Background refetch
-  // still happens on stale, just no spinner. Pull-to-refresh (if added)
-  // can force-fetch via refetch().
   const { data, isLoading } = useQuery({
     queryKey: ["rewards", phone ?? "anonymous"],
     queryFn: () => fetchRewards(phone),
@@ -49,23 +52,34 @@ export default function RewardsTab() {
   const rewards = data?.rewards ?? [];
   const ts = tierStyle(tier);
 
-  const { claimable, locked } = useMemo(() => {
-    const sorted = [...rewards].sort((a, b) => a.points_required - b.points_required);
-    return {
-      claimable: sorted.filter((r) => balance >= r.points_required),
-      locked: sorted.filter((r) => balance < r.points_required),
-    };
-  }, [rewards, balance]);
+  // Single ordered list — easiest to redeem first. Drives both the
+  // hero progress bar (cheapest unaffordable = "next reward") and the
+  // unified rewards list below.
+  const sortedRewards = useMemo(
+    () => [...rewards].sort((a, b) => a.points_required - b.points_required),
+    [rewards],
+  );
+  const nextReward = useMemo(
+    () => sortedRewards.find((r) => r.points_required > balance) ?? null,
+    [sortedRewards, balance],
+  );
+  const nextProgress = nextReward
+    ? Math.max(0, Math.min(1, balance / nextReward.points_required))
+    : 0;
+  const nextShortBy = nextReward
+    ? Math.max(0, nextReward.points_required - balance)
+    : 0;
 
   return (
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Tier-themed hero — eyebrow + balance numerals + status sub. */}
+      {/* Tier-themed hero — eyebrow + balance numerals + status sub +
+          single progress bar to next reward. */}
       <TierHero
         style={ts}
         paddingTop={insets.top + 12}
-        paddingBottom={36}
+        paddingBottom={32}
         variant="tall"
       >
         <Text
@@ -108,6 +122,37 @@ export default function RewardsTab() {
             {`Earning ${tier.tier_multiplier ?? 1}× on every order`}
           </Text>
         ) : null}
+
+        {/* Progress to next reward — answers "how close am I?" without
+            requiring the customer to scroll the list and do math. */}
+        {nextReward && (
+          <View style={{ marginTop: 18 }}>
+            <View
+              style={{
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: "rgba(255,255,255,0.18)",
+                overflow: "hidden",
+              }}
+            >
+              <View
+                style={{
+                  height: "100%",
+                  width: `${nextProgress * 100}%`,
+                  backgroundColor: ts.accentColor,
+                  borderRadius: 2,
+                }}
+              />
+            </View>
+            <Text
+              className="mt-2 text-[11px]"
+              style={{ color: ts.mutedColor, fontFamily: "SpaceGrotesk_500Medium" }}
+              numberOfLines={1}
+            >
+              {`${nextShortBy.toLocaleString()} pts to ${nextReward.name}`}
+            </Text>
+          </View>
+        )}
       </TierHero>
 
       <ScrollView
@@ -119,6 +164,64 @@ export default function RewardsTab() {
           <SignInPrompt />
         ) : (
           <>
+            {/* Tier perks — moved up so the answer to "what's special
+                about being PLATINUM" lands before the rewards list,
+                not as an afterthought at the bottom. */}
+            {tier && tier.tier_benefits && tier.tier_benefits.length > 0 && (
+              <View
+                style={{
+                  marginTop: 8,
+                  marginBottom: 8,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: "rgba(26, 2, 0, 0.12)",
+                  padding: 14,
+                }}
+              >
+                <Text
+                  style={{
+                    color: "rgba(26, 2, 0, 0.55)",
+                    fontFamily: "SpaceGrotesk_700Bold",
+                    fontSize: 10,
+                    letterSpacing: 2.5,
+                    textTransform: "uppercase",
+                    marginBottom: 8,
+                  }}
+                >
+                  {`${ts.displayName} perks`}
+                </Text>
+                {tier.tier_benefits.map((b, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                      paddingVertical: 4,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 4,
+                        height: 4,
+                        borderRadius: 2,
+                        backgroundColor: "#C05040",
+                      }}
+                    />
+                    <Text
+                      style={{
+                        color: "#1A0200",
+                        fontFamily: "SpaceGrotesk_500Medium",
+                        fontSize: 14,
+                      }}
+                    >
+                      {b}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             {/* Empty state — only when fetch is done and no rewards */}
             {!isLoading && rewards.length === 0 && (
               <View className="py-12 items-center">
@@ -144,60 +247,36 @@ export default function RewardsTab() {
               </View>
             )}
 
-            {/* CLAIM NOW — affordable rewards in a single card */}
-            {claimable.length > 0 && (
-              <Section title="Claim now" rightLabel={`${claimable.length} active`}>
-                <Card>
-                  {claimable.map((r, i) => (
-                    <ClaimRow
-                      key={r.id}
-                      reward={r}
-                      isFirst={i === 0}
-                    />
-                  ))}
-                </Card>
-              </Section>
-            )}
-
-            {/* REDEEM — points cost rewards (still claimable + locked
-                merged into one list, locked ones faded with "X to go") */}
-            {locked.length > 0 && (
-              <Section title="Redeem" rightLabel={`${balance.toLocaleString()} available`}>
-                <Card>
-                  {locked.map((r, i) => (
-                    <RedeemRow
-                      key={r.id}
-                      reward={r}
-                      balance={balance}
-                      isFirst={i === 0}
-                    />
-                  ))}
-                </Card>
-              </Section>
-            )}
-
-            {/* TIER BENEFITS — only when tier is loaded with benefits */}
-            {tier && tier.tier_benefits && tier.tier_benefits.length > 0 && (
-              <Section
-                title={`${ts.displayName.toLowerCase()} benefits`}
-                eyebrow={`${ts.displayName} BENEFITS`}
-                trailingRule={false}
-              >
-                {tier.tier_benefits.map((b, i) => (
-                  <View key={i} style={{ paddingVertical: 10 }}>
-                    <Text
-                      style={{
-                        color: "#1A0200",
-                        fontFamily: "SpaceGrotesk_500Medium",
-                        fontSize: 16,
-                        letterSpacing: 0.1,
-                      }}
-                    >
-                      {b}
-                    </Text>
-                  </View>
+            {/* Unified rewards list — replaces the prior "Claim now" /
+                "Redeem" split. One ordered ladder, easiest first.
+                Affordable rows get the terracotta Apply pill;
+                in-reach locked rows show a thin progress bar; far-off
+                ones stay minimal so the list doesn't read as an
+                unreachable wall. */}
+            {sortedRewards.length > 0 && (
+              <View style={{ marginTop: 4 }}>
+                <Text
+                  style={{
+                    color: "rgba(26, 2, 0, 0.55)",
+                    fontFamily: "SpaceGrotesk_700Bold",
+                    fontSize: 10,
+                    letterSpacing: 2.5,
+                    textTransform: "uppercase",
+                    marginTop: 16,
+                    marginBottom: 8,
+                  }}
+                >
+                  Your rewards
+                </Text>
+                {sortedRewards.map((reward, i) => (
+                  <RewardListRow
+                    key={reward.id}
+                    reward={reward}
+                    balance={balance}
+                    isFirst={i === 0}
+                  />
                 ))}
-              </Section>
+              </View>
             )}
           </>
         )}
@@ -208,94 +287,32 @@ export default function RewardsTab() {
   );
 }
 
-// ─── building blocks ───
+// ─── reward row ───
 
-// Brand-poster section header — small caps eyebrow stacked above a
-// large Peachii display title. Optional right-aligned meta sits next
-// to the eyebrow row in matching small caps. Pattern from the
-// "BREWING HOURS / Monday—Thursday" outlet poster (CC Brand System).
-function Section({
-  title,
-  rightLabel,
-  eyebrow,
-  children,
-  trailingRule = true,
+function RewardListRow({
+  reward,
+  balance,
+  isFirst,
 }: {
-  title: string;
-  rightLabel?: string;
-  /** Tiny caps line above the Peachii title. Falls back to the title's
-   *  small-caps form (e.g. "CLAIM NOW") if not provided. */
-  eyebrow?: string;
-  children: React.ReactNode;
-  /** Render a thin rule below this section to divide it from the next.
-   *  Match the poster: one hairline between sections, not around cards. */
-  trailingRule?: boolean;
+  reward: Reward;
+  balance: number;
+  isFirst: boolean;
 }) {
-  const eb = eyebrow ?? title.toUpperCase();
-  return (
-    <View>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          marginTop: 24,
-          marginBottom: 10,
-        }}
-      >
-        <Text
-          style={{
-            color: "#1A0200",
-            fontFamily: "SpaceGrotesk_700Bold",
-            fontSize: 10,
-            letterSpacing: 2.5,
-          }}
-        >
-          {eb}
-        </Text>
-        {rightLabel ? (
-          <Text
-            style={{
-              color: "rgba(26, 2, 0, 0.55)",
-              fontFamily: "SpaceGrotesk_500Medium",
-              fontSize: 10,
-              letterSpacing: 1.5,
-              textTransform: "uppercase",
-            }}
-          >
-            {rightLabel}
-          </Text>
-        ) : null}
-      </View>
-      {children}
-      {trailingRule ? (
-        <View
-          style={{
-            height: 1,
-            backgroundColor: "rgba(26, 2, 0, 0.12)",
-            marginTop: 18,
-          }}
-        />
-      ) : null}
-    </View>
-  );
-}
-
-// Cardless layout — content sits directly on the cream body, divided
-// only by thin rules. Matches the brand poster aesthetic where the
-// page is a single vertical column with breathing room, not a stack
-// of bordered rectangles.
-function Card({ children }: { children: React.ReactNode }) {
-  return <View>{children}</View>;
-}
-
-function ClaimRow({ reward, isFirst }: { reward: Reward; isFirst: boolean }) {
   const appliedReward = useApp((s) => s.appliedReward);
   const setAppliedReward = useApp((s) => s.setAppliedReward);
   const cart = useApp((s) => s.cart);
   const isApplied = appliedReward?.id === reward.id;
 
+  const required = reward.points_required;
+  const canClaim = balance >= required;
+  const progress = required > 0 ? Math.max(0, Math.min(1, balance / required)) : 1;
+  const shortBy = Math.max(0, required - balance);
+  const showProgress = !canClaim && progress >= PROGRESS_VISIBLE_THRESHOLD;
+
+  const urgency = canClaim ? rewardUrgencyLabel(reward) : null;
+
   const onApply = () => {
+    if (!canClaim) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setAppliedReward({
       id: reward.id,
@@ -310,29 +327,41 @@ function ClaimRow({ reward, isFirst }: { reward: Reward; isFirst: boolean }) {
     if (cart.length > 0) router.push("/cart");
   };
 
-  // Use-it-or-lose-it pill — only when the reward is genuinely
-  // close to expiring or last-of-stock. Drives behaviour better than
-  // an open-ended "Available" label, especially for the auto-issued
-  // welcome BOGO which has a 30-day window.
-  const urgency = rewardUrgencyLabel(reward);
+  const Icon = pickRewardIcon(reward);
+  const iconColor = canClaim ? "#C05040" : "rgba(26, 2, 0, 0.45)";
 
   return (
     <View
       style={{
         flexDirection: "row",
-        alignItems: "flex-end",
+        alignItems: "center",
         gap: 12,
         paddingVertical: 12,
+        borderTopWidth: isFirst ? 0 : 1,
+        borderTopColor: "rgba(26, 2, 0, 0.08)",
+        opacity: !canClaim && !showProgress ? 0.55 : 1,
       }}
     >
+      <View
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          backgroundColor: canClaim ? "rgba(192, 80, 64, 0.10)" : "rgba(26, 2, 0, 0.06)",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Icon size={22} color={iconColor} />
+      </View>
+
       <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <Text
             style={{
               color: "#1A0200",
               fontFamily: "SpaceGrotesk_700Bold",
-              fontSize: 17,
-              letterSpacing: 0.1,
+              fontSize: 15,
               flexShrink: 1,
             }}
             numberOfLines={1}
@@ -344,16 +373,12 @@ function ClaimRow({ reward, isFirst }: { reward: Reward; isFirst: boolean }) {
               style={{
                 backgroundColor: "#C05040",
                 borderRadius: 999,
-                paddingHorizontal: 7,
-                paddingVertical: 2,
+                paddingHorizontal: 6,
+                paddingVertical: 1.5,
               }}
             >
               <Text
-                style={{
-                  color: "#FFFFFF",
-                  fontFamily: "Peachi-Bold",
-                  fontSize: 10,
-                }}
+                style={{ color: "#FFFFFF", fontFamily: "Peachi-Bold", fontSize: 9 }}
               >
                 {urgency}
               </Text>
@@ -365,115 +390,110 @@ function ClaimRow({ reward, isFirst }: { reward: Reward; isFirst: boolean }) {
             color: "rgba(26, 2, 0, 0.55)",
             fontFamily: "SpaceGrotesk_400Regular",
             fontSize: 12,
-            marginTop: 3,
+            marginTop: 2,
           }}
           numberOfLines={1}
         >
           {formatRewardValue(reward)}
         </Text>
+        {showProgress && (
+          <View style={{ marginTop: 6 }}>
+            <View
+              style={{
+                height: 3,
+                borderRadius: 2,
+                backgroundColor: "rgba(26, 2, 0, 0.08)",
+                overflow: "hidden",
+              }}
+            >
+              <View
+                style={{
+                  height: "100%",
+                  width: `${progress * 100}%`,
+                  backgroundColor: "#C05040",
+                }}
+              />
+            </View>
+            <Text
+              style={{
+                color: "rgba(26, 2, 0, 0.55)",
+                fontFamily: "SpaceGrotesk_500Medium",
+                fontSize: 11,
+                marginTop: 4,
+              }}
+              numberOfLines={1}
+            >
+              {`${shortBy.toLocaleString()} pts to go`}
+            </Text>
+          </View>
+        )}
       </View>
-      <Pressable
-        onPress={onApply}
-        disabled={isApplied}
-        className="active:opacity-80"
-        style={{
-          backgroundColor: isApplied ? "#16A34A" : "#1A0200",
-          paddingHorizontal: 16,
-          paddingVertical: 9,
-          borderRadius: 999,
-        }}
-      >
-        <Text
+
+      {canClaim ? (
+        <Pressable
+          onPress={onApply}
+          disabled={isApplied}
+          className="active:opacity-80"
           style={{
-            color: "#FFFFFF",
-            fontFamily: "SpaceGrotesk_700Bold",
-            fontSize: 11,
-            letterSpacing: 1,
-            textTransform: "uppercase",
+            backgroundColor: isApplied ? "#16A34A" : "#C05040",
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 999,
           }}
         >
-          {isApplied ? "Applied" : "Apply"}
-        </Text>
-      </Pressable>
+          <Text
+            style={{
+              color: "#FFFFFF",
+              fontFamily: "SpaceGrotesk_700Bold",
+              fontSize: 11,
+              letterSpacing: 1,
+              textTransform: "uppercase",
+            }}
+          >
+            {isApplied ? "Applied" : "Apply"}
+          </Text>
+        </Pressable>
+      ) : (
+        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
+          <Text
+            style={{
+              color: "#1A0200",
+              fontFamily: "Peachi-Bold",
+              fontSize: 18,
+              lineHeight: 22,
+            }}
+          >
+            {required.toLocaleString()}
+          </Text>
+          <Text
+            style={{
+              color: "rgba(26, 2, 0, 0.55)",
+              fontFamily: "SpaceGrotesk_700Bold",
+              fontSize: 9,
+              letterSpacing: 1.5,
+            }}
+          >
+            PTS
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
 
-function RedeemRow({
-  reward,
-  balance,
-  isFirst,
-}: {
-  reward: Reward;
-  balance: number;
-  isFirst: boolean;
-}) {
-  const pointsShort = Math.max(0, reward.points_required - balance);
-  const canClaim = pointsShort === 0;
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "flex-end",
-        justifyContent: "space-between",
-        paddingVertical: 12,
-        opacity: canClaim ? 1 : 0.45,
-      }}
-    >
-      <View style={{ flex: 1 }}>
-        <Text
-          style={{
-            color: "#1A0200",
-            fontFamily: "SpaceGrotesk_700Bold",
-            fontSize: 17,
-            letterSpacing: 0.1,
-          }}
-          numberOfLines={1}
-        >
-          {reward.name}
-        </Text>
-        {!canClaim ? (
-          <Text
-            style={{
-              color: "rgba(26, 2, 0, 0.55)",
-              fontFamily: "SpaceGrotesk_400Regular",
-              fontSize: 12,
-              marginTop: 3,
-            }}
-            numberOfLines={1}
-          >
-            {pointsShort.toLocaleString()} points to go
-          </Text>
-        ) : null}
-      </View>
-      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 5 }}>
-        <Text
-          style={{
-            color: "#1A0200",
-            // Numbers stay Peachii — the brand poster keeps numerals
-            // ("12:30 PM") in Space Grotesk but in our points list
-            // the number IS the value being weighed, so it gets the
-            // hero treatment. Keeps a Peachii beat in every section.
-            fontFamily: "Peachi-Bold",
-            fontSize: 22,
-            lineHeight: 26,
-          }}
-        >
-          {reward.points_required.toLocaleString()}
-        </Text>
-        <Text
-          style={{
-            color: "rgba(26, 2, 0, 0.55)",
-            fontFamily: "SpaceGrotesk_700Bold",
-            fontSize: 10,
-            letterSpacing: 1.5,
-          }}
-        >
-          PTS
-        </Text>
-      </View>
-    </View>
-  );
+// Map reward shape to a brand icon — gift for auto-issued (welcome /
+// birthday), tag for monetary discounts, cup for everything else
+// (free drinks / BOGO / unknown). Mirrors the icon mapping on
+// RewardTicket so the ticket on home and the row here read as the
+// same item.
+function pickRewardIcon(reward: Reward): typeof CelsiusCup {
+  const type = (reward as { reward_type?: string }).reward_type;
+  if (type === "new_member" || type === "birthday") return CelsiusGift;
+  const dt = reward.discount_type;
+  if (dt === "percent" || dt === "percentage" || dt === "flat" || dt === "fixed_amount") {
+    return CelsiusTag;
+  }
+  return CelsiusCup;
 }
 
 function SignInPrompt() {
