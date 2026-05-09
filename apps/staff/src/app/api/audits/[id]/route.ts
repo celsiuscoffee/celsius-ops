@@ -101,3 +101,68 @@ export async function PATCH(
 
   return NextResponse.json(updated);
 }
+
+function hasModule(
+  role: string,
+  moduleAccess: Record<string, unknown> | null | undefined,
+  key: string,
+): boolean {
+  if (role === "OWNER" || role === "ADMIN") return true;
+  if (!moduleAccess) return false;
+  if (key.includes(":")) {
+    const [app, mod] = key.split(":");
+    const appAccess = moduleAccess[app];
+    if (appAccess === true) return true;
+    if (Array.isArray(appAccess)) return appAccess.includes(mod);
+    return false;
+  }
+  const appAccess = moduleAccess[key];
+  if (appAccess === true) return true;
+  if (Array.isArray(appAccess) && appAccess.length > 0) return true;
+  return false;
+}
+
+// DELETE /api/audits/[id] — delete an audit report (cascades to items).
+// Permission model:
+//   - Auditor can always delete their own audit.
+//   - OWNER/ADMIN can delete any audit.
+//   - Managers with ops:audit can delete audits at their assigned outlets.
+// COMPLETED audits remain deletable by admins/auditors — there's no historical
+// integrity reason to lock them once a manager wants the record gone.
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+
+  const report = await prisma.auditReport.findUnique({
+    where: { id },
+    select: { id: true, auditorId: true, outletId: true },
+  });
+  if (!report) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const me = await prisma.user.findUnique({
+    where: { id: session.id },
+    select: { moduleAccess: true, outletId: true, outletIds: true },
+  });
+  const moduleAccess = (me?.moduleAccess ?? null) as Record<string, unknown> | null;
+  const isAdmin = session.role === "OWNER" || session.role === "ADMIN";
+  const isAuditor = report.auditorId === session.id;
+  const isManager = hasModule(session.role, moduleAccess, "ops:audit");
+
+  let allowed = isAdmin || isAuditor;
+  if (!allowed && isManager) {
+    const myOutlets = new Set<string>([
+      ...(me?.outletId ? [me.outletId] : []),
+      ...(me?.outletIds ?? []),
+    ]);
+    allowed = myOutlets.has(report.outletId);
+  }
+  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  await prisma.auditReport.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}

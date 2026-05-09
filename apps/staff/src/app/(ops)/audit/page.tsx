@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  ClipboardCheck, Loader2, CheckCircle2, Clock, Plus, ChevronRight, Building2,
+  ClipboardCheck, Loader2, CheckCircle2, Clock, Plus, ChevronRight, Building2, Trash2,
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
@@ -41,6 +41,27 @@ export default function AuditPage() {
   const [selectedOutlet, setSelectedOutlet] = useState("");
   const [selectedAuditee, setSelectedAuditee] = useState("");
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Delete handler shared between in-progress and completed lists. The button
+  // sits inside the Link wrapper, so we stop propagation to prevent navigation.
+  const handleDelete = async (e: React.MouseEvent, auditId: string, templateName: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`Delete "${templateName}"? All ratings and photos for this audit will be lost.`)) return;
+    setDeletingId(auditId);
+    try {
+      const res = await fetch(`/api/audits/${auditId}`, { method: "DELETE" });
+      if (res.ok) {
+        mutate();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        alert(body.error ?? "Failed to delete audit");
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   // Auditee list — only relevant for STAFF templates. Re-fetched whenever
   // template or outlet changes so the list always matches the current pick.
@@ -237,6 +258,14 @@ export default function AuditPage() {
                     </div>
                     <div className="shrink-0 text-right flex items-center gap-2">
                       <span className="text-sm font-bold text-gray-700">{audit.progress}%</span>
+                      <button
+                        onClick={(e) => handleDelete(e, audit.id, audit.template.name)}
+                        disabled={deletingId === audit.id}
+                        aria-label="Delete audit"
+                        className="rounded p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {deletingId === audit.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      </button>
                       <ChevronRight className="h-4 w-4 text-gray-300" />
                     </div>
                   </div>
@@ -278,6 +307,14 @@ export default function AuditPage() {
                       <Badge className={`text-[10px] ${(audit.overallScore ?? 0) >= 80 ? "bg-green-100 text-green-700" : (audit.overallScore ?? 0) >= 60 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
                         {audit.overallScore ?? 0}%
                       </Badge>
+                      <button
+                        onClick={(e) => handleDelete(e, audit.id, audit.template.name)}
+                        disabled={deletingId === audit.id}
+                        aria-label="Delete audit"
+                        className="rounded p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {deletingId === audit.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      </button>
                       <ChevronRight className="h-4 w-4 text-gray-300" />
                     </div>
                   </div>

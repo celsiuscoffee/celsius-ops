@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { CameraCaptureModal } from "@/components/camera-capture-modal";
 import {
   ArrowLeft, CheckCircle2, Loader2, Camera, X, MessageSquare, RotateCcw,
-  Image as ImageIcon, Star, ThumbsUp, ThumbsDown, Minus, Building2,
+  Image as ImageIcon, Star, ThumbsUp, ThumbsDown, Minus, Building2, Trash2,
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
@@ -52,6 +52,25 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
   const [completing, setCompleting] = useState(false);
   const [overallNotes, setOverallNotes] = useState("");
   const [showComplete, setShowComplete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirm("Delete this audit? All items, ratings, and photos will be lost.")) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/audits/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        router.push("/audit");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        alert(body.error ?? "Failed to delete audit");
+        setDeleting(false);
+      }
+    } catch {
+      alert("Failed to delete audit");
+      setDeleting(false);
+    }
+  };
 
   const activeItemRef = useRef<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -222,10 +241,18 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
           <ArrowLeft className="h-4 w-4" />Back to Audits
         </Link>
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-bold text-foreground">{audit.template.name}</h1>
+          <h1 className="text-lg font-bold text-foreground flex-1">{audit.template.name}</h1>
           <Badge className={isCompleted ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}>
             {isCompleted ? "Completed" : "In Progress"}
           </Badge>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            aria-label="Delete audit"
+            className="rounded-md p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
+          >
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </button>
         </div>
         <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
           <Building2 className="h-3 w-3" />
