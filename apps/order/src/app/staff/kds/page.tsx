@@ -491,6 +491,42 @@ export default function StaffOrdersPage() {
     return () => clearInterval(t);
   }, []);
 
+  // Keep the screen awake while the KDS tab is open. Without this the
+  // SUNMI sleeps after the OS-level idle timeout, the realtime channel
+  // drops, and incoming orders silently miss the chime + auto-print.
+  // Re-acquired on visibilitychange because the lock is released by the
+  // browser whenever the page becomes hidden (e.g. switching apps).
+  useEffect(() => {
+    type WakeLockSentinel = { release: () => Promise<void> };
+    type WakeLock = { request: (type: "screen") => Promise<WakeLockSentinel> };
+    const wakeLock = (navigator as unknown as { wakeLock?: WakeLock }).wakeLock;
+    if (!wakeLock) return;
+
+    let sentinel: WakeLockSentinel | null = null;
+    let cancelled = false;
+
+    const acquire = async () => {
+      try {
+        sentinel = await wakeLock.request("screen");
+      } catch {
+        // Some surfaces (cross-origin frames, low battery) refuse the
+        // request — fall back to the OS idle timeout silently.
+      }
+    };
+
+    acquire();
+    const onVisibility = () => {
+      if (!cancelled && document.visibilityState === "visible") acquire();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      sentinel?.release().catch(() => { /* already released */ });
+    };
+  }, []);
+
   void tick; // suppress unused warning
 
   function toggleAutoPrint() {
