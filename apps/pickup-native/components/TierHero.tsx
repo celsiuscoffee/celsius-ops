@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
-import Svg, { Defs, LinearGradient as SvgLinearGradient, Pattern, Rect, Stop } from "react-native-svg";
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from "react-native-svg";
 import type { TierStyle } from "../lib/tier-styles";
 
 type Props = {
@@ -23,16 +23,14 @@ type Props = {
  *   2. Tier gradient — the 3-stop linear from tier-styles, vertical
  *      (top-light → bottom-deep). Gives Platinum a brushed-metal
  *      sheen, Gold real richness, Silver a cool curve.
- *   3. Hairline texture — horizontal 0.5px lines at 4% white, 4px
- *      vertical rhythm. Reads like rib paper / letterpress, brand-aligned
- *      with the poster aesthetic. Subtle enough not to fight typography.
- *   4. Top-edge highlight — transparent-to-white-7% gradient over the
+ *   3. Top-edge highlight — transparent-to-white-7% gradient over the
  *      top ~35% of the panel, simulating a polished light catch.
  *      Tier-agnostic.
  *
- * No curves, no draping, no ornaments — the rectangular brand-block
- * intent (CC Brand System v2026) is preserved; we're just letting
- * the existing tier gradients actually render.
+ * Hairline rib texture removed in the premium pass — at 4% it wasn't
+ * earning its keep on a small phone hero, and dropping it lets the
+ * gradient + highlight be the only "richness" treatment. Less stuff =
+ * more premium.
  */
 export function TierHero({
   style,
@@ -81,14 +79,8 @@ export function TierHero({
               <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.07" />
               <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
             </SvgLinearGradient>
-            {/* Hairline rib pattern — single thin white line every 4px.
-                Reads as fine ribbed paper / letterpress at low opacity. */}
-            <Pattern id="hairlines" x="0" y="0" width="4" height="4" patternUnits="userSpaceOnUse">
-              <Rect x="0" y="0" width="4" height="0.5" fill="#FFFFFF" fillOpacity="0.04" />
-            </Pattern>
           </Defs>
           <Rect x="0" y="0" width={size.w} height={size.h} fill="url(#tierGrad)" />
-          <Rect x="0" y="0" width={size.w} height={size.h} fill="url(#hairlines)" />
           <Rect x="0" y="0" width={size.w} height={size.h} fill="url(#topHighlight)" />
         </Svg>
       )}

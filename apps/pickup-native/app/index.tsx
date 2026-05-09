@@ -283,89 +283,22 @@ export default function Home() {
           separate card, keeping the header dense and clean. */}
       <TierHero
         style={ts}
-        paddingTop={insets.top + 8}
-        paddingBottom={28}
+        paddingTop={insets.top + 14}
+        paddingBottom={32}
         variant="compact"
       >
-        <View className="flex-row items-start gap-3">
-          <View className="flex-1">
-            {/* Brand mark sits inline with the eyebrow instead of
-                stacked above it — saves ~36pt of vertical space on
-                the hero, which is the only screen real estate that
-                competes with first-fold "Your usual" cards. */}
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Image
-                source={require("../assets/icon.png")}
-                style={{ width: 22, height: 22, borderRadius: 5 }}
-                resizeMode="cover"
-              />
-              {/* Eyebrow swaps from time-of-day greeting to tier identity
-                  once the tier loads. */}
-              <Text
-                className="text-[10px] tracking-widest uppercase"
-                style={{
-                  color: ts.eyebrowColor,
-                  fontFamily: "SpaceGrotesk_700Bold",
-                  letterSpacing: 3,
-                  flex: 1,
-                }}
-                numberOfLines={1}
-              >
-                {showTierEyebrow
-                  ? `${ts.displayName} · ${tier?.tier_multiplier ?? 1}× PTS`
-                  : greeting}
-              </Text>
-            </View>
-            <Text
-              className="text-[24px] mt-1"
-              style={{
-                color: ts.textColor,
-                fontFamily: "Peachi-Bold",
-              }}
-              numberOfLines={1}
-            >
-              {firstName ? `Hi, ${firstName}` : "Welcome"}
-            </Text>
-            {member && (
-              <Pressable
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  router.push("/rewards");
-                }}
-                hitSlop={6}
-                className="active:opacity-70 self-start"
-                style={{ flexDirection: "row", alignItems: "baseline", marginTop: 4 }}
-              >
-                {/* Identity-row stats: balance + nearest unaffordable
-                    reward on a single line. Lives under the greeting
-                    instead of floating right so the hero reads as one
-                    left-aligned block. */}
-                <Text
-                  style={{
-                    color: ts.textColor,
-                    fontFamily: "SpaceGrotesk_700Bold",
-                    fontSize: 11,
-                    letterSpacing: 1.5,
-                  }}
-                >
-                  {(member.pointsBalance ?? 0).toLocaleString()} PTS
-                </Text>
-                {nextReward && pointsToNext > 0 ? (
-                  <Text
-                    style={{
-                      color: ts.mutedColor,
-                      fontFamily: "SpaceGrotesk_500Medium",
-                      fontSize: 11,
-                      marginLeft: 6,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {`· ${pointsToNext.toLocaleString()} to ${nextReward.name}`}
-                  </Text>
-                ) : null}
-              </Pressable>
-            )}
-          </View>
+        {/* Premium hero treatment — single editorial moment ("Hi, Ammar")
+            with everything else demoted into one quiet meta line. Brand
+            mark gets its own row at full presence; cart sits alone
+            top-right. More breathing room (paddings ↑) so the hero
+            feels considered rather than packed. */}
+        <View className="flex-row items-start">
+          <Image
+            source={require("../assets/icon.png")}
+            style={{ width: 28, height: 28, borderRadius: 6 }}
+            resizeMode="cover"
+          />
+          <View style={{ flex: 1 }} />
           <Pressable
             onPress={() => router.push("/cart")}
             className="relative p-1 active:opacity-60"
@@ -388,12 +321,72 @@ export default function Home() {
           </Pressable>
         </View>
 
+        {/* Greeting — the editorial moment. Bigger Peachi, more
+            vertical room above and below than the earlier draft. */}
+        <Text
+          className="mt-5"
+          style={{
+            color: ts.textColor,
+            fontFamily: "Peachi-Bold",
+            fontSize: 28,
+            lineHeight: 32,
+          }}
+          numberOfLines={1}
+        >
+          {firstName
+            ? `Hi, ${firstName}`
+            : showTierEyebrow
+            ? "Welcome"
+            : greeting}
+        </Text>
+
+        {/* Demoted meta line — tier · multiplier · balance · next-reward
+            all in one quiet small-caps row. Tappable into Rewards so
+            the loyalty affordance survives the demotion. */}
+        {member && (
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync();
+              router.push("/rewards");
+            }}
+            hitSlop={6}
+            className="active:opacity-70 self-start"
+            style={{ marginTop: 6 }}
+          >
+            <Text
+              style={{
+                color: ts.mutedColor,
+                fontFamily: "SpaceGrotesk_500Medium",
+                fontSize: 11,
+                letterSpacing: 1.4,
+                textTransform: "uppercase",
+              }}
+              numberOfLines={1}
+            >
+              {(() => {
+                const parts: string[] = [];
+                if (showTierEyebrow) {
+                  parts.push(ts.displayName);
+                  parts.push(`${tier?.tier_multiplier ?? 1}×`);
+                }
+                parts.push(`${(member.pointsBalance ?? 0).toLocaleString()} pts`);
+                if (nextReward && pointsToNext > 0) {
+                  parts.push(`${pointsToNext.toLocaleString()} to ${nextReward.name}`);
+                }
+                return parts.join(" · ");
+              })()}
+            </Text>
+          </Pressable>
+        )}
+
+        {/* Outlet pill — extra breathing room above; ETA dropped per
+            redesign so the row is shorter and reads at a glance. */}
         <Pressable
           onPress={() => {
             Haptics.selectionAsync();
             router.push("/store");
           }}
-          className="flex-row items-center gap-1.5 mt-3 self-start active:opacity-70"
+          className="flex-row items-center gap-1.5 mt-5 self-start active:opacity-70"
         >
           <MapPin size={15} color={ts.mutedColor} />
           <Text
@@ -402,50 +395,34 @@ export default function Home() {
           >
             {outletName ?? "Select pickup outlet"}
           </Text>
-          {currentOutlet && (
-            <>
-              {(() => {
-                const dot = !currentOutlet.is_open
-                  ? { bg: "#EF4444", label: "Closed" }
-                  : currentOutlet.is_busy
-                  ? { bg: "#F59E0B", label: "Busy" }
-                  : { bg: "#22C55E", label: null };
-                const eta =
-                  currentOutlet.is_open && currentOutlet.pickup_time_mins
-                    ? `~${currentOutlet.pickup_time_mins} min`
-                    : null;
-                return (
-                  <>
-                    <View
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: 3,
-                        backgroundColor: dot.bg,
-                        marginLeft: 4,
-                      }}
-                    />
-                    {dot.label && (
-                      <Text
-                        className="text-[11px]"
-                        style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: ts.mutedColor }}
-                      >
-                        {dot.label}
-                      </Text>
-                    )}
-                    {eta && (
-                      <Text
-                        className="text-[11px]"
-                        style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: ts.mutedColor }}
-                      >
-                        · {eta}
-                      </Text>
-                    )}
-                  </>
-                );
-              })()}
-            </>
-          )}
+          {currentOutlet && (() => {
+            const dot = !currentOutlet.is_open
+              ? { bg: "#EF4444", label: "Closed" }
+              : currentOutlet.is_busy
+              ? { bg: "#F59E0B", label: "Busy" }
+              : { bg: "#22C55E", label: null };
+            return (
+              <>
+                <View
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 3,
+                    backgroundColor: dot.bg,
+                    marginLeft: 4,
+                  }}
+                />
+                {dot.label && (
+                  <Text
+                    className="text-[11px]"
+                    style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: ts.mutedColor }}
+                  >
+                    {dot.label}
+                  </Text>
+                )}
+              </>
+            );
+          })()}
           <ChevronRight size={14} color={ts.mutedColor} />
         </Pressable>
 
