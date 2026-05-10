@@ -112,6 +112,16 @@ export function applySecurityHeaders(
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("Permissions-Policy", "camera=(self), geolocation=(self), microphone=()");
+  // HSTS — pin HTTPS for 2 years on the apex + every subdomain.
+  // Only emit in production so local http://localhost dev doesn't
+  // get pinned to https in the developer's browser. Submit the apex
+  // to https://hstspreload.org once everything is HTTPS-only.
+  if (process.env.NODE_ENV === "production") {
+    response.headers.set(
+      "Strict-Transport-Security",
+      "max-age=63072000; includeSubDomains; preload",
+    );
+  }
   if (opts.isApi) {
     response.headers.set("Cache-Control", "no-store, max-age=0");
   }

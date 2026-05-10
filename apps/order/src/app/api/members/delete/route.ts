@@ -85,6 +85,26 @@ export async function POST(request: NextRequest) {
       .delete()
       .eq("phone", member.phone);
 
+    // Anonymise the customer phone on prior orders. The orders row
+    // itself is retained (financial / accounting requirement) but
+    // every link back to a real person is severed. Hits both
+    // canonical phone shapes the API may have written.
+    const phoneShapes = [member.phone, normalizedPhone, "+" + normalizedPhone];
+    for (const p of phoneShapes) {
+      await supabaseAdmin
+        .from("orders")
+        .update({ customer_phone: null, loyalty_phone: null, customer_name: null, customer_email: null })
+        .or(`customer_phone.eq.${p},loyalty_phone.eq.${p}`);
+    }
+
+    // Drop every Expo push token the member registered so a stranger
+    // who later signs in on the same device doesn't inherit the
+    // deleted account's order pushes.
+    await supabaseAdmin
+      .from("expo_push_tokens")
+      .delete()
+      .or(`member_id.eq.${member_id},phone.eq.${member.phone}`);
+
     // Delete the member — cascades to member_brands, point_transactions, redemptions, issued_rewards
     const { error: deleteErr } = await supabaseAdmin
       .from("members")

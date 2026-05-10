@@ -49,6 +49,20 @@ export const api = {
       if (!r.ok || j.error) throw new Error(j.error || "Profile update failed");
       return j as { success: boolean; member?: { name?: string; email?: string; birthday?: string } };
     }),
+  deleteAccount: (payload: { member_id: string; phone: string }) =>
+    fetch(`${API_BASE}/api/members/delete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: API_BASE,
+        Referer: API_BASE + "/",
+      },
+      body: JSON.stringify(payload),
+    }).then(async (r) => {
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.error) throw new Error(j.error || "Account deletion failed");
+      return j as { success: boolean };
+    }),
   placeOrder: (payload: {
     selectedStore: { id: string; name?: string };
     loyaltyPhone: string;
