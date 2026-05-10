@@ -392,21 +392,24 @@ export default function Home() {
         <View style={{ height: insets.top + 60, backgroundColor: "#160800" }} />
       )}
 
-      {/* Info bar — Chagee-style compact strip directly under the
-          poster. Greeting + tier on the left, points + vouchers on the
-          right. Tappable into Rewards for the loyalty affordance. */}
+      {/* Info bar — espresso black with cream text. Sits halfway over
+          the poster's bottom edge; the brand-black panel on a photo
+          is the Celsius signature treatment (mirrors how the website's
+          dark hero overlay reads against its bar interior shot).
+          Tappable into Rewards. */}
       <Pressable
         onPress={() => {
           Haptics.selectionAsync();
           router.push("/rewards");
         }}
-        className="bg-surface mx-4 -mt-6 rounded-2xl p-4 active:opacity-90"
+        className="mx-4 -mt-6 rounded-2xl p-4 active:opacity-90"
         style={{
+          backgroundColor: "#160800",
           shadowColor: "#000",
-          shadowOpacity: 0.08,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 3,
+          shadowOpacity: 0.18,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 5,
         }}
       >
         <View className="flex-row items-center">
@@ -416,7 +419,7 @@ export default function Home() {
               flex: 1,
               fontFamily: "Peachi-Bold",
               fontSize: 17,
-              color: "#160800",
+              color: "#FFFFFF",
             }}
           >
             {firstName ? `Hi, ${firstName}.` : showTierEyebrow ? "Welcome." : `${greeting}.`}
@@ -438,17 +441,20 @@ export default function Home() {
           )}
         </View>
 
-        {/* KPI strip — points + vouchers, mirroring Chagee's "Tea
-            Leaves / Vouchers" pattern. Outlet pill stays below the
-            carousel section so customers can swap pickup point
-            without wading through this row. */}
-        <View className="flex-row mt-3 pt-3 border-t border-border/50">
+        {/* KPI strip — points + vouchers in cream over espresso, divider
+            and labels at WCAG-AA-passable opacities. Voucher count
+            uses the gold accent (#FBBF24) when > 0 so a customer with
+            a live voucher sees it pop. */}
+        <View
+          className="flex-row mt-3 pt-3"
+          style={{ borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.10)" }}
+        >
           <View className="flex-1">
             <Text
               style={{
                 fontFamily: "Peachi-Bold",
                 fontSize: 18,
-                color: "#160800",
+                color: "#FFFFFF",
               }}
             >
               {points.toLocaleString()}
@@ -458,7 +464,7 @@ export default function Home() {
                 fontFamily: "SpaceGrotesk_500Medium",
                 fontSize: 10,
                 letterSpacing: 1.2,
-                color: "#8E8E93",
+                color: "rgba(255,255,255,0.55)",
                 marginTop: 2,
                 textTransform: "uppercase",
               }}
@@ -466,12 +472,15 @@ export default function Home() {
               Points
             </Text>
           </View>
-          <View className="flex-1 border-l border-border/50 pl-4">
+          <View
+            className="flex-1 pl-4"
+            style={{ borderLeftWidth: 1, borderLeftColor: "rgba(255,255,255,0.10)" }}
+          >
             <Text
               style={{
                 fontFamily: "Peachi-Bold",
                 fontSize: 18,
-                color: voucherCount > 0 ? "#C05040" : "#160800",
+                color: voucherCount > 0 ? "#FBBF24" : "#FFFFFF",
               }}
             >
               {voucherCount}
@@ -481,7 +490,7 @@ export default function Home() {
                 fontFamily: "SpaceGrotesk_500Medium",
                 fontSize: 10,
                 letterSpacing: 1.2,
-                color: "#8E8E93",
+                color: "rgba(255,255,255,0.55)",
                 marginTop: 2,
                 textTransform: "uppercase",
               }}
@@ -490,7 +499,7 @@ export default function Home() {
             </Text>
           </View>
           <View className="items-end justify-center">
-            <ChevronRight size={16} color="#8E8E93" />
+            <ChevronRight size={16} color="rgba(255,255,255,0.55)" />
           </View>
         </View>
       </Pressable>
