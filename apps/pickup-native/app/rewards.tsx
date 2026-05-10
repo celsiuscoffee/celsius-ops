@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Gift, ChevronRight } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../components/BottomNav";
-import { TierHero } from "../components/TierHero";
+import { EspressoHeader } from "../components/EspressoHeader";
 import { CelsiusLoader } from "../components/CelsiusLoader";
 import { CelsiusCup } from "../components/brand/CelsiusCup";
 import { CelsiusGift } from "../components/brand/CelsiusGift";
@@ -75,64 +75,59 @@ export default function RewardsTab() {
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Tier-themed hero — eyebrow + balance numerals + status sub +
-          single progress bar to next reward. */}
-      <TierHero
-        style={ts}
-        paddingTop={insets.top + 12}
-        paddingBottom={32}
-        variant="tall"
+      {/* Standard espresso header (matches Orders / Account). The
+          balance + progress moved out of the hero into a content
+          card below so the visual language across tabs stays
+          consistent. */}
+      <EspressoHeader title="Rewards" showCart={false} />
+
+      {/* Balance + progress card — espresso black to standardize with
+          the home info card and orders cards. Tier accent kept as a
+          single eyebrow line + the progress bar fill. */}
+      <View
+        className="mx-4 mt-4 rounded-2xl"
+        style={{ backgroundColor: "#160800", padding: 16 }}
       >
         <Text
           className="text-[10px] uppercase"
           style={{
-            color: ts.eyebrowColor,
+            color: ts.accentColor,
             fontFamily: "SpaceGrotesk_700Bold",
-            letterSpacing: 4,
+            letterSpacing: 3,
           }}
         >
-          {tier?.tier_slug ? ts.displayName : "REWARDS"}
+          {tier?.tier_slug ? `${ts.displayName} · ${tier.tier_multiplier ?? 1}×` : "REWARDS"}
         </Text>
-        <View className="flex-row items-baseline mt-3.5" style={{ gap: 10 }}>
+        <View className="flex-row items-baseline mt-2" style={{ gap: 8 }}>
           <Text
             style={{
-              color: ts.textColor,
+              color: "#FFFFFF",
               fontFamily: "Peachi-Bold",
-              fontSize: 42,
-              lineHeight: 44,
+              fontSize: 32,
+              lineHeight: 34,
             }}
           >
             {isLoading && balance === 0 ? "—" : balance.toLocaleString()}
           </Text>
           <Text
             style={{
-              color: ts.mutedColor,
+              color: "rgba(255,255,255,0.55)",
               fontFamily: "SpaceGrotesk_700Bold",
-              fontSize: 11,
-              letterSpacing: 1.5,
+              fontSize: 10,
+              letterSpacing: 1.4,
             }}
           >
             POINTS
           </Text>
         </View>
-        {tier ? (
-          <Text
-            className="mt-2 text-[11px]"
-            style={{ color: ts.mutedColor, fontFamily: "SpaceGrotesk_400Regular" }}
-          >
-            {`Earning ${tier.tier_multiplier ?? 1}× on every order`}
-          </Text>
-        ) : null}
 
-        {/* Progress to next reward — answers "how close am I?" without
-            requiring the customer to scroll the list and do math. */}
         {nextReward && (
-          <View style={{ marginTop: 18 }}>
+          <View style={{ marginTop: 14 }}>
             <View
               style={{
                 height: 4,
                 borderRadius: 2,
-                backgroundColor: "rgba(255,255,255,0.18)",
+                backgroundColor: "rgba(255,255,255,0.12)",
                 overflow: "hidden",
               }}
             >
@@ -147,14 +142,14 @@ export default function RewardsTab() {
             </View>
             <Text
               className="mt-2 text-[11px]"
-              style={{ color: ts.mutedColor, fontFamily: "SpaceGrotesk_500Medium" }}
+              style={{ color: "rgba(255,255,255,0.65)", fontFamily: "SpaceGrotesk_500Medium" }}
               numberOfLines={1}
             >
               {`${nextShortBy.toLocaleString()} pts to ${nextReward.name}`}
             </Text>
           </View>
         )}
-      </TierHero>
+      </View>
 
       <ScrollView
         className="flex-1"

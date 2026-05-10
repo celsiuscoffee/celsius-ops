@@ -25,8 +25,8 @@ export function EspressoHeader({
 
   return (
     <View
-      className="bg-espresso px-4 pb-5"
-      style={{ paddingTop: insets.top + 12 }}
+      className="bg-espresso px-4 pb-3"
+      style={{ paddingTop: insets.top + 8 }}
     >
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center flex-1">
@@ -38,18 +38,18 @@ export function EspressoHeader({
               accessibilityRole="button"
               accessibilityLabel="Back"
             >
-              <ArrowLeft size={22} color="#FFFFFF" />
+              <ArrowLeft size={20} color="#FFFFFF" />
             </Pressable>
           )}
           <View className="flex-1">
             {subtitle && (
-              <Text className="text-white/50 text-[10px] tracking-widest uppercase">
+              <Text className="text-white/50 text-[9px] tracking-widest uppercase">
                 {subtitle}
               </Text>
             )}
             {title && (
               <Text
-                className="text-white text-[22px]"
+                className="text-white text-[18px]"
                 numberOfLines={1}
                 style={{ fontFamily: "Peachi-Bold" }}
               >
@@ -67,7 +67,7 @@ export function EspressoHeader({
               accessibilityRole="button"
               accessibilityLabel={count > 0 ? `Cart, ${count} ${count === 1 ? "item" : "items"}` : "Cart, empty"}
             >
-              <ShoppingCart size={22} color="rgba(255,255,255,0.8)" />
+              <ShoppingCart size={20} color="rgba(255,255,255,0.8)" />
               {count > 0 && (
                 <View className="absolute -top-0.5 -right-0.5 bg-white rounded-full w-4 h-4 items-center justify-center">
                   <Text className="text-primary text-[9px] font-bold">{count}</Text>

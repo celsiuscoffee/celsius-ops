@@ -139,74 +139,75 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Tier-themed hero — eyebrow + name + phone. Curve drapes into
-          the body. Replaces both the old EspressoHeader and the
-          standalone profile card. */}
-      <TierHero
-        style={ts}
-        paddingTop={insets.top + 12}
-        paddingBottom={36}
-        variant="tall"
-      >
-        <View className="flex-row items-start justify-between">
-          <View className="flex-1">
-            {showTierEyebrow ? (
-              <Text
-                className="text-[10px] uppercase"
-                style={{
-                  color: ts.eyebrowColor,
-                  fontFamily: "SpaceGrotesk_700Bold",
-                  letterSpacing: 3.5,
-                }}
-                numberOfLines={1}
-              >
-                {`${ts.displayName} MEMBER`}
-              </Text>
-            ) : tierQ.isLoading ? (
-              // Cold cache: tier query hasn't resolved yet. Show the
-              // brand spinner in the eyebrow slot so we never print a
-              // tier name we'd have to swap a moment later.
-              <CelsiusLoader size="sm" style={{ alignItems: "flex-start" }} />
-            ) : (
-              <Text
-                className="text-[10px] uppercase"
-                style={{
-                  color: ts.eyebrowColor,
-                  fontFamily: "SpaceGrotesk_700Bold",
-                  letterSpacing: 3.5,
-                }}
-                numberOfLines={1}
-              >
-                MEMBER
-              </Text>
-            )}
-            <Text
-              className="text-[26px] mt-2"
-              style={{ color: ts.textColor, fontFamily: "Peachi-Bold" }}
-              numberOfLines={1}
-            >
-              {memberName}
-            </Text>
-            <Text
-              className="text-[11px] mt-1.5"
-              style={{ color: ts.mutedColor, fontFamily: "SpaceGrotesk_400Regular" }}
-              numberOfLines={1}
-            >
-              {formattedPhone}
-            </Text>
-          </View>
+      {/* Standard espresso header (matches Orders / Rewards). The
+          name + phone + tier moved out of the hero into a content
+          card below so the visual language across tabs stays
+          consistent. */}
+      <EspressoHeader
+        title="Account"
+        showCart={false}
+        rightSlot={
           <Pressable
             onPress={() => {
               Haptics.selectionAsync();
               setEditing(true);
             }}
             hitSlop={10}
-            className="active:opacity-70"
+            className="p-1 active:opacity-70"
           >
-            <Pencil size={18} color={ts.textColor} />
+            <Pencil size={18} color="#FFFFFF" />
           </Pressable>
-        </View>
-      </TierHero>
+        }
+      />
+
+      {/* Profile card — same espresso panel pattern used on rewards
+          + home info card. Tier accent shown as a small caps eyebrow. */}
+      <View
+        className="mx-4 mt-4 rounded-2xl"
+        style={{ backgroundColor: "#160800", padding: 16 }}
+      >
+        {showTierEyebrow ? (
+          <Text
+            className="text-[10px] uppercase"
+            style={{
+              color: ts.accentColor,
+              fontFamily: "SpaceGrotesk_700Bold",
+              letterSpacing: 3,
+            }}
+            numberOfLines={1}
+          >
+            {`${ts.displayName} MEMBER`}
+          </Text>
+        ) : tierQ.isLoading ? (
+          <CelsiusLoader size="sm" style={{ alignItems: "flex-start" }} />
+        ) : (
+          <Text
+            className="text-[10px] uppercase"
+            style={{
+              color: "rgba(255,255,255,0.55)",
+              fontFamily: "SpaceGrotesk_700Bold",
+              letterSpacing: 3,
+            }}
+            numberOfLines={1}
+          >
+            MEMBER
+          </Text>
+        )}
+        <Text
+          className="text-[22px] mt-2"
+          style={{ color: "#FFFFFF", fontFamily: "Peachi-Bold" }}
+          numberOfLines={1}
+        >
+          {memberName}
+        </Text>
+        <Text
+          className="text-[11px] mt-1"
+          style={{ color: "rgba(255,255,255,0.55)", fontFamily: "SpaceGrotesk_400Regular" }}
+          numberOfLines={1}
+        >
+          {formattedPhone}
+        </Text>
+      </View>
 
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 100 }}
