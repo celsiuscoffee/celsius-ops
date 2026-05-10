@@ -16,7 +16,7 @@ import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { useConfirm, toast } from "@celsius/ui";
 import { PosterCropDialog } from "@/components/pickup/PosterCropDialog";
 
-type Placement = "splash" | "home" | "both";
+type Placement = "splash" | "home";
 
 type Poster = {
   id: string;
@@ -44,10 +44,9 @@ type Form = {
   placement: Placement;
 };
 
-// Per-placement aspect templates. The pickup app crops with object-fit
-// "cover" so the source image extends past the visible window if its
-// ratio doesn't match — these aspects are the AT-MINIMUM visible area
-// the operator should design for.
+// Per-placement aspect templates. The crop window in the upload
+// dialog is locked to the placement's aspect, so what the operator
+// sees in the cropper is exactly what the customer will see.
 const PLACEMENT_META: Record<
   Placement,
   { label: string; aspect: number; aspectLabel: string; help: string }
@@ -63,12 +62,6 @@ const PLACEMENT_META: Record<
     aspect:      4 / 3,
     aspectLabel: "4:3 landscape · ~1200×900",
     help:        "Auto-rotating banner on the home page. All active posters appear.",
-  },
-  both: {
-    label:       "Both surfaces",
-    aspect:      9 / 16,
-    aspectLabel: "9:16 portrait (cropped to 4:3 on home)",
-    help:        "Same image used on launch + home. Use only when the design works at both crops.",
   },
 };
 
@@ -171,7 +164,7 @@ export default function SplashPostersPage() {
       active: p.active,
       startsAt: p.starts_at ?? "",
       endsAt: p.ends_at ?? "",
-      placement: p.placement ?? "both",
+      placement: p.placement ?? "home",
     });
     setShowForm(true);
   };
@@ -316,8 +309,8 @@ export default function SplashPostersPage() {
           tagged 'both' count toward both splash and home tabs since
           they actually appear on both surfaces. */}
       {!loading && posters.length > 0 && (() => {
-        const splashCount = posters.filter((p) => (p.placement ?? "both") !== "home").length;
-        const homeCount   = posters.filter((p) => (p.placement ?? "both") !== "splash").length;
+        const splashCount = posters.filter((p) => (p.placement ?? "home") === "splash").length;
+        const homeCount   = posters.filter((p) => (p.placement ?? "home") === "home").length;
         const tabs: { id: "all" | Placement; label: string; count: number }[] = [
           { id: "all",    label: "All",    count: posters.length },
           { id: "splash", label: "Splash", count: splashCount },
@@ -351,10 +344,7 @@ export default function SplashPostersPage() {
         // splash surface). Same logic for 'home'. 'all' is unfiltered.
         const filtered = tab === "all"
           ? posters
-          : posters.filter((p) => {
-              const place = p.placement ?? "both";
-              return place === tab || place === "both";
-            });
+          : posters.filter((p) => (p.placement ?? "home") === tab);
 
         if (loading) {
           return (
@@ -394,19 +384,14 @@ export default function SplashPostersPage() {
         return (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((p) => {
-            const placement = (p.placement ?? "both") as Placement;
+            const placement = (p.placement ?? "home") as Placement;
             // Preview at the placement's natural aspect so the operator
             // sees what the customer will see on each surface.
             const aspectClass =
               placement === "home" ? "aspect-[4/3]" : "aspect-[9/16]";
-            const placementLabel =
-              placement === "splash" ? "SPLASH" : placement === "home" ? "HOME" : "BOTH";
+            const placementLabel = placement === "splash" ? "SPLASH" : "HOME";
             const placementColor =
-              placement === "splash"
-                ? "bg-indigo-500"
-                : placement === "home"
-                ? "bg-amber-500"
-                : "bg-stone-500";
+              placement === "splash" ? "bg-indigo-500" : "bg-amber-500";
             return (
             <div
               key={p.id}
@@ -504,8 +489,8 @@ export default function SplashPostersPage() {
                 <label className="text-xs font-medium text-gray-700">
                   Where it shows
                 </label>
-                <div className="mt-1 grid grid-cols-3 gap-2">
-                  {(["splash", "home", "both"] as Placement[]).map((p) => {
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  {(["splash", "home"] as Placement[]).map((p) => {
                     const meta = PLACEMENT_META[p];
                     const selected = form.placement === p;
                     return (
@@ -524,14 +509,14 @@ export default function SplashPostersPage() {
                                 : f.durationMs,
                           }))
                         }
-                        className={`rounded-lg border p-2 text-left transition-colors ${
+                        className={`rounded-lg border p-3 text-left transition-colors ${
                           selected
                             ? "border-terracotta bg-terracotta/5"
                             : "border-gray-200 hover:bg-gray-50"
                         }`}
                       >
-                        <p className={`text-xs font-semibold ${selected ? "text-terracotta" : "text-gray-900"}`}>
-                          {p === "splash" ? "Splash" : p === "home" ? "Home" : "Both"}
+                        <p className={`text-sm font-semibold ${selected ? "text-terracotta" : "text-gray-900"}`}>
+                          {p === "splash" ? "Splash" : "Home"}
                         </p>
                         <p className="mt-0.5 text-[10px] text-gray-500 leading-tight">
                           {meta.aspectLabel}
@@ -723,9 +708,7 @@ export default function SplashPostersPage() {
                   <p className="text-xs text-gray-500 mt-0.5">
                     {form.placement === "home"
                       ? "All active home posters rotate in the carousel"
-                      : form.placement === "splash"
-                      ? "Most-recent active splash poster wins"
-                      : "Posted to both surfaces (splash + home)"}
+                      : "Most-recent active splash poster wins"}
                   </p>
                 </div>
                 <button

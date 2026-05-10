@@ -23,9 +23,8 @@ export async function GET(request: NextRequest) {
       .select("id, image_url, title, deeplink, duration_ms, starts_at, ends_at")
       .eq("brand_id", brandId)
       .eq("active", true)
-      // Home carousel pulls anything tagged 'home' or 'both'.
-      // 'splash'-only rows stay reserved for the launch screen.
-      .in("placement", ["home", "both"])
+      // Home carousel only — splash posters stay on the launch screen.
+      .eq("placement", "home")
       .order("updated_at", { ascending: false });
 
     if (error) {

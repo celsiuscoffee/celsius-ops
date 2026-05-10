@@ -26,13 +26,10 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const supabase = getSupabaseAdmin();
 
-  // Placement gates which surfaces the poster appears on:
-  //   'splash' = launch-screen only, 'home' = home carousel only,
-  //   'both'   = legacy default, posted to either.
-  const placement: "splash" | "home" | "both" =
-    body.placement === "splash" || body.placement === "home"
-      ? body.placement
-      : "both";
+  // Placement is exclusive: 'splash' (launch only) or 'home' (carousel
+  // only). Default to home since that's where most posters live.
+  const placement: "splash" | "home" =
+    body.placement === "splash" ? "splash" : "home";
 
   const { data, error } = await supabase
     .from("splash_posters")
@@ -73,7 +70,7 @@ export async function PATCH(request: NextRequest) {
   if ("active"     in body) updates.active      = Boolean(body.active);
   if ("startsAt"   in body) updates.starts_at   = body.startsAt;
   if ("endsAt"     in body) updates.ends_at     = body.endsAt;
-  if ("placement"  in body && (body.placement === "splash" || body.placement === "home" || body.placement === "both")) {
+  if ("placement"  in body && (body.placement === "splash" || body.placement === "home")) {
     updates.placement = body.placement;
   }
 
