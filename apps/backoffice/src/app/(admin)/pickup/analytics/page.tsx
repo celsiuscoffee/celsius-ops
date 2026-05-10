@@ -50,11 +50,69 @@ interface OrderWithItems extends OrderRow {
   order_items: ItemRow[];
 }
 
+// Engagement endpoint response shape — declared once so both fetch
+// and renderers stay in lockstep with the API.
+interface EngagementResponse {
+  range: Range;
+  sinceIso: string;
+  acquisition: {
+    newMembersByDay: { date: string; new: number; active: number }[];
+    totalNew: number;
+    totalActive: number;
+    repeatRate: number;
+    avgOrdersPerActive: number;
+    totalOrdersInRange: number;
+  };
+  activity: {
+    dau: number;
+    wau: number;
+    mau: number;
+    dauMauRatio: number;
+  };
+  cohorts: {
+    weeks: { label: string; size: number; retention: number[] }[];
+  };
+  tiers: { tier: string; slug: string; count: number; pct: number }[];
+  rewards: {
+    lifetimeIssued: number;
+    lifetimeUsed: number;
+    lifetimeActive: number;
+    lifetimeExpired: number;
+    rangeIssued: number;
+    rangeUsed: number;
+    rangeRedemptions: number;
+    redemptionRate: number;
+    byReward: {
+      rewardId: string;
+      name: string;
+      rewardType: string;
+      autoIssue: boolean;
+      issued: number;
+      used: number;
+      redeemed: number;
+    }[];
+  };
+}
+
+// Cohort heatmap cell color — matches the existing analytics palette
+// (espresso to terracotta gradient with cream as the empty state).
+function cohortBg(pct: number): string {
+  if (pct === 0) return "#f5f5f4";
+  const t = Math.min(1, pct);
+  // Interpolate between #fdf6e3 (very light) and #160800 (espresso).
+  const r = Math.round(253 + (22 - 253) * t);
+  const g = Math.round(246 + (8 - 246) * t);
+  const b = Math.round(227 + (0 - 227) * t);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 export default function PickupAnalyticsPage() {
   const [range,         setRange]         = useState<Range>("7d");
   const [orders,        setOrders]        = useState<OrderRow[]>([]);
   const [ordersItems,   setOrdersItems]   = useState<OrderWithItems[]>([]);
   const [loading,       setLoading]       = useState(true);
+  const [engagement,    setEngagement]    = useState<EngagementResponse | null>(null);
+  const [engLoading,    setEngLoading]    = useState(true);
 
   useEffect(() => {
     async function load() {
@@ -82,6 +140,31 @@ export default function PickupAnalyticsPage() {
       setLoading(false);
     }
     load();
+  }, [range]);
+
+  // Engagement metrics live behind a server endpoint (admin-RLS reads
+  // member_brands, issued_rewards, redemptions, tiers — none of which
+  // are safe to query from a browser client).
+  useEffect(() => {
+    let cancelled = false;
+    async function loadEngagement() {
+      setEngLoading(true);
+      try {
+        const res = await fetch(`/api/pickup/engagement?range=${range}`);
+        if (!res.ok) {
+          if (!cancelled) setEngagement(null);
+          return;
+        }
+        const json = (await res.json()) as EngagementResponse;
+        if (!cancelled) setEngagement(json);
+      } catch {
+        if (!cancelled) setEngagement(null);
+      } finally {
+        if (!cancelled) setEngLoading(false);
+      }
+    }
+    loadEngagement();
+    return () => { cancelled = true; };
   }, [range]);
 
   // Build daily revenue series
@@ -336,6 +419,221 @@ export default function PickupAnalyticsPage() {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* ── Engagement & retention ───────────────────────────────────────
+          Acquisition is approximated from members-with-orders since the
+          members table doesn't track signup source. Once App Store /
+          Play Console / Amplitude pulls land, the "downloads" half of
+          the funnel can layer in here. */}
+      <div className="pt-2">
+        <h2 className="text-lg font-bold text-[#160800]">Engagement</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Activity, retention, and loyalty engagement across the period.
+        </p>
+      </div>
+
+      {/* Engagement KPI row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: "New members",    value: engagement ? engagement.acquisition.totalNew.toLocaleString()    : "—",
+            hint: "First pickup order" },
+          { label: "Active members", value: engagement ? engagement.acquisition.totalActive.toLocaleString() : "—",
+            hint: `${engagement ? engagement.acquisition.totalOrdersInRange.toLocaleString() : "—"} orders` },
+          { label: "Repeat rate",    value: engagement ? `${Math.round(engagement.acquisition.repeatRate * 100)}%` : "—",
+            hint: "Members with 2+ orders" },
+          { label: "Stickiness",     value: engagement ? `${Math.round(engagement.activity.dauMauRatio * 100)}%` : "—",
+            hint: `DAU ${engagement?.activity.dau ?? 0} / MAU ${engagement?.activity.mau ?? 0}` },
+        ].map(({ label, value, hint }) => (
+          <div key={label} className="bg-white rounded-2xl p-4">
+            <p className="text-2xl font-bold text-[#160800]">{engLoading ? "—" : value}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+            <p className="text-[10px] text-muted-foreground/70 mt-1">{hint}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* New vs Active per day */}
+      <div className="bg-white rounded-2xl p-5">
+        <h2 className="font-bold text-sm mb-4">New vs Returning Activity</h2>
+        {engLoading ? (
+          <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+        ) : !engagement ? (
+          <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">No data</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart
+              data={engagement.acquisition.newMembersByDay.map((d) => ({
+                ...d,
+                returning: Math.max(0, d.active - d.new),
+                label: fmtDate(d.date + "T00:00:00", range),
+              }))}
+              margin={{ top: 5, right: 10, left: -10, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient id="newGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#e67e22" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#e67e22" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="retGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#160800" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#160800" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
+              <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }} />
+              <Area type="monotone" dataKey="returning" stackId="1" name="Returning orders" stroke="#160800" strokeWidth={2} fill="url(#retGrad)" />
+              <Area type="monotone" dataKey="new"       stackId="1" name="First-time members" stroke="#e67e22" strokeWidth={2} fill="url(#newGrad)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Cohort retention heatmap */}
+      <div className="bg-white rounded-2xl p-5">
+        <h2 className="font-bold text-sm mb-1">Weekly Retention Cohorts</h2>
+        <p className="text-[11px] text-muted-foreground mb-4">
+          % of each week&apos;s first-time members that placed another order in weeks 1–4 since.
+        </p>
+        {engLoading ? (
+          <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+        ) : !engagement || engagement.cohorts.weeks.length === 0 ? (
+          <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">Not enough history yet</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="text-xs w-full">
+              <thead>
+                <tr className="text-muted-foreground">
+                  <th className="text-left font-medium pb-2 pr-3">Cohort (wk of)</th>
+                  <th className="text-right font-medium pb-2 pr-3">Size</th>
+                  <th className="text-center font-medium pb-2 px-1">+1w</th>
+                  <th className="text-center font-medium pb-2 px-1">+2w</th>
+                  <th className="text-center font-medium pb-2 px-1">+3w</th>
+                  <th className="text-center font-medium pb-2 px-1">+4w</th>
+                </tr>
+              </thead>
+              <tbody>
+                {engagement.cohorts.weeks.map((wk) => (
+                  <tr key={wk.label} className="border-t border-muted/30">
+                    <td className="py-1.5 pr-3 text-[#160800] font-medium whitespace-nowrap">
+                      {new Date(wk.label).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right text-muted-foreground">{wk.size}</td>
+                    {wk.retention.map((p, i) => (
+                      <td key={i} className="px-1 py-1">
+                        <div
+                          className="text-center rounded-md py-1.5 text-[11px] font-semibold"
+                          style={{
+                            backgroundColor: cohortBg(p),
+                            color: p > 0.4 ? "#fff" : "#160800",
+                          }}
+                        >
+                          {wk.size > 0 ? `${Math.round(p * 100)}%` : "—"}
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Tier distribution */}
+      <div className="bg-white rounded-2xl p-5">
+        <h2 className="font-bold text-sm mb-1">Loyalty Tier Distribution</h2>
+        <p className="text-[11px] text-muted-foreground mb-4">
+          Snapshot across all members in this brand (not range-bound).
+        </p>
+        {engLoading ? (
+          <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+        ) : !engagement || engagement.tiers.length === 0 ? (
+          <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">No tiers configured</div>
+        ) : (
+          <div className="space-y-2">
+            {engagement.tiers.map((t) => (
+              <div key={t.slug} className="flex items-center gap-3">
+                <div className="w-20 text-[12px] font-semibold text-[#160800] capitalize">{t.tier}</div>
+                <div className="flex-1 bg-muted/30 rounded-full h-5 relative overflow-hidden">
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full"
+                    style={{
+                      width: `${Math.max(2, t.pct * 100)}%`,
+                      backgroundColor:
+                        t.slug === "elite"  ? "#0a0c12" :
+                        t.slug === "gold"   ? "#FFD700" :
+                        t.slug === "silver" ? "#9ca3af" :
+                        t.slug === "bronze" ? "#e2725b" : "#d6d3d1",
+                    }}
+                  />
+                </div>
+                <div className="w-28 text-right text-[12px] text-muted-foreground">
+                  {t.count.toLocaleString()} ({Math.round(t.pct * 100)}%)
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Reward engagement */}
+      <div className="bg-white rounded-2xl p-5">
+        <h2 className="font-bold text-sm mb-1">Reward Engagement</h2>
+        <p className="text-[11px] text-muted-foreground mb-4">
+          Vouchers issued, used, and redemptions in this period — plus all-time funnel.
+        </p>
+        {engLoading ? (
+          <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+        ) : !engagement ? (
+          <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">No data</div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+              {[
+                { label: "Issued (range)",  value: engagement.rewards.rangeIssued.toLocaleString() },
+                { label: "Used (range)",    value: engagement.rewards.rangeUsed.toLocaleString() },
+                { label: "Redemptions",     value: engagement.rewards.rangeRedemptions.toLocaleString() },
+                { label: "Lifetime redemption rate", value: `${Math.round(engagement.rewards.redemptionRate * 100)}%` },
+              ].map((k) => (
+                <div key={k.label} className="bg-muted/20 rounded-xl p-3">
+                  <div className="text-lg font-bold text-[#160800]">{k.value}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{k.label}</div>
+                </div>
+              ))}
+            </div>
+            {engagement.rewards.byReward.length === 0 ? (
+              <div className="text-xs text-muted-foreground py-2">No reward activity in this period.</div>
+            ) : (
+              <div>
+                <div className="grid grid-cols-[1fr_70px_70px_80px] gap-2 px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  <span>Reward</span>
+                  <span className="text-right">Issued</span>
+                  <span className="text-right">Used</span>
+                  <span className="text-right">Redeemed</span>
+                </div>
+                {engagement.rewards.byReward.slice(0, 10).map((r) => (
+                  <div
+                    key={r.rewardId}
+                    className="grid grid-cols-[1fr_70px_70px_80px] gap-2 items-center px-2 py-2 rounded-lg hover:bg-muted/20 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{r.name}</div>
+                      <div className="text-[10px] text-muted-foreground capitalize">
+                        {r.rewardType.replace(/_/g, " ")}{r.autoIssue ? " · auto-issued" : ""}
+                      </div>
+                    </div>
+                    <span className="text-sm text-right">{r.issued.toLocaleString()}</span>
+                    <span className="text-sm text-right">{r.used.toLocaleString()}</span>
+                    <span className="text-sm font-semibold text-right">{r.redeemed.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
