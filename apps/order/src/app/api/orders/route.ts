@@ -46,11 +46,12 @@ async function validateAppliedReward(
     subtotalSen: number;
     minOrderRm: number;
     totalRm: number;
+    loyaltyId: string | null;
   },
 ): Promise<{ ok: true; discountSen: number } | { ok: false; error: string }> {
   const { data: reward } = await supabase
     .from("rewards")
-    .select("id, is_active, valid_from, valid_until, stock, min_order_value")
+    .select("id, is_active, valid_from, valid_until, stock, min_order_value, points_required")
     .eq("id", args.rewardId)
     .single<{
       id: string;
@@ -59,6 +60,7 @@ async function validateAppliedReward(
       valid_until: string | null;
       stock: number | null;
       min_order_value: number | null;
+      points_required: number | null;
     }>();
 
   if (!reward) {
@@ -82,6 +84,40 @@ async function validateAppliedReward(
       ok: false,
       error: `Reward needs a minimum order of RM${reward.min_order_value.toFixed(2)}`,
     };
+  }
+
+  // Pre-check the points balance for catalog rewards. Without this,
+  // the customer's order proceeds to a Stripe charge before the
+  // post-payment `deductLoyaltyPoints` discovers the shortfall and
+  // logs RECONCILE MANUALLY — i.e. they pay the discounted amount
+  // but the reward never gets consumed. Skip the check when the
+  // member already holds an active issued_reward row for this
+  // reward (auto-issued vouchers don't deduct from points balance).
+  const pointsCost = reward.points_required ?? 0;
+  if (pointsCost > 0 && args.loyaltyId) {
+    const { data: voucher } = await supabase
+      .from("issued_rewards")
+      .select("id")
+      .eq("member_id", args.loyaltyId)
+      .eq("reward_id", reward.id)
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+    if (!voucher) {
+      const { data: mb } = await supabase
+        .from("member_brands")
+        .select("points_balance")
+        .eq("member_id", args.loyaltyId)
+        .eq("brand_id", "brand-celsius")
+        .single<{ points_balance: number }>();
+      const balance = mb?.points_balance ?? 0;
+      if (balance < pointsCost) {
+        return {
+          ok: false,
+          error: `Not enough points (need ${pointsCost}, have ${balance})`,
+        };
+      }
+    }
   }
 
   // Sanity-bound the client-supplied discount: never negative,
@@ -224,6 +260,7 @@ export async function POST(request: NextRequest) {
         subtotalSen,
         minOrderRm,
         totalRm: total,
+        loyaltyId: loyaltyId ?? null,
       });
       if (!validated.ok) {
         return NextResponse.json({ error: validated.error }, { status: 400 });

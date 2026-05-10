@@ -261,8 +261,10 @@ export function calcRewardDiscount(
     bogo_buy_qty?: number;
     bogo_free_qty?: number;
     min_order_value?: number | null;
+    applicable_categories?: string[] | null;
+    applicable_products?: string[] | null;
   } | null,
-  cartItems: { basePrice: number; totalPrice: number; quantity: number }[],
+  cartItems: { productId?: string; category?: string; basePrice: number; totalPrice: number; quantity: number }[],
   subtotal: number
 ): number {
   if (!reward) return 0;
@@ -273,13 +275,34 @@ export function calcRewardDiscount(
   if (reward.min_order_value != null && subtotal < reward.min_order_value) {
     return 0;
   }
+
+  // Eligibility filter — only used by free_item / bogo. When the
+  // reward has applicable_categories or applicable_products set,
+  // the discount must come off an item in that set, NOT off the
+  // cheapest snack the customer happened to add. Falls back to all
+  // items if neither filter is set or none of the cart has a
+  // category populated yet (legacy persisted carts pre-category).
+  const cats = reward.applicable_categories;
+  const prods = reward.applicable_products;
+  const hasFilter = (cats && cats.length > 0) || (prods && prods.length > 0);
+  const someHaveCategory = cartItems.some((i) => !!i.category);
+  const eligible =
+    hasFilter && someHaveCategory
+      ? cartItems.filter((i) => {
+          if (cats && cats.length > 0 && i.category && cats.includes(i.category)) return true;
+          if (prods && prods.length > 0 && i.productId && prods.includes(i.productId)) return true;
+          return false;
+        })
+      : cartItems;
+
   const t = reward.discount_type;
   if (t === "free_item") {
     // Free drink covers the base product only — modifier upgrades
     // (oatmilk, extra shot, syrups) are still paid for. Pick the
-    // cheapest base price across cart items.
-    const prices = cartItems.map((i) => i.basePrice);
-    return prices.length > 0 ? Math.min(...prices) : 0;
+    // cheapest base price across the eligible set.
+    if (eligible.length === 0) return 0;
+    const prices = eligible.map((i) => i.basePrice);
+    return Math.min(...prices);
   }
   if (t === "bogo") {
     // Pair items by quantity and free the cheaper of each pair. With
@@ -288,7 +311,8 @@ export function calcRewardDiscount(
     // client-side preview legacy. The loyalty engine evaluates BOGO
     // against `bogo_buy_qty` / `bogo_free_qty` on its own pass and
     // is the authoritative path; this client number is a preview.
-    const unitPrices = cartItems.flatMap((i) => Array(i.quantity).fill(i.totalPrice / i.quantity)) as number[];
+    if (eligible.length === 0) return 0;
+    const unitPrices = eligible.flatMap((i) => Array(i.quantity).fill(i.totalPrice / i.quantity)) as number[];
     unitPrices.sort((a, b) => b - a);
     return unitPrices[1] ?? 0;
   }

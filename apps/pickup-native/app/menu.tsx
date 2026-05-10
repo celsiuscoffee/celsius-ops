@@ -176,6 +176,7 @@ export default function Menu() {
       productId: p.id,
       name: p.name,
       image: p.image_url ?? undefined,
+      category: p.category,
       basePrice: p.price,
       quantity: 1,
       modifiers: [],

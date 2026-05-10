@@ -125,6 +125,7 @@ export default function ProductScreen() {
       productId: product.id,
       name: product.name,
       image: product.image_url ?? undefined,
+      category: product.category,
       basePrice: product.price,
       quantity: qty,
       modifiers: flatSelections,

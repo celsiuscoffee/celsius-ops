@@ -15,6 +15,13 @@ export type CartItem = {
   productId: string;
   name: string;
   image?: string;
+  /** Product category slug — needed so rewards with
+   *  applicable_categories can filter the cart down to eligible
+   *  items (free_item picks the cheapest of the eligible set, not
+   *  the cheapest of the whole cart). Optional because legacy
+   *  persisted carts won't have it set; calcRewardDiscount falls
+   *  back to "all items" when none of the cart has a category. */
+  category?: string;
   basePrice: number;
   quantity: number;
   modifiers: ModifierSelection[];
@@ -31,6 +38,14 @@ export type AppliedReward = {
   bogo_buy_qty?: number;
   bogo_free_qty?: number;
   free_product_name?: string | null;
+  /** Categories the reward applies to. When set + non-empty, the
+   *  free_item / bogo discount picks the cheapest item whose
+   *  category is in this list; null means "any item". */
+  applicable_categories?: string[] | null;
+  /** Whitelist of product IDs the reward applies to. Same fallback
+   *  semantics as applicable_categories. */
+  applicable_products?: string[] | null;
+  min_order_value?: number | null;
 };
 
 export type MemberProfile = {

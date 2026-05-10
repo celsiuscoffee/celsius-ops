@@ -327,6 +327,9 @@ function RewardListRow({
       bogo_buy_qty: reward.bogo_buy_qty,
       bogo_free_qty: reward.bogo_free_qty,
       free_product_name: reward.free_product_name,
+      applicable_categories: reward.applicable_categories,
+      applicable_products: reward.applicable_products,
+      min_order_value: reward.min_order_value,
     });
     if (cart.length > 0) router.push("/cart");
   };
