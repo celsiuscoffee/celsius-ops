@@ -125,6 +125,10 @@ export default function SplashPostersPage() {
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  // Surface filter — defaults to "all". 'splash' shows splash + both,
+  // 'home' shows home + both — i.e. each tab matches what the customer
+  // would actually see on that surface.
+  const [tab, setTab] = useState<"all" | Placement>("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -297,23 +301,89 @@ export default function SplashPostersPage() {
         </button>
       </div>
 
-      {loading ? (
-        <div className="flex h-40 items-center justify-center text-gray-400">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
-      ) : posters.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-200 bg-white p-12 text-center">
-          <p className="text-sm text-gray-500">No posters yet.</p>
-          <button
-            onClick={openNew}
-            className="mt-3 text-sm font-medium text-terracotta hover:underline"
-          >
-            Create your first poster
-          </button>
-        </div>
-      ) : (
+      {/* Surface filter — counts shown per tab so an operator scanning
+          'home' sees how many are scheduled there at a glance. Posters
+          tagged 'both' count toward both splash and home tabs since
+          they actually appear on both surfaces. */}
+      {!loading && posters.length > 0 && (() => {
+        const splashCount = posters.filter((p) => (p.placement ?? "both") !== "home").length;
+        const homeCount   = posters.filter((p) => (p.placement ?? "both") !== "splash").length;
+        const tabs: { id: "all" | Placement; label: string; count: number }[] = [
+          { id: "all",    label: "All",    count: posters.length },
+          { id: "splash", label: "Splash", count: splashCount },
+          { id: "home",   label: "Home",   count: homeCount   },
+        ];
+        return (
+          <div className="mb-4 flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  tab === t.id
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                {t.label}
+                <span className={`ml-1.5 text-[10px] ${tab === t.id ? "text-gray-500" : "text-gray-400"}`}>
+                  {t.count}
+                </span>
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
+      {(() => {
+        // Filtering rule: 'splash' tab shows posters whose placement is
+        // 'splash' or 'both' (i.e. anything that actually shows on the
+        // splash surface). Same logic for 'home'. 'all' is unfiltered.
+        const filtered = tab === "all"
+          ? posters
+          : posters.filter((p) => {
+              const place = p.placement ?? "both";
+              return place === tab || place === "both";
+            });
+
+        if (loading) {
+          return (
+            <div className="flex h-40 items-center justify-center text-gray-400">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          );
+        }
+        if (posters.length === 0) {
+          return (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-white p-12 text-center">
+              <p className="text-sm text-gray-500">No posters yet.</p>
+              <button
+                onClick={openNew}
+                className="mt-3 text-sm font-medium text-terracotta hover:underline"
+              >
+                Create your first poster
+              </button>
+            </div>
+          );
+        }
+        if (filtered.length === 0) {
+          return (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center">
+              <p className="text-sm text-gray-500">
+                No posters scheduled on {tab === "splash" ? "Splash" : "Home"}.
+              </p>
+              <button
+                onClick={() => { setForm({ ...empty, placement: tab as Placement }); setShowForm(true); }}
+                className="mt-3 text-sm font-medium text-terracotta hover:underline"
+              >
+                Add one
+              </button>
+            </div>
+          );
+        }
+        return (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {posters.map((p) => {
+          {filtered.map((p) => {
             const placement = (p.placement ?? "both") as Placement;
             // Preview at the placement's natural aspect so the operator
             // sees what the customer will see on each surface.
@@ -400,7 +470,8 @@ export default function SplashPostersPage() {
             );
           })}
         </div>
-      )}
+        );
+      })()}
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
