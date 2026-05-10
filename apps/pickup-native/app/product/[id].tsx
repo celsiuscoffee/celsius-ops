@@ -15,6 +15,7 @@ import { ArrowLeft } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fetchMenu, type ModifierGroup } from "../../lib/menu";
 import { useApp, type ModifierSelection } from "../../lib/store";
+import { trackEvent } from "../../lib/analytics";
 import { formatPrice } from "../../lib/api";
 import { CelsiusLoader } from "../../components/CelsiusLoader";
 
@@ -47,7 +48,13 @@ export default function ProductScreen() {
       if (def) initial[g.id] = [def.id];
     }
     setSelections((cur) => (Object.keys(cur).length === 0 ? initial : cur));
-  }, [product]);
+    trackEvent("product_viewed", {
+      productId:   product.id,
+      productName: product.name,
+      price:       product.price,
+      outletId,
+    });
+  }, [product, outletId]);
 
   // Required = every single-select group must have one selected.
   // Used to gate the Add to cart button so customers can't ship an
@@ -123,6 +130,14 @@ export default function ProductScreen() {
       modifiers: flatSelections,
       specialInstructions: notes || undefined,
       totalPrice,
+    });
+    trackEvent("cart_add", {
+      productId:   product.id,
+      productName: product.name,
+      quantity:    qty,
+      totalPrice,
+      hasNotes:    !!notes,
+      outletId,
     });
     router.back();
   };

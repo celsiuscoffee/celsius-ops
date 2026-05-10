@@ -27,6 +27,7 @@ import {
 } from "../lib/rewards";
 import { getSetting } from "../lib/settings";
 import { showToast } from "../lib/toast";
+import { trackEvent } from "../lib/analytics";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { PrimaryButton } from "../components/PrimaryButton";
 
@@ -173,6 +174,7 @@ export default function Checkout() {
     try {
       await api.verifyOtp(phoneInput.trim(), otp.trim());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      trackEvent("login_success", { surface: "checkout" });
       setPhone(phoneInput.trim());
       setStep("review");
     } catch (e) {
@@ -187,6 +189,14 @@ export default function Checkout() {
       Alert.alert("No outlet selected", "Pick an outlet first.");
       return;
     }
+    trackEvent("checkout_started", {
+      itemCount: cart.length,
+      subtotal,
+      hasReward: !!appliedReward,
+      hasPromo: !!promoCode.trim(),
+      paymentMethod,
+      outletId,
+    });
 
     // Guard: re-validate the applied reward right before submitting.
     // Customers can sit on the cart screen for hours; a reward that
@@ -260,6 +270,17 @@ export default function Checkout() {
         promoCode: promoCode.trim() || undefined,
       });
       clearCart();
+      trackEvent("order_placed", {
+        orderId:        res.orderId,
+        orderNumber:    res.orderNumber,
+        total:          grandTotal,
+        subtotal,
+        rewardDiscount,
+        promoDiscount,
+        paymentMethod,
+        rewardId:       appliedReward?.id ?? null,
+        outletId,
+      });
       // Reward was just consumed (server deducts points + decrements stock)
       // and points were earned on the after-discount subtotal. The home,
       // rewards, and account screens cache tier + rewards for 5 min — without
@@ -315,6 +336,7 @@ export default function Checkout() {
       // Skip Stripe PaymentSheet and route straight to the order page.
       if (piRes.ok && piJson.skipPayment) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        trackEvent("payment_skipped", { orderId: res.orderId, reason: "zero_amount" });
         router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
         return;
       }
@@ -346,12 +368,16 @@ export default function Checkout() {
         // User cancelled or payment failed. Order stays pending; cron will
         // expire it after 10 min if no retry.
         if (presentRes.error.code !== "Canceled") {
+          trackEvent("payment_failed", { orderId: res.orderId, code: presentRes.error.code, message: presentRes.error.message });
           Alert.alert("Payment failed", presentRes.error.message);
+        } else {
+          trackEvent("payment_cancelled", { orderId: res.orderId });
         }
         // Always route to the order page so customer can retry from there.
         router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
         return;
       }
+      trackEvent("payment_success", { orderId: res.orderId, paymentMethod });
 
       // Payment succeeded — confirm server-side immediately so the order is
       // already "preparing" by the time we navigate.

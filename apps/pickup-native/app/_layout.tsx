@@ -19,6 +19,7 @@ import { RootErrorBoundary } from "../components/RootErrorBoundary";
 import { Toast } from "../components/Toast";
 import { registerForPush } from "../lib/notifications";
 import { useApp } from "../lib/store";
+import { initAnalytics, identifyMember, clearMember } from "../lib/analytics";
 import { fetchRewards, fetchTier, fetchOrderHistory } from "../lib/rewards";
 import {
   SpaceGrotesk_400Regular,
@@ -82,6 +83,12 @@ export default function RootLayout() {
     // Hand off from native iOS launch screen to our JS splash as fast as
     // possible — the poster image renders fine without fonts loaded.
     SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
+  // Amplitude init. No-ops when EXPO_PUBLIC_AMPLITUDE_API_KEY isn't set
+  // (which is the case until we drop the key into EAS env vars).
+  useEffect(() => {
+    initAnalytics().catch(() => {});
   }, []);
 
   // Eager OTA fetch + reload on cold launch.
@@ -170,6 +177,21 @@ export default function RootLayout() {
   useEffect(() => {
     registerForPush({ phone, memberId: member?.id ?? null }).catch(() => {});
   }, [phone, member?.id]);
+
+  // Tie Amplitude events to the loyalty member id so cohorts /
+  // retention / per-user breakdowns work. Reset when the user signs out
+  // (member becomes null) so the device anon-id doesn't inherit the
+  // previous user's event history.
+  useEffect(() => {
+    if (member?.id) {
+      identifyMember(member.id, {
+        name:  member.name ?? null,
+        phone: phone ?? null,
+      });
+    } else if (!phone) {
+      clearMember();
+    }
+  }, [member?.id, member?.name, phone]);
 
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((res) => {

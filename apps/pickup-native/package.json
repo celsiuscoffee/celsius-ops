@@ -14,6 +14,7 @@
     "submit:android": "eas submit --platform android"
   },
   "dependencies": {
+    "@amplitude/analytics-react-native": "^1.5.52",
     "@expo-google-fonts/space-grotesk": "^0.4.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@stripe/stripe-react-native": "0.50.3",

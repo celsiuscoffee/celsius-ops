@@ -33,6 +33,12 @@ export type Reward = {
   stock?: number | null;
   max_redemptions_per_member?: number | null;
   redemption_count?: number;
+  reward_type?: string | null;
+  // Set by /api/loyalty/rewards when the row came from issued_rewards
+  // (welcome BOGO, post-purchase coupon, etc.) rather than from the
+  // public points-shop catalog. Drives voucher-vs-points UI hints.
+  voucher_id?: string | null;
+  voucher_expires_at?: string | null;
 };
 
 export type RewardsResponse = {

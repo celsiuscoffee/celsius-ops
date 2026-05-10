@@ -13,6 +13,7 @@ import { CelsiusTag } from "../components/brand/CelsiusTag";
 import { tierStyle } from "../lib/tier-styles";
 import * as Haptics from "expo-haptics";
 import { useApp } from "../lib/store";
+import { trackEvent } from "../lib/analytics";
 import {
   fetchRewards,
   fetchTier,
@@ -314,6 +315,14 @@ function RewardListRow({
   const onApply = () => {
     if (!canClaim) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    trackEvent("reward_applied", {
+      rewardId:        reward.id,
+      rewardName:      reward.name,
+      rewardType:      reward.reward_type,
+      discountType:    reward.discount_type,
+      pointsRequired:  reward.points_required,
+      isVoucher:       !!(reward as { voucher_id?: string }).voucher_id,
+    });
     setAppliedReward({
       id: reward.id,
       name: reward.name,
