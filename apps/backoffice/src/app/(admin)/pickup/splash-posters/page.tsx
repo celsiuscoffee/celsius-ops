@@ -539,25 +539,72 @@ export default function SplashPostersPage() {
                 </label>
                 <div className="mt-1 flex items-start gap-3">
                   {form.imageUrl ? (
+                    /* In-app preview — for 'home' we mock the live hero
+                       (poster + espresso info card) so the operator sees
+                       exactly what the customer will see, including how
+                       the rounded card crops the bottom of their image.
+                       'splash' renders full-bleed since the launch has
+                       no overlay. */
                     <div className="relative">
-                      {/* Preview at the placement's aspect so the
-                          operator sees what the customer will see. */}
-                      <img
-                        src={form.imageUrl}
-                        alt=""
-                        className={`rounded-lg object-cover ${
+                      <div
+                        className={`relative overflow-hidden rounded-lg bg-gray-100 ${
                           form.placement === "home"
-                            ? "h-40 w-[213px]"
-                            : "h-56 w-32"
+                            ? "h-44 w-[235px]"
+                            : "h-72 w-40"
                         }`}
-                      />
+                      >
+                        <img
+                          src={form.imageUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+
+                        {/* Mock espresso info card — only on home. The
+                            geometry mirrors the app exactly: rounded
+                            top corners, full-width, sits flush with the
+                            bottom edge but with a slight overlap into
+                            the photo (matches -22px in-app marginTop). */}
+                        {form.placement === "home" && (
+                          <div
+                            className="absolute inset-x-0 bottom-0 rounded-t-2xl px-3 pb-2 pt-3 shadow-2xl"
+                            style={{ backgroundColor: "#160800" }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span
+                                className="truncate text-[11px] text-white"
+                                style={{ fontFamily: "Peachi-Bold, serif" }}
+                              >
+                                Hi, Friend.
+                              </span>
+                              <span className="text-[8px] font-bold tracking-wider text-amber-400">
+                                ✦ MEMBER
+                              </span>
+                            </div>
+                            <div className="mt-2 flex items-center border-t border-white/10 pt-2">
+                              <div className="flex-1">
+                                <div className="text-[10px] font-bold text-white">3,214</div>
+                                <div className="text-[7px] uppercase tracking-wider text-white/55">
+                                  Points
+                                </div>
+                              </div>
+                              <div className="flex-1 border-l border-white/10 pl-2">
+                                <div className="text-[10px] font-bold text-amber-400">2</div>
+                                <div className="text-[7px] uppercase tracking-wider text-white/55">
+                                  Vouchers
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                       {/* Re-crop pulls the live image URL back into the
                           cropper so the operator can reposition / re-zoom
                           without having to re-pick the source file. */}
                       <button
                         type="button"
                         onClick={() => setCropSource(form.imageUrl)}
-                        className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-white/95 px-2 py-1 text-[10px] font-semibold text-gray-700 shadow"
+                        className="absolute -bottom-3 left-2 flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[10px] font-semibold text-gray-700 shadow"
                         title="Reposition / re-zoom"
                       >
                         <Crop className="h-3 w-3" />
@@ -580,7 +627,7 @@ export default function SplashPostersPage() {
                       onDrop={onDrop}
                       onClick={() => fileInputRef.current?.click()}
                       className={`flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed text-xs transition-colors ${
-                        form.placement === "home" ? "h-40" : "h-56"
+                        form.placement === "home" ? "h-44" : "h-72"
                       } ${
                         dragOver
                           ? "border-terracotta bg-terracotta/5 text-terracotta"
@@ -621,6 +668,13 @@ export default function SplashPostersPage() {
                     }}
                   />
                 </div>
+                {form.imageUrl && form.placement === "home" && (
+                  <p className="mt-3 text-[10px] text-gray-400">
+                    Preview shows the espresso info card overlay —
+                    keep important details (logo, headline) clear of
+                    the bottom 25% of the image.
+                  </p>
+                )}
               </div>
 
               <div>
