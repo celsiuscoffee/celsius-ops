@@ -155,8 +155,13 @@ export async function GET(request: NextRequest) {
     // points-shop reward. The voucher_id field tells the redemption
     // path that we should consume the issued_reward instead of (or in
     // addition to) deducting points.
-    const nowIso = new Date().toISOString();
-    const { data: vouchers } = await supabase
+    // Filter expiry in JS rather than PostgREST .or() — the latter
+    // was silently dropping every voucher in prod (probably a parser
+    // edge case with the ISO timestamp string), so vouchers never
+    // surfaced for any member. Pull all active rows for the member,
+    // then drop expired ones below.
+    const nowMs = Date.now();
+    const { data: vouchersRaw, error: voucherErr } = await supabase
       .from("issued_rewards")
       .select(
         "id, expires_at, code, status, " +
@@ -169,8 +174,14 @@ export async function GET(request: NextRequest) {
       )
       .eq("member_id", member.id)
       .eq("brand_id", BRAND_ID)
-      .eq("status", "active")
-      .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
+      .eq("status", "active");
+    if (voucherErr) {
+      console.error("[rewards] voucher fetch error:", voucherErr.message);
+    }
+    const vouchers = (((vouchersRaw ?? []) as unknown) as Array<{ expires_at: string | null }>).filter((v) => {
+      if (!v.expires_at) return true;
+      return new Date(v.expires_at).getTime() > nowMs;
+    });
 
     type VoucherRow = {
       id: string;

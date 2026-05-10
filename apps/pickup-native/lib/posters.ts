@@ -11,28 +11,61 @@ export type HomePoster = {
   durationMs: number;
 };
 
-// Returns the cached list immediately if we have one + kicks off a
-// background refresh, OR races a fresh fetch against a 2.5s timeout
-// for first launches. Empty array means "no posters scheduled" — the
-// home page hides the carousel in that case.
+// Fetch strategy: prefer fresh network data, fall back to cache only
+// if the network is slow/unreachable. Operators expect a poster
+// change in backoffice to surface in the app within seconds — the
+// previous cache-first approach kept serving stale data because a
+// successful background refetch updated AsyncStorage but not the
+// React Query cache, so RQ kept returning the same stale snapshot.
+//
+// Network race: 4s timeout (longer than the 2.5s we used for cache-
+// first since the network IS now the primary source). If it loses,
+// fall back to whatever's in AsyncStorage. If both fail, return [].
 export async function getHomePosters(): Promise<HomePoster[]> {
+  let resolved = false;
   let cached: HomePoster[] | null = null;
-  try {
-    const raw = await AsyncStorage.getItem(CACHE_KEY);
-    if (raw) cached = JSON.parse(raw);
-  } catch {
-    // ignore
-  }
 
-  if (cached && cached.length > 0) {
-    fetchPosters().catch(() => {});
-    return cached;
-  }
+  // Read cache in parallel with the fetch.
+  const cacheRead: Promise<HomePoster[] | null> = (async () => {
+    try {
+      const raw = await AsyncStorage.getItem(CACHE_KEY);
+      return raw ? (JSON.parse(raw) as HomePoster[]) : null;
+    } catch {
+      return null;
+    }
+  })();
 
-  return Promise.race<HomePoster[]>([
-    fetchPosters(),
-    new Promise<HomePoster[]>((resolve) => setTimeout(() => resolve([]), 2500)),
+  const network = fetchPosters().then((posters) => {
+    resolved = true;
+    return posters;
+  });
+
+  // Race fresh vs. 4s timeout.
+  const winner = await Promise.race<HomePoster[] | "timeout">([
+    network,
+    new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 4000)),
   ]);
+
+  if (winner !== "timeout") {
+    return winner;
+  }
+
+  // Network slow — fall back to cached data if we have it. The
+  // network promise is still in flight; let it complete in the
+  // background and update the cache for the next launch.
+  cached = await cacheRead;
+  if (cached && cached.length > 0) return cached;
+
+  // No cache either. Wait a bit longer for the network — slow
+  // connection but no point returning empty if we'll have data soon.
+  if (!resolved) {
+    const second = await Promise.race<HomePoster[] | "timeout">([
+      network,
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 4000)),
+    ]);
+    if (second !== "timeout") return second;
+  }
+  return [];
 }
 
 async function fetchPosters(): Promise<HomePoster[]> {
