@@ -14,6 +14,8 @@ import {
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { useConfirm, toast } from "@celsius/ui";
 
+type Placement = "splash" | "home" | "both";
+
 type Poster = {
   id: string;
   brand_id: string;
@@ -25,6 +27,7 @@ type Poster = {
   starts_at: string | null;
   ends_at: string | null;
   updated_at: string;
+  placement: Placement;
 };
 
 type Form = {
@@ -36,6 +39,35 @@ type Form = {
   active: boolean;
   startsAt: string;
   endsAt: string;
+  placement: Placement;
+};
+
+// Per-placement aspect templates. The pickup app crops with object-fit
+// "cover" so the source image extends past the visible window if its
+// ratio doesn't match — these aspects are the AT-MINIMUM visible area
+// the operator should design for.
+const PLACEMENT_META: Record<
+  Placement,
+  { label: string; aspect: number; aspectLabel: string; help: string }
+> = {
+  splash: {
+    label:       "App splash (launch)",
+    aspect:      9 / 16,
+    aspectLabel: "9:16 portrait · ~1080×1920",
+    help:        "Shown full-screen on app launch. Most-recent active wins.",
+  },
+  home: {
+    label:       "Home carousel",
+    aspect:      4 / 3,
+    aspectLabel: "4:3 landscape · ~1200×900",
+    help:        "Auto-rotating banner on the home page. All active posters appear.",
+  },
+  both: {
+    label:       "Both surfaces",
+    aspect:      9 / 16,
+    aspectLabel: "9:16 portrait (cropped to 4:3 on home)",
+    help:        "Same image used on launch + home. Use only when the design works at both crops.",
+  },
 };
 
 // Resize splash images to a max long-edge of 1440px and re-encode as JPEG
@@ -81,6 +113,7 @@ const empty: Form = {
   active: false,
   startsAt: "",
   endsAt: "",
+  placement: "home",
 };
 
 export default function SplashPostersPage() {
@@ -127,6 +160,7 @@ export default function SplashPostersPage() {
       active: p.active,
       startsAt: p.starts_at ?? "",
       endsAt: p.ends_at ?? "",
+      placement: p.placement ?? "both",
     });
     setShowForm(true);
   };
@@ -181,6 +215,7 @@ export default function SplashPostersPage() {
         active: form.active,
         startsAt: form.startsAt || null,
         endsAt: form.endsAt || null,
+        placement: form.placement,
       };
       const url = form.id
         ? `/api/pickup/splash-posters?id=${encodeURIComponent(form.id)}`
@@ -248,9 +283,9 @@ export default function SplashPostersPage() {
 
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Splash Posters</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Posters</h2>
           <p className="mt-0.5 text-sm text-gray-500">
-            Full-screen promo image shown when the pickup app launches. Only one active at a time.
+            Splash = launch screen (one active wins). Home = carousel banners (all active rotate).
           </p>
         </div>
         <button
@@ -278,12 +313,26 @@ export default function SplashPostersPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {posters.map((p) => (
+          {posters.map((p) => {
+            const placement = (p.placement ?? "both") as Placement;
+            // Preview at the placement's natural aspect so the operator
+            // sees what the customer will see on each surface.
+            const aspectClass =
+              placement === "home" ? "aspect-[4/3]" : "aspect-[9/16]";
+            const placementLabel =
+              placement === "splash" ? "SPLASH" : placement === "home" ? "HOME" : "BOTH";
+            const placementColor =
+              placement === "splash"
+                ? "bg-indigo-500"
+                : placement === "home"
+                ? "bg-amber-500"
+                : "bg-stone-500";
+            return (
             <div
               key={p.id}
               className="overflow-hidden rounded-xl border border-gray-200 bg-white"
             >
-              <div className="relative aspect-[9/16] bg-gray-100">
+              <div className={`relative ${aspectClass} bg-gray-100`}>
                 {p.image_url && (
                   <img
                     src={p.image_url}
@@ -292,6 +341,9 @@ export default function SplashPostersPage() {
                   />
                 )}
                 <div className="absolute left-2 top-2 flex gap-1">
+                  <span className={`rounded-full ${placementColor} px-2 py-0.5 text-[10px] font-semibold text-white`}>
+                    {placementLabel}
+                  </span>
                   {p.active && (
                     <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white">
                       ACTIVE
@@ -345,7 +397,8 @@ export default function SplashPostersPage() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -362,17 +415,72 @@ export default function SplashPostersPage() {
             </div>
 
             <div className="space-y-4">
+              {/* Placement first — choosing it sets the aspect-ratio
+                  template for the upload preview below. Saves the
+                  operator from realising mid-upload that splash and
+                  home need different crops. */}
               <div>
                 <label className="text-xs font-medium text-gray-700">
-                  Image (9:16 portrait — auto-resized to 1440px max)
+                  Where it shows
+                </label>
+                <div className="mt-1 grid grid-cols-3 gap-2">
+                  {(["splash", "home", "both"] as Placement[]).map((p) => {
+                    const meta = PLACEMENT_META[p];
+                    const selected = form.placement === p;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            placement: p,
+                            // Sensible default per surface — splash is a
+                            // quick flash, home posters linger.
+                            durationMs:
+                              !f.id && (f.durationMs === 2500 || f.durationMs === 4500)
+                                ? p === "home" ? 4500 : 2500
+                                : f.durationMs,
+                          }))
+                        }
+                        className={`rounded-lg border p-2 text-left transition-colors ${
+                          selected
+                            ? "border-terracotta bg-terracotta/5"
+                            : "border-gray-200 hover:bg-gray-50"
+                        }`}
+                      >
+                        <p className={`text-xs font-semibold ${selected ? "text-terracotta" : "text-gray-900"}`}>
+                          {p === "splash" ? "Splash" : p === "home" ? "Home" : "Both"}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-gray-500 leading-tight">
+                          {meta.aspectLabel}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-[11px] text-gray-500">
+                  {PLACEMENT_META[form.placement].help}
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-700">
+                  Image · {PLACEMENT_META[form.placement].aspectLabel} · auto-resized to 1440px max
                 </label>
                 <div className="mt-1 flex items-start gap-3">
                   {form.imageUrl ? (
                     <div className="relative">
+                      {/* Preview at the placement's aspect so the
+                          operator sees what the customer will see. */}
                       <img
                         src={form.imageUrl}
                         alt=""
-                        className="h-56 w-32 rounded-lg object-cover"
+                        className={`rounded-lg object-cover ${
+                          form.placement === "home"
+                            ? "h-40 w-[213px]"
+                            : "h-56 w-32"
+                        }`}
                       />
                       <button
                         onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))}
@@ -390,7 +498,9 @@ export default function SplashPostersPage() {
                       onDragLeave={() => setDragOver(false)}
                       onDrop={onDrop}
                       onClick={() => fileInputRef.current?.click()}
-                      className={`flex h-56 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed text-xs transition-colors ${
+                      className={`flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed text-xs transition-colors ${
+                        form.placement === "home" ? "h-40" : "h-56"
+                      } ${
                         dragOver
                           ? "border-terracotta bg-terracotta/5 text-terracotta"
                           : "border-gray-300 text-gray-500 hover:border-terracotta hover:bg-gray-50"
@@ -513,7 +623,11 @@ export default function SplashPostersPage() {
                     {form.active ? "Active in app" : "Inactive (draft)"}
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    Only one poster can be active at a time
+                    {form.placement === "home"
+                      ? "All active home posters rotate in the carousel"
+                      : form.placement === "splash"
+                      ? "Most-recent active splash poster wins"
+                      : "Posted to both surfaces (splash + home)"}
                   </p>
                 </div>
                 <button

@@ -19,6 +19,10 @@ export async function GET(request: NextRequest) {
       .select("id, image_url, deeplink, duration_ms, starts_at, ends_at")
       .eq("brand_id", brandId)
       .eq("active", true)
+      // Splash surface picks anything tagged 'splash' or 'both'.
+      // 'home'-only rows are excluded so home-page promos don't
+      // hijack the launch screen.
+      .in("placement", ["splash", "both"])
       .order("updated_at", { ascending: false });
 
     if (error) {

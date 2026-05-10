@@ -26,6 +26,14 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const supabase = getSupabaseAdmin();
 
+  // Placement gates which surfaces the poster appears on:
+  //   'splash' = launch-screen only, 'home' = home carousel only,
+  //   'both'   = legacy default, posted to either.
+  const placement: "splash" | "home" | "both" =
+    body.placement === "splash" || body.placement === "home"
+      ? body.placement
+      : "both";
+
   const { data, error } = await supabase
     .from("splash_posters")
     .insert({
@@ -37,7 +45,8 @@ export async function POST(request: NextRequest) {
       active:      Boolean(body.active),
       starts_at:   body.startsAt ?? null,
       ends_at:     body.endsAt ?? null,
-    })
+      placement,
+    } as Record<string, unknown>)
     .select()
     .single();
 
@@ -64,6 +73,9 @@ export async function PATCH(request: NextRequest) {
   if ("active"     in body) updates.active      = Boolean(body.active);
   if ("startsAt"   in body) updates.starts_at   = body.startsAt;
   if ("endsAt"     in body) updates.ends_at     = body.endsAt;
+  if ("placement"  in body && (body.placement === "splash" || body.placement === "home" || body.placement === "both")) {
+    updates.placement = body.placement;
+  }
 
   const { data, error } = await supabase
     .from("splash_posters")
