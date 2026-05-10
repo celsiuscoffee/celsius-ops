@@ -559,14 +559,14 @@ export default function SplashPostersPage() {
                           className="h-full w-full object-cover"
                         />
 
-                        {/* Mock espresso info card — only on home. The
-                            geometry mirrors the app exactly: rounded
-                            top corners, full-width, sits flush with the
-                            bottom edge but with a slight overlap into
-                            the photo (matches -22px in-app marginTop). */}
+                        {/* Mock espresso info card — only on home. Small
+                            floating box with mx-4 + rounded on all sides,
+                            sits near the bottom of the poster with the
+                            photo extending fully behind it. Mirrors the
+                            shipped app geometry. */}
                         {form.placement === "home" && (
                           <div
-                            className="absolute inset-x-0 bottom-0 rounded-t-2xl px-3 pb-2 pt-3 shadow-2xl"
+                            className="absolute inset-x-3 bottom-2 rounded-xl px-3 pb-2 pt-2.5 shadow-2xl"
                             style={{ backgroundColor: "#160800" }}
                           >
                             <div className="flex items-center justify-between">

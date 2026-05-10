@@ -310,25 +310,29 @@ export default function Home() {
         <View style={{ height: insets.top + 60, backgroundColor: "#160800" }} />
       )}
 
-      {/* Info bar — espresso black, full-width with rounded TOP corners
-          only. Sits flush against the poster's bottom edge so the
-          transition reads as the card "rising up" from beneath the
-          photo (Chagee-style). No horizontal margin so it bleeds to
-          the screen edges. Tappable into Rewards. */}
+      {/* Info card — small espresso box with mx-4 + rounded corners
+          on every side (Chagee-style). Sits floating near the bottom
+          of the poster with deep negative margin so the photo
+          extends fully BEHIND the card all the way to the card's
+          bottom edge. Photo wraps around the card on left, right,
+          and a sliver below. Tappable into Rewards. */}
       <Pressable
         onPress={() => {
           Haptics.selectionAsync();
           router.push("/rewards");
         }}
-        className="rounded-t-3xl px-5 pt-5 pb-4 active:opacity-90"
+        className="mx-4 rounded-2xl p-4 active:opacity-90"
         style={{
           backgroundColor: "#160800",
-          marginTop: -22,
+          // Negative margin equals roughly the card's own height so
+          // its bottom edge aligns with the poster's bottom — the
+          // photo continues behind it, nothing peeks below the card.
+          marginTop: -110,
           shadowColor: "#000",
-          shadowOpacity: 0.18,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: -4 },
-          elevation: 5,
+          shadowOpacity: 0.22,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 6,
         }}
       >
         <View className="flex-row items-center">
