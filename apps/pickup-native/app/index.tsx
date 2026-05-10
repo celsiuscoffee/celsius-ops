@@ -19,7 +19,9 @@ import {
 } from "../lib/rewards";
 import { SafeBoundary } from "../components/SafeBoundary";
 import { TierHero } from "../components/TierHero";
+import { PosterCarousel } from "../components/PosterCarousel";
 import { RewardTicket } from "../components/RewardTicket";
+import { getHomePosters, type HomePoster } from "../lib/posters";
 import { tierStyle } from "../lib/tier-styles";
 import { getSetting, type Settings } from "../lib/settings";
 import { BottomNav } from "../components/BottomNav";
@@ -302,165 +304,250 @@ export default function Home() {
   // ever bring back an inline promo CTA, restore the cta_target switch
   // from git (commit ffef593 has the last version).
 
-  // Tier-driven palette — gradient + accent. Falls back to the
-  // espresso baseline when no tier is loaded (signed out / fetch
-  // pending / fetch failed).
+  // Tier-driven palette — accents (chip color, dots, etc). Gradient
+  // hero is gone; the poster carousel is now the visual anchor.
   const ts = tierStyle(tier);
   const showTierEyebrow = !!tier?.tier_slug;
 
+  // Auto-rotating posters (Chagee-style). Cached locally + refreshed
+  // in background so the home page paints instantly on cold launch.
+  const postersQ = useQuery({
+    queryKey: ["home-posters"],
+    queryFn: getHomePosters,
+    staleTime: 5 * 60_000,
+  });
+  const posters: HomePoster[] = postersQ.data ?? [];
+
+  // Active voucher count for the info bar — pulled from the rewards
+  // query (the same call that surfaces issued_rewards as a flag on
+  // each entry). Counts each row that has a voucher_id.
+  const voucherCount = (rewardsQ.data?.rewards ?? []).filter(
+    (r) => (r as { voucher_id?: string | null }).voucher_id,
+  ).length;
+
   return (
     <View className="flex-1 bg-background">
-      {/* Tier-themed hero — gradient + ghosted bean ornament + curved
-          bottom edge that drapes into the body. Tier identity carries
-          through the eyebrow ("PLATINUM · 2× PTS") rather than via a
-          separate card, keeping the header dense and clean. */}
-      <TierHero
-        style={ts}
-        paddingTop={insets.top + 14}
-        paddingBottom={32}
-        variant="compact"
+      {/* Top bar — small wordmark + cart, sits over the poster top edge.
+          Espresso ink against the cream backdrop on the carousel
+          (posters generally have darker bottoms; the top is fine).
+          Absolute-positioned over the carousel so the photo runs
+          full-bleed to the status bar. */}
+      <View
+        style={{
+          position: "absolute",
+          top: insets.top + 8,
+          left: 16,
+          right: 16,
+          zIndex: 5,
+          flexDirection: "row",
+          alignItems: "center",
+        }}
       >
-        {/* Top row — brand mark + greeting on one line (left), cart
-            on the right. Putting "Hi, Ammar." next to the °C logo
-            saves a row of vertical space and keeps the editorial
-            moment in the brand's eyeline rather than below it. */}
+        <Image
+          source={require("../assets/icon.png")}
+          style={{ width: 28, height: 28, borderRadius: 6 }}
+          resizeMode="cover"
+        />
+        <View style={{ flex: 1 }} />
+        <Pressable
+          onPress={() => router.push("/cart")}
+          className="relative active:opacity-60"
+          hitSlop={12}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: "rgba(255,255,255,0.92)",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <ShoppingCart size={18} color="#160800" />
+          {cartCount(cart) > 0 && (
+            <View
+              className="absolute rounded-full items-center justify-center"
+              style={{ top: -3, right: -3, width: 16, height: 16, backgroundColor: "#C05040" }}
+            >
+              <Text
+                className="text-[9px]"
+                style={{ fontFamily: "Peachi-Bold", color: "#FFFFFF" }}
+              >
+                {cartCount(cart)}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+      </View>
+
+      {/* Auto-rotating poster carousel — replaces the tier-color
+          gradient hero. Backoffice-managed via /pickup/splash-posters.
+          Hides cleanly when no scheduled posters exist; the info bar
+          below carries the brand identity in that case. */}
+      {posters.length > 0 ? (
+        <PosterCarousel posters={posters} />
+      ) : (
+        // Fallback: small espresso bar so the top isn't blank when no
+        // posters are scheduled. Same height as the safe-area inset
+        // plus a little so the cart button sits comfortably.
+        <View style={{ height: insets.top + 60, backgroundColor: "#160800" }} />
+      )}
+
+      {/* Info bar — Chagee-style compact strip directly under the
+          poster. Greeting + tier on the left, points + vouchers on the
+          right. Tappable into Rewards for the loyalty affordance. */}
+      <Pressable
+        onPress={() => {
+          Haptics.selectionAsync();
+          router.push("/rewards");
+        }}
+        className="bg-surface mx-4 -mt-6 rounded-2xl p-4 active:opacity-90"
+        style={{
+          shadowColor: "#000",
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 3,
+        }}
+      >
         <View className="flex-row items-center">
-          <Image
-            source={require("../assets/icon.png")}
-            style={{ width: 30, height: 30, borderRadius: 7 }}
-            resizeMode="cover"
-          />
           <Text
             numberOfLines={1}
             style={{
               flex: 1,
-              marginLeft: 10,
-              color: ts.textColor,
               fontFamily: "Peachi-Bold",
               fontSize: 17,
-              lineHeight: 22,
+              color: "#160800",
             }}
           >
-            {firstName
-              ? `Hi, ${firstName}.`
-              : showTierEyebrow
-              ? "Welcome."
-              : `${greeting}.`}
+            {firstName ? `Hi, ${firstName}.` : showTierEyebrow ? "Welcome." : `${greeting}.`}
           </Text>
-          <Pressable
-            onPress={() => router.push("/cart")}
-            className="relative p-1 active:opacity-60"
-            hitSlop={12}
-          >
-            <ShoppingCart size={22} color={ts.textColor === "#FFFFFF" ? "rgba(255,255,255,0.85)" : ts.textColor} />
-            {cartCount(cart) > 0 && (
-              <View
-                className="absolute rounded-full items-center justify-center"
-                style={{ top: -2, right: -2, width: 16, height: 16, backgroundColor: ts.textColor }}
+          {showTierEyebrow && tier && (
+            <View className="flex-row items-center" style={{ gap: 5 }}>
+              <Sparkles size={11} color={ts.accentColor} fill={ts.accentColor} />
+              <Text
+                style={{
+                  fontFamily: "SpaceGrotesk_700Bold",
+                  fontSize: 10.5,
+                  letterSpacing: 1.4,
+                  color: ts.accentColor,
+                }}
               >
-                <Text
-                  className="text-[9px]"
-                  style={{ fontFamily: "Peachi-Bold", color: ts.gradient[1] }}
-                >
-                  {cartCount(cart)}
-                </Text>
-              </View>
-            )}
-          </Pressable>
+                {ts.displayName}
+              </Text>
+            </View>
+          )}
         </View>
 
-        {/* Tier mark — small caps in the tier's accent color, no chip
-            or border. Reads as a quiet eyebrow that says "you're a
-            <tier> member" without the chrome of a contained badge. The
-            sparkle in the same accent color is the only ornament. */}
-        {showTierEyebrow && tier && (
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync();
-              router.push("/rewards");
-            }}
-            hitSlop={6}
-            className="flex-row items-center self-start active:opacity-70"
-            style={{ marginTop: 18, gap: 6 }}
-          >
-            <Sparkles size={11} color={ts.accentColor} fill={ts.accentColor} />
+        {/* KPI strip — points + vouchers, mirroring Chagee's "Tea
+            Leaves / Vouchers" pattern. Outlet pill stays below the
+            carousel section so customers can swap pickup point
+            without wading through this row. */}
+        <View className="flex-row mt-3 pt-3 border-t border-border/50">
+          <View className="flex-1">
             <Text
               style={{
-                fontFamily: "SpaceGrotesk_700Bold",
-                fontSize: 11,
-                letterSpacing: 1.6,
-                color: ts.accentColor,
+                fontFamily: "Peachi-Bold",
+                fontSize: 18,
+                color: "#160800",
               }}
             >
-              {ts.displayName} · {tier.tier_multiplier ?? 1}× POINTS
+              {points.toLocaleString()}
             </Text>
-          </Pressable>
-        )}
+            <Text
+              style={{
+                fontFamily: "SpaceGrotesk_500Medium",
+                fontSize: 10,
+                letterSpacing: 1.2,
+                color: "#8E8E93",
+                marginTop: 2,
+                textTransform: "uppercase",
+              }}
+            >
+              Points
+            </Text>
+          </View>
+          <View className="flex-1 border-l border-border/50 pl-4">
+            <Text
+              style={{
+                fontFamily: "Peachi-Bold",
+                fontSize: 18,
+                color: voucherCount > 0 ? "#C05040" : "#160800",
+              }}
+            >
+              {voucherCount}
+            </Text>
+            <Text
+              style={{
+                fontFamily: "SpaceGrotesk_500Medium",
+                fontSize: 10,
+                letterSpacing: 1.2,
+                color: "#8E8E93",
+                marginTop: 2,
+                textTransform: "uppercase",
+              }}
+            >
+              Vouchers
+            </Text>
+          </View>
+          <View className="items-end justify-center">
+            <ChevronRight size={16} color="#8E8E93" />
+          </View>
+        </View>
+      </Pressable>
 
-        {/* Outlet row — plain (no border, no pill background). Just
-            the icon, name, and status dot. Lets the tier badge above
-            be the only chip on the screen, which makes it feel earned. */}
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync();
-            router.push("/store");
+      {/* Outlet row — kept as a plain pressable below the info card,
+          so customers can swap pickup outlet without affecting the
+          hero. Same icon + name + status dot pattern as before. */}
+      <Pressable
+        onPress={() => {
+          Haptics.selectionAsync();
+          router.push("/store");
+        }}
+        className="flex-row items-center self-start active:opacity-75"
+        style={{ marginLeft: 20, marginTop: 14, marginBottom: 4, gap: 6 }}
+      >
+        <MapPin size={14} color="#8E8E93" />
+        <Text
+          style={{
+            fontFamily: "Peachi-Bold",
+            fontSize: 14,
+            color: "#160800",
           }}
-          className="flex-row items-center self-start active:opacity-75"
-          style={{ marginTop: 14, gap: 6 }}
+          numberOfLines={1}
         >
-          <MapPin size={14} color={ts.mutedColor} />
-          <Text
-            style={{
-              fontFamily: "Peachi-Bold",
-              fontSize: 15,
-              color: ts.textColor,
-            }}
-            numberOfLines={1}
-          >
-            {outletName ?? "Select pickup outlet"}
-          </Text>
-          {currentOutlet && (() => {
-            const dot = !currentOutlet.is_open
-              ? { bg: "#EF4444", label: "Closed" }
-              : currentOutlet.is_busy
-              ? { bg: "#F59E0B", label: "Busy" }
-              : { bg: "#22C55E", label: currentOutlet.pickup_time_mins ? `~${currentOutlet.pickup_time_mins} min` : "Open" };
-            return (
-              <>
-                <View
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: 3,
-                    backgroundColor: dot.bg,
-                    marginLeft: 4,
-                  }}
-                />
-                <Text
-                  style={{
-                    fontFamily: "SpaceGrotesk_500Medium",
-                    fontSize: 12,
-                    color: ts.mutedColor,
-                  }}
-                >
-                  {dot.label}
-                </Text>
-              </>
-            );
-          })()}
-          <ChevronRight size={13} color={ts.mutedColor} />
-        </Pressable>
-
-        {/* Points line removed — the tier mark above carries the
-            loyalty affordance. Customers reach balance + redeemable
-            rewards via the Rewards tab; the home hero stays calm. */}
-
-        {/* Promo strip removed — the hero now ends at the outlet pill.
-            Promo content from backoffice still drives the standalone
-            empty-state hero further down (when nothing else fills the
-            screen) and the future image-led campaign card if we add
-            one. Customers reach offers via Rewards or in-cart prompts. */}
-      </TierHero>
+          {outletName ?? "Select pickup outlet"}
+        </Text>
+        {currentOutlet && (() => {
+          const dot = !currentOutlet.is_open
+            ? { bg: "#EF4444", label: "Closed" }
+            : currentOutlet.is_busy
+            ? { bg: "#F59E0B", label: "Busy" }
+            : { bg: "#22C55E", label: currentOutlet.pickup_time_mins ? `~${currentOutlet.pickup_time_mins} min` : "Open" };
+          return (
+            <>
+              <View
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: dot.bg,
+                  marginLeft: 4,
+                }}
+              />
+              <Text
+                style={{
+                  fontFamily: "SpaceGrotesk_500Medium",
+                  fontSize: 12,
+                  color: "#8E8E93",
+                }}
+              >
+                {dot.label}
+              </Text>
+            </>
+          );
+        })()}
+        <ChevronRight size={13} color="#8E8E93" />
+      </Pressable>
 
       <ScrollView
         contentContainerClassName="pb-40"
