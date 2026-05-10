@@ -310,23 +310,24 @@ export default function Home() {
         <View style={{ height: insets.top + 60, backgroundColor: "#160800" }} />
       )}
 
-      {/* Info bar — espresso black with cream text. Sits halfway over
-          the poster's bottom edge; the brand-black panel on a photo
-          is the Celsius signature treatment (mirrors how the website's
-          dark hero overlay reads against its bar interior shot).
-          Tappable into Rewards. */}
+      {/* Info bar — espresso black, full-width with rounded TOP corners
+          only. Sits flush against the poster's bottom edge so the
+          transition reads as the card "rising up" from beneath the
+          photo (Chagee-style). No horizontal margin so it bleeds to
+          the screen edges. Tappable into Rewards. */}
       <Pressable
         onPress={() => {
           Haptics.selectionAsync();
           router.push("/rewards");
         }}
-        className="mx-4 -mt-6 rounded-2xl p-4 active:opacity-90"
+        className="rounded-t-3xl px-5 pt-5 pb-4 active:opacity-90"
         style={{
           backgroundColor: "#160800",
+          marginTop: -22,
           shadowColor: "#000",
           shadowOpacity: 0.18,
           shadowRadius: 12,
-          shadowOffset: { width: 0, height: 6 },
+          shadowOffset: { width: 0, height: -4 },
           elevation: 5,
         }}
       >
@@ -594,37 +595,126 @@ export default function Home() {
             lives only on the Orders tab (where the customer expects to
             see past orders). Home stays focused on what's next. */}
 
-        {/* Single "For you" strip — tab pills for Vouchers · Usual ·
-            Best sellers, one shared horizontal card track that swaps
-            content. Replaces three separately-stacked sections so the
-            same screen real estate carries more rather than scrolling
-            past three near-identical headers. */}
-        <ForYouStrip
-          phone={phone}
-          outletId={outletId}
-          rewards={affordableRewards}
-          usual={recent.data ?? []}
-          featured={featured}
-          urgencyLabel={urgencyLabel}
-          onRewardTap={() => router.push("/rewards")}
-          onUsualTap={() => {
-            if (!outletId) router.push("/store");
-            else router.push({ pathname: "/menu", params: { tab: "usual" } });
-          }}
-          onFeaturedTap={(p) => {
-            if (!outletId) router.push("/store");
-            else router.push({ pathname: "/product/[id]", params: { id: p.id } });
-          }}
-          onRewardsSeeAll={() => router.push("/rewards")}
-          onUsualSeeAll={() => {
-            if (!outletId) router.push("/store");
-            else router.push({ pathname: "/menu", params: { tab: "usual" } });
-          }}
-          onFeaturedSeeAll={() => {
-            if (!outletId) router.push("/store");
-            else router.push("/menu");
-          }}
-        />
+        {/* Available rewards — what's redeemable right now. Time-
+            sensitive (urgency labels, stock countdowns), so it leads. */}
+        {affordableRewards.length > 0 && (
+          <View className="mt-5">
+            <View className="flex-row items-center justify-between mb-2 px-4">
+              <Text
+                className="text-espresso text-[18px]"
+                style={{ fontFamily: "Peachi-Bold" }}
+              >
+                Available rewards
+              </Text>
+              <Pressable
+                onPress={() => router.push("/rewards")}
+                className="flex-row items-center gap-0.5 active:opacity-70"
+              >
+                <Text className="text-primary text-xs font-bold">All</Text>
+                <ChevronRight size={14} color="#C05040" />
+              </Pressable>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerClassName="gap-3 px-4"
+            >
+              {affordableRewards.map((r) => (
+                <RewardTicket
+                  key={r.id}
+                  reward={r}
+                  onPress={() => router.push("/rewards")}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Your usual — surfaces the customer's regular orders with
+            a one-tap path into the menu's Usual tab. */}
+        {phone && (recent.data?.length ?? 0) > 0 && (
+          <View className="mt-5">
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                if (!outletId) router.push("/store");
+                else router.push({ pathname: "/menu", params: { tab: "usual" } });
+              }}
+              className="flex-row items-center justify-between mb-2 px-4 active:opacity-70"
+            >
+              <Text
+                className="text-espresso text-[18px]"
+                style={{ fontFamily: "Peachi-Bold" }}
+              >
+                Your usual
+              </Text>
+              <View className="flex-row items-center gap-0.5">
+                <Text className="text-primary text-xs font-bold">See all</Text>
+                <ChevronRight size={14} color="#C05040" />
+              </View>
+            </Pressable>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerClassName="gap-3 px-4"
+            >
+              {recent.data!.map((item) => (
+                <Pressable
+                  key={item.id}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    if (!outletId) router.push("/store");
+                    else router.push({ pathname: "/menu", params: { tab: "usual" } });
+                  }}
+                  className="w-44 bg-surface rounded-2xl border border-border overflow-hidden active:opacity-70"
+                  style={{
+                    shadowColor: "#000",
+                    shadowOpacity: 0.06,
+                    shadowRadius: 8,
+                    shadowOffset: { width: 0, height: 3 },
+                  }}
+                >
+                  <View className="aspect-[4/5] bg-primary/5">
+                    {item.image_url ? (
+                      <Image
+                        source={{ uri: item.image_url }}
+                        style={{ width: "100%", height: "100%" }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View className="flex-1 items-center justify-center">
+                        <Coffee size={32} color="#C05040" strokeWidth={1.5} />
+                      </View>
+                    )}
+                  </View>
+                  <View className="p-3">
+                    <Text
+                      className="text-espresso text-[14px]"
+                      style={{ fontFamily: "Peachi-Bold" }}
+                      numberOfLines={1}
+                    >
+                      {item.name}
+                    </Text>
+                    <View className="flex-row items-center justify-between mt-2">
+                      <Text
+                        className="text-primary text-[16px]"
+                        style={{ fontFamily: "Peachi-Bold" }}
+                      >
+                        {formatPrice(item.price)}
+                      </Text>
+                      <View
+                        className="bg-espresso rounded-full items-center justify-center"
+                        style={{ width: 28, height: 28 }}
+                      >
+                        <Text className="text-white text-base leading-none">+</Text>
+                      </View>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* First-launch poster — replaces the small empty-state nudge
             when the home would otherwise be sparse (no orders, no
@@ -697,9 +787,104 @@ export default function Home() {
             </Pressable>
           )}
 
-        {/* Standalone Best Sellers section removed — now lives inside
-            ForYouStrip as the "Best sellers" tab. Removing the
-            duplicate strip kept home tighter without losing discovery. */}
+        {/* Best Sellers — discovery surface. Skeleton while menu
+            loads, real cards once the data lands. */}
+        {menu.isLoading && featured.length === 0 ? (
+          <View className="px-4 mt-5">
+            <View className="bg-surface/60 rounded-md mb-2" style={{ height: 16, width: 110 }} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-3">
+              {[0, 1, 2, 3].map((i) => (
+                <View
+                  key={i}
+                  className="w-44 bg-surface rounded-2xl border border-border overflow-hidden"
+                >
+                  <View className="aspect-[4/5] bg-background" />
+                  <View className="p-3 gap-2">
+                    <View className="bg-background rounded-md" style={{ height: 12, width: "80%" }} />
+                    <View className="bg-background rounded-md" style={{ height: 14, width: "40%" }} />
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+        {featured.length > 0 && (
+          <View className="px-4 mt-5">
+            <View className="flex-row items-center justify-between mb-2">
+              <Text
+                className="text-espresso text-[18px]"
+                style={{ fontFamily: "Peachi-Bold" }}
+              >
+                Best Sellers
+              </Text>
+              <Pressable
+                onPress={() => {
+                  if (!outletId) router.push("/store");
+                  else router.push("/menu");
+                }}
+                className="flex-row items-center gap-0.5 active:opacity-70"
+              >
+                <Text className="text-primary text-xs font-bold">More</Text>
+                <ChevronRight size={14} color="#C05040" />
+              </Pressable>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-3">
+              {featured.map((p) => (
+                <Pressable
+                  key={p.id}
+                  onPress={() => {
+                    if (!outletId) router.push("/store");
+                    else router.push({ pathname: "/product/[id]", params: { id: p.id } });
+                  }}
+                  className="w-44 active:opacity-70"
+                >
+                  <View
+                    className="bg-surface rounded-2xl overflow-hidden border border-border"
+                    style={{
+                      shadowColor: "#000",
+                      shadowOpacity: 0.06,
+                      shadowRadius: 8,
+                      shadowOffset: { width: 0, height: 3 },
+                    }}
+                  >
+                    <View className="aspect-[4/5] bg-background">
+                      {p.image_url && (
+                        <Image
+                          source={{ uri: p.image_url }}
+                          className="w-full h-full"
+                          resizeMode="cover"
+                        />
+                      )}
+                    </View>
+                    <View className="p-3">
+                      <Text
+                        className="text-espresso text-[14px]"
+                        style={{ fontFamily: "Peachi-Bold" }}
+                        numberOfLines={1}
+                      >
+                        {p.name}
+                      </Text>
+                      <View className="flex-row items-center justify-between mt-2">
+                        <Text
+                          className="text-primary text-[16px]"
+                          style={{ fontFamily: "Peachi-Bold" }}
+                        >
+                          {formatPrice(p.price)}
+                        </Text>
+                        <View
+                          className="bg-espresso rounded-full items-center justify-center"
+                          style={{ width: 28, height: 28 }}
+                        >
+                          <ChevronRight size={16} color="#FFFFFF" />
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
       </ScrollView>
 
