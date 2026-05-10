@@ -5,16 +5,17 @@ import { formatRM } from "@celsius/shared";
 /**
  * Staff Order Management — optimised for Sunmi V3 (Android touch POS).
  *
- * Layout: single scrollable queue, largest actions at bottom thumb zone.
+ * Layout: PREPARING (oldest first) on top, READY FOR COLLECTION below.
+ * Per-card count-up timer + urgency strip (green ≤3m, amber 3-7m, red >7m).
  * Auto-prints 80mm kitchen slip when a new order arrives.
- * Staff taps "Ready" → customer gets push notification.
- * Staff taps "Collected" → order is archived.
- * Staff can cancel any pending/preparing order.
+ * Header pulses red OVERDUE chip when any preparing order >7m; tap to snooze 60s.
+ * Audio re-chime every 30s while overdue exists; mute toggle persists.
+ * Staff taps "Ready" → customer push. "Collected" → archive. Undo Ready supported.
  */
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Wifi, Printer, Receipt, X, CheckCircle, Package, Loader2, Pause, Play, RotateCcw } from "lucide-react";
+import { Wifi, Printer, Receipt, X, CheckCircle, Package, Loader2, Pause, Play, RotateCcw, Bell, BellOff } from "lucide-react";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { printKitchenSlip, printReceipt } from "@/lib/thermal-print";
 import { hasSunmiPrinter } from "@/lib/sunmi-printer";
@@ -25,32 +26,74 @@ import type { OrderRow, OrderItemRow } from "@/lib/supabase/types";
 
 type OrderWithItems = OrderRow & { order_items: OrderItemRow[] };
 
-const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  preparing: { label: "Preparing",   cls: "bg-amber-100 text-amber-700" },
-  ready:     { label: "Ready",       cls: "bg-green-100 text-green-700" },
-};
+// SLA thresholds — used by both card visuals and the overdue escalation.
+const PREP_GREEN_MAX_MIN = 3;
+const PREP_AMBER_MAX_MIN = 7;
+const READY_GREEN_MAX_MIN = 20;
+const OVERDUE_RECHIME_MS  = 30_000;
+const SNOOZE_MS           = 60_000;
 
-function playChime() {
+// ── Audio ──────────────────────────────────────────────────────────────────
+
+let _audioCtx: AudioContext | null = null;
+
+function getAudioCtx(): AudioContext | null {
   try {
-    const ctx  = new AudioContext();
-    const gain = ctx.createGain();
-    gain.connect(ctx.destination);
+    if (!_audioCtx) _audioCtx = new AudioContext();
+    if (_audioCtx.state === "suspended") void _audioCtx.resume();
+    return _audioCtx;
+  } catch { return null; }
+}
 
-    // Three-tone ascending chime, repeated 3 times
-    for (let rep = 0; rep < 3; rep++) {
-      const notes = [660, 880, 1047]; // E5, A5, C6
-      notes.forEach((freq, i) => {
-        const osc = ctx.createOscillator();
-        osc.connect(gain);
-        osc.frequency.value = freq;
-        const start = ctx.currentTime + rep * 1.2 + i * 0.3;
-        gain.gain.setValueAtTime(0.4, start);
-        gain.gain.exponentialRampToValueAtTime(0.01, start + 0.8);
-        osc.start(start);
-        osc.stop(start + 0.8);
-      });
-    }
-  } catch { /* ignore */ }
+// Three-tone ascending fanfare, repeated 3 times — for new-order arrival.
+function playArrivalChime() {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+  for (let rep = 0; rep < 3; rep++) {
+    const notes = [660, 880, 1047]; // E5, A5, C6
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      osc.connect(gain);
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + rep * 1.2 + i * 0.3;
+      gain.gain.setValueAtTime(0.4, start);
+      gain.gain.exponentialRampToValueAtTime(0.01, start + 0.8);
+      osc.start(start);
+      osc.stop(start + 0.8);
+    });
+  }
+}
+
+// Short two-pip 880Hz alert — for overdue re-chime escalation.
+function playEscalationChime() {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+  for (let i = 0; i < 2; i++) {
+    const osc = ctx.createOscillator();
+    osc.connect(gain);
+    osc.frequency.value = 880;
+    const start = ctx.currentTime + i * 0.4;
+    gain.gain.setValueAtTime(0.45, start);
+    gain.gain.exponentialRampToValueAtTime(0.01, start + 0.3);
+    osc.start(start);
+    osc.stop(start + 0.3);
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function elapsedSec(dateStr: string) {
+  return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000));
+}
+
+function formatTimer(s: number) {
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, "0")}`;
 }
 
 function timeAgo(dateStr: string) {
@@ -61,21 +104,17 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(mins / 60)}h`;
 }
 
-// Prep-time SLA bucket. Drives card border color so a busy barista can triage
-// at a glance: green = on track, amber = slipping, red = overdue.
-//   preparing: green ≤3m, amber 3-7m, red >7m
-//   ready:     green ≤20m (still warm), red after that — same as the prior
-//              "stale" highlight, just expressed via the same bucket helper
-function prepBucket(createdAt: string, status: string): "green" | "amber" | "red" | "none" {
-  const elapsedMs = Date.now() - new Date(createdAt).getTime();
-  const mins = elapsedMs / 60_000;
+type Bucket = "green" | "amber" | "red" | "none";
+
+function prepBucket(createdAt: string, status: string): Bucket {
+  const mins = (Date.now() - new Date(createdAt).getTime()) / 60_000;
   if (status === "preparing") {
-    if (mins <= 3) return "green";
-    if (mins <= 7) return "amber";
+    if (mins <= PREP_GREEN_MAX_MIN) return "green";
+    if (mins <= PREP_AMBER_MAX_MIN) return "amber";
     return "red";
   }
   if (status === "ready") {
-    return mins <= 20 ? "green" : "red";
+    return mins <= READY_GREEN_MAX_MIN ? "green" : "red";
   }
   return "none";
 }
@@ -87,7 +126,6 @@ function firstName(name: string | null): string | null {
 }
 
 // ── Print helper — renders receipt inline + calls window.print() ──
-// No popups, no redirects, no external apps. Works everywhere.
 
 const STORE_NAMES: Record<string, string> = {
   "shah-alam": "Shah Alam",
@@ -158,26 +196,17 @@ function buildReceiptHtml(order: OrderWithItems): string {
 }
 
 function doPrint(_orderId: string, type: "kitchen" | "receipt", order: OrderWithItems) {
-  // Priority 1: Capacitor native app (Sunmi AIDL) — silent, instant
   if (isCapacitorNative()) {
-    if (type === "kitchen") {
-      nativePrintKitchenSlip(order).catch(console.error);
-    } else {
-      nativePrintReceipt(order).catch(console.error);
-    }
+    if (type === "kitchen") nativePrintKitchenSlip(order).catch(console.error);
+    else nativePrintReceipt(order).catch(console.error);
     return;
   }
-
-  // Priority 2: Sunmi JS bridge (Sunmi browser)
   if (hasSunmiPrinter()) {
     if (type === "kitchen") printKitchenSlip(order);
     else printReceipt(order);
     return;
   }
-
-  // Priority 3: Fallback — render in-page and use window.print()
   const html = type === "kitchen" ? buildKitchenHtml(order) : buildReceiptHtml(order);
-
   let zone = document.getElementById("kds-print-zone");
   if (!zone) {
     zone = document.createElement("div");
@@ -186,14 +215,11 @@ function doPrint(_orderId: string, type: "kitchen" | "receipt", order: OrderWith
   }
   zone.innerHTML = html;
 
-  // Add print-only stylesheet if not already present
   if (!document.getElementById("kds-print-styles")) {
     const style = document.createElement("style");
     style.id = "kds-print-styles";
     style.textContent = `
-      #kds-print-zone {
-        display: none;
-      }
+      #kds-print-zone { display: none; }
       @media print {
         body > *:not(#kds-print-zone) {
           display: none !important;
@@ -203,27 +229,16 @@ function doPrint(_orderId: string, type: "kitchen" | "receipt", order: OrderWith
         }
         #kds-print-zone {
           display: block !important;
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 80mm;
-          padding: 2mm 4mm;
-          background: #fff;
-          color: #000;
+          position: fixed; top: 0; left: 0; width: 80mm;
+          padding: 2mm 4mm; background: #fff; color: #000;
           font-family: 'Courier New', Courier, monospace;
-          font-size: 12px;
-          z-index: 999999;
+          font-size: 12px; z-index: 999999;
         }
-        @page {
-          size: 80mm auto;
-          margin: 0;
-        }
+        @page { size: 80mm auto; margin: 0; }
       }
     `;
     document.head.appendChild(style);
   }
-
-  // Small delay for DOM to update, then print
   setTimeout(() => window.print(), 100);
 }
 
@@ -231,23 +246,48 @@ function doPrint(_orderId: string, type: "kitchen" | "receipt", order: OrderWith
 
 function StaffOrderCard({
   order,
+  tick,
   onAdvance,
   onCancel,
 }: {
   order: OrderWithItems;
+  tick: number;
   onAdvance: (id: string, status: "ready" | "completed" | "preparing") => Promise<void>;
   onCancel:  (id: string) => Promise<void>;
 }) {
-  const [busy,  setBusy]  = useState(false);
+  void tick; // forces re-render so the count-up timer ticks each second
+  const [busy,   setBusy]   = useState(false);
   const [errMsg, setErrMsg] = useState("");
-  const badge = STATUS_BADGE[order.status];
-  const bucket = prepBucket(order.created_at, order.status);
-  const borderCls =
-    bucket === "red"   ? "border-red-300"   :
-    bucket === "amber" ? "border-amber-300" :
-    bucket === "green" ? "border-green-300" :
-    "border-transparent";
+
+  const isPreparing = order.status === "preparing";
+  const isReady     = order.status === "ready";
+  const elapsed     = elapsedSec(order.created_at);
+  const bucket      = prepBucket(order.created_at, order.status);
   const customerFirst = firstName(order.customer_name);
+  const itemCount   = order.order_items.reduce((s, i) => s + i.quantity, 0);
+
+  // Strip on left edge — taller than border, easier to scan
+  const stripCls =
+    bucket === "red"   ? "bg-red-500"   :
+    bucket === "amber" ? "bg-amber-400" :
+    bucket === "green" ? "bg-emerald-500" :
+                         "bg-transparent";
+
+  const borderCls =
+    bucket === "red"   ? "border-red-300 shadow-[0_0_0_2px_rgba(239,68,68,0.12)]" :
+    bucket === "amber" ? "border-amber-300" :
+    bucket === "green" ? "border-emerald-300" :
+                         "border-transparent";
+
+  const timerCls =
+    bucket === "red"   ? "text-red-600"   :
+    bucket === "amber" ? "text-amber-600" :
+    isReady            ? "text-emerald-600" :
+                         "text-[#160800]";
+
+  // Progress towards target — full bar = at the amber/red boundary (7m for prep, 20m for ready)
+  const targetMin = isPreparing ? PREP_AMBER_MAX_MIN : READY_GREEN_MAX_MIN;
+  const progressPct = Math.min(100, ((elapsed / 60) / targetMin) * 100);
 
   async function act(fn: () => Promise<void>) {
     setBusy(true);
@@ -259,16 +299,17 @@ function StaffOrderCard({
   }
 
   return (
-    <div className={`bg-white rounded-2xl border-2 overflow-hidden transition-all ${borderCls}`}>
+    <div className={`relative bg-white rounded-2xl border-2 overflow-hidden transition-colors ${borderCls}`}>
+      {/* Urgency strip on left edge */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${stripCls}`} />
+
       {/* Card header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+      <div className="flex items-start justify-between px-4 pt-3.5 pb-2 pl-5">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-3xl font-black text-[#160800] leading-none">#{order.order_number}</span>
-          {badge && (
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.cls}`}>
-              {badge.label}
-            </span>
-          )}
+          <span className="text-3xl font-black text-[#160800] leading-none shrink-0">#{order.order_number}</span>
+          <span className="text-xs font-semibold text-muted-foreground shrink-0">
+            {itemCount} {itemCount === 1 ? "item" : "items"}
+          </span>
           {customerFirst && (
             <span className="text-sm font-semibold text-[#160800]/80 truncate">
               {customerFirst}
@@ -276,15 +317,29 @@ function StaffOrderCard({
           )}
         </div>
         <div className="text-right shrink-0 ml-2">
-          <p className="text-xs text-muted-foreground">{timeAgo(order.created_at)} ago</p>
-          <p className="text-xs font-bold text-[#160800]">
+          <p className={`font-mono font-black text-2xl leading-none tabular-nums ${timerCls}`}>
+            {formatTimer(elapsed)}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-1">
             RM {(order.total / 100).toFixed(2)}
           </p>
         </div>
       </div>
 
+      {/* Progress bar */}
+      <div className="mx-4 mb-2 ml-5 h-1 bg-[#f0f0f0] rounded-full overflow-hidden">
+        <div
+          className={`h-full transition-all ${
+            bucket === "red"   ? "bg-red-500" :
+            bucket === "amber" ? "bg-amber-400" :
+                                 "bg-emerald-400"
+          }`}
+          style={{ width: `${progressPct}%` }}
+        />
+      </div>
+
       {/* Items */}
-      <div className="px-4 pb-3 space-y-1.5 border-b border-border/40">
+      <div className="px-4 pb-3 pl-5 space-y-1.5 border-b border-border/40">
         {order.order_items.map((item) => {
           const mods = (item.modifiers.selections ?? []).map((s: { label: string }) => s.label).join(" · ");
           return (
@@ -305,17 +360,17 @@ function StaffOrderCard({
 
       {/* Error */}
       {errMsg && (
-        <p className="px-4 pb-1 text-xs text-red-500 font-medium">{errMsg}</p>
+        <p className="px-4 pb-1 pl-5 text-xs text-red-500 font-medium">{errMsg}</p>
       )}
 
       {/* Actions */}
-      <div className="px-3 py-3 flex gap-2">
-        {order.status === "preparing" && (
+      <div className="px-3 py-3 pl-4 flex gap-2">
+        {isPreparing && (
           <>
             <button
               onClick={() => act(() => onAdvance(order.id, "ready"))}
               disabled={busy}
-              className="flex-1 bg-green-600 text-white rounded-xl py-3 font-bold text-sm flex items-center justify-center gap-2 active:opacity-80"
+              className="flex-1 bg-green-600 text-white rounded-xl py-3.5 font-bold text-sm flex items-center justify-center gap-2 active:opacity-80 disabled:opacity-50"
             >
               <CheckCircle className="h-4 w-4" />
               Ready
@@ -323,33 +378,35 @@ function StaffOrderCard({
             <button
               onClick={() => doPrint(order.id, "kitchen", order)}
               className="w-12 flex items-center justify-center rounded-xl border border-border text-muted-foreground active:bg-muted"
+              aria-label="Print kitchen slip"
             >
               <Printer className="h-4 w-4" />
             </button>
             <button
               onClick={() => act(() => onCancel(order.id))}
               disabled={busy}
-              className="w-12 flex items-center justify-center rounded-xl border border-red-200 text-red-500 active:bg-red-50"
+              className="w-12 flex items-center justify-center rounded-xl border border-red-200 text-red-500 active:bg-red-50 disabled:opacity-50"
+              aria-label="Cancel order"
             >
               <X className="h-4 w-4" />
             </button>
           </>
         )}
 
-        {order.status === "ready" && (
+        {isReady && (
           <>
             <button
               onClick={() => act(() => onAdvance(order.id, "preparing"))}
               disabled={busy}
               title="Undo Ready (move back to Preparing)"
-              className="w-10 flex items-center justify-center rounded-xl border border-border text-muted-foreground active:bg-muted"
+              className="w-10 flex items-center justify-center rounded-xl border border-border text-muted-foreground active:bg-muted disabled:opacity-50"
             >
               <RotateCcw className="h-4 w-4" />
             </button>
             <button
               onClick={() => act(() => onAdvance(order.id, "completed"))}
               disabled={busy}
-              className="flex-1 bg-[#160800] text-white rounded-xl py-3 font-bold text-sm flex items-center justify-center gap-2 active:opacity-80"
+              className="flex-1 bg-[#160800] text-white rounded-xl py-3.5 font-bold text-sm flex items-center justify-center gap-2 active:opacity-80 disabled:opacity-50"
             >
               <Package className="h-4 w-4" />
               Collected
@@ -380,7 +437,7 @@ function StaffOrderCard({
 function CompletedOrderCard({ order }: { order: OrderWithItems }) {
   const totalRM = (order.total / 100).toFixed(2);
   return (
-    <div className="bg-white rounded-2xl border border-border/40 overflow-hidden opacity-80">
+    <div className="bg-white rounded-2xl border border-border/40 overflow-hidden opacity-90">
       <div className="flex items-center justify-between px-4 py-3">
         <div>
           <span className="text-xl font-black text-[#160800]">#{order.order_number}</span>
@@ -416,6 +473,25 @@ function CompletedOrderCard({ order }: { order: OrderWithItems }) {
   );
 }
 
+// ── Section header ─────────────────────────────────────────────────────────
+
+function SectionHeader({ label, count, accent }: { label: string; count: number; accent: "amber" | "emerald" | "red" }) {
+  if (count === 0) return null;
+  const dotCls = accent === "red"
+    ? "bg-red-500 animate-pulse"
+    : accent === "amber"
+    ? "bg-amber-400 animate-pulse"
+    : "bg-emerald-500";
+  return (
+    <div className="flex items-center gap-2 px-1 pt-1 pb-1">
+      <div className={`w-2 h-2 rounded-full ${dotCls}`} />
+      <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+        {label} <span className="text-[#160800]">{count}</span>
+      </span>
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function StaffOrdersPage() {
@@ -423,7 +499,6 @@ export default function StaffOrdersPage() {
   const [session, setSession] = useState<ReturnType<typeof getSession>>(null);
   const [mounted, setMounted] = useState(false);
 
-  // Auth guard + session init (client-only)
   useEffect(() => {
     const s = getSession();
     if (!s) { router.replace("/staff/login"); return; }
@@ -433,24 +508,35 @@ export default function StaffOrdersPage() {
 
   const storeId = session?.storeId ?? "";
   const [autoPrint, setAutoPrint] = useState(true);
+  const [muted,     setMuted]     = useState(false);
   const [tab,       setTab]       = useState<"active" | "completed">("active");
   const [orders,    setOrders]    = useState<OrderWithItems[]>([]);
   const [completed, setCompleted] = useState<OrderWithItems[]>([]);
   const [loadingCompleted, setLoadingCompleted] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [tick,      setTick]      = useState(0); // for time-ago refresh
+  const [tick,      setTick]      = useState(0);
   const [outletBusy, setOutletBusy] = useState(false);
   const [busyToggling, setBusyToggling] = useState(false);
 
   const autoPrintRef = useRef(autoPrint);
   useEffect(() => { autoPrintRef.current = autoPrint; }, [autoPrint]);
 
-  // Read autoPrint preference from localStorage after mount
+  const mutedRef = useRef(muted);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+
+  const ordersRef = useRef(orders);
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
+
+  const snoozeUntilRef = useRef(0);
+  const lastChimeRef   = useRef(0);
+
+  // Read prefs
   useEffect(() => {
     setAutoPrint(localStorage.getItem("kds-autoprint") !== "off");
+    setMuted(localStorage.getItem("kds-muted") === "on");
   }, []);
 
-  // Sync busy state from server on mount + every 60s (so other devices stay in sync)
+  // Sync busy state from server on mount + every 60s
   useEffect(() => {
     if (!storeId) return;
     let cancelled = false;
@@ -470,14 +556,14 @@ export default function StaffOrdersPage() {
     if (!storeId || busyToggling) return;
     setBusyToggling(true);
     const next = !outletBusy;
-    setOutletBusy(next); // optimistic
+    setOutletBusy(next);
     try {
       const res = await fetch("/api/staff/outlet/busy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ storeId, busy: next }),
       });
-      if (!res.ok) setOutletBusy(!next); // rollback
+      if (!res.ok) setOutletBusy(!next);
     } catch {
       setOutletBusy(!next);
     } finally {
@@ -485,49 +571,28 @@ export default function StaffOrdersPage() {
     }
   }
 
-  // Refresh time-ago labels every 30s
+  // Tick — 1Hz when any active order, else 30s for time-ago labels
   useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 30_000);
+    const period = orders.length > 0 ? 1000 : 30_000;
+    const t = setInterval(() => setTick((n) => n + 1), period);
+    return () => clearInterval(t);
+  }, [orders.length]);
+
+  // Audio escalation — fires every OVERDUE_RECHIME_MS while overdue exists & not muted/snoozed
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (mutedRef.current) return;
+      if (Date.now() < snoozeUntilRef.current) return;
+      const overdue = ordersRef.current.some(
+        (o) => o.status === "preparing" && prepBucket(o.created_at, o.status) === "red",
+      );
+      if (!overdue) return;
+      if (Date.now() - lastChimeRef.current < OVERDUE_RECHIME_MS - 1000) return;
+      lastChimeRef.current = Date.now();
+      playEscalationChime();
+    }, 5_000);
     return () => clearInterval(t);
   }, []);
-
-  // Keep the screen awake while the KDS tab is open. Without this the
-  // SUNMI sleeps after the OS-level idle timeout, the realtime channel
-  // drops, and incoming orders silently miss the chime + auto-print.
-  // Re-acquired on visibilitychange because the lock is released by the
-  // browser whenever the page becomes hidden (e.g. switching apps).
-  useEffect(() => {
-    type WakeLockSentinel = { release: () => Promise<void> };
-    type WakeLock = { request: (type: "screen") => Promise<WakeLockSentinel> };
-    const wakeLock = (navigator as unknown as { wakeLock?: WakeLock }).wakeLock;
-    if (!wakeLock) return;
-
-    let sentinel: WakeLockSentinel | null = null;
-    let cancelled = false;
-
-    const acquire = async () => {
-      try {
-        sentinel = await wakeLock.request("screen");
-      } catch {
-        // Some surfaces (cross-origin frames, low battery) refuse the
-        // request — fall back to the OS idle timeout silently.
-      }
-    };
-
-    acquire();
-    const onVisibility = () => {
-      if (!cancelled && document.visibilityState === "visible") acquire();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", onVisibility);
-      sentinel?.release().catch(() => { /* already released */ });
-    };
-  }, []);
-
-  void tick; // suppress unused warning
 
   function toggleAutoPrint() {
     setAutoPrint((v) => {
@@ -535,6 +600,19 @@ export default function StaffOrdersPage() {
       localStorage.setItem("kds-autoprint", next ? "on" : "off");
       return next;
     });
+  }
+
+  function toggleMute() {
+    setMuted((v) => {
+      const next = !v;
+      localStorage.setItem("kds-muted", next ? "on" : "off");
+      return next;
+    });
+  }
+
+  function snooze() {
+    snoozeUntilRef.current = Date.now() + SNOOZE_MS;
+    setTick((n) => n + 1);
   }
 
   const fetchOrders = useCallback(async (sid: string) => {
@@ -548,7 +626,6 @@ export default function StaffOrdersPage() {
     if (data) setOrders(data as OrderWithItems[]);
   }, []);
 
-  // Track known order IDs for detecting new arrivals during polling
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -563,7 +640,6 @@ export default function StaffOrdersPage() {
     let realtimeConnected = false;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-    // ── Polling fallback: fetches orders every 5s if realtime is down ──
     function startPolling() {
       if (pollTimer) return;
       pollTimer = setInterval(async () => {
@@ -575,12 +651,10 @@ export default function StaffOrdersPage() {
           .order("created_at", { ascending: true });
         if (!data) return;
         const fresh = data as OrderWithItems[];
-        // Detect new orders that weren't in previous poll
         const freshIds = new Set(fresh.map((o) => o.id));
         for (const order of fresh) {
           if (!knownOrderIdsRef.current.has(order.id)) {
-            // New order detected via polling
-            playChime();
+            if (!mutedRef.current) playArrivalChime();
             if (autoPrintRef.current) setTimeout(() => doPrint(order.id, "kitchen", order), 400);
           }
         }
@@ -604,7 +678,7 @@ export default function StaffOrdersPage() {
             if (order && ["preparing", "ready"].includes(order.status)) {
               knownOrderIdsRef.current.add(order.id);
               setOrders((prev) => [...prev, order]);
-              playChime();
+              if (!mutedRef.current) playArrivalChime();
               if (autoPrintRef.current) setTimeout(() => doPrint(order.id, "kitchen", order), 400);
             }
           }
@@ -615,7 +689,6 @@ export default function StaffOrdersPage() {
               knownOrderIdsRef.current.delete(updated.id);
               setOrders((prev) => prev.filter((o) => o.id !== updated.id));
             } else if (updated.status === "preparing") {
-              // Payment confirmed → new order entering queue
               const { data } = await supabase
                 .from("orders").select("*, order_items(*)").eq("id", updated.id).single();
               const order = data as OrderWithItems | null;
@@ -624,7 +697,7 @@ export default function StaffOrdersPage() {
                   const exists = prev.some((o) => o.id === order.id);
                   if (exists) return prev.map((o) => o.id === order.id ? { ...o, ...order } : o);
                   knownOrderIdsRef.current.add(order.id);
-                  playChime();
+                  if (!mutedRef.current) playArrivalChime();
                   if (autoPrintRef.current) setTimeout(() => doPrint(order.id, "kitchen", order), 400);
                   return [...prev, order];
                 });
@@ -638,15 +711,10 @@ export default function StaffOrdersPage() {
       .subscribe((status) => {
         realtimeConnected = status === "SUBSCRIBED";
         setConnected(realtimeConnected);
-        if (realtimeConnected) {
-          stopPolling();
-        } else {
-          // Realtime failed — start polling fallback
-          startPolling();
-        }
+        if (realtimeConnected) stopPolling();
+        else startPolling();
       });
 
-    // Also seed known IDs from initial fetch
     supabase
       .from("orders")
       .select("id")
@@ -669,7 +737,6 @@ export default function StaffOrdersPage() {
     });
     const data = await res.json() as { ok?: boolean; error?: string };
     if (!res.ok) throw new Error(data.error ?? `Failed (${res.status})`);
-    // Fallback: update local state immediately in case Realtime is slow/disconnected
     if (newStatus === "completed") {
       setOrders((prev) => prev.filter((o) => o.id !== orderId));
     } else {
@@ -686,9 +753,9 @@ export default function StaffOrdersPage() {
     setOrders((prev) => prev.filter((o) => o.id !== orderId));
   }
 
-  // Fetch today's completed orders when switching to completed tab
+  // Today's completed
   useEffect(() => {
-    if (tab !== "completed") return;
+    if (tab !== "completed" || !storeId) return;
     setLoadingCompleted(true);
     const supabase = getSupabaseClient();
     const todayStart = new Date();
@@ -706,9 +773,8 @@ export default function StaffOrdersPage() {
       });
   }, [tab, storeId]);
 
-  // Keep completed list updated via Realtime (append newly completed orders)
   useEffect(() => {
-    if (tab !== "completed") return;
+    if (tab !== "completed" || !storeId) return;
     const supabase = getSupabaseClient();
     const ch = supabase
       .channel(`kds-completed-${storeId}`)
@@ -727,27 +793,62 @@ export default function StaffOrdersPage() {
     return () => { supabase.removeChannel(ch); };
   }, [tab, storeId]);
 
-  const preparing = orders.filter((o) => o.status === "preparing");
-  const ready     = orders.filter((o) => o.status === "ready");
-  const total     = orders.length;
+  // Derived: split + sort + count overdue (recomputed each tick)
+  const { preparing, ready, overdueCount } = useMemo(() => {
+    void tick;
+    const prep = orders
+      .filter((o) => o.status === "preparing")
+      .slice()
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const rdy = orders
+      .filter((o) => o.status === "ready")
+      .slice()
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const over = prep.filter((o) => prepBucket(o.created_at, "preparing") === "red").length;
+    return { preparing: prep, ready: rdy, overdueCount: over };
+  }, [orders, tick]);
+
+  const total = orders.length;
+  const snoozed = Date.now() < snoozeUntilRef.current;
 
   if (!mounted || !session) return <div className="min-h-dvh bg-[#160800]" />;
 
   return (
     <div className="min-h-dvh bg-[#f0f0f0] flex flex-col select-none pb-16">
       {/* Header */}
-      <header className="bg-[#160800] text-white px-4 py-3 flex items-center justify-between shrink-0">
-        <div className="flex flex-col gap-0.5">
+      <header className="bg-[#160800] text-white px-4 py-3 flex items-center justify-between shrink-0 gap-2">
+        <div className="flex flex-col gap-0.5 min-w-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/images/celsius-wordmark-white.png"
             alt="Celsius Coffee"
             className="h-5 w-auto"
           />
-          <p className="text-white/50 text-xs">{session.storeName}</p>
+          <p className="text-white/50 text-xs truncate">{session.storeName}</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Overdue chip — tap to snooze */}
+          {overdueCount > 0 && tab === "active" && (
+            <button
+              onClick={snooze}
+              className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-full bg-red-500/90 text-white font-bold animate-pulse active:opacity-80"
+            >
+              {overdueCount} OVERDUE
+              {snoozed && <span className="opacity-70 font-normal">· snoozed</span>}
+            </button>
+          )}
+          {/* Mute */}
+          <button
+            onClick={toggleMute}
+            className={`flex items-center justify-center w-8 h-8 rounded-full border transition-colors ${
+              muted ? "bg-white/8 text-white/40 border-white/10" : "bg-white/8 text-white/70 border-white/10"
+            }`}
+            aria-label={muted ? "Unmute" : "Mute"}
+          >
+            {muted ? <BellOff className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
+          </button>
+          {/* Busy */}
           <button
             onClick={toggleBusy}
             disabled={busyToggling}
@@ -760,6 +861,7 @@ export default function StaffOrdersPage() {
             {outletBusy ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
             {outletBusy ? "Busy" : "Open"}
           </button>
+          {/* Auto-print */}
           {tab === "active" && (
             <button
               onClick={toggleAutoPrint}
@@ -770,7 +872,7 @@ export default function StaffOrdersPage() {
               }`}
             >
               <Printer className="h-3 w-3" />
-              {autoPrint ? "Auto-print" : "Manual"}
+              {autoPrint ? "Auto" : "Manual"}
             </button>
           )}
           {connected
@@ -797,7 +899,9 @@ export default function StaffOrdersPage() {
           >
             Active
             {total > 0 && (
-              <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-white text-[9px] font-bold">
+              <span className={`ml-1.5 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-white text-[9px] font-bold ${
+                overdueCount > 0 ? "bg-red-500" : "bg-amber-400"
+              }`}>
                 {total}
               </span>
             )}
@@ -810,17 +914,16 @@ export default function StaffOrdersPage() {
           >
             Completed
             {completed.length > 0 && (
-              <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-400 text-white text-[9px] font-bold">
+              <span className="ml-1.5 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-gray-400 text-white text-[9px] font-bold">
                 {completed.length}
               </span>
             )}
           </button>
         </div>
-
       </div>
 
       {/* Order list */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-4">
+      <div className="flex-1 overflow-y-auto p-3 space-y-2 pb-4">
         {tab === "active" ? (
           orders.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -829,14 +932,33 @@ export default function StaffOrdersPage() {
               <p className="text-xs text-muted-foreground/60 mt-1">New orders will appear here</p>
             </div>
           ) : (
-            [...ready, ...preparing].map((order) => (
-              <StaffOrderCard
-                key={order.id}
-                order={order}
-                onAdvance={handleAdvance}
-                onCancel={handleCancel}
+            <>
+              <SectionHeader
+                label="Preparing"
+                count={preparing.length}
+                accent={overdueCount > 0 ? "red" : "amber"}
               />
-            ))
+              {preparing.map((order) => (
+                <StaffOrderCard
+                  key={order.id}
+                  order={order}
+                  tick={tick}
+                  onAdvance={handleAdvance}
+                  onCancel={handleCancel}
+                />
+              ))}
+              {ready.length > 0 && <div className="h-2" />}
+              <SectionHeader label="Ready for collection" count={ready.length} accent="emerald" />
+              {ready.map((order) => (
+                <StaffOrderCard
+                  key={order.id}
+                  order={order}
+                  tick={tick}
+                  onAdvance={handleAdvance}
+                  onCancel={handleCancel}
+                />
+              ))}
+            </>
           )
         ) : loadingCompleted ? (
           <div className="flex items-center justify-center h-40">
