@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 /**
  * PUT /api/menus/[id]/ingredients
@@ -11,6 +12,8 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   const { id: menuId } = await params;
   const body = await req.json();
   const { ingredients } = body;

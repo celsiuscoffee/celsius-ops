@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
+import { requireAuth } from "@/lib/auth";
 
 // GET /api/pickup/products
 // Maps the loyalty app's products table schema to the backoffice DbProduct interface.
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("products")
@@ -47,6 +50,8 @@ export async function GET() {
 
 // POST /api/pickup/products — create
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
   const body = await request.json() as {
     id?: string;
     category_id?: string;

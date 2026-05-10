@@ -1,11 +1,14 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 /**
  * Returns stock levels with par level comparison for an outlet.
  * Query params: ?outletId=xxx
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   const { searchParams } = new URL(req.url);
   const outletId = searchParams.get("outletId");
 

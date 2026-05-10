@@ -1,7 +1,10 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
   const suppliers = await prisma.supplier.findMany({
     select: {
       id: true,
@@ -62,6 +65,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   const body = await req.json();
   const {
     name, supplierCode, phone, email, location, leadTimeDays,

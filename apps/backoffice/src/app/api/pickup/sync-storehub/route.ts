@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
 import { getProducts, getInventory } from "@/lib/pickup/storehub-client";
+import { requireAuth } from "@/lib/auth";
 
 function slugify(str: string): string {
   return str
@@ -14,7 +15,9 @@ function slugify(str: string): string {
  *
  * Pulls all products from StoreHub and upserts into Supabase.
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
   if (!process.env.STOREHUB_API_KEY) {
     return NextResponse.json(
       { error: "STOREHUB_API_KEY not configured in environment variables" },

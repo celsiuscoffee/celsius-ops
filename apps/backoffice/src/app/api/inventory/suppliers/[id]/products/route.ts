@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 /**
  * POST /api/suppliers/[id]/products
@@ -10,6 +11,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   const { id: supplierId } = await params;
   const body = await req.json();
   const { productId, productPackageId, price } = body;
@@ -65,6 +68,8 @@ export async function POST(
  * Body: { supplierProductId }
  */
 export async function DELETE(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   const body = await req.json();
   const { supplierProductId } = body;
 

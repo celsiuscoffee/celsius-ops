@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 // ─── Par Level Calculation ─────────────────────────────────────────────
 //
@@ -21,6 +22,8 @@ const DEFAULT_LOOKBACK_DAYS = 30;
 const MAX_LEVEL_MULTIPLIER = 1.5;
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   const body = await req.json();
   const {
     outletId,

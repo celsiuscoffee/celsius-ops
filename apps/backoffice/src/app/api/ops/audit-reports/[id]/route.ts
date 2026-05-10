@@ -1,11 +1,14 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 // GET — single audit report with all items + photos
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const auth = await requireAuth(_req);
+  if (auth.error) return auth.error;
   const { id } = await params;
 
   const report = await prisma.auditReport.findUnique({

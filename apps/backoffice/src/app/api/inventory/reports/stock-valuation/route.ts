@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 /**
  * GET /api/reports/stock-valuation?outletId=xxx
@@ -7,6 +8,8 @@ import { prisma } from "@/lib/prisma";
  * If no outletId, returns all outlets aggregated.
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   const outletId = new URL(req.url).searchParams.get("outletId");
 
   const [balances, supplierProducts, lastCounts, outlets] = await Promise.all([

@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 const WASTE_TYPES = [
   "WASTAGE",
@@ -15,6 +16,8 @@ const WASTE_TYPES = [
  * Returns wastage report: aggregated by outlet, type, product + detailed items.
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   const params = new URL(req.url).searchParams;
   const outletId = params.get("outletId") || undefined;
 

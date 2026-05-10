@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
+import { requireAuth } from "@/lib/auth";
 
 /**
  * GET /api/pickup/customers
@@ -15,6 +16,8 @@ import { getSupabaseAdmin } from "@/lib/pickup/supabase";
  *   search -- partial match on phone or name
  */
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
   const { searchParams } = request.nextUrl;
   const page   = Math.max(1, parseInt(searchParams.get("page")  ?? "1",  10));
   const limit  = Math.min(100, parseInt(searchParams.get("limit") ?? "25", 10));

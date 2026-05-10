@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
+import { requireAuth } from "@/lib/auth";
 
 function csvEscape(value: string | number | null | undefined): string {
   const str = String(value ?? "");
@@ -12,6 +13,8 @@ function csvEscape(value: string | number | null | undefined): string {
 // GET /api/pickup/orders/export?from=YYYY-MM-DD&to=YYYY-MM-DD&store=xxx
 // Returns a CSV download of orders in the given date range
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
   try {
     const { searchParams } = request.nextUrl;
     const from  = searchParams.get("from");

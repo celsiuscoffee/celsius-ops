@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTransactions, getProducts } from "@/lib/storehub";
+import { requireAuth } from "@/lib/auth";
 
 /**
  * POST /api/storehub/sync-sales
@@ -13,6 +14,8 @@ import { getTransactions, getProducts } from "@/lib/storehub";
  *  - days: shortcut — sync last N days (overrides from/to)
  */
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   const body = await req.json();
   const { outletId, days } = body;
 

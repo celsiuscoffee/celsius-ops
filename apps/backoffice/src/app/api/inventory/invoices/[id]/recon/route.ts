@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 // GET /api/inventory/invoices/[id]/recon
 // Returns the data the Attach Supplier Invoice dialog uses to reconcile
@@ -7,6 +8,8 @@ import { prisma } from "@/lib/prisma";
 // amount. Per-line breakdown so procurement can see which items
 // contributed to a variance — without forcing line-by-line entry.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth(_req);
+  if (auth.error) return auth.error;
   const { id } = await params;
   const invoice = await prisma.invoice.findUnique({
     where: { id },

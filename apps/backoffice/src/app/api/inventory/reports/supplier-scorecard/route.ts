@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 /**
  * GET /api/inventory/reports/supplier-scorecard?supplierId=xxx&from=ISO&to=ISO
@@ -7,6 +8,8 @@ import { prisma } from "@/lib/prisma";
  * Defaults to last 90 days if no date range provided.
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   const params = new URL(req.url).searchParams;
   const supplierId = params.get("supplierId");
   const now = new Date();

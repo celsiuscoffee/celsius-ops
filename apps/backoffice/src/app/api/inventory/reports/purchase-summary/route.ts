@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 /**
  * GET /api/inventory/reports/purchase-summary
@@ -7,6 +8,8 @@ import { prisma } from "@/lib/prisma";
  * Returns purchase summary aggregated by supplier within the date range.
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   const params = new URL(req.url).searchParams;
   const outletId = params.get("outletId") || undefined;
   const supplierId = params.get("supplierId") || undefined;

@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
+import { requireAuth } from "@/lib/auth";
 
 // PATCH /api/pickup/products/[id]
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
   const { id } = await params;
   const body = await request.json() as Record<string, unknown>;
 
@@ -47,6 +50,8 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(_request);
+  if (auth.error) return auth.error;
   const { id } = await params;
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from("products").delete().eq("id", id);

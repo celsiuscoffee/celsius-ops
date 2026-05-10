@@ -1,7 +1,10 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   try {
     const { id } = await params;
     const body = await req.json();
@@ -52,6 +55,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth(_req);
+  if (auth.error) return auth.error;
   try {
     const { id } = await params;
     await prisma.supplier.delete({ where: { id } });

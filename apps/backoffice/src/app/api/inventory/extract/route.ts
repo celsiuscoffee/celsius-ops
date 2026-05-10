@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { requireAuth } from "@/lib/auth";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -34,6 +35,8 @@ type ExtractedInvoice = {
 };
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (auth.error) return auth.error;
   try {
     const body = await req.json();
     const { urls, context, productNames, supplierNames, orderItems, outletNames } = body as { urls: string[]; context?: string; productNames?: string[]; supplierNames?: string[]; orderItems?: string[]; outletNames?: string[] };

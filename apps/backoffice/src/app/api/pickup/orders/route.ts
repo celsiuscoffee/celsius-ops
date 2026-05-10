@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
+import { requireAuth } from "@/lib/auth";
 
 function normalisePhone(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -11,6 +12,8 @@ function normalisePhone(phone: string): string {
 // GET /api/pickup/orders
 // Query params: from, to, store, status, phone
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
   try {
     const { searchParams } = request.nextUrl;
     const from   = searchParams.get("from");
