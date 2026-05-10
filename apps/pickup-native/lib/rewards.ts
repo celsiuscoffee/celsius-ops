@@ -262,7 +262,7 @@ export function calcRewardDiscount(
     bogo_free_qty?: number;
     min_order_value?: number | null;
   } | null,
-  cartItems: { totalPrice: number; quantity: number }[],
+  cartItems: { basePrice: number; totalPrice: number; quantity: number }[],
   subtotal: number
 ): number {
   if (!reward) return 0;
@@ -275,7 +275,10 @@ export function calcRewardDiscount(
   }
   const t = reward.discount_type;
   if (t === "free_item") {
-    const prices = cartItems.map((i) => i.totalPrice / i.quantity);
+    // Free drink covers the base product only — modifier upgrades
+    // (oatmilk, extra shot, syrups) are still paid for. Pick the
+    // cheapest base price across cart items.
+    const prices = cartItems.map((i) => i.basePrice);
     return prices.length > 0 ? Math.min(...prices) : 0;
   }
   if (t === "bogo") {
