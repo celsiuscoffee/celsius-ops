@@ -97,3 +97,34 @@ export async function registerForPush(ctx: RegisterCtx): Promise<string | null> 
 
   return token;
 }
+
+/**
+ * Drop the push-token row server-side and clear the local cache.
+ * Call on sign-out so the previous customer's phone stops receiving
+ * order pushes for any future order placed on this device. Failures
+ * are swallowed — local sign-out must always succeed.
+ */
+export async function deregisterPush(): Promise<void> {
+  let token: string | null = null;
+  try {
+    const cached = await AsyncStorage.getItem(STORED_TOKEN_KEY);
+    // Cache value is "<token>::<phone>" (see registerForPush).
+    if (cached) token = cached.split("::")[0] ?? null;
+  } catch {
+    // ignore
+  }
+
+  if (token) {
+    try {
+      await fetch(`${API_BASE}/api/loyalty/push/deregister`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ token }),
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  await AsyncStorage.removeItem(STORED_TOKEN_KEY).catch(() => {});
+}

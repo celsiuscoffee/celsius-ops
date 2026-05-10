@@ -61,6 +61,10 @@ type AppState = {
   setLoyaltyId: (id: string | null) => void;
   setMember: (m: MemberProfile | null) => void;
   setAppliedReward: (reward: AppliedReward | null) => void;
+  /** Wipe every per-customer field in one shot. Call on sign-out so
+   *  the next customer (or family member) can't see the previous
+   *  account's cart, applied reward, or member profile. */
+  signOutReset: () => void;
 };
 
 export const useApp = create<AppState>()(
@@ -98,9 +102,30 @@ export const useApp = create<AppState>()(
       setLoyaltyId: (id) => set({ loyaltyId: id }),
       setMember: (m) => set({ member: m }),
       setAppliedReward: (reward) => set({ appliedReward: reward }),
+      signOutReset: () =>
+        set({
+          phone: null,
+          loyaltyId: null,
+          member: null,
+          cart: [],
+          appliedReward: null,
+        }),
     }),
     {
       name: "celsius-pickup",
+      // Versioned baseline. When the persisted shape changes, bump
+      // this number and add a `migrate` branch so existing installs
+      // don't crash on hydrate. Without a baseline, every future
+      // change risks an NPE on every device on first launch after
+      // the new bundle lands.
+      version: 1,
+      migrate: (persisted, fromVersion) => {
+        // No previous versions yet — accept whatever we get and let
+        // partialize re-pin the shape. Future migrations branch on
+        // `fromVersion` to transform old payloads.
+        if (fromVersion < 1) return persisted as AppState;
+        return persisted as AppState;
+      },
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({
         outletId: s.outletId,

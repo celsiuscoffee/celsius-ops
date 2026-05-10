@@ -32,7 +32,8 @@ import { tierStyle } from "../lib/tier-styles";
 import { useApp } from "../lib/store";
 import { api } from "../lib/api";
 import { fetchMember, fetchTier, type MemberTier } from "../lib/rewards";
-import { useQuery } from "@tanstack/react-query";
+import { deregisterPush } from "../lib/notifications";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CelsiusLoader } from "../components/CelsiusLoader";
 
 function normalisePhone(input: string): string {
@@ -55,6 +56,8 @@ export default function AccountTab() {
   const setPhone = useApp((s) => s.setPhone);
   const setLoyaltyId = useApp((s) => s.setLoyaltyId);
   const setMember = useApp((s) => s.setMember);
+  const signOutReset = useApp((s) => s.signOutReset);
+  const queryClient = useQueryClient();
 
   const handleVerified = async (p: string) => {
     setPhone(p);
@@ -77,10 +80,14 @@ export default function AccountTab() {
     }
   };
 
+  // Hard sign-out: wipe per-customer state, clear React Query cache
+  // (rewards, tier, order-history are keyed by phone), and drop the
+  // server's push-token row so the next user on this device doesn't
+  // inherit the previous customer's data, vouchers, or push pings.
   const handleSignOut = () => {
-    setPhone("");
-    setLoyaltyId(null);
-    setMember(null);
+    deregisterPush().catch(() => {});
+    signOutReset();
+    queryClient.clear();
   };
 
   if (phone) return <SignedIn phone={phone} onSignOut={handleSignOut} />;

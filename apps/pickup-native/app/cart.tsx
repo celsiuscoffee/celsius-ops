@@ -46,7 +46,11 @@ export default function Cart() {
   const outletClosed = outletQ.data && outletQ.data.is_open === false;
 
   const subtotal = cartTotal(cart);
-  const discount = calcRewardDiscount(appliedReward, cart, subtotal);
+  // Cap the displayed discount at the subtotal — otherwise an RM5
+  // reward applied to a RM3 cart shows a "−RM5.00" line under a
+  // RM3.00 subtotal which reads as a bug to the customer. Server
+  // already clamps the actual charge.
+  const discount = Math.min(calcRewardDiscount(appliedReward, cart, subtotal), subtotal);
   const grandTotal = Math.max(0, subtotal - discount);
 
   const [minOrder, setMinOrder] = useState(0);
