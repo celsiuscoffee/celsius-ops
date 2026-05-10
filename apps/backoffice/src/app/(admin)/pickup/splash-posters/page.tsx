@@ -10,9 +10,11 @@ import {
   ImagePlus,
   Power,
   Clock,
+  Crop,
 } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { useConfirm, toast } from "@celsius/ui";
+import { PosterCropDialog } from "@/components/pickup/PosterCropDialog";
 
 type Placement = "splash" | "home" | "both";
 
@@ -129,6 +131,11 @@ export default function SplashPostersPage() {
   // 'home' shows home + both — i.e. each tab matches what the customer
   // would actually see on that surface.
   const [tab, setTab] = useState<"all" | Placement>("all");
+  // Crop-flow source. When the user picks a file (or hits "Re-crop"
+  // on an existing image), we put it here and open the cropper. The
+  // cropped output flows back through handleUpload so the rest of the
+  // upload pipeline is unchanged.
+  const [cropSource, setCropSource] = useState<File | string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -201,7 +208,10 @@ export default function SplashPostersPage() {
       toast.error("Drop an image file");
       return;
     }
-    handleUpload(file);
+    // Open the cropper instead of uploading straight away — the
+    // operator positions the image inside the placement's window
+    // before we hit Cloudinary.
+    setCropSource(file);
   };
 
   const save = async () => {
@@ -553,6 +563,18 @@ export default function SplashPostersPage() {
                             : "h-56 w-32"
                         }`}
                       />
+                      {/* Re-crop pulls the live image URL back into the
+                          cropper so the operator can reposition / re-zoom
+                          without having to re-pick the source file. */}
+                      <button
+                        type="button"
+                        onClick={() => setCropSource(form.imageUrl)}
+                        className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-white/95 px-2 py-1 text-[10px] font-semibold text-gray-700 shadow"
+                        title="Reposition / re-zoom"
+                      >
+                        <Crop className="h-3 w-3" />
+                        Re-crop
+                      </button>
                       <button
                         onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))}
                         className="absolute -right-2 -top-2 rounded-full bg-white p-1 shadow"
@@ -602,7 +624,12 @@ export default function SplashPostersPage() {
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) handleUpload(file);
+                      // Reset the input so picking the same file twice
+                      // still triggers onChange the second time.
+                      e.target.value = "";
+                      // Open the cropper instead of going straight to
+                      // upload — operator positions the image first.
+                      if (file) setCropSource(file);
                     }}
                   />
                 </div>
@@ -735,6 +762,23 @@ export default function SplashPostersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Crop dialog — opens whenever cropSource is set. The output
+          File flows through the existing handleUpload pipeline so the
+          rest of the upload code (resize cap, /api/pickup/upload-image,
+          imageUrl write) stays unchanged. */}
+      {cropSource && (
+        <PosterCropDialog
+          source={cropSource}
+          aspect={PLACEMENT_META[form.placement].aspect}
+          aspectLabel={PLACEMENT_META[form.placement].aspectLabel}
+          onCancel={() => setCropSource(null)}
+          onSave={(file) => {
+            setCropSource(null);
+            handleUpload(file);
+          }}
+        />
       )}
     </div>
   );
