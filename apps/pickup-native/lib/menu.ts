@@ -114,15 +114,22 @@ export type OrderDetail = {
   }>;
 };
 
+// Fetch a single order via the order-app API instead of querying
+// the `orders` table directly with the public anon key. The direct
+// path worked while RLS was open, but anon read on the orders table
+// is going away as part of the lockdown — and the same data is
+// exposed at the API endpoint with identical shape.
 export async function fetchOrder(orderId: string): Promise<OrderDetail> {
-  const { data, error } = await supabase
-    .from("orders")
-    .select(
-      "id,order_number,status,total,store_id,created_at,payment_method," +
-        "order_items(product_id,product_name,quantity,unit_price,item_total,modifiers)"
-    )
-    .eq("id", orderId)
-    .single();
-  if (error) throw error;
-  return data as unknown as OrderDetail;
+  const res = await fetch(
+    `https://order.celsiuscoffee.com/api/orders/${encodeURIComponent(orderId)}`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Origin:  "https://order.celsiuscoffee.com",
+        Referer: "https://order.celsiuscoffee.com/",
+      },
+    }
+  );
+  if (!res.ok) throw new Error(`Order fetch failed (${res.status})`);
+  return (await res.json()) as OrderDetail;
 }
