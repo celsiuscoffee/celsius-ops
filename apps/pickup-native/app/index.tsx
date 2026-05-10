@@ -211,6 +211,7 @@ export default function Home() {
         queryClient.invalidateQueries({ queryKey: ["recent-items", phone] }),
         queryClient.invalidateQueries({ queryKey: ["order-history-home", phone] }),
         queryClient.invalidateQueries({ queryKey: ["rewards-home", phone] }),
+        queryClient.invalidateQueries({ queryKey: ["home-posters"] }),
       ]);
     } finally {
       setRefreshing(false);
@@ -227,12 +228,17 @@ export default function Home() {
   const ts = tierStyle(tier);
   const showTierEyebrow = !!tier?.tier_slug;
 
-  // Auto-rotating posters (Chagee-style). Cached locally + refreshed
-  // in background so the home page paints instantly on cold launch.
+  // Auto-rotating posters (Chagee-style). Short staleTime so a
+  // poster change in backoffice surfaces in the app within ~30s
+  // instead of waiting out a 5-min cache. AsyncStorage cache via
+  // getHomePosters() still provides instant first paint on cold
+  // launch; this just makes refresh aggressive.
   const postersQ = useQuery({
     queryKey: ["home-posters"],
     queryFn: getHomePosters,
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
   const posters: HomePoster[] = postersQ.data ?? [];
 
