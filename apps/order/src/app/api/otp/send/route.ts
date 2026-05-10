@@ -10,6 +10,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'phone required' }, { status: 400 });
     }
 
+    // App Store / Play Store reviewer bypass — they cannot receive
+    // a real Malaysian SMS. When the phone matches OTP_REVIEWER_PHONE
+    // we no-op the send: verify will accept OTP_REVIEWER_CODE for the
+    // same phone. Both env vars must be set; if either is missing,
+    // this branch never fires (so prod is unaffected when not in use).
+    const reviewerPhone = process.env.OTP_REVIEWER_PHONE;
+    const reviewerCode  = process.env.OTP_REVIEWER_CODE;
+    if (reviewerPhone && reviewerCode && phone === reviewerPhone) {
+      return NextResponse.json({ success: true });
+    }
+
     // Rate limit by phone number
     const rateCheck = await checkRateLimit(phone, RATE_LIMITS.OTP_SEND);
     if (!rateCheck.allowed) {
