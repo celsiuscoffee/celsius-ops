@@ -59,8 +59,8 @@ const PLACEMENT_META: Record<
   },
   home: {
     label:       "Home carousel",
-    aspect:      3 / 4,
-    aspectLabel: "3:4 portrait · ~900×1200",
+    aspect:      (3 / 4) / 0.7,
+    aspectLabel: "~15:14 (slightly wider than tall) · ~1200×1120",
     help:        "Auto-rotating banner on the home page. All active posters appear.",
   },
 };
@@ -388,7 +388,7 @@ export default function SplashPostersPage() {
             // Preview at the placement's natural aspect so the operator
             // sees what the customer will see on each surface.
             const aspectClass =
-              placement === "home" ? "aspect-[3/4]" : "aspect-[9/16]";
+              placement === "home" ? "aspect-[15/14]" : "aspect-[9/16]";
             const placementLabel = placement === "splash" ? "SPLASH" : "HOME";
             const placementColor =
               placement === "splash" ? "bg-indigo-500" : "bg-amber-500";
@@ -549,7 +549,7 @@ export default function SplashPostersPage() {
                       <div
                         className={`relative overflow-hidden rounded-lg bg-gray-100 ${
                           form.placement === "home"
-                            ? "h-72 w-[216px]"
+                            ? "h-52 w-[235px]"
                             : "h-72 w-40"
                         }`}
                       >
@@ -627,7 +627,7 @@ export default function SplashPostersPage() {
                       onDrop={onDrop}
                       onClick={() => fileInputRef.current?.click()}
                       className={`flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed text-xs transition-colors ${
-                        form.placement === "home" ? "h-72" : "h-72"
+                        form.placement === "home" ? "h-52" : "h-72"
                       } ${
                         dragOver
                           ? "border-terracotta bg-terracotta/5 text-terracotta"

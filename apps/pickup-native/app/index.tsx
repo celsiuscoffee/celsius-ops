@@ -297,20 +297,19 @@ export default function Home() {
         </Pressable>
       </View>
 
-      {/* Hero — taller poster box (aspect 3:4 portrait so the photo
-          dominates the screen) with the info card overlaid at the
-          bottom via absolute positioning. The photo fills the entire
-          hero area; the card sits on top of the lower portion with
-          mx-4 + rounded-2xl, and the photo continues behind it. No
-          negative margins — the carousel is just taller. */}
+      {/* Hero — slightly portrait poster (~70% of a 3:4 box) with the
+          info card overlaid at the bottom via absolute positioning.
+          The photo fills the entire hero area; the card sits on top
+          of the lower portion with mx-4 + rounded-2xl, and the photo
+          continues behind it. No negative margins. Aspect (3/4)/0.7
+          = ~1.07 — wider than 3:4 was, narrower than 4:3.
+          Tweak this number to scale the hero up/down without touching
+          card geometry. */}
       <View style={{ position: "relative" }}>
         {posters.length > 0 ? (
-          <PosterCarousel posters={posters} aspect={3 / 4} />
+          <PosterCarousel posters={posters} aspect={(3 / 4) / 0.7} />
         ) : (
-          // Fallback: tall espresso bar when no posters scheduled.
-          // Roughly matches the 3:4 carousel area so the info card
-          // still sits over a hero-sized panel.
-          <View style={{ height: insets.top + 460, backgroundColor: "#160800" }} />
+          <View style={{ height: insets.top + 320, backgroundColor: "#160800" }} />
         )}
 
         {/* Info card pinned to the bottom of the hero area. mx-4 from
