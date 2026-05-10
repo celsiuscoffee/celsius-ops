@@ -1,14 +1,34 @@
+import { useApp } from "./store";
+
 const API_BASE = "https://order.celsiuscoffee.com";
+
+// Pull the customer session token from the zustand store outside a
+// React hook context. Safe — the store is module-singleton.
+function readSessionToken(): string | null {
+  try {
+    return useApp.getState().sessionToken;
+  } catch {
+    return null;
+  }
+}
+
+function buildHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = readSessionToken();
+  const h: Record<string, string> = {
+    "Content-Type": "application/json",
+    // Server-side CSRF middleware requires Origin/Referer.
+    Origin: API_BASE,
+    Referer: API_BASE + "/",
+    ...(extra ?? {}),
+  };
+  if (token) h["Authorization"] = `Bearer ${token}`;
+  return h;
+}
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      // Server-side CSRF middleware requires Origin/Referer.
-      Origin: API_BASE,
-      Referer: API_BASE + "/",
-    },
+    headers: buildHeaders(),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -19,8 +39,17 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function postOtp(path: string, body: unknown) {
-  const res = await post<{ success: boolean; error?: string }>(path, body);
+  const res = await post<{ success: boolean; error?: string; sessionToken?: string }>(path, body);
   if (!res.success) throw new Error(res.error || "Request failed");
+  // OTP verify returns a sessionToken on success — persist it so
+  // every subsequent member-scoped call sends it as a Bearer header.
+  if (res.sessionToken) {
+    try {
+      useApp.getState().setSessionToken(res.sessionToken);
+    } catch {
+      // ignore — store hydration race; next call will pick it up.
+    }
+  }
   return res;
 }
 
@@ -38,11 +67,7 @@ export const api = {
   }) =>
     fetch(`${API_BASE}/api/members/profile`, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Origin: API_BASE,
-        Referer: API_BASE + "/",
-      },
+      headers: buildHeaders(),
       body: JSON.stringify(payload),
     }).then(async (r) => {
       const j = await r.json();
@@ -52,11 +77,7 @@ export const api = {
   deleteAccount: (payload: { member_id: string; phone: string }) =>
     fetch(`${API_BASE}/api/members/delete`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Origin: API_BASE,
-        Referer: API_BASE + "/",
-      },
+      headers: buildHeaders(),
       body: JSON.stringify(payload),
     }).then(async (r) => {
       const j = await r.json().catch(() => ({}));

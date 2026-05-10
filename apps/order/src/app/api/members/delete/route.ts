@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { readCustomerSession } from "@/lib/customer-jwt";
 
 /**
  * POST /api/members/delete
@@ -33,6 +34,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Invalid input types" },
         { status: 400 }
+      );
+    }
+
+    // Customer session check. New pickup-native builds send a Bearer
+    // token issued at OTP verify; the body's `phone` and `member_id`
+    // must match the signed payload, otherwise anyone who guesses a
+    // phone number can wipe that account. Old builds without a token
+    // fall through to the rate-limit + DB-match path below — the
+    // token becomes mandatory once the OTA propagates and we flip
+    // to fail-closed.
+    const session = readCustomerSession(request);
+    if (session && session.phone !== phone) {
+      return NextResponse.json(
+        { error: "Session does not match the supplied phone" },
+        { status: 403 }
       );
     }
 

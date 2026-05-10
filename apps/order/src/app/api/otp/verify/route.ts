@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyOTP } from '@/lib/otp';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { signCustomerSession } from '@/lib/customer-jwt';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
+
+// Look up the member_id (if any) so the issued session token carries it.
+// Pre-first-order phones won't have a row yet — sub stays empty and is
+// filled in on a follow-up verify after the first order.
+async function lookupMemberId(phone: string): Promise<string | null> {
+  try {
+    const sb = getSupabaseAdmin();
+    const { data } = await sb
+      .from('members')
+      .select('id')
+      .eq('phone', phone)
+      .maybeSingle();
+    return (data as { id?: string } | null)?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,7 +47,9 @@ export async function POST(request: NextRequest) {
         diff |= code.charCodeAt(i) ^ reviewerCode.charCodeAt(i);
       }
       if (diff === 0) {
-        return NextResponse.json({ success: true });
+        const memberId = await lookupMemberId(phone);
+        const sessionToken = signCustomerSession({ memberId, phone });
+        return NextResponse.json({ success: true, sessionToken });
       }
     }
 
@@ -42,7 +63,15 @@ export async function POST(request: NextRequest) {
     }
 
     const valid = await verifyOTP(phone, code, purpose || 'login');
-    return NextResponse.json({ success: valid, error: valid ? undefined : 'Invalid or expired code' });
+    if (!valid) {
+      return NextResponse.json({ success: false, error: 'Invalid or expired code' });
+    }
+    // Issue a customer session JWT alongside the OK response. Old
+    // clients ignore the extra field; new clients send it back as a
+    // Bearer header on member-scoped calls.
+    const memberId = await lookupMemberId(phone);
+    const sessionToken = signCustomerSession({ memberId, phone });
+    return NextResponse.json({ success: true, sessionToken });
   } catch {
     return NextResponse.json({ success: false, error: 'Verification failed' }, { status: 500 });
   }

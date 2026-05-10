@@ -66,6 +66,13 @@ type AppState = {
   loyaltyId: string | null;
   member: MemberProfile | null;
   appliedReward: AppliedReward | null;
+  /** Customer session JWT issued by the order app on OTP verify.
+   *  Sent as `Authorization: Bearer ${sessionToken}` on every
+   *  member-scoped fetch so the server doesn't have to trust
+   *  `phone` / `member_id` body params (which would let any caller
+   *  read or delete any account by guessing the phone). Null until
+   *  the customer signs in; cleared by signOutReset(). */
+  sessionToken: string | null;
 
   setOutlet: (id: string, name: string) => void;
   addToCart: (item: Omit<CartItem, "cartId">) => void;
@@ -76,6 +83,7 @@ type AppState = {
   setLoyaltyId: (id: string | null) => void;
   setMember: (m: MemberProfile | null) => void;
   setAppliedReward: (reward: AppliedReward | null) => void;
+  setSessionToken: (token: string | null) => void;
   /** Wipe every per-customer field in one shot. Call on sign-out so
    *  the next customer (or family member) can't see the previous
    *  account's cart, applied reward, or member profile. */
@@ -92,6 +100,7 @@ export const useApp = create<AppState>()(
       loyaltyId: null,
       member: null,
       appliedReward: null,
+      sessionToken: null,
 
       setOutlet: (id, name) => set({ outletId: id, outletName: name }),
       addToCart: (item) =>
@@ -117,6 +126,7 @@ export const useApp = create<AppState>()(
       setLoyaltyId: (id) => set({ loyaltyId: id }),
       setMember: (m) => set({ member: m }),
       setAppliedReward: (reward) => set({ appliedReward: reward }),
+      setSessionToken: (token) => set({ sessionToken: token }),
       signOutReset: () =>
         set({
           phone: null,
@@ -124,6 +134,7 @@ export const useApp = create<AppState>()(
           member: null,
           cart: [],
           appliedReward: null,
+          sessionToken: null,
         }),
     }),
     {
@@ -150,6 +161,7 @@ export const useApp = create<AppState>()(
         loyaltyId: s.loyaltyId,
         member: s.member,
         appliedReward: s.appliedReward,
+        sessionToken: s.sessionToken,
       }),
     }
   )
