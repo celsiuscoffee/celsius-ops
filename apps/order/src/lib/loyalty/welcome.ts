@@ -13,6 +13,7 @@
 // alongside it.
 
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { notifyWelcomeBonus } from "@/lib/push/templates";
 
 const BRAND_ID = "brand-celsius";
 
@@ -27,7 +28,7 @@ export async function ensureNewMemberRewards(
     // Usually one (Welcome BOGO) but the loop tolerates multiple.
     const { data: rewards } = await supabase
       .from("rewards")
-      .select("id, validity_days")
+      .select("id, name, validity_days")
       .eq("brand_id", brandId)
       .eq("reward_type", "new_member")
       .eq("auto_issue", true)
@@ -77,7 +78,15 @@ export async function ensureNewMemberRewards(
           `[welcome] failed to issue reward ${reward.id} to ${memberId}:`,
           error.message,
         );
+        continue;
       }
+
+      // Notify the member that the welcome voucher landed. Fire-and-
+      // forget — never let a push miss block the issuance flow.
+      notifyWelcomeBonus({
+        memberId,
+        rewardName: (reward as { name?: string }).name,
+      }).catch((e) => console.warn("[push] welcome_bonus", e));
     }
   } catch (err) {
     // Never block sign-in on a voucher issuance failure.
