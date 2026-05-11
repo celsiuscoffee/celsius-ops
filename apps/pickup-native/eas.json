@@ -20,10 +20,21 @@
       "channel": "production"
     },
     "production": {
-      "channel": "production"
+      "channel": "production",
+      "android": {
+        "buildType":  "app-bundle"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track":         "internal",
+        "releaseStatus": "draft"
+      },
+      "ios": {
+        "appleTeamId":   "9U2R774T9W"
+      }
+    }
   }
 }
