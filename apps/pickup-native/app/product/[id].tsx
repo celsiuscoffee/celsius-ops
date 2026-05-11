@@ -34,15 +34,31 @@ export default function ProductScreen() {
   const [notes, setNotes] = useState("");
   const addToCart = useApp((s) => s.addToCart);
 
+  // Modifier groups hidden from customer view. Same set the order
+  // PWA uses (product-detail-content.tsx) — keeps the two surfaces
+  // in lock-step. Pickup orders are by definition take-away so the
+  // POS / kitchen handles packaging on its own; surfacing it in the
+  // app just adds a forced click for the customer with no real
+  // choice (all our packaging is the same cup).
+  const HIDDEN_GROUPS = useMemo(() => new Set(["packaging", "package"]), []);
+  const visibleModifiers = useMemo(
+    () => (product?.modifiers ?? []).filter(
+      (g) => !HIDDEN_GROUPS.has((g.name ?? "").toLowerCase()),
+    ),
+    [product, HIDDEN_GROUPS],
+  );
+
   // Pre-fill single-select modifier groups with their default option
   // (or first option as a fallback) the first time we see the product.
   // Without this, customers can tap Add to cart without selecting a
   // size and end up with an ambiguous line. Multi-select groups stay
-  // empty — those are genuinely optional.
+  // empty — those are genuinely optional. Only walks VISIBLE groups
+  // so the hidden packaging group doesn't sneak into selections /
+  // the cart payload.
   useEffect(() => {
     if (!product) return;
     const initial: Record<string, string[]> = {};
-    for (const g of product.modifiers ?? []) {
+    for (const g of visibleModifiers) {
       if (g.multiSelect) continue;
       const def = g.options.find((o) => o.isDefault) ?? g.options[0];
       if (def) initial[g.id] = [def.id];
@@ -54,20 +70,21 @@ export default function ProductScreen() {
       price:       product.price,
       outletId,
     });
-  }, [product, outletId]);
+  }, [product, outletId, visibleModifiers]);
 
-  // Required = every single-select group must have one selected.
-  // Used to gate the Add to cart button so customers can't ship an
-  // incomplete order.
+  // Required = every single-select VISIBLE group must have one
+  // selected. Hidden groups never block the button.
   const allRequiredPicked =
     !product ||
-    (product.modifiers ?? [])
+    visibleModifiers
       .filter((g) => !g.multiSelect)
       .every((g) => (selections[g.id] ?? []).length > 0);
 
   const totalPrice = useMemo(() => {
     if (!product) return 0;
-    const modifierTotal = (product.modifiers ?? []).reduce((sum, g) => {
+    // Price only walks VISIBLE modifiers so a hidden packaging
+    // price-delta never silently inflates the customer's total.
+    const modifierTotal = visibleModifiers.reduce((sum, g) => {
       const selected = selections[g.id] ?? [];
       return (
         sum +
@@ -78,7 +95,7 @@ export default function ProductScreen() {
       );
     }, 0);
     return (product.price + modifierTotal) * qty;
-  }, [product, selections, qty]);
+  }, [product, selections, qty, visibleModifiers]);
 
   if (isLoading || !product) {
     return (
@@ -106,7 +123,9 @@ export default function ProductScreen() {
 
   const onAdd = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const flatSelections: ModifierSelection[] = (product.modifiers ?? []).flatMap((g) =>
+    // Only emit selections from VISIBLE groups so the hidden packaging
+    // option never lands in the cart line / order payload.
+    const flatSelections: ModifierSelection[] = visibleModifiers.flatMap((g) =>
       (selections[g.id] ?? [])
         .map((optId) => {
           const opt = g.options.find((o) => o.id === optId);
@@ -198,7 +217,7 @@ export default function ProductScreen() {
             {formatPrice(product.price)}
           </Text>
 
-          {(product.modifiers ?? []).map((g) => (
+          {visibleModifiers.map((g) => (
             <View key={g.id} className="mt-6">
               <Text className="text-espresso text-xs font-bold uppercase tracking-wider">
                 {g.name}
