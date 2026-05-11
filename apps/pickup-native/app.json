@@ -75,7 +75,13 @@
           "defaultChannel": "default"
         }
       ],
-      "@sentry/react-native"
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "celsius-coffee-sdn-bhd",
+          "project": "celsius-pickup-native"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
