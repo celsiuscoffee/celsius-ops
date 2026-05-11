@@ -187,6 +187,26 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
+    // Maintenance mode — server-authoritative. Previously gated only
+    // client-side, so a stale or bypassed client could still create
+    // orders during a maintenance window. Refuse here too. Error
+    // surfaces the configured message so customers see a coherent
+    // explanation rather than a generic 503.
+    {
+      const { data: maint } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "maintenance")
+        .maybeSingle();
+      const m = (maint?.value ?? null) as { enabled?: boolean; message?: string } | null;
+      if (m?.enabled === true) {
+        return NextResponse.json(
+          { error: m.message?.trim() || "Online ordering is paused for maintenance. Please try again shortly." },
+          { status: 503 },
+        );
+      }
+    }
+
     // Outlet must exist and be active. Without this, an attacker (or
     // a stale client) can drop orders at any string store_id —
     // points still credit, but the staff KDS for that "outlet" never

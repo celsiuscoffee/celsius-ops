@@ -68,6 +68,24 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
+    // Maintenance mode — server-authoritative. Mirrors /api/orders so
+    // a stale or bypassed PWA client can't create orders while the
+    // backoffice has online ordering paused.
+    {
+      const { data: maint } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "maintenance")
+        .maybeSingle();
+      const m = (maint?.value ?? null) as { enabled?: boolean; message?: string } | null;
+      if (m?.enabled === true) {
+        return NextResponse.json(
+          { error: m.message?.trim() || "Online ordering is paused for maintenance. Please try again shortly." },
+          { status: 503 },
+        );
+      }
+    }
+
     // Outlet must exist and be active.
     const storeId = String(selectedStore?.id ?? "");
     if (!storeId) {
@@ -150,6 +168,19 @@ export async function POST(request: NextRequest) {
       serverSubtotalSen += unitPriceSen * item.quantity;
     }
 
+    // ── Backoffice settings — single batch read so we don't fire one
+    //    Supabase round-trip per setting. Same shape /api/orders uses
+    //    so both order paths read from the same source of truth.
+    const { data: settingsRows } = await supabase
+      .from("app_settings")
+      .select("key, value")
+      .in("key", ["points_per_rm", "min_order_value", "first_order_discount", "sst"]);
+    const settingsMap = new Map((settingsRows ?? []).map((r) => [r.key, r.value]));
+    const pointsPerRm  = Number((settingsMap.get("points_per_rm") as any)?.rate ?? 1);
+    const minOrderRm   = Number((settingsMap.get("min_order_value") as any)?.rm ?? 0);
+    const fodConfig    = settingsMap.get("first_order_discount") as
+      { enabled: boolean; type: "percent" | "fixed"; amount: number } | undefined;
+
     // ── Server-side monetary validation ────────────────────────────────────
     const rawDiscountSen = discountSen ?? 0;
     if (
@@ -158,6 +189,12 @@ export async function POST(request: NextRequest) {
       serverSubtotalSen <= 0
     ) {
       return NextResponse.json({ error: "Invalid order amounts" }, { status: 400 });
+    }
+    if (minOrderRm > 0 && total < minOrderRm) {
+      return NextResponse.json(
+        { error: `Minimum order is RM${minOrderRm.toFixed(2)}` },
+        { status: 400 },
+      );
     }
 
     // ── Server-side voucher validation ─────────────────────────────────────
@@ -211,18 +248,31 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Server-side SST calculation ───────────────────────────────────────
-    const { data: sstSetting } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "sst")
-      .single();
+    // Pulled from the batched settings read above. The client-supplied
+    // `sst` field is intentionally ignored — settings.sst is the only
+    // source of truth so a stale or malicious client can't zero out tax.
+    const sstSettingVal = settingsMap.get("sst") as { enabled?: boolean; rate?: number } | undefined;
+    const sstEnabled = sstSettingVal?.enabled !== false;
+    const sstRate    = sstSettingVal?.rate ?? 0.06;
+    void sst; // accepted in payload for backward-compat; intentionally unused
 
-    let sstRate = 0.06; // default 6%
-    let sstEnabled = true;
-    if (sstSetting?.value != null) {
-      const val = sstSetting.value as { enabled?: boolean; rate?: number };
-      sstEnabled = val.enabled !== false;
-      if (val.rate != null) sstRate = val.rate;
+    // ── First-order discount ──────────────────────────────────────────────
+    // Mirrors /api/orders: customer's first completed/preparing/ready/paid
+    // order on this loyalty_phone gets a single welcome bump. Phone is the
+    // identity here — loyaltyId may be null for guest checkouts but a phone
+    // is always set.
+    let fodDiscountSen = 0;
+    if (fodConfig?.enabled && loyaltyPhone) {
+      const { count } = await supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("loyalty_phone", loyaltyPhone)
+        .in("status", ["completed", "preparing", "ready", "paid"]);
+      if ((count ?? 0) === 0) {
+        fodDiscountSen = fodConfig.type === "percent"
+          ? Math.round(serverSubtotalSen * (fodConfig.amount / 100))
+          : Math.round(fodConfig.amount * 100);
+      }
     }
 
     // ── Resolve member tier (used for promo eligibility and points) ───────
@@ -261,15 +311,14 @@ export async function POST(request: NextRequest) {
     const voucherDiscountSen   = Math.round(discountSen ?? 0);
     const afterDiscount        = Math.max(
       0,
-      subtotalSen - voucherDiscountSen - rewardDiscountSenAmt - promoDiscountSen
+      subtotalSen - voucherDiscountSen - rewardDiscountSenAmt - fodDiscountSen - promoDiscountSen
     );
     const sstSen               = sstEnabled ? Math.round(afterDiscount * sstRate) : 0;
     const totalSen             = afterDiscount + sstSen;
-    // Base points = RM spent (afterDiscount is in sen). Then multiply by
-    // the member's tier multiplier so the displayed "+X pts" matches the
-    // actual award. Post-purchase coupon multiplier is applied later in
-    // earnLoyaltyPoints (it can change between order create and payment).
-    const basePoints           = loyaltyId ? Math.floor(afterDiscount / 100) : 0;
+    // Base points = pointsPerRm × RM of after-discount subtotal. Then
+    // multiply by tier. Mirrors /api/orders so the two flows credit the
+    // same number of points for the same cart.
+    const basePoints           = loyaltyId ? Math.floor((afterDiscount / 100) * pointsPerRm) : 0;
     const tierMul              = loyaltyId ? await getTierMultiplier(loyaltyId) : 1;
     const pointsToEarn         = Math.round(basePoints * tierMul);
 
@@ -292,6 +341,12 @@ export async function POST(request: NextRequest) {
         reward_id:              rewardId ?? null,
         reward_name:            rewardName ?? null,
         sst_amount:             sstSen,
+        first_order_discount_amount: fodDiscountSen,
+        // Promotion-engine discounts persisted so the order detail
+        // screen can render the same breakdown the /api/orders flow
+        // already does. Without this, the PWA's order page showed a
+        // bare total with no line explaining the gap.
+        promo_discount:         promoDiscountSen,
         total:                  totalSen,
         customer_phone:         loyaltyPhone ?? null,
         loyalty_phone:          loyaltyPhone ?? null,
