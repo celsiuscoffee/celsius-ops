@@ -454,8 +454,13 @@ export default function Checkout() {
   };
 
   // Empty cart guard — covers deep-link / back-nav cases where the user
-  // lands here with nothing to pay for.
-  if (cartCount(cart) === 0) {
+  // lands here with nothing to pay for. Suppressed while `busy` is true
+  // (an order is in flight). Without this, clearCart() fires the moment
+  // the server confirms the order, the screen re-renders cart=0, and
+  // the customer sees the empty-cart placeholder flash for a few
+  // hundred ms before either the Stripe sheet opens or router.replace
+  // navigates to /order/[id].
+  if (cartCount(cart) === 0 && !busy) {
     return (
       <View className="flex-1 bg-background">
         <Stack.Screen options={{ headerShown: false }} />
