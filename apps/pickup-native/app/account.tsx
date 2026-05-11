@@ -214,8 +214,10 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
         contentContainerStyle={{ paddingHorizontal: 0, paddingTop: 12, paddingBottom: 100 }}
       >
         {/* Themed tier carousel — replaces the old espresso "PLATINUM
-            MEMBER" eyebrow card. Customer's current tier auto-snaps,
-            tap any card opens the full Membership screen. */}
+            MEMBER" eyebrow card AND the standalone stats card.
+            Points / Visits / Earned now fold into the current tier
+            card itself so the page reads as one unified statement
+            instead of two redundant panels. */}
         {tiers.length > 0 && (
           <View style={{ marginBottom: 16 }}>
             <TierCardCarousel
@@ -223,7 +225,11 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
               currentSlug={tier?.tier_slug ?? null}
               memberVisits={tier?.visits_this_period ?? 0}
               memberSpend={tier?.spend_this_period ?? 0}
-              cardHeight={180}
+              stats={{
+                points: member?.pointsBalance       ?? 0,
+                visits: member?.totalVisits          ?? 0,
+                earned: member?.totalPointsEarned    ?? 0,
+              }}
               onCardPress={() => {
                 Haptics.selectionAsync();
                 router.push("/tier-benefits" as never);
@@ -232,30 +238,9 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
           </View>
         )}
 
-        {/* Stats card — espresso bg with 3 numerals. Same content as
-            the old profile card's bottom row, lifted out so it stands
-            alone now that the hero shows name + phone. */}
-        <View className="px-4">
         {/* Inner wrapper restores the 16px horizontal gutter for
-            non-carousel content; the carousel needs full-bleed so
-            cards span the screen. */}
-        <View
-          className="rounded-2xl"
-          style={{
-            backgroundColor: "#160800",
-            paddingVertical: 16,
-            paddingHorizontal: 8,
-            marginBottom: 16,
-          }}
-        >
-          <View className="flex-row items-center justify-around">
-            <Stat label="Points" value={(member?.pointsBalance ?? 0).toLocaleString()} />
-            <View style={{ width: 1, height: 40, backgroundColor: "rgba(255,255,255,0.10)" }} />
-            <Stat label="Visits" value={String(member?.totalVisits ?? 0)} />
-            <View style={{ width: 1, height: 40, backgroundColor: "rgba(255,255,255,0.10)" }} />
-            <Stat label="Earned" value={(member?.totalPointsEarned ?? 0).toLocaleString()} />
-          </View>
-        </View>
+            non-carousel content; the carousel above is full-bleed. */}
+        <View className="px-4">
 
         {/* Tier benefits live on the Rewards screen — keeping a
             duplicate here just made customers compare the two lists.

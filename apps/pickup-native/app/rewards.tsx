@@ -32,6 +32,7 @@ const PROGRESS_VISIBLE_THRESHOLD = 0.3;
 export default function RewardsTab() {
   const phone = useApp((s) => s.phone);
   const loyaltyId = useApp((s) => s.loyaltyId);
+  const member = useApp((s) => s.member);
   const insets = useSafeAreaInsets();
 
   // Tier — drives the hero theme + benefits card. Read via React Query
@@ -97,80 +98,43 @@ export default function RewardsTab() {
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Standard espresso header (matches Orders / Account). The
-          balance + progress moved out of the hero into a content
-          card below so the visual language across tabs stays
-          consistent. */}
+          old espresso balance card was removed — Points / Visits /
+          Earned now fold into the tier carousel's current-tier card
+          below, and per-reward progress lives on each row of the
+          rewards catalogue. One source of truth per number. */}
       <EspressoHeader title="Rewards" showCart={false} />
 
-      {/* Balance + progress card — espresso black to standardize with
-          the home info card and orders cards. Tier accent kept as a
-          single eyebrow line + the progress bar fill. */}
-      <View
-        className="mx-4 mt-4 rounded-2xl"
-        style={{ backgroundColor: "#160800", padding: 16 }}
-      >
-        <Text
-          className="text-[10px] uppercase"
-          style={{
-            color: ts.accentColor,
-            fontFamily: "SpaceGrotesk_700Bold",
-            letterSpacing: 3,
-          }}
-        >
-          {tier?.tier_slug ? `${ts.displayName} · ${tier.tier_multiplier ?? 1}×` : "REWARDS"}
-        </Text>
-        <View className="flex-row items-baseline mt-2" style={{ gap: 8 }}>
-          <Text
+      {/* Next-reward progress strip — slim flat line replacing the
+          old espresso card. Keeps "X pts to <reward>" surfaced
+          without duplicating the points number. */}
+      {nextReward && (
+        <View className="mx-4 mt-4">
+          <View
             style={{
-              color: "#FFFFFF",
-              fontFamily: "Peachi-Bold",
-              fontSize: 32,
-              lineHeight: 34,
+              height: 4,
+              borderRadius: 2,
+              backgroundColor: "rgba(26,2,0,0.10)",
+              overflow: "hidden",
             }}
           >
-            {isLoading && balance === 0 ? "—" : balance.toLocaleString()}
-          </Text>
-          <Text
-            style={{
-              color: "rgba(255,255,255,0.55)",
-              fontFamily: "SpaceGrotesk_700Bold",
-              fontSize: 10,
-              letterSpacing: 1.4,
-            }}
-          >
-            POINTS
-          </Text>
-        </View>
-
-        {nextReward && (
-          <View style={{ marginTop: 14 }}>
             <View
               style={{
-                height: 4,
+                height: "100%",
+                width: `${nextProgress * 100}%`,
+                backgroundColor: ts.accentColor,
                 borderRadius: 2,
-                backgroundColor: "rgba(255,255,255,0.12)",
-                overflow: "hidden",
               }}
-            >
-              <View
-                style={{
-                  height: "100%",
-                  width: `${nextProgress * 100}%`,
-                  backgroundColor: ts.accentColor,
-                  borderRadius: 2,
-                }}
-              />
-            </View>
-            <Text
-              className="mt-2 text-[11px]"
-              style={{ color: "rgba(255,255,255,0.65)", fontFamily: "SpaceGrotesk_500Medium" }}
-              numberOfLines={1}
-            >
-              {`${nextShortBy.toLocaleString()} pts to ${nextReward.name}`}
-            </Text>
+            />
           </View>
-        )}
-      </View>
+          <Text
+            className="mt-2 text-[11px]"
+            style={{ color: "rgba(26,2,0,0.6)", fontFamily: "SpaceGrotesk_500Medium" }}
+            numberOfLines={1}
+          >
+            {`${nextShortBy.toLocaleString()} pts to ${nextReward.name}`}
+          </Text>
+        </View>
+      )}
 
       <ScrollView
         className="flex-1"
@@ -194,7 +158,11 @@ export default function RewardsTab() {
                   currentSlug={tier?.tier_slug ?? null}
                   memberVisits={tier?.visits_this_period ?? 0}
                   memberSpend={tier?.spend_this_period ?? 0}
-                  cardHeight={172}
+                  stats={{
+                    points: balance,
+                    visits: member?.totalVisits         ?? 0,
+                    earned: member?.totalPointsEarned   ?? balance,
+                  }}
                   title="Membership tiers"
                   onCardPress={() => {
                     Haptics.selectionAsync();

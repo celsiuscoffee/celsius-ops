@@ -40,12 +40,23 @@ export type TierLite = {
   sort_order: number | null;
 };
 
+export type MemberStats = {
+  points:   number;
+  visits:   number;
+  earned:   number;
+};
+
 export type CarouselProps = {
   tiers:        TierLite[];
   currentSlug:  string | null;
   memberVisits: number;
   memberSpend:  number;
-  /** Card visual height in pixels. Defaults to 192 (matches Membership screen). */
+  /** When set, the customer's CURRENT tier card folds in a
+   *  Points / Visits / Earned row at the bottom — so the
+   *  surrounding screen doesn't need a separate stats card. */
+  stats?:       MemberStats;
+  /** Card visual height in pixels. Defaults to 192 (matches Membership screen).
+   *  When `stats` is provided, the current card auto-grows to fit the row. */
   cardHeight?: number;
   /** Tap handler — called with the tier the customer tapped on. */
   onCardPress?: (tier: TierLite) => void;
@@ -144,10 +155,15 @@ export function TierCardCarousel({
   currentSlug,
   memberVisits,
   memberSpend,
+  stats,
   cardHeight = 192,
   onCardPress,
   title,
 }: CarouselProps) {
+  // When stats are embedded, the current card needs more vertical room
+  // for the bottom row + divider. Other cards keep the base height so
+  // the pager swipe still snaps cleanly card-to-card.
+  const effectiveHeight = stats ? Math.max(cardHeight, 232) : cardHeight;
   const currentIdx = useMemo(
     () => Math.max(0, tiers.findIndex((t) => t.slug === currentSlug)),
     [tiers, currentSlug],
@@ -217,7 +233,8 @@ export function TierCardCarousel({
                 isAchieved={idx < currentIdx}
                 memberVisits={memberVisits}
                 memberSpend={memberSpend}
-                height={cardHeight}
+                height={effectiveHeight}
+                stats={idx === currentIdx ? stats : undefined}
               />
             </Pressable>
           </View>
@@ -254,6 +271,7 @@ export function TierHeroCard({
   memberVisits,
   memberSpend,
   height = 192,
+  stats,
 }: {
   tier:         TierLite;
   isCurrent:    boolean;
@@ -262,6 +280,10 @@ export function TierHeroCard({
   memberVisits: number;
   memberSpend:  number;
   height?:      number;
+  /** When set on the current tier card, renders a Points / Visits /
+   *  Earned row below the progress strip. Hidden on locked/achieved
+   *  cards since those numbers are member-specific. */
+  stats?:       MemberStats;
 }) {
   const theme = themeForTier(tier);
   const isDark = tier.slug === "elite";
@@ -373,65 +395,144 @@ export function TierHeroCard({
           </View>
         </View>
 
-        <View style={{ width: "62%" }}>
-          {isCurrent ? (
-            <>
-              <View
-                style={{
-                  height: 6,
-                  borderRadius: 3,
-                  backgroundColor: isDark ? "rgba(232,199,102,0.22)" : "rgba(0,0,0,0.10)",
-                  overflow: "hidden",
-                }}
-              >
+        {/* Progress / requirement strip — kept inside left 62% so the
+            mascot has room. Stats row (when present) sits BELOW this
+            block and spans the full width. */}
+        <View>
+          <View style={{ width: "62%" }}>
+            {isCurrent ? (
+              <>
                 <View
                   style={{
-                    height: "100%",
-                    width: `${Math.round(progressPct * 100)}%`,
-                    backgroundColor: theme.accent,
+                    height: 6,
                     borderRadius: 3,
+                    backgroundColor: isDark ? "rgba(232,199,102,0.22)" : "rgba(0,0,0,0.10)",
+                    overflow: "hidden",
                   }}
-                />
-              </View>
+                >
+                  <View
+                    style={{
+                      height: "100%",
+                      width: `${Math.round(progressPct * 100)}%`,
+                      backgroundColor: theme.accent,
+                      borderRadius: 3,
+                    }}
+                  />
+                </View>
+                <Text
+                  style={{
+                    marginTop: 6,
+                    fontFamily: "SpaceGrotesk_500Medium",
+                    fontSize: 12,
+                    color: theme.subtle,
+                  }}
+                  numberOfLines={1}
+                >
+                  {cupsAway === 0 && ringgitAway === 0
+                    ? "Top of this tier"
+                    : useVisits
+                      ? `${cupsAway} cup${cupsAway === 1 ? "" : "s"} this period`
+                      : `RM${ringgitAway.toFixed(0)} more this period`}
+                </Text>
+              </>
+            ) : isLocked ? (
               <Text
                 style={{
-                  marginTop: 6,
                   fontFamily: "SpaceGrotesk_500Medium",
                   fontSize: 12,
                   color: theme.subtle,
+                  lineHeight: 16,
                 }}
-                numberOfLines={1}
+                numberOfLines={2}
               >
-                {cupsAway === 0 && ringgitAway === 0
-                  ? "Top of this tier"
-                  : useVisits
-                    ? `${cupsAway} cup${cupsAway === 1 ? "" : "s"} this period`
-                    : `RM${ringgitAway.toFixed(0)} more this period`}
+                Achieving {tier.name} requires{" "}
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", color: theme.accent }}>
+                  {useVisits ? `${needVisits} cups` : `RM${needSpend.toFixed(0)}`}
+                </Text>
               </Text>
-            </>
-          ) : isLocked ? (
-            <Text
+            ) : (
+              <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12, color: theme.subtle }}>
+                Achieved · perks unlocked
+              </Text>
+            )}
+          </View>
+
+          {/* Embedded stats row — only on the customer's current card. */}
+          {isCurrent && stats ? (
+            <View
               style={{
-                fontFamily: "SpaceGrotesk_500Medium",
-                fontSize: 12,
-                color: theme.subtle,
-                lineHeight: 16,
+                marginTop: 14,
+                paddingTop: 12,
+                borderTopWidth: 1,
+                borderTopColor: isDark
+                  ? "rgba(232,199,102,0.22)"
+                  : "rgba(0,0,0,0.08)",
+                flexDirection: "row",
+                alignItems: "center",
               }}
-              numberOfLines={2}
             >
-              Achieving {tier.name} requires{" "}
-              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", color: theme.accent }}>
-                {useVisits ? `${needVisits} cups` : `RM${needSpend.toFixed(0)}`}
-              </Text>
-            </Text>
-          ) : (
-            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12, color: theme.subtle }}>
-              Achieved · perks unlocked
-            </Text>
-          )}
+              <StatCell label="Points"  value={stats.points.toLocaleString()}  accent={theme.accent} subtle={theme.subtle} />
+              <StatDivider isDark={isDark} />
+              <StatCell label="Visits"  value={String(stats.visits)}            accent={theme.accent} subtle={theme.subtle} />
+              <StatDivider isDark={isDark} />
+              <StatCell label="Earned"  value={stats.earned.toLocaleString()}  accent={theme.accent} subtle={theme.subtle} />
+            </View>
+          ) : null}
         </View>
       </View>
     </View>
+  );
+}
+
+function StatCell({
+  label,
+  value,
+  accent,
+  subtle,
+}: {
+  label:  string;
+  value:  string;
+  accent: string;
+  subtle: string;
+}) {
+  return (
+    <View style={{ flex: 1, alignItems: "center" }}>
+      <Text
+        style={{
+          fontFamily: "Peachi-Bold",
+          fontSize: 18,
+          color: accent,
+          lineHeight: 20,
+        }}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+      <Text
+        style={{
+          fontFamily: "SpaceGrotesk_700Bold",
+          fontSize: 9,
+          letterSpacing: 1.2,
+          color: subtle,
+          marginTop: 2,
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function StatDivider({ isDark }: { isDark: boolean }) {
+  return (
+    <View
+      style={{
+        width: 1,
+        height: 28,
+        backgroundColor: isDark ? "rgba(232,199,102,0.18)" : "rgba(0,0,0,0.10)",
+      }}
+    />
   );
 }
 
@@ -439,54 +540,53 @@ export function TierHeroCard({
 /* Background + pattern + mascot (all SVG)                                    */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-/* Brand wordmark — a large outlined "C" with the supporting "°" degree
-   mark (echoes the °C celsius temperature reading on the actual cup
-   sleeves). Sized big enough to fill the left half of the card behind
-   the content but subtle in opacity so it never out-shouts the foreground. */
+/* Brand wordmark — the actual "°c" glyph from the Celsius app icon,
+   set in Peachi-Bold (the app's brand serif). The "°" floats to the
+   upper-left of the "c" exactly like the icon. Rendered as flat
+   React Native Text (not SVG) so the typeface matches the rest of
+   the brand surfaces 1:1 — same "c" the customer sees on the
+   takeaway cup sleeve and the app icon. */
 function CelsiusWordmark({ theme, cardHeight }: { theme: TierTheme; cardHeight: number }) {
-  // The wordmark sits in the upper-left third of the card, behind the
-  // tier name + eyebrow. The mascot occupies the right side; this anchor
-  // keeps them from colliding regardless of card height.
-  const size = cardHeight * 1.05;
+  const size = cardHeight * 1.15;
   return (
     <View
       pointerEvents="none"
       style={{
         position: "absolute",
-        left: -size * 0.08,
-        top: -size * 0.10,
+        left: -size * 0.04,
+        top: -size * 0.04,
         width: size,
         height: size,
       }}
     >
-      <Svg width={size} height={size} viewBox="0 0 100 100">
-        <Defs>
-          <SvgLinearGradient id="wm" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={theme.accent} stopOpacity="0.18" />
-            <Stop offset="1" stopColor={theme.accent} stopOpacity="0.06" />
-          </SvgLinearGradient>
-        </Defs>
-        {/* The big "C" — outlined, traces the same arc as the Celsius
-            brand block on the takeaway cups (open mouth facing right). */}
-        <Path
-          d="M 78 28
-             A 30 30 0 1 0 78 72"
-          stroke="url(#wm)"
-          strokeWidth={9}
-          strokeLinecap="round"
-          fill="none"
-        />
-        {/* Small "°" floating above the "C" — same degree-symbol motif
-            from the °C wordmark. */}
-        <Circle
-          cx={78}
-          cy={28}
-          r={4}
-          stroke="url(#wm)"
-          strokeWidth={2.5}
-          fill="none"
-        />
-      </Svg>
+      {/* Degree mark — sits to the upper-left of the "c" cap height.
+          Sized ~14% of the c glyph, exactly as in the icon.png. */}
+      <View
+        style={{
+          position: "absolute",
+          left: size * 0.18,
+          top: size * 0.18,
+          width: size * 0.10,
+          height: size * 0.10,
+          borderRadius: size * 0.05,
+          borderWidth: Math.max(2, size * 0.015),
+          borderColor: theme.watermark,
+        }}
+      />
+      {/* The "c" — lowercase, Peachi-Bold, theme-tinted at low opacity. */}
+      <Text
+        style={{
+          position: "absolute",
+          left: size * 0.20,
+          top: size * 0.05,
+          fontFamily: "Peachi-Bold",
+          fontSize: size * 0.95,
+          lineHeight: size * 0.95,
+          color: theme.watermark,
+        }}
+      >
+        c
+      </Text>
     </View>
   );
 }
