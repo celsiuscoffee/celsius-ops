@@ -121,7 +121,13 @@ export default function Home() {
     queryFn: () => fetchRewards(phone ?? null),
     staleTime: 60_000,
   });
-  const points = member?.pointsBalance ?? rewardsQ.data?.pointsBalance ?? 0;
+  // Prefer the LIVE rewards-query balance over the cached member.points
+  // Balance — `member` is set once at sign-in and never refreshed, so on
+  // a customer who's earned + redeemed since signing in it shows a stale
+  // figure (e.g. 430 home / 4130 rewards mismatch shipped in earlier
+  // screenshots). The store-cached value remains a soft fallback for the
+  // brief window before the rewards query lands.
+  const points = rewardsQ.data?.pointsBalance ?? member?.pointsBalance ?? 0;
   // Eligibility — active + affordable + valid date window + has stock +
   // pickup-capable + member hasn't hit max redemption. The server attaches
   // redemption_count, so this stays cheap on the client.
