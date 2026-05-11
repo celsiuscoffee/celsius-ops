@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { notifyTierUpgrade } from "@/lib/push/templates";
 
@@ -73,11 +74,16 @@ export async function GET(request: NextRequest) {
         fetchTierSortOrder(newTierId),
       ]);
       if (newOrder > prevOrder) {
-        notifyTierUpgrade({
-          memberId,
-          newTierName,
-          multiplier: newTierMul,
-        }).catch((e) => console.warn("[push] tier_upgrade", e));
+        // after() keeps the Vercel invocation alive until the Expo
+        // fetch finishes — without it, the lambda freezes on response
+        // return and the push is silently dropped.
+        after(async () => {
+          await notifyTierUpgrade({
+            memberId,
+            newTierName,
+            multiplier: newTierMul,
+          }).catch((e) => console.warn("[push] tier_upgrade", e));
+        });
       }
     }
 

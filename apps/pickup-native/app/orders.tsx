@@ -52,7 +52,9 @@ export default function OrdersTab() {
   // staleTime 5min so the prefetched cache from _layout serves the
   // first-paint instantly. Background refetch still happens; the
   // pull-to-refresh affordance below force-fetches when the user
-  // wants the latest.
+  // wants the latest. refetchInterval keeps the list live while the
+  // tab is foregrounded — without it a status flip on KDS only
+  // surfaces when the customer leaves and re-enters the tab.
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["order-history", phone],
     queryFn: () => (phone ? fetchOrderHistory(phone, 20) : Promise.resolve([])),
@@ -62,6 +64,7 @@ export default function OrdersTab() {
     // used to live here masked the new order until pull-to-refresh.
     staleTime: 0,
     refetchOnMount: "always",
+    refetchInterval: 5000,
   });
 
   const reorder = (order: OrderHistoryEntry) => {

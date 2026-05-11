@@ -12,6 +12,7 @@
 // signal "this is a pickup-app sign-in," so the issuance hook lives
 // alongside it.
 
+import { after } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { notifyWelcomeBonus } from "@/lib/push/templates";
 
@@ -81,12 +82,18 @@ export async function ensureNewMemberRewards(
         continue;
       }
 
-      // Notify the member that the welcome voucher landed. Fire-and-
-      // forget — never let a push miss block the issuance flow.
-      notifyWelcomeBonus({
-        memberId,
-        rewardName: (reward as { name?: string }).name,
-      }).catch((e) => console.warn("[push] welcome_bonus", e));
+      // Notify the member that the welcome voucher landed. Wrapped in
+      // after() so Vercel's waitUntil keeps the lambda alive until the
+      // Expo fetch completes — without it the push silently dropped on
+      // response return. Errors still swallowed so a push miss never
+      // blocks issuance.
+      const rewardName = (reward as { name?: string }).name;
+      after(async () => {
+        await notifyWelcomeBonus({
+          memberId,
+          rewardName,
+        }).catch((e) => console.warn("[push] welcome_bonus", e));
+      });
     }
   } catch (err) {
     // Never block sign-in on a voucher issuance failure.
