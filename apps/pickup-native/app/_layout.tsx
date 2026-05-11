@@ -30,6 +30,32 @@ import {
 
 SplashScreen.preventAutoHideAsync();
 
+// Sentry — crash + error reporting. DSN is sourced from
+// EXPO_PUBLIC_SENTRY_DSN at build time and baked into the JS bundle.
+// init() is a no-op when DSN is unset, so dev builds without a DSN
+// don't crash and forks of the project don't accidentally report to
+// this org's Sentry. tracesSampleRate is conservative in prod to keep
+// the free-tier event budget intact; bump if you start using perf.
+import * as Sentry from "@sentry/react-native";
+
+const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? "";
+if (SENTRY_DSN) {
+  Sentry.init({
+    dsn:                  SENTRY_DSN,
+    environment:          __DEV__ ? "development" : "production",
+    enableNative:         true,
+    tracesSampleRate:     __DEV__ ? 1.0 : 0.1,
+    profilesSampleRate:   0,
+    // Capture the runtime / OTA channel so a regression introduced by
+    // an OTA can be traced back to a specific update group ID.
+    initialScope: {
+      tags: {
+        channel: process.env.EXPO_PUBLIC_RELEASE_CHANNEL ?? "preview",
+      },
+    },
+  });
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 60_000, retry: 1 },
@@ -61,7 +87,10 @@ function applyDefaultFont() {
   InputAny.defaultProps.maxFontSizeMultiplier = 1.3;
 }
 
-export default function RootLayout() {
+// Sentry.wrap captures uncaught errors in the React tree and ties
+// them to the active navigation stack. Wrapped at the very root so
+// every screen + provider is instrumented.
+const RootLayout = function RootLayout() {
   const [loaded] = useFonts({
     "Peachi-Regular": require("../assets/fonts/Peachi-Regular.otf"),
     "Peachi-Medium": require("../assets/fonts/Peachi-Medium.otf"),
@@ -259,4 +288,6 @@ export default function RootLayout() {
     </SafeAreaProvider>
     </GestureHandlerRootView>
   );
-}
+};
+
+export default Sentry.wrap(RootLayout);

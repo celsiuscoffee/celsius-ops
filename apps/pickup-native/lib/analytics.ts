@@ -73,6 +73,23 @@ export function identifyMember(
   memberId: string,
   traits: { name?: string | null; phone?: string | null; tier?: string | null } = {},
 ): void {
+  // Sentry user context — separate try/catch so an Amplitude failure
+  // doesn't break Sentry attribution and vice versa. Sentry is a no-op
+  // when its DSN isn't set in _layout.tsx, so this is safe to always
+  // call.
+  try {
+    // Lazy require so non-RN environments / tests that don't pull
+    // Sentry stay clean. setUser is sync.
+    const Sentry = require("@sentry/react-native") as typeof import("@sentry/react-native");
+    Sentry.setUser({
+      id:    memberId,
+      ...(traits.phone ? { phone: traits.phone } : {}),
+      ...(traits.name  ? { username: traits.name } : {}),
+    });
+  } catch {
+    /* noop */
+  }
+
   if (!ENABLED) return;
   const m = loadAmplitude();
   if (!m) return;
@@ -89,6 +106,13 @@ export function identifyMember(
 }
 
 export function clearMember(): void {
+  try {
+    const Sentry = require("@sentry/react-native") as typeof import("@sentry/react-native");
+    Sentry.setUser(null);
+  } catch {
+    /* noop */
+  }
+
   if (!ENABLED) return;
   const m = loadAmplitude();
   if (!m) return;
