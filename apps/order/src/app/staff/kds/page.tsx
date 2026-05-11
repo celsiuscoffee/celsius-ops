@@ -267,8 +267,17 @@ function StaffOrderCard({
 
   const isPreparing = order.status === "preparing";
   const isReady     = order.status === "ready";
-  const elapsed     = elapsedSec(order.created_at);
-  const bucket      = prepBucket(order.created_at, order.status);
+  // Prefer prep_started_at (stamped when status hit "preparing") so the
+  // timer reflects kitchen time, not order-placed time. Card orders sit
+  // in "pending" for 2-3 min while Stripe confirms; created_at would
+  // make them look overdue the second they land on the KDS.
+  // For "ready" orders, fall back to created_at so the existing stale
+  // logic (20-min cutoff) keeps working consistently with prior behavior.
+  const timerAnchor = isPreparing
+    ? (order.prep_started_at ?? order.created_at)
+    : order.created_at;
+  const elapsed     = elapsedSec(timerAnchor);
+  const bucket      = prepBucket(timerAnchor, order.status);
   const customerFirst = firstName(order.customer_name);
   const itemCount   = order.order_items.reduce((s, i) => s + i.quantity, 0);
 
@@ -590,7 +599,8 @@ export default function StaffOrdersPage() {
       if (mutedRef.current) return;
       if (Date.now() < snoozeUntilRef.current) return;
       const overdue = ordersRef.current.some(
-        (o) => o.status === "preparing" && prepBucket(o.created_at, o.status) === "red",
+        (o) => o.status === "preparing"
+          && prepBucket(o.prep_started_at ?? o.created_at, o.status) === "red",
       );
       if (!overdue) return;
       if (Date.now() - lastChimeRef.current < OVERDUE_RECHIME_MS - 1000) return;
@@ -751,7 +761,9 @@ export default function StaffOrdersPage() {
       .filter((o) => o.status === "ready")
       .slice()
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-    const over = prep.filter((o) => prepBucket(o.created_at, "preparing") === "red").length;
+    const over = prep.filter(
+      (o) => prepBucket(o.prep_started_at ?? o.created_at, "preparing") === "red",
+    ).length;
     return { preparing: prep, ready: rdy, overdueCount: over };
   }, [orders, tick]);
 

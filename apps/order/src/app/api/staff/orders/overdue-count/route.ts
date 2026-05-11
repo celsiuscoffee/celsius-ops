@@ -18,12 +18,16 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin();
+  // Filter on prep_started_at (set by the BEFORE-INSERT/UPDATE trigger
+  // when status first hits "preparing") instead of created_at, so card
+  // orders waiting on Stripe-webhook confirmation don't show as overdue
+  // before they've actually entered the kitchen queue.
   const { count, error } = await supabase
     .from("orders")
     .select("id", { count: "exact", head: true })
     .eq("store_id", storeId)
     .eq("status", "preparing")
-    .lt("created_at", before);
+    .lt("prep_started_at", before);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

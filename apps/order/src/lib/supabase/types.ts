@@ -31,6 +31,11 @@ export interface OrderRow {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  // Stamped by a BEFORE-INSERT/UPDATE trigger the first time `status`
+  // becomes "preparing". Use this — not created_at — when measuring how
+  // long an order has been in the kitchen queue (avoids counting the
+  // pre-payment / pending window for card orders).
+  prep_started_at: string | null;
 }
 
 export interface OrderItemRow {
