@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+// Use the service-role client: this route runs server-side and authenticates
+// the caller via getSession() above. The anon client lacks INSERT/UPDATE
+// grants on hr_attendance_logs ("permission denied for table"), so writes
+// would fail before RLS even runs.
+import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { haversineDistance, GEOFENCE_RADIUS_METERS } from "@/lib/hr/constants";
 import type { AttendanceLog, GeofenceZone } from "@/lib/hr/types";
 
