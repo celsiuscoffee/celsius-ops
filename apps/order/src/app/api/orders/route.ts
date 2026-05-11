@@ -364,6 +364,12 @@ export async function POST(request: NextRequest) {
         reward_name:            rewardName ?? null,
         sst_amount:             sstSen,
         first_order_discount_amount: fodDiscountSen,
+        // Promotion-engine discounts (auto, code, tier-perk, reward-link)
+        // — previously thrown away after computing `afterDiscount`,
+        // leaving customers staring at "Total RM 4.72" against an
+        // RM 8.90 line item with no idea where the gap went. Persist
+        // it so the order detail screen can render the breakdown.
+        promo_discount:         promoDiscountSen,
         total:                  totalSen,
         customer_phone:         loyaltyPhone ?? null,
         loyalty_phone:          loyaltyPhone ?? null,

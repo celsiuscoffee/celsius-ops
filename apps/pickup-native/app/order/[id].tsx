@@ -231,7 +231,12 @@ export default function OrderStatus() {
             )}
           </View>
 
-          {/* Order summary */}
+          {/* Order summary. Previously showed only line items + a bare
+              total — which read as a broken math bug when there were
+              applied discounts (e.g. RM 8.90 line item, RM 4.72 total,
+              no explanation). Now mirrors the checkout summary:
+              subtotal, each non-zero discount as its own line, SST,
+              then the grand total. */}
           <View className="bg-surface rounded-2xl border border-border p-4">
             <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
               Items
@@ -245,7 +250,64 @@ export default function OrderStatus() {
                   <Text className="text-espresso">{formatPrice((i.item_total ?? 0) / 100)}</Text>
                 </View>
               ))}
+
               <View className="flex-row justify-between mt-3 pt-3 border-t border-border">
+                <Text className="text-muted-fg">Subtotal</Text>
+                <Text className="text-espresso">
+                  {formatPrice((data.subtotal ?? 0) / 100)}
+                </Text>
+              </View>
+
+              {data.reward_discount_amount > 0 && (
+                <View className="flex-row justify-between">
+                  <Text className="text-primary text-[13px]" numberOfLines={1}>
+                    Reward{data.reward_name ? ` · ${data.reward_name}` : ""}
+                  </Text>
+                  <Text className="text-primary">
+                    −{formatPrice(data.reward_discount_amount / 100)}
+                  </Text>
+                </View>
+              )}
+
+              {data.discount_amount > 0 && (
+                <View className="flex-row justify-between">
+                  <Text className="text-primary text-[13px]" numberOfLines={1}>
+                    Voucher{data.voucher_code ? ` · ${data.voucher_code}` : ""}
+                  </Text>
+                  <Text className="text-primary">
+                    −{formatPrice(data.discount_amount / 100)}
+                  </Text>
+                </View>
+              )}
+
+              {data.first_order_discount_amount > 0 && (
+                <View className="flex-row justify-between">
+                  <Text className="text-primary text-[13px]">First order discount</Text>
+                  <Text className="text-primary">
+                    −{formatPrice(data.first_order_discount_amount / 100)}
+                  </Text>
+                </View>
+              )}
+
+              {data.promo_discount > 0 && (
+                <View className="flex-row justify-between">
+                  <Text className="text-primary text-[13px]">Promotion</Text>
+                  <Text className="text-primary">
+                    −{formatPrice(data.promo_discount / 100)}
+                  </Text>
+                </View>
+              )}
+
+              {data.sst_amount > 0 && (
+                <View className="flex-row justify-between">
+                  <Text className="text-muted-fg text-[13px]">SST (6%)</Text>
+                  <Text className="text-muted-fg text-[13px]">
+                    {formatPrice(data.sst_amount / 100)}
+                  </Text>
+                </View>
+              )}
+
+              <View className="flex-row justify-between mt-2 pt-2 border-t border-border">
                 <Text className="text-espresso font-bold">Total</Text>
                 <Text
                   className="text-primary"

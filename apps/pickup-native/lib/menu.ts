@@ -100,7 +100,16 @@ export type OrderDetail = {
   id:             string;
   order_number:   string;
   status:         string;
-  total:          number;
+  // All monetary fields are integer sen (1 RM = 100 sen).
+  subtotal:                    number;
+  discount_amount:             number;          // voucher discount
+  reward_discount_amount:      number;          // loyalty reward
+  first_order_discount_amount: number;
+  promo_discount:              number;          // promotion engine
+  sst_amount:                  number;
+  total:                       number;          // grand total after all
+  reward_name:    string | null;
+  voucher_code:   string | null;
   store_id:       string | null;
   created_at:     string;
   payment_method: string | null;
