@@ -21,6 +21,8 @@ import {
   rewardUrgencyLabel,
   type Reward,
 } from "../lib/rewards";
+import { supabase } from "../lib/supabase";
+import { TierCardCarousel, type TierLite } from "../components/TierCardCarousel";
 
 // Locked rewards within this much of the customer's balance get a
 // visible progress bar + "X to go" sub-line. Anything further out
@@ -42,6 +44,25 @@ export default function RewardsTab() {
     staleTime: 5 * 60_000,
   });
   const tier = tierQ.data ?? null;
+
+  // Full tier ladder — drives the embedded carousel below the points
+  // card so customers can see what each tier unlocks without leaving
+  // the Rewards tab. Cached for 5 min; light SELECT so cheap to keep.
+  const tiersQ = useQuery({
+    queryKey: ["tiers"],
+    queryFn: async () => {
+      const { data: rows } = await supabase
+        .from("tiers")
+        .select("id,slug,name,min_visits,min_spend,multiplier,color,icon,benefits,benefit_rules,qualification_metric,sort_order")
+        .eq("brand_id", "brand-celsius")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true, nullsFirst: true })
+        .order("min_visits", { ascending: true, nullsFirst: true });
+      return (rows ?? []) as TierLite[];
+    },
+    staleTime: 5 * 60_000,
+  });
+  const tiers = tiersQ.data ?? [];
 
   const { data, isLoading } = useQuery({
     queryKey: ["rewards", phone ?? "anonymous"],
@@ -160,6 +181,49 @@ export default function RewardsTab() {
           <SignInPrompt />
         ) : (
           <>
+            {/* Tier ladder — themed carousel of every tier with the
+                customer's current one auto-snapped. Tap any card to
+                open the full Membership screen for that tier. Sits
+                above the perks block + rewards list so customers
+                immediately see "this is your tier — here's what's
+                next" before they scan the redemption catalogue. */}
+            {tiers.length > 0 && (
+              <View style={{ marginHorizontal: -16, marginTop: -8, marginBottom: 8 }}>
+                <TierCardCarousel
+                  tiers={tiers}
+                  currentSlug={tier?.tier_slug ?? null}
+                  memberVisits={tier?.visits_this_period ?? 0}
+                  memberSpend={tier?.spend_this_period ?? 0}
+                  cardHeight={172}
+                  title="Membership tiers"
+                  onCardPress={() => {
+                    Haptics.selectionAsync();
+                    router.push("/tier-benefits" as never);
+                  }}
+                />
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    router.push("/tier-benefits" as never);
+                  }}
+                  className="mx-4 mt-3 active:opacity-70"
+                  accessibilityRole="button"
+                  accessibilityLabel="See all tier benefits"
+                >
+                  <Text
+                    style={{
+                      color: "#C05040",
+                      fontFamily: "Peachi-Bold",
+                      fontSize: 13,
+                      textAlign: "right",
+                    }}
+                  >
+                    See all tier benefits →
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+
             {/* Tier perks — moved up so the answer to "what's special
                 about being PLATINUM" lands before the rewards list,
                 not as an afterthought at the bottom. */}
