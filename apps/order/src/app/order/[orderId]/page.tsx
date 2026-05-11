@@ -6,9 +6,14 @@ import Link from "next/link";
 import { AlertCircle, Loader2, MapPin, CheckCircle2, Clock, ChevronRight } from "lucide-react";
 
 const ArrowRight = ChevronRight;
-import { getSupabaseClient } from "@/lib/supabase/client";
 import { useCartStore } from "@/store/cart";
 import type { OrderRow, OrderItemRow } from "@/lib/supabase/types";
+
+// Customer-tracking page polls the server-side /api/orders/[id] endpoint
+// every POLL_MS instead of subscribing to Supabase Realtime with the
+// public anon key (which the security A3 lockdown revoked). Polling stops
+// once the order is in a terminal state (completed / failed).
+const POLL_MS = 5_000;
 
 // ── Swipe-to-receive component ─────────────────────────────────────────────
 function SwipeToReceive({ onComplete }: { onComplete: () => void }) {
@@ -248,29 +253,38 @@ export default function OrderTrackingPage() {
       .catch(() => setLoading(false));
   }, [orderId, clearCart, searchParams]);
 
-  // Realtime: listen for status changes
+  // Poll for status changes. Stops once the order is terminal.
+  // Detects ready transitions to fire the chime + vibrate (same UX as
+  // the previous Supabase Realtime subscription, just polled).
   useEffect(() => {
     if (!orderId) return;
-    const supabase = getSupabaseClient();
-    const channel  = supabase
-      .channel(`order-${orderId}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "orders", filter: `id=eq.${orderId}` },
-        (payload) => {
-          const updated = payload.new as OrderRow;
-          setOrder((prev) => prev ? { ...prev, ...updated } : null);
-          // Chime + vibrate when staff marks order ready
-          if (updated.status === "ready" && !chimePlayed) {
+    if (!order) return;
+    if (order.status === "completed" || order.status === "failed") return;
+
+    let cancelled = false;
+
+    const refresh = async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}`, { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const next = await res.json() as OrderWithItems;
+        if (!next || cancelled) return;
+        setOrder((prev) => {
+          if (!prev) return next;
+          // Chime + vibrate on preparing → ready transition (once).
+          if (prev.status !== "ready" && next.status === "ready" && !chimePlayed) {
             playChime();
             setChimePlayed(true);
             try { navigator.vibrate([80, 40, 160]); } catch { /* ignore */ }
           }
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [orderId, chimePlayed]);
+          return { ...prev, ...next };
+        });
+      } catch { /* keep last known state */ }
+    };
+
+    const t = setInterval(refresh, POLL_MS);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [orderId, order, chimePlayed]);
 
   // ── LOADING ────────────────────────────────────────────────────────────────
   if (loading) {

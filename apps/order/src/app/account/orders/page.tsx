@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -8,9 +8,14 @@ import {
   ChevronRight, Loader2,
 } from "lucide-react";
 import { useCartStore } from "@/store/cart";
-import { getSupabaseClient } from "@/lib/supabase/client";
 import { BottomNav } from "@/components/bottom-nav";
 import type { Product, CartItemModifiers } from "@/lib/types";
+
+// Polls /api/orders/[id] every ACTIVE_POLL_MS for each in-progress order
+// instead of subscribing to Supabase Realtime (anon SELECT on orders was
+// revoked by the security A3 lockdown). Stops automatically once no
+// active orders remain.
+const ACTIVE_POLL_MS = 5_000;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -189,7 +194,6 @@ export default function OrdersPage() {
     searchParams.get("tab") === "history" ? "history" : "current"
   );
   const [toast,    setToast]    = useState(false);
-  const channelsRef             = useRef<ReturnType<ReturnType<typeof getSupabaseClient>["channel"]>[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -227,41 +231,45 @@ export default function OrdersPage() {
     load();
   }, [recentOrders, loyaltyMember]);
 
-  // Realtime: subscribe to status changes on all active orders
+  // Poll active orders for status changes. Was a per-order Supabase
+  // Realtime channel; switched to polling because anon SELECT was
+  // revoked from the orders table (security lockdown A3). One request
+  // per active order every ACTIVE_POLL_MS; loop self-terminates once
+  // no active orders remain.
   useEffect(() => {
     const activeIds = orders
       .filter((o) => ACTIVE_STATUSES.has(o.status))
       .map((o) => o.id);
-
-    // Clean up previous channels
-    const supabase = getSupabaseClient();
-    channelsRef.current.forEach((ch) => supabase.removeChannel(ch));
-    channelsRef.current = [];
-
     if (!activeIds.length) return;
 
-    // One channel per active order (Supabase filter supports only eq per channel)
-    activeIds.forEach((id) => {
-      const ch = supabase
-        .channel(`orders-list-${id}`)
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "orders", filter: `id=eq.${id}` },
-          (payload) => {
-            const updated = payload.new as OrderSummary;
-            setOrders((prev) =>
-              prev.map((o) => (o.id === id ? { ...o, ...updated } : o))
-            );
-          }
-        )
-        .subscribe();
-      channelsRef.current.push(ch);
-    });
+    let cancelled = false;
 
-    return () => {
-      channelsRef.current.forEach((ch) => supabase.removeChannel(ch));
-      channelsRef.current = [];
+    const refresh = async () => {
+      const results = await Promise.allSettled(
+        activeIds.map((id) =>
+          fetch(`/api/orders/${id}`, { cache: "no-store" })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+        )
+      );
+      if (cancelled) return;
+      const updates = new Map<string, OrderSummary>();
+      results.forEach((r, i) => {
+        if (r.status === "fulfilled" && r.value) {
+          updates.set(activeIds[i], r.value as OrderSummary);
+        }
+      });
+      if (updates.size === 0) return;
+      setOrders((prev) =>
+        prev.map((o) => {
+          const next = updates.get(o.id);
+          return next ? { ...o, ...next } : o;
+        })
+      );
     };
+
+    const t = setInterval(refresh, ACTIVE_POLL_MS);
+    return () => { cancelled = true; clearInterval(t); };
   }, [orders.map((o) => o.id + o.status).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reconstruct cart items from stored order data and push to cart
