@@ -9,15 +9,13 @@ import { ProductImage } from "@/components/product-image";
 import { BottomNav } from "@/components/bottom-nav";
 import { useCartStore } from "@/store/cart";
 import type { Product } from "@/lib/types";
-import type { PromoBanner } from "@/lib/supabase/types";
 
 interface HomeContentProps {
   featuredProducts: Product[];
-  promoBanner:      PromoBanner;
   campaignBgUrl:    string | null;
 }
 
-export function HomeContent({ featuredProducts, promoBanner, campaignBgUrl }: HomeContentProps) {
+export function HomeContent({ featuredProducts, campaignBgUrl }: HomeContentProps) {
   const hasHydrated = useCartStore((s) => s._hasHydrated);
   const _selectedStore = useCartStore((s) => s.selectedStore);
   const _itemCount = useCartStore((s) => s.getItemCount());
@@ -67,8 +65,11 @@ export function HomeContent({ featuredProducts, promoBanner, campaignBgUrl }: Ho
       </header>
 
       <main className="flex-1 space-y-4 pb-20">
-        {/* Hero — campaign poster takes priority, falls back to text promo banner */}
-        {campaignBgUrl ? (
+        {/* Hero — campaign poster from app_settings.campaign_bg. The
+            text-only promo-banner fallback was retired in favor of
+            full-bleed splash photos managed via the splash-poster
+            flow (see SplashPoster + app_settings.splash_poster). */}
+        {campaignBgUrl && (
           <Link href={selectedStore ? `/menu?store=${selectedStore.id}` : "/store"} className="block relative w-full">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -78,43 +79,6 @@ export function HomeContent({ featuredProducts, promoBanner, campaignBgUrl }: Ho
               style={{ maxHeight: "60vw" }}
             />
           </Link>
-        ) : promoBanner.enabled && (
-          <div className="bg-gradient-to-br from-[#160800] via-[#2a1200] to-[#3d1f00] mx-0 relative overflow-hidden">
-            <div className="px-5 pt-6 pb-7">
-              <p className="text-[10px] font-bold text-amber-400/80 uppercase tracking-widest">
-                {promoBanner.label}
-              </p>
-              <div className="flex items-end gap-3 mt-1">
-                <p className="text-5xl font-black font-display text-white leading-none">
-                  {promoBanner.headline}<br />
-                  <span className="text-amber-400">{promoBanner.highlight}</span>
-                </p>
-                <svg
-                  viewBox="0 0 48 48"
-                  className="w-14 h-14 mb-1 opacity-90 shrink-0"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <ellipse cx="24" cy="40" rx="12" ry="4" fill="#ffffff18" />
-                  <rect x="10" y="18" width="28" height="18" rx="10" fill="white" fillOpacity="0.18" />
-                  <rect x="10" y="18" width="28" height="18" rx="10" stroke="white" strokeOpacity="0.5" strokeWidth="1.5" />
-                  <rect x="16" y="14" width="16" height="6" rx="3" fill="white" fillOpacity="0.25" stroke="white" strokeOpacity="0.4" strokeWidth="1" />
-                  <path d="M38 22 Q44 22 44 27 Q44 32 38 32" stroke="white" strokeOpacity="0.5" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-                  <path d="M19 10 Q21 7 23 10 Q25 13 27 10 Q29 7 31 10" stroke="#FBBF24" strokeOpacity="0.7" strokeWidth="1.2" strokeLinecap="round" fill="none" />
-                </svg>
-              </div>
-              <p className="text-sm text-white/60 mt-2">{promoBanner.description}</p>
-              <Link
-                href={orderHref}
-                className="inline-flex items-center gap-1.5 mt-4 bg-white text-primary rounded-full px-5 py-2.5 text-sm font-bold shadow-lg"
-              >
-                Order Now <ChevronRight className="h-4 w-4" />
-              </Link>
-            </div>
-            <div className="absolute -right-8 -top-8 w-44 h-44 rounded-full bg-white/5" />
-            <div className="absolute -right-4 -bottom-12 w-36 h-36 rounded-full bg-amber-400/5" />
-            <div className="absolute right-16 top-4 w-20 h-20 rounded-full bg-white/3" />
-          </div>
         )}
 
         {/* Quick Actions */}

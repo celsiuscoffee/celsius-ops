@@ -49,15 +49,6 @@ export interface OrderItemRow {
   created_at: string;
 }
 
-// Promo banner config stored in app_settings table as key="promo_banner"
-export interface PromoBanner {
-  enabled:     boolean;
-  label:       string;  // e.g. "New User Promo"
-  headline:    string;  // e.g. "Buy 1"
-  highlight:   string;  // e.g. "Free 1"
-  description: string;  // e.g. "First app order · Any drink · Any size"
-}
-
 export interface AppSettingRow {
   key:        string;
   value:      unknown;

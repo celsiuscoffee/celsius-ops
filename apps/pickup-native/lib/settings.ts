@@ -10,17 +10,6 @@ export type Settings = {
   min_order_value: { rm: number };
   maintenance: { enabled: boolean; message: string };
   min_app_version: { ios: string; android: string; forceUpdate: boolean };
-  promo_banner: {
-    enabled: boolean;
-    label?: string;
-    headline?: string;
-    highlight?: string;
-    description?: string;
-    image_url?: string;
-    cta_text?: string;
-    cta_target?: "menu" | "store" | "rewards" | "url";
-    cta_url?: string;
-  };
   payments_enabled: { enabled: boolean };
   first_order_discount: { enabled: boolean; type: "percent" | "fixed"; amount: number; label: string };
 };
@@ -32,7 +21,6 @@ const DEFAULTS: Settings = {
   min_order_value: { rm: 0 },
   maintenance: { enabled: false, message: "" },
   min_app_version: { ios: "1.0.0", android: "1.0.0", forceUpdate: false },
-  promo_banner: { enabled: false },
   payments_enabled: { enabled: true },
 };
 

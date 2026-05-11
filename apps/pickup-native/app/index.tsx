@@ -23,7 +23,7 @@ import { PosterCarousel } from "../components/PosterCarousel";
 import { RewardTicket } from "../components/RewardTicket";
 import { getHomePosters, type HomePoster } from "../lib/posters";
 import { tierStyle } from "../lib/tier-styles";
-import { getSetting, type Settings } from "../lib/settings";
+import { getSetting } from "../lib/settings";
 import { BottomNav } from "../components/BottomNav";
 import { formatPrice } from "../lib/api";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -165,22 +165,6 @@ export default function Home() {
   // Resolve the live outlet record so the picker can show its open/busy
   // state and ETA (data we already pulled in fetchOutlets).
   const currentOutlet = (outlets.data ?? []).find((o) => o.store_id === outletId) ?? null;
-
-  // Hero promo content driven by backoffice setting; falls back to a baked-in
-  // launch promo if the setting hasn't been configured yet.
-  const [promo, setPromo] = useState<Settings["promo_banner"]>({
-    enabled: true,
-    label: "New App Promo",
-    headline: "Buy 1",
-    highlight: "Free 1",
-    description: "First app order · Any drink · Any size",
-  });
-  useEffect(() => {
-    getSetting("promo_banner").then((v) => {
-      if (v && v.enabled) setPromo(v);
-      else setPromo((p) => ({ ...p, enabled: false }));
-    });
-  }, []);
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -751,7 +735,6 @@ export default function Home() {
           !(phone && (recent.data?.length ?? 0) > 0) &&
           affordableRewards.length === 0 &&
           featured.length === 0 &&
-          !(promo.enabled && promo.headline) &&
           cartCount(cart) === 0 && (
             <Pressable
               onPress={onOrderNow}

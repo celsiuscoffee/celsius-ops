@@ -5,7 +5,6 @@ import {
   Wallet,
   Wrench,
   AppWindow,
-  Megaphone,
   CreditCard,
   Save,
   Loader2,
@@ -22,17 +21,6 @@ import { toast } from "@celsius/ui";
 type MinOrder = { rm: number };
 type Maintenance = { enabled: boolean; message: string };
 type MinAppVersion = { ios: string; android: string; forceUpdate: boolean };
-type PromoBanner = {
-  enabled: boolean;
-  label?: string;
-  headline?: string;
-  highlight?: string;
-  description?: string;
-  image_url?: string;
-  cta_text?: string;
-  cta_target?: "menu" | "store" | "rewards" | "url";
-  cta_url?: string;
-};
 type PaymentsEnabled = { enabled: boolean };
 
 type OutletHours = { open: string; close: string; daysOpen: number[] };
@@ -56,7 +44,6 @@ export default function PickupSettingsPage() {
   const [minOrder, setMinOrder] = useState<MinOrder>({ rm: 0 });
   const [maint, setMaint] = useState<Maintenance>({ enabled: false, message: "" });
   const [appVer, setAppVer] = useState<MinAppVersion>({ ios: "1.0.0", android: "1.0.0", forceUpdate: false });
-  const [promo, setPromo] = useState<PromoBanner>({ enabled: false });
   const [payments, setPayments] = useState<PaymentsEnabled>({ enabled: true });
   const [outletHours, setOutletHours] = useState<OutletHoursMap>({
     conezion:    { ...DEFAULT_OUTLET_HOURS },
@@ -81,7 +68,6 @@ export default function PickupSettingsPage() {
           "min_order_value",
           "maintenance",
           "min_app_version",
-          "promo_banner",
           "payments_enabled",
           "outlet_hours",
           "first_order_discount",
@@ -100,10 +86,9 @@ export default function PickupSettingsPage() {
         if (results[0]) setMinOrder(results[0]);
         if (results[1]) setMaint(results[1]);
         if (results[2]) setAppVer(results[2]);
-        if (results[3]) setPromo(results[3]);
-        if (results[4]) setPayments(results[4]);
-        if (results[5]) setOutletHours(results[5]);
-        if (results[6]) setFirstOrder(results[6]);
+        if (results[3]) setPayments(results[3]);
+        if (results[4]) setOutletHours(results[4]);
+        if (results[5]) setFirstOrder(results[5]);
         if (tokenCountRes?.count !== undefined) setBlastTokenCount(tokenCountRes.count);
       } finally {
         setLoading(false);
@@ -247,83 +232,6 @@ export default function PickupSettingsPage() {
             <Toggle checked={appVer.forceUpdate} onChange={(v) => setAppVer({ ...appVer, forceUpdate: v })} />
           </Field>
           <SaveBtn busy={saving === "min_app_version"} onClick={() => save("min_app_version", appVer)} />
-        </Card>
-
-        {/* Promo banner */}
-        <Card icon={<Megaphone className="h-4.5 w-4.5 text-rose-600" />} bg="bg-rose-50"
-              title="Homescreen promo banner"
-              sub="Persistent strip on the pickup app home hero">
-          <Field label="Enabled">
-            <Toggle checked={promo.enabled} onChange={(v) => setPromo({ ...promo, enabled: v })} />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Label">
-              <input type="text"
-                value={promo.label ?? ""}
-                onChange={(e) => setPromo({ ...promo, label: e.target.value })}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                placeholder="App PROMO" />
-            </Field>
-            <Field label="Highlight">
-              <input type="text"
-                value={promo.highlight ?? ""}
-                onChange={(e) => setPromo({ ...promo, highlight: e.target.value })}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                placeholder="Free 1" />
-            </Field>
-          </div>
-          <Field label="Headline">
-            <input type="text"
-              value={promo.headline ?? ""}
-              onChange={(e) => setPromo({ ...promo, headline: e.target.value })}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              placeholder="Buy 1" />
-          </Field>
-          <Field label="Description">
-            <input type="text"
-              value={promo.description ?? ""}
-              onChange={(e) => setPromo({ ...promo, description: e.target.value })}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              placeholder="First app order · Any drink · Any size" />
-          </Field>
-          <Field label="Hero image URL (optional · 16:9 recommended)">
-            <input type="text"
-              value={promo.image_url ?? ""}
-              onChange={(e) => setPromo({ ...promo, image_url: e.target.value })}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              placeholder="https://...campaign-hero.jpg" />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="CTA text">
-              <input type="text"
-                value={promo.cta_text ?? ""}
-                onChange={(e) => setPromo({ ...promo, cta_text: e.target.value })}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                placeholder="Order Now" />
-            </Field>
-            <Field label="CTA target">
-              <select
-                value={promo.cta_target ?? "menu"}
-                onChange={(e) => setPromo({ ...promo, cta_target: e.target.value as PromoBanner["cta_target"] })}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              >
-                <option value="menu">Menu</option>
-                <option value="store">Pick outlet</option>
-                <option value="rewards">Rewards</option>
-                <option value="url">External URL</option>
-              </select>
-            </Field>
-          </div>
-          {promo.cta_target === "url" && (
-            <Field label="External URL">
-              <input type="text"
-                value={promo.cta_url ?? ""}
-                onChange={(e) => setPromo({ ...promo, cta_url: e.target.value })}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                placeholder="https://..." />
-            </Field>
-          )}
-          <SaveBtn busy={saving === "promo_banner"} onClick={() => save("promo_banner", promo)} />
         </Card>
 
         {/* Outlet ordering hours */}
