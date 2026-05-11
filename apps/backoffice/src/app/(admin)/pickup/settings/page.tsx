@@ -5,7 +5,6 @@ import {
   Wallet,
   Wrench,
   AppWindow,
-  MessageSquare,
   Megaphone,
   CreditCard,
   Save,
@@ -23,7 +22,6 @@ import { toast } from "@celsius/ui";
 type MinOrder = { rm: number };
 type Maintenance = { enabled: boolean; message: string };
 type MinAppVersion = { ios: string; android: string; forceUpdate: boolean };
-type OrderReadySms = { template: string };
 type PromoBanner = {
   enabled: boolean;
   label?: string;
@@ -58,7 +56,6 @@ export default function PickupSettingsPage() {
   const [minOrder, setMinOrder] = useState<MinOrder>({ rm: 0 });
   const [maint, setMaint] = useState<Maintenance>({ enabled: false, message: "" });
   const [appVer, setAppVer] = useState<MinAppVersion>({ ios: "1.0.0", android: "1.0.0", forceUpdate: false });
-  const [orderReady, setOrderReady] = useState<OrderReadySms>({ template: "" });
   const [promo, setPromo] = useState<PromoBanner>({ enabled: false });
   const [payments, setPayments] = useState<PaymentsEnabled>({ enabled: true });
   const [outletHours, setOutletHours] = useState<OutletHoursMap>({
@@ -84,7 +81,6 @@ export default function PickupSettingsPage() {
           "min_order_value",
           "maintenance",
           "min_app_version",
-          "order_ready_sms",
           "promo_banner",
           "payments_enabled",
           "outlet_hours",
@@ -104,11 +100,10 @@ export default function PickupSettingsPage() {
         if (results[0]) setMinOrder(results[0]);
         if (results[1]) setMaint(results[1]);
         if (results[2]) setAppVer(results[2]);
-        if (results[3]) setOrderReady(results[3]);
-        if (results[4]) setPromo(results[4]);
-        if (results[5]) setPayments(results[5]);
-        if (results[6]) setOutletHours(results[6]);
-        if (results[7]) setFirstOrder(results[7]);
+        if (results[3]) setPromo(results[3]);
+        if (results[4]) setPayments(results[4]);
+        if (results[5]) setOutletHours(results[5]);
+        if (results[6]) setFirstOrder(results[6]);
         if (tokenCountRes?.count !== undefined) setBlastTokenCount(tokenCountRes.count);
       } finally {
         setLoading(false);
@@ -252,20 +247,6 @@ export default function PickupSettingsPage() {
             <Toggle checked={appVer.forceUpdate} onChange={(v) => setAppVer({ ...appVer, forceUpdate: v })} />
           </Field>
           <SaveBtn busy={saving === "min_app_version"} onClick={() => save("min_app_version", appVer)} />
-        </Card>
-
-        {/* Order ready SMS */}
-        <Card icon={<MessageSquare className="h-4.5 w-4.5 text-indigo-600" />} bg="bg-indigo-50"
-              title="Order-ready SMS template"
-              sub="Sent when staff marks an order ready. Tokens: {orderNumber}, {outletName}">
-          <Field label="Template">
-            <textarea
-              value={orderReady.template}
-              onChange={(e) => setOrderReady({ template: e.target.value })}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              rows={3} />
-          </Field>
-          <SaveBtn busy={saving === "order_ready_sms"} onClick={() => save("order_ready_sms", orderReady)} />
         </Card>
 
         {/* Promo banner */}
