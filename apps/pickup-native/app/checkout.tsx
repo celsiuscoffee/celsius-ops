@@ -162,6 +162,25 @@ export default function Checkout() {
   // overlay animates in, holds ~1.5s, then router.replace navigates
   // to the order detail screen.
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  // Frozen snapshot of the order summary, captured the instant Place
+  // Order is tapped. clearCart() runs immediately after the server
+  // creates the pending order (to prevent duplicate-order submissions
+  // if the customer back-navigates and retries) — but that empties
+  // `cart`, recomputes all derived totals to 0, and made the order
+  // summary flash "Total RM 0.00" behind the Apple Pay sheet while
+  // the user authorised payment. Pinning the summary values here
+  // keeps the display stable until we navigate away.
+  type FrozenSummary = {
+    items:          typeof cart;
+    subtotal:       number;
+    rewardDiscount: number;
+    rewardName:     string | null;
+    promoDiscounts: NonNullable<typeof promoEval>["discounts"];
+    sst:            number;
+    grandTotal:     number;
+    afterDiscount:  number;
+  };
+  const [frozenSummary, setFrozenSummary] = useState<FrozenSummary | null>(null);
   const successOpacity = useRef(new Animated.Value(0)).current;
   const successScale   = useRef(new Animated.Value(0.6)).current;
 
@@ -308,6 +327,20 @@ export default function Checkout() {
         rewardPointsCost: appliedReward?.points_required ?? 0,
         rewardDiscountSen: Math.round(rewardDiscount * 100),
         promoCode: promoCode.trim() || undefined,
+      });
+      // Pin the summary BEFORE clearCart so the customer keeps seeing
+      // their RM 4.45 (or whatever) behind the Stripe / Apple Pay
+      // sheet — otherwise the live total recomputes to 0 the moment
+      // the cart empties.
+      setFrozenSummary({
+        items:          cart,
+        subtotal,
+        rewardDiscount,
+        rewardName:     appliedReward?.name ?? null,
+        promoDiscounts: promoEval?.discounts ?? [],
+        sst,
+        grandTotal,
+        afterDiscount,
       });
       clearCart();
       trackEvent("order_placed", {
@@ -697,73 +730,90 @@ export default function Checkout() {
               <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
                 Order
               </Text>
-              <View className="mt-2 gap-1.5">
-                {cart.map((i) => (
-                  <View key={i.cartId} className="flex-row justify-between">
-                    <Text className="text-espresso flex-1">
-                      {i.quantity}× {i.name}
-                    </Text>
-                    <Text className="text-espresso">{formatPrice(i.totalPrice)}</Text>
+              {/* Use frozenSummary values when set (during the Place Order
+                  → Stripe sheet → navigate window) so the summary behind
+                  the payment sheet doesn't recompute to RM 0 once the
+                  cart is cleared. Falls back to live values when not
+                  frozen — i.e. normal browsing of the checkout screen. */}
+              {(() => {
+                const items          = frozenSummary?.items          ?? cart;
+                const dispSubtotal   = frozenSummary?.subtotal       ?? subtotal;
+                const dispReward     = frozenSummary?.rewardDiscount ?? rewardDiscount;
+                const dispRewardName = frozenSummary?.rewardName     ?? (appliedReward?.name ?? null);
+                const dispPromos     = frozenSummary?.promoDiscounts ?? promoEval?.discounts ?? [];
+                const dispSst        = frozenSummary?.sst            ?? sst;
+                const dispGrand      = frozenSummary?.grandTotal     ?? grandTotal;
+                const dispAfter      = frozenSummary?.afterDiscount  ?? afterDiscount;
+                return (
+                  <View className="mt-2 gap-1.5">
+                    {items.map((i) => (
+                      <View key={i.cartId} className="flex-row justify-between">
+                        <Text className="text-espresso flex-1">
+                          {i.quantity}× {i.name}
+                        </Text>
+                        <Text className="text-espresso">{formatPrice(i.totalPrice)}</Text>
+                      </View>
+                    ))}
+                    <View className="flex-row justify-between mt-3 pt-3 border-t border-border">
+                      <Text className="text-muted-fg">Subtotal</Text>
+                      <Text className="text-espresso">{formatPrice(dispSubtotal)}</Text>
+                    </View>
+                    {dispRewardName && dispReward > 0 && (
+                      <View className="flex-row justify-between">
+                        <Text className="text-primary text-[13px]" numberOfLines={1}>
+                          Reward · {dispRewardName}
+                        </Text>
+                        <Text className="text-primary">−{formatPrice(dispReward)}</Text>
+                      </View>
+                    )}
+                    {dispPromos.map((d) => (
+                      <View key={d.promotion_id} className="flex-row justify-between">
+                        <Text className="text-primary text-[13px]" numberOfLines={1}>
+                          {d.reason === "tier_perk"
+                            ? "🎁 "
+                            : d.reason === "code"
+                            ? "🏷️ "
+                            : ""}
+                          {d.promotion_name}
+                        </Text>
+                        <Text className="text-primary">
+                          −{formatPrice(d.discount_amount)}
+                        </Text>
+                      </View>
+                    ))}
+                    {sstConfig.enabled && dispSst > 0 && (
+                      <View className="flex-row justify-between">
+                        <Text className="text-muted-fg text-[13px]">
+                          SST ({Math.round(sstConfig.rate * 100)}%)
+                        </Text>
+                        <Text className="text-muted-fg text-[13px]">{formatPrice(dispSst)}</Text>
+                      </View>
+                    )}
+                    <View className="flex-row justify-between mt-2 pt-2 border-t border-border">
+                      <Text className="text-espresso font-bold">Total</Text>
+                      <Text
+                        className="text-primary"
+                        style={{ fontFamily: "Peachi-Bold" }}
+                      >
+                        {formatPrice(dispGrand)}
+                      </Text>
+                    </View>
+                    {tier && tier.tier_name && (
+                      <View className="flex-row justify-between mt-2">
+                        <Text className="text-muted-fg text-[13px]" numberOfLines={1}>
+                          {tier.tier_icon} {tier.tier_name} · earning {tier.tier_multiplier}×
+                        </Text>
+                        <Text
+                          className="text-[13px]"
+                          style={{ color: tier.tier_color ?? "#92400e" }}
+                        >
+                          +{Math.round(dispAfter * (tier.tier_multiplier ?? 1))} pts
+                        </Text>
+                      </View>
+                    )}
                   </View>
-                ))}
-                <View className="flex-row justify-between mt-3 pt-3 border-t border-border">
-                  <Text className="text-muted-fg">Subtotal</Text>
-                  <Text className="text-espresso">{formatPrice(subtotal)}</Text>
-                </View>
-                {appliedReward && rewardDiscount > 0 && (
-                  <View className="flex-row justify-between">
-                    <Text className="text-primary text-[13px]" numberOfLines={1}>
-                      Reward · {appliedReward.name}
-                    </Text>
-                    <Text className="text-primary">−{formatPrice(rewardDiscount)}</Text>
-                  </View>
-                )}
-                {promoEval?.discounts.map((d) => (
-                  <View key={d.promotion_id} className="flex-row justify-between">
-                    <Text className="text-primary text-[13px]" numberOfLines={1}>
-                      {d.reason === "tier_perk"
-                        ? "🎁 "
-                        : d.reason === "code"
-                        ? "🏷️ "
-                        : ""}
-                      {d.promotion_name}
-                    </Text>
-                    <Text className="text-primary">
-                      −{formatPrice(d.discount_amount)}
-                    </Text>
-                  </View>
-                ))}
-                {sstConfig.enabled && (
-                  <View className="flex-row justify-between">
-                    <Text className="text-muted-fg text-[13px]">
-                      SST ({Math.round(sstConfig.rate * 100)}%)
-                    </Text>
-                    <Text className="text-muted-fg text-[13px]">{formatPrice(sst)}</Text>
-                  </View>
-                )}
-                <View className="flex-row justify-between mt-2 pt-2 border-t border-border">
-                  <Text className="text-espresso font-bold">Total</Text>
-                  <Text
-                    className="text-primary"
-                    style={{ fontFamily: "Peachi-Bold" }}
-                  >
-                    {formatPrice(grandTotal)}
-                  </Text>
-                </View>
-                {tier && tier.tier_name && (
-                  <View className="flex-row justify-between mt-2">
-                    <Text className="text-muted-fg text-[13px]" numberOfLines={1}>
-                      {tier.tier_icon} {tier.tier_name} · earning {tier.tier_multiplier}×
-                    </Text>
-                    <Text
-                      className="text-[13px]"
-                      style={{ color: tier.tier_color ?? "#92400e" }}
-                    >
-                      +{Math.round(afterDiscount * (tier.tier_multiplier ?? 1))} pts
-                    </Text>
-                  </View>
-                )}
-              </View>
+                );
+              })()}
             </View>
 
             {!paymentsEnabled && (
