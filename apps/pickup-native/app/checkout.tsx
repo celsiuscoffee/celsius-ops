@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Stack, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CreditCard, Smartphone, Check, AlertCircle, Building2, Coffee, MapPin, Clock } from "lucide-react-native";
+import { Check, AlertCircle, Coffee, MapPin, Clock, Wallet } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useStripe } from "@stripe/stripe-react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -149,7 +149,13 @@ export default function Checkout() {
   const [phoneInput, setPhoneInput] = useState(phoneFromStore ?? "");
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "ewallet" | "fpx">("card");
+  // Single Stripe-routed payment flow. The sheet presents whatever
+  // methods are enabled in Stripe Dashboard (card, Apple Pay, FPX,
+  // GrabPay, etc.) via automatic_payment_methods, so the app no
+  // longer asks the customer to pre-pick. We still send a value to
+  // the server because it requires one; "card" is the most common
+  // and the actual method gets recorded post-payment via Stripe's
+  // PaymentIntent metadata.
   const [lastError, setLastError] = useState<string | null>(null);
   // Success acknowledgement — toggled the moment payment is confirmed
   // (or we hit the skipPayment branch for zero-amount orders). The
@@ -229,7 +235,6 @@ export default function Checkout() {
       subtotal,
       hasReward: !!appliedReward,
       hasPromo: !!promoCode.trim(),
-      paymentMethod,
       outletId,
     });
 
@@ -283,7 +288,7 @@ export default function Checkout() {
         selectedStore: { id: outletId, name: outletName ?? undefined },
         loyaltyPhone: phoneInput.trim(),
         loyaltyId: loyaltyId ?? undefined,
-        paymentMethod,
+        paymentMethod: "card",
         total: subtotal, // pre-discount subtotal in RM; server applies discount + SST
         items: cart.map((i) => ({
           productId: i.productId,
@@ -312,7 +317,6 @@ export default function Checkout() {
         subtotal,
         rewardDiscount,
         promoDiscount,
-        paymentMethod,
         rewardId:       appliedReward?.id ?? null,
         outletId,
       });
@@ -412,7 +416,7 @@ export default function Checkout() {
         router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
         return;
       }
-      trackEvent("payment_success", { orderId: res.orderId, paymentMethod });
+      trackEvent("payment_success", { orderId: res.orderId });
 
       // Payment succeeded — confirm server-side immediately so the order is
       // already "preparing" by the time we navigate.
@@ -446,46 +450,6 @@ export default function Checkout() {
     } finally {
       setBusy(false);
     }
-  };
-
-  const PaymentRow = ({
-    method,
-    icon: Icon,
-    label,
-    sub,
-  }: {
-    method: typeof paymentMethod;
-    icon: any;
-    label: string;
-    sub?: string;
-  }) => {
-    const selected = paymentMethod === method;
-    return (
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync();
-          setPaymentMethod(method);
-        }}
-        className={`px-4 py-3 rounded-2xl border flex-row items-center gap-3 active:opacity-70 ${
-          selected ? "bg-primary/8 border-primary" : "bg-surface border-border"
-        }`}
-      >
-        <View
-          className={`w-9 h-9 rounded-2xl items-center justify-center ${
-            selected ? "bg-primary/15" : "bg-background"
-          }`}
-        >
-          <Icon size={18} color={selected ? "#C05040" : "#160800"} />
-        </View>
-        <View className="flex-1">
-          <Text className={selected ? "text-primary font-bold" : "text-espresso font-bold"}>
-            {label}
-          </Text>
-          {sub && <Text className="text-muted-fg text-xs">{sub}</Text>}
-        </View>
-        {selected && <Check size={18} color="#C05040" />}
-      </Pressable>
-    );
   };
 
   // Empty cart guard — covers deep-link / back-nav cases where the user
@@ -669,10 +633,23 @@ export default function Checkout() {
               <Text className="text-muted-fg text-[11px] font-bold uppercase tracking-wider px-1 mb-2">
                 Payment
               </Text>
-              <View className="gap-2">
-                <PaymentRow method="card" icon={CreditCard} label="Card / Apple Pay" sub="Pay now via Stripe" />
-                <PaymentRow method="fpx" icon={Building2} label="FPX online banking" sub="Maybank2u · CIMB Clicks · Public Bank · all banks" />
-                <PaymentRow method="ewallet" icon={Smartphone} label="E-wallet" sub="GrabPay · TNG · Boost" />
+              {/* Stripe sheet handles method selection — Card, Apple Pay,
+                  FPX, GrabPay, etc. are surfaced based on what's enabled
+                  in the Stripe Dashboard. No app-side picker so customers
+                  don't get a misleading pre-selection that doesn't actually
+                  filter the sheet. */}
+              <View className="bg-surface rounded-2xl border border-border px-4 py-3 flex-row items-center gap-3">
+                <View className="w-9 h-9 rounded-2xl items-center justify-center bg-primary/15">
+                  <Wallet size={18} color="#C05040" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-espresso font-bold">
+                    Pay securely via Stripe
+                  </Text>
+                  <Text className="text-muted-fg text-xs">
+                    Card · Apple Pay · FPX · GrabPay — pick on the next screen
+                  </Text>
+                </View>
               </View>
             </View>
 
