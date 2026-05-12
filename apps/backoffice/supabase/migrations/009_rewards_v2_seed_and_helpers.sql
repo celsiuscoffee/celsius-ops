@@ -7,7 +7,7 @@
 --     to its issued_rewards row at order time and mark the voucher
 --     redeemed when the payment confirms.
 ALTER TABLE public.orders
-  ADD COLUMN IF NOT EXISTS wallet_voucher_id uuid;
+  ADD COLUMN IF NOT EXISTS wallet_voucher_id text;
 
 CREATE INDEX IF NOT EXISTS idx_orders_wallet_voucher_id
   ON public.orders(wallet_voucher_id)
@@ -33,7 +33,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION public.increment_referral_total(member_id_param uuid)
+CREATE OR REPLACE FUNCTION public.increment_referral_total(member_id_param text)
 RETURNS void AS $$
 BEGIN
   UPDATE public.referral_codes
@@ -104,14 +104,14 @@ ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS public.admin_claimables (
   id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  brand_id             uuid NOT NULL,
+  brand_id             text NOT NULL,
 
   title                text NOT NULL,
   description          text NOT NULL,
   voucher_template_id  uuid NOT NULL REFERENCES public.voucher_templates(id) ON DELETE RESTRICT,
 
   -- Who can claim. Empty member_ids[] means everyone.
-  member_ids           uuid[] NOT NULL DEFAULT '{}',
+  member_ids           text[] NOT NULL DEFAULT '{}',
   -- Member-segment filters; future-proof but not enforced today.
   min_tier             text,
   audience_label       text,                       -- display only, e.g. "Welcome cohort"
@@ -134,8 +134,8 @@ CREATE INDEX IF NOT EXISTS idx_admin_claimables_brand_active
 -- enforces one-claim-per-member.
 CREATE TABLE IF NOT EXISTS public.admin_claimables_claimed (
   claimable_id  uuid NOT NULL REFERENCES public.admin_claimables(id) ON DELETE CASCADE,
-  member_id     uuid NOT NULL,
-  voucher_id    uuid REFERENCES public.issued_rewards(id) ON DELETE SET NULL,
+  member_id     text NOT NULL,
+  voucher_id    text REFERENCES public.issued_rewards(id) ON DELETE SET NULL,
   claimed_at    timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (claimable_id, member_id)
 );
@@ -149,8 +149,8 @@ CREATE TRIGGER trg_admin_claimables_updated
 -- linking to the voucher templates that get issued to both sides.
 
 CREATE TABLE IF NOT EXISTS public.referral_codes (
-  member_id   uuid PRIMARY KEY,
-  brand_id    uuid NOT NULL,
+  member_id   text PRIMARY KEY,
+  brand_id    text NOT NULL,
   code        text NOT NULL UNIQUE,        -- short readable code, e.g. AMMAR-7K2L
   total_referred integer NOT NULL DEFAULT 0,
   created_at  timestamptz NOT NULL DEFAULT now()
@@ -159,9 +159,9 @@ CREATE INDEX IF NOT EXISTS idx_referral_codes_brand ON public.referral_codes(bra
 
 CREATE TABLE IF NOT EXISTS public.referral_attributions (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  brand_id         uuid NOT NULL,
-  referrer_id      uuid NOT NULL,            -- member who shared the code
-  referee_id       uuid NOT NULL,            -- member who signed up using it
+  brand_id         text NOT NULL,
+  referrer_id      text NOT NULL,            -- member who shared the code
+  referee_id       text NOT NULL,            -- member who signed up using it
   referral_code    text NOT NULL,
   status           text NOT NULL DEFAULT 'pending' CHECK (status IN (
     'pending',        -- referee signed up; waiting for first qualifying order
@@ -169,8 +169,8 @@ CREATE TABLE IF NOT EXISTS public.referral_attributions (
     'voided'          -- abuse / disqualified
   )),
   referee_first_order_id uuid,
-  referrer_voucher_id    uuid REFERENCES public.issued_rewards(id) ON DELETE SET NULL,
-  referee_voucher_id     uuid REFERENCES public.issued_rewards(id) ON DELETE SET NULL,
+  referrer_voucher_id    text REFERENCES public.issued_rewards(id) ON DELETE SET NULL,
+  referee_voucher_id     text REFERENCES public.issued_rewards(id) ON DELETE SET NULL,
   created_at       timestamptz NOT NULL DEFAULT now(),
   rewarded_at      timestamptz,
   UNIQUE (referee_id)                       -- referee can only be attributed once

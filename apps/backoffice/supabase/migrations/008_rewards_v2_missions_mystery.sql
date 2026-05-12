@@ -10,7 +10,7 @@
 
 CREATE TABLE IF NOT EXISTS public.reward_missions (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  brand_id        uuid NOT NULL,
+  brand_id        text NOT NULL,
 
   -- Display
   title           text NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS public.reward_missions (
 
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now(),
-  created_by      uuid
+  created_by      text
 );
 
 CREATE INDEX IF NOT EXISTS idx_reward_missions_brand_active
@@ -50,7 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_reward_missions_brand_active
 
 CREATE TABLE IF NOT EXISTS public.mission_assignments (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  member_id        uuid NOT NULL,
+  member_id        text NOT NULL,
   mission_id       uuid NOT NULL REFERENCES public.reward_missions(id) ON DELETE RESTRICT,
 
   -- Week window — Mon 00:00 to Sun 23:59 of customer local time
@@ -84,7 +84,7 @@ CREATE INDEX IF NOT EXISTS idx_mission_assignments_week
 
 CREATE TABLE IF NOT EXISTS public.mystery_pool (
   id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  brand_id                 uuid NOT NULL,
+  brand_id                 text NOT NULL,
 
   -- Display
   label                    text NOT NULL,           -- e.g. "3× Bean Multiplier"
@@ -120,7 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_mystery_pool_brand_active
 
 CREATE TABLE IF NOT EXISTS public.mystery_drops (
   id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  member_id           uuid NOT NULL,
+  member_id           text NOT NULL,
   order_id            uuid,
   pool_entry_id       uuid NOT NULL REFERENCES public.mystery_pool(id) ON DELETE RESTRICT,
 
@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS public.mystery_drops (
   outcome_type        text NOT NULL,
   multiplier_applied  numeric(4,2),
   beans_awarded       integer,
-  voucher_id          uuid,                          -- references issued_rewards.id
+  voucher_id          text,                          -- references issued_rewards.id
 
   revealed_at         timestamptz,                   -- when customer tapped to reveal
   created_at          timestamptz NOT NULL DEFAULT now()
@@ -144,7 +144,7 @@ CREATE INDEX IF NOT EXISTS idx_mystery_drops_order
 -- ═══════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS public.user_streaks (
-  member_id            uuid PRIMARY KEY,
+  member_id            text PRIMARY KEY,
   current_streak_weeks integer NOT NULL DEFAULT 0,
   longest_streak_weeks integer NOT NULL DEFAULT 0,
   last_order_week_start timestamptz,
@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS public.user_streaks (
 
 CREATE TABLE IF NOT EXISTS public.reward_milestones (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  brand_id        uuid NOT NULL,
+  brand_id        text NOT NULL,
 
   title           text NOT NULL,                -- e.g. "Coffee Veteran"
   description     text NOT NULL,
@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS public.reward_milestones (
 
 CREATE TABLE IF NOT EXISTS public.user_milestones_earned (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  member_id     uuid NOT NULL,
+  member_id     text NOT NULL,
   milestone_id  uuid NOT NULL REFERENCES public.reward_milestones(id) ON DELETE CASCADE,
   earned_at     timestamptz NOT NULL DEFAULT now(),
 
@@ -198,7 +198,7 @@ CREATE INDEX IF NOT EXISTS idx_user_milestones_member
 
 CREATE TABLE IF NOT EXISTS public.voucher_templates (
   id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  brand_id             uuid NOT NULL,
+  brand_id             text NOT NULL,
 
   title                text NOT NULL,                 -- "Free Pastry"
   description          text NOT NULL,                 -- "Any pastry under RM10"
@@ -222,7 +222,7 @@ CREATE TABLE IF NOT EXISTS public.voucher_templates (
   free_product_ids     text[],
   free_product_name    text,
   fulfillment_type     text[],
-  outlets_allowlist    uuid[],                       -- empty = all outlets
+  outlets_allowlist    text[],                       -- empty = all outlets
 
   -- Stacking & limits
   stacks_with_beans    boolean NOT NULL DEFAULT true,
@@ -249,7 +249,7 @@ ALTER TABLE public.issued_rewards
   ADD COLUMN IF NOT EXISTS source_type text CHECK (source_type IN (
     'mission','mystery','birthday','referral','milestone','manual','points_redemption'
   )),
-  ADD COLUMN IF NOT EXISTS source_ref_id uuid;
+  ADD COLUMN IF NOT EXISTS source_ref_id text;
 
 CREATE INDEX IF NOT EXISTS idx_issued_rewards_template
   ON public.issued_rewards(voucher_template_id);
