@@ -14,27 +14,33 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { username, password } = await req.json();
+  const body = await req.json();
+  // Accept either { identifier } (new) or { username } (back-compat).
+  const identifierRaw: string = (body.identifier ?? body.username ?? "").toString().trim();
+  const password: string = body.password ?? "";
 
-  if (!username || !password) {
-    return NextResponse.json({ error: "Username and password required" }, { status: 400 });
+  if (!identifierRaw || !password) {
+    return NextResponse.json({ error: "Email/username and password required" }, { status: 400 });
   }
 
+  const isEmail = identifierRaw.includes("@");
   const user = await prisma.user.findFirst({
     where: {
-      username: username.trim(),
       status: "ACTIVE",
       role: { in: ["OWNER", "ADMIN", "MANAGER"] },
+      ...(isEmail
+        ? { email: { equals: identifierRaw, mode: "insensitive" } }
+        : { username: identifierRaw }),
     },
     include: { outlet: { select: { name: true } } },
   });
 
   if (!user || !user.passwordHash) {
-    return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
+    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
   if (!(await verifyPassword(password, user.passwordHash))) {
-    return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
+    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
   await createSession({

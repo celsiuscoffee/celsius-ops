@@ -1,26 +1,27 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
-  const [username, setUsername] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password) return;
+    if (!identifier.trim() || !password) return;
     setLoading(true);
     setError("");
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim(), password }),
+        body: JSON.stringify({ identifier: identifier.trim(), password }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Login failed"); return; }
@@ -41,17 +42,20 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-white/70">Username</label>
-            <Input type="text" placeholder="Enter username" value={username} onChange={(e) => setUsername(e.target.value)}
+            <label className="mb-1.5 block text-xs font-medium text-white/70">Email or username</label>
+            <Input type="text" placeholder="you@celsiuscoffee.com or username" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
               className="border-white/10 bg-white/5 text-white placeholder:text-white/30" autoFocus autoComplete="username" />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-white/70">Password</label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="block text-xs font-medium text-white/70">Password</label>
+              <Link href="/forgot-password" className="text-xs text-white/50 hover:text-white">Forgot?</Link>
+            </div>
             <Input type="password" placeholder="Enter password" value={password} onChange={(e) => setPassword(e.target.value)}
               className="border-white/10 bg-white/5 text-white placeholder:text-white/30" autoComplete="current-password" />
           </div>
           {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{error}</p>}
-          <Button type="submit" disabled={loading || !username.trim() || !password} className="w-full bg-terracotta hover:bg-terracotta-dark disabled:opacity-50">
+          <Button type="submit" disabled={loading || !identifier.trim() || !password} className="w-full bg-terracotta hover:bg-terracotta-dark disabled:opacity-50">
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Sign In
           </Button>
         </form>

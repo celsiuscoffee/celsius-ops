@@ -42,6 +42,8 @@ export async function middleware(request: NextRequest) {
   // headers via buildResponse() so API responses get CSP + no-store.
   if (
     pathname === "/login" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password" ||
     pathname.startsWith("/r/") ||
     pathname.startsWith("/review/") ||
     pathname.startsWith("/api/") ||
