@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
       template: { select: { id: true, name: true, roleType: true } },
       outlet: { select: { id: true, name: true, code: true } },
       auditor: { select: { id: true, name: true } },
+      auditee: { select: { id: true, name: true, fullName: true } },
       items: { select: { id: true, rating: true, ratingType: true, photos: true } },
     },
     orderBy: { date: "desc" },
@@ -53,6 +54,9 @@ export async function GET(req: NextRequest) {
       template: r.template,
       outlet: r.outlet,
       auditor: r.auditor,
+      auditee: r.auditee
+        ? { id: r.auditee.id, name: r.auditee.fullName ?? r.auditee.name }
+        : null,
       totalItems,
       ratedItems,
       totalPhotos,

@@ -25,6 +25,7 @@ type AuditReport = {
   template: { id: string; name: string; roleType: string };
   outlet: { id: string; name: string; code: string };
   auditor: { id: string; name: string };
+  auditee: { id: string; name: string } | null;
   totalItems: number;
   ratedItems: number;
   totalPhotos: number;
@@ -88,7 +89,8 @@ export default function AuditReportsPage() {
     return (
       r.template.name.toLowerCase().includes(q) ||
       r.outlet.name.toLowerCase().includes(q) ||
-      r.auditor.name.toLowerCase().includes(q)
+      r.auditor.name.toLowerCase().includes(q) ||
+      (r.auditee?.name.toLowerCase().includes(q) ?? false)
     );
   });
 
@@ -161,7 +163,7 @@ export default function AuditReportsPage() {
             </div>
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input placeholder="Search template, outlet, auditor..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+              <Input placeholder="Search template, outlet, auditor, auditee..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
             </div>
           </div>
         </CardContent>
@@ -239,8 +241,13 @@ export default function AuditReportsPage() {
                     <span className="flex items-center gap-1">
                       <Building2 className="h-3 w-3" /> {r.outlet.name}
                     </span>
+                    {r.auditee && (
+                      <span className="flex items-center gap-1">
+                        <User className="h-3 w-3" /> Auditee: {r.auditee.name}
+                      </span>
+                    )}
                     <span className="flex items-center gap-1">
-                      <User className="h-3 w-3" /> {r.auditor.name}
+                      <User className="h-3 w-3" /> Auditor: {r.auditor.name}
                     </span>
                     <span>{r.date}</span>
                     <span>

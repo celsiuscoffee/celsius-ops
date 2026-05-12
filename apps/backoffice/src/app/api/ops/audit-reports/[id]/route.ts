@@ -25,6 +25,7 @@ export async function GET(
       },
       outlet: { select: { id: true, name: true, code: true } },
       auditor: { select: { id: true, name: true, role: true } },
+      auditee: { select: { id: true, name: true, fullName: true, role: true } },
       items: { orderBy: { sortOrder: "asc" } },
     },
   });
@@ -68,6 +69,13 @@ export async function GET(
     template: report.template,
     outlet: report.outlet,
     auditor: report.auditor,
+    auditee: report.auditee
+      ? {
+          id: report.auditee.id,
+          name: report.auditee.fullName ?? report.auditee.name,
+          role: report.auditee.role,
+        }
+      : null,
     sections: sections.map((s) => ({
       name: s.name,
       items: s.items.map((i) => ({

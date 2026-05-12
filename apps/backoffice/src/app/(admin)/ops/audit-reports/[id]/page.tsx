@@ -36,6 +36,7 @@ type Report = {
   template: { id: string; name: string; description: string | null; roleType: string; version: number };
   outlet: { id: string; name: string; code: string };
   auditor: { id: string; name: string; role: string };
+  auditee: { id: string; name: string; role: string } | null;
   sections: Section[];
   summary: {
     totalItems: number;
@@ -177,8 +178,13 @@ export default function AuditReportDetailPage({
             <span className="flex items-center gap-1">
               <Building2 className="h-3 w-3" /> {report.outlet.name}
             </span>
+            {report.auditee && (
+              <span className="flex items-center gap-1">
+                <User className="h-3 w-3" /> Auditee: {report.auditee.name}
+              </span>
+            )}
             <span className="flex items-center gap-1">
-              <User className="h-3 w-3" /> {report.auditor.name}
+              <User className="h-3 w-3" /> Auditor: {report.auditor.name}
             </span>
             <span>Date: {report.date}</span>
             {report.completedAt && (
