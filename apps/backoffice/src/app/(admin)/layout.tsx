@@ -455,7 +455,7 @@ function IconRail({
       </Link>
 
       {/* Module icons */}
-      <div className="mt-1 flex flex-1 flex-col items-center gap-1 overflow-y-auto scrollbar-thin">
+      <div className="mt-1 flex flex-1 flex-col items-center gap-1 overflow-y-auto overflow-x-clip scrollbar-thin">
         {NAV_SECTIONS.map((section) => {
           const visible = getVisibleItems(section, user);
           if (visible.length === 0) return null;
