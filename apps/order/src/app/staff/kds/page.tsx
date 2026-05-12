@@ -521,6 +521,45 @@ export default function StaffOrdersPage() {
     setMounted(true);
   }, [router]);
 
+  // Keep the SUNMI screen awake while the KDS is open. Without this, the
+  // OS idle timeout puts the device to sleep after a few minutes — the
+  // polling loop pauses, the audio context gets ducked, and new orders
+  // miss the chime / auto-print until a barista taps the screen.
+  //
+  // Wake Lock API is HTTPS-only and gets released whenever the tab
+  // becomes hidden (tab switch, app switch). Re-acquire on the
+  // matching `visible` event so a brief context-switch doesn't break
+  // the always-on. Silent no-op on platforms that don't support it.
+  useEffect(() => {
+    type WakeLockSentinel = { release: () => Promise<void> };
+    let sentinel: WakeLockSentinel | null = null;
+    let cancelled = false;
+
+    const acquire = async () => {
+      try {
+        const navAny = navigator as unknown as { wakeLock?: { request: (t: string) => Promise<WakeLockSentinel> } };
+        if (!navAny.wakeLock) return;
+        const s = await navAny.wakeLock.request("screen");
+        if (cancelled) { void s.release(); return; }
+        sentinel = s;
+      } catch { /* battery saver / unsupported / user gesture missing — silent */ }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && !sentinel) {
+        void acquire();
+      }
+    };
+
+    void acquire();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (sentinel) { void sentinel.release(); sentinel = null; }
+    };
+  }, []);
+
   const storeId = session?.storeId ?? "";
   const [autoPrint, setAutoPrint] = useState(true);
   const [muted,     setMuted]     = useState(false);
