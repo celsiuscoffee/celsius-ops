@@ -51,7 +51,7 @@ export default function AuditTemplatesPage() {
   const [newDesc, setNewDesc] = useState("");
   const [newRole, setNewRole] = useState("area_manager");
   const [newTarget, setNewTarget] = useState<"OUTLET" | "STAFF">("OUTLET");
-  const [newJobRole, setNewJobRole] = useState("");
+  const [newJobRoles, setNewJobRoles] = useState<string[]>([]);
 
   const filtered = (templates ?? []).filter((t) => {
     if (roleFilter !== "ALL" && t.roleType !== roleFilter) return false;
@@ -80,8 +80,8 @@ export default function AuditTemplatesPage() {
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
-    if (newTarget === "STAFF" && !newJobRole) {
-      alert("Choose a job role for staff-skills templates");
+    if (newTarget === "STAFF" && newJobRoles.length === 0) {
+      alert("Choose at least one job role for staff-skills templates");
       return;
     }
     setCreating(true);
@@ -94,7 +94,7 @@ export default function AuditTemplatesPage() {
           description: newDesc.trim() || null,
           roleType: newRole,
           auditTarget: newTarget,
-          jobRoleFilter: newTarget === "STAFF" && newJobRole ? [newJobRole] : [],
+          jobRoleFilter: newTarget === "STAFF" ? newJobRoles : [],
           sections: [],
         }),
       });
@@ -103,7 +103,7 @@ export default function AuditTemplatesPage() {
         setNewName("");
         setNewDesc("");
         setNewTarget("OUTLET");
-        setNewJobRole("");
+        setNewJobRoles([]);
         mutate();
       }
     } finally {
@@ -167,20 +167,42 @@ export default function AuditTemplatesPage() {
 
             {newTarget === "STAFF" && (
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 mb-1">Staff job role to audit</label>
-                <select
-                  value={newJobRole}
-                  onChange={(e) => setNewJobRole(e.target.value)}
-                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-                >
-                  <option value="">Select a role…</option>
-                  {(jobRoles ?? []).map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
-                <p className="mt-1 text-[10px] text-gray-400">
-                  Pulled live from HR profiles. Templates only match staff with this exact position.
+                <label className="block text-[11px] font-medium text-gray-500 mb-1">
+                  Staff job role to audit
+                  {newJobRoles.length > 0 && <span className="ml-1 text-gray-400">({newJobRoles.length} selected)</span>}
+                </label>
+                <p className="text-[10px] text-gray-400 mb-2">
+                  Pick every HR position this template should cover. Pulled live from HR profiles.
                 </p>
+                <div className="max-h-40 overflow-y-auto rounded-md border border-gray-200 bg-white">
+                  {(jobRoles ?? []).length === 0 ? (
+                    <div className="p-3 text-xs text-gray-400">Loading roles…</div>
+                  ) : (
+                    (jobRoles ?? []).map((r) => {
+                      const checked = newJobRoles.includes(r);
+                      return (
+                        <label
+                          key={r}
+                          className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setNewJobRoles((prev) =>
+                                e.target.checked
+                                  ? [...prev, r]
+                                  : prev.filter((x) => x !== r),
+                              )
+                            }
+                            className="rounded border-gray-300"
+                          />
+                          <span>{r}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             )}
 
