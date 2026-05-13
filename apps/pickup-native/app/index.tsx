@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, Pressable, ScrollView, Image, RefreshControl } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { MapPin, ChevronRight, Coffee, Sparkles, Gift, Clock4, ShoppingCart } from "lucide-react-native";
+import { MapPin, ChevronRight, Coffee, Sparkles, Gift, Clock4, ShoppingCart, Croissant, Plus, Percent, Ticket } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { supabase, type Outlet } from "../lib/supabase";
 import { useApp, cartCount } from "../lib/store";
@@ -23,11 +23,12 @@ import {
   fetchMyVouchers,
   fetchClaimableVouchers,
   fetchActiveMission,
+  voucherUrgencyLabel,
+  type Voucher,
 } from "../lib/rewards-v2";
 import { SafeBoundary } from "../components/SafeBoundary";
 import { TierHero } from "../components/TierHero";
 import { PosterCarousel } from "../components/PosterCarousel";
-import { RewardTicket } from "../components/RewardTicket";
 import { getHomePosters, type HomePoster } from "../lib/posters";
 import { tierStyle } from "../lib/tier-styles";
 import { getSetting } from "../lib/settings";
@@ -835,19 +836,22 @@ export default function Home() {
           </Pressable>
         )}
 
-        {/* Available rewards — what's redeemable right now. Time-
-            sensitive (urgency labels, stock countdowns), so it leads. */}
-        {affordableRewards.length > 0 && (
+        {/* Your rewards — wallet vouchers ready to redeem at checkout.
+            Switched from showing points-shop rewards (which require the
+            customer to claim into the wallet first) so what surfaces here
+            is what the customer can immediately use. Tap → Rewards tab on
+            the rewards screen so they can hit "Use" or open detail. */}
+        {walletVouchers.length > 0 && (
           <View className="mt-5">
             <View className="flex-row items-center justify-between mb-2 px-4">
               <Text
                 className="text-espresso text-[18px]"
                 style={{ fontFamily: "Peachi-Bold" }}
               >
-                Available rewards
+                Your rewards
               </Text>
               <Pressable
-                onPress={() => router.push("/rewards")}
+                onPress={() => router.push("/rewards?tab=vouchers" as never)}
                 className="flex-row items-center gap-0.5 active:opacity-70"
               >
                 <Text className="text-primary text-xs font-bold">All</Text>
@@ -859,12 +863,8 @@ export default function Home() {
               showsHorizontalScrollIndicator={false}
               contentContainerClassName="gap-3 px-4"
             >
-              {affordableRewards.map((r) => (
-                <RewardTicket
-                  key={r.id}
-                  reward={r}
-                  onPress={() => router.push("/rewards")}
-                />
+              {walletVouchers.slice(0, 6).map((v) => (
+                <HomeVoucherCard key={v.id} voucher={v} />
               ))}
             </ScrollView>
           </View>
@@ -1460,5 +1460,106 @@ function ForYouStrip({
           ))}
       </ScrollView>
     </View>
+  );
+}
+
+// ─── Home voucher card ──────────────────────────────────────────────
+// Compact card for the home-screen "Your rewards" rail. Matches the
+// Claim / Rewards-tab visual language (terracotta-50 for redeemed,
+// cream/amber for auto-issued, ghost-icon corner, accent CTA bar) but
+// sized for a horizontal scroll lane.
+
+const HOME_VOUCHER_ICONS: Record<Voucher["category"], React.ComponentType<{ size: number; color: string; strokeWidth?: number }>> = {
+  free_item:  Croissant,
+  upgrade:    Plus,
+  discount:   Percent,
+  multiplier: Sparkles,
+  special:    Ticket,
+};
+
+function HomeVoucherCard({ voucher }: { voucher: Voucher }) {
+  const Icon = HOME_VOUCHER_ICONS[voucher.category] ?? Ticket;
+  const isAutoIssued = ["birthday", "mission", "mystery", "milestone", "referral"].includes(
+    voucher.source_type ?? "",
+  );
+  const surfaceBg     = isAutoIssued ? "#FFF6E0" : "#FBEBE8";
+  const surfaceBorder = isAutoIssued ? "rgba(217,148,4,0.22)" : "rgba(192,80,64,0.18)";
+  const accent        = isAutoIssued ? "#D99404" : "#C05040";
+  const iconTint      = isAutoIssued ? "rgba(217,148,4,0.18)" : "rgba(192,80,64,0.18)";
+  const urgency = voucherUrgencyLabel(voucher);
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/voucher/${voucher.id}` as never)}
+      className="active:opacity-80"
+      style={{
+        width: 178,
+        borderRadius: 16,
+        overflow: "hidden",
+        backgroundColor: surfaceBg,
+        borderWidth: 1,
+        borderColor: surfaceBorder,
+        shadowColor: "#000",
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 1,
+      }}
+    >
+      <View style={{ padding: 12, gap: 8 }}>
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            backgroundColor: iconTint,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Icon size={20} color={accent} strokeWidth={1.8} />
+        </View>
+        <Text
+          style={{
+            fontFamily: "Peachi-Bold",
+            fontSize: 14,
+            color: "#1A0200",
+            marginTop: 2,
+          }}
+          numberOfLines={2}
+        >
+          {voucher.title}
+        </Text>
+        <Text
+          style={{
+            color: urgency.warning ? "#C05040" : "rgba(26,2,0,0.60)",
+            fontFamily: "SpaceGrotesk_500Medium",
+            fontSize: 11,
+          }}
+          numberOfLines={1}
+        >
+          {urgency.label}
+        </Text>
+      </View>
+      <View
+        style={{
+          backgroundColor: accent,
+          paddingVertical: 7,
+          alignItems: "center",
+        }}
+      >
+        <Text
+          style={{
+            color: "#FFFFFF",
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 10.5,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+          }}
+        >
+          Tap to use
+        </Text>
+      </View>
+    </Pressable>
   );
 }

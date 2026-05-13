@@ -262,15 +262,22 @@ function CompactHero({
   nextShortBy: number;
   accent: string;
 }) {
-  // Tier badge styling — match the legacy TierCard pattern: tier's own
-  // color drives the pill background, the brand-supplied icon emoji
-  // anchors it, and the multiplier shows next to the wordmark. Keeps the
-  // compact pill size (not a card) so the hero stays tight.
+  // Tier badge styling — same pill footprint as before, but the inner
+  // composition now mirrors the full TierHeroCard: the tier's own colour
+  // becomes the solid pill background, a darker shade rims the edge for
+  // depth, a separate "Nx" chip on the trailing side calls out the
+  // multiplier instead of running it inline with the wordmark. Keeps the
+  // compact size so the hero stays tight.
   const tierColor = tier?.tier_color ?? "#1A0200";
   const tierIcon  = tier?.tier_icon  ?? "★";
   const tierMul   = tier?.tier_multiplier ?? 1;
-  const tierBg    = hexWithAlpha(tierColor, 0.16);
-  const tierFg    = tierColor;
+  // Decide text contrast based on the tier colour's luminance. Light tiers
+  // (Bronze cream, Silver light grey, Gold) want dark espresso text; dark
+  // tiers (Platinum charcoal, Elite black) want a bright cream.
+  const tierIsLight = isLightColor(tierColor);
+  const tierFg = tierIsLight ? "#1A0200" : "#FFF5E1";
+  const tierMulBg = tierIsLight ? "rgba(26,2,0,0.10)" : "rgba(255,245,225,0.18)";
+  const tierMulFg = tierIsLight ? "#1A0200" : "#FFF5E1";
 
   // Tier progress copy — depends on the brand's qualification metric.
   let tierCaption: string | null = null;
@@ -326,7 +333,9 @@ function CompactHero({
           </Text>
         </View>
 
-        {/* Right — tier badge + streak */}
+        {/* Right — tier badge + streak. Pill mirrors the tier card's
+            visual language: solid tier-colour fill, brand mascot emoji,
+            wordmark + a separate multiplier chip riding inside. */}
         <View style={{ alignItems: "flex-end", gap: 4 }}>
           <Pressable
             onPress={() => {
@@ -335,38 +344,53 @@ function CompactHero({
             }}
             className="flex-row items-center active:opacity-80"
             style={{
-              paddingHorizontal: 9,
-              paddingVertical: 4,
+              paddingLeft: 9,
+              paddingRight: tierMul > 1 ? 4 : 12,
+              paddingVertical: 4.5,
               borderRadius: 100,
-              backgroundColor: tierBg,
+              backgroundColor: tierColor,
               borderWidth: 1,
-              borderColor: hexWithAlpha(tierColor, 0.28),
-              gap: 5,
+              borderColor: hexWithAlpha(tierColor, 0.55),
+              gap: 6,
+              shadowColor: tierColor,
+              shadowOpacity: 0.18,
+              shadowRadius: 6,
+              shadowOffset: { width: 0, height: 2 },
+              elevation: 2,
             }}
           >
-            <Text style={{ fontSize: 11 }}>{tierIcon}</Text>
+            <Text style={{ fontSize: 13 }}>{tierIcon}</Text>
             <Text
               style={{
                 fontFamily: "SpaceGrotesk_700Bold",
-                fontSize: 10,
+                fontSize: 11,
                 color: tierFg,
-                letterSpacing: 1.2,
+                letterSpacing: 1.4,
                 textTransform: "uppercase",
               }}
             >
               {tierDisplayName}
             </Text>
             {tierMul > 1 && (
-              <Text
+              <View
                 style={{
-                  fontFamily: "SpaceGrotesk_700Bold",
-                  fontSize: 10,
-                  color: hexWithAlpha(tierColor, 0.7),
-                  marginLeft: -2,
+                  backgroundColor: tierMulBg,
+                  paddingHorizontal: 7,
+                  paddingVertical: 2,
+                  borderRadius: 100,
                 }}
               >
-                · {formatMul(tierMul)}×
-              </Text>
+                <Text
+                  style={{
+                    fontFamily: "SpaceGrotesk_700Bold",
+                    fontSize: 10,
+                    color: tierMulFg,
+                    letterSpacing: 0.4,
+                  }}
+                >
+                  {formatMul(tierMul)}×
+                </Text>
+              </View>
             )}
           </Pressable>
           {/* Streak chip — visible once the customer has any active streak. */}
@@ -487,7 +511,7 @@ function TabButton({
         <Text
           style={{
             fontFamily: active ? "SpaceGrotesk_700Bold" : "SpaceGrotesk_600SemiBold",
-            fontSize: 13,
+            fontSize: 15,
             color: active ? "#1A0200" : "#6B6B6B",
           }}
         >
@@ -496,10 +520,10 @@ function TabButton({
         {badge !== undefined && badge > 0 && (
           <View
             style={{
-              minWidth: 16,
-              height: 14,
-              paddingHorizontal: 5,
-              borderRadius: 8,
+              minWidth: 18,
+              height: 16,
+              paddingHorizontal: 6,
+              borderRadius: 9,
               backgroundColor: "#C05040",
               alignItems: "center",
               justifyContent: "center",
@@ -508,7 +532,7 @@ function TabButton({
             <Text
               style={{
                 fontFamily: "SpaceGrotesk_700Bold",
-                fontSize: 9,
+                fontSize: 10,
                 color: "#FFFFFF",
                 fontWeight: "800",
               }}
@@ -1059,6 +1083,23 @@ function hexWithAlpha(color: string, alpha: number): string {
  *  and "2.00" reads as just "2". */
 function formatMul(n: number): string {
   return n % 1 === 0 ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+/** True when the colour's relative luminance reads as a "light" surface —
+ *  used to pick between espresso text and cream text on the tier pill.
+ *  Defensive: bad input returns false (treat as dark, use cream text). */
+function isLightColor(color: string): boolean {
+  const c = color.trim();
+  let hex = c.startsWith("#") ? c.slice(1) : c;
+  if (hex.length === 3) hex = hex.split("").map((ch) => ch + ch).join("");
+  if (hex.length !== 6) return false;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  if ([r, g, b].some(Number.isNaN)) return false;
+  // sRGB luminance approximation — close enough for binary contrast picks.
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.62;
 }
 
 // birthday), tag for monetary discounts, cup for everything else

@@ -171,11 +171,16 @@ function VoucherRow({ voucher }: { voucher: Voucher }) {
   const setReservedVoucher = useApp((s) => s.setReservedVoucher);
   const setAppliedReward = useApp((s) => s.setAppliedReward);
 
+  // Auto-issued vouchers (birthday/mission/mystery/milestone/referral)
+  // wear an amber surface so they stand apart from points-shop redeems
+  // at a glance. Same brand language as the tier-card mascot accent.
   const isAutoIssued = ["birthday", "mission", "mystery", "milestone", "referral"].includes(
-    voucher.source_type ?? ""
+    voucher.source_type ?? "",
   );
-  const iconBg = isAutoIssued ? "#FBBF24" : "#FBEBE8";
-  const iconColor = isAutoIssued ? "#1A0200" : "#C05040";
+  const surfaceBg     = isAutoIssued ? "#FFF6E0" : "#FBEBE8";
+  const surfaceBorder = isAutoIssued ? "rgba(217,148,4,0.22)" : "rgba(192,80,64,0.18)";
+  const accent        = isAutoIssued ? "#D99404" : "#C05040";
+  const iconTint      = isAutoIssued ? "rgba(217,148,4,0.18)" : "rgba(192,80,64,0.18)";
 
   function openDetail() {
     Haptics.selectionAsync();
@@ -216,78 +221,120 @@ function VoucherRow({ voucher }: { voucher: Voucher }) {
     router.push("/menu" as never);
   }
 
+  // Friendly category label — mirrors what the Claim card shows.
+  const categoryLabel = (
+    voucher.category === "free_item" ? "Free Item"
+      : voucher.category === "upgrade" ? "Add-on"
+      : voucher.category === "discount" ? "Discount"
+      : voucher.category === "multiplier" ? "Boost"
+      : "Reward"
+  );
+
   return (
     <Pressable
       onPress={openDetail}
-      className="bg-surface rounded-2xl border border-border p-3 flex-row items-center gap-3 active:opacity-70"
+      className="active:opacity-80"
       style={{
+        borderRadius: 16,
+        overflow: "hidden",
+        backgroundColor: surfaceBg,
+        borderWidth: 1,
+        borderColor: surfaceBorder,
         shadowColor: "#000",
-        shadowOpacity: 0.04,
+        shadowOpacity: 0.06,
         shadowRadius: 6,
         shadowOffset: { width: 0, height: 2 },
         elevation: 1,
       }}
     >
       <View
-        className="rounded-xl items-center justify-center"
-        style={{ width: 42, height: 42, backgroundColor: iconBg }}
-      >
-        <Icon size={22} color={iconColor} strokeWidth={1.8} />
-      </View>
-
-      <View className="flex-1 min-w-0">
-        <Text
-          className="text-espresso text-[15px]"
-          style={{ fontFamily: "Peachi-Bold" }}
-          numberOfLines={1}
-        >
-          {voucher.title}
-        </Text>
-        <Text
-          className="text-[11px] mt-0.5"
-          style={{
-            fontFamily: "SpaceGrotesk_500Medium",
-            color: urgency.warning ? "#C05040" : "#6B6B6B",
-            letterSpacing: 0.2,
-          }}
-          numberOfLines={1}
-        >
-          {urgency.label}
-        </Text>
-      </View>
-
-      {/* Inline Use pill */}
-      <Pressable
-        onPress={useNow}
-        hitSlop={8}
-        className={`rounded-full flex-row items-center active:opacity-80 ${
-          isAutoIssued ? "" : "bg-white"
-        }`}
         style={{
-          backgroundColor: isAutoIssued ? "#C05040" : "#FFFFFF",
           paddingHorizontal: 12,
-          paddingVertical: 6,
-          gap: 3,
-          flexShrink: 0,
-          borderWidth: isAutoIssued ? 0 : 1.5,
-          borderColor: "#C05040",
+          paddingVertical: 10,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
         }}
       >
-        <Text
-          className="text-[12px]"
+        {/* Foreground icon — matches Claim card sizing. */}
+        <View
           style={{
-            fontFamily: "Peachi-Bold",
-            color: isAutoIssued ? "#FFFFFF" : "#C05040",
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            backgroundColor: iconTint,
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          Use
-        </Text>
-        <ChevronRight
-          size={11}
-          color={isAutoIssued ? "#FFFFFF" : "#C05040"}
-          strokeWidth={2.4}
-        />
-      </Pressable>
+          <Icon size={20} color={accent} strokeWidth={1.8} />
+        </View>
+
+        {/* Title + meta */}
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              fontFamily: "Peachi-Bold",
+              fontSize: 14,
+              color: "#1A0200",
+            }}
+            numberOfLines={1}
+          >
+            {voucher.title}
+          </Text>
+          <Text
+            style={{
+              marginTop: 1,
+              color: urgency.warning ? "#C05040" : "rgba(26,2,0,0.60)",
+              fontFamily: "SpaceGrotesk_500Medium",
+              fontSize: 11,
+            }}
+            numberOfLines={1}
+          >
+            <Text
+              style={{
+                color: accent,
+                fontFamily: "SpaceGrotesk_700Bold",
+                letterSpacing: 1,
+              }}
+            >
+              {categoryLabel.toUpperCase()}
+            </Text>
+            {"  ·  "}
+            {urgency.label}
+          </Text>
+        </View>
+
+        {/* Use pill — solid accent so it stays as the obvious primary
+            action on the card. */}
+        <Pressable
+          onPress={useNow}
+          hitSlop={8}
+          className="active:opacity-80"
+          style={{
+            backgroundColor: accent,
+            paddingHorizontal: 14,
+            paddingVertical: 7,
+            borderRadius: 999,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 3,
+          }}
+        >
+          <Text
+            style={{
+              color: "#FFFFFF",
+              fontFamily: "SpaceGrotesk_700Bold",
+              fontSize: 10.5,
+              letterSpacing: 0.8,
+              textTransform: "uppercase",
+            }}
+          >
+            Use
+          </Text>
+          <ChevronRight size={11} color="#FFFFFF" strokeWidth={2.4} />
+        </Pressable>
+      </View>
     </Pressable>
   );
 }
