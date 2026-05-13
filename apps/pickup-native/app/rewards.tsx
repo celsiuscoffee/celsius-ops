@@ -303,20 +303,21 @@ function CompactHero({
 
   return (
     <View
-      className="rounded-3xl overflow-hidden"
+      className="rounded-2xl overflow-hidden"
       style={{
         backgroundColor: "#1A0200",
         shadowColor: "#160800",
-        shadowOpacity: 0.22,
-        shadowRadius: 14,
-        shadowOffset: { width: 0, height: 6 },
-        elevation: 5,
+        shadowOpacity: 0.18,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 3,
       }}
     >
       {/* ── Top: tier identity band ───────────────────────────────────
-          Tier colour fills the strip. Tapping anywhere on the band
-          opens the tier-benefits sheet, so the customer learns what
-          their multiplier unlocks. */}
+          Tier colour fills a slim strip — same overall footprint as
+          the previous compact card, so the hero doesn't grow on the
+          page. Tapping anywhere on the band opens the tier-benefits
+          sheet. */}
       <Pressable
         onPress={() => {
           Haptics.selectionAsync();
@@ -327,18 +328,18 @@ function CompactHero({
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          paddingHorizontal: 16,
-          paddingVertical: 11,
+          paddingHorizontal: 14,
+          paddingVertical: 7,
           backgroundColor: tierColor,
           gap: 10,
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 }}>
-          <Text style={{ fontSize: 14 }}>{tierIcon}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 7, flexShrink: 1 }}>
+          <Text style={{ fontSize: 12 }}>{tierIcon}</Text>
           <Text
             style={{
               fontFamily: "Peachi-Bold",
-              fontSize: 14,
+              fontSize: 12,
               color: tierFg,
               letterSpacing: 0.3,
             }}
@@ -347,48 +348,51 @@ function CompactHero({
             {tierDisplayName}
           </Text>
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
           <View
             style={{
               backgroundColor: tierMulBg,
-              paddingHorizontal: 9,
-              paddingVertical: 3,
+              paddingHorizontal: 7,
+              paddingVertical: 1.5,
               borderRadius: 100,
             }}
           >
             <Text
               style={{
                 fontFamily: "SpaceGrotesk_700Bold",
-                fontSize: 10.5,
+                fontSize: 9.5,
                 color: tierFg,
-                letterSpacing: 0.6,
+                letterSpacing: 0.5,
               }}
             >
               {formatMul(tierMul)}× BEANS
             </Text>
           </View>
-          <ChevronRight size={14} color={tierFg} strokeWidth={2.4} />
+          <ChevronRight size={12} color={tierFg} strokeWidth={2.4} />
         </View>
       </Pressable>
 
-      {/* ── Body: Beans + streak + progress ─────────────────────── */}
-      <View style={{ padding: 18 }}>
+      {/* ── Body: Beans + streak + progress ─────────────────────────
+          Padding + type sizing matches the original CompactHero
+          dimensions so the card slots back into the layout at the
+          height customers are used to. */}
+      <View style={{ paddingHorizontal: 14, paddingVertical: 12 }}>
         <View
           style={{
             flexDirection: "row",
-            alignItems: "flex-end",
+            alignItems: "baseline",
             justifyContent: "space-between",
             gap: 10,
           }}
         >
-          <View style={{ flexShrink: 1 }}>
+          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, flexShrink: 1 }}>
             <Text
               style={{
                 fontFamily: "Peachi-Bold",
-                fontSize: 40,
+                fontSize: 32,
                 color: "#FFFFFF",
-                letterSpacing: -1.5,
-                lineHeight: 40,
+                letterSpacing: -1,
+                lineHeight: 32,
               }}
               numberOfLines={1}
             >
@@ -397,43 +401,40 @@ function CompactHero({
             <Text
               style={{
                 fontFamily: "SpaceGrotesk_700Bold",
-                fontSize: 10.5,
+                fontSize: 11,
                 color: "rgba(255,255,255,0.55)",
-                letterSpacing: 2,
+                letterSpacing: 1.5,
                 textTransform: "uppercase",
-                marginTop: 4,
               }}
             >
-              Beans available
+              Beans
             </Text>
           </View>
 
-          {/* Streak — amber-on-espresso chip. Aligned to the baseline of
-              the Beans number so the eye reads "balance + active streak"
-              as one row. Hidden when there's nothing to celebrate. */}
+          {/* Streak — amber-on-espresso chip. Hidden when none. */}
           {streakWeeks > 0 && (
             <View
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                gap: 5,
-                paddingHorizontal: 10,
-                paddingVertical: 6,
+                gap: 4,
+                paddingHorizontal: 8,
+                paddingVertical: 3,
                 backgroundColor: "rgba(251,191,36,0.14)",
                 borderRadius: 100,
                 borderWidth: 1,
                 borderColor: "rgba(251,191,36,0.35)",
               }}
             >
-              <Flame size={12} color="#FBBF24" strokeWidth={2.2} />
+              <Flame size={11} color="#FBBF24" strokeWidth={2.2} />
               <Text
                 style={{
                   fontFamily: "SpaceGrotesk_700Bold",
-                  fontSize: 11,
+                  fontSize: 10.5,
                   color: "#FBBF24",
                 }}
               >
-                {streakWeeks}-week streak
+                {streakWeeks} {streakWeeks === 1 ? "wk" : "wks"}
               </Text>
             </View>
           )}
@@ -446,9 +447,9 @@ function CompactHero({
           <>
             <View
               style={{
-                marginTop: 16,
-                height: 5,
-                borderRadius: 3,
+                marginTop: 10,
+                height: 4,
+                borderRadius: 2,
                 backgroundColor: "rgba(255,255,255,0.10)",
                 overflow: "hidden",
               }}
@@ -458,13 +459,13 @@ function CompactHero({
                   height: "100%",
                   width: `${Math.round(nextProgress * 100)}%`,
                   backgroundColor: "#FBBF24",
-                  borderRadius: 3,
+                  borderRadius: 2,
                 }}
               />
             </View>
             <View
               style={{
-                marginTop: 10,
+                marginTop: 7,
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "space-between",
@@ -474,7 +475,7 @@ function CompactHero({
               <Text
                 style={{
                   fontFamily: "SpaceGrotesk_500Medium",
-                  fontSize: 11.5,
+                  fontSize: 11,
                   color: "rgba(255,255,255,0.55)",
                   flexShrink: 1,
                 }}
@@ -489,7 +490,7 @@ function CompactHero({
                 <Text
                   style={{
                     fontFamily: "SpaceGrotesk_700Bold",
-                    fontSize: 11.5,
+                    fontSize: 11,
                     color: "#FBBF24",
                   }}
                   numberOfLines={1}
@@ -505,9 +506,9 @@ function CompactHero({
         {!nextReward && tierCaption && (
           <Text
             style={{
-              marginTop: 14,
+              marginTop: 8,
               fontFamily: "SpaceGrotesk_700Bold",
-              fontSize: 11.5,
+              fontSize: 11,
               color: "#FBBF24",
             }}
           >
