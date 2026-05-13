@@ -19,11 +19,12 @@
  * customer doesn't see five empty strips on first launch.
  */
 
-import { View, Text, ScrollView, Pressable } from "react-native";
+import { useState } from "react";
+import { View, Text, ScrollView, Pressable, Modal } from "react-native";
 import { Stack, router } from "expo-router";
 import {
   ChevronRight, Sparkles, Flame, Trophy, Gift,
-  Target,
+  Target, Check,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { BottomNav } from "../components/BottomNav";
@@ -57,10 +58,15 @@ const MOCK = {
     bonusBeans: 75,
     voucherTitle: "RM5 Off",
   },
+  // Mission demo: showing the NEW "complete-unclaimed" state so you
+  // can see the proposed claim flow. Tap "Claim reward" to trigger
+  // the celebration modal. After dismissing, this card would fall
+  // back to the "Pick this week's challenge" state until the
+  // customer picks a new mission.
   mission: {
-    active: true,
+    state: "complete-unclaimed" as "active" | "complete-unclaimed" | "no-active",
     title: "Group Order",
-    progressCurrent: 2,
+    progressCurrent: 3,
     progressTarget: 3,
     rewardChips: ["Free Pastry", "+30 Beans"],
   },
@@ -80,24 +86,45 @@ const MOCK = {
       emoji: "🎁",
     },
   ],
+  // Capped at 4 — claimables surface higher up in "Ready to claim",
+  // so this section shows only "Yours" (active wallet vouchers).
   yourVouchers: [
     { id: "v1", title: "Free Drink",  sub: "From milestone", accent: "#FBBF24", bg: "#1A0200", fg: "#FFFFFF" },
     { id: "v2", title: "RM5 Off",     sub: "Expires Apr 12", accent: "#C05040", bg: "#FBEBE8", fg: "#1A0200" },
+    { id: "v3", title: "Free Add-on", sub: "Expires Apr 20", accent: "#C05040", bg: "#FBEBE8", fg: "#1A0200" },
+    { id: "v4", title: "2× Beans",    sub: "From mystery",   accent: "#FBBF24", bg: "#1A0200", fg: "#FFFFFF" },
   ],
+  // Capped at 4 — prioritise in-progress first (closest to threshold),
+  // then earned. Claimable milestones surface in "Ready to claim"
+  // above, not here.
   achievements: [
     {
       id: "ach1",
+      title: "Outlet Explorer",
+      progress: "2 / 3 outlets · 1 to go",
+      earned: false,
+      emoji: "🏙",
+    },
+    {
+      id: "ach2",
+      title: "Hot Streak",
+      progress: "4 / 8 weeks · halfway there",
+      earned: false,
+      emoji: "🔥",
+    },
+    {
+      id: "ach3",
       title: "First Sip",
       progress: "Earned · Mar 4",
       earned: true,
       emoji: "🥉",
     },
     {
-      id: "ach2",
-      title: "Outlet Explorer",
-      progress: "2 / 3 outlets · 1 to go",
-      earned: false,
-      emoji: "🏙",
+      id: "ach4",
+      title: "Bean Counter",
+      progress: "Earned · Feb 18",
+      earned: true,
+      emoji: "🪙",
     },
   ],
   catalog: [
@@ -113,6 +140,20 @@ const MOCK = {
 
 export default function RewardsMock() {
   const m = MOCK;
+  const [missionCelebration, setMissionCelebration] = useState(false);
+  const [missionState, setMissionState] = useState(m.mission.state);
+
+  function claimMission() {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setMissionCelebration(true);
+  }
+
+  function closeMissionCelebration() {
+    setMissionCelebration(false);
+    // After claiming, mission cycle resets — card flips back to the
+    // "pick this week's challenge" prompt.
+    setMissionState("no-active");
+  }
 
   return (
     <View className="flex-1 bg-background">
@@ -140,7 +181,14 @@ export default function RewardsMock() {
         <Section label="Now">
           <Grid2>
             <BagCard {...m.beanBag} />
-            <MissionCard {...m.mission} />
+            <MissionCard
+              state={missionState}
+              title={m.mission.title}
+              progressCurrent={m.mission.progressCurrent}
+              progressTarget={m.mission.progressTarget}
+              rewardChips={m.mission.rewardChips}
+              onClaim={claimMission}
+            />
           </Grid2>
         </Section>
 
@@ -209,6 +257,14 @@ export default function RewardsMock() {
       </ScrollView>
 
       <BottomNav />
+
+      {missionCelebration && (
+        <MissionClaimCelebration
+          title={m.mission.title}
+          rewardChips={m.mission.rewardChips}
+          onClose={closeMissionCelebration}
+        />
+      )}
     </View>
   );
 }
@@ -489,17 +545,36 @@ function BagCard({
 }
 
 function MissionCard({
-  active, title, progressCurrent, progressTarget, rewardChips,
+  state, title, progressCurrent, progressTarget, rewardChips, onClaim,
 }: {
-  active: boolean;
+  state: "active" | "complete-unclaimed" | "no-active";
   title: string;
   progressCurrent: number;
   progressTarget: number;
   rewardChips: string[];
+  onClaim?: () => void;
 }) {
-  if (!active) {
+  // No mission picked — dashed-terracotta CTA pulling the customer
+  // into the mission picker.
+  if (state === "no-active") {
     return (
-      <GridCard bg="#FFFFFF" border="#C05040">
+      <Pressable
+        onPress={() => {
+          Haptics.selectionAsync();
+          router.push("/mission-picker" as never);
+        }}
+        className="active:opacity-85"
+        style={{
+          width: "48%",
+          minHeight: 138,
+          padding: 12,
+          borderRadius: 16,
+          backgroundColor: "#FFFFFF",
+          borderWidth: 1,
+          borderColor: "#C05040",
+          borderStyle: "dashed",
+        }}
+      >
         <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#FBEBE8", alignItems: "center", justifyContent: "center" }}>
           <Target size={18} color="#C05040" strokeWidth={2} />
         </View>
@@ -509,9 +584,70 @@ function MissionCard({
         <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "#6B6B6B", marginTop: 2 }} numberOfLines={2}>
           Earn voucher rewards by Sunday
         </Text>
-      </GridCard>
+      </Pressable>
     );
   }
+
+  // Mission complete but reward not claimed — espresso card with a
+  // chunky gold "Claim reward" pill. Mirrors the bean-bag and
+  // milestone claim language so wins read as one family.
+  if (state === "complete-unclaimed") {
+    return (
+      <View
+        style={{
+          width: "48%",
+          minHeight: 138,
+          padding: 12,
+          borderRadius: 16,
+          backgroundColor: "#1A0200",
+          borderWidth: 1,
+          borderColor: "#1A0200",
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View
+            style={{
+              width: 22, height: 22, borderRadius: 11,
+              backgroundColor: "rgba(251,191,36,0.18)",
+              alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <Check size={14} color="#FBBF24" strokeWidth={2.6} />
+          </View>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, color: "#FBBF24", letterSpacing: 1.4, textTransform: "uppercase" }}>
+            Mission done
+          </Text>
+        </View>
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#FFFFFF", marginTop: 8 }} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(255,255,255,0.65)", marginTop: 2 }} numberOfLines={2}>
+          {rewardChips.join(" · ")}
+        </Text>
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onClaim?.();
+          }}
+          className="active:opacity-85"
+          style={{
+            marginTop: "auto",
+            backgroundColor: "#FBBF24",
+            borderRadius: 100,
+            paddingVertical: 7,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 12, color: "#1A0200" }}>
+            Claim reward
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  // Active in-progress — white card with terracotta progress bar.
   const pct = Math.min(1, progressCurrent / Math.max(1, progressTarget));
   return (
     <GridCard>
@@ -534,6 +670,100 @@ function MissionCard({
         {progressCurrent} / {progressTarget}
       </Text>
     </GridCard>
+  );
+}
+
+// Celebration modal fired when the customer taps "Claim reward" on a
+// completed mission card. Mirrors the bean-bag / milestone celebration
+// language: espresso surface, gold trophy badge, reward list, single
+// "Got it" CTA. After dismiss, the mission card flips to the "Pick
+// this week's challenge" state.
+function MissionClaimCelebration({
+  title, rewardChips, onClose,
+}: {
+  title: string;
+  rewardChips: string[];
+  onClose: () => void;
+}) {
+  return (
+    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+      <Pressable
+        onPress={onClose}
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.65)",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          style={{
+            width: "100%",
+            maxWidth: 360,
+            borderRadius: 24,
+            backgroundColor: "#1A0200",
+            padding: 24,
+            alignItems: "center",
+            shadowColor: "#000",
+            shadowOpacity: 0.4,
+            shadowRadius: 24,
+            shadowOffset: { width: 0, height: 12 },
+          }}
+        >
+          <View
+            style={{
+              width: 86, height: 86, borderRadius: 43,
+              backgroundColor: "rgba(251,191,36,0.18)",
+              alignItems: "center", justifyContent: "center",
+              marginBottom: 14,
+              borderWidth: 1,
+              borderColor: "rgba(251,191,36,0.4)",
+            }}
+          >
+            <Target size={40} color="#FBBF24" strokeWidth={1.8} />
+          </View>
+
+          <Text style={{
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 10.5, color: "#FBBF24",
+            letterSpacing: 2, textTransform: "uppercase", marginBottom: 4,
+          }}>
+            Mission complete
+          </Text>
+          <Text
+            style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: "#FFFFFF", letterSpacing: -0.3, textAlign: "center" }}
+            numberOfLines={2}
+          >
+            {title}
+          </Text>
+
+          <View style={{ alignSelf: "stretch", marginTop: 18, borderTopWidth: 1, borderTopColor: "rgba(251,191,36,0.15)", paddingTop: 14, gap: 8 }}>
+            {rewardChips.map((chip, i) => (
+              <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Gift size={16} color="#FBBF24" strokeWidth={2} />
+                <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, color: "rgba(255,255,255,0.92)" }} numberOfLines={1}>
+                  {chip}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={{ alignSelf: "stretch", marginTop: 22 }}>
+            <Pressable
+              onPress={onClose}
+              className="active:opacity-85"
+              style={{ backgroundColor: "#FBBF24", borderRadius: 100, paddingVertical: 13, alignItems: "center", justifyContent: "center" }}
+            >
+              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#1A0200" }}>
+                Got it
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
