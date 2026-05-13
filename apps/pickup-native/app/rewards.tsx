@@ -21,8 +21,6 @@ import {
   rewardUrgencyLabel,
   type Reward,
 } from "../lib/rewards";
-import { supabase } from "../lib/supabase";
-import { TierCardCarousel, type TierLite } from "../components/TierCardCarousel";
 import {
   fetchMyVouchers,
   fetchClaimableVouchers,
@@ -73,23 +71,6 @@ export default function RewardsTab() {
     staleTime: 5 * 60_000,
   });
   const tier = tierQ.data ?? null;
-
-  // Full tier ladder — used on the Catalog tab.
-  const tiersQ = useQuery({
-    queryKey: ["tiers"],
-    queryFn: async () => {
-      const { data: rows } = await supabase
-        .from("tiers")
-        .select("id,slug,name,min_visits,min_spend,multiplier,color,icon,benefits,benefit_rules,qualification_metric,sort_order")
-        .eq("brand_id", "brand-celsius")
-        .eq("is_active", true)
-        .order("sort_order", { ascending: true, nullsFirst: true })
-        .order("min_visits", { ascending: true, nullsFirst: true });
-      return (rows ?? []) as TierLite[];
-    },
-    staleTime: 5 * 60_000,
-  });
-  const tiers = tiersQ.data ?? [];
 
   const { data, isLoading } = useQuery({
     queryKey: ["rewards", phone ?? "anonymous"],
@@ -210,15 +191,11 @@ export default function RewardsTab() {
             )}
             {activeTab === "catalog" && (
               <CatalogTab
-                tiers={tiers}
-                tier={tier}
-                member={member}
                 balance={balance}
                 rewards={rewards}
                 sortedRewards={sortedRewards}
                 claimables={claimables}
                 isLoading={isLoading}
-                tierDisplayName={ts.displayName}
               />
             )}
           </ScrollView>
@@ -696,17 +673,13 @@ function VouchersTab({
 // active issued_rewards row.
 
 function CatalogTab({
-  tiers, tier, member, balance, rewards, sortedRewards, claimables, isLoading, tierDisplayName,
+  balance, rewards, sortedRewards, claimables, isLoading,
 }: {
-  tiers: TierLite[];
-  tier: Awaited<ReturnType<typeof fetchTier>>;
-  member: { totalVisits: number; totalPointsEarned: number } | null;
   balance: number;
   rewards: Reward[];
   sortedRewards: Reward[];
   claimables: Awaited<ReturnType<typeof fetchClaimableVouchers>>;
   isLoading: boolean;
-  tierDisplayName: string;
 }) {
   return (
     <>
@@ -715,70 +688,6 @@ function CatalogTab({
           into the Rewards wallet. Lives at the top so it's the first thing
           customers see when they open this tab. */}
       <ClaimableSection claimables={claimables} />
-
-      {/* Tier ladder carousel — kept on this tab so it doesn't crowd the
-          Challenges tab. Customers see "what tier am I, what's next"
-          while browsing the things they can claim. */}
-      {tiers.length > 0 && (
-        <View style={{ marginHorizontal: -16, marginTop: -8, marginBottom: 8 }}>
-          <TierCardCarousel
-            tiers={tiers}
-            currentSlug={tier?.tier_slug ?? null}
-            memberVisits={tier?.visits_this_period ?? 0}
-            memberSpend={tier?.spend_this_period ?? 0}
-            stats={{
-              points: balance,
-              visits: member?.totalVisits ?? 0,
-              earned: member?.totalPointsEarned ?? balance,
-            }}
-            title="Membership tiers"
-            onCardPress={() => {
-              Haptics.selectionAsync();
-              router.push("/tier-benefits" as never);
-            }}
-          />
-        </View>
-      )}
-
-      {/* Tier perks */}
-      {tier && tier.tier_benefits && tier.tier_benefits.length > 0 && (
-        <View
-          style={{
-            marginTop: 8,
-            marginBottom: 8,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: "rgba(26,2,0,0.12)",
-            padding: 14,
-          }}
-        >
-          <Text
-            style={{
-              color: "rgba(26,2,0,0.55)",
-              fontFamily: "SpaceGrotesk_700Bold",
-              fontSize: 10,
-              letterSpacing: 2.5,
-              textTransform: "uppercase",
-              marginBottom: 8,
-            }}
-          >
-            {`${tierDisplayName} perks`}
-          </Text>
-          {tier.tier_benefits.map((b, i) => (
-            <View
-              key={i}
-              style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4 }}
-            >
-              <View
-                style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: "#C05040" }}
-              />
-              <Text style={{ color: "#1A0200", fontFamily: "SpaceGrotesk_500Medium", fontSize: 14 }}>
-                {b}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
 
       {!isLoading && rewards.length === 0 && (
         <View className="py-12 items-center">
@@ -811,19 +720,33 @@ function CatalogTab({
               letterSpacing: 2.5,
               textTransform: "uppercase",
               marginTop: 16,
-              marginBottom: 8,
+              marginBottom: 10,
+              paddingHorizontal: 4,
             }}
           >
             Spend your Beans
           </Text>
-          {sortedRewards.map((reward, i) => (
-            <RewardListRow
-              key={reward.id}
-              reward={reward}
-              balance={balance}
-              isFirst={i === 0}
-            />
-          ))}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            snapToInterval={REWARD_CARD_W + REWARD_CARD_GAP}
+            snapToAlignment="start"
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 6, paddingRight: 24 }}
+            style={{ marginHorizontal: -16 }}
+          >
+            {sortedRewards.map((reward, idx) => (
+              <View
+                key={reward.id}
+                style={{
+                  width: REWARD_CARD_W,
+                  marginRight: idx < sortedRewards.length - 1 ? REWARD_CARD_GAP : 0,
+                }}
+              >
+                <RewardCard reward={reward} balance={balance} />
+              </View>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -877,16 +800,22 @@ function CatalogTab({
   );
 }
 
-// ─── reward row ───
+// ─── Reward card (Claim tab) ────────────────────────────────────────
+// Single horizontally-scrolling card for one points-shop reward. Mirrors
+// the tier-card visual language (rounded 18px, branded gradient backdrop,
+// big Peachi title, bottom-row CTA) so the Claim and Rewards-tier
+// surfaces feel like one design family.
 
-function RewardListRow({
+const REWARD_CARD_W = 272;
+const REWARD_CARD_H = 200;
+const REWARD_CARD_GAP = 14;
+
+function RewardCard({
   reward,
   balance,
-  isFirst,
 }: {
   reward: Reward;
   balance: number;
-  isFirst: boolean;
 }) {
   const qc = useQueryClient();
 
@@ -894,8 +823,6 @@ function RewardListRow({
   const canClaim = balance >= required;
   const progress = required > 0 ? Math.max(0, Math.min(1, balance / required)) : 1;
   const shortBy = Math.max(0, required - balance);
-  const showProgress = !canClaim && progress >= PROGRESS_VISIBLE_THRESHOLD;
-
   const urgency = canClaim ? rewardUrgencyLabel(reward) : null;
 
   // Claim flow — spend Beans now, the new voucher lands in the Rewards
@@ -941,158 +868,268 @@ function RewardListRow({
   };
 
   const Icon = pickRewardIcon(reward);
-  const iconColor = canClaim ? "#C05040" : "rgba(26, 2, 0, 0.45)";
+
+  // Category label — friendlier than the DB enum.
+  const categoryLabel = categoryToLabel(reward);
 
   return (
     <View
       style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-        paddingVertical: 12,
-        borderTopWidth: isFirst ? 0 : 1,
-        borderTopColor: "rgba(26, 2, 0, 0.08)",
-        opacity: !canClaim && !showProgress ? 0.55 : 1,
+        height: REWARD_CARD_H,
+        borderRadius: 18,
+        overflow: "hidden",
+        backgroundColor: canClaim ? "#FBEBE8" : "#F4EDEA",
+        borderWidth: 1,
+        borderColor: canClaim ? "rgba(192,80,64,0.18)" : "rgba(26,2,0,0.08)",
+        shadowColor: "#000",
+        shadowOpacity: canClaim ? 0.08 : 0.04,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 2,
+        opacity: canClaim ? 1 : 0.92,
       }}
     >
+      {/* Decorative icon — large, low-opacity, bottom-right corner. Echoes
+          the tier card's mascot placement without needing an SVG asset. */}
       <View
         style={{
-          width: 36,
-          height: 36,
-          borderRadius: 10,
-          backgroundColor: canClaim ? "rgba(192, 80, 64, 0.10)" : "rgba(26, 2, 0, 0.06)",
-          alignItems: "center",
-          justifyContent: "center",
+          position: "absolute",
+          right: -10,
+          bottom: -14,
+          opacity: 0.10,
         }}
       >
-        <Icon size={22} color={iconColor} />
+        <Icon size={140} color="#C05040" />
       </View>
 
-      <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <Text
+      <View
+        style={{
+          padding: 16,
+          flex: 1,
+          justifyContent: "space-between",
+        }}
+      >
+        <View>
+          {/* Category pill + urgency badge */}
+          <View
             style={{
-              color: "#1A0200",
-              fontFamily: "SpaceGrotesk_700Bold",
-              fontSize: 15,
-              flexShrink: 1,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              flexWrap: "wrap",
             }}
-            numberOfLines={1}
           >
-            {reward.name}
-          </Text>
-          {urgency && (
             <View
               style={{
-                backgroundColor: "#C05040",
-                borderRadius: 999,
-                paddingHorizontal: 6,
-                paddingVertical: 1.5,
+                backgroundColor: canClaim ? "#C05040" : "rgba(26,2,0,0.40)",
+                paddingHorizontal: 7,
+                paddingVertical: 3,
+                borderRadius: 6,
               }}
             >
               <Text
-                style={{ color: "#FFFFFF", fontFamily: "Peachi-Bold", fontSize: 9 }}
+                style={{
+                  color: "#FFFFFF",
+                  fontFamily: "SpaceGrotesk_700Bold",
+                  fontSize: 9,
+                  letterSpacing: 1.4,
+                  textTransform: "uppercase",
+                }}
               >
-                {urgency}
+                {categoryLabel}
               </Text>
             </View>
-          )}
+            {urgency && (
+              <View
+                style={{
+                  backgroundColor: "rgba(192,80,64,0.18)",
+                  paddingHorizontal: 7,
+                  paddingVertical: 3,
+                  borderRadius: 6,
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#C05040",
+                    fontFamily: "SpaceGrotesk_700Bold",
+                    fontSize: 9,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {urgency}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Title */}
+          <Text
+            style={{
+              marginTop: 10,
+              fontFamily: "Peachi-Bold",
+              fontSize: 21,
+              color: "#1A0200",
+              lineHeight: 25,
+            }}
+            numberOfLines={2}
+          >
+            {reward.name}
+          </Text>
+
+          {/* Description */}
+          <Text
+            style={{
+              marginTop: 4,
+              fontFamily: "SpaceGrotesk_500Medium",
+              fontSize: 12,
+              color: "rgba(26,2,0,0.62)",
+            }}
+            numberOfLines={2}
+          >
+            {formatRewardValue(reward)}
+          </Text>
         </View>
-        <Text
-          style={{
-            color: "rgba(26, 2, 0, 0.55)",
-            fontFamily: "SpaceGrotesk_400Regular",
-            fontSize: 12,
-            marginTop: 2,
-          }}
-          numberOfLines={1}
-        >
-          {formatRewardValue(reward)}
-        </Text>
-        {showProgress && (
-          <View style={{ marginTop: 6 }}>
+
+        {/* Bottom row — bean cost on the left, CTA on the right. When
+            locked, swap the CTA for a "X to go" progress strip. */}
+        {canClaim ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
+              <Text
+                style={{
+                  color: "#1A0200",
+                  fontFamily: "Peachi-Bold",
+                  fontSize: 22,
+                  lineHeight: 26,
+                }}
+              >
+                {required.toLocaleString()}
+              </Text>
+              <Text
+                style={{
+                  color: "rgba(26,2,0,0.55)",
+                  fontFamily: "SpaceGrotesk_700Bold",
+                  fontSize: 10,
+                  letterSpacing: 1.5,
+                }}
+              >
+                BEANS
+              </Text>
+            </View>
+            <Pressable
+              onPress={onClaim}
+              disabled={claimMutation.isPending}
+              className="active:opacity-80"
+              style={{
+                backgroundColor: "#C05040",
+                paddingHorizontal: 18,
+                paddingVertical: 10,
+                borderRadius: 999,
+                opacity: claimMutation.isPending ? 0.6 : 1,
+              }}
+            >
+              <Text
+                style={{
+                  color: "#FFFFFF",
+                  fontFamily: "SpaceGrotesk_700Bold",
+                  fontSize: 12,
+                  letterSpacing: 1.2,
+                  textTransform: "uppercase",
+                }}
+              >
+                {claimMutation.isPending ? "Claiming…" : "Claim"}
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View>
             <View
               style={{
-                height: 3,
+                flexDirection: "row",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
+                <Text
+                  style={{
+                    color: "#1A0200",
+                    fontFamily: "Peachi-Bold",
+                    fontSize: 22,
+                    lineHeight: 26,
+                  }}
+                >
+                  {required.toLocaleString()}
+                </Text>
+                <Text
+                  style={{
+                    color: "rgba(26,2,0,0.45)",
+                    fontFamily: "SpaceGrotesk_700Bold",
+                    fontSize: 10,
+                    letterSpacing: 1.5,
+                  }}
+                >
+                  BEANS
+                </Text>
+              </View>
+              <Text
+                style={{
+                  color: "rgba(26,2,0,0.55)",
+                  fontFamily: "SpaceGrotesk_500Medium",
+                  fontSize: 11,
+                }}
+              >
+                {`${shortBy.toLocaleString()} to go`}
+              </Text>
+            </View>
+            <View
+              style={{
+                height: 4,
                 borderRadius: 2,
-                backgroundColor: "rgba(26, 2, 0, 0.08)",
+                marginTop: 8,
+                backgroundColor: "rgba(26,2,0,0.10)",
                 overflow: "hidden",
               }}
             >
               <View
                 style={{
                   height: "100%",
-                  width: `${progress * 100}%`,
+                  width: `${Math.max(progress * 100, PROGRESS_VISIBLE_THRESHOLD * 100 * 0.05)}%`,
                   backgroundColor: "#C05040",
+                  borderRadius: 2,
                 }}
               />
             </View>
-            <Text
-              style={{
-                color: "rgba(26, 2, 0, 0.55)",
-                fontFamily: "SpaceGrotesk_500Medium",
-                fontSize: 11,
-                marginTop: 4,
-              }}
-              numberOfLines={1}
-            >
-              {`${shortBy.toLocaleString()} pts to go`}
-            </Text>
           </View>
         )}
       </View>
-
-      {canClaim ? (
-        <Pressable
-          onPress={onClaim}
-          disabled={claimMutation.isPending}
-          className="active:opacity-80"
-          style={{
-            backgroundColor: "#C05040",
-            paddingHorizontal: 14,
-            paddingVertical: 8,
-            borderRadius: 999,
-            opacity: claimMutation.isPending ? 0.6 : 1,
-          }}
-        >
-          <Text
-            style={{
-              color: "#FFFFFF",
-              fontFamily: "SpaceGrotesk_700Bold",
-              fontSize: 11,
-              letterSpacing: 1,
-              textTransform: "uppercase",
-            }}
-          >
-            {claimMutation.isPending ? "Claiming…" : "Claim"}
-          </Text>
-        </Pressable>
-      ) : (
-        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
-          <Text
-            style={{
-              color: "#1A0200",
-              fontFamily: "Peachi-Bold",
-              fontSize: 18,
-              lineHeight: 22,
-            }}
-          >
-            {required.toLocaleString()}
-          </Text>
-          <Text
-            style={{
-              color: "rgba(26, 2, 0, 0.55)",
-              fontFamily: "SpaceGrotesk_700Bold",
-              fontSize: 9,
-              letterSpacing: 1.5,
-            }}
-          >
-            PTS
-          </Text>
-        </View>
-      )}
     </View>
   );
+}
+
+/** Friendlier label for the reward's category — falls back to the
+ *  discount-type when no explicit category is set. */
+function categoryToLabel(reward: Reward): string {
+  const cat = (reward as { category?: string }).category;
+  if (cat === "free_item" || cat === "free_drink") return "Free Item";
+  if (cat === "upgrade") return "Add-on";
+  if (cat === "discount") return "Discount";
+  if (cat === "multiplier") return "Boost";
+  if (cat === "special") return "Special";
+  const dt = reward.discount_type;
+  if (dt === "percent" || dt === "percentage") return "Discount";
+  if (dt === "flat" || dt === "fixed_amount") return "Discount";
+  if (dt === "free_item") return "Free Item";
+  return "Reward";
 }
 
 // Map reward shape to a brand icon — gift for auto-issued (welcome /
