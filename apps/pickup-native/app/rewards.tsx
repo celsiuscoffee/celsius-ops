@@ -196,7 +196,7 @@ export default function RewardsTab() {
             showsVerticalScrollIndicator={false}
           >
             {activeTab === "challenges" && (
-              <ChallengesTab activeMission={activeMission} />
+              <ChallengesTab activeMission={activeMission} streakWeeks={streakWeeks} />
             )}
             {activeTab === "vouchers" && (
               <VouchersTab
@@ -527,21 +527,21 @@ function TabButton({
 
 function ChallengesTab({
   activeMission,
+  streakWeeks,
 }: {
   activeMission: Awaited<ReturnType<typeof fetchActiveMission>>;
+  streakWeeks: number;
 }) {
   return (
     <>
       <MissionCard mission={activeMission} />
 
-      {/* Daily streak placeholder — to be replaced with real streak card
-          when /api/loyalty/me/streak ships. Tap routes to streak detail. */}
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync();
-          router.push("/tier-benefits" as never); // TODO: route to streak detail
-        }}
-        className="mt-6 bg-surface rounded-2xl border border-border p-4 flex-row items-center active:opacity-80"
+      {/* Weekly streak — info card (no claim button yet; streaks update
+          via the streak-update cron after each ordering week, no
+          customer action needed). Tap is a no-op so customers don't
+          chase a dead route. */}
+      <View
+        className="mt-6 bg-surface rounded-2xl border border-border p-4 flex-row items-center"
         style={{
           gap: 12,
           shadowColor: "#000",
@@ -567,7 +567,9 @@ function ChallengesTab({
           <Text
             style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: "#1A0200" }}
           >
-            Daily Streak
+            {streakWeeks > 0
+              ? `${streakWeeks}-week streak`
+              : "Build your streak"}
           </Text>
           <Text
             style={{
@@ -577,11 +579,12 @@ function ChallengesTab({
               marginTop: 2,
             }}
           >
-            Open the app daily for bonus Beans
+            {streakWeeks > 0
+              ? "One order a week keeps your streak alive"
+              : "One order a week earns a streak — first one starts after your next order"}
           </Text>
         </View>
-        <ChevronRight size={16} color="#6B6B6B" strokeWidth={2} />
-      </Pressable>
+      </View>
 
       {/* Referral */}
       <View className="mt-6">

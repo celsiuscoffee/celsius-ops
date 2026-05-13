@@ -3,6 +3,7 @@ import { after } from "next/server";
 import Stripe from "stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
+import { applyOrderToMission, generateMysteryDrop, maybeRewardReferralOnFirstOrder } from "@/lib/loyalty/v2";
 import { notifyOrderPreparing } from "@/lib/push/templates";
 
 export const preferredRegion = "iad1";
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
         } as Record<string, unknown>)
         .eq("id", orderId)
         .eq("status", "pending")
-        .select("loyalty_id, loyalty_points_earned, reward_id, store_id, order_number, customer_phone")
+        .select("loyalty_id, loyalty_points_earned, reward_id, wallet_voucher_id, store_id, order_number, customer_phone, created_at")
         .single();
 
       if (order?.loyalty_id) {
@@ -70,6 +71,92 @@ export async function POST(request: NextRequest) {
             );
           }
         }
+
+        // Wallet voucher redemption — mark the issued_rewards row
+        // consumed. Doesn't deduct Beans (wallet vouchers cost nothing).
+        // Runs in after() because the 200 to Stripe is more urgent than
+        // the redemption flag, and the row is uniquely keyed on
+        // (id, member_id) so it's safe to defer.
+        if (order.wallet_voucher_id) {
+          const voucherId = order.wallet_voucher_id as string;
+          after(async () => {
+            await supabase
+              .from("issued_rewards")
+              .update({ status: "redeemed", redeemed_at: new Date().toISOString() })
+              .eq("id", voucherId)
+              .eq("member_id", order.loyalty_id as string);
+          });
+        }
+
+        // ─── Rewards v2 hooks ────────────────────────────────────────
+        // Mirror of the fallback confirm-stripe route — without these
+        // on the webhook (which is the PRIMARY production path),
+        // missions never progress and no mystery drops generate.
+        // Both run in after() so they don't block returning 200 to
+        // Stripe.
+        const loyaltyId = order.loyalty_id as string;
+        const orderCreatedAt = (order.created_at as string) ?? new Date().toISOString();
+        after(async () => {
+          try {
+            const { data: items } = await supabase
+              .from("order_items")
+              .select("product_id, quantity")
+              .eq("order_id", orderId);
+            const itemIds = (items ?? []).map((i) => i.product_id as string);
+            const itemCount = (items ?? []).reduce((sum, i) => sum + ((i.quantity as number) ?? 0), 0);
+
+            await applyOrderToMission({
+              memberId: loyaltyId,
+              order: {
+                id: orderId,
+                outlet_id: outletId,
+                item_ids: itemIds,
+                item_count: itemCount,
+                total_sen: 0,
+                created_at: orderCreatedAt,
+              },
+            });
+          } catch (e) {
+            console.warn("[v2] applyOrderToMission failed (webhook)", e);
+          }
+
+          try {
+            const [{ data: memberBrand }, { data: memberRow }] = await Promise.all([
+              supabase
+                .from("member_brands")
+                .select("tiers(slug)")
+                .eq("member_id", loyaltyId)
+                .eq("brand_id", "brand-celsius")
+                .single(),
+              supabase
+                .from("members")
+                .select("brand_data")
+                .eq("id", loyaltyId)
+                .single(),
+            ]);
+            const tierSlug = (memberBrand as { tiers?: { slug?: string } | null } | null)?.tiers?.slug ?? null;
+            const bdayIso = (memberRow?.brand_data as { birthday?: string | null } | null)?.birthday ?? null;
+            const birthdayMonth = bdayIso ? new Date(bdayIso).getMonth() + 1 : null;
+
+            await generateMysteryDrop({
+              memberId: loyaltyId,
+              orderId,
+              memberTier: tierSlug,
+              birthdayMonth,
+            });
+          } catch (e) {
+            console.warn("[v2] generateMysteryDrop failed (webhook)", e);
+          }
+
+          try {
+            await maybeRewardReferralOnFirstOrder({
+              memberId: loyaltyId,
+              orderId,
+            });
+          } catch (e) {
+            console.warn("[v2] maybeRewardReferralOnFirstOrder failed (webhook)", e);
+          }
+        });
       }
 
       // "Brewing now ☕" push at the payment-confirmed moment. Before

@@ -84,6 +84,43 @@ const HIDDEN_CATEGORIES = new Set([
   "roti-bakar",
 ]);
 
+// Sidebar order is grouped: drinks first (the bulk of pickup orders),
+// then food, then dessert. Within each group we preserve whatever order
+// the menu API returned — that's where StoreHub-side bartender ordering
+// lives, so we don't override it without a reason. Categories not in
+// this map land in `food` as a safe fallback so a new StoreHub category
+// doesn't disappear from the menu.
+const CATEGORY_GROUP: Record<string, "drinks" | "food" | "dessert"> = {
+  classic:          "drinks",
+  mocha:            "drinks",
+  flavoured:        "drinks",
+  "artisan-choc":   "drinks",
+  "artisan-matcha": "drinks",
+  "fruit-tea":      "drinks",
+  "gourmet-tea":    "drinks",
+  mocktails:        "drinks",
+  bottles:          "drinks",
+  // Food
+  sandwiches:       "food",
+  croissant:        "food",
+  fries:            "food",
+  "nasi-lemak":     "food",
+  noodle:           "food",
+  pasta:            "food",
+  "roti-bakar":     "food",
+  // Dessert
+  cakes:            "dessert",
+  cookies:          "dessert",
+};
+const GROUP_RANK: Record<"drinks" | "food" | "dessert", number> = {
+  drinks:  0,
+  food:    1,
+  dessert: 2,
+};
+function groupOf(catId: string): "drinks" | "food" | "dessert" {
+  return CATEGORY_GROUP[catId] ?? "food";
+}
+
 export default function Menu() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ tab?: string }>();
@@ -130,10 +167,16 @@ export default function Menu() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [recentlyAdded, setRecentlyAdded] = useState<Record<string, boolean>>({});
 
-  const visibleCats = useMemo(
-    () => (data?.categories ?? []).filter((c) => !HIDDEN_CATEGORIES.has(c.id)),
-    [data]
-  );
+  // Drop hidden categories, then stable-sort by group rank (drinks →
+  // food → dessert). Items within the same group keep the order the
+  // menu API returned them in.
+  const visibleCats = useMemo(() => {
+    const all = (data?.categories ?? []).filter((c) => !HIDDEN_CATEGORIES.has(c.id));
+    return all
+      .map((c, originalIndex) => ({ c, originalIndex, rank: GROUP_RANK[groupOf(c.id)] }))
+      .sort((a, b) => a.rank - b.rank || a.originalIndex - b.originalIndex)
+      .map((x) => x.c);
+  }, [data]);
   // Best Sellers + search results need the same hidden-category filter
   // so dine-in products don't sneak in via the Best Sellers tab or a
   // free-text search. Otherwise hiding categories was cosmetic.
