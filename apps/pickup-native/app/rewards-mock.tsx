@@ -1,31 +1,32 @@
 /**
- * MOCK v4 — Proposed unified Rewards screen.
+ * MOCK v5 — Unified rewards stream with opacity-based status.
  *
- * Every reward card surfaces the same four pieces of information so
- * customers know exactly where they stand at a glance:
+ * Three reward SOURCES, all on one page:
+ *   1. CHALLENGE   — one-off missions that drive AOV + orders.
+ *                    Spend RM100/bill, Refer-a-friend, Group Order,
+ *                    Try New Things.
+ *   2. MYSTERY BAG — point-of-sale reveal (the scratch card on the
+ *                    order confirmation screen).
+ *   3. POINTS      — Beans-to-redeem catalog (formerly "Spend Beans").
  *
- *   1. OFFER       — what they get ("Free Drink", "+75 Beans + RM5 Off")
- *   2. HOW TO GET  — implicit in the action pill ("Use", "Claim",
- *                    "Open bag", "Spend N Beans") or in the progress
- *                    indicator for locked rewards
- *   3. CONSTRAINT  — expiry / points cost / threshold ("Expires Apr 12",
- *                    "1200 Beans", "50 lifetime orders")
- *   4. STATUS      — a small dot in the top-right of every card:
- *                    🟢 Ready  /  ⚪ Locked  /  🟡 Earned
+ * Plus the existing wallet, achievements, and streak chests render
+ * into the same stream.
  *
- * Two card surfaces:
- *   - Dark (espresso) → READY-TO-CLAIM state — gold pill, high prominence
- *   - Light (white)   → LOCKED state — progress bar instead of pill
+ * Every card surfaces the same four pieces of information:
+ *   1. OFFER       — title + offer line ("Free Pastry + 30 Beans")
+ *   2. HOW TO GET  — action pill ("Claim", "Use", "Open bag") or
+ *                    progress bar
+ *   3. CONSTRAINT  — small Clock row ("Expires Apr 12", "RM100 bill",
+ *                    "1,200 Beans", "50 lifetime orders")
+ *   4. STATUS      — pill in the top-right (READY / LOCKED / EARNED)
  *
- * Layout:
- *   1. Hero — next-tier progression
- *   2. Stat strip — Beans + streak
- *   3. Continuous card stream (no section labels)
- *      • Bag + mission
- *      • Claimables
- *      • Wallet rewards
- *      • Achievements (locked + earned)
- *      • Catalog (horizontal rail)
+ * Visual rule for ready-vs-locked:
+ *   - Single espresso card surface for ALL rewards.
+ *   - Ready (claimable now): full opacity, gold accent, gold action
+ *     pill.
+ *   - Locked: 55% opacity on the entire card. The customer reads it
+ *     as "this exists but it's not for you yet" at a glance.
+ *   - Earned (trophy): full opacity, gold "UNLOCKED" badge.
  */
 
 import { useState } from "react";
@@ -34,7 +35,7 @@ import { Stack, router } from "expo-router";
 import {
   ChevronRight, Sparkles, Flame, Trophy, Gift,
   Target, Check, Package, Award, Coffee, Cookie,
-  Tag, Sandwich, Star, Clock,
+  Tag, Sandwich, Star, Clock, Users, DollarSign, Search,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { BottomNav } from "../components/BottomNav";
@@ -58,6 +59,193 @@ const MOCK = {
     visitsTotal: 20,
     perksTease: "1.75× Beans + free monthly drink",
   },
+  cards: [
+    // ── CHALLENGES (one-off missions that drive AOV + orders) ────────
+    {
+      kind: "challenge",
+      id: "ch1",
+      Icon: Check,
+      eyebrow: "CHALLENGE",
+      title: "Group Order",
+      offer: "Free Pastry + 30 Beans",
+      constraint: "Completed 3/3",
+      status: "ready",
+      action: "Claim",
+    },
+    {
+      kind: "challenge",
+      id: "ch2",
+      Icon: DollarSign,
+      eyebrow: "CHALLENGE",
+      title: "Big Bill",
+      offer: "Free Drink + 50 Beans",
+      constraint: "RM100+ in one bill",
+      status: "locked",
+      progressCurrent: 62,
+      progressTarget: 100,
+      progressUnit: "RM",
+    },
+    {
+      kind: "challenge",
+      id: "ch3",
+      Icon: Search,
+      eyebrow: "CHALLENGE",
+      title: "Try New Things",
+      offer: "2× Beans Boost",
+      constraint: "3 distinct new drinks",
+      status: "locked",
+      progressCurrent: 1,
+      progressTarget: 3,
+      progressUnit: "tried",
+    },
+    {
+      kind: "challenge",
+      id: "ch4",
+      Icon: Users,
+      eyebrow: "CHALLENGE",
+      title: "Refer a friend",
+      offer: "Free Drink for both",
+      constraint: "1 successful referral",
+      status: "locked",
+      progressCurrent: 0,
+      progressTarget: 1,
+      progressUnit: "ref",
+    },
+
+    // ── MYSTERY BAG (point-of-sale reveals) ─────────────────────────
+    {
+      kind: "mystery",
+      id: "myst1",
+      Icon: Sparkles,
+      eyebrow: "MYSTERY BAG",
+      title: "2× Beans",
+      offer: "Doubled this order's Beans",
+      constraint: "From order #1042",
+      status: "earned",
+    },
+
+    // ── POINTS (Beans redemption) ────────────────────────────────────
+    {
+      kind: "points",
+      id: "p1",
+      Icon: Gift,
+      eyebrow: "POINTS",
+      title: "Free Add-on",
+      offer: "Any free add-on",
+      constraint: "200 Beans",
+      status: "ready",
+      action: "Claim",
+    },
+    {
+      kind: "points",
+      id: "p2",
+      Icon: Tag,
+      eyebrow: "POINTS",
+      title: "RM5 Off",
+      offer: "RM5 off your order",
+      constraint: "500 Beans",
+      status: "ready",
+      action: "Claim",
+    },
+    {
+      kind: "points",
+      id: "p3",
+      Icon: Cookie,
+      eyebrow: "POINTS",
+      title: "Free Pastry",
+      offer: "Any pastry under RM10",
+      constraint: "800 Beans",
+      status: "ready",
+      action: "Claim",
+    },
+    {
+      kind: "points",
+      id: "p4",
+      Icon: Coffee,
+      eyebrow: "POINTS",
+      title: "Free Drink",
+      offer: "Any drink at checkout",
+      constraint: "1,200 Beans · 86 to go",
+      status: "locked",
+      progressCurrent: 2314,
+      progressTarget: 2400,
+      progressUnit: "Beans",
+    },
+    {
+      kind: "points",
+      id: "p5",
+      Icon: Sandwich,
+      eyebrow: "POINTS",
+      title: "Free Lunch",
+      offer: "Any lunch combo",
+      constraint: "3,000 Beans · 686 to go",
+      status: "locked",
+      progressCurrent: 2314,
+      progressTarget: 3000,
+      progressUnit: "Beans",
+    },
+
+    // ── WALLET (issued rewards ready to use) ─────────────────────────
+    {
+      kind: "wallet",
+      id: "w1",
+      Icon: Coffee,
+      eyebrow: "WALLET",
+      title: "Free Drink",
+      offer: "Any drink at checkout",
+      constraint: "From milestone · No expiry",
+      status: "ready",
+      action: "Use",
+    },
+    {
+      kind: "wallet",
+      id: "w2",
+      Icon: Tag,
+      eyebrow: "WALLET",
+      title: "RM5 Off",
+      offer: "RM5 off your order",
+      constraint: "Expires Apr 12",
+      status: "ready",
+      action: "Use",
+    },
+
+    // ── ACHIEVEMENTS (lifetime milestones) ──────────────────────────
+    {
+      kind: "achievement",
+      id: "ach1",
+      Icon: Trophy,
+      eyebrow: "ACHIEVEMENT",
+      title: "Coffee Veteran",
+      offer: "+200 Beans + 2 rewards",
+      constraint: "50 lifetime orders",
+      status: "ready",
+      action: "Claim",
+    },
+    {
+      kind: "achievement",
+      id: "ach2",
+      Icon: Target,
+      eyebrow: "ACHIEVEMENT",
+      title: "Outlet Explorer",
+      offer: "+100 Beans + Add-on voucher",
+      constraint: "3 distinct outlets",
+      status: "locked",
+      progressCurrent: 2,
+      progressTarget: 3,
+      progressUnit: "outlets",
+    },
+    {
+      kind: "achievement",
+      id: "ach3",
+      Icon: Award,
+      eyebrow: "ACHIEVEMENT",
+      title: "First Sip",
+      offer: "+50 Beans",
+      constraint: "Earned Mar 4",
+      status: "earned",
+    },
+  ] as MockCard[],
+  // Bag at the very top of the cards stream
   beanBag: {
     available: true,
     weeksAtQualify: 4,
@@ -66,98 +254,32 @@ const MOCK = {
     offer: "+75 Beans + RM5 Off",
     constraint: "Expires in 7 days",
   },
-  mission: {
-    state: "complete-unclaimed" as "active" | "complete-unclaimed" | "no-active",
-    title: "Group Order",
-    offer: "Free Pastry + 30 Beans",
-    progressCurrent: 3,
-    progressTarget: 3,
-  },
-  claimableMilestones: [
-    {
-      id: "m1",
-      title: "Coffee Veteran",
-      offer: "+200 Beans + 2 rewards",
-      constraint: "50 lifetime orders",
-      Icon: Trophy,
-    },
-  ],
-  claimableAdmin: [
-    {
-      id: "a1",
-      title: "Welcome BOGO",
-      offer: "Buy one, get one free",
-      constraint: "Expires Apr 30",
-      Icon: Gift,
-    },
-  ],
-  yourRewards: [
-    { id: "v1", title: "Free Drink",  offer: "Any drink at checkout", constraint: "From milestone · No expiry",  Icon: Coffee },
-    { id: "v2", title: "RM5 Off",     offer: "RM5 off your order",     constraint: "Expires Apr 12",              Icon: Tag    },
-    { id: "v3", title: "Free Add-on", offer: "Any free add-on",         constraint: "Expires Apr 20",              Icon: Gift   },
-    { id: "v4", title: "2× Beans",    offer: "Double points",           constraint: "From mystery · 1 use",        Icon: Sparkles },
-  ],
-  achievements: [
-    {
-      id: "ach1",
-      title: "Outlet Explorer",
-      offer: "+100 Beans + Add-on voucher",
-      constraint: "3 distinct outlets",
-      progressCurrent: 2,
-      progressTarget: 3,
-      progressUnit: "outlets",
-      earned: false,
-      Icon: Target,
-    },
-    {
-      id: "ach2",
-      title: "Hot Streak",
-      offer: "+200 Beans + Free drink",
-      constraint: "8-week streak",
-      progressCurrent: 4,
-      progressTarget: 8,
-      progressUnit: "weeks",
-      earned: false,
-      Icon: Flame,
-    },
-    {
-      id: "ach3",
-      title: "First Sip",
-      offer: "+50 Beans",
-      constraint: "5 lifetime orders",
-      earnedAt: "Earned Mar 4",
-      earned: true,
-      Icon: Award,
-    },
-    {
-      id: "ach4",
-      title: "Bean Counter",
-      offer: "+100 Beans + RM5 voucher",
-      constraint: "1,000 lifetime Beans",
-      earnedAt: "Earned Feb 18",
-      earned: true,
-      Icon: Trophy,
-    },
-  ],
-  catalog: [
-    { id: "r1", name: "Free Add-on", offer: "Any free add-on",      pts: 200,  Icon: Gift },
-    { id: "r2", name: "RM5 Off",     offer: "RM5 off your order",    pts: 500,  Icon: Tag },
-    { id: "r3", name: "Free Pastry", offer: "Any pastry under RM10", pts: 800,  Icon: Cookie },
-    { id: "r4", name: "Free Drink",  offer: "Any drink at checkout", pts: 1200, Icon: Coffee },
-    { id: "r5", name: "Free Lunch",  offer: "Any lunch combo",        pts: 3000, Icon: Sandwich },
-  ],
+};
+
+type MockCard = {
+  kind: "challenge" | "mystery" | "points" | "wallet" | "achievement";
+  id: string;
+  Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }>;
+  eyebrow: string;
+  title: string;
+  offer: string;
+  constraint?: string;
+  status: "ready" | "locked" | "earned";
+  action?: string;
+  progressCurrent?: number;
+  progressTarget?: number;
+  progressUnit?: string;
 };
 
 const C = {
   bg:       "#F8F5F2",
   surface:  "#FFFFFF",
-  surfaceWarm: "#FBEBE8",
   espresso: "#1A0200",
   border:   "#E5E5E5",
   primary:  "#C05040",
   gold:     "#FBBF24",
-  ready:    "#22C55E",   // claimable / ready-to-use
-  locked:   "#8E8E93",   // not yet
+  ready:    "#22C55E",
+  locked:   "#8E8E93",
   mutedFg:  "#6B6B6B",
   faintFg:  "#8E8E93",
 };
@@ -166,17 +288,6 @@ const C = {
 
 export default function RewardsMock() {
   const m = MOCK;
-  const [missionCelebration, setMissionCelebration] = useState(false);
-  const [missionState, setMissionState] = useState(m.mission.state);
-
-  function claimMission() {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setMissionCelebration(true);
-  }
-  function closeMissionCelebration() {
-    setMissionCelebration(false);
-    setMissionState("no-active");
-  }
 
   return (
     <View className="flex-1 bg-background">
@@ -192,115 +303,15 @@ export default function RewardsMock() {
         <StatStrip points={m.member.points} streakWeeks={m.member.streakWeeks} />
 
         <Grid2>
+          {/* Bag at the top so the streak chest stays prominent. */}
           <BagCard {...m.beanBag} />
-          <MissionCard
-            state={missionState}
-            title={m.mission.title}
-            offer={m.mission.offer}
-            progressCurrent={m.mission.progressCurrent}
-            progressTarget={m.mission.progressTarget}
-            onClaim={claimMission}
-          />
-        </Grid2>
-
-        {(m.claimableMilestones.length > 0 || m.claimableAdmin.length > 0) && (
-          <Grid2>
-            {m.claimableMilestones.map((c) => (
-              <RewardCardTpl
-                key={c.id}
-                Icon={c.Icon}
-                eyebrow="MILESTONE"
-                title={c.title}
-                offer={c.offer}
-                constraint={c.constraint}
-                status="ready"
-                action={{ label: "Claim", onPress: () => {} }}
-              />
-            ))}
-            {m.claimableAdmin.map((c) => (
-              <RewardCardTpl
-                key={c.id}
-                Icon={c.Icon}
-                eyebrow="GIFT"
-                title={c.title}
-                offer={c.offer}
-                constraint={c.constraint}
-                status="ready"
-                action={{ label: "Claim", onPress: () => {} }}
-              />
-            ))}
-          </Grid2>
-        )}
-
-        <Grid2>
-          {m.yourRewards.map((v) => (
-            <RewardCardTpl
-              key={v.id}
-              Icon={v.Icon}
-              eyebrow="WALLET"
-              title={v.title}
-              offer={v.offer}
-              constraint={v.constraint}
-              status="ready"
-              action={{ label: "Use", onPress: () => {} }}
-            />
-          ))}
-        </Grid2>
-
-        <Grid2>
-          {m.achievements.map((a) =>
-            a.earned ? (
-              <RewardCardTpl
-                key={a.id}
-                Icon={a.Icon}
-                eyebrow="EARNED"
-                title={a.title}
-                offer={a.offer}
-                constraint={a.earnedAt}
-                status="earned"
-              />
-            ) : (
-              <RewardCardTpl
-                key={a.id}
-                Icon={a.Icon}
-                eyebrow="ACHIEVEMENT"
-                title={a.title}
-                offer={a.offer}
-                constraint={a.constraint}
-                status="locked"
-                progress={{
-                  current: a.progressCurrent ?? 0,
-                  target: a.progressTarget ?? 1,
-                  unit: a.progressUnit ?? "",
-                }}
-              />
-            ),
-          )}
-        </Grid2>
-
-        <Grid2>
-          {m.catalog.map((r) => (
-            <CatalogCard
-              key={r.id}
-              Icon={r.Icon}
-              name={r.name}
-              offer={r.offer}
-              pts={r.pts}
-              balance={m.member.points}
-            />
+          {m.cards.map((c) => (
+            <RewardCard key={c.id} {...c} />
           ))}
         </Grid2>
       </ScrollView>
 
       <BottomNav />
-
-      {missionCelebration && (
-        <MissionClaimCelebration
-          title={m.mission.title}
-          offer={m.mission.offer}
-          onClose={closeMissionCelebration}
-        />
-      )}
     </View>
   );
 }
@@ -411,42 +422,26 @@ function Grid2({ children }: { children: React.ReactNode }) {
   return <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>{children}</View>;
 }
 
-// ─── Unified reward card template ───────────────────────────────────
+// ─── Unified reward card ────────────────────────────────────────────
 //
-// Every reward / achievement / claimable on the page renders through
-// this single template so the visual language is identical:
-//   - Status dot (top-right): ready / locked / earned
-//   - Icon tile + eyebrow row
-//   - Title (the offer name)
-//   - Offer line (what you get when you redeem)
-//   - Constraint line (expiry / threshold / cost)
-//   - Footer: action pill (ready) OR progress bar (locked) OR
-//             earned-on date (earned)
+// Single espresso surface for every card on the page. Status drives
+// the visual differentiation, not the surface color:
+//
+//   ready   → full opacity, gold accents, gold "Claim/Use" pill
+//   locked  → 55% opacity on the whole card so the customer can
+//             instantly tell "exists but not yet for me," gold accents
+//             at the same opacity, progress bar instead of pill
+//   earned  → full opacity, gold accents, "UNLOCKED" check footer
+//
+// Every card surfaces the same four info pieces in the same slots so
+// the eye learns the pattern once.
 
 const CARD_W = "48%" as const;
-const CARD_MIN_H = 168;
+const CARD_MIN_H = 174;
 
-type CardStatus = "ready" | "locked" | "earned";
-
-function RewardCardTpl({
-  Icon, eyebrow, title, offer, constraint, status, action, progress,
-}: {
-  Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }>;
-  eyebrow: string;
-  title: string;
-  offer: string;
-  constraint?: string;
-  status: CardStatus;
-  action?: { label: string; onPress: () => void };
-  progress?: { current: number; target: number; unit: string };
-}) {
-  const dark = status !== "locked";
-  const bg = dark ? C.espresso : C.surface;
-  const border = dark ? C.espresso : C.border;
-  const fg = dark ? "#FFFFFF" : C.espresso;
-  const muted = dark ? "rgba(255,255,255,0.6)" : C.mutedFg;
-  const accent = status === "ready" ? C.gold : status === "earned" ? C.gold : C.primary;
-  const iconTileBg = dark ? "rgba(251,191,36,0.18)" : "rgba(192,80,64,0.10)";
+function RewardCard(props: MockCard) {
+  const { Icon, eyebrow, title, offer, constraint, status, action, progressCurrent, progressTarget, progressUnit } = props;
+  const isLocked = status === "locked";
 
   return (
     <View
@@ -455,9 +450,10 @@ function RewardCardTpl({
         minHeight: CARD_MIN_H,
         padding: 12,
         borderRadius: 16,
-        backgroundColor: bg,
+        backgroundColor: C.espresso,
         borderWidth: 1,
-        borderColor: border,
+        borderColor: C.espresso,
+        opacity: isLocked ? 0.55 : 1,
       }}
     >
       {/* Status dot — top-right corner, always present. */}
@@ -465,60 +461,65 @@ function RewardCardTpl({
         <StatusDot status={status} />
       </View>
 
-      <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: iconTileBg, alignItems: "center", justifyContent: "center" }}>
-        <Icon size={18} color={accent} strokeWidth={2} />
+      {/* Icon tile */}
+      <View
+        style={{
+          width: 36, height: 36, borderRadius: 10,
+          backgroundColor: "rgba(251,191,36,0.18)",
+          alignItems: "center", justifyContent: "center",
+        }}
+      >
+        <Icon size={18} color={C.gold} strokeWidth={2} />
       </View>
 
-      <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, color: accent, letterSpacing: 1.4, textTransform: "uppercase", marginTop: 8 }}>
+      {/* Eyebrow — source identifier */}
+      <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, color: C.gold, letterSpacing: 1.4, textTransform: "uppercase", marginTop: 8 }}>
         {eyebrow}
       </Text>
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: fg, marginTop: 2 }} numberOfLines={1}>
+
+      {/* Title — offer name */}
+      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#FFFFFF", marginTop: 2 }} numberOfLines={1}>
         {title}
       </Text>
-      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11.5, color: muted, marginTop: 2 }} numberOfLines={2}>
+
+      {/* Offer line — what you get */}
+      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11.5, color: "rgba(255,255,255,0.65)", marginTop: 2 }} numberOfLines={2}>
         {offer}
       </Text>
 
-      {/* Constraint row — small inline icon + text. Surfaces expiry,
-          threshold, cost, source, etc. in a consistent slot so the
-          customer's eye always lands in the same place for "the
-          fine print." */}
+      {/* Constraint slot — expiry / cost / threshold / source */}
       {constraint && (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6 }}>
-          <Clock size={10} color={muted} strokeWidth={2} />
-          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10.5, color: muted }} numberOfLines={1}>
+          <Clock size={10} color="rgba(255,255,255,0.55)" strokeWidth={2} />
+          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10.5, color: "rgba(255,255,255,0.55)" }} numberOfLines={1}>
             {constraint}
           </Text>
         </View>
       )}
 
-      {/* Footer */}
+      {/* Footer — action pill / progress bar / earned check */}
       <View style={{ marginTop: "auto", paddingTop: 10 }}>
         {status === "ready" && action && (
-          <Pressable
-            onPress={action.onPress}
-            className="active:opacity-85"
-            style={{ backgroundColor: C.gold, borderRadius: 100, paddingVertical: 7, alignItems: "center" }}
-          >
+          <View style={{ backgroundColor: C.gold, borderRadius: 100, paddingVertical: 7, alignItems: "center" }}>
             <Text style={{ fontFamily: "Peachi-Bold", fontSize: 12, color: C.espresso }}>
-              {action.label}
+              {action}
             </Text>
-          </Pressable>
+          </View>
         )}
-        {status === "locked" && progress && (
+        {status === "locked" && progressTarget !== undefined && (
           <>
-            <View style={{ height: 5, borderRadius: 3, backgroundColor: "rgba(192,80,64,0.12)", overflow: "hidden" }}>
+            <View style={{ height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.10)", overflow: "hidden" }}>
               <View
                 style={{
                   height: "100%",
-                  width: `${Math.round(Math.min(1, progress.current / Math.max(1, progress.target)) * 100)}%`,
-                  backgroundColor: C.primary,
+                  width: `${Math.round(Math.min(1, (progressCurrent ?? 0) / progressTarget) * 100)}%`,
+                  backgroundColor: C.gold,
                   borderRadius: 3,
                 }}
               />
             </View>
-            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10.5, color: C.primary, letterSpacing: 0.8, marginTop: 6 }}>
-              {progress.current}/{progress.target} {progress.unit}
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10.5, color: C.gold, letterSpacing: 0.8, marginTop: 6 }}>
+              {(progressCurrent ?? 0).toLocaleString()}/{progressTarget.toLocaleString()}{progressUnit ? ` ${progressUnit}` : ""}
             </Text>
           </>
         )}
@@ -535,11 +536,13 @@ function RewardCardTpl({
   );
 }
 
-function StatusDot({ status }: { status: CardStatus }) {
+// ─── Status dot ─────────────────────────────────────────────────────
+
+function StatusDot({ status }: { status: "ready" | "locked" | "earned" }) {
   const map = {
-    ready:  { bg: "rgba(34,197,94,0.18)",  fg: C.ready,  label: "READY"   },
-    locked: { bg: "rgba(142,142,147,0.18)", fg: C.locked, label: "LOCKED" },
-    earned: { bg: "rgba(251,191,36,0.18)", fg: C.gold,   label: "EARNED" },
+    ready:  { bg: "rgba(34,197,94,0.18)",   fg: C.ready,  label: "READY"   },
+    locked: { bg: "rgba(142,142,147,0.18)", fg: C.locked, label: "LOCKED"  },
+    earned: { bg: "rgba(251,191,36,0.18)",  fg: C.gold,   label: "EARNED"  },
   } as const;
   const s = map[status];
   return (
@@ -562,7 +565,7 @@ function StatusDot({ status }: { status: CardStatus }) {
   );
 }
 
-// ─── Bag + Mission cards (specialised variants) ────────────────────
+// ─── Bean Bag card (streak chest) ──────────────────────────────────
 
 function BagCard({
   available, weeksAtQualify, label, Icon, offer, constraint,
@@ -576,222 +579,32 @@ function BagCard({
 }) {
   if (!available) {
     return (
-      <RewardCardTpl
+      <RewardCard
+        kind="challenge"
+        id="bag"
         Icon={Flame}
         eyebrow="STREAK"
         title="Build your streak"
         offer="Order once a week to unlock a bag"
         constraint="No streak yet"
         status="locked"
-        progress={{ current: 0, target: 1, unit: "wk" }}
+        progressCurrent={0}
+        progressTarget={1}
+        progressUnit="wk"
       />
     );
   }
   return (
-    <RewardCardTpl
+    <RewardCard
+      kind="challenge"
+      id="bag"
       Icon={Icon}
       eyebrow={`WK ${weeksAtQualify} BAG`}
       title={label}
       offer={offer}
       constraint={constraint}
       status="ready"
-      action={{ label: "Open bag", onPress: () => {} }}
+      action="Open"
     />
-  );
-}
-
-function MissionCard({
-  state, title, offer, progressCurrent, progressTarget, onClaim,
-}: {
-  state: "active" | "complete-unclaimed" | "no-active";
-  title: string;
-  offer: string;
-  progressCurrent: number;
-  progressTarget: number;
-  onClaim?: () => void;
-}) {
-  if (state === "no-active") {
-    return (
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync();
-          router.push("/mission-picker" as never);
-        }}
-        className="active:opacity-85"
-        style={{
-          width: CARD_W,
-          minHeight: CARD_MIN_H,
-          padding: 12,
-          borderRadius: 16,
-          backgroundColor: C.surface,
-          borderWidth: 1,
-          borderColor: C.primary,
-          borderStyle: "dashed",
-        }}
-      >
-        <View style={{ position: "absolute", top: 12, right: 12 }}>
-          <StatusDot status="locked" />
-        </View>
-        <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(192,80,64,0.10)", alignItems: "center", justifyContent: "center" }}>
-          <Target size={18} color={C.primary} strokeWidth={2} />
-        </View>
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, color: C.primary, letterSpacing: 1.4, textTransform: "uppercase", marginTop: 8 }}>
-          CHALLENGE
-        </Text>
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: C.espresso, marginTop: 2 }}>
-          Pick this week
-        </Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11.5, color: C.mutedFg, marginTop: 2 }} numberOfLines={2}>
-          Earn rewards by Sunday
-        </Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6 }}>
-          <Clock size={10} color={C.mutedFg} strokeWidth={2} />
-          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10.5, color: C.mutedFg }}>
-            Resets Sunday
-          </Text>
-        </View>
-        <View style={{ marginTop: "auto", paddingTop: 10 }}>
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10.5, color: C.primary, letterSpacing: 0.8 }}>
-            TAP TO PICK →
-          </Text>
-        </View>
-      </Pressable>
-    );
-  }
-
-  if (state === "complete-unclaimed") {
-    return (
-      <RewardCardTpl
-        Icon={Check}
-        eyebrow="MISSION DONE"
-        title={title}
-        offer={offer}
-        constraint={`Completed ${progressCurrent}/${progressTarget}`}
-        status="ready"
-        action={{ label: "Claim reward", onPress: () => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          onClaim?.();
-        }}}
-      />
-    );
-  }
-
-  return (
-    <RewardCardTpl
-      Icon={Target}
-      eyebrow="ACTIVE"
-      title={title}
-      offer={offer}
-      constraint="Ends Sunday"
-      status="locked"
-      progress={{ current: progressCurrent, target: progressTarget, unit: "done" }}
-    />
-  );
-}
-
-// ─── Catalog card (points-shop) ─────────────────────────────────────
-// Same dimensions + anatomy as every other reward card on the page.
-// Status dot + Claim pill when the customer can afford it, progress
-// bar (balance / cost) when they can't. The constraint slot always
-// shows the Bean cost so the customer sees the price at a glance.
-function CatalogCard({
-  Icon, name, offer, pts, balance,
-}: {
-  Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }>;
-  name: string;
-  offer: string;
-  pts: number;
-  balance: number;
-}) {
-  const affordable = balance >= pts;
-  if (affordable) {
-    return (
-      <RewardCardTpl
-        Icon={Icon}
-        eyebrow="BEANS SHOP"
-        title={name}
-        offer={offer}
-        constraint={`${pts.toLocaleString()} Beans`}
-        status="ready"
-        action={{ label: "Claim", onPress: () => {} }}
-      />
-    );
-  }
-  return (
-    <RewardCardTpl
-      Icon={Icon}
-      eyebrow="BEANS SHOP"
-      title={name}
-      offer={offer}
-      constraint={`${pts.toLocaleString()} Beans · ${(pts - balance).toLocaleString()} to go`}
-      status="locked"
-      progress={{ current: balance, target: pts, unit: "Beans" }}
-    />
-  );
-}
-
-// ─── Mission claim celebration ──────────────────────────────────────
-
-function MissionClaimCelebration({
-  title, offer, onClose,
-}: {
-  title: string;
-  offer: string;
-  onClose: () => void;
-}) {
-  return (
-    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.65)", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={{
-            width: "100%", maxWidth: 360,
-            borderRadius: 24,
-            backgroundColor: C.espresso,
-            padding: 24,
-            alignItems: "center",
-            shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 24, shadowOffset: { width: 0, height: 12 },
-          }}
-        >
-          <View
-            style={{
-              width: 86, height: 86, borderRadius: 43,
-              backgroundColor: "rgba(251,191,36,0.18)",
-              alignItems: "center", justifyContent: "center",
-              marginBottom: 14,
-              borderWidth: 1, borderColor: "rgba(251,191,36,0.4)",
-            }}
-          >
-            <Target size={40} color={C.gold} strokeWidth={1.8} />
-          </View>
-
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10.5, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>
-            Mission complete
-          </Text>
-          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: "#FFFFFF", letterSpacing: -0.3, textAlign: "center" }} numberOfLines={2}>
-            {title}
-          </Text>
-
-          <View style={{ alignSelf: "stretch", marginTop: 18, borderTopWidth: 1, borderTopColor: "rgba(251,191,36,0.15)", paddingTop: 14, flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <Gift size={16} color={C.gold} strokeWidth={2} />
-            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, color: "rgba(255,255,255,0.92)" }} numberOfLines={1}>
-              {offer}
-            </Text>
-          </View>
-
-          <View style={{ alignSelf: "stretch", marginTop: 22 }}>
-            <Pressable
-              onPress={onClose}
-              className="active:opacity-85"
-              style={{ backgroundColor: C.gold, borderRadius: 100, paddingVertical: 13, alignItems: "center", justifyContent: "center" }}
-            >
-              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: C.espresso }}>
-                Got it
-              </Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
   );
 }
