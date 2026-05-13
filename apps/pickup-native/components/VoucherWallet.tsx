@@ -175,23 +175,11 @@ export function VoucherWallet({ vouchers, maxVisible = 3, hideViewAll = false }:
           className="text-espresso text-[12px] uppercase"
           style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.8 }}
         >
-          My Vouchers · {active.length}
+          My Rewards · {active.length}
         </Text>
-        {hasMore && (
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync();
-              router.push("/vouchers" as never);
-            }}
-            hitSlop={8}
-            className="flex-row items-center gap-0.5 active:opacity-70"
-          >
-            <Text className="text-primary text-[12px]" style={{ fontFamily: "Peachi-Bold" }}>
-              View all
-            </Text>
-            <ChevronRight size={12} color="#C05040" strokeWidth={2.2} />
-          </Pressable>
-        )}
+        {/* "View all" link removed — /vouchers as a dedicated list page
+            no longer exists. The whole wallet renders inline on the
+            Rewards tab now. */}
       </View>
 
       {showFilter && (
@@ -237,7 +225,7 @@ export function VoucherWallet({ vouchers, maxVisible = 3, hideViewAll = false }:
             className="text-muted-fg text-[12px] text-center py-6"
             style={{ fontFamily: "SpaceGrotesk_500Medium" }}
           >
-            No vouchers in this category
+            No rewards in this category
           </Text>
         ) : (
           shown.map((v) => <VoucherRow key={v.id} voucher={v} />)
@@ -252,11 +240,6 @@ function VoucherRow({ voucher }: { voucher: Voucher }) {
   const urgency = voucherUrgencyLabel(voucher);
   const setReservedVoucher = useApp((s) => s.setReservedVoucher);
   const setAppliedReward = useApp((s) => s.setAppliedReward);
-
-  function openDetail() {
-    Haptics.selectionAsync();
-    router.push(`/voucher/${voucher.id}` as never);
-  }
 
   function useNow() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -310,7 +293,7 @@ function VoucherRow({ voucher }: { voucher: Voucher }) {
 
   return (
     <Pressable
-      onPress={openDetail}
+      onPress={useNow}
       className="active:opacity-90"
       style={{
         borderRadius: 18,

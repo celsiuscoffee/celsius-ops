@@ -480,7 +480,7 @@ export default function Home() {
                 textTransform: "uppercase",
               }}
             >
-              Vouchers
+              Rewards
             </Text>
           </Pressable>
           <View className="items-end justify-center">
@@ -714,7 +714,7 @@ export default function Home() {
                   marginTop: 1,
                 }}
               >
-                Tap to view in Rewards · Vouchers
+                Tap to view in Rewards
               </Text>
             </View>
             <ChevronRight size={16} color="#5A1F16" strokeWidth={2.2} />
@@ -767,7 +767,7 @@ export default function Home() {
                   marginTop: 1,
                 }}
               >
-                Earn voucher rewards by Sunday
+                Earn rewards by Sunday
               </Text>
             </View>
             <ChevronRight size={16} color="#C05040" strokeWidth={2.2} />
@@ -1293,7 +1293,7 @@ function ForYouStrip({
         <View className="flex-row gap-5">
           {visibleTabs.map((t) => {
             const isActive = active === t;
-            const label = t === "vouchers" ? "Vouchers" : t === "usual" ? "Usual" : "Best sellers";
+            const label = t === "vouchers" ? "Rewards" : t === "usual" ? "Usual" : "Best sellers";
             const badge = t === "vouchers" ? rewards.length : t === "usual" ? usual.length : null;
             return (
               <Pressable
@@ -1512,7 +1512,7 @@ function describeVoucherTicket(v: Voucher): TicketDescriptor {
   // Headline mirrors RewardTicket's value-led copy: customers read
   // "RM 5 off" / "Free drink" off the card without scanning the
   // smaller name line.
-  let eyebrow = "Voucher";
+  let eyebrow = "Reward";
   let headline = v.title;
 
   if (v.source_type === "birthday")           { eyebrow = "Birthday gift"; }

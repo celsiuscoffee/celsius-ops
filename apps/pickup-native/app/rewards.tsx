@@ -1213,7 +1213,7 @@ function StreakSheet({
             <StreakRule
               icon="🏆"
               title="Streaks unlock milestones"
-              body="Hit thresholds on the Milestones tab (e.g. 4-week run) to earn bonus vouchers + Beans."
+              body="Hit thresholds on the Milestones tab (e.g. 4-week run) to earn bonus rewards + Beans."
               last
             />
           </View>
@@ -1936,7 +1936,7 @@ function MilestoneRow({
   const rewardChips: string[] = [];
   if (milestone.reward_voucher_template_ids?.length > 0) {
     const n = milestone.reward_voucher_template_ids.length;
-    rewardChips.push(`${n} voucher${n === 1 ? "" : "s"}`);
+    rewardChips.push(`${n} reward${n === 1 ? "" : "s"}`);
   }
   if ((milestone.reward_bonus_beans ?? 0) > 0) {
     rewardChips.push(`+${milestone.reward_bonus_beans} Beans`);

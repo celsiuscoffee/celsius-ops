@@ -139,7 +139,7 @@ export default function ReferralScreen() {
             <Step n={1} text="Share your code with a friend" />
             <Step n={2} text="They sign up and enter your code" />
             <Step n={3} text="They complete their first order" />
-            <Step n={4} text="Both of you get a free drink voucher 🎉" last />
+            <Step n={4} text="Both of you get a free drink reward 🎉" last />
           </View>
 
           {data.recent.length > 0 && (

@@ -74,7 +74,7 @@ const MOCK = {
     {
       id: "m1",
       title: "Coffee Veteran",
-      reward: "2 vouchers · +200 Beans",
+      reward: "2 rewards · +200 Beans",
       emoji: "🏆",
     },
   ],
@@ -582,7 +582,7 @@ function MissionCard({
           Pick this week's challenge
         </Text>
         <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "#6B6B6B", marginTop: 2 }} numberOfLines={2}>
-          Earn voucher rewards by Sunday
+          Earn rewards by Sunday
         </Text>
       </Pressable>
     );
