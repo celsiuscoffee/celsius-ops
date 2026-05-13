@@ -79,7 +79,15 @@ export function BottomNav() {
               />
             )}
             <Text
-              className={`text-[11px] ${active ? "text-espresso font-bold" : "text-muted-fg font-medium"}`}
+              style={{
+                // Space Grotesk reads cleaner than the system default at
+                // small sizes, and a couple of points up makes the labels
+                // legible without dominating the icon.
+                fontFamily: active ? "SpaceGrotesk_700Bold" : "SpaceGrotesk_600SemiBold",
+                fontSize: 12.5,
+                letterSpacing: 0.2,
+                color: active ? "#160800" : "#8E8E93",
+              }}
             >
               {tab.label}
             </Text>
