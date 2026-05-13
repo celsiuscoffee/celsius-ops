@@ -119,11 +119,8 @@ export const api = {
     rewardDiscountSen?: number;
     /** When set, the redeemed asset is a wallet voucher (issued_rewards
      *  row), not a points-shop reward. Server marks the voucher as
-     *  redeemed and skips the points deduction path. Named distinctly
-     *  from the legacy `voucherId` field (promo-code system) to avoid
-     *  collision. */
+     *  redeemed and skips the points deduction path. */
     walletVoucherId?: string | null;
-    promoCode?: string;
   }) =>
     post<{ orderId: string; orderNumber: string }>("/api/orders", {
       ...payload,

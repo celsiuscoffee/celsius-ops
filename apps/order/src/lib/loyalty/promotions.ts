@@ -35,8 +35,11 @@ interface EvaluateInput {
   member_id?: string | null;
   outlet_id?: string | null;
   member_tier_id?: string | null;
-  promo_code?: string | null;
   reward_promotion_ids?: string[];
+  // `promo_code` was a customer-entered string. We removed that entry
+  // point everywhere (checkout UI + pickup lib). The discount engine
+  // still picks up auto-promos, tier perks, and reward-linked
+  // promotions on its own.
 }
 
 /**
@@ -93,7 +96,6 @@ export async function recordPromotionApplications(args: {
   reference_id: string;
   lines: CartLine[];
   member_tier_id?: string | null;
-  promo_code?: string | null;
   reward_promotion_ids?: string[];
 }): Promise<void> {
   if (args.evaluated.discounts.length === 0) return;
@@ -122,7 +124,6 @@ export async function recordPromotionApplications(args: {
         member_id: args.member_id,
         outlet_id: args.outlet_id,
         member_tier_id: args.member_tier_id,
-        promo_code: args.promo_code,
         reward_promotion_ids: args.reward_promotion_ids,
       }),
     });

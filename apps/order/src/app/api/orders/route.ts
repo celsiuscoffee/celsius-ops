@@ -162,7 +162,6 @@ export async function POST(request: NextRequest) {
       walletVoucherId,
       loyaltyPhone,
       loyaltyId,
-      promoCode,
       clientSupportsSkipPayment,
     } = body;
 
@@ -340,7 +339,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Promotion engine: auto, code, tier-perk, reward-link discounts.
+    // Promotion engine: auto, tier-perk, reward-link discounts.
+    // (Customer-typed promo codes were removed end-to-end.)
     let memberTierId: string | null = null;
     if (loyaltyId) {
       const { data: mb } = await supabase
@@ -372,7 +372,6 @@ export async function POST(request: NextRequest) {
       member_id: loyaltyId,
       outlet_id: selectedStore.id,
       member_tier_id: memberTierId,
-      promo_code: promoCode ?? null,
     });
     const promoDiscountSen = Math.round(evaluated.total_discount * 100);
 
@@ -425,7 +424,7 @@ export async function POST(request: NextRequest) {
         wallet_voucher_id:      walletVoucherId ?? null,
         sst_amount:             sstSen,
         first_order_discount_amount: fodDiscountSen,
-        // Promotion-engine discounts (auto, code, tier-perk, reward-link)
+        // Promotion-engine discounts (auto, tier-perk, reward-link)
         // — previously thrown away after computing `afterDiscount`,
         // leaving customers staring at "Total RM 4.72" against an
         // RM 8.90 line item with no idea where the gap went. Persist
@@ -502,9 +501,9 @@ export async function POST(request: NextRequest) {
     // gates on `status="pending" → "preparing"` so it's idempotent
     // even if Stripe fires the event twice.
 
-    // Record applied promotions to the loyalty ledger — awaited for
-    // the same reason. uses_count never bumping = customer can re-
-    // claim the same code-driven promo.
+    // Record applied promotions to the loyalty ledger — awaited so
+    // a failure surfaces in the order POST rather than dropping the
+    // uses_count silently.
     try {
       await recordPromotionApplications({
         evaluated,
@@ -513,7 +512,6 @@ export async function POST(request: NextRequest) {
         reference_id: order.id,
         lines: cartLines,
         member_tier_id: memberTierId,
-        promo_code: promoCode ?? null,
       });
     } catch (err) {
       console.error(

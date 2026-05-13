@@ -9,6 +9,7 @@ import {
   Animated,
   Easing,
 } from "react-native";
+// TextInput stays imported — it's still used by the phone / OTP entry steps.
 import { Stack, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Check, AlertCircle, Coffee, MapPin, Clock, Wallet } from "lucide-react-native";
@@ -72,10 +73,10 @@ export default function Checkout() {
 
   // ── Promotion preview ──────────────────────────────────────────────────
   // Hits the loyalty engine through the order-app proxy whenever the cart,
-  // promo code, tier, or outlet changes. Debounced so the typing of a
-  // promo code doesn't fire one request per keystroke.
-  const [promoCode, setPromoCode] = useState("");
-  const [promoCodeOpen, setPromoCodeOpen] = useState(false);
+  // tier, or outlet changes. Debounced so multiple rapid cart edits don't
+  // fire one request per change. Promo codes were removed end-to-end — the
+  // engine still applies auto-promos, tier perks, and reward-linked
+  // promotions; there's just no customer-entered code path anymore.
   const [promoEval, setPromoEval] = useState<EvaluatedCart | null>(null);
 
   // Track whether the last evaluate call failed so we can surface a
@@ -100,7 +101,6 @@ export default function Checkout() {
         member_id: loyaltyId,
         outlet_id: outletId,
         member_tier_id: tier?.tier_id ?? null,
-        promo_code: promoCode.trim() || null,
       }).then((res) => {
         if (res.kind === "ok") {
           setPromoEval(res.data);
@@ -120,7 +120,7 @@ export default function Checkout() {
       });
     }, 300);
     return () => clearTimeout(handle);
-  }, [cart, loyaltyId, outletId, tier?.tier_id, promoCode, promoEvalError]);
+  }, [cart, loyaltyId, outletId, tier?.tier_id, promoEvalError]);
 
   const promoDiscount = promoEval?.total_discount ?? 0;
 
@@ -254,7 +254,6 @@ export default function Checkout() {
       itemCount: cart.length,
       subtotal,
       hasReward: !!appliedReward,
-      hasPromo: !!promoCode.trim(),
       outletId,
     });
 
@@ -335,7 +334,6 @@ export default function Checkout() {
         rewardPointsCost: appliedReward?.points_required ?? 0,
         rewardDiscountSen: Math.round(rewardDiscount * 100),
         walletVoucherId: appliedReward?.voucher_id ?? null,
-        promoCode: promoCode.trim() || undefined,
       });
       // Pin the summary BEFORE clearCart so the customer keeps seeing
       // their RM 4.45 (or whatever) behind the Stripe / Apple Pay
@@ -699,46 +697,6 @@ export default function Checkout() {
               </View>
             </View>
 
-            {/* Promo code — collapsed by default; opens to a single input */}
-            <View className="bg-surface rounded-2xl border border-border p-4">
-              {!promoCodeOpen ? (
-                <Pressable
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setPromoCodeOpen(true);
-                  }}
-                  className="flex-row items-center justify-between active:opacity-70"
-                >
-                  <Text className="text-espresso text-[13px] font-semibold">
-                    🏷️ Have a promo code?
-                  </Text>
-                  <Text className="text-muted-fg text-[12px]">Add</Text>
-                </Pressable>
-              ) : (
-                <View className="gap-2">
-                  <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
-                    Promo code
-                  </Text>
-                  <TextInput
-                    value={promoCode}
-                    onChangeText={(t) => setPromoCode(t.toUpperCase())}
-                    placeholder="WELCOME10"
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                    className="rounded-2xl border border-border px-3 py-2.5 text-espresso"
-                    style={{ fontFamily: "SpaceGrotesk_500Medium" }}
-                  />
-                  {promoCode.trim().length > 0 &&
-                    promoEval &&
-                    !promoEval.discounts.some((d) => d.reason === "code") && (
-                      <Text className="text-[12px] text-red-500">
-                        Code not recognised or not eligible.
-                      </Text>
-                    )}
-                </View>
-              )}
-            </View>
-
             <View className="bg-surface rounded-2xl border border-border p-4">
               <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
                 Order
@@ -782,11 +740,7 @@ export default function Checkout() {
                     {dispPromos.map((d) => (
                       <View key={d.promotion_id} className="flex-row justify-between">
                         <Text className="text-primary text-[13px]" numberOfLines={1}>
-                          {d.reason === "tier_perk"
-                            ? "🎁 "
-                            : d.reason === "code"
-                            ? "🏷️ "
-                            : ""}
+                          {d.reason === "tier_perk" ? "🎁 " : ""}
                           {d.promotion_name}
                         </Text>
                         <Text className="text-primary">

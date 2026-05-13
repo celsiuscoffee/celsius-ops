@@ -115,7 +115,10 @@ export type AppliedDiscount = {
     | "override_price";
   discount_amount: number;
   affected_lines: number[];
-  reason: "auto" | "code" | "tier_perk" | "reward_link";
+  // "code" used to be a valid reason — a customer-typed promo string.
+  // That entry point was removed everywhere (UI + lib + server). The
+  // engine still emits auto/tier/reward-link discounts.
+  reason: "auto" | "tier_perk" | "reward_link";
 };
 
 export type EvaluatedCart = {
@@ -150,7 +153,6 @@ export async function evaluatePromotions(input: {
   member_id?: string | null;
   outlet_id?: string | null;
   member_tier_id?: string | null;
-  promo_code?: string | null;
 }): Promise<EvaluateResult> {
   try {
     // Two gotchas the order app's middleware imposes:

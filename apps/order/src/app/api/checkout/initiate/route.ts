@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
       rewardPointsCost,
       loyaltyPhone,
       loyaltyId,
-      promoCode,
       notes,
       orderType,
       tableNumber,
@@ -296,9 +295,10 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Evaluate promotion engine ─────────────────────────────────────────
-    // Auto-apply, code, tier-perk, and reward-link promotions all flow
-    // through here. Voucher (legacy) and reward discounts stay separate
-    // for now since they predate the engine.
+    // Auto-apply, tier-perk, and reward-link promotions flow through
+    // here. Customer-typed promo codes were removed end-to-end. Voucher
+    // (legacy) and reward discounts stay separate since they predate
+    // the engine.
     const cartLines: CartLine[] = typedItems.map((item) => ({
       product_id: (item.product?.id ?? item.product_id) as string,
       quantity: item.quantity,
@@ -309,7 +309,6 @@ export async function POST(request: NextRequest) {
       member_id: loyaltyId,
       outlet_id: selectedStore.id,
       member_tier_id: memberTierId,
-      promo_code: promoCode ?? null,
     });
     const promoDiscountSen = Math.round(evaluated.total_discount * 100);
 
@@ -410,7 +409,6 @@ export async function POST(request: NextRequest) {
       reference_id: order.id,
       lines: cartLines,
       member_tier_id: memberTierId,
-      promo_code: promoCode ?? null,
     });
 
     // Points deduction (reward) happens post-payment in webhook/confirm-stripe
