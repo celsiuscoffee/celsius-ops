@@ -340,13 +340,21 @@ export async function maybeRewardReferralOnFirstOrder(args: {
     .maybeSingle();
   if (!attr) return;
 
-  // Look up voucher template ids from app_config.
+  // Look up voucher template ids from AppConfig. value is jsonb so
+  // callers may store a bare string or an object; unwrap both shapes.
   const { data: cfg } = await supabase
-    .from("app_config")
+    .from("AppConfig")
     .select("key, value")
     .in("key", ["referral_referrer_voucher_template_id", "referral_referee_voucher_template_id"]);
 
-  const cfgMap = new Map((cfg ?? []).map((c) => [c.key as string, c.value as string | null]));
+  function unwrap(raw: unknown): string | null {
+    if (typeof raw === "string") return raw;
+    if (raw && typeof raw === "object" && "value" in (raw as Record<string, unknown>)) {
+      return String((raw as Record<string, unknown>).value);
+    }
+    return null;
+  }
+  const cfgMap = new Map((cfg ?? []).map((c) => [c.key as string, unwrap(c.value)]));
   const referrerTpl = cfgMap.get("referral_referrer_voucher_template_id");
   const refereeTpl  = cfgMap.get("referral_referee_voucher_template_id");
   if (!referrerTpl || !refereeTpl) return; // referral disabled until configured

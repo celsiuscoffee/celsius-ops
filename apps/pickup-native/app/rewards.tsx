@@ -113,8 +113,19 @@ export default function RewardsTab() {
   const activeMission = activeMissionQ.data ?? null;
   const streakWeeks = streakQ.data?.current_streak_weeks ?? 0;
 
+  // Claim tab only — birthday + new-member rewards are auto-issued (cron
+  // for birthday, signup trigger for welcome BOGO). They shouldn't show
+  // up here as if they were redeemable for Beans. The server endpoint
+  // already filters by auto_issue, this is belt-and-braces against a
+  // mis-configured row landing the wrong reward in front of customers.
   const sortedRewards = useMemo(
-    () => [...rewards].sort((a, b) => a.points_required - b.points_required),
+    () =>
+      [...rewards]
+        .filter((r) => {
+          const t = (r as { reward_type?: string | null }).reward_type;
+          return t !== "birthday" && t !== "new_member";
+        })
+        .sort((a, b) => a.points_required - b.points_required),
     [rewards],
   );
   const nextReward = useMemo(

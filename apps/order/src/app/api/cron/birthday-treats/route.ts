@@ -26,15 +26,22 @@ export async function GET(req: NextRequest) {
   const supabase = getSupabaseAdmin();
 
   // Birthday voucher template — admin-configured. Fail fast if missing.
+  // AppConfig.value is jsonb so callers may store either a bare string or
+  // an object; unwrap both shapes so the row format isn't load-bearing.
   const { data: cfg } = await supabase
-    .from("app_config")
+    .from("AppConfig")
     .select("value")
     .eq("key", "birthday_voucher_template_id")
-    .single();
-  const templateId = (cfg?.value as string | null) ?? null;
+    .maybeSingle();
+  const raw = cfg?.value as unknown;
+  const templateId =
+    typeof raw === "string" ? raw
+      : (raw && typeof raw === "object" && "value" in (raw as Record<string, unknown>))
+        ? String((raw as Record<string, unknown>).value)
+        : null;
   if (!templateId) {
     return NextResponse.json(
-      { error: "birthday_voucher_template_id not configured in app_config" },
+      { error: "birthday_voucher_template_id not configured in AppConfig" },
       { status: 503 },
     );
   }
