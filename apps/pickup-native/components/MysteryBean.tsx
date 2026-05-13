@@ -1,44 +1,66 @@
 /**
  * MysteryBean — tap-to-reveal scratch card displayed on order confirmation.
  *
- * Matches the app's existing card vocabulary: rounded-2xl, Peachi headings,
- * Space Grotesk body, brand colours.
+ * UX notes (the v2 rewrite that fixed the "reveal disappears" bug):
+ *  - The reveal outcome is held in local state. The parent decides when
+ *    to unmount via `onDismiss`. Crucially we DON'T let the parent's
+ *    React Query refetch (which returns `revealed:true` from the server
+ *    a beat later) yank the reveal out from under the user — the parent
+ *    now gates on a sticky local flag, not on the live query data.
+ *  - The shimmer animation stops the moment we reveal. Infinite
+ *    `withRepeat` was costing animation cost during/after reveal.
+ *  - Every reveal state ends with an explicit CTA so the customer
+ *    never sees a card with "now what?" ambiguity. Voucher wins go
+ *    to the wallet, everything else dismisses cleanly.
  *
  * States:
- *  - Unrevealed: terracotta tile (matches RewardTicket's terracotta tone)
- *  - Win: espresso surface, amber title (matches RewardTicket's gold tone)
+ *  - Unrevealed: terracotta tile, shimmer + "Reveal" pill
+ *  - Win (multiplier/flat/voucher/surprise): espresso surface, amber title
  *  - No-bonus: quiet white card with brand border — never feels punishing
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, ActivityIndicator } from "react-native";
+import { router } from "expo-router";
 import Animated, {
   useSharedValue, useAnimatedStyle, withSequence, withSpring,
-  withTiming, withRepeat, Easing,
+  withTiming, withRepeat, Easing, cancelAnimation,
 } from "react-native-reanimated";
-import { Gift, Sparkles, ChevronRight } from "lucide-react-native";
+import { Gift, Sparkles, ChevronRight, Check, Wallet } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { revealMysteryDrop, type MysteryDropRevealed } from "../lib/rewards-v2";
 
 type Props = {
   dropId: string;
   baseBeansEarned: number;
+  /** Called once with the reveal payload so the parent can refresh
+   *  beans / vouchers — but the parent should NOT unmount us based on
+   *  this. Keep the reveal card on screen until the customer taps a CTA. */
   onRevealed?: (drop: MysteryDropRevealed) => void;
+  /** Called when the customer taps the dismiss / wallet CTA on the
+   *  reveal card. Only after this should the parent take us off-screen. */
+  onDismiss?: () => void;
 };
 
-export function MysteryBean({ dropId, baseBeansEarned, onRevealed }: Props) {
+export function MysteryBean({ dropId, baseBeansEarned, onRevealed, onDismiss }: Props) {
   const [revealed, setRevealed] = useState<MysteryDropRevealed | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Shimmer — only runs while we're in the unrevealed state. Once
+  // revealed we cancel it; an infinite withRepeat on a hidden node
+  // would otherwise keep ticking in the background.
   const shimmer = useSharedValue(-1);
   useEffect(() => {
-    if (!revealed) {
-      shimmer.value = withRepeat(
-        withTiming(1, { duration: 2500, easing: Easing.linear }),
-        -1,
-        false
-      );
+    if (revealed) {
+      cancelAnimation(shimmer);
+      return;
     }
+    shimmer.value = withRepeat(
+      withTiming(1, { duration: 2200, easing: Easing.linear }),
+      -1,
+      false,
+    );
+    return () => { cancelAnimation(shimmer); };
   }, [revealed, shimmer]);
   const shimmerStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: shimmer.value * 220 }],
@@ -49,8 +71,13 @@ export function MysteryBean({ dropId, baseBeansEarned, onRevealed }: Props) {
     transform: [{ scale: scale.value }],
   }));
 
+  // Guard against double-taps in the brief window between the tap and
+  // setLoading(true) — onPress can fire twice on low-end Android.
+  const firingRef = useRef(false);
+
   async function handleReveal() {
-    if (loading || revealed) return;
+    if (loading || revealed || firingRef.current) return;
+    firingRef.current = true;
     setLoading(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -62,20 +89,23 @@ export function MysteryBean({ dropId, baseBeansEarned, onRevealed }: Props) {
       }
       scale.value = withSequence(
         withTiming(0.85, { duration: 120 }),
-        withSpring(1.0, { damping: 8, stiffness: 140 })
+        withSpring(1.0, { damping: 8, stiffness: 140 }),
       );
       setRevealed(result);
       onRevealed?.(result);
     } catch (err) {
       console.warn("Mystery reveal failed", err);
+      // Brief haptic so a network failure isn't silent.
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
     } finally {
+      firingRef.current = false;
       setLoading(false);
     }
   }
 
   if (!revealed) {
     return (
-      <Pressable onPress={handleReveal} disabled={loading}>
+      <Pressable onPress={handleReveal} disabled={loading} accessibilityRole="button">
         <Animated.View
           className="bg-primary rounded-2xl px-5 py-6 items-center overflow-hidden"
           style={[
@@ -147,22 +177,30 @@ export function MysteryBean({ dropId, baseBeansEarned, onRevealed }: Props) {
     );
   }
 
-  return <MysteryReveal drop={revealed} baseBeansEarned={baseBeansEarned} />;
+  return (
+    <MysteryReveal
+      drop={revealed}
+      baseBeansEarned={baseBeansEarned}
+      onDismiss={onDismiss}
+    />
+  );
 }
 
 function MysteryReveal({
   drop,
   baseBeansEarned,
+  onDismiss,
 }: {
   drop: MysteryDropRevealed;
   baseBeansEarned: number;
+  onDismiss?: () => void;
 }) {
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(20);
 
   useEffect(() => {
-    opacity.value = withTiming(1, { duration: 400 });
-    translateY.value = withSpring(0, { damping: 10, stiffness: 100 });
+    opacity.value = withTiming(1, { duration: 320 });
+    translateY.value = withSpring(0, { damping: 12, stiffness: 110 });
   }, [opacity, translateY]);
 
   const containerStyle = useAnimatedStyle(() => ({
@@ -174,6 +212,22 @@ function MysteryReveal({
     drop.outcome_type === "beans_multiplier" && drop.multiplier_value && drop.multiplier_value > 1;
   const isVoucher = drop.outcome_type === "voucher";
   const isNoBonus = drop.outcome_type === "no_bonus";
+  const isFlat    = drop.outcome_type === "flat_beans" && drop.flat_beans_value;
+  const isSurprise = drop.outcome_type === "surprise_in_store";
+
+  // Decide the right post-reveal action. Voucher → wallet (so the
+  // customer can SEE the thing they just won), beans/no-bonus/surprise
+  // → simple acknowledge. We never auto-dismiss; the customer always
+  // taps to leave the reveal screen.
+  function handlePrimary() {
+    Haptics.selectionAsync();
+    if (isVoucher) {
+      onDismiss?.();
+      router.push("/rewards?tab=rewards" as never);
+    } else {
+      onDismiss?.();
+    }
+  }
 
   // No-bonus: quiet white card. Same as Card primitive (rounded-2xl + border-border).
   if (isNoBonus) {
@@ -190,11 +244,12 @@ function MysteryReveal({
           No bonus this time
         </Text>
         <Text
-          className="text-muted-fg text-[13px] mt-1"
+          className="text-muted-fg text-[13px] mt-1 text-center"
           style={{ fontFamily: "SpaceGrotesk_500Medium" }}
         >
           Better luck on your next order ☕
         </Text>
+        <DismissPill onPress={handlePrimary} variant="quiet" label="Got it" />
       </Animated.View>
     );
   }
@@ -280,7 +335,7 @@ function MysteryReveal({
         </>
       )}
 
-      {drop.outcome_type === "flat_beans" && drop.flat_beans_value && (
+      {isFlat && (
         <>
           <Text
             className="text-amber-400 mt-2.5"
@@ -301,7 +356,7 @@ function MysteryReveal({
         </>
       )}
 
-      {drop.outcome_type === "surprise_in_store" && (
+      {isSurprise && (
         <>
           <Text
             className="text-amber-400 text-[20px] text-center mt-2.5"
@@ -317,6 +372,58 @@ function MysteryReveal({
           </Text>
         </>
       )}
+
+      <DismissPill
+        onPress={handlePrimary}
+        variant="amber"
+        label={isVoucher ? "View in wallet" : "Got it"}
+        leadingIcon={isVoucher ? "wallet" : "check"}
+      />
     </Animated.View>
+  );
+}
+
+/** Bottom action pill — kept consistent across every reveal variant so
+ *  the customer always knows where the "out" of the reveal is. The amber
+ *  variant pops against the espresso card; the quiet variant is for the
+ *  no-bonus white card. */
+function DismissPill({
+  onPress, label, variant, leadingIcon,
+}: {
+  onPress: () => void;
+  label: string;
+  variant: "amber" | "quiet";
+  leadingIcon?: "wallet" | "check";
+}) {
+  const amberBg   = "#FBBF24";
+  const amberFg   = "#1A0200";
+  const quietBg   = "#1A0200";
+  const quietFg   = "#FFFFFF";
+  const bg = variant === "amber" ? amberBg : quietBg;
+  const fg = variant === "amber" ? amberFg : quietFg;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={{
+        marginTop: 20,
+        backgroundColor: bg,
+        borderRadius: 100,
+        paddingHorizontal: 20,
+        paddingVertical: 11,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        alignSelf: "stretch",
+        justifyContent: "center",
+      }}
+      className="active:opacity-85"
+    >
+      {leadingIcon === "wallet" && <Wallet size={15} color={fg} strokeWidth={2.4} />}
+      {leadingIcon === "check"  && <Check  size={15} color={fg} strokeWidth={2.6} />}
+      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: fg }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
