@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, Pressable, ScrollView, Image, RefreshControl } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { MapPin, ChevronRight, Coffee, Sparkles, Gift, Clock4, ShoppingCart, Croissant, Plus, Percent, Ticket } from "lucide-react-native";
+import { MapPin, ChevronRight, Coffee, Sparkles, Gift, Clock4, ShoppingCart } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { supabase, type Outlet } from "../lib/supabase";
 import { useApp, cartCount } from "../lib/store";
@@ -26,6 +26,7 @@ import {
   voucherUrgencyLabel,
   type Voucher,
 } from "../lib/rewards-v2";
+import { themeForVoucher } from "../components/VoucherWallet";
 import { SafeBoundary } from "../components/SafeBoundary";
 import { TierHero } from "../components/TierHero";
 import { PosterCarousel } from "../components/PosterCarousel";
@@ -373,7 +374,13 @@ export default function Home() {
         <Pressable
           onPress={() => {
             Haptics.selectionAsync();
-            router.push("/rewards");
+            // Tier card on home is anchored on the voucher stat (gold
+            // count when > 0), and the voucher rail below it is the
+            // next visual unit — making the whole card land on the
+            // Vouchers tab keeps that visual chain intact regardless of
+            // where on the card the customer taps. Inner Points / Vouchers
+            // stat Pressables still override for their specific tabs.
+            router.push("/rewards?tab=vouchers" as never);
           }}
           style={{
             position: "absolute",
@@ -1477,67 +1484,97 @@ function ForYouStrip({
 }
 
 // ─── Home voucher card ──────────────────────────────────────────────
-// Compact card for the home-screen "Your rewards" rail. Matches the
-// Claim / Rewards-tab visual language (terracotta-50 for redeemed,
-// cream/amber for auto-issued, ghost-icon corner, accent CTA bar) but
-// sized for a horizontal scroll lane.
-
-const HOME_VOUCHER_ICONS: Record<Voucher["category"], React.ComponentType<{ size: number; color: string; strokeWidth?: number }>> = {
-  free_item:  Croissant,
-  upgrade:    Plus,
-  discount:   Percent,
-  multiplier: Sparkles,
-  special:    Ticket,
-};
+// Compact tile for the home-screen "Your vouchers" rail. Pulls its
+// colourway + brand icon from the shared VOUCHER_THEME table so a
+// free-drink voucher reads the same here as in the wallet (espresso +
+// gold + CelsiusCup), a discount looks identical (terracotta + white
+// + CelsiusTag), etc.
 
 function HomeVoucherCard({ voucher }: { voucher: Voucher }) {
-  const Icon = HOME_VOUCHER_ICONS[voucher.category] ?? Ticket;
-  const isAutoIssued = ["birthday", "mission", "mystery", "milestone", "referral"].includes(
-    voucher.source_type ?? "",
-  );
-  const surfaceBg     = isAutoIssued ? "#FFF6E0" : "#FBEBE8";
-  const surfaceBorder = isAutoIssued ? "rgba(217,148,4,0.22)" : "rgba(192,80,64,0.18)";
-  const accent        = isAutoIssued ? "#D99404" : "#C05040";
-  const iconTint      = isAutoIssued ? "rgba(217,148,4,0.18)" : "rgba(192,80,64,0.18)";
+  const theme = themeForVoucher(voucher);
   const urgency = voucherUrgencyLabel(voucher);
+  const useFgIsLight = (
+    theme.accent === "#FBBF24" || theme.accent === "#FFFFFF" || theme.accent === "#D99404"
+  );
+  const usePillFg = useFgIsLight ? "#1A0200" : "#FFFFFF";
+  const categoryLabel = (
+    voucher.category === "free_item" ? "Free Item"
+      : voucher.category === "upgrade" ? "Add-on"
+      : voucher.category === "discount" ? "Discount"
+      : voucher.category === "multiplier" ? "Boost"
+      : "Reward"
+  );
 
   return (
     <Pressable
       onPress={() => router.push("/rewards?tab=vouchers" as never)}
-      className="active:opacity-80"
+      className="active:opacity-90"
       style={{
-        width: 178,
+        width: 188,
         borderRadius: 16,
         overflow: "hidden",
-        backgroundColor: surfaceBg,
+        backgroundColor: theme.bg,
         borderWidth: 1,
-        borderColor: surfaceBorder,
+        borderColor: theme.border,
         shadowColor: "#000",
-        shadowOpacity: 0.06,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 2 },
-        elevation: 1,
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 3,
       }}
     >
-      <View style={{ padding: 12, gap: 8 }}>
+      {/* Ghost mascot in the bottom-right, mirroring the wallet card. */}
+      <View
+        style={{
+          position: "absolute",
+          right: -14,
+          bottom: 24,
+          opacity: 0.12,
+        }}
+      >
+        {theme.iconKind === "brand" && theme.brandIcon
+          ? <theme.brandIcon size={120} color={theme.iconColor} />
+          : theme.glyphIcon
+            ? <theme.glyphIcon size={120} color={theme.iconColor} />
+            : null}
+      </View>
+
+      <View style={{ padding: 12, gap: 6 }}>
         <View
           style={{
             width: 36,
             height: 36,
             borderRadius: 10,
-            backgroundColor: iconTint,
+            backgroundColor: theme.iconBg,
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Icon size={20} color={accent} strokeWidth={1.8} />
+          {theme.iconKind === "brand" && theme.brandIcon
+            ? <theme.brandIcon size={22} color={theme.iconColor} />
+            : theme.glyphIcon
+              ? <theme.glyphIcon size={20} color={theme.iconColor} strokeWidth={2} />
+              : null}
         </View>
         <Text
           style={{
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 9,
+            letterSpacing: 1.3,
+            color: theme.accent,
+            textTransform: "uppercase",
+            marginTop: 4,
+          }}
+          numberOfLines={1}
+        >
+          {categoryLabel}
+        </Text>
+        <Text
+          style={{
             fontFamily: "Peachi-Bold",
-            fontSize: 14,
-            color: "#1A0200",
-            marginTop: 2,
+            fontSize: 15,
+            color: theme.fg,
+            lineHeight: 19,
           }}
           numberOfLines={2}
         >
@@ -1545,7 +1582,7 @@ function HomeVoucherCard({ voucher }: { voucher: Voucher }) {
         </Text>
         <Text
           style={{
-            color: urgency.warning ? "#C05040" : "rgba(26,2,0,0.60)",
+            color: urgency.warning ? "#FFB070" : theme.fgDim,
             fontFamily: "SpaceGrotesk_500Medium",
             fontSize: 11,
           }}
@@ -1556,14 +1593,14 @@ function HomeVoucherCard({ voucher }: { voucher: Voucher }) {
       </View>
       <View
         style={{
-          backgroundColor: accent,
-          paddingVertical: 7,
+          backgroundColor: theme.accent,
+          paddingVertical: 8,
           alignItems: "center",
         }}
       >
         <Text
           style={{
-            color: "#FFFFFF",
+            color: usePillFg,
             fontFamily: "SpaceGrotesk_700Bold",
             fontSize: 10.5,
             letterSpacing: 1,
