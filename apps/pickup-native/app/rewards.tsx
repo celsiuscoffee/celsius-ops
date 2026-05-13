@@ -27,12 +27,18 @@ import {
   fetchClaimableVouchers,
   fetchActiveMission,
   fetchMyStreak,
+  fetchStreakChests,
+  claimStreakChest,
   fetchMyMilestones,
   claimMilestone,
   redeemPointsReward,
   type Milestone,
   type MilestoneClaimOutcome,
   type StreakState,
+  type StreakChest,
+  type StreakChestTier,
+  type StreakChestsResponse,
+  type StreakChestClaimOutcome,
 } from "../lib/rewards-v2";
 import { VoucherWallet, VOUCHER_THEME } from "../components/VoucherWallet";
 import type { Voucher } from "../lib/rewards-v2";
@@ -122,6 +128,12 @@ export default function RewardsTab() {
     enabled: !!phone,
     staleTime: 5 * 60_000,
   });
+  const chestsQ = useQuery({
+    queryKey: ["streak-chests", phone ?? "anon"],
+    queryFn: fetchStreakChests,
+    enabled: !!phone,
+    staleTime: 60_000,
+  });
 
   const vouchers = myVouchersQ.data ?? [];
   const claimables = claimableQ.data ?? [];
@@ -129,6 +141,7 @@ export default function RewardsTab() {
   const streak = streakQ.data ?? null;
   const streakWeeks = streak?.current_streak_weeks ?? 0;
   const milestones = milestonesQ.data ?? [];
+  const chestData = chestsQ.data ?? { claimable: [], recent: [], tier_ladder: [] };
 
   // Claim tab only — birthday + new-member rewards are auto-issued (cron
   // for birthday, signup trigger for welcome BOGO). They shouldn't show
@@ -215,6 +228,7 @@ export default function RewardsTab() {
               <ChallengesTab
                 activeMission={activeMission}
                 streak={streak}
+                chests={chestData}
               />
             )}
             {activeTab === "rewards" && (
@@ -600,80 +614,134 @@ function TabButton({
 function ChallengesTab({
   activeMission,
   streak,
+  chests,
 }: {
   activeMission: Awaited<ReturnType<typeof fetchActiveMission>>;
   streak: StreakState | null;
+  chests: StreakChestsResponse;
 }) {
   const [streakSheet, setStreakSheet] = useState(false);
+  const [celebration, setCelebration] = useState<{
+    outcome: StreakChestClaimOutcome;
+    weeks: number;
+  } | null>(null);
+  const queryClient = useQueryClient();
   const streakWeeks = streak?.current_streak_weeks ?? 0;
   const longestWeeks = streak?.longest_streak_weeks ?? 0;
+
+  const claimChestMut = useMutation({
+    mutationFn: (chest: StreakChest) => claimStreakChest(chest.id),
+    onSuccess: (res, chest) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setCelebration({ outcome: res.outcome, weeks: chest.streak_at_qualify });
+      queryClient.invalidateQueries({ queryKey: ["streak-chests"] });
+      queryClient.invalidateQueries({ queryKey: ["my-vouchers"] });
+      queryClient.invalidateQueries({ queryKey: ["rewards"] });
+      queryClient.invalidateQueries({ queryKey: ["tier"] });
+    },
+    onError: (e: unknown) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Couldn't open chest", e instanceof Error ? e.message : "Try again in a moment");
+    },
+  });
+
+  // The most actionable chest is always the newest claimable one.
+  const nextChest = chests.claimable[0] ?? null;
+  const nextTier  = nextChest
+    ? chests.tier_ladder.find((t) => t.streak_floor === nextChest.tier_floor) ?? null
+    : null;
 
   return (
     <>
       <MissionCard mission={activeMission} />
 
-      {/* Weekly streak — tappable card. Opens a sheet with the
-          customer's status (current + longest + saver), a "how it
-          works" explainer, and an action to go place an order so
-          streaks aren't a passive number the customer can only
-          observe. */}
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync();
-          setStreakSheet(true);
-        }}
-        className="mt-6 bg-surface rounded-2xl border border-border p-4 flex-row items-center active:opacity-85"
-        style={{
-          gap: 12,
-          shadowColor: "#000",
-          shadowOpacity: 0.04,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 2 },
-          elevation: 1,
-        }}
-      >
-        <View
+      {/* Streak chest — the centerpiece. Shows the next claimable
+          chest if there is one, otherwise becomes a "build your
+          streak" prompt with the same tappable affordance. */}
+      {nextChest && nextTier ? (
+        <ChestClaimCard
+          chest={nextChest}
+          tier={nextTier}
+          streakWeeks={streakWeeks}
+          onOpen={() => claimChestMut.mutate(nextChest)}
+          onTapDetails={() => {
+            Haptics.selectionAsync();
+            setStreakSheet(true);
+          }}
+          claiming={claimChestMut.isPending}
+        />
+      ) : (
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync();
+            setStreakSheet(true);
+          }}
+          className="mt-6 bg-surface rounded-2xl border border-border p-4 flex-row items-center active:opacity-85"
           style={{
-            width: 46,
-            height: 46,
-            borderRadius: 12,
-            backgroundColor: streakWeeks > 0 ? "rgba(192,80,64,0.15)" : "#FBEBE8",
-            alignItems: "center",
-            justifyContent: "center",
+            gap: 12,
+            shadowColor: "#000",
+            shadowOpacity: 0.04,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 1,
           }}
         >
-          <Flame size={22} color="#C05040" strokeWidth={1.8} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text
-            style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: "#1A0200" }}
-          >
-            {streakWeeks > 0
-              ? `${streakWeeks}-week streak`
-              : "Build your streak"}
-          </Text>
-          <Text
+          <View
             style={{
-              fontFamily: "SpaceGrotesk_500Medium",
-              fontSize: 12,
-              color: "#6B6B6B",
-              marginTop: 2,
+              width: 46,
+              height: 46,
+              borderRadius: 12,
+              backgroundColor: streakWeeks > 0 ? "rgba(192,80,64,0.15)" : "#FBEBE8",
+              alignItems: "center",
+              justifyContent: "center",
             }}
-            numberOfLines={1}
           >
-            {streakWeeks > 0
-              ? `One order a week keeps it alive · best: ${longestWeeks}wk`
-              : "One order a week earns a streak — tap to learn how"}
-          </Text>
-        </View>
-        <ChevronRight size={16} color="#8E8E93" />
-      </Pressable>
+            <Flame size={22} color="#C05040" strokeWidth={1.8} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: "#1A0200" }}
+            >
+              {streakWeeks > 0
+                ? `${streakWeeks}-week streak`
+                : "Build your streak"}
+            </Text>
+            <Text
+              style={{
+                fontFamily: "SpaceGrotesk_500Medium",
+                fontSize: 12,
+                color: "#6B6B6B",
+                marginTop: 2,
+              }}
+              numberOfLines={1}
+            >
+              {streakWeeks > 0
+                ? `Order this week to unlock your next chest · best: ${longestWeeks}wk`
+                : "One order a week earns a chest — tap to learn how"}
+            </Text>
+          </View>
+          <ChevronRight size={16} color="#8E8E93" />
+        </Pressable>
+      )}
 
       <StreakSheet
         visible={streakSheet}
         onClose={() => setStreakSheet(false)}
         streak={streak}
+        chests={chests}
       />
+
+      {celebration && (
+        <ChestCelebrationModal
+          outcome={celebration.outcome}
+          weeks={celebration.weeks}
+          onClose={() => setCelebration(null)}
+          onViewWallet={() => {
+            setCelebration(null);
+            router.setParams({ tab: "rewards" });
+          }}
+        />
+      )}
 
       {/* Referral */}
       <View className="mt-6">
@@ -732,6 +800,263 @@ function ChallengesTab({
   );
 }
 
+// ─── Chest claim card ────────────────────────────────────────────────
+// The marquee card on the Challenges tab when a chest is waiting. Big
+// emoji badge, tier label, reward preview, and a chunky gold "Open
+// chest" pill. Tapping the body (outside the pill) opens the streak
+// sheet so customers can browse the ladder.
+function ChestClaimCard({
+  chest, tier, streakWeeks, onOpen, onTapDetails, claiming,
+}: {
+  chest: StreakChest;
+  tier: StreakChestTier;
+  streakWeeks: number;
+  onOpen: () => void;
+  onTapDetails: () => void;
+  claiming: boolean;
+}) {
+  const rewardChips: string[] = [];
+  if (tier.bonus_beans > 0)   rewardChips.push(`+${tier.bonus_beans} Beans`);
+  if (tier.voucher_title)     rewardChips.push(tier.voucher_title);
+  return (
+    <Pressable
+      onPress={onTapDetails}
+      className="mt-6 rounded-2xl overflow-hidden active:opacity-95"
+      style={{
+        backgroundColor: "#1A0200",
+        shadowColor: "#160800",
+        shadowOpacity: 0.22,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 5,
+      }}
+    >
+      <View style={{ padding: 18 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <View
+            style={{
+              width: 64, height: 64, borderRadius: 18,
+              backgroundColor: "rgba(251,191,36,0.18)",
+              alignItems: "center", justifyContent: "center",
+              borderWidth: 1,
+              borderColor: "rgba(251,191,36,0.35)",
+            }}
+          >
+            <Text style={{ fontSize: 32 }}>{tier.emoji}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                fontFamily: "SpaceGrotesk_700Bold",
+                fontSize: 10.5,
+                color: "#FBBF24",
+                letterSpacing: 2,
+                textTransform: "uppercase",
+                marginBottom: 2,
+              }}
+              numberOfLines={1}
+            >
+              Week {streakWeeks > 0 ? streakWeeks : chest.streak_at_qualify} chest ready
+            </Text>
+            <Text
+              style={{
+                fontFamily: "Peachi-Bold",
+                fontSize: 19,
+                color: "#FFFFFF",
+                letterSpacing: -0.3,
+              }}
+              numberOfLines={1}
+            >
+              {tier.label}
+            </Text>
+            {rewardChips.length > 0 && (
+              <Text
+                style={{
+                  fontFamily: "SpaceGrotesk_500Medium",
+                  fontSize: 12,
+                  color: "rgba(255,255,255,0.65)",
+                  marginTop: 3,
+                }}
+                numberOfLines={1}
+              >
+                {rewardChips.join(" · ")}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation?.();
+            if (claiming) return;
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onOpen();
+          }}
+          disabled={claiming}
+          className="active:opacity-85"
+          style={{
+            marginTop: 16,
+            backgroundColor: "#FBBF24",
+            borderRadius: 100,
+            paddingVertical: 13,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            opacity: claiming ? 0.6 : 1,
+          }}
+        >
+          {claiming ? (
+            <ActivityIndicator size="small" color="#1A0200" />
+          ) : (
+            <>
+              <Gift size={15} color="#1A0200" strokeWidth={2.4} />
+              <Text
+                style={{
+                  fontFamily: "Peachi-Bold",
+                  fontSize: 14.5,
+                  color: "#1A0200",
+                  letterSpacing: 0.2,
+                }}
+              >
+                Open chest
+              </Text>
+            </>
+          )}
+        </Pressable>
+
+        <Text
+          style={{
+            marginTop: 10,
+            fontFamily: "SpaceGrotesk_500Medium",
+            fontSize: 11,
+            color: "rgba(255,255,255,0.45)",
+            textAlign: "center",
+          }}
+        >
+          Tap card to see the chest ladder
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+// ─── Chest celebration modal ─────────────────────────────────────────
+// Mirrors MilestoneCelebration but tuned for the weekly rhythm. The
+// emoji is the tier's emoji (rises through the ladder: 🎁 🔥 🌟 🏆 👑)
+// so the moment visibly upgrades as the customer's streak grows.
+function ChestCelebrationModal({
+  outcome, weeks, onClose, onViewWallet,
+}: {
+  outcome: StreakChestClaimOutcome;
+  weeks: number;
+  onClose: () => void;
+  onViewWallet: () => void;
+}) {
+  const hasVoucher = !!outcome.voucher_title;
+  const hasBeans   = outcome.bonus_beans > 0;
+  return (
+    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+      <Pressable
+        onPress={onClose}
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.65)",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          style={{
+            width: "100%",
+            maxWidth: 360,
+            borderRadius: 24,
+            backgroundColor: "#1A0200",
+            padding: 24,
+            alignItems: "center",
+            shadowColor: "#000",
+            shadowOpacity: 0.4,
+            shadowRadius: 24,
+            shadowOffset: { width: 0, height: 12 },
+          }}
+        >
+          <View
+            style={{
+              width: 86, height: 86, borderRadius: 43,
+              backgroundColor: "rgba(251,191,36,0.18)",
+              alignItems: "center", justifyContent: "center",
+              marginBottom: 14,
+              borderWidth: 1,
+              borderColor: "rgba(251,191,36,0.4)",
+            }}
+          >
+            <Text style={{ fontSize: 44 }}>{outcome.emoji}</Text>
+          </View>
+
+          <Text style={{
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 10.5, color: "#FBBF24",
+            letterSpacing: 2, textTransform: "uppercase", marginBottom: 4,
+          }}>
+            Week {weeks} chest opened
+          </Text>
+          <Text
+            style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: "#FFFFFF", letterSpacing: -0.3, textAlign: "center" }}
+            numberOfLines={2}
+          >
+            {outcome.label}
+          </Text>
+
+          {/* Outcome */}
+          <View style={{ alignSelf: "stretch", marginTop: 18, borderTopWidth: 1, borderTopColor: "rgba(251,191,36,0.15)", paddingTop: 14, gap: 8 }}>
+            {hasVoucher && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Gift size={16} color="#FBBF24" strokeWidth={2} />
+                <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, color: "rgba(255,255,255,0.92)" }} numberOfLines={1}>
+                  {outcome.voucher_title}
+                </Text>
+              </View>
+            )}
+            {hasBeans && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Sparkles size={16} color="#FBBF24" strokeWidth={2} />
+                <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, color: "rgba(255,255,255,0.92)" }}>
+                  +{outcome.bonus_beans.toLocaleString()} Beans
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <View style={{ alignSelf: "stretch", marginTop: 22, gap: 8 }}>
+            {hasVoucher && (
+              <Pressable
+                onPress={onViewWallet}
+                className="active:opacity-85"
+                style={{ backgroundColor: "#FBBF24", borderRadius: 100, paddingVertical: 13, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 6 }}
+              >
+                <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#1A0200" }}>
+                  View in wallet
+                </Text>
+              </Pressable>
+            )}
+            <Pressable
+              onPress={onClose}
+              className="active:opacity-70"
+              style={{ paddingVertical: 12, alignItems: "center" }}
+            >
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 13, color: hasVoucher ? "rgba(255,255,255,0.65)" : "#FBBF24" }}>
+                {hasVoucher ? "Close" : "Got it"}
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // ─── Streak sheet ────────────────────────────────────────────────────
 // Tapping the "Build your streak" card opens this. Surfaces the
 // customer's current state (current weeks, longest run, saver
@@ -744,11 +1069,12 @@ function ChallengesTab({
 // that should be one tap away.
 
 function StreakSheet({
-  visible, onClose, streak,
+  visible, onClose, streak, chests,
 }: {
   visible: boolean;
   onClose: () => void;
   streak: StreakState | null;
+  chests?: StreakChestsResponse;
 }) {
   const current = streak?.current_streak_weeks ?? 0;
   const longest = streak?.longest_streak_weeks ?? 0;
@@ -856,6 +1182,26 @@ function StreakSheet({
             </View>
           )}
 
+          {/* Chest ladder — shows every tier so the customer sees
+              what they're working toward. Highlights the current
+              tier and marks past tiers as cleared. */}
+          {chests && chests.tier_ladder.length > 0 && (
+            <View style={{ marginTop: 18 }}>
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10.5, color: "#6B6B6B", letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>
+                Chest ladder
+              </Text>
+              <View style={{ gap: 8 }}>
+                {chests.tier_ladder.map((t) => (
+                  <ChestLadderRow
+                    key={t.streak_floor}
+                    tier={t}
+                    currentStreak={current}
+                  />
+                ))}
+              </View>
+            </View>
+          )}
+
           {/* How it works */}
           <View style={{ marginTop: 18 }}>
             <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10.5, color: "#6B6B6B", letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>
@@ -865,6 +1211,11 @@ function StreakSheet({
               icon="🗓"
               title="One order a week, every week"
               body="Order at least once between Monday and Sunday (MYT) and your streak ticks up by one."
+            />
+            <StreakRule
+              icon="🎁"
+              title="Open a chest every week you order"
+              body="The chest gets better as your streak grows: Week 1, 4, 8, 12, and 24 each upgrade your reward."
             />
             <StreakRule
               icon="🛡"
@@ -946,6 +1297,81 @@ function StreakStat({
           </Text>
         )}
       </View>
+    </View>
+  );
+}
+
+// Single row on the chest ladder. Three visual states based on the
+// customer's current streak vs this tier's floor:
+//   - active   (current is at this exact tier): espresso bg + gold ring
+//   - cleared  (current >= this floor, but there's a higher tier they
+//               match): light surface with a check
+//   - locked   (current < floor): faded preview with "X-week chest"
+function ChestLadderRow({
+  tier, currentStreak,
+}: {
+  tier: StreakChestTier;
+  currentStreak: number;
+}) {
+  const cleared = currentStreak >= tier.streak_floor;
+  const reward: string[] = [];
+  if (tier.bonus_beans > 0) reward.push(`+${tier.bonus_beans} Beans`);
+  if (tier.voucher_title)   reward.push(tier.voucher_title);
+  const rewardLine = reward.length > 0 ? reward.join(" · ") : "Bonus reward";
+
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        padding: 11,
+        borderRadius: 14,
+        backgroundColor: cleared ? "#FFFFFF" : "#FBEBE8",
+        borderWidth: 1,
+        borderColor: cleared ? "#E5E5E5" : "rgba(192,80,64,0.25)",
+        opacity: cleared ? 1 : 0.85,
+      }}
+    >
+      <View
+        style={{
+          width: 38, height: 38, borderRadius: 10,
+          backgroundColor: cleared ? "rgba(34,197,94,0.12)" : "rgba(192,80,64,0.12)",
+          alignItems: "center", justifyContent: "center",
+        }}
+      >
+        <Text style={{ fontSize: 20 }}>{tier.emoji}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text
+          style={{ fontFamily: "Peachi-Bold", fontSize: 13.5, color: "#1A0200" }}
+          numberOfLines={1}
+        >
+          {tier.label}
+        </Text>
+        <Text
+          style={{
+            fontFamily: "SpaceGrotesk_500Medium",
+            fontSize: 11.5,
+            color: "#6B6B6B",
+            marginTop: 1,
+          }}
+          numberOfLines={1}
+        >
+          Week {tier.streak_floor}+ · {rewardLine}
+        </Text>
+      </View>
+      <Text
+        style={{
+          fontFamily: "SpaceGrotesk_700Bold",
+          fontSize: 10.5,
+          color: cleared ? "#22C55E" : "#8E8E93",
+          letterSpacing: 1.2,
+          textTransform: "uppercase",
+        }}
+      >
+        {cleared ? "✓ Unlocked" : "Locked"}
+      </Text>
     </View>
   );
 }

@@ -15,7 +15,9 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { checkCronAuth } from "@celsius/shared";
+import { notifyStreakChestReady } from "@/lib/push/templates";
 
+const BRAND_ID = (process.env.LOYALTY_BRAND_ID ?? "brand-celsius").trim();
 const MY_OFFSET_HOURS = 8;
 
 function thisWeekStartIso(now = new Date()): string {
@@ -45,7 +47,31 @@ export async function GET(req: NextRequest) {
     Date.now() - SAVER_REFILL_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-  // 1) Members with a paid order this week → bump streak if not already bumped.
+  // Tier ladder for chests. Cached once per cron run.
+  const { data: tiers } = await supabase
+    .from("streak_chest_tiers")
+    .select("streak_floor, label, bonus_beans, voucher_template_id")
+    .eq("brand_id", BRAND_ID)
+    .order("streak_floor", { ascending: false });
+
+  function tierForStreak(weeks: number) {
+    for (const t of tiers ?? []) {
+      if (weeks >= (t.streak_floor as number)) return t;
+    }
+    return null;
+  }
+
+  // Chests expire one full week after the qualifying week ends — gives
+  // customers a 7-day buffer to come back and open it, but doesn't let
+  // unclaimed chests pile up forever.
+  function chestExpiry(weekStartIso: string): string {
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    return new Date(new Date(weekStartIso).getTime() + 2 * weekMs).toISOString();
+  }
+
+  // 1) Members with a paid order this week → bump streak if not already
+  //    bumped, AND mint a chest for this week (idempotent — unique
+  //    on (member_id, brand_id, week_start)).
   const { data: ordering } = await supabase
     .from("orders")
     .select("loyalty_id")
@@ -56,6 +82,7 @@ export async function GET(req: NextRequest) {
   const uniqueMembers = Array.from(new Set((ordering ?? []).map((o) => o.loyalty_id as string)));
 
   let bumped = 0;
+  let chestsMinted = 0;
   for (const memberId of uniqueMembers) {
     const { data: existing } = await supabase
       .from("user_streaks")
@@ -63,18 +90,58 @@ export async function GET(req: NextRequest) {
       .eq("member_id", memberId)
       .single();
 
-    if (existing && existing.last_order_week_start === weekStart) continue; // already counted
+    let currentForChest: number;
+    if (existing && existing.last_order_week_start === weekStart) {
+      // Already bumped this week — but we still need to make sure
+      // the chest was minted (e.g. cron crashed between bump and
+      // chest insert previously). Use the existing streak count.
+      currentForChest = existing.current_streak_weeks as number;
+    } else {
+      const newCurrent = (existing?.current_streak_weeks ?? 0) + 1;
+      const newLongest = Math.max(existing?.longest_streak_weeks ?? 0, newCurrent);
+      await supabase.from("user_streaks").upsert({
+        member_id: memberId,
+        current_streak_weeks: newCurrent,
+        longest_streak_weeks: newLongest,
+        last_order_week_start: weekStart,
+      });
+      bumped++;
+      currentForChest = newCurrent;
+    }
 
-    const newCurrent = (existing?.current_streak_weeks ?? 0) + 1;
-    const newLongest = Math.max(existing?.longest_streak_weeks ?? 0, newCurrent);
+    // Mint the chest for this week. Pick the highest tier the
+    // current streak qualifies for.
+    const tier = tierForStreak(currentForChest);
+    if (!tier) continue;
 
-    await supabase.from("user_streaks").upsert({
-      member_id: memberId,
-      current_streak_weeks: newCurrent,
-      longest_streak_weeks: newLongest,
-      last_order_week_start: weekStart,
-    });
-    bumped++;
+    const { data: chestInsert, error: chestErr } = await supabase
+      .from("streak_weekly_chests")
+      .insert({
+        member_id: memberId,
+        brand_id: BRAND_ID,
+        week_start: weekStart,
+        streak_at_qualify: currentForChest,
+        tier_floor: tier.streak_floor as number,
+        expires_at: chestExpiry(weekStart),
+      })
+      .select("id")
+      .single();
+
+    // Unique-violation = chest already minted (we ran twice in the
+    // same day, etc.). Skip the push but don't error.
+    if (chestErr || !chestInsert) continue;
+
+    chestsMinted++;
+
+    // Fire-and-forget push so the customer knows there's a chest
+    // waiting. Body teases the reward.
+    notifyStreakChestReady({
+      memberId,
+      streakWeeks: currentForChest,
+      label: tier.label as string,
+      bonusBeans: tier.bonus_beans as number,
+      hasVoucher: !!tier.voucher_template_id,
+    }).catch(() => {});
   }
 
   // 2) Lapsed members (last order > 2 weeks ago) — burn streak or saver.
@@ -127,5 +194,6 @@ export async function GET(req: NextRequest) {
     burned,
     saved,
     refilled,
+    chests_minted: chestsMinted,
   });
 }

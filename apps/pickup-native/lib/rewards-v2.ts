@@ -183,6 +183,59 @@ export async function fetchMyStreak(): Promise<StreakState | null> {
   }
 }
 
+// ─── Streak chests ──────────────────────────────────────────────────
+
+export type StreakChestTier = {
+  streak_floor: number;
+  label: string;
+  description: string | null;
+  bonus_beans: number;
+  voucher_template_id: string | null;
+  voucher_title: string | null;
+  emoji: string;
+};
+
+export type StreakChest = {
+  id: string;
+  week_start: string;
+  streak_at_qualify: number;
+  tier_floor: number;
+  qualified_at?: string;
+  expires_at?: string;
+  claimed_at?: string | null;
+  claim_outcome?: StreakChestClaimOutcome | null;
+};
+
+export type StreakChestClaimOutcome = {
+  bonus_beans: number;
+  voucher_id: string | null;
+  voucher_title: string | null;
+  label: string;
+  emoji: string;
+};
+
+export type StreakChestsResponse = {
+  claimable: StreakChest[];
+  recent: StreakChest[];
+  tier_ladder: StreakChestTier[];
+};
+
+export async function fetchStreakChests(): Promise<StreakChestsResponse> {
+  try {
+    return await get<StreakChestsResponse>("/api/loyalty/me/streak/chests");
+  } catch {
+    return { claimable: [], recent: [], tier_ladder: [] };
+  }
+}
+
+export async function claimStreakChest(chestId: string): Promise<{
+  already_claimed: boolean;
+  claimed_at: string | null;
+  outcome: StreakChestClaimOutcome;
+}> {
+  return post(`/api/loyalty/me/streak/chests/${chestId}/claim`);
+}
+
 // ─── Milestones ─────────────────────────────────────────────────────────
 
 export type Milestone = {

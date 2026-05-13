@@ -521,6 +521,38 @@ export async function notifyClaimableReady(args: {
   );
 }
 
+/** Weekly streak chest ready — fired by the streak-update cron the
+ *  morning after a member's qualifying week. Body teases the reward
+ *  tier so the customer feels the upgrade as their streak grows
+ *  (Week 1 → "Weekly chest", Week 12 → "Legendary chest"). */
+export async function notifyStreakChestReady(args: {
+  memberId: string;
+  streakWeeks: number;
+  label: string;
+  bonusBeans: number;
+  hasVoucher: boolean;
+}): Promise<SendResult> {
+  const tokens = await tokensForMember(args.memberId);
+  if (tokens.length === 0) return zero();
+  const teases: string[] = [];
+  if (args.bonusBeans > 0) teases.push(`+${args.bonusBeans} Beans`);
+  if (args.hasVoucher)     teases.push("a voucher");
+  const body = teases.length > 0
+    ? `Tap to open · ${teases.join(" + ")}`
+    : "Tap to open";
+  return sendExpoPush(
+    tokens.map((to) => ({
+      to,
+      title: `🔥 Week ${args.streakWeeks} ${args.label} is ready!`,
+      body,
+      sound: "default",
+      priority: "high",
+      channelId: CH_LOYALTY,
+      data: { type: "streak_chest_ready", deeplink: "rewards?tab=challenges" },
+    })),
+  );
+}
+
 /** Milestone earned — fired by the milestone-scan cron the moment a
  *  member crosses a lifetime achievement threshold (50 cups, 3 outlets,
  *  longest-streak weeks, etc.). The reward isn't issued yet; customer
