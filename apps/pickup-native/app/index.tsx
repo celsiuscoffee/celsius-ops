@@ -440,7 +440,10 @@ export default function Home() {
           <Pressable
             onPress={() => {
               Haptics.selectionAsync();
-              router.push("/rewards?tab=catalog" as never);
+              // Single Rewards tab now hosts everything — Points and
+              // Vouchers stats both land there; the customer scrolls
+              // to "Spend your Beans" or "Yours" depending on intent.
+              router.push("/rewards?tab=rewards" as never);
             }}
             hitSlop={6}
             className="flex-1 active:opacity-70"

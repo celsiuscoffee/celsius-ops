@@ -38,19 +38,17 @@ import { RewardsOnboarding } from "../components/RewardsOnboarding";
 // stays minimal so the list doesn't read as an unreachable ladder.
 const PROGRESS_VISIBLE_THRESHOLD = 0.3;
 
-type RewardsTabKey = "challenges" | "vouchers" | "catalog";
+type RewardsTabKey = "challenges" | "rewards";
 
 const ONBOARDING_KEY = "rewards-v2-intro";
 
 function paramToTab(raw: string | string[] | undefined): RewardsTabKey {
   const v = Array.isArray(raw) ? raw[0] : raw;
-  if (v === "vouchers" || v === "catalog" || v === "challenges") return v;
-  // Friendly aliases the cart "Apply a reward" CTA + account links
-  // might use. Map them onto the canonical key so the URL surface
-  // stays forgiving.
-  if (v === "rewards" || v === "wallet") return "vouchers";
-  if (v === "claim") return "catalog";
-  return "challenges";
+  if (v === "challenges") return "challenges";
+  // Friendly aliases — the cart "Apply a reward" CTA, home rail, and
+  // pre-merge deeplinks (?tab=vouchers / ?tab=catalog / ?tab=claim /
+  // ?tab=wallet) all map onto the single Rewards tab now.
+  return "rewards";
 }
 
 export default function RewardsTab() {
@@ -159,10 +157,10 @@ export default function RewardsTab() {
     ? Math.max(0, nextReward.points_required - balance)
     : 0;
 
-  // Rewards-tab badge counts just the wallet (active issued_rewards).
-  // Claimables moved to the Claim tab and get their own badge.
-  const voucherCount = vouchers.filter((v) => v.status === "active").length;
-  const claimCount = claimables.length;
+  // Rewards-tab badge — wallet vouchers + claim-now offers count
+  // together (each is something the customer can act on right now).
+  const activeVoucherCount = vouchers.filter((v) => v.status === "active").length;
+  const rewardsBadge = activeVoucherCount + claimables.length;
 
   function selectTab(t: RewardsTabKey) {
     Haptics.selectionAsync();
@@ -196,14 +194,14 @@ export default function RewardsTab() {
             />
           </View>
 
-          {/* Tab strip */}
+          {/* Tab strip — two tabs: Challenges (gamification loop) and
+              Rewards (single home for wallet + ways to add to it). */}
           <View
             className="flex-row bg-surface border-b border-border"
             style={{ paddingHorizontal: 16, gap: 24 }}
           >
-            <TabButton label="Challenges"  active={activeTab === "challenges"} onPress={() => selectTab("challenges")} />
-            <TabButton label="Vouchers"    active={activeTab === "vouchers"}   onPress={() => selectTab("vouchers")}   badge={voucherCount} />
-            <TabButton label="Claim"       active={activeTab === "catalog"}    onPress={() => selectTab("catalog")}    badge={claimCount} />
+            <TabButton label="Challenges" active={activeTab === "challenges"} onPress={() => selectTab("challenges")} />
+            <TabButton label="Rewards"    active={activeTab === "rewards"}    onPress={() => selectTab("rewards")}    badge={rewardsBadge} />
           </View>
 
           <ScrollView
@@ -214,19 +212,15 @@ export default function RewardsTab() {
             {activeTab === "challenges" && (
               <ChallengesTab activeMission={activeMission} streakWeeks={streakWeeks} />
             )}
-            {activeTab === "vouchers" && (
-              <VouchersTab
+            {activeTab === "rewards" && (
+              <RewardsTabBody
                 vouchers={vouchers}
-                loading={myVouchersQ.isLoading}
-              />
-            )}
-            {activeTab === "catalog" && (
-              <CatalogTab
-                balance={balance}
+                claimables={claimables}
                 rewards={rewards}
                 sortedRewards={sortedRewards}
-                claimables={claimables}
-                isLoading={isLoading}
+                balance={balance}
+                loadingVouchers={myVouchersQ.isLoading}
+                loadingRewards={isLoading}
               />
             )}
           </ScrollView>
@@ -684,15 +678,41 @@ function ChallengesTab({
 // at checkout. Claimables live on the Claim tab now (because tapping
 // one moves it INTO this wallet).
 
-function VouchersTab({
-  vouchers, loading,
+// ─── Tab: Rewards (unified) ─────────────────────────────────────────
+// Single home for everything reward-related:
+//
+//   Yours        — wallet vouchers ready to redeem (gifts, mission
+//                  wins, mystery reveals, points-shop redeems — all
+//                  with a "Use" pill, all in one place)
+//   Get more
+//     Claim now  — admin claimables (one-tap, free)
+//     Spend Beans — points-shop catalogue (Claim · N → Use)
+//
+// One verb per area: "Use" for everything in Yours, "Claim" for
+// everything in Get more. Customer learns the rule once.
+
+function RewardsTabBody({
+  vouchers, claimables, rewards, sortedRewards, balance,
+  loadingVouchers, loadingRewards,
 }: {
   vouchers: Awaited<ReturnType<typeof fetchMyVouchers>>;
-  loading: boolean;
+  claimables: Awaited<ReturnType<typeof fetchClaimableVouchers>>;
+  rewards: Reward[];
+  sortedRewards: Reward[];
+  balance: number;
+  loadingVouchers: boolean;
+  loadingRewards: boolean;
 }) {
-  const hasActive = vouchers.some((v) => v.status === "active");
+  const activeVouchers = vouchers.filter((v) => v.status === "active");
+  const yoursCount = activeVouchers.length;
+  const hasClaimables = claimables.length > 0;
+  const hasCatalogue  = sortedRewards.length > 0;
+  const isLoadingEverything =
+    (loadingVouchers && yoursCount === 0) &&
+    (loadingRewards && !hasCatalogue) &&
+    !hasClaimables;
 
-  if (loading && !hasActive) {
+  if (isLoadingEverything) {
     return (
       <View className="py-12 items-center">
         <CelsiusLoader size="md" />
@@ -700,96 +720,161 @@ function VouchersTab({
     );
   }
 
-  if (!hasActive) {
+  // Brand-new account with nothing yet — empty state pointing at how
+  // to start (which is the catalogue itself, which always has stuff).
+  const trulyEmpty =
+    yoursCount === 0 &&
+    !hasClaimables &&
+    !hasCatalogue &&
+    !loadingVouchers &&
+    !loadingRewards;
+  if (trulyEmpty) {
     return (
       <View className="py-12 items-center">
         <Gift size={36} color="#C05040" strokeWidth={1.25} />
         <Text className="text-[15px] mt-3" style={{ color: "#1A0200", fontFamily: "Peachi-Bold" }}>
-          No vouchers yet
+          No rewards yet
         </Text>
         <Text
           className="text-[12px] text-center mt-1.5 max-w-xs"
           style={{ color: "#6B6B6B", fontFamily: "SpaceGrotesk_500Medium" }}
         >
-          Claim from the Claim tab, complete a challenge, or watch for surprises after each order.
+          Earn Beans on every order, complete a weekly challenge, or watch for surprises after each pickup.
         </Text>
       </View>
     );
   }
 
-  return <VoucherWallet vouchers={vouchers} maxVisible={20} hideViewAll />;
-}
-
-// ─── Tab: Claim (formerly "Catalog") ────────────────────────────────
-// Everything the customer can ADD to their wallet:
-//   • Admin claimables (one-tap pushed offers)
-//   • Points-shop rewards (spend Beans)
-// Tapping any of these moves the item into the Rewards tab as an
-// active issued_rewards row.
-
-function CatalogTab({
-  balance, rewards, sortedRewards, claimables, isLoading,
-}: {
-  balance: number;
-  rewards: Reward[];
-  sortedRewards: Reward[];
-  claimables: Awaited<ReturnType<typeof fetchClaimableVouchers>>;
-  isLoading: boolean;
-}) {
   return (
     <>
-      {/* Admin claimables — one-tap pushed offers (welcome drinks, comeback
-          promos, segmented give-aways). Tapping Claim issues the voucher
-          into the Rewards wallet. Lives at the top so it's the first thing
-          customers see when they open this tab. */}
-      <ClaimableSection claimables={claimables} />
-
-      {!isLoading && rewards.length === 0 && (
-        <View className="py-12 items-center">
-          <Gift size={36} color="#C05040" strokeWidth={1.25} />
-          <Text className="text-[15px] mt-3" style={{ color: "#160800", fontFamily: "Peachi-Bold" }}>
-            No rewards yet
-          </Text>
-          <Text
-            className="text-[12px] text-center mt-1.5"
-            style={{ color: "#8E8E93", fontFamily: "SpaceGrotesk_400Regular" }}
-          >
-            Check back soon — new rewards drop regularly.
-          </Text>
+      {/* ─── Yours ──────────────────────────────────────────────────── */}
+      {yoursCount > 0 ? (
+        <View>
+          <SectionLabel label="Yours" count={yoursCount} />
+          {/* VoucherWallet renders the brand-themed Use cards. hideViewAll
+              + a large maxVisible so the section shows everything without
+              a redundant "View all" link. */}
+          <VoucherWallet vouchers={activeVouchers} maxVisible={50} hideViewAll />
         </View>
-      )}
-
-      {isLoading && rewards.length === 0 && (
-        <View className="py-12 items-center">
-          <CelsiusLoader size="md" />
-        </View>
-      )}
-
-      {sortedRewards.length > 0 && (
-        <View style={{ marginTop: 4 }}>
+      ) : (
+        // No wallet vouchers but the customer might still have things
+        // to Claim — soft empty state with a nudge instead of the big
+        // gift-icon block, so the rest of the screen (claim now / spend
+        // Beans) stays visible above the fold.
+        <View
+          className="px-1 py-5"
+          style={{
+            alignItems: "center",
+          }}
+        >
           <Text
             style={{
+              fontFamily: "SpaceGrotesk_500Medium",
+              fontSize: 12,
               color: "rgba(26,2,0,0.55)",
-              fontFamily: "SpaceGrotesk_700Bold",
-              fontSize: 10,
-              letterSpacing: 2.5,
-              textTransform: "uppercase",
-              marginTop: 16,
-              marginBottom: 10,
-              paddingHorizontal: 4,
+              textAlign: "center",
             }}
           >
-            Spend your Beans
+            No vouchers yet — start by claiming below.
           </Text>
-          <View style={{ gap: 8 }}>
-            {sortedRewards.map((reward) => (
-              <RewardCard key={reward.id} reward={reward} balance={balance} />
-            ))}
-          </View>
         </View>
       )}
 
+      {/* ─── Get more — header for everything below ─────────────────── */}
+      {(hasClaimables || hasCatalogue || loadingRewards) && (
+        <View style={{ marginTop: yoursCount > 0 ? 20 : 8 }}>
+          <SectionLabel label="Get more" />
+
+          {/* Claim now — admin-pushed offers, one-tap free claim. */}
+          {hasClaimables && (
+            <View style={{ marginBottom: hasCatalogue ? 14 : 0 }}>
+              <ClaimableSection claimables={claimables} />
+            </View>
+          )}
+
+          {/* Spend Beans — points-shop catalogue. */}
+          {hasCatalogue && (
+            <View>
+              <Text
+                style={{
+                  color: "rgba(26,2,0,0.55)",
+                  fontFamily: "SpaceGrotesk_700Bold",
+                  fontSize: 10,
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                  marginTop: 4,
+                  marginBottom: 10,
+                  paddingHorizontal: 4,
+                }}
+              >
+                Spend your Beans
+              </Text>
+              <View style={{ gap: 8 }}>
+                {sortedRewards.map((reward) => (
+                  <RewardCard key={reward.id} reward={reward} balance={balance} />
+                ))}
+              </View>
+            </View>
+          )}
+
+          {loadingRewards && !hasCatalogue && (
+            <View className="py-8 items-center">
+              <CelsiusLoader size="md" />
+            </View>
+          )}
+        </View>
+      )}
     </>
+  );
+}
+
+/** Big section label — used for "Yours" and "Get more". Optional count
+ *  pill on the right (chip styled like the tab badge). */
+function SectionLabel({ label, count }: { label: string; count?: number }) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 10,
+        paddingHorizontal: 2,
+      }}
+    >
+      <Text
+        style={{
+          color: "#1A0200",
+          fontFamily: "Peachi-Bold",
+          fontSize: 17,
+          letterSpacing: -0.2,
+        }}
+      >
+        {label}
+      </Text>
+      {count !== undefined && count > 0 && (
+        <View
+          style={{
+            minWidth: 22,
+            height: 18,
+            paddingHorizontal: 7,
+            borderRadius: 9,
+            backgroundColor: "rgba(192,80,64,0.12)",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text
+            style={{
+              color: "#C05040",
+              fontFamily: "SpaceGrotesk_700Bold",
+              fontSize: 11,
+            }}
+          >
+            {count}
+          </Text>
+        </View>
+      )}
+    </View>
   );
 }
 
