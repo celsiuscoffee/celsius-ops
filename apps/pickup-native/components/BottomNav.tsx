@@ -80,11 +80,11 @@ export function BottomNav() {
             )}
             <Text
               style={{
-                // Match the size of the "Pickup" header on the Menu tab
-                // (22pt). The bottom-nav labels read as real navigation
-                // identifiers instead of icon captions at this scale.
+                // Space Grotesk reads cleaner than the system default at
+                // small sizes, and a couple of points up makes the labels
+                // legible without dominating the icon.
                 fontFamily: active ? "SpaceGrotesk_700Bold" : "SpaceGrotesk_600SemiBold",
-                fontSize: 22,
+                fontSize: 12.5,
                 letterSpacing: 0.2,
                 color: active ? "#160800" : "#8E8E93",
               }}
