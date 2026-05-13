@@ -183,6 +183,32 @@ export async function fetchMyStreak(): Promise<StreakState | null> {
   }
 }
 
+// ─── Milestones ─────────────────────────────────────────────────────────
+
+export type Milestone = {
+  id: string;
+  title: string;
+  description: string | null;
+  icon: string | null;
+  trigger_type: "lifetime_orders" | "lifetime_beans" | "distinct_outlets" | "streak_weeks";
+  trigger_value: number;
+  reward_voucher_template_ids: string[];
+  reward_bonus_beans: number;
+  reward_unlock: string | null;
+  progress_current: number;
+  earned: boolean;
+  earned_at: string | null;
+};
+
+export async function fetchMyMilestones(): Promise<Milestone[]> {
+  try {
+    const r = await get<{ milestones: Milestone[] }>("/api/loyalty/me/milestones");
+    return r.milestones ?? [];
+  } catch {
+    return [];
+  }
+}
+
 // ─── Referrals ──────────────────────────────────────────────────────────
 
 export type ReferralState = {

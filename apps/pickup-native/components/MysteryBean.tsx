@@ -33,18 +33,37 @@ import { revealMysteryDrop, type MysteryDropRevealed } from "../lib/rewards-v2";
 type Props = {
   dropId: string;
   baseBeansEarned: number;
+  /** When the parent has already received a reveal payload (because the
+   *  child fired onRevealed earlier this session, or because the child
+   *  was remounted and the parent still holds the reveal), pass it
+   *  back in here. The component skips the tap-to-reveal state and
+   *  renders MysteryReveal directly — this is the safety net that
+   *  prevents an accidental child remount from erasing a customer's
+   *  reward. */
+  prerevealed?: MysteryDropRevealed | null;
   /** Called once with the reveal payload so the parent can refresh
-   *  beans / vouchers — but the parent should NOT unmount us based on
-   *  this. Keep the reveal card on screen until the customer taps a CTA. */
+   *  beans / vouchers — and persist the payload so prerevealed can
+   *  be supplied on the next render. */
   onRevealed?: (drop: MysteryDropRevealed) => void;
   /** Called when the customer taps the dismiss / wallet CTA on the
    *  reveal card. Only after this should the parent take us off-screen. */
   onDismiss?: () => void;
 };
 
-export function MysteryBean({ dropId, baseBeansEarned, onRevealed, onDismiss }: Props) {
-  const [revealed, setRevealed] = useState<MysteryDropRevealed | null>(null);
+export function MysteryBean({ dropId, baseBeansEarned, prerevealed, onRevealed, onDismiss }: Props) {
+  // Initialise from prerevealed so a remount lands straight on the
+  // reveal screen without a single frame of the "Tap to reveal" card.
+  const [revealed, setRevealed] = useState<MysteryDropRevealed | null>(prerevealed ?? null);
   const [loading, setLoading] = useState(false);
+
+  // If the parent updates prerevealed after mount (e.g. async hydration
+  // of a cached reveal), sync it in. Only ever moves NULL → reveal —
+  // we never clear a local reveal because the parent decided not to.
+  useEffect(() => {
+    if (prerevealed && !revealed) {
+      setRevealed(prerevealed);
+    }
+  }, [prerevealed, revealed]);
 
   // Shimmer — only runs while we're in the unrevealed state. Once
   // revealed we cancel it; an infinite withRepeat on a hidden node

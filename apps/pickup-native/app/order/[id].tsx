@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View, Text, Pressable, ScrollView, ActivityIndicator, Alert } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,7 +13,7 @@ import { SwipeToCollect } from "../../components/SwipeToCollect";
 import { OrderStepper } from "../../components/OrderStepper";
 import { CelsiusLoader } from "../../components/CelsiusLoader";
 import { MysteryBean } from "../../components/MysteryBean";
-import { fetchPendingMysteryDrop } from "../../lib/rewards-v2";
+import { fetchPendingMysteryDrop, type MysteryDropRevealed } from "../../lib/rewards-v2";
 
 const STATUS_INDEX: Record<string, number> = {
   pending: -1,
@@ -68,21 +68,27 @@ export default function OrderStatus() {
   // alongside the order so the scratch card appears within a few
   // seconds of payment landing. Hidden while pending payment.
   //
-  // Three pieces of local state cooperate to make the reveal flow feel
-  // stable on screen:
-  //   - mysteryRevealedLocally: flips true the moment the customer taps
-  //     "Reveal" and we get a result back. The reveal card stays on
-  //     screen even after the next /mystery refetch returns
-  //     revealed:true on the server (which used to yank the whole
-  //     `<MysteryBean>` off the page mid-animation).
+  // v3 of this flow. The previous attempts split state between the
+  // child (local `revealed`) and the parent (a boolean "did we reveal
+  // locally?") — which left a race window where the polling query
+  // returned revealed:true at the same moment the user tapped, and
+  // the section could vanish mid-animation. Now the PARENT owns the
+  // reveal payload from the moment it lands. The child becomes a
+  // pure presenter: pass prerevealed and it renders the reveal
+  // directly. A remount can't lose the reward because the data lives
+  // here, not in child local state.
+  //
+  // Three pieces of local state cooperate:
+  //   - mysteryRevealed: the full reveal payload. Null until the
+  //     customer taps Reveal and the server returns the outcome.
+  //     Drives both "should we show?" and "what to show".
   //   - mysteryDismissed: flips true when the customer taps the post-
   //     reveal CTA (Got it / View in wallet). Only then does the card
   //     leave the screen.
   //   - mysteryFirstSeenId: the drop_id we first showed to the user. We
-  //     pin to this id so a later server response with a different
-  //     drop (unlikely, but the query data can change) doesn't swap
-  //     the reveal under the user's feet.
-  const [mysteryRevealedLocally, setMysteryRevealedLocally] = useState(false);
+  //     pin to this so a later server response can't swap the reveal
+  //     under the user's feet.
+  const [mysteryRevealed, setMysteryRevealed] = useState<MysteryDropRevealed | null>(null);
   const [mysteryDismissed, setMysteryDismissed] = useState(false);
   const [mysteryFirstSeenId, setMysteryFirstSeenId] = useState<string | null>(null);
   const mysteryQ = useQuery({
@@ -92,27 +98,28 @@ export default function OrderStatus() {
       !!id &&
       data?.status !== "pending" &&
       !mysteryDismissed &&
-      !mysteryRevealedLocally,
+      !mysteryRevealed,
     refetchInterval: 6000,
   });
   // Pin to the first drop we saw so the card identity stays stable
-  // across refetches.
-  if (mysteryQ.data?.drop_id && !mysteryFirstSeenId) {
-    // Schedule the state update on the next tick so we don't violate
-    // React's "no setState during render" rule.
-    queueMicrotask(() => setMysteryFirstSeenId(mysteryQ.data!.drop_id));
-  }
+  // across refetches. Effect-based — the previous queueMicrotask in
+  // render path could miss in strict mode if React aborted the render
+  // before the microtask drained.
+  useEffect(() => {
+    if (mysteryQ.data?.drop_id && !mysteryFirstSeenId) {
+      setMysteryFirstSeenId(mysteryQ.data.drop_id);
+    }
+  }, [mysteryQ.data?.drop_id, mysteryFirstSeenId]);
   const dropId = mysteryFirstSeenId ?? mysteryQ.data?.drop_id ?? null;
-  // Show the mystery section if (a) the server has produced a drop for
-  // us and the customer hasn't revealed yet, OR (b) the customer just
-  // revealed locally and hasn't dismissed yet. The previous logic
-  // unmounted the component as soon as the server confirmed the reveal,
-  // erasing the reward animation and leaving the customer staring at
-  // empty space.
+  // Show the mystery section if (a) the server has produced a drop and
+  // the customer hasn't revealed yet, OR (b) the customer revealed and
+  // hasn't dismissed yet. The previous logic unmounted the component
+  // as soon as the server confirmed the reveal, erasing the reward
+  // animation and leaving the customer staring at empty space.
   const showMystery =
     !mysteryDismissed &&
     !!dropId &&
-    (mysteryRevealedLocally || (mysteryQ.data && !mysteryQ.data.revealed));
+    (!!mysteryRevealed || (mysteryQ.data && !mysteryQ.data.revealed));
   const [retrying, setRetrying] = useState(false);
 
   // Re-mints a PaymentIntent for this pending order and re-opens the native
@@ -294,16 +301,18 @@ export default function OrderStatus() {
             <MysteryBean
               dropId={dropId}
               baseBeansEarned={data.loyalty_points_earned ?? 0}
-              onRevealed={() => {
-                // Pin the reveal on screen and stop polling for this
-                // drop — the local state owns the UI from here.
-                setMysteryRevealedLocally(true);
+              prerevealed={mysteryRevealed}
+              onRevealed={(payload) => {
+                // Parent now owns the reveal payload — passing it back
+                // in via prerevealed makes the child a pure presenter
+                // and removes the unmount risk entirely.
+                setMysteryRevealed(payload);
                 // Refresh the order so newly-credited Beans show up in
                 // the summary, and the voucher wallet so a voucher win
                 // is already in the list when the customer opens it.
-                // NOT invalidating ["mystery-drop", id] here — the
-                // refetch would return revealed:true and used to make
-                // the reveal disappear mid-animation.
+                // NOT invalidating ["mystery-drop", id] — that refetch
+                // returns revealed:true and used to race the reveal
+                // animation off the page.
                 queryClient.invalidateQueries({ queryKey: ["order", id] });
                 queryClient.invalidateQueries({ queryKey: ["my-vouchers"] });
               }}

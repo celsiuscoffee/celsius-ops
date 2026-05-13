@@ -269,36 +269,16 @@ export default function Home() {
   });
   const posters: HomePoster[] = postersQ.data ?? [];
 
-  // Redeemable-now count for the hero KPI. Combines two buckets:
-  //   1. Gifted / issued vouchers — Birthday Drink, Welcome BOGO,
-  //      anything auto-issued. These already carry a voucher_id on
-  //      the rewards-API row.
-  //   2. Affordable catalog rewards — points-shop entries where the
-  //      customer's balance already covers points_required (e.g. RM5
-  //      at 100 pts when the customer has 2,314).
-  // A row is only counted once even if it sits in both buckets.
   const heroBalance = rewardsQ.data?.pointsBalance ?? 0;
-  // Voucher count combines:
-  //   1. Legacy points-shop voucher_id rows + affordable catalog rewards
-  //      (kept for back-compat with existing rewards API)
-  //   2. Real wallet vouchers from rewards-v2 (issued from missions /
-  //      mystery / birthday / referral / milestones)
-  //   3. Claimable offers waiting for one-tap claim (welcome / promo /
-  //      pending mystery / pending milestone)
-  // Dedupe legacy voucher_id rows that already appear in the v2 wallet —
-  // rows in walletVouchers carry the same id as the legacy voucher_id.
-  const legacyVoucherIds = new Set(walletVouchers.map((v) => v.id));
-  const legacyCount = (rewardsQ.data?.rewards ?? []).filter((r) => {
-    const vId = (r as { voucher_id?: string | null }).voucher_id;
-    if (vId && legacyVoucherIds.has(vId)) return false;
-    const hasVoucher = !!vId;
-    const affordable =
-      typeof r.points_required === "number" &&
-      r.points_required > 0 &&
-      heroBalance >= r.points_required;
-    return hasVoucher || affordable;
-  }).length;
-  const voucherCount = legacyCount + walletVouchers.length + claimables.length;
+  // Voucher KPI on the tier card — strictly "what's in my wallet right
+  // now." Previously this also counted (a) every legacy points-shop
+  // catalog row the customer could afford, and (b) pending claimables.
+  // That inflated the number with stuff that isn't yet a redeemable
+  // voucher in the wallet sense, and the count never matched the
+  // wallet tab. Now: just active wallet vouchers (issued_rewards
+  // status='active'). Catalog affordability is surfaced inside the
+  // Rewards tab, not as a count here.
+  const voucherCount = walletVouchers.filter((v) => v.status === "active").length;
 
   return (
     <View className="flex-1 bg-background">

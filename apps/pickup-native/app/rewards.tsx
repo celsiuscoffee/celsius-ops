@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { View, Text, ScrollView, Pressable, Alert } from "react-native";
+import { View, Text, ScrollView, Pressable, Alert, ActivityIndicator } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Gift, ChevronRight, Flame, Users, Clock } from "lucide-react-native";
+import { Gift, ChevronRight, Flame, Users, Clock, Sparkles, Trophy } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../components/BottomNav";
 import { EspressoHeader } from "../components/EspressoHeader";
@@ -20,13 +20,16 @@ import {
   formatRewardValue,
   rewardUrgencyLabel,
   type Reward,
+  type MemberTier,
 } from "../lib/rewards";
 import {
   fetchMyVouchers,
   fetchClaimableVouchers,
   fetchActiveMission,
   fetchMyStreak,
+  fetchMyMilestones,
   redeemPointsReward,
+  type Milestone,
 } from "../lib/rewards-v2";
 import { VoucherWallet, VOUCHER_THEME } from "../components/VoucherWallet";
 import type { Voucher } from "../lib/rewards-v2";
@@ -38,11 +41,12 @@ import { ClaimableSection } from "../components/ClaimableSection";
 // stays minimal so the list doesn't read as an unreachable ladder.
 const PROGRESS_VISIBLE_THRESHOLD = 0.3;
 
-type RewardsTabKey = "challenges" | "rewards";
+type RewardsTabKey = "challenges" | "rewards" | "milestones";
 
 function paramToTab(raw: string | string[] | undefined): RewardsTabKey {
   const v = Array.isArray(raw) ? raw[0] : raw;
   if (v === "challenges") return "challenges";
+  if (v === "milestones") return "milestones";
   // Friendly aliases — the cart "Apply a reward" CTA, home rail, and
   // pre-merge deeplinks (?tab=vouchers / ?tab=catalog / ?tab=claim /
   // ?tab=wallet) all map onto the single Rewards tab now.
@@ -109,11 +113,18 @@ export default function RewardsTab() {
     enabled: !!phone,
     staleTime: 5 * 60_000,
   });
+  const milestonesQ = useQuery({
+    queryKey: ["my-milestones", phone ?? "anon"],
+    queryFn: fetchMyMilestones,
+    enabled: !!phone,
+    staleTime: 5 * 60_000,
+  });
 
   const vouchers = myVouchersQ.data ?? [];
   const claimables = claimableQ.data ?? [];
   const activeMission = activeMissionQ.data ?? null;
   const streakWeeks = streakQ.data?.current_streak_weeks ?? 0;
+  const milestones = milestonesQ.data ?? [];
 
   // Claim tab only — birthday + new-member rewards are auto-issued (cron
   // for birthday, signup trigger for welcome BOGO). They shouldn't show
@@ -178,14 +189,17 @@ export default function RewardsTab() {
             />
           </View>
 
-          {/* Tab strip — two tabs: Challenges (gamification loop) and
-              Rewards (single home for wallet + ways to add to it). */}
+          {/* Tab strip — three tabs:
+                Challenges  → weekly mission loop
+                Rewards     → wallet + ways to add to it
+                Milestones  → tier ladder + lifetime achievements */}
           <View
             className="flex-row bg-surface border-b border-border"
-            style={{ paddingHorizontal: 16, gap: 24 }}
+            style={{ paddingHorizontal: 16, gap: 22 }}
           >
             <TabButton label="Challenges" active={activeTab === "challenges"} onPress={() => selectTab("challenges")} />
             <TabButton label="Rewards"    active={activeTab === "rewards"}    onPress={() => selectTab("rewards")}    badge={rewardsBadge} />
+            <TabButton label="Milestones" active={activeTab === "milestones"} onPress={() => selectTab("milestones")} />
           </View>
 
           <ScrollView
@@ -205,6 +219,13 @@ export default function RewardsTab() {
                 balance={balance}
                 loadingVouchers={myVouchersQ.isLoading}
                 loadingRewards={isLoading}
+              />
+            )}
+            {activeTab === "milestones" && (
+              <MilestonesTab
+                tier={tier}
+                milestones={milestones}
+                loading={milestonesQ.isLoading}
               />
             )}
           </ScrollView>
@@ -666,6 +687,424 @@ function ChallengesTab({
 //
 // One verb per area: "Use" for everything in Yours, "Claim" for
 // everything in Get more. Customer learns the rule once.
+
+// ─── Tab: Milestones ────────────────────────────────────────────────
+//
+// Long-term progression in one place. Section order matters:
+//   1. Next tier — what the customer is actively working toward right
+//      now. This is the highest-frequency question ("how do I get to
+//      Gold?") and lives at the top.
+//   2. Lifetime achievements — the milestone ladder configured in
+//      backoffice (50 cups, 200 cups, 3 outlets, etc.). Each card
+//      shows progress and what the customer earns on unlock.
+//   3. Earned — a quiet trophy shelf for everything already cleared.
+
+function MilestonesTab({
+  tier,
+  milestones,
+  loading,
+}: {
+  tier: MemberTier | null;
+  milestones: Milestone[];
+  loading: boolean;
+}) {
+  // Sort: not-yet-earned first (sorted by trigger_value asc), earned
+  // last (sorted by earned_at desc). The API already sorts by
+  // trigger_value; we just partition here.
+  const unearned = milestones.filter((m) => !m.earned);
+  const earned   = milestones.filter((m) => m.earned).sort((a, b) => {
+    const ta = a.earned_at ? new Date(a.earned_at).getTime() : 0;
+    const tb = b.earned_at ? new Date(b.earned_at).getTime() : 0;
+    return tb - ta;
+  });
+
+  return (
+    <View style={{ gap: 20 }}>
+      {/* ── 1. Next tier ─────────────────────────────────────────── */}
+      <NextTierCard tier={tier} />
+
+      {/* ── 2. Lifetime milestones ──────────────────────────────── */}
+      <View>
+        <SectionLabel label="Achievements" count={unearned.length + earned.length} />
+        {loading ? (
+          <View
+            className="bg-surface rounded-2xl border border-border p-5 mt-2"
+            style={{ alignItems: "center" }}
+          >
+            <ActivityIndicator color="#C05040" />
+          </View>
+        ) : milestones.length === 0 ? (
+          <View
+            className="bg-surface rounded-2xl border border-border p-5 mt-2"
+            style={{ alignItems: "center" }}
+          >
+            <Text
+              className="text-muted-fg text-[13px] text-center"
+              style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+            >
+              No milestones set up yet. Check back soon.
+            </Text>
+          </View>
+        ) : (
+          <View style={{ gap: 10, marginTop: 6 }}>
+            {unearned.map((m) => (
+              <MilestoneRow key={m.id} milestone={m} />
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* ── 3. Earned trophy shelf ──────────────────────────────── */}
+      {earned.length > 0 && (
+        <View>
+          <SectionLabel label="Earned" count={earned.length} />
+          <View style={{ gap: 10, marginTop: 6 }}>
+            {earned.map((m) => (
+              <MilestoneRow key={m.id} milestone={m} />
+            ))}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// Hero card for "what's next" — tier progression. Espresso panel with
+// gold accents matching the membership tier hero language.
+function NextTierCard({ tier }: { tier: MemberTier | null }) {
+  // No tier API response yet — show a quiet placeholder.
+  if (!tier) {
+    return (
+      <View className="bg-surface rounded-2xl border border-border p-5 items-center">
+        <Sparkles size={24} color="#8E8E93" />
+        <Text
+          className="text-muted-fg text-[13px] mt-2 text-center"
+          style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+        >
+          Sign in to see your tier progress.
+        </Text>
+      </View>
+    );
+  }
+
+  const nextTierName     = tier.next_tier_name;
+  const qualification    = tier.tier_qualification ?? tier.next_tier_qualification ?? "visits";
+  // Already at the top tier — celebrate, don't badger.
+  if (!nextTierName) {
+    return (
+      <View
+        className="rounded-2xl p-5"
+        style={{
+          backgroundColor: "#1A0200",
+          shadowColor: "#160800",
+          shadowOpacity: 0.18,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+        }}
+      >
+        <Text
+          style={{
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 10,
+            color: "#FBBF24",
+            letterSpacing: 2,
+            textTransform: "uppercase",
+            marginBottom: 6,
+          }}
+        >
+          Top tier
+        </Text>
+        <Text
+          style={{
+            fontFamily: "Peachi-Bold",
+            fontSize: 22,
+            color: "#FFFFFF",
+            letterSpacing: -0.3,
+          }}
+        >
+          You&apos;re already at the top.
+        </Text>
+        <Text
+          style={{
+            fontFamily: "SpaceGrotesk_500Medium",
+            fontSize: 13,
+            color: "rgba(255,255,255,0.7)",
+            marginTop: 4,
+          }}
+        >
+          {tier.tier_name ?? "Member"} · {tier.tier_multiplier ?? 1}× Beans on every order
+        </Text>
+      </View>
+    );
+  }
+
+  // Distance + denominator based on qualification metric.
+  const useSpend = qualification === "spend" || qualification === "spend_lifetime";
+  const distance = useSpend
+    ? Math.max(0, Math.ceil(tier.spend_to_next_tier))
+    : Math.max(0, tier.visits_to_next_tier);
+  const denom = useSpend
+    ? Math.max(1, tier.next_tier_min_spend ?? 1)
+    : Math.max(1, tier.next_tier_min_visits ?? 1);
+  const current = useSpend
+    ? Math.max(0, tier.spend_this_period)
+    : Math.max(0, tier.visits_this_period);
+  const progress = Math.max(0, Math.min(1, current / denom));
+  const metricLabel = useSpend ? "RM" : "visit";
+  const remainingCopy = useSpend
+    ? `RM${distance} to ${nextTierName}`
+    : `${distance} ${distance === 1 ? "visit" : "visits"} to ${nextTierName}`;
+  const periodCopy = useSpend && qualification === "spend_lifetime"
+    ? "Lifetime spend"
+    : `Last ${tier.period_days ?? 90} days`;
+
+  return (
+    <View
+      className="rounded-2xl p-5"
+      style={{
+        backgroundColor: "#1A0200",
+        shadowColor: "#160800",
+        shadowOpacity: 0.2,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 6 },
+      }}
+    >
+      <Text
+        style={{
+          fontFamily: "SpaceGrotesk_700Bold",
+          fontSize: 10,
+          color: "#FBBF24",
+          letterSpacing: 2,
+          textTransform: "uppercase",
+          marginBottom: 6,
+        }}
+      >
+        Next tier
+      </Text>
+      <Text
+        style={{
+          fontFamily: "Peachi-Bold",
+          fontSize: 22,
+          color: "#FBBF24",
+          letterSpacing: -0.3,
+        }}
+      >
+        {remainingCopy}
+      </Text>
+      <Text
+        style={{
+          fontFamily: "SpaceGrotesk_500Medium",
+          fontSize: 12,
+          color: "rgba(255,255,255,0.6)",
+          marginTop: 4,
+        }}
+      >
+        {periodCopy} · {current.toLocaleString()}
+        {useSpend ? ` ${metricLabel}` : ` ${metricLabel}${current === 1 ? "" : "s"}`}
+        {" "}of {denom.toLocaleString()}{useSpend ? "" : " visits"}
+      </Text>
+
+      {/* Progress track — gold fill against a thin amber-shadow rail. */}
+      <View
+        style={{
+          height: 8,
+          marginTop: 14,
+          borderRadius: 4,
+          backgroundColor: "rgba(251,191,36,0.15)",
+          overflow: "hidden",
+        }}
+      >
+        <View
+          style={{
+            height: "100%",
+            width: `${Math.round(progress * 100)}%`,
+            backgroundColor: "#FBBF24",
+            borderRadius: 4,
+          }}
+        />
+      </View>
+
+      {/* Tier multiplier preview — what they UNLOCK at the next tier. */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+          marginTop: 14,
+        }}
+      >
+        <Sparkles size={13} color="#FBBF24" strokeWidth={2} />
+        <Text
+          style={{
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 12,
+            color: "rgba(255,255,255,0.85)",
+          }}
+        >
+          {nextTierName}
+        </Text>
+        <Text
+          style={{
+            fontFamily: "SpaceGrotesk_500Medium",
+            fontSize: 12,
+            color: "rgba(255,255,255,0.55)",
+          }}
+        >
+          unlocks faster Beans + member perks
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// One milestone card. Cream/espresso when locked, espresso/gold when
+// earned (mirrors the wallet's "auto-issued" theme so earned achievements
+// read as the same family of "good things").
+function MilestoneRow({ milestone }: { milestone: Milestone }) {
+  const earned = milestone.earned;
+  const progress = Math.max(0, Math.min(1, milestone.progress_current / Math.max(1, milestone.trigger_value)));
+  const remaining = Math.max(0, milestone.trigger_value - milestone.progress_current);
+
+  // Render-friendly metric units per trigger.
+  const unit: { single: string; plural: string } = (() => {
+    switch (milestone.trigger_type) {
+      case "lifetime_orders":  return { single: "order", plural: "orders" };
+      case "lifetime_beans":   return { single: "Bean",  plural: "Beans" };
+      case "distinct_outlets": return { single: "outlet", plural: "outlets" };
+      case "streak_weeks":     return { single: "week",  plural: "weeks" };
+    }
+  })();
+  const unitLabel = milestone.trigger_value === 1 ? unit.single : unit.plural;
+
+  // Reward summary line under the title.
+  const rewardChips: string[] = [];
+  if (milestone.reward_voucher_template_ids?.length > 0) {
+    const n = milestone.reward_voucher_template_ids.length;
+    rewardChips.push(`${n} voucher${n === 1 ? "" : "s"}`);
+  }
+  if ((milestone.reward_bonus_beans ?? 0) > 0) {
+    rewardChips.push(`+${milestone.reward_bonus_beans} Beans`);
+  }
+
+  const bg     = earned ? "#1A0200" : "#FFFFFF";
+  const border = earned ? "#1A0200" : "#E5E5E5";
+  const fg     = earned ? "#FFFFFF" : "#1A0200";
+  const muted  = earned ? "rgba(255,255,255,0.6)" : "#6B6B6B";
+  const accent = earned ? "#FBBF24" : "#C05040";
+
+  return (
+    <View
+      className="rounded-2xl"
+      style={{
+        backgroundColor: bg,
+        borderWidth: 1,
+        borderColor: border,
+        padding: 14,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+        <View
+          style={{
+            width: 44, height: 44, borderRadius: 12,
+            backgroundColor: earned ? "rgba(251,191,36,0.18)" : "#FBEBE8",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Trophy size={20} color={accent} strokeWidth={1.8} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              fontFamily: "Peachi-Bold",
+              fontSize: 15,
+              color: fg,
+            }}
+            numberOfLines={1}
+          >
+            {milestone.title}
+          </Text>
+          {milestone.description && (
+            <Text
+              style={{
+                fontFamily: "SpaceGrotesk_500Medium",
+                fontSize: 12,
+                color: muted,
+                marginTop: 2,
+              }}
+              numberOfLines={2}
+            >
+              {milestone.description}
+            </Text>
+          )}
+          {rewardChips.length > 0 && (
+            <Text
+              style={{
+                fontFamily: "SpaceGrotesk_700Bold",
+                fontSize: 10.5,
+                color: accent,
+                letterSpacing: 1.2,
+                textTransform: "uppercase",
+                marginTop: 6,
+              }}
+              numberOfLines={1}
+            >
+              {rewardChips.join(" · ")}
+            </Text>
+          )}
+        </View>
+      </View>
+
+      {/* Progress or earned-date footer */}
+      {earned ? (
+        <Text
+          style={{
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 10.5,
+            color: accent,
+            letterSpacing: 1.2,
+            textTransform: "uppercase",
+            marginTop: 12,
+          }}
+        >
+          ● Earned{milestone.earned_at ? ` · ${new Date(milestone.earned_at).toLocaleDateString()}` : ""}
+        </Text>
+      ) : (
+        <>
+          <View
+            style={{
+              height: 6,
+              marginTop: 12,
+              borderRadius: 3,
+              backgroundColor: "rgba(192,80,64,0.12)",
+              overflow: "hidden",
+            }}
+          >
+            <View
+              style={{
+                height: "100%",
+                width: `${Math.round(progress * 100)}%`,
+                backgroundColor: accent,
+                borderRadius: 3,
+              }}
+            />
+          </View>
+          <Text
+            style={{
+              fontFamily: "SpaceGrotesk_500Medium",
+              fontSize: 11,
+              color: muted,
+              marginTop: 6,
+            }}
+          >
+            {milestone.progress_current.toLocaleString()} / {milestone.trigger_value.toLocaleString()} {unitLabel}
+            {remaining > 0 ? ` · ${remaining.toLocaleString()} to go` : ""}
+          </Text>
+        </>
+      )}
+    </View>
+  );
+}
 
 function RewardsTabBody({
   vouchers, claimables, rewards, sortedRewards, balance,
