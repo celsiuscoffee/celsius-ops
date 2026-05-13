@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { View, Text, ScrollView, Pressable } from "react-native";
+import { View, Text, ScrollView, Pressable, Alert } from "react-native";
 import { Stack, router } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Gift, ChevronRight, Flame, Users, Clock, Sparkles as SparklesIcon } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../components/BottomNav";
@@ -28,6 +28,7 @@ import {
   fetchClaimableVouchers,
   fetchActiveMission,
   fetchMyStreak,
+  redeemPointsReward,
 } from "../lib/rewards-v2";
 import { VoucherWallet } from "../components/VoucherWallet";
 import { MissionCard } from "../components/MissionCard";
@@ -887,10 +888,7 @@ function RewardListRow({
   balance: number;
   isFirst: boolean;
 }) {
-  const appliedReward = useApp((s) => s.appliedReward);
-  const setAppliedReward = useApp((s) => s.setAppliedReward);
-  const cart = useApp((s) => s.cart);
-  const isApplied = appliedReward?.id === reward.id;
+  const qc = useQueryClient();
 
   const required = reward.points_required;
   const canClaim = balance >= required;
@@ -900,31 +898,46 @@ function RewardListRow({
 
   const urgency = canClaim ? rewardUrgencyLabel(reward) : null;
 
-  const onApply = () => {
-    if (!canClaim) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    trackEvent("reward_applied", {
-      rewardId:        reward.id,
-      rewardName:      reward.name,
-      rewardType:      reward.reward_type,
-      discountType:    reward.discount_type,
-      pointsRequired:  reward.points_required,
-      isVoucher:       !!(reward as { voucher_id?: string }).voucher_id,
-    });
-    setAppliedReward({
-      id: reward.id,
-      name: reward.name,
-      points_required: reward.points_required,
-      discount_type: reward.discount_type,
-      discount_value: reward.discount_value,
-      bogo_buy_qty: reward.bogo_buy_qty,
-      bogo_free_qty: reward.bogo_free_qty,
-      free_product_name: reward.free_product_name,
-      applicable_categories: reward.applicable_categories,
-      applicable_products: reward.applicable_products,
-      min_order_value: reward.min_order_value,
-    });
-    if (cart.length > 0) router.push("/cart");
+  // Claim flow — spend Beans now, the new voucher lands in the Rewards
+  // tab wallet. Mutation invalidates wallet + balance queries so both
+  // surfaces update without waiting for a refocus.
+  const claimMutation = useMutation({
+    mutationFn: () => redeemPointsReward(reward.id),
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      qc.invalidateQueries({ queryKey: ["my-vouchers"] });
+      qc.invalidateQueries({ queryKey: ["rewards"] });
+      qc.invalidateQueries({ queryKey: ["member"] });
+      qc.invalidateQueries({ queryKey: ["tier"] });
+      trackEvent("reward_claimed_to_wallet", {
+        rewardId:        reward.id,
+        rewardName:      reward.name,
+        pointsRequired:  reward.points_required,
+      });
+      Alert.alert(
+        "Claimed!",
+        `"${reward.name}" is now in your Rewards. Use it at checkout any time before it expires.`,
+        [{ text: "OK", style: "default" }],
+      );
+    },
+    onError: (e: unknown) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const message = e instanceof Error ? e.message : "Could not claim — try again in a moment.";
+      Alert.alert("Couldn’t claim", message);
+    },
+  });
+
+  const onClaim = () => {
+    if (!canClaim || claimMutation.isPending) return;
+    Haptics.selectionAsync();
+    Alert.alert(
+      "Claim this reward?",
+      `Spend ${required.toLocaleString()} Beans for "${reward.name}". It will move to your Rewards tab and you can use it at checkout.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Claim", style: "default", onPress: () => claimMutation.mutate() },
+      ],
+    );
   };
 
   const Icon = pickRewardIcon(reward);
@@ -1031,14 +1044,15 @@ function RewardListRow({
 
       {canClaim ? (
         <Pressable
-          onPress={onApply}
-          disabled={isApplied}
+          onPress={onClaim}
+          disabled={claimMutation.isPending}
           className="active:opacity-80"
           style={{
-            backgroundColor: isApplied ? "#16A34A" : "#C05040",
+            backgroundColor: "#C05040",
             paddingHorizontal: 14,
             paddingVertical: 8,
             borderRadius: 999,
+            opacity: claimMutation.isPending ? 0.6 : 1,
           }}
         >
           <Text
@@ -1050,7 +1064,7 @@ function RewardListRow({
               textTransform: "uppercase",
             }}
           >
-            {isApplied ? "Applied" : "Apply"}
+            {claimMutation.isPending ? "Claiming…" : "Claim"}
           </Text>
         </Pressable>
       ) : (

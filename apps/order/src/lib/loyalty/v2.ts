@@ -82,9 +82,15 @@ export async function issueVoucher(args: {
     ? new Date(Date.now() + tpl.validity_days * 24 * 60 * 60 * 1000).toISOString()
     : null;
 
+  // issued_rewards.id is text NOT NULL with no DB default, so callers
+  // own ID generation. Format mirrors the legacy "ir-…" prefix so the
+  // backoffice + analytics queries that filter by prefix keep working.
+  const id = `ir-${args.sourceType}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
   const { data, error } = await supabase
     .from("issued_rewards")
     .insert({
+      id,
       brand_id: BRAND_ID,
       member_id: args.memberId,
       voucher_template_id: tpl.id,
@@ -116,6 +122,144 @@ export async function issueVoucher(args: {
     return null;
   }
   return data as IssuedVoucher;
+}
+
+/** Redeem a legacy points-shop reward INTO the wallet. Deducts the
+ *  member's Beans atomically and inserts an issued_rewards row with all
+ *  display + discount fields copied off the reward. The voucher then
+ *  shows up on the Rewards tab and can be applied at checkout the same
+ *  way every other voucher does.
+ *
+ *  Returns `{ ok: false, reason }` on insufficient balance / unknown
+ *  reward / inactive reward — caller turns those into 4xx responses.
+ *
+ *  Idempotency is NOT enforced here (a customer may legitimately claim
+ *  the same reward twice if they have the Beans). max_redemptions
+ *  enforcement is a TODO. */
+export async function redeemPointsShopReward(args: {
+  memberId: string;
+  rewardId: string;
+}): Promise<
+  | { ok: true; voucher: IssuedVoucher; newBalance: number; pointsSpent: number }
+  | { ok: false; reason: "reward_not_found" | "insufficient_beans" | "insert_failed" }
+> {
+  const supabase = getSupabaseAdmin();
+
+  const { data: reward } = await supabase
+    .from("rewards")
+    .select(`
+      id, name, description, points_required, validity_days,
+      category, discount_type, discount_value, min_order_value,
+      applicable_categories, applicable_products, free_product_name,
+      is_active, auto_issue
+    `)
+    .eq("id", args.rewardId)
+    .eq("brand_id", BRAND_ID)
+    .eq("is_active", true)
+    .single();
+
+  if (!reward) return { ok: false, reason: "reward_not_found" };
+
+  const pointsRequired = (reward.points_required as number) ?? 0;
+
+  // Atomic deduction via existing RPC — returns the new balance or
+  // throws when balance < pointsRequired.
+  if (pointsRequired > 0) {
+    const { data: newBalance, error: rpcErr } = await supabase.rpc("deduct_points", {
+      p_member_id: args.memberId,
+      p_brand_id:  BRAND_ID,
+      p_points:    pointsRequired,
+    });
+    if (rpcErr) {
+      // RPC raises a specific error on insufficient balance — surface it.
+      return { ok: false, reason: "insufficient_beans" };
+    }
+
+    // Insert the voucher into the wallet.
+    const id = `ir-redeem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const validityDays = (reward.validity_days as number | null) ?? 30;
+    const expiresAt = validityDays
+      ? new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000).toISOString()
+      : null;
+
+    const { data: inserted, error: insErr } = await supabase
+      .from("issued_rewards")
+      .insert({
+        id,
+        brand_id: BRAND_ID,
+        member_id: args.memberId,
+        reward_id: reward.id,
+        source_type: "points_redemption",
+        source_ref_id: reward.id,
+        title:                 reward.name,
+        description:           reward.description,
+        icon:                  reward.category ?? "ticket",
+        category:              reward.category ?? "special",
+        discount_type:         reward.discount_type,
+        discount_value:        reward.discount_value,
+        min_order_value:       reward.min_order_value,
+        applicable_categories: reward.applicable_categories,
+        applicable_products:   reward.applicable_products,
+        free_product_name:     reward.free_product_name,
+        stacks_with_beans:     false, // points-shop redemptions don't stack with Beans by default
+        status: "active",
+        issued_at: new Date().toISOString(),
+        expires_at: expiresAt,
+      })
+      .select()
+      .single();
+
+    if (insErr || !inserted) {
+      // Beans already deducted — caller decides whether to refund. We
+      // log loud + return insert_failed so the route handler can refund
+      // via awardBonusBeans before responding 500.
+      console.error("[v2] redeemPointsShopReward: insert failed", insErr?.message);
+      return { ok: false, reason: "insert_failed" };
+    }
+
+    return {
+      ok: true,
+      voucher: inserted as IssuedVoucher,
+      newBalance: newBalance as number,
+      pointsSpent: pointsRequired,
+    };
+  }
+
+  // Zero-cost reward (admin-grant flavours). Issue without touching balance.
+  const id = `ir-redeem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const validityDays = (reward.validity_days as number | null) ?? 30;
+  const expiresAt = validityDays
+    ? new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+
+  const { data: inserted, error: insErr } = await supabase
+    .from("issued_rewards")
+    .insert({
+      id,
+      brand_id: BRAND_ID,
+      member_id: args.memberId,
+      reward_id: reward.id,
+      source_type: "points_redemption",
+      source_ref_id: reward.id,
+      title:                 reward.name,
+      description:           reward.description,
+      icon:                  reward.category ?? "ticket",
+      category:              reward.category ?? "special",
+      discount_type:         reward.discount_type,
+      discount_value:        reward.discount_value,
+      min_order_value:       reward.min_order_value,
+      applicable_categories: reward.applicable_categories,
+      applicable_products:   reward.applicable_products,
+      free_product_name:     reward.free_product_name,
+      stacks_with_beans:     false,
+      status: "active",
+      issued_at: new Date().toISOString(),
+      expires_at: expiresAt,
+    })
+    .select()
+    .single();
+  if (insErr || !inserted) return { ok: false, reason: "insert_failed" };
+  return { ok: true, voucher: inserted as IssuedVoucher, newBalance: 0, pointsSpent: 0 };
 }
 
 // ─── Referrals ───────────────────────────────────────────────────────

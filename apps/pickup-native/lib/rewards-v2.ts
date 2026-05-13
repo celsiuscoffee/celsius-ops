@@ -152,6 +152,20 @@ export async function claimVoucher(claimableId: string): Promise<Voucher> {
   return post<Voucher>(`/api/loyalty/me/claimable/${claimableId}/claim`);
 }
 
+/** Spend Beans to add a points-shop reward to the wallet. Atomic on the
+ *  server — either both the deduction and the voucher row happen, or
+ *  nothing does. Returns the new balance so the home screen can update
+ *  without an extra round-trip. */
+export async function redeemPointsReward(rewardId: string): Promise<{
+  voucher: Voucher;
+  newBalance: number;
+  pointsSpent: number;
+}> {
+  return post<{ voucher: Voucher; newBalance: number; pointsSpent: number }>(
+    `/api/loyalty/me/rewards/${rewardId}/redeem`,
+  );
+}
+
 // ─── Streak ─────────────────────────────────────────────────────────────
 
 export type StreakState = {
