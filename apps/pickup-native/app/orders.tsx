@@ -348,9 +348,13 @@ function TabPill({
       accessibilityState={{ selected: active }}
     >
       <Text
-        className="text-[13px]"
         style={{
-          fontFamily: "Peachi-Bold",
+          // Space Grotesk Bold at 16pt — small bump from the prior 13pt
+          // Peachi, and matches the typographic voice the rest of the
+          // app uses for tab strips.
+          fontFamily: "SpaceGrotesk_700Bold",
+          fontSize: 16,
+          letterSpacing: 0.2,
           color: active ? "#1A0200" : "#8E8E93",
         }}
       >
