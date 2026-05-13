@@ -186,7 +186,12 @@ function VoucherRow({ voucher }: { voucher: Voucher }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     // Reserve voucher (banner) AND apply it to the discount engine so
     // cart + checkout reflect the line item immediately. The two are
-    // intentionally coupled — they always travel together.
+    // intentionally coupled — they always travel together. We set
+    // appliedReward unconditionally even when discount_type is null
+    // (legacy vouchers backfilled later) — calcRewardDiscount returns
+    // 0 for unknown types, so the chip stays visible and the customer
+    // sees the voucher staked out for their next order. The eventual
+    // backfill / proper template config lights up the actual discount.
     setReservedVoucher({
       id: voucher.id,
       title: voucher.title,
@@ -194,20 +199,20 @@ function VoucherRow({ voucher }: { voucher: Voucher }) {
       icon: voucher.icon,
       expires_at: voucher.expires_at,
     });
-    if (voucher.discount_type) {
-      setAppliedReward({
-        id: voucher.id,
-        name: voucher.title,
-        points_required: 0,         // wallet vouchers cost no Beans
-        discount_type: mapDiscountType(voucher.discount_type),
-        discount_value: voucher.discount_value ?? null,
-        applicable_categories: voucher.applicable_categories ?? null,
-        applicable_products: voucher.applicable_products ?? null,
-        free_product_name: voucher.free_product_name ?? null,
-        min_order_value: voucher.min_order_value ?? null,
-        voucher_id: voucher.id,    // marks this as a wallet voucher (not a points redemption)
-      });
-    }
+    setAppliedReward({
+      id: voucher.id,
+      name: voucher.title,
+      points_required: 0,         // wallet vouchers cost no Beans
+      discount_type: voucher.discount_type
+        ? mapDiscountType(voucher.discount_type)
+        : null,
+      discount_value: voucher.discount_value ?? null,
+      applicable_categories: voucher.applicable_categories ?? null,
+      applicable_products: voucher.applicable_products ?? null,
+      free_product_name: voucher.free_product_name ?? null,
+      min_order_value: voucher.min_order_value ?? null,
+      voucher_id: voucher.id,    // marks this as a wallet voucher (not a points redemption)
+    });
     router.push("/menu" as never);
   }
 

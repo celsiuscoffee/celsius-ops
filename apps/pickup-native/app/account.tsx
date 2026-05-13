@@ -26,6 +26,7 @@ import {
   CircleHelp,
   Shield,
   Trash2,
+  Sparkles,
 } from "lucide-react-native";
 import QRCode from "react-native-qrcode-svg";
 import * as Haptics from "expo-haptics";
@@ -209,6 +210,11 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
           icon={Coffee}
           label="Your usual drinks"
           onPress={() => router.push({ pathname: "/menu", params: { tab: "usual" } })}
+        />
+        <ActionRow
+          icon={Sparkles}
+          label={`Coffee Wrapped ${new Date().getFullYear()}`}
+          onPress={() => router.push("/wrapped" as never)}
         />
 
         <SectionLabel>PREFERENCES</SectionLabel>

@@ -145,20 +145,44 @@ export async function redeemPointsShopReward(args: {
 > {
   const supabase = getSupabaseAdmin();
 
-  const { data: reward } = await supabase
-    .from("rewards")
-    .select(`
-      id, name, description, points_required, validity_days,
-      category, discount_type, discount_value, min_order_value,
-      applicable_categories, applicable_products, free_product_name,
-      is_active, auto_issue
-    `)
-    .eq("id", args.rewardId)
-    .eq("brand_id", BRAND_ID)
-    .eq("is_active", true)
-    .single();
+  const [{ data: reward }, { data: config }] = await Promise.all([
+    supabase
+      .from("rewards")
+      .select(`
+        id, name, description, points_required, validity_days,
+        category, discount_type, discount_value, min_order_value,
+        applicable_categories, applicable_products, free_product_name,
+        is_active, auto_issue
+      `)
+      .eq("id", args.rewardId)
+      .eq("brand_id", BRAND_ID)
+      .eq("is_active", true)
+      .single(),
+    // Discount metadata for most rewards lives in reward_configs, not on
+    // the rewards row directly. Without this lookup the issued voucher
+    // lands with discount_type=null and the cart-side discount engine
+    // returns 0, which presents as "the voucher banner shows but the
+    // subtotal doesn't drop". Joining via reward_id keeps existing
+    // backoffice editors as the single source of truth for discount config.
+    supabase
+      .from("reward_configs")
+      .select("discount_type, discount_value, max_discount_value, min_order_value, applicable_categories, applicable_products, free_product_name, bogo_buy_qty, bogo_free_qty")
+      .eq("reward_id", args.rewardId)
+      .maybeSingle(),
+  ]);
 
   if (!reward) return { ok: false, reason: "reward_not_found" };
+
+  // Merge: reward_configs wins when it has a non-null value, falling
+  // back to whatever was directly on the rewards row (legacy/seed data).
+  const discountType        = (config?.discount_type as string | null) ?? (reward.discount_type as string | null);
+  const discountValue       = (config?.discount_value as number | null) ?? (reward.discount_value as number | null);
+  const minOrderValue       = (config?.min_order_value as number | null) ?? (reward.min_order_value as number | null);
+  const applicableCategories =
+    (config?.applicable_categories as string[] | null) ?? (reward.applicable_categories as string[] | null);
+  const applicableProducts   =
+    (config?.applicable_products as string[] | null) ?? (reward.applicable_products as string[] | null);
+  const freeProductName      = (config?.free_product_name as string | null) ?? (reward.free_product_name as string | null);
 
   const pointsRequired = (reward.points_required as number) ?? 0;
 
@@ -195,12 +219,12 @@ export async function redeemPointsShopReward(args: {
         description:           reward.description,
         icon:                  reward.category ?? "ticket",
         category:              reward.category ?? "special",
-        discount_type:         reward.discount_type,
-        discount_value:        reward.discount_value,
-        min_order_value:       reward.min_order_value,
-        applicable_categories: reward.applicable_categories,
-        applicable_products:   reward.applicable_products,
-        free_product_name:     reward.free_product_name,
+        discount_type:         discountType,
+        discount_value:        discountValue,
+        min_order_value:       minOrderValue,
+        applicable_categories: applicableCategories,
+        applicable_products:   applicableProducts,
+        free_product_name:     freeProductName,
         stacks_with_beans:     false, // points-shop redemptions don't stack with Beans by default
         status: "active",
         issued_at: new Date().toISOString(),
@@ -245,12 +269,12 @@ export async function redeemPointsShopReward(args: {
       description:           reward.description,
       icon:                  reward.category ?? "ticket",
       category:              reward.category ?? "special",
-      discount_type:         reward.discount_type,
-      discount_value:        reward.discount_value,
-      min_order_value:       reward.min_order_value,
-      applicable_categories: reward.applicable_categories,
-      applicable_products:   reward.applicable_products,
-      free_product_name:     reward.free_product_name,
+      discount_type:         discountType,
+      discount_value:        discountValue,
+      min_order_value:       minOrderValue,
+      applicable_categories: applicableCategories,
+      applicable_products:   applicableProducts,
+      free_product_name:     freeProductName,
       stacks_with_beans:     false,
       status: "active",
       issued_at: new Date().toISOString(),

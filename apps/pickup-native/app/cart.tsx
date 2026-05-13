@@ -12,7 +12,6 @@ import { fetchMenu } from "../lib/menu";
 import { getSetting } from "../lib/settings";
 import { supabase, type Outlet } from "../lib/supabase";
 import { EspressoHeader } from "../components/EspressoHeader";
-import { ReservedVoucherBanner } from "../components/ReservedVoucherBanner";
 
 export default function Cart() {
   const insets = useSafeAreaInsets();
@@ -23,6 +22,7 @@ export default function Cart() {
   const outletName = useApp((s) => s.outletName);
   const appliedReward = useApp((s) => s.appliedReward);
   const setAppliedReward = useApp((s) => s.setAppliedReward);
+  const setReservedVoucher = useApp((s) => s.setReservedVoucher);
   const member = useApp((s) => s.member);
 
   // Re-poll the chosen outlet's open/busy state every 30s while this
@@ -77,7 +77,6 @@ export default function Cart() {
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
       <EspressoHeader title="Your cart" subtitle={outletName ? `Pickup from ${outletName}` : undefined} showBack showCart={false} />
-      <ReservedVoucherBanner />
 
       {cart.length === 0 ? (
         // Empty cart should sell, not just say "empty". Espresso hero
@@ -350,13 +349,20 @@ export default function Cart() {
                     className="text-primary/80 text-[11px]"
                     style={{ fontFamily: "SpaceGrotesk_500Medium" }}
                   >
-                    {appliedReward.points_required} pts · −{formatPrice(discount)}
+                    {discount > 0
+                      ? `Reward applied · −${formatPrice(discount)}`
+                      : "Reward applied — discount at checkout"}
                   </Text>
                 </View>
                 <Pressable
                   onPress={() => {
                     Haptics.selectionAsync();
+                    // Clear both the applied reward AND the reserved voucher
+                    // so the X actually unsets everything. Otherwise the
+                    // chip clears but the next /menu visit re-applies it
+                    // via the reservedVoucher restore path.
                     setAppliedReward(null);
+                    setReservedVoucher(null);
                   }}
                   hitSlop={12}
                   className="active:opacity-70"
@@ -368,7 +374,11 @@ export default function Cart() {
               <Pressable
                 onPress={() => {
                   Haptics.selectionAsync();
-                  router.push("/rewards");
+                  // Land directly on the Rewards (wallet) tab — that's
+                  // where the customer's claimed vouchers live, and where
+                  // tapping "Use" sets the applied reward + sends them
+                  // back here.
+                  router.push("/rewards?tab=vouchers" as never);
                 }}
                 className="bg-surface border border-dashed border-primary/40 rounded-2xl px-3 py-2 mb-3 flex-row items-center gap-2 active:opacity-70"
               >

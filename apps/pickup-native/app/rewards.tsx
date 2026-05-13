@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { View, Text, ScrollView, Pressable, Alert } from "react-native";
-import { Stack, router } from "expo-router";
+import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Gift, ChevronRight, Flame, Users, Clock, Sparkles as SparklesIcon } from "lucide-react-native";
+import { Gift, ChevronRight, Flame, Users, Clock } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomNav } from "../components/BottomNav";
 import { EspressoHeader } from "../components/EspressoHeader";
@@ -42,15 +42,35 @@ type RewardsTabKey = "challenges" | "vouchers" | "catalog";
 
 const ONBOARDING_KEY = "rewards-v2-intro";
 
+function paramToTab(raw: string | string[] | undefined): RewardsTabKey {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (v === "vouchers" || v === "catalog" || v === "challenges") return v;
+  // Friendly aliases the cart "Apply a reward" CTA + account links
+  // might use. Map them onto the canonical key so the URL surface
+  // stays forgiving.
+  if (v === "rewards" || v === "wallet") return "vouchers";
+  if (v === "claim") return "catalog";
+  return "challenges";
+}
+
 export default function RewardsTab() {
+  const params = useLocalSearchParams<{ tab?: string }>();
   const phone = useApp((s) => s.phone);
   const loyaltyId = useApp((s) => s.loyaltyId);
   const member = useApp((s) => s.member);
   const seenOnboardings = useApp((s) => s.seenOnboardings);
   const markOnboardingSeen = useApp((s) => s.markOnboardingSeen);
 
-  const [activeTab, setActiveTab] = useState<RewardsTabKey>("challenges");
+  const [activeTab, setActiveTab] = useState<RewardsTabKey>(() => paramToTab(params.tab));
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Respect later route changes too — useful when the screen is already
+  // mounted and someone pushes /rewards?tab=vouchers from a different
+  // surface; without this the route param updates but the tab doesn't.
+  useEffect(() => {
+    const next = paramToTab(params.tab);
+    setActiveTab((prev) => (prev === next ? prev : next));
+  }, [params.tab]);
 
   // Reveal the v2 onboarding sheet on first visit per install — gated
   // on a signed-in phone so anonymous users don't see it before they
@@ -737,7 +757,7 @@ function CatalogTab({
           >
             Spend your Beans
           </Text>
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: 8 }}>
             {sortedRewards.map((reward) => (
               <RewardCard key={reward.id} reward={reward} balance={balance} />
             ))}
@@ -745,52 +765,6 @@ function CatalogTab({
         </View>
       )}
 
-      {/* Coffee Wrapped — annual recap. Visible year-round but the link
-          is most relevant in Dec/Jan when the recap actually has a story
-          to tell. Lower placement so it doesn't crowd the main catalog. */}
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync();
-          router.push("/wrapped" as never);
-        }}
-        className="mt-5 active:opacity-80 rounded-2xl"
-        style={{
-          backgroundColor: "#1A0200",
-          padding: 16,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
-        }}
-      >
-        <View
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 12,
-            backgroundColor: "rgba(251,191,36,0.18)",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <SparklesIcon size={20} color="#FBBF24" strokeWidth={1.8} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, color: "#FBBF24" }}>
-            Coffee Wrapped {new Date().getFullYear()}
-          </Text>
-          <Text
-            style={{
-              fontFamily: "SpaceGrotesk_500Medium",
-              fontSize: 11,
-              color: "rgba(255,255,255,0.65)",
-              marginTop: 1,
-            }}
-          >
-            Your year in coffee, recapped
-          </Text>
-        </View>
-        <ChevronRight size={16} color="rgba(251,191,36,0.7)" strokeWidth={2} />
-      </Pressable>
     </>
   );
 }
@@ -876,56 +850,43 @@ function RewardCard({
         elevation: 1,
       }}
     >
-      {/* Ghost icon — bottom-right corner echoes the tier-card mascot
-          placement, low opacity so it stays out of the way of text. */}
       <View
         style={{
-          position: "absolute",
-          right: -8,
-          bottom: -12,
-          opacity: 0.10,
-        }}
-      >
-        <Icon size={88} color="#C05040" />
-      </View>
-
-      <View
-        style={{
-          padding: 14,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
           flexDirection: "row",
           alignItems: "center",
-          gap: 12,
+          gap: 10,
         }}
       >
-        {/* Foreground icon — solid colour, sized to match the existing
-            tier-card mascot proportions. */}
+        {/* Foreground icon — compact, matches the wallet voucher row size. */}
         <View
           style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
+            width: 36,
+            height: 36,
+            borderRadius: 10,
             backgroundColor: canClaim ? "rgba(192,80,64,0.18)" : "rgba(26,2,0,0.06)",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Icon size={26} color={canClaim ? "#C05040" : "rgba(26,2,0,0.45)"} />
+          <Icon size={20} color={canClaim ? "#C05040" : "rgba(26,2,0,0.45)"} />
         </View>
 
         {/* Title + meta */}
-        <View style={{ flex: 1, gap: 2 }}>
+        <View style={{ flex: 1 }}>
           <View
             style={{
               flexDirection: "row",
               alignItems: "center",
-              gap: 6,
+              gap: 5,
               flexWrap: "wrap",
             }}
           >
             <Text
               style={{
                 fontFamily: "Peachi-Bold",
-                fontSize: 16,
+                fontSize: 14,
                 color: "#1A0200",
               }}
               numberOfLines={1}
@@ -936,17 +897,17 @@ function RewardCard({
               <View
                 style={{
                   backgroundColor: "#C05040",
-                  paddingHorizontal: 6,
-                  paddingVertical: 1.5,
-                  borderRadius: 4,
+                  paddingHorizontal: 5,
+                  paddingVertical: 1,
+                  borderRadius: 3,
                 }}
               >
                 <Text
                   style={{
                     color: "#FFFFFF",
                     fontFamily: "SpaceGrotesk_700Bold",
-                    fontSize: 9,
-                    letterSpacing: 1,
+                    fontSize: 8.5,
+                    letterSpacing: 0.8,
                     textTransform: "uppercase",
                   }}
                 >
@@ -956,44 +917,29 @@ function RewardCard({
             )}
           </View>
 
-          <View
+          <Text
             style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
+              marginTop: 1,
+              color: "rgba(26,2,0,0.60)",
+              fontFamily: "SpaceGrotesk_500Medium",
+              fontSize: 11,
             }}
+            numberOfLines={1}
           >
-            <Text
-              style={{
-                color: canClaim ? "#C05040" : "rgba(26,2,0,0.55)",
-                fontFamily: "SpaceGrotesk_700Bold",
-                fontSize: 9,
-                letterSpacing: 1.4,
-                textTransform: "uppercase",
-              }}
-            >
-              {categoryLabel}
+            <Text style={{ color: canClaim ? "#C05040" : "rgba(26,2,0,0.55)", fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1 }}>
+              {categoryLabel.toUpperCase()}
             </Text>
-            <Text style={{ color: "rgba(26,2,0,0.30)", fontSize: 10 }}>•</Text>
-            <Text
-              style={{
-                color: "rgba(26,2,0,0.60)",
-                fontFamily: "SpaceGrotesk_500Medium",
-                fontSize: 12,
-              }}
-              numberOfLines={1}
-            >
-              {formatRewardValue(reward)}
-            </Text>
-          </View>
+            {"  ·  "}
+            {formatRewardValue(reward)}
+          </Text>
 
-          {/* Locked: progress strip + "X to go" sub-line */}
+          {/* Locked: progress strip — kept minimal */}
           {!canClaim && (
-            <View style={{ marginTop: 6 }}>
+            <View style={{ marginTop: 5 }}>
               <View
                 style={{
-                  height: 3,
-                  borderRadius: 2,
+                  height: 2,
+                  borderRadius: 1,
                   backgroundColor: "rgba(26,2,0,0.08)",
                   overflow: "hidden",
                 }}
@@ -1003,16 +949,16 @@ function RewardCard({
                     height: "100%",
                     width: `${Math.max(progress * 100, 4)}%`,
                     backgroundColor: "#C05040",
-                    borderRadius: 2,
+                    borderRadius: 1,
                   }}
                 />
               </View>
               <Text
                 style={{
-                  marginTop: 4,
+                  marginTop: 3,
                   color: "rgba(26,2,0,0.55)",
                   fontFamily: "SpaceGrotesk_500Medium",
-                  fontSize: 11,
+                  fontSize: 10,
                 }}
               >
                 {`${shortBy.toLocaleString()} Beans to go`}
@@ -1029,8 +975,8 @@ function RewardCard({
             className="active:opacity-80"
             style={{
               backgroundColor: "#C05040",
-              paddingHorizontal: 14,
-              paddingVertical: 9,
+              paddingHorizontal: 12,
+              paddingVertical: 7,
               borderRadius: 999,
               opacity: claimMutation.isPending ? 0.6 : 1,
             }}
@@ -1039,8 +985,8 @@ function RewardCard({
               style={{
                 color: "#FFFFFF",
                 fontFamily: "SpaceGrotesk_700Bold",
-                fontSize: 11,
-                letterSpacing: 1,
+                fontSize: 10.5,
+                letterSpacing: 0.8,
                 textTransform: "uppercase",
               }}
             >
@@ -1048,12 +994,12 @@ function RewardCard({
             </Text>
           </Pressable>
         ) : (
-          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 3 }}>
+          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 2 }}>
             <Text
               style={{
                 color: "rgba(26,2,0,0.55)",
                 fontFamily: "Peachi-Bold",
-                fontSize: 16,
+                fontSize: 14,
               }}
             >
               {required.toLocaleString()}
@@ -1062,8 +1008,8 @@ function RewardCard({
               style={{
                 color: "rgba(26,2,0,0.45)",
                 fontFamily: "SpaceGrotesk_700Bold",
-                fontSize: 9,
-                letterSpacing: 1.2,
+                fontSize: 8.5,
+                letterSpacing: 1,
               }}
             >
               BEANS
