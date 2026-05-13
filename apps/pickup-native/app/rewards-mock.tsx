@@ -59,38 +59,16 @@ const MOCK = {
     visitsTotal: 20,
     perksTease: "1.75× Beans + free monthly drink",
   },
-  // Cards ordered by immediacy at checkout:
-  //   1. Wallet rewards — usable at checkout RIGHT NOW
-  //   2. Ready to claim (challenge wins, milestones, admin gifts,
-  //      ready points redemptions) — one tap from being checkout-ready
-  //   3. Locked / in-progress — working toward a checkout reward
-  //   4. Earned trophies — history, no action needed
+  // Three reward TYPES on the page, in order:
+  //   1. CHALLENGE  — 3 active per cycle (mix of ready / locked)
+  //   2. POINTS     — Beans redemption (mix of ready / locked)
+  //   3. MYSTERY    — past mystery-bag wins (earned trophies)
+  //
+  // Wallet / achievements / streak chest moved off this page —
+  // wallet vouchers surface inline at checkout, achievements and
+  // the streak chest live on their own surfaces.
   cards: [
-    // ── 1. WALLET (use at checkout right now) ───────────────────────
-    {
-      kind: "wallet",
-      id: "w1",
-      Icon: Coffee,
-      eyebrow: "WALLET",
-      title: "Free Drink",
-      offer: "Any drink at checkout",
-      constraint: "From milestone · No expiry",
-      status: "ready",
-      action: "Use",
-    },
-    {
-      kind: "wallet",
-      id: "w2",
-      Icon: Tag,
-      eyebrow: "WALLET",
-      title: "RM5 Off",
-      offer: "RM5 off your order",
-      constraint: "Expires Apr 12",
-      status: "ready",
-      action: "Use",
-    },
-
-    // ── 2. READY TO CLAIM (one tap → moves into wallet) ─────────────
+    // ── 1. CHALLENGE (3 active, mix of states) ──────────────────────
     {
       kind: "challenge",
       id: "ch1",
@@ -103,16 +81,33 @@ const MOCK = {
       action: "Claim",
     },
     {
-      kind: "achievement",
-      id: "ach1",
-      Icon: Trophy,
-      eyebrow: "ACHIEVEMENT",
-      title: "Coffee Veteran",
-      offer: "+200 Beans + 2 rewards",
-      constraint: "50 lifetime orders",
-      status: "ready",
-      action: "Claim",
+      kind: "challenge",
+      id: "ch2",
+      Icon: DollarSign,
+      eyebrow: "CHALLENGE",
+      title: "Big Bill",
+      offer: "Free Drink + 50 Beans",
+      constraint: "RM100+ in one bill",
+      status: "locked",
+      progressCurrent: 62,
+      progressTarget: 100,
+      progressUnit: "RM",
     },
+    {
+      kind: "challenge",
+      id: "ch3",
+      Icon: Search,
+      eyebrow: "CHALLENGE",
+      title: "Try New Things",
+      offer: "2× Beans Boost",
+      constraint: "3 distinct new drinks",
+      status: "locked",
+      progressCurrent: 1,
+      progressTarget: 3,
+      progressUnit: "tried",
+    },
+
+    // ── 2. POINTS (Beans redemption) ────────────────────────────────
     {
       kind: "points",
       id: "p1",
@@ -147,60 +142,6 @@ const MOCK = {
       action: "Claim",
     },
 
-    // ── 3. LOCKED / working toward a checkout reward ────────────────
-    {
-      kind: "challenge",
-      id: "ch2",
-      Icon: DollarSign,
-      eyebrow: "CHALLENGE",
-      title: "Big Bill",
-      offer: "Free Drink + 50 Beans",
-      constraint: "RM100+ in one bill",
-      status: "locked",
-      progressCurrent: 62,
-      progressTarget: 100,
-      progressUnit: "RM",
-    },
-    {
-      kind: "achievement",
-      id: "ach2",
-      Icon: Target,
-      eyebrow: "ACHIEVEMENT",
-      title: "Outlet Explorer",
-      offer: "+100 Beans + Add-on voucher",
-      constraint: "3 distinct outlets",
-      status: "locked",
-      progressCurrent: 2,
-      progressTarget: 3,
-      progressUnit: "outlets",
-    },
-    {
-      kind: "challenge",
-      id: "ch3",
-      Icon: Search,
-      eyebrow: "CHALLENGE",
-      title: "Try New Things",
-      offer: "2× Beans Boost",
-      constraint: "3 distinct new drinks",
-      status: "locked",
-      progressCurrent: 1,
-      progressTarget: 3,
-      progressUnit: "tried",
-    },
-    {
-      kind: "challenge",
-      id: "ch4",
-      Icon: Users,
-      eyebrow: "CHALLENGE",
-      title: "Refer a friend",
-      offer: "Free Drink for both",
-      constraint: "1 successful referral",
-      status: "locked",
-      progressCurrent: 0,
-      progressTarget: 1,
-      progressUnit: "ref",
-    },
-
     {
       kind: "points",
       id: "p-locked-drink",
@@ -228,7 +169,7 @@ const MOCK = {
       progressUnit: "Beans",
     },
 
-    // ── 4. EARNED (history / trophy shelf) ──────────────────────────
+    // ── 3. MYSTERY BAG (point-of-sale wins) ─────────────────────────
     {
       kind: "mystery",
       id: "myst1",
@@ -240,25 +181,16 @@ const MOCK = {
       status: "earned",
     },
     {
-      kind: "achievement",
-      id: "ach3",
-      Icon: Award,
-      eyebrow: "ACHIEVEMENT",
-      title: "First Sip",
-      offer: "+50 Beans",
-      constraint: "Earned Mar 4",
+      kind: "mystery",
+      id: "myst2",
+      Icon: Cookie,
+      eyebrow: "MYSTERY BAG",
+      title: "Free Pastry",
+      offer: "Free pastry on next order",
+      constraint: "From order #1038",
       status: "earned",
     },
   ] as MockCard[],
-  // Bag at the very top of the cards stream
-  beanBag: {
-    available: true,
-    weeksAtQualify: 4,
-    label: "House Bag",
-    Icon: Package,
-    offer: "+75 Beans + RM5 Off",
-    constraint: "Expires in 7 days",
-  },
 };
 
 type MockCard = {
@@ -334,10 +266,6 @@ export default function RewardsMock() {
         </View>
 
         <Grid2>
-          {/* Streak bean bag sits inline with the rest of the stream —
-              it's another checkout-ready reward, no need for special
-              real estate. */}
-          <BagCard {...m.beanBag} />
           {m.cards.map((c) => (
             <RewardCard key={c.id} {...c} />
           ))}
