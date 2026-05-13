@@ -67,7 +67,7 @@ export async function issueVoucher(args: {
     .from("voucher_templates")
     .select(`
       id, title, description, icon, category, validity_days,
-      discount_type, discount_value, min_order_value,
+      discount_type, discount_value, multiplier_value, min_order_value,
       applicable_categories, applicable_products, free_product_name,
       stacks_with_beans
     `)
@@ -108,6 +108,7 @@ export async function issueVoucher(args: {
       category:              tpl.category,
       discount_type:         tpl.discount_type,
       discount_value:        tpl.discount_value,
+      multiplier_value:      tpl.multiplier_value,
       min_order_value:       tpl.min_order_value,
       applicable_categories: tpl.applicable_categories,
       applicable_products:   tpl.applicable_products,
@@ -822,16 +823,59 @@ export async function applyOrderV2Hooks(args: {
   // surfaced), so wallet vouchers stayed status='active' forever and
   // could be re-applied at every checkout. Aligning with the existing
   // enum.
+  //
+  // ALSO: if the voucher was a multiplier (beans_multiplier with
+  // multiplier_value > 1), credit the bonus Beans NOW — the cart-side
+  // discount engine returns 0 for multiplier vouchers because the
+  // multiplier is a post-payment boost, not a price reduction. Without
+  // this branch a "2× Beans Boost" voucher would be consumed at
+  // checkout without ever doubling the customer's earned points.
   if (walletVoucherId) {
     try {
+      // Fetch BEFORE the update so we still see the discount metadata
+      // (status='used' rows don't get re-read anywhere else in this
+      // function).
+      const { data: voucher } = await supabase
+        .from("issued_rewards")
+        .select("discount_type, multiplier_value, title")
+        .eq("id", walletVoucherId)
+        .eq("member_id", memberId)
+        .single();
+
       const { error } = await supabase
         .from("issued_rewards")
         .update({ status: "used", redeemed_at: new Date().toISOString() })
         .eq("id", walletVoucherId)
         .eq("member_id", memberId);
       if (error) console.warn("[v2] markVoucherUsed failed", error.message);
+
+      // Multiplier credit. Reads the order's loyalty_points_earned to
+      // know what 100% of the base award was, then awards (mul - 1) ×
+      // base as a separate "voucher_bonus" transaction. Keeps the base
+      // points ledger entry from earnLoyaltyPoints untouched so audit
+      // history reads cleanly (base + bonus, not a mutated base).
+      const mul = Number((voucher as { multiplier_value?: number | string | null } | null)?.multiplier_value ?? 0);
+      const dt  = (voucher as { discount_type?: string | null } | null)?.discount_type ?? null;
+      if (voucher && dt === "beans_multiplier" && mul > 1) {
+        const { data: orderRow } = await supabase
+          .from("orders")
+          .select("loyalty_points_earned")
+          .eq("id", orderId)
+          .single();
+        const base = Number((orderRow as { loyalty_points_earned?: number | null } | null)?.loyalty_points_earned ?? 0);
+        const bonus = Math.round(base * (mul - 1));
+        if (bonus > 0) {
+          await awardBonusBeans({
+            memberId,
+            amount: bonus,
+            description: `${(voucher as { title?: string | null }).title ?? "Boost voucher"} (${mul}× bonus)`,
+            referenceId: walletVoucherId,
+            txnType: "manual_bonus",
+          });
+        }
+      }
     } catch (e) {
-      console.warn("[v2] markVoucherUsed failed", e);
+      console.warn("[v2] markVoucherUsed/multiplier failed", e);
     }
   }
 
