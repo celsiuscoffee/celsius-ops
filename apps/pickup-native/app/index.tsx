@@ -23,10 +23,8 @@ import {
   fetchMyVouchers,
   fetchClaimableVouchers,
   fetchActiveMission,
-  voucherUrgencyLabel,
-  type Voucher,
 } from "../lib/rewards-v2";
-import { themeForVoucher } from "../components/VoucherWallet";
+import { RewardTicket } from "../components/RewardTicket";
 import { SafeBoundary } from "../components/SafeBoundary";
 import { TierHero } from "../components/TierHero";
 import { PosterCarousel } from "../components/PosterCarousel";
@@ -859,22 +857,92 @@ export default function Home() {
           </Pressable>
         )}
 
-        {/* Your vouchers — wallet vouchers ready to redeem at checkout.
-            Tapping the title row, any card, or the All link all land on
-            the Vouchers tab in /rewards (one consistent destination —
-            keeps the home affordance simple and matches what the KPI
-            strip's Vouchers stat does). */}
-        {walletVouchers.length > 0 && (
+        {/* Active challenge — small banner that surfaces the customer's
+            current weekly mission with one-tap into the Challenges tab.
+            Hidden while no mission is picked / nothing's loaded. */}
+        {activeMission && (
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync();
+              router.push("/rewards?tab=challenges" as never);
+            }}
+            className="mt-5 mx-4 active:opacity-80 rounded-2xl flex-row items-center"
+            style={{
+              backgroundColor: "#1A0200",
+              padding: 14,
+              gap: 12,
+              shadowColor: "#160800",
+              shadowOpacity: 0.18,
+              shadowRadius: 10,
+              shadowOffset: { width: 0, height: 4 },
+            }}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 12,
+                backgroundColor: "rgba(251,191,36,0.18)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Sparkles size={20} color="#FBBF24" strokeWidth={1.8} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontFamily: "SpaceGrotesk_700Bold",
+                  fontSize: 9.5,
+                  letterSpacing: 1.4,
+                  color: "#FBBF24",
+                  textTransform: "uppercase",
+                }}
+                numberOfLines={1}
+              >
+                Active challenge · {activeMission.progress_current}/{activeMission.goal_threshold}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: "Peachi-Bold",
+                  fontSize: 15,
+                  color: "#FFFFFF",
+                  marginTop: 2,
+                }}
+                numberOfLines={1}
+              >
+                {activeMission.title}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: "SpaceGrotesk_500Medium",
+                  fontSize: 11,
+                  color: "rgba(255,255,255,0.65)",
+                  marginTop: 1,
+                }}
+                numberOfLines={1}
+              >
+                {activeMission.reward_summary}
+              </Text>
+            </View>
+            <ChevronRight size={16} color="rgba(251,191,36,0.7)" strokeWidth={2} />
+          </Pressable>
+        )}
+
+        {/* Available rewards — points-shop catalogue the customer can
+            spend Beans on. Tap any card OR the All link to jump to the
+            Rewards tab (Get more / Spend Beans section). */}
+        {affordableRewards.length > 0 && (
           <View className="mt-5">
             <View className="flex-row items-center justify-between mb-2 px-4">
               <Text
                 className="text-espresso text-[18px]"
                 style={{ fontFamily: "Peachi-Bold" }}
               >
-                Your vouchers
+                Available rewards
               </Text>
               <Pressable
-                onPress={() => router.push("/rewards?tab=vouchers" as never)}
+                onPress={() => router.push("/rewards?tab=rewards" as never)}
                 className="flex-row items-center gap-0.5 active:opacity-70"
               >
                 <Text className="text-primary text-xs font-bold">All</Text>
@@ -886,8 +954,12 @@ export default function Home() {
               showsHorizontalScrollIndicator={false}
               contentContainerClassName="gap-3 px-4"
             >
-              {walletVouchers.slice(0, 6).map((v) => (
-                <HomeVoucherCard key={v.id} voucher={v} />
+              {affordableRewards.map((r) => (
+                <RewardTicket
+                  key={r.id}
+                  reward={r}
+                  onPress={() => router.push("/rewards?tab=rewards" as never)}
+                />
               ))}
             </ScrollView>
           </View>
@@ -1486,133 +1558,3 @@ function ForYouStrip({
   );
 }
 
-// ─── Home voucher card ──────────────────────────────────────────────
-// Compact tile for the home-screen "Your vouchers" rail. Pulls its
-// colourway + brand icon from the shared VOUCHER_THEME table so a
-// free-drink voucher reads the same here as in the wallet (espresso +
-// gold + CelsiusCup), a discount looks identical (terracotta + white
-// + CelsiusTag), etc.
-
-function HomeVoucherCard({ voucher }: { voucher: Voucher }) {
-  const theme = themeForVoucher(voucher);
-  const urgency = voucherUrgencyLabel(voucher);
-  const useFgIsLight = (
-    theme.accent === "#FBBF24" || theme.accent === "#FFFFFF" || theme.accent === "#D99404"
-  );
-  const usePillFg = useFgIsLight ? "#1A0200" : "#FFFFFF";
-  const categoryLabel = (
-    voucher.category === "free_item" ? "Free Item"
-      : voucher.category === "upgrade" ? "Add-on"
-      : voucher.category === "discount" ? "Discount"
-      : voucher.category === "multiplier" ? "Boost"
-      : "Reward"
-  );
-
-  return (
-    <Pressable
-      onPress={() => router.push("/rewards?tab=vouchers" as never)}
-      className="active:opacity-90"
-      style={{
-        width: 188,
-        borderRadius: 16,
-        overflow: "hidden",
-        backgroundColor: theme.bg,
-        borderWidth: 1,
-        borderColor: theme.border,
-        shadowColor: "#000",
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 4 },
-        elevation: 3,
-      }}
-    >
-      {/* Ghost mascot in the bottom-right, mirroring the wallet card. */}
-      <View
-        style={{
-          position: "absolute",
-          right: -14,
-          bottom: 24,
-          opacity: 0.12,
-        }}
-      >
-        {theme.iconKind === "brand" && theme.brandIcon
-          ? <theme.brandIcon size={120} color={theme.iconColor} />
-          : theme.glyphIcon
-            ? <theme.glyphIcon size={120} color={theme.iconColor} />
-            : null}
-      </View>
-
-      <View style={{ padding: 12, gap: 6 }}>
-        <View
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            backgroundColor: theme.iconBg,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {theme.iconKind === "brand" && theme.brandIcon
-            ? <theme.brandIcon size={22} color={theme.iconColor} />
-            : theme.glyphIcon
-              ? <theme.glyphIcon size={20} color={theme.iconColor} strokeWidth={2} />
-              : null}
-        </View>
-        <Text
-          style={{
-            fontFamily: "SpaceGrotesk_700Bold",
-            fontSize: 9,
-            letterSpacing: 1.3,
-            color: theme.accent,
-            textTransform: "uppercase",
-            marginTop: 4,
-          }}
-          numberOfLines={1}
-        >
-          {categoryLabel}
-        </Text>
-        <Text
-          style={{
-            fontFamily: "Peachi-Bold",
-            fontSize: 15,
-            color: theme.fg,
-            lineHeight: 19,
-          }}
-          numberOfLines={2}
-        >
-          {voucher.title}
-        </Text>
-        <Text
-          style={{
-            color: urgency.warning ? "#FFB070" : theme.fgDim,
-            fontFamily: "SpaceGrotesk_500Medium",
-            fontSize: 11,
-          }}
-          numberOfLines={1}
-        >
-          {urgency.label}
-        </Text>
-      </View>
-      <View
-        style={{
-          backgroundColor: theme.accent,
-          paddingVertical: 8,
-          alignItems: "center",
-        }}
-      >
-        <Text
-          style={{
-            color: usePillFg,
-            fontFamily: "SpaceGrotesk_700Bold",
-            fontSize: 10.5,
-            letterSpacing: 1,
-            textTransform: "uppercase",
-          }}
-        >
-          View
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
