@@ -61,7 +61,9 @@ export async function GET(request: NextRequest) {
     const k = (v.source_type as string) ?? "unknown";
     if (!sourceFunnel[k]) sourceFunnel[k] = { issued: 0, redeemed: 0, expired: 0 };
     sourceFunnel[k].issued++;
-    if (v.status === "redeemed") sourceFunnel[k].redeemed++;
+    // status 'used' is the consumed state for wallet vouchers — the DB
+    // CHECK constraint only allows ('active','used','expired').
+    if (v.status === "used") sourceFunnel[k].redeemed++;
     if (v.status === "expired")  sourceFunnel[k].expired++;
   }
   const voucherFunnel = Object.entries(sourceFunnel).map(([source, n]) => ({

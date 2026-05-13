@@ -36,7 +36,10 @@ export type IssuedVoucher = {
   voucher_template_id: string | null;
   source_type: "mission" | "mystery" | "birthday" | "referral" | "milestone" | "manual" | "points_redemption" | null;
   source_ref_id: string | null;
-  status: "active" | "redeemed" | "expired" | "voided";
+  // DB CHECK constraint allows: 'active' | 'used' | 'expired'. ('redeemed'
+  // and 'voided' are intentionally NOT in the enum — earlier code that
+  // tried to set 'redeemed' silently failed.)
+  status: "active" | "used" | "expired";
   issued_at: string;
   expires_at: string | null;
   redeemed_at: string | null;
@@ -738,18 +741,26 @@ export async function applyOrderV2Hooks(args: {
   const supabase = getSupabaseAdmin();
   const { memberId, orderId, outletId, orderCreatedAt, walletVoucherId } = args;
 
-  // Wallet voucher → redeemed. Doesn't deduct Beans (wallet vouchers
+  // Wallet voucher → consumed. Doesn't deduct Beans (wallet vouchers
   // cost nothing to claim). Idempotent: a second call no-ops because
-  // status='redeemed' is sticky.
+  // status='used' is sticky.
+  //
+  // Constraint note: issued_rewards.status only allows ('active','used',
+  // 'expired') — earlier writes here used 'redeemed' which failed the
+  // CHECK constraint silently (errors caught + logged but never
+  // surfaced), so wallet vouchers stayed status='active' forever and
+  // could be re-applied at every checkout. Aligning with the existing
+  // enum.
   if (walletVoucherId) {
     try {
-      await supabase
+      const { error } = await supabase
         .from("issued_rewards")
-        .update({ status: "redeemed", redeemed_at: new Date().toISOString() })
+        .update({ status: "used", redeemed_at: new Date().toISOString() })
         .eq("id", walletVoucherId)
         .eq("member_id", memberId);
+      if (error) console.warn("[v2] markVoucherUsed failed", error.message);
     } catch (e) {
-      console.warn("[v2] markVoucherRedeemed failed", e);
+      console.warn("[v2] markVoucherUsed failed", e);
     }
   }
 

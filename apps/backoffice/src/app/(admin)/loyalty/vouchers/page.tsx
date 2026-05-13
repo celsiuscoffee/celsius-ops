@@ -40,7 +40,7 @@ export default function ActiveVouchersPage() {
         </h1>
         <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
           Per-customer voucher wallet — issued by Missions, Mystery Bean, Birthday treats, Referrals,
-          Milestones, or manual grants. Includes active, redeemed, and expired states.
+          Milestones, or manual grants. Includes active, used, and expired states.
           <br />
           <span className="text-xs text-muted-foreground/80">
             Not the same as <strong>Points Redemptions</strong> (when a customer spends Beans on a Points Catalog reward — separate log).
@@ -73,9 +73,9 @@ export default function ActiveVouchersPage() {
                     <td className="px-4 py-3 text-muted-foreground">{v.source_type ?? "—"}</td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                        v.status === "active"   ? "bg-emerald-500/10 text-emerald-500" :
-                        v.status === "redeemed" ? "bg-sky-500/10 text-sky-500" :
-                                                  "bg-muted text-muted-foreground"
+                        v.status === "active" ? "bg-emerald-500/10 text-emerald-500" :
+                        v.status === "used"   ? "bg-sky-500/10 text-sky-500" :
+                                                "bg-muted text-muted-foreground"
                       }`}>{v.status}</span>
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(v.issued_at).toLocaleDateString()}</td>

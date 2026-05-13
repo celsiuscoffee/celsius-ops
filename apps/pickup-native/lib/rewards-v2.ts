@@ -14,7 +14,7 @@ export type Voucher = {
   description: string;
   icon: string;
   category: "free_item" | "upgrade" | "discount" | "multiplier" | "special";
-  status: "active" | "redeemed" | "expired" | "voided";
+  status: "active" | "used" | "expired";
   source_type: "mission" | "mystery" | "birthday" | "referral" | "milestone" | "manual" | "points_redemption" | null;
   issued_at: string;
   expires_at: string | null;

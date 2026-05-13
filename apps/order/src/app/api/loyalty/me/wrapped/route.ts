@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     .from("issued_rewards")
     .select("id", { count: "exact", head: false })
     .eq("member_id", r.member.memberId)
-    .eq("status", "redeemed")
+    .eq("status", "used")
     .gte("redeemed_at", yearStart)
     .lt("redeemed_at", yearEnd);
 
