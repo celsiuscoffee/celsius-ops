@@ -32,7 +32,6 @@ import { VoucherWallet, VOUCHER_THEME } from "../components/VoucherWallet";
 import type { Voucher } from "../lib/rewards-v2";
 import { MissionCard } from "../components/MissionCard";
 import { ClaimableSection } from "../components/ClaimableSection";
-import { RewardsOnboarding } from "../components/RewardsOnboarding";
 
 // Locked rewards within this much of the customer's balance get a
 // visible progress bar + "X to go" sub-line. Anything further out
@@ -40,8 +39,6 @@ import { RewardsOnboarding } from "../components/RewardsOnboarding";
 const PROGRESS_VISIBLE_THRESHOLD = 0.3;
 
 type RewardsTabKey = "challenges" | "rewards";
-
-const ONBOARDING_KEY = "rewards-v2-intro";
 
 function paramToTab(raw: string | string[] | undefined): RewardsTabKey {
   const v = Array.isArray(raw) ? raw[0] : raw;
@@ -57,11 +54,8 @@ export default function RewardsTab() {
   const phone = useApp((s) => s.phone);
   const loyaltyId = useApp((s) => s.loyaltyId);
   const member = useApp((s) => s.member);
-  const seenOnboardings = useApp((s) => s.seenOnboardings);
-  const markOnboardingSeen = useApp((s) => s.markOnboardingSeen);
 
   const [activeTab, setActiveTab] = useState<RewardsTabKey>(() => paramToTab(params.tab));
-  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Respect later route changes too — useful when the screen is already
   // mounted and someone pushes /rewards?tab=vouchers from a different
@@ -70,17 +64,6 @@ export default function RewardsTab() {
     const next = paramToTab(params.tab);
     setActiveTab((prev) => (prev === next ? prev : next));
   }, [params.tab]);
-
-  // Reveal the v2 onboarding sheet on first visit per install — gated
-  // on a signed-in phone so anonymous users don't see it before they
-  // can act on it.
-  useEffect(() => {
-    if (!phone) return;
-    if (seenOnboardings.includes(ONBOARDING_KEY)) return;
-    // Small delay so it doesn't fight the screen entrance.
-    const t = setTimeout(() => setShowOnboarding(true), 350);
-    return () => clearTimeout(t);
-  }, [phone, seenOnboardings]);
 
   // Tier — drives the hero theme + benefits card.
   const tierQ = useQuery({
@@ -229,14 +212,6 @@ export default function RewardsTab() {
       )}
 
       <BottomNav />
-
-      <RewardsOnboarding
-        visible={showOnboarding}
-        onDismiss={() => {
-          setShowOnboarding(false);
-          markOnboardingSeen(ONBOARDING_KEY);
-        }}
-      />
     </View>
   );
 }
