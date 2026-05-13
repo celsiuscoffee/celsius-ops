@@ -1,7 +1,7 @@
 "use client";
 
 import { useFetch } from "@/lib/use-fetch";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronRight, CheckCircle2, AlertCircle, Search, Plus, Loader2, X, Download, Sparkles, FileText, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { EmployeeProfile } from "@/lib/hr/types";
@@ -57,6 +57,15 @@ export default function EmployeesPage() {
   const [loeConfidence, setLoeConfidence] = useState<"high" | "medium" | "low" | null>(null);
   const [loePrefilled, setLoePrefilled] = useState(false);
   const [loeDragOver, setLoeDragOver] = useState(false);
+  // Caller role — drives UI gates (the New Employee button mirrors the API,
+  // which is OWNER/ADMIN only — see api/hr/employees/create/route.ts).
+  const [me, setMe] = useState<{ role: string } | null>(null);
+  useEffect(() => {
+    fetch("/api/auth/me").then((r) => r.ok ? r.json() : null).then((d) => {
+      if (d) setMe({ role: d.role });
+    });
+  }, []);
+  const canCreate = me?.role === "OWNER" || me?.role === "ADMIN";
   const [newEmp, setNewEmp] = useState({
     name: "",
     fullName: "",
@@ -356,13 +365,15 @@ export default function EmployeesPage() {
             <p className="mt-1 text-xs text-terracotta">Showing your direct reports only.</p>
           )}
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90"
-        >
-          <Plus className="h-4 w-4" />
-          New Employee
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90"
+          >
+            <Plus className="h-4 w-4" />
+            New Employee
+          </button>
+        )}
       </div>
 
       <div className="relative">
