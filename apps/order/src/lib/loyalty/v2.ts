@@ -164,25 +164,33 @@ export async function redeemPointsShopReward(args: {
     // returns 0, which presents as "the voucher banner shows but the
     // subtotal doesn't drop". Joining via reward_id keeps existing
     // backoffice editors as the single source of truth for discount config.
+    //
+    // reward_configs is a slim override table: only reward_id,
+    // discount_type, discount_value, updated_at. Earlier SELECT named
+    // columns that don't exist (max_discount_value, min_order_value,
+    // applicable_categories, applicable_products, free_product_name,
+    // bogo_buy_qty, bogo_free_qty) — the query errored with
+    // "column reward_configs.max_discount_value does not exist" and
+    // EVERY claim attempt failed. Limit the SELECT to what's actually
+    // on the table; everything else falls back to the rewards row.
     supabase
       .from("reward_configs")
-      .select("discount_type, discount_value, max_discount_value, min_order_value, applicable_categories, applicable_products, free_product_name, bogo_buy_qty, bogo_free_qty")
+      .select("discount_type, discount_value")
       .eq("reward_id", args.rewardId)
       .maybeSingle(),
   ]);
 
   if (!reward) return { ok: false, reason: "reward_not_found" };
 
-  // Merge: reward_configs wins when it has a non-null value, falling
-  // back to whatever was directly on the rewards row (legacy/seed data).
-  const discountType        = (config?.discount_type as string | null) ?? (reward.discount_type as string | null);
-  const discountValue       = (config?.discount_value as number | null) ?? (reward.discount_value as number | null);
-  const minOrderValue       = (config?.min_order_value as number | null) ?? (reward.min_order_value as number | null);
-  const applicableCategories =
-    (config?.applicable_categories as string[] | null) ?? (reward.applicable_categories as string[] | null);
-  const applicableProducts   =
-    (config?.applicable_products as string[] | null) ?? (reward.applicable_products as string[] | null);
-  const freeProductName      = (config?.free_product_name as string | null) ?? (reward.free_product_name as string | null);
+  // Merge: reward_configs overrides discount_type / discount_value when
+  // present (that's all that table actually stores). Eligibility +
+  // min-order filters live exclusively on the rewards row.
+  const discountType         = (config?.discount_type as string | null) ?? (reward.discount_type as string | null);
+  const discountValue        = (config?.discount_value as number | null) ?? (reward.discount_value as number | null);
+  const minOrderValue        = (reward.min_order_value as number | null);
+  const applicableCategories = (reward.applicable_categories as string[] | null);
+  const applicableProducts   = (reward.applicable_products as string[] | null);
+  const freeProductName      = (reward.free_product_name as string | null);
 
   const pointsRequired = (reward.points_required as number) ?? 0;
 
