@@ -12,6 +12,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { checkCronAuth } from "@celsius/shared";
 import { issueVoucher } from "@/lib/loyalty/v2";
+import { awardBonusBeans } from "@/lib/loyalty/points";
+import { notifyMilestoneEarned } from "@/lib/push/templates";
 
 const BRAND_ID = (process.env.LOYALTY_BRAND_ID ?? "brand-celsius").trim();
 
@@ -97,19 +99,57 @@ export async function GET(req: NextRequest) {
         .maybeSingle();
       if (existing) continue;
 
-      // Record + grant.
-      await supabase.from("user_milestones_earned").insert({
-        member_id: member.id,
-        milestone_id: m.id,
-      });
+      // Record + grant. Order matters: the earned row goes in FIRST
+      // so a crash mid-grant doesn't re-trigger the milestone on the
+      // next scan and double-issue vouchers / double-credit beans.
+      const { error: insertErr } = await supabase
+        .from("user_milestones_earned")
+        .insert({ member_id: member.id, milestone_id: m.id });
+      // If the insert lost a race with another scanner, skip — the
+      // unique (member_id, milestone_id) constraint already protected
+      // us from a duplicate earn, and the original winner will have
+      // (or will) award the reward.
+      if (insertErr) continue;
+
+      let issuedCount = 0;
       for (const tplId of m.reward_voucher_template_ids ?? []) {
-        await issueVoucher({
+        const v = await issueVoucher({
           memberId: member.id,
           templateId: tplId,
           sourceType: "milestone",
           sourceRefId: m.id,
         });
+        if (v) issuedCount++;
       }
+
+      // Credit reward_bonus_beans configured on the milestone. Was
+      // ignored before — the backoffice exposes the field and the
+      // four seeded milestones (50/200/500 etc.) all set it, but the
+      // cron never read it. Wrapped in try/catch so a balance write
+      // miss never blocks the rest of the scan.
+      const bonus = m.reward_bonus_beans ?? 0;
+      if (bonus > 0) {
+        try {
+          await awardBonusBeans({
+            memberId: member.id,
+            amount: bonus,
+            description: `Milestone — ${m.title}`,
+            referenceId: m.id,
+            txnType: "milestone_bonus",
+          });
+        } catch (e) {
+          console.warn("[milestone] bonus beans failed", e);
+        }
+      }
+
+      // Fire-and-forget push so the customer feels the milestone land.
+      notifyMilestoneEarned({
+        memberId: member.id,
+        milestoneTitle: m.title,
+        voucherCount: issuedCount,
+        bonusBeans: bonus,
+      }).catch(() => {});
+
       earned++;
     }
   }

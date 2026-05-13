@@ -27,6 +27,13 @@ function thisWeekStartIso(now = new Date()): string {
   return new Date(mon.getTime() - MY_OFFSET_HOURS * 60 * 60 * 1000).toISOString();
 }
 
+// Streak savers refill on this cadence. The schema comment says "once
+// per quarter" — without this, every member only ever has the one
+// saver they were created with, and once it's burned they're back to
+// hard-burn mode forever. 90 days is the right anchor: each member
+// gets a fresh saver three months after their last one was consumed.
+const SAVER_REFILL_DAYS = 90;
+
 export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
@@ -34,6 +41,9 @@ export async function GET(req: NextRequest) {
   const supabase = getSupabaseAdmin();
   const weekStart = thisWeekStartIso();
   const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+  const saverRefillCutoff = new Date(
+    Date.now() - SAVER_REFILL_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
 
   // 1) Members with a paid order this week → bump streak if not already bumped.
   const { data: ordering } = await supabase
@@ -91,10 +101,31 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // 3) Refill streak savers — anyone whose saver was consumed more
+  // than SAVER_REFILL_DAYS ago gets it back. Matches the table's
+  // "once per quarter" comment. Filtered on saver_last_used_at being
+  // older than the cutoff so we never repeatedly toggle the same row.
+  const { data: refillCandidates } = await supabase
+    .from("user_streaks")
+    .select("member_id")
+    .eq("saver_available", false)
+    .not("saver_last_used_at", "is", null)
+    .lt("saver_last_used_at", saverRefillCutoff);
+
+  let refilled = 0;
+  for (const r of refillCandidates ?? []) {
+    const { error } = await supabase
+      .from("user_streaks")
+      .update({ saver_available: true })
+      .eq("member_id", r.member_id);
+    if (!error) refilled++;
+  }
+
   return NextResponse.json({
     week_start: weekStart,
     bumped,
     burned,
     saved,
+    refilled,
   });
 }

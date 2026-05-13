@@ -521,6 +521,35 @@ export async function notifyClaimableReady(args: {
   );
 }
 
+/** Milestone earned — fired by the milestone-scan cron the moment a
+ *  member crosses a lifetime achievement threshold (50 cups, 3 outlets,
+ *  longest-streak weeks, etc.). Body summarises the reward so the
+ *  customer knows what landed without opening the app. */
+export async function notifyMilestoneEarned(args: {
+  memberId: string;
+  milestoneTitle: string;
+  voucherCount: number;
+  bonusBeans: number;
+}): Promise<SendResult> {
+  const tokens = await tokensForMember(args.memberId);
+  if (tokens.length === 0) return zero();
+  const parts: string[] = [];
+  if (args.voucherCount > 0) parts.push(`${args.voucherCount} voucher${args.voucherCount === 1 ? "" : "s"}`);
+  if (args.bonusBeans   > 0) parts.push(`+${args.bonusBeans} Beans`);
+  const body = parts.length > 0 ? parts.join(" · ") : "Tap to see your reward";
+  return sendExpoPush(
+    tokens.map((to) => ({
+      to,
+      title: `🏆 ${args.milestoneTitle} — unlocked!`,
+      body,
+      sound: "default",
+      priority: "high",
+      channelId: CH_LOYALTY,
+      data: { type: "milestone_earned", deeplink: "rewards/vouchers" },
+    })),
+  );
+}
+
 /** Referral reward landed — both sides ping at the same moment. */
 export async function notifyReferralRewarded(args: {
   memberId: string;
