@@ -1,22 +1,18 @@
 /**
- * MOCK — Proposed unified Rewards screen.
+ * MOCK v3 — Proposed unified Rewards screen.
  *
- * Static layout + mock data so we can iterate on the design before
- * touching the live rewards screen. Navigate to /rewards-mock in the
- * app to preview.
- *
+ * No emojis anywhere. Every visual signal is a lucide icon in a
+ * consistent 36×36 tile so the page reads as one design system.
  * Layout (top → bottom):
- *   1. Espresso header
- *   2. Hero — next-tier progression card (was on Milestones tab)
- *   3. Stat strip — Beans · streak · tier in one row
- *   4. NOW — bag + active mission (2-col grid, max 2 cards)
- *   5. READY TO CLAIM — milestones + admin claimables (2-col grid)
- *   6. YOUR REWARDS — wallet vouchers (2-col grid, all-link)
- *   7. ACHIEVEMENTS — milestone ladder (2-col grid, all-link)
- *   8. SPEND BEANS — points-shop catalog (horizontal rail)
+ *   1. Hero — next-tier progression
+ *   2. Stat strip — Beans + streak (tier moved to hero, no more pill duplicate)
+ *   3. NOW — bag + active mission (2-col grid)
+ *   4. READY TO CLAIM — milestones + admin claimables (2-col grid)
+ *   5. YOUR REWARDS — wallet rewards (2-col grid, all-link)
+ *   6. ACHIEVEMENTS — milestone ladder (2-col grid, all-link)
+ *   7. SPEND BEANS — points-shop catalog (horizontal rail)
  *
- * Each section renders ONLY when there's content for it, so a fresh
- * customer doesn't see five empty strips on first launch.
+ * Each section renders only when populated.
  */
 
 import { useState } from "react";
@@ -24,7 +20,8 @@ import { View, Text, ScrollView, Pressable, Modal } from "react-native";
 import { Stack, router } from "expo-router";
 import {
   ChevronRight, Sparkles, Flame, Trophy, Gift,
-  Target, Check,
+  Target, Check, Package, Award, Crown, Coffee, Cookie,
+  Tag, Sandwich, Star,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { BottomNav } from "../components/BottomNav";
@@ -38,13 +35,11 @@ const MOCK = {
     streakWeeks: 4,
     longestWeeks: 7,
     tierName: "Gold",
-    tierIcon: "★",
     tierColor: "#D99404",
     tierMultiplier: 1.5,
   },
   nextTier: {
     name: "Platinum",
-    qualification: "visits" as const,
     visitsLeft: 8,
     visitsCurrent: 12,
     visitsTotal: 20,
@@ -54,15 +49,10 @@ const MOCK = {
     available: true,
     weeksAtQualify: 4,
     label: "House Bag",
-    emoji: "🛍️",
+    Icon: Package,
     bonusBeans: 75,
     voucherTitle: "RM5 Off",
   },
-  // Mission demo: showing the NEW "complete-unclaimed" state so you
-  // can see the proposed claim flow. Tap "Claim reward" to trigger
-  // the celebration modal. After dismissing, this card would fall
-  // back to the "Pick this week's challenge" state until the
-  // customer picks a new mission.
   mission: {
     state: "complete-unclaimed" as "active" | "complete-unclaimed" | "no-active",
     title: "Group Order",
@@ -75,7 +65,7 @@ const MOCK = {
       id: "m1",
       title: "Coffee Veteran",
       reward: "2 rewards · +200 Beans",
-      emoji: "🏆",
+      Icon: Trophy,
     },
   ],
   claimableAdmin: [
@@ -83,57 +73,65 @@ const MOCK = {
       id: "a1",
       title: "Welcome BOGO",
       description: "Buy one drink, get one free",
-      emoji: "🎁",
+      Icon: Gift,
     },
   ],
-  // Capped at 4 — claimables surface higher up in "Ready to claim",
-  // so this section shows only "Yours" (active wallet vouchers).
-  yourVouchers: [
-    { id: "v1", title: "Free Drink",  sub: "From milestone", accent: "#FBBF24", bg: "#1A0200", fg: "#FFFFFF" },
-    { id: "v2", title: "RM5 Off",     sub: "Expires Apr 12", accent: "#C05040", bg: "#FBEBE8", fg: "#1A0200" },
-    { id: "v3", title: "Free Add-on", sub: "Expires Apr 20", accent: "#C05040", bg: "#FBEBE8", fg: "#1A0200" },
-    { id: "v4", title: "2× Beans",    sub: "From mystery",   accent: "#FBBF24", bg: "#1A0200", fg: "#FFFFFF" },
+  yourRewards: [
+    { id: "v1", title: "Free Drink",  sub: "From milestone", Icon: Coffee, dark: true  },
+    { id: "v2", title: "RM5 Off",     sub: "Expires Apr 12", Icon: Tag,    dark: false },
+    { id: "v3", title: "Free Add-on", sub: "Expires Apr 20", Icon: Gift,   dark: false },
+    { id: "v4", title: "2× Beans",    sub: "From mystery",   Icon: Sparkles, dark: true },
   ],
-  // Capped at 4 — prioritise in-progress first (closest to threshold),
-  // then earned. Claimable milestones surface in "Ready to claim"
-  // above, not here.
   achievements: [
     {
       id: "ach1",
       title: "Outlet Explorer",
-      progress: "2 / 3 outlets · 1 to go",
+      progress: "2 / 3 outlets",
       earned: false,
-      emoji: "🏙",
+      Icon: Target,
     },
     {
       id: "ach2",
       title: "Hot Streak",
-      progress: "4 / 8 weeks · halfway there",
+      progress: "4 / 8 weeks",
       earned: false,
-      emoji: "🔥",
+      Icon: Flame,
     },
     {
       id: "ach3",
       title: "First Sip",
       progress: "Earned · Mar 4",
       earned: true,
-      emoji: "🥉",
+      Icon: Award,
     },
     {
       id: "ach4",
       title: "Bean Counter",
       progress: "Earned · Feb 18",
       earned: true,
-      emoji: "🪙",
+      Icon: Trophy,
     },
   ],
   catalog: [
-    { id: "r1", name: "Free Add-on",   pts: 200,  emoji: "☕" },
-    { id: "r2", name: "RM5 Voucher",   pts: 500,  emoji: "💵" },
-    { id: "r3", name: "Free Pastry",   pts: 800,  emoji: "🥐" },
-    { id: "r4", name: "Free Drink",    pts: 1200, emoji: "🥤" },
-    { id: "r5", name: "Free Lunch",    pts: 3000, emoji: "🍝" },
+    { id: "r1", name: "Free Add-on", pts: 200,  Icon: Gift },
+    { id: "r2", name: "RM5 Off",     pts: 500,  Icon: Tag },
+    { id: "r3", name: "Free Pastry", pts: 800,  Icon: Cookie },
+    { id: "r4", name: "Free Drink",  pts: 1200, Icon: Coffee },
+    { id: "r5", name: "Free Lunch",  pts: 3000, Icon: Sandwich },
   ],
+};
+
+// Brand palette in one place so every card pulls from the same source.
+const C = {
+  bg:       "#F8F5F2",
+  surface:  "#FFFFFF",
+  surfaceWarm: "#FBEBE8",
+  espresso: "#1A0200",
+  border:   "#E5E5E5",
+  primary:  "#C05040",
+  gold:     "#FBBF24",
+  mutedFg:  "#6B6B6B",
+  faintFg:  "#8E8E93",
 };
 
 // ─── Screen ─────────────────────────────────────────────────────────
@@ -147,11 +145,8 @@ export default function RewardsMock() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setMissionCelebration(true);
   }
-
   function closeMissionCelebration() {
     setMissionCelebration(false);
-    // After claiming, mission cycle resets — card flips back to the
-    // "pick this week's challenge" prompt.
     setMissionState("no-active");
   }
 
@@ -162,22 +157,16 @@ export default function RewardsMock() {
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 18 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 20 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── 1. Hero — next-tier progression ────────────────────── */}
-        <NextTierHero {...m.nextTier} tierColor={m.member.tierColor} />
+        <NextTierHero {...m.nextTier} tierName={m.member.tierName} tierColor={m.member.tierColor} />
 
-        {/* ── 2. Stat strip ──────────────────────────────────────── */}
         <StatStrip
           points={m.member.points}
           streakWeeks={m.member.streakWeeks}
-          tierName={m.member.tierName}
-          tierMultiplier={m.member.tierMultiplier}
-          tierColor={m.member.tierColor}
         />
 
-        {/* ── 3. NOW — actionable this week ──────────────────────── */}
         <Section label="Now">
           <Grid2>
             <BagCard {...m.beanBag} />
@@ -192,65 +181,39 @@ export default function RewardsMock() {
           </Grid2>
         </Section>
 
-        {/* ── 4. READY TO CLAIM ──────────────────────────────────── */}
         {(m.claimableMilestones.length > 0 || m.claimableAdmin.length > 0) && (
           <Section label="Ready to claim" count={m.claimableMilestones.length + m.claimableAdmin.length}>
             <Grid2>
               {m.claimableMilestones.map((c) => (
-                <ClaimCard
-                  key={c.id}
-                  emoji={c.emoji}
-                  title={c.title}
-                  subtitle={c.reward}
-                  variant="milestone"
-                />
+                <ClaimCard key={c.id} Icon={c.Icon} title={c.title} subtitle={c.reward} kind="milestone" />
               ))}
               {m.claimableAdmin.map((c) => (
-                <ClaimCard
-                  key={c.id}
-                  emoji={c.emoji}
-                  title={c.title}
-                  subtitle={c.description}
-                  variant="gift"
-                />
+                <ClaimCard key={c.id} Icon={c.Icon} title={c.title} subtitle={c.description} kind="gift" />
               ))}
             </Grid2>
           </Section>
         )}
 
-        {/* ── 5. YOUR REWARDS — wallet vouchers ──────────────────── */}
-        <Section label="Your rewards" count={m.yourVouchers.length} showAll>
+        <Section label="Your rewards" count={m.yourRewards.length} showAll>
           <Grid2>
-            {m.yourVouchers.map((v) => (
-              <VoucherCard key={v.id} title={v.title} sub={v.sub} bg={v.bg} fg={v.fg} accent={v.accent} />
+            {m.yourRewards.map((v) => (
+              <RewardCard key={v.id} Icon={v.Icon} title={v.title} sub={v.sub} dark={v.dark} />
             ))}
           </Grid2>
         </Section>
 
-        {/* ── 6. ACHIEVEMENTS — milestone ladder ─────────────────── */}
         <Section label="Achievements" count={m.achievements.length} showAll>
           <Grid2>
             {m.achievements.map((a) => (
-              <AchievementCard
-                key={a.id}
-                emoji={a.emoji}
-                title={a.title}
-                progress={a.progress}
-                earned={a.earned}
-              />
+              <AchievementCard key={a.id} Icon={a.Icon} title={a.title} progress={a.progress} earned={a.earned} />
             ))}
           </Grid2>
         </Section>
 
-        {/* ── 7. SPEND BEANS — horizontal rail ───────────────────── */}
         <Section label="Spend Beans" count={m.catalog.length} showAll>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 10, paddingRight: 4 }}
-          >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 4 }}>
             {m.catalog.map((r) => (
-              <CatalogTicket key={r.id} name={r.name} pts={r.pts} emoji={r.emoji} balance={m.member.points} />
+              <CatalogTicket key={r.id} Icon={r.Icon} name={r.name} pts={r.pts} balance={m.member.points} />
             ))}
           </ScrollView>
         </Section>
@@ -269,157 +232,122 @@ export default function RewardsMock() {
   );
 }
 
-// ─── Components ────────────────────────────────────────────────────
+// ─── Hero ───────────────────────────────────────────────────────────
 
 function NextTierHero({
-  name, qualification, visitsLeft, visitsCurrent, visitsTotal, perksTease, tierColor,
+  name, visitsLeft, visitsCurrent, visitsTotal, perksTease, tierName, tierColor,
 }: {
   name: string;
-  qualification: "visits" | "spend";
   visitsLeft: number;
   visitsCurrent: number;
   visitsTotal: number;
   perksTease: string;
+  tierName: string;
   tierColor: string;
 }) {
   const pct = Math.min(1, visitsCurrent / Math.max(1, visitsTotal));
   return (
     <View
-      className="rounded-2xl"
       style={{
-        backgroundColor: "#1A0200",
-        padding: 18,
+        backgroundColor: C.espresso,
+        borderRadius: 20,
+        padding: 20,
         shadowColor: "#160800",
         shadowOpacity: 0.2,
         shadowRadius: 14,
         shadowOffset: { width: 0, height: 6 },
       }}
     >
-      <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: "#FBBF24", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>
-        Next tier
-      </Text>
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 22, color: "#FBBF24", letterSpacing: -0.3 }}>
+      {/* Top eyebrow row — current tier badge on the left, "Next tier" eyebrow on the right */}
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100, backgroundColor: tierColor }}>
+          <Star size={12} color={C.espresso} strokeWidth={2.4} />
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, color: C.espresso, letterSpacing: 0.5 }}>
+            {tierName.toUpperCase()}
+          </Text>
+        </View>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: C.gold, letterSpacing: 2, textTransform: "uppercase" }}>
+          Next tier
+        </Text>
+      </View>
+
+      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: "#FFFFFF", letterSpacing: -0.4 }}>
         {visitsLeft} {visitsLeft === 1 ? "visit" : "visits"} to {name}
       </Text>
-      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 4 }}>
-        Last 90 days · {visitsCurrent} of {visitsTotal} visits
+      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 4 }}>
+        Last 90 days · {visitsCurrent}/{visitsTotal} visits
       </Text>
 
-      <View style={{ height: 8, marginTop: 14, borderRadius: 4, backgroundColor: "rgba(251,191,36,0.15)", overflow: "hidden" }}>
-        <View style={{ height: "100%", width: `${Math.round(pct * 100)}%`, backgroundColor: "#FBBF24", borderRadius: 4 }} />
+      <View style={{ height: 8, marginTop: 16, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.10)", overflow: "hidden" }}>
+        <View style={{ height: "100%", width: `${Math.round(pct * 100)}%`, backgroundColor: C.gold, borderRadius: 4 }} />
       </View>
 
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14 }}>
-        <Sparkles size={13} color="#FBBF24" strokeWidth={2} />
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
-          {name}
-        </Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
-          unlocks {perksTease}
+        <Sparkles size={13} color={C.gold} strokeWidth={2} />
+        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12, color: "rgba(255,255,255,0.65)" }} numberOfLines={1}>
+          {perksTease}
         </Text>
       </View>
     </View>
   );
 }
 
-function StatStrip({
-  points, streakWeeks, tierName, tierMultiplier, tierColor,
-}: {
-  points: number;
-  streakWeeks: number;
-  tierName: string;
-  tierMultiplier: number;
-  tierColor: string;
-}) {
+// ─── Stat strip ─────────────────────────────────────────────────────
+
+function StatStrip({ points, streakWeeks }: { points: number; streakWeeks: number }) {
   return (
     <View
-      className="rounded-2xl bg-surface border border-border"
       style={{
         flexDirection: "row",
         alignItems: "center",
-        paddingHorizontal: 14,
+        backgroundColor: C.surface,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: C.border,
+        paddingHorizontal: 16,
         paddingVertical: 12,
-        gap: 14,
-        shadowColor: "#000",
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 2 },
       }}
     >
       <View style={{ flex: 1 }}>
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, color: "#8E8E93", letterSpacing: 1.4, textTransform: "uppercase" }}>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, color: C.faintFg, letterSpacing: 1.4, textTransform: "uppercase" }}>
           Beans
         </Text>
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 22, color: "#1A0200", letterSpacing: -0.5, lineHeight: 24, marginTop: 2 }}>
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 22, color: C.espresso, letterSpacing: -0.5, lineHeight: 24, marginTop: 2 }}>
           {points.toLocaleString()}
         </Text>
       </View>
       <View style={{ width: 1, height: 32, backgroundColor: "rgba(26,2,0,0.08)" }} />
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, color: "#8E8E93", letterSpacing: 1.4, textTransform: "uppercase" }}>
+      <View style={{ flex: 1, paddingLeft: 16 }}>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, color: C.faintFg, letterSpacing: 1.4, textTransform: "uppercase" }}>
           Streak
         </Text>
-        <View style={{ flexDirection: "row", alignItems: "baseline", gap: 3, marginTop: 2 }}>
-          <Flame size={14} color="#C05040" strokeWidth={2.2} />
-          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 18, color: "#C05040", letterSpacing: -0.3 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
+          <Flame size={16} color={C.primary} strokeWidth={2.2} />
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 22, color: C.primary, letterSpacing: -0.3, lineHeight: 24 }}>
             {streakWeeks}
           </Text>
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: "#C05040", letterSpacing: 1 }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10.5, color: C.primary, letterSpacing: 1 }}>
             WK
           </Text>
         </View>
       </View>
-      <View style={{ width: 1, height: 32, backgroundColor: "rgba(26,2,0,0.08)" }} />
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync();
-          router.push("/tier-benefits" as never);
-        }}
-        className="active:opacity-80"
-        style={{
-          paddingLeft: 10,
-          paddingRight: 10,
-          paddingVertical: 6,
-          borderRadius: 100,
-          backgroundColor: tierColor,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 5,
-        }}
-      >
-        <Text style={{ fontSize: 12 }}>★</Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, color: "#1A0200", letterSpacing: 1 }}>
-          {tierName.toUpperCase()} {tierMultiplier}×
-        </Text>
-      </Pressable>
     </View>
   );
 }
 
-function Section({
-  label, count, showAll, children,
-}: {
-  label: string;
-  count?: number;
-  showAll?: boolean;
-  children: React.ReactNode;
-}) {
+// ─── Section header ─────────────────────────────────────────────────
+
+function Section({ label, count, showAll, children }: { label: string; count?: number; showAll?: boolean; children: React.ReactNode }) {
   return (
     <View>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10, paddingHorizontal: 2 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, color: "#1A0200", letterSpacing: 1.8, textTransform: "uppercase" }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, color: C.espresso, letterSpacing: 1.8, textTransform: "uppercase" }}>
             {label}
           </Text>
           {count !== undefined && count > 0 && (
-            <View
-              style={{
-                paddingHorizontal: 6, height: 16, borderRadius: 8,
-                backgroundColor: "rgba(192,80,64,0.12)",
-                alignItems: "center", justifyContent: "center",
-              }}
-            >
-              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: "#C05040" }}>
+            <View style={{ paddingHorizontal: 6, height: 16, borderRadius: 8, backgroundColor: "rgba(192,80,64,0.12)", alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: C.primary }}>
                 {count}
               </Text>
             </View>
@@ -427,10 +355,10 @@ function Section({
         </View>
         {showAll && (
           <Pressable onPress={() => Haptics.selectionAsync()} className="active:opacity-70" style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, color: "#C05040" }}>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, color: C.primary }}>
               All
             </Text>
-            <ChevronRight size={12} color="#C05040" strokeWidth={2.4} />
+            <ChevronRight size={12} color={C.primary} strokeWidth={2.4} />
           </Pressable>
         )}
       </View>
@@ -440,33 +368,35 @@ function Section({
 }
 
 function Grid2({ children }: { children: React.ReactNode }) {
-  return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-      {children}
-    </View>
-  );
+  return <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>{children}</View>;
 }
 
-// Reusable shell so every grid card has the same width/height
-function GridCard({
-  children,
-  bg = "#FFFFFF",
-  border = "#E5E5E5",
-}: {
-  children: React.ReactNode;
-  bg?: string;
-  border?: string;
-}) {
+// ─── Card shells ────────────────────────────────────────────────────
+//
+// Two shells used everywhere:
+//   - CardLight: cream/white surface, espresso text — for "passive"
+//                state (locked, in-progress, regular wallet)
+//   - CardDark:  espresso surface, gold accents — for actionable
+//                state (claimable, mission-done, premium reward)
+//
+// Both expose the same anatomy: icon tile → label → body → optional
+// action pill at the bottom. Strict consistency keeps the page from
+// fragmenting into a parade of bespoke cards.
+
+const CARD_W = "48%" as const;
+const CARD_MIN_H = 142;
+
+function CardLight({ children }: { children: React.ReactNode }) {
   return (
     <View
       style={{
-        width: "48%",
-        minHeight: 138,
+        width: CARD_W,
+        minHeight: CARD_MIN_H,
         padding: 12,
         borderRadius: 16,
-        backgroundColor: bg,
+        backgroundColor: C.surface,
         borderWidth: 1,
-        borderColor: border,
+        borderColor: C.border,
       }}
     >
       {children}
@@ -474,73 +404,147 @@ function GridCard({
   );
 }
 
+function CardDark({ children }: { children: React.ReactNode }) {
+  return (
+    <View
+      style={{
+        width: CARD_W,
+        minHeight: CARD_MIN_H,
+        padding: 12,
+        borderRadius: 16,
+        backgroundColor: C.espresso,
+        borderWidth: 1,
+        borderColor: C.espresso,
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+function IconTile({ Icon, dark, accent }: { Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }>; dark?: boolean; accent?: string }) {
+  const bg = dark ? "rgba(251,191,36,0.18)" : "rgba(192,80,64,0.10)";
+  const color = accent ?? (dark ? C.gold : C.primary);
+  return (
+    <View
+      style={{
+        width: 36, height: 36, borderRadius: 10,
+        backgroundColor: bg,
+        alignItems: "center", justifyContent: "center",
+      }}
+    >
+      <Icon size={18} color={color} strokeWidth={2} />
+    </View>
+  );
+}
+
+function CardEyebrow({ children, dark }: { children: React.ReactNode; dark?: boolean }) {
+  return (
+    <Text style={{
+      fontFamily: "SpaceGrotesk_700Bold",
+      fontSize: 9.5,
+      color: dark ? C.gold : C.primary,
+      letterSpacing: 1.4,
+      textTransform: "uppercase",
+      marginTop: 8,
+    }}>
+      {children}
+    </Text>
+  );
+}
+
+function CardTitle({ children, dark }: { children: React.ReactNode; dark?: boolean }) {
+  return (
+    <Text
+      style={{
+        fontFamily: "Peachi-Bold",
+        fontSize: 14,
+        color: dark ? "#FFFFFF" : C.espresso,
+        marginTop: 2,
+      }}
+      numberOfLines={1}
+    >
+      {children}
+    </Text>
+  );
+}
+
+function CardSub({ children, dark }: { children: React.ReactNode; dark?: boolean }) {
+  return (
+    <Text
+      style={{
+        fontFamily: "SpaceGrotesk_500Medium",
+        fontSize: 11,
+        color: dark ? "rgba(255,255,255,0.6)" : C.mutedFg,
+        marginTop: 2,
+      }}
+      numberOfLines={2}
+    >
+      {children}
+    </Text>
+  );
+}
+
+function CardActionPill({
+  label, dark, onPress,
+}: {
+  label: string;
+  dark?: boolean;
+  onPress?: () => void;
+}) {
+  const bg = dark ? C.gold : C.espresso;
+  const fg = dark ? C.espresso : "#FFFFFF";
+  return (
+    <Pressable
+      onPress={onPress}
+      className="active:opacity-85"
+      style={{
+        marginTop: "auto",
+        paddingVertical: 7,
+        borderRadius: 100,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: bg,
+      }}
+    >
+      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 12, color: fg }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+// ─── Now cards ──────────────────────────────────────────────────────
+
 function BagCard({
-  available, weeksAtQualify, label, emoji, bonusBeans, voucherTitle,
+  available, weeksAtQualify, label, Icon, bonusBeans, voucherTitle,
 }: {
   available: boolean;
   weeksAtQualify: number;
   label: string;
-  emoji: string;
+  Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }>;
   bonusBeans: number;
   voucherTitle: string | null;
 }) {
   if (!available) {
     return (
-      <GridCard bg="#FBEBE8" border="rgba(192,80,64,0.25)">
-        <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(192,80,64,0.18)", alignItems: "center", justifyContent: "center" }}>
-          <Flame size={18} color="#C05040" strokeWidth={2} />
-        </View>
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#1A0200", marginTop: 8 }}>
-          Build your streak
-        </Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "#6B6B6B", marginTop: 2 }} numberOfLines={2}>
-          Order once a week to unlock a bean bag
-        </Text>
-      </GridCard>
+      <CardLight>
+        <IconTile Icon={Flame} />
+        <CardEyebrow>Streak</CardEyebrow>
+        <CardTitle>Build your streak</CardTitle>
+        <CardSub>Order once a week to unlock a bag</CardSub>
+      </CardLight>
     );
   }
-  const chips: string[] = [];
-  if (bonusBeans > 0) chips.push(`+${bonusBeans} Beans`);
-  if (voucherTitle)   chips.push(voucherTitle);
+  const sub = [bonusBeans > 0 ? `+${bonusBeans} Beans` : null, voucherTitle].filter(Boolean).join(" · ");
   return (
-    <View
-      style={{
-        width: "48%",
-        minHeight: 138,
-        padding: 12,
-        borderRadius: 16,
-        backgroundColor: "#1A0200",
-        borderWidth: 1,
-        borderColor: "#1A0200",
-      }}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Text style={{ fontSize: 22 }}>{emoji}</Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, color: "#FBBF24", letterSpacing: 1.4, textTransform: "uppercase" }}>
-          Wk {weeksAtQualify} bag
-        </Text>
-      </View>
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#FFFFFF", marginTop: 8 }} numberOfLines={1}>
-        {label}
-      </Text>
-      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(255,255,255,0.65)", marginTop: 2 }} numberOfLines={2}>
-        {chips.join(" · ")}
-      </Text>
-      <View
-        style={{
-          marginTop: "auto",
-          backgroundColor: "#FBBF24",
-          borderRadius: 100,
-          paddingVertical: 7,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 12, color: "#1A0200" }}>
-          Open bag
-        </Text>
-      </View>
-    </View>
+    <CardDark>
+      <IconTile Icon={Icon} dark />
+      <CardEyebrow dark>Wk {weeksAtQualify} bag</CardEyebrow>
+      <CardTitle dark>{label}</CardTitle>
+      <CardSub dark>{sub}</CardSub>
+      <CardActionPill label="Open bag" dark />
+    </CardDark>
   );
 }
 
@@ -554,8 +558,7 @@ function MissionCard({
   rewardChips: string[];
   onClaim?: () => void;
 }) {
-  // No mission picked — dashed-terracotta CTA pulling the customer
-  // into the mission picker.
+  // 1) No mission picked — light card with dashed terracotta border.
   if (state === "no-active") {
     return (
       <Pressable
@@ -565,119 +568,189 @@ function MissionCard({
         }}
         className="active:opacity-85"
         style={{
-          width: "48%",
-          minHeight: 138,
+          width: CARD_W,
+          minHeight: CARD_MIN_H,
           padding: 12,
           borderRadius: 16,
-          backgroundColor: "#FFFFFF",
+          backgroundColor: C.surface,
           borderWidth: 1,
-          borderColor: "#C05040",
+          borderColor: C.primary,
           borderStyle: "dashed",
         }}
       >
-        <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#FBEBE8", alignItems: "center", justifyContent: "center" }}>
-          <Target size={18} color="#C05040" strokeWidth={2} />
-        </View>
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#1A0200", marginTop: 8 }}>
-          Pick this week's challenge
-        </Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "#6B6B6B", marginTop: 2 }} numberOfLines={2}>
-          Earn rewards by Sunday
-        </Text>
+        <IconTile Icon={Target} />
+        <CardEyebrow>Challenge</CardEyebrow>
+        <CardTitle>Pick this week</CardTitle>
+        <CardSub>Earn rewards by Sunday</CardSub>
       </Pressable>
     );
   }
 
-  // Mission complete but reward not claimed — espresso card with a
-  // chunky gold "Claim reward" pill. Mirrors the bean-bag and
-  // milestone claim language so wins read as one family.
+  // 2) Mission complete but reward not yet claimed — dark card + gold pill.
   if (state === "complete-unclaimed") {
     return (
-      <View
-        style={{
-          width: "48%",
-          minHeight: 138,
-          padding: 12,
-          borderRadius: 16,
-          backgroundColor: "#1A0200",
-          borderWidth: 1,
-          borderColor: "#1A0200",
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <View
-            style={{
-              width: 22, height: 22, borderRadius: 11,
-              backgroundColor: "rgba(251,191,36,0.18)",
-              alignItems: "center", justifyContent: "center",
-            }}
-          >
-            <Check size={14} color="#FBBF24" strokeWidth={2.6} />
-          </View>
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, color: "#FBBF24", letterSpacing: 1.4, textTransform: "uppercase" }}>
-            Mission done
-          </Text>
-        </View>
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#FFFFFF", marginTop: 8 }} numberOfLines={1}>
-          {title}
-        </Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(255,255,255,0.65)", marginTop: 2 }} numberOfLines={2}>
-          {rewardChips.join(" · ")}
-        </Text>
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            onClaim?.();
-          }}
-          className="active:opacity-85"
-          style={{
-            marginTop: "auto",
-            backgroundColor: "#FBBF24",
-            borderRadius: 100,
-            paddingVertical: 7,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 12, color: "#1A0200" }}>
-            Claim reward
-          </Text>
-        </Pressable>
-      </View>
+      <CardDark>
+        <IconTile Icon={Check} dark />
+        <CardEyebrow dark>Mission done</CardEyebrow>
+        <CardTitle dark>{title}</CardTitle>
+        <CardSub dark>{rewardChips.join(" · ")}</CardSub>
+        <CardActionPill label="Claim reward" dark onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          onClaim?.();
+        }} />
+      </CardDark>
     );
   }
 
-  // Active in-progress — white card with terracotta progress bar.
+  // 3) In progress — light card with terracotta progress bar.
   const pct = Math.min(1, progressCurrent / Math.max(1, progressTarget));
   return (
-    <GridCard>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Target size={16} color="#C05040" strokeWidth={2} />
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, color: "#C05040", letterSpacing: 1.4, textTransform: "uppercase" }}>
-          Active mission
+    <CardLight>
+      <IconTile Icon={Target} />
+      <CardEyebrow>Active</CardEyebrow>
+      <CardTitle>{title}</CardTitle>
+      <CardSub>{rewardChips.join(" · ")}</CardSub>
+      <View style={{ marginTop: "auto" }}>
+        <View style={{ height: 5, borderRadius: 3, backgroundColor: "rgba(192,80,64,0.12)", overflow: "hidden" }}>
+          <View style={{ height: "100%", width: `${Math.round(pct * 100)}%`, backgroundColor: C.primary, borderRadius: 3 }} />
+        </View>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10.5, color: C.primary, marginTop: 6, letterSpacing: 1 }}>
+          {progressCurrent}/{progressTarget}
         </Text>
       </View>
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#1A0200", marginTop: 8 }} numberOfLines={1}>
-        {title}
-      </Text>
-      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "#6B6B6B", marginTop: 2 }} numberOfLines={1}>
-        {rewardChips.join(" · ")}
-      </Text>
-      <View style={{ height: 5, marginTop: 10, borderRadius: 3, backgroundColor: "rgba(192,80,64,0.12)", overflow: "hidden" }}>
-        <View style={{ height: "100%", width: `${Math.round(pct * 100)}%`, backgroundColor: "#C05040", borderRadius: 3 }} />
-      </View>
-      <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10.5, color: "#C05040", marginTop: 6, letterSpacing: 1 }}>
-        {progressCurrent} / {progressTarget}
-      </Text>
-    </GridCard>
+    </CardLight>
   );
 }
 
-// Celebration modal fired when the customer taps "Claim reward" on a
-// completed mission card. Mirrors the bean-bag / milestone celebration
-// language: espresso surface, gold trophy badge, reward list, single
-// "Got it" CTA. After dismiss, the mission card flips to the "Pick
-// this week's challenge" state.
+// ─── Claim card ─────────────────────────────────────────────────────
+
+function ClaimCard({
+  Icon, title, subtitle, kind,
+}: {
+  Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }>;
+  title: string;
+  subtitle: string;
+  kind: "milestone" | "gift";
+}) {
+  return (
+    <CardDark>
+      <IconTile Icon={Icon} dark />
+      <CardEyebrow dark>{kind === "milestone" ? "Milestone" : "Gift"}</CardEyebrow>
+      <CardTitle dark>{title}</CardTitle>
+      <CardSub dark>{subtitle}</CardSub>
+      <CardActionPill label={kind === "milestone" ? "Claim reward" : "Claim"} dark />
+    </CardDark>
+  );
+}
+
+// ─── Reward card (wallet) ───────────────────────────────────────────
+
+function RewardCard({
+  Icon, title, sub, dark,
+}: {
+  Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }>;
+  title: string;
+  sub: string;
+  dark: boolean;
+}) {
+  return dark ? (
+    <CardDark>
+      <IconTile Icon={Icon} dark />
+      <CardEyebrow dark>Reward</CardEyebrow>
+      <CardTitle dark>{title}</CardTitle>
+      <CardSub dark>{sub}</CardSub>
+      <CardActionPill label="Use" dark />
+    </CardDark>
+  ) : (
+    <CardLight>
+      <IconTile Icon={Icon} />
+      <CardEyebrow>Reward</CardEyebrow>
+      <CardTitle>{title}</CardTitle>
+      <CardSub>{sub}</CardSub>
+      <CardActionPill label="Use" />
+    </CardLight>
+  );
+}
+
+// ─── Achievement card ───────────────────────────────────────────────
+
+function AchievementCard({
+  Icon, title, progress, earned,
+}: {
+  Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }>;
+  title: string;
+  progress: string;
+  earned: boolean;
+}) {
+  if (earned) {
+    return (
+      <CardDark>
+        <IconTile Icon={Icon} dark />
+        <CardEyebrow dark>Earned</CardEyebrow>
+        <CardTitle dark>{title}</CardTitle>
+        <CardSub dark>{progress}</CardSub>
+      </CardDark>
+    );
+  }
+  return (
+    <CardLight>
+      <IconTile Icon={Icon} />
+      <CardEyebrow>In progress</CardEyebrow>
+      <CardTitle>{title}</CardTitle>
+      <CardSub>{progress}</CardSub>
+    </CardLight>
+  );
+}
+
+// ─── Catalog ticket ─────────────────────────────────────────────────
+
+function CatalogTicket({
+  Icon, name, pts, balance,
+}: {
+  Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }>;
+  name: string;
+  pts: number;
+  balance: number;
+}) {
+  const affordable = balance >= pts;
+  return (
+    <View
+      style={{
+        width: 132,
+        padding: 12,
+        borderRadius: 16,
+        backgroundColor: C.surface,
+        borderWidth: 1,
+        borderColor: C.border,
+      }}
+    >
+      <View style={{ height: 60, alignItems: "center", justifyContent: "center" }}>
+        <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: "rgba(192,80,64,0.10)", alignItems: "center", justifyContent: "center" }}>
+          <Icon size={22} color={C.primary} strokeWidth={2} />
+        </View>
+      </View>
+      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 13, color: C.espresso, marginTop: 4 }} numberOfLines={2}>
+        {name}
+      </Text>
+      <View
+        style={{
+          marginTop: 6,
+          paddingVertical: 5,
+          borderRadius: 100,
+          backgroundColor: affordable ? C.espresso : "rgba(26,2,0,0.06)",
+          alignItems: "center",
+        }}
+      >
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, color: affordable ? C.gold : C.faintFg, letterSpacing: 0.4 }}>
+          {pts.toLocaleString()} pts
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Mission claim celebration ──────────────────────────────────────
+
 function MissionClaimCelebration({
   title, rewardChips, onClose,
 }: {
@@ -687,29 +760,16 @@ function MissionClaimCelebration({
 }) {
   return (
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
-      <Pressable
-        onPress={onClose}
-        style={{
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.65)",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 24,
-        }}
-      >
+      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.65)", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <Pressable
           onPress={(e) => e.stopPropagation()}
           style={{
-            width: "100%",
-            maxWidth: 360,
+            width: "100%", maxWidth: 360,
             borderRadius: 24,
-            backgroundColor: "#1A0200",
+            backgroundColor: C.espresso,
             padding: 24,
             alignItems: "center",
-            shadowColor: "#000",
-            shadowOpacity: 0.4,
-            shadowRadius: 24,
-            shadowOffset: { width: 0, height: 12 },
+            shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 24, shadowOffset: { width: 0, height: 12 },
           }}
         >
           <View
@@ -718,31 +778,23 @@ function MissionClaimCelebration({
               backgroundColor: "rgba(251,191,36,0.18)",
               alignItems: "center", justifyContent: "center",
               marginBottom: 14,
-              borderWidth: 1,
-              borderColor: "rgba(251,191,36,0.4)",
+              borderWidth: 1, borderColor: "rgba(251,191,36,0.4)",
             }}
           >
-            <Target size={40} color="#FBBF24" strokeWidth={1.8} />
+            <Target size={40} color={C.gold} strokeWidth={1.8} />
           </View>
 
-          <Text style={{
-            fontFamily: "SpaceGrotesk_700Bold",
-            fontSize: 10.5, color: "#FBBF24",
-            letterSpacing: 2, textTransform: "uppercase", marginBottom: 4,
-          }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10.5, color: C.gold, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>
             Mission complete
           </Text>
-          <Text
-            style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: "#FFFFFF", letterSpacing: -0.3, textAlign: "center" }}
-            numberOfLines={2}
-          >
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: "#FFFFFF", letterSpacing: -0.3, textAlign: "center" }} numberOfLines={2}>
             {title}
           </Text>
 
           <View style={{ alignSelf: "stretch", marginTop: 18, borderTopWidth: 1, borderTopColor: "rgba(251,191,36,0.15)", paddingTop: 14, gap: 8 }}>
             {rewardChips.map((chip, i) => (
               <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <Gift size={16} color="#FBBF24" strokeWidth={2} />
+                <Gift size={16} color={C.gold} strokeWidth={2} />
                 <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, color: "rgba(255,255,255,0.92)" }} numberOfLines={1}>
                   {chip}
                 </Text>
@@ -754,9 +806,9 @@ function MissionClaimCelebration({
             <Pressable
               onPress={onClose}
               className="active:opacity-85"
-              style={{ backgroundColor: "#FBBF24", borderRadius: 100, paddingVertical: 13, alignItems: "center", justifyContent: "center" }}
+              style={{ backgroundColor: C.gold, borderRadius: 100, paddingVertical: 13, alignItems: "center", justifyContent: "center" }}
             >
-              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#1A0200" }}>
+              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: C.espresso }}>
                 Got it
               </Text>
             </Pressable>
@@ -764,193 +816,5 @@ function MissionClaimCelebration({
         </Pressable>
       </Pressable>
     </Modal>
-  );
-}
-
-function ClaimCard({
-  emoji, title, subtitle, variant,
-}: {
-  emoji: string;
-  title: string;
-  subtitle: string;
-  variant: "milestone" | "gift";
-}) {
-  const accent = "#FBBF24";
-  return (
-    <View
-      style={{
-        width: "48%",
-        minHeight: 138,
-        padding: 12,
-        borderRadius: 16,
-        backgroundColor: "#1A0200",
-        borderWidth: 1,
-        borderColor: "#1A0200",
-      }}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Text style={{ fontSize: 20 }}>{emoji}</Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, color: accent, letterSpacing: 1.4, textTransform: "uppercase" }}>
-          {variant === "milestone" ? "Milestone" : "Gift"}
-        </Text>
-      </View>
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#FFFFFF", marginTop: 8 }} numberOfLines={1}>
-        {title}
-      </Text>
-      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(255,255,255,0.65)", marginTop: 2 }} numberOfLines={2}>
-        {subtitle}
-      </Text>
-      <View
-        style={{
-          marginTop: "auto",
-          backgroundColor: accent,
-          borderRadius: 100,
-          paddingVertical: 7,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 12, color: "#1A0200" }}>
-          {variant === "milestone" ? "Claim reward" : "Claim"}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function VoucherCard({
-  title, sub, bg, fg, accent,
-}: {
-  title: string;
-  sub: string;
-  bg: string;
-  fg: string;
-  accent: string;
-}) {
-  return (
-    <View
-      style={{
-        width: "48%",
-        minHeight: 138,
-        padding: 12,
-        borderRadius: 16,
-        backgroundColor: bg,
-        borderWidth: 1,
-        borderColor: bg === "#1A0200" ? "#1A0200" : "rgba(26,2,0,0.08)",
-      }}
-    >
-      <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: bg === "#1A0200" ? "rgba(251,191,36,0.18)" : "rgba(192,80,64,0.15)", alignItems: "center", justifyContent: "center" }}>
-        <Gift size={18} color={accent} strokeWidth={2} />
-      </View>
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: fg, marginTop: 8 }} numberOfLines={1}>
-        {title}
-      </Text>
-      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: bg === "#1A0200" ? "rgba(255,255,255,0.6)" : "#6B6B6B", marginTop: 2 }} numberOfLines={1}>
-        {sub}
-      </Text>
-      <View
-        style={{
-          marginTop: "auto",
-          paddingVertical: 7,
-          borderRadius: 100,
-          alignItems: "center",
-          backgroundColor: bg === "#1A0200" ? "rgba(255,255,255,0.10)" : "#1A0200",
-        }}
-      >
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 12, color: bg === "#1A0200" ? "#FBBF24" : "#FFFFFF" }}>
-          Use
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function AchievementCard({
-  emoji, title, progress, earned,
-}: {
-  emoji: string;
-  title: string;
-  progress: string;
-  earned: boolean;
-}) {
-  return (
-    <View
-      style={{
-        width: "48%",
-        minHeight: 138,
-        padding: 12,
-        borderRadius: 16,
-        backgroundColor: earned ? "#1A0200" : "#FFFFFF",
-        borderWidth: 1,
-        borderColor: earned ? "#1A0200" : "#E5E5E5",
-      }}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Text style={{ fontSize: 20 }}>{emoji}</Text>
-        <Trophy size={14} color={earned ? "#FBBF24" : "#8E8E93"} strokeWidth={2} />
-      </View>
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: earned ? "#FFFFFF" : "#1A0200", marginTop: 8 }} numberOfLines={1}>
-        {title}
-      </Text>
-      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: earned ? "rgba(255,255,255,0.6)" : "#6B6B6B", marginTop: 2 }} numberOfLines={2}>
-        {progress}
-      </Text>
-      <Text
-        style={{
-          marginTop: "auto",
-          fontFamily: "SpaceGrotesk_700Bold",
-          fontSize: 9.5,
-          color: earned ? "#FBBF24" : "#C05040",
-          letterSpacing: 1.2,
-          textTransform: "uppercase",
-        }}
-      >
-        {earned ? "● Earned" : "In progress"}
-      </Text>
-    </View>
-  );
-}
-
-function CatalogTicket({
-  name, pts, emoji, balance,
-}: {
-  name: string;
-  pts: number;
-  emoji: string;
-  balance: number;
-}) {
-  const affordable = balance >= pts;
-  return (
-    <View
-      style={{
-        width: 124,
-        padding: 12,
-        borderRadius: 16,
-        backgroundColor: "#FFFFFF",
-        borderWidth: 1,
-        borderColor: "#E5E5E5",
-        gap: 4,
-      }}
-    >
-      <View style={{ height: 56, alignItems: "center", justifyContent: "center" }}>
-        <Text style={{ fontSize: 32 }}>{emoji}</Text>
-      </View>
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 13, color: "#1A0200" }} numberOfLines={2}>
-        {name}
-      </Text>
-      <View
-        style={{
-          marginTop: 4,
-          paddingVertical: 5,
-          borderRadius: 100,
-          backgroundColor: affordable ? "#1A0200" : "rgba(26,2,0,0.06)",
-          alignItems: "center",
-        }}
-      >
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, color: affordable ? "#FBBF24" : "#8E8E93", letterSpacing: 0.4 }}>
-          {pts.toLocaleString()} pts
-        </Text>
-      </View>
-    </View>
   );
 }
