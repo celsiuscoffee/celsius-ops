@@ -56,6 +56,7 @@ export default function EmployeesPage() {
   const [parsingLoe, setParsingLoe] = useState(false);
   const [loeConfidence, setLoeConfidence] = useState<"high" | "medium" | "low" | null>(null);
   const [loePrefilled, setLoePrefilled] = useState(false);
+  const [loeDragOver, setLoeDragOver] = useState(false);
   const [newEmp, setNewEmp] = useState({
     name: "",
     fullName: "",
@@ -770,18 +771,43 @@ export default function EmployeesPage() {
                   and prefills the form below. The file is attached to the
                   employee's document vault automatically after create. */}
               {!loeFile ? (
-                <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-muted/20 px-4 py-6 text-xs text-muted-foreground hover:bg-muted/30">
+                <label
+                  onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); if (!parsingLoe && !creating) setLoeDragOver(true); }}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (!parsingLoe && !creating) setLoeDragOver(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setLoeDragOver(false); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setLoeDragOver(false);
+                    if (parsingLoe || creating) return;
+                    const f = e.dataTransfer.files?.[0];
+                    if (!f) return;
+                    const ok = f.type === "application/pdf" || f.type.startsWith("image/") || /\.(pdf|png|jpe?g|webp|gif)$/i.test(f.name);
+                    if (ok) parseLoe(f);
+                  }}
+                  className={
+                    "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-xs transition " +
+                    (loeDragOver
+                      ? "border-terracotta bg-terracotta/10 text-terracotta"
+                      : "border-gray-300 bg-muted/20 text-muted-foreground hover:bg-muted/30")
+                  }
+                >
                   {parsingLoe ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin text-terracotta" />
                       <span className="font-medium text-foreground">Parsing LoE with AI…</span>
+                    </>
+                  ) : loeDragOver ? (
+                    <>
+                      <Sparkles className="h-5 w-5" />
+                      <span className="font-semibold">Drop to parse</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="h-5 w-5 text-terracotta" />
                       <span className="font-semibold text-foreground">Upload LoE to auto-fill</span>
                       <span>We&apos;ll read the letter and prefill the fields below. The PDF also saves to the employee&apos;s Documents.</span>
-                      <span className="text-[10px]">Skip to fill manually</span>
+                      <span className="text-[10px]">Drop a file here, or click to choose · Skip to fill manually</span>
                     </>
                   )}
                   <input
