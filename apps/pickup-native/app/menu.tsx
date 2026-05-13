@@ -71,17 +71,14 @@ const CAT_ICON: Record<string, any> = {
   sandwiches: Sandwich,
 };
 
-// Pickup-only menu — anything that doesn't travel well or is dine-in
-// by nature stays out. Bottles are an upsell rack at the counter, not
-// an app product. Hot rice / noodle / pasta / toast lose too much
-// quality in the 5-15 min between brewer and pickup, so we keep them
-// off the takeaway list to protect the brand experience.
+// Bottles are an upsell rack at the counter — not a real app product.
+// Nasi Lemak / Noodles / Pasta / Roti Bakar were previously hidden on
+// the assumption that hot rice / pasta / toast don't survive the 5-15
+// min pickup window well, but the product call was reversed: customers
+// expect a full menu, and ETA-based reheating instructions can be added
+// later if quality complaints surface. Show them in the Food group.
 const HIDDEN_CATEGORIES = new Set([
   "bottles",
-  "nasi-lemak",
-  "noodle",
-  "pasta",
-  "roti-bakar",
 ]);
 
 // Sidebar order is grouped: drinks first (the bulk of pickup orders),
