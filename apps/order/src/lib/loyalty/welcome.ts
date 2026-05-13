@@ -27,15 +27,30 @@ export async function ensureNewMemberRewards(
 
     // Pull every active new_member auto_issue reward for the brand.
     // Usually one (Welcome BOGO) but the loop tolerates multiple.
+    // Include display + free-item config so the issued row carries
+    // everything the wallet UI needs without a second join.
     const { data: rewards } = await supabase
       .from("rewards")
-      .select("id, name, validity_days")
+      .select(
+        "id, name, description, validity_days, category, discount_type, discount_value, min_order_value, applicable_categories, applicable_products, free_product_name, bogo_buy_qty, bogo_free_qty",
+      )
       .eq("brand_id", brandId)
       .eq("reward_type", "new_member")
       .eq("auto_issue", true)
       .eq("is_active", true);
 
     if (!rewards || rewards.length === 0) return;
+
+    // reward_configs is where most legacy rewards keep discount_type +
+    // discount_value, so look that up once and merge in. Same pattern
+    // as redeemPointsShopReward — keeps backoffice editors as the single
+    // source of truth for discount config.
+    const rewardIds = rewards.map((r) => r.id as string);
+    const { data: configs } = await supabase
+      .from("reward_configs")
+      .select("reward_id, discount_type, discount_value")
+      .in("reward_id", rewardIds);
+    const configById = new Map((configs ?? []).map((c) => [c.reward_id as string, c]));
 
     for (const reward of rewards) {
       // Idempotency gate: if this member has EVER been issued this
@@ -58,6 +73,11 @@ export async function ensureNewMemberRewards(
       const id   = `ir-app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const code = `NM-APP-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
+      const cfg = configById.get(reward.id as string);
+      const discountType = (cfg?.discount_type as string | null) ?? (reward.discount_type as string | null);
+      const discountValue = (cfg?.discount_value as number | null) ?? (reward.discount_value as number | null);
+      const rewardCategory = (reward.category as string | null) ?? "free_item";
+
       const { error } = await supabase.from("issued_rewards").insert({
         id,
         member_id:  memberId,
@@ -68,6 +88,22 @@ export async function ensureNewMemberRewards(
         code,
         year:       null,
         issued_at:  new Date().toISOString(),
+        // Denormalised display + discount fields — without these the
+        // wallet renders a generic "Voucher" tile and the cart engine
+        // returns 0 discount, producing the ghost vouchers customers
+        // kept seeing in their wallet right after signup.
+        source_type:           "manual",
+        title:                 reward.name,
+        description:           reward.description,
+        icon:                  rewardCategory,
+        category:              rewardCategory,
+        discount_type:         discountType,
+        discount_value:        discountValue,
+        min_order_value:       reward.min_order_value as number | null,
+        applicable_categories: reward.applicable_categories as string[] | null,
+        applicable_products:   reward.applicable_products as string[] | null,
+        free_product_name:     reward.free_product_name as string | null,
+        stacks_with_beans:     true,
       });
 
       if (error) {

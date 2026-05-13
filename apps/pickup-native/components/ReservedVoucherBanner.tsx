@@ -1,23 +1,18 @@
 /**
- * ReservedVoucherBanner — sticky strip shown on the Menu / Cart screens
- * when the customer tapped "Use" on a voucher in their wallet.
+ * ReservedVoucherBanner — sticky strip shown on the Menu screen when the
+ * customer tapped "Use" on a voucher in their wallet.
  *
- * Renders nothing if no voucher is reserved. Lets the customer dismiss
- * (and clear the reservation) without leaving the screen.
+ * Uses the shared VOUCHER_THEME so the banner colour + brand icon match
+ * the voucher card the customer just tapped on the Rewards tab. A free
+ * drink locks in with espresso+gold + CelsiusCup; a discount locks in
+ * with terracotta+white + CelsiusTag; etc.
  */
 
 import { View, Text, Pressable } from "react-native";
-import { Croissant, Plus, Sparkles, Percent, Ticket, X } from "lucide-react-native";
+import { X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
-import { useApp, type ReservedVoucher } from "../lib/store";
-
-const CATEGORY_ICON: Record<ReservedVoucher["category"], React.ComponentType<{ size: number; color: string; strokeWidth?: number }>> = {
-  free_item:  Croissant,
-  upgrade:    Plus,  // Celsius offers add-ons (extra shot, oat milk) — not size upgrades
-  discount:   Percent,
-  multiplier: Sparkles,
-  special:    Ticket,
-};
+import { useApp } from "../lib/store";
+import { VOUCHER_THEME } from "./VoucherWallet";
 
 export function ReservedVoucherBanner() {
   const reserved = useApp((s) => s.reservedVoucher);
@@ -27,7 +22,10 @@ export function ReservedVoucherBanner() {
 
   if (!reserved) return null;
 
-  const Icon = CATEGORY_ICON[reserved.category] ?? Ticket;
+  const theme = VOUCHER_THEME[reserved.category] ?? VOUCHER_THEME.special;
+  // Text contrast on the banner — same logic the wallet rows use to
+  // decide whether to drop cream or espresso on top of the surface.
+  const dim = theme.fgDim;
 
   function dismiss() {
     Haptics.selectionAsync();
@@ -42,34 +40,38 @@ export function ReservedVoucherBanner() {
   return (
     <View
       style={{
-        backgroundColor: "#FBEBE8",
+        backgroundColor: theme.bg,
         paddingHorizontal: 14,
-        paddingVertical: 10,
+        paddingVertical: 12,
         flexDirection: "row",
         alignItems: "center",
-        gap: 10,
+        gap: 12,
         borderBottomWidth: 1,
-        borderBottomColor: "rgba(192,80,64,0.18)",
+        borderBottomColor: theme.border,
       }}
     >
       <View
         style={{
-          width: 32,
-          height: 32,
+          width: 38,
+          height: 38,
           borderRadius: 10,
-          backgroundColor: "#C05040",
+          backgroundColor: theme.iconBg,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <Icon size={18} color="#FFFFFF" strokeWidth={1.8} />
+        {theme.iconKind === "brand" && theme.brandIcon
+          ? <theme.brandIcon size={22} color={theme.iconColor} />
+          : theme.glyphIcon
+            ? <theme.glyphIcon size={20} color={theme.iconColor} strokeWidth={2} />
+            : null}
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text
           style={{
             fontFamily: "Peachi-Bold",
-            fontSize: 13,
-            color: "#1A0200",
+            fontSize: 14,
+            color: theme.fg,
           }}
           numberOfLines={1}
         >
@@ -79,7 +81,7 @@ export function ReservedVoucherBanner() {
           style={{
             fontFamily: "SpaceGrotesk_500Medium",
             fontSize: 11,
-            color: "#5A1F16",
+            color: dim,
             marginTop: 1,
           }}
           numberOfLines={1}
@@ -91,16 +93,16 @@ export function ReservedVoucherBanner() {
         onPress={dismiss}
         hitSlop={12}
         style={{
-          width: 28,
-          height: 28,
-          borderRadius: 14,
-          backgroundColor: "rgba(26,2,0,0.08)",
+          width: 30,
+          height: 30,
+          borderRadius: 15,
+          backgroundColor: theme.iconBg,
           alignItems: "center",
           justifyContent: "center",
         }}
         accessibilityLabel="Remove reserved voucher"
       >
-        <X size={14} color="#5A1F16" strokeWidth={2.4} />
+        <X size={14} color={theme.iconColor} strokeWidth={2.4} />
       </Pressable>
     </View>
   );

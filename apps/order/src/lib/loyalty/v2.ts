@@ -435,8 +435,12 @@ type OrderForMission = {
 
 function evalGoalOnOrder(goal: Goal, order: OrderForMission): number {
   // Returns the increment to add to progress_current for this single order.
-  // Most goals add 1 per qualifying order; some (like "items_count") add
-  // the item count of a single order.
+  // Most goals add 1 per qualifying order; some (like
+  // "single_order_item_count") add the item count of one order. Goals
+  // that require seeing the member's PRIOR orders (distinct_outlets,
+  // distinct_new_products) are handled in evalDedupedGoal below — this
+  // function returns 0 for them so callers know they need the async
+  // dedup path.
   const hour = new Date(order.created_at).getHours();
   if (goal.filter?.order_hour_lt !== undefined && hour >= goal.filter.order_hour_lt) {
     return 0;
@@ -444,11 +448,53 @@ function evalGoalOnOrder(goal: Goal, order: OrderForMission): number {
   switch (goal.type) {
     case "orders_count":             return 1;
     case "single_order_item_count":  return order.item_count >= goal.threshold ? goal.threshold : 0;
-    case "distinct_outlets":         return 1; // server-side dedupe handled below
-    case "distinct_new_products":    return 1; // dedupe handled below
     case "spend_amount":             return order.total_sen;
+    case "distinct_outlets":         return 0; // dedup: see evalDedupedGoal
+    case "distinct_new_products":    return 0; // dedup: see evalDedupedGoal
     default:                          return 0;
   }
+}
+
+/** Goals that need the member's prior order history to evaluate
+ *  correctly. Without this dedup, "Outlet Hopper · 3 outlets" would
+ *  complete on 3 orders from the same outlet, and "Try Something New ·
+ *  3 distinct drinks" would complete after 3 orders of the same drink.
+ *
+ *  Returns 1 when the current order introduces a new outlet / a new
+ *  product compared to the customer's previous orders, otherwise 0. */
+async function evalDedupedGoal(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  memberId: string,
+  goal: Goal,
+  order: OrderForMission,
+): Promise<number> {
+  if (goal.type === "distinct_outlets") {
+    // Has the member ever ordered from this outlet BEFORE this order?
+    const { count } = await supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("loyalty_id", memberId)
+      .eq("store_id", order.outlet_id)
+      .neq("id", order.id)
+      .in("status", ["preparing", "ready", "completed"]);
+    return (count ?? 0) === 0 ? 1 : 0;
+  }
+  if (goal.type === "distinct_new_products") {
+    if (order.item_ids.length === 0) return 0;
+    // Any product in the current order that the member has NEVER
+    // ordered before counts. The mission ticks +1 if at least one such
+    // "new" product appears — same semantics as Starbucks' Try It Free.
+    const { data: prior } = await supabase
+      .from("order_items")
+      .select("product_id, order_id, orders!inner(loyalty_id, status)")
+      .eq("orders.loyalty_id", memberId)
+      .in("orders.status", ["preparing", "ready", "completed"])
+      .neq("order_id", order.id);
+    const priorIds = new Set<string>((prior ?? []).map((p) => p.product_id as string));
+    const hasNew = order.item_ids.some((p) => !priorIds.has(p));
+    return hasNew ? 1 : 0;
+  }
+  return 0;
 }
 
 /** Apply an order to the customer's active mission. Updates progress,
@@ -468,7 +514,7 @@ export async function applyOrderToMission(args: {
     .select("id, mission_id, progress_current, progress_target")
     .eq("member_id", args.memberId)
     .eq("status", "active")
-    .single();
+    .maybeSingle();
 
   if (!assignment) return noResult;
 
@@ -480,7 +526,11 @@ export async function applyOrderToMission(args: {
 
   if (!mission) return noResult;
 
-  const inc = evalGoalOnOrder(mission.goal as Goal, args.order);
+  const goal = mission.goal as Goal;
+  let inc = evalGoalOnOrder(goal, args.order);
+  if (inc === 0 && (goal.type === "distinct_outlets" || goal.type === "distinct_new_products")) {
+    inc = await evalDedupedGoal(supabase, args.memberId, goal, args.order);
+  }
   if (inc === 0) return { completed: false, missionId: assignment.mission_id };
 
   const newProgress = assignment.progress_current + inc;
@@ -514,6 +564,27 @@ export async function applyOrderToMission(args: {
       });
       if (v) issuedCount++;
     }
+
+    // Credit any reward_bonus_beans configured on the mission. Was
+    // ignored before — completing a mission with bonus_beans > 0 would
+    // tick the assignment to 'completed' but never actually award the
+    // Beans. Wrapped in try/catch since a balance update failure
+    // shouldn't block voucher issuance / push.
+    const bonusBeans = (mission.reward_bonus_beans as number | null) ?? 0;
+    if (bonusBeans > 0) {
+      try {
+        await awardBonusBeans({
+          memberId: args.memberId,
+          amount: bonusBeans,
+          description: `Mission complete — ${(meta?.title as string) ?? "Challenge"}`,
+          referenceId: assignment.id,
+          txnType: "mission_bonus",
+        });
+      } catch (e) {
+        console.warn("[v2] mission bonus beans failed", e);
+      }
+    }
+
     // Bump completion counter on the mission (analytics). Best-effort.
     try {
       await supabase.rpc("increment_mission_completed", { mission_id_param: mission.id });

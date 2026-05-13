@@ -28,7 +28,8 @@ import {
   fetchMyStreak,
   redeemPointsReward,
 } from "../lib/rewards-v2";
-import { VoucherWallet } from "../components/VoucherWallet";
+import { VoucherWallet, VOUCHER_THEME } from "../components/VoucherWallet";
+import type { Voucher } from "../lib/rewards-v2";
 import { MissionCard } from "../components/MissionCard";
 import { ClaimableSection } from "../components/ClaimableSection";
 import { RewardsOnboarding } from "../components/RewardsOnboarding";
@@ -879,10 +880,30 @@ function SectionLabel({ label, count }: { label: string; count?: number }) {
 }
 
 // ─── Reward card (Claim tab) ────────────────────────────────────────
-// Full-width compact list row for one points-shop reward. Same brand
-// language as TierCardCarousel (terracotta-50 fill, rounded 16, ghost
-// icon corner) but stacked vertically so customers can scan all
-// available rewards at a glance.
+// Renders a points-shop catalogue reward using the SAME themed card
+// language as the wallet's VoucherRow (espresso+gold for free items,
+// terracotta+white for discounts, cream+gold for special, etc.).
+//
+// One visual deck — the only practical difference is the CTA pill:
+//   • Affordable → "Claim · {beans}"
+//   • Locked → progress strip + "{N} to go"
+
+/** Map a points-shop reward onto the wallet voucher theme. The
+ *  category is derived from discount_type so a "RM5" flat-discount
+ *  reward and an "RM5 Off" wallet voucher render with the same
+ *  terracotta+white card. */
+function themeForReward(reward: Reward): typeof VOUCHER_THEME[Voucher["category"]] {
+  const dt = reward.discount_type;
+  if (dt === "free_item")                                return VOUCHER_THEME.free_item;
+  if (dt === "fixed_amount" || dt === "flat" || dt === "percent" || dt === "percentage") return VOUCHER_THEME.discount;
+  if (dt === "bogo")                                     return VOUCHER_THEME.free_item; // BOGO ≈ free item
+  // free_upgrade / beans_multiplier aren't expected on a points-shop
+  // reward today, but cover them anyway.
+  const explicitCat = (reward as { category?: string }).category;
+  if (explicitCat === "upgrade")                         return VOUCHER_THEME.upgrade;
+  if (explicitCat === "multiplier")                      return VOUCHER_THEME.multiplier;
+  return VOUCHER_THEME.special;
+}
 
 function RewardCard({
   reward,
@@ -941,45 +962,63 @@ function RewardCard({
     );
   };
 
-  const Icon = pickRewardIcon(reward);
+  const theme = themeForReward(reward);
   const categoryLabel = categoryToLabel(reward);
+  // Use pill text contrast picker — same logic VoucherWallet uses.
+  const useFgIsLight = theme.accent === "#FBBF24" || theme.accent === "#FFFFFF" || theme.accent === "#D99404";
+  const pillFg = useFgIsLight ? "#1A0200" : "#FFFFFF";
 
   return (
     <View
       style={{
-        borderRadius: 16,
+        borderRadius: 18,
         overflow: "hidden",
-        backgroundColor: canClaim ? "#FBEBE8" : "#F4EDEA",
+        backgroundColor: theme.bg,
         borderWidth: 1,
-        borderColor: canClaim ? "rgba(192,80,64,0.18)" : "rgba(26,2,0,0.08)",
+        borderColor: theme.border,
+        opacity: canClaim ? 1 : 0.78,
         shadowColor: "#000",
-        shadowOpacity: canClaim ? 0.06 : 0.03,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 2 },
-        elevation: 1,
+        shadowOpacity: 0.12,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 3,
       }}
     >
+      {/* Ghost mascot — large translucent brand icon tucked bottom-right,
+          mirroring the wallet card layout. */}
+      <View style={{ position: "absolute", right: -10, bottom: -16, opacity: 0.12 }}>
+        {theme.iconKind === "brand" && theme.brandIcon
+          ? <theme.brandIcon size={120} color={theme.iconColor} />
+          : theme.glyphIcon
+            ? <theme.glyphIcon size={120} color={theme.iconColor} />
+            : null}
+      </View>
+
       <View
         style={{
-          paddingHorizontal: 12,
-          paddingVertical: 10,
+          paddingHorizontal: 14,
+          paddingVertical: 14,
           flexDirection: "row",
           alignItems: "center",
-          gap: 10,
+          gap: 14,
         }}
       >
-        {/* Foreground icon — compact, matches the wallet voucher row size. */}
+        {/* Foreground brand icon tile (48×48 — matches wallet voucher row). */}
         <View
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            backgroundColor: canClaim ? "rgba(192,80,64,0.18)" : "rgba(26,2,0,0.06)",
+            width: 48,
+            height: 48,
+            borderRadius: 12,
+            backgroundColor: theme.iconBg,
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Icon size={20} color={canClaim ? "#C05040" : "rgba(26,2,0,0.45)"} />
+          {theme.iconKind === "brand" && theme.brandIcon
+            ? <theme.brandIcon size={28} color={theme.iconColor} />
+            : theme.glyphIcon
+              ? <theme.glyphIcon size={24} color={theme.iconColor} strokeWidth={2} />
+              : null}
         </View>
 
         {/* Title + meta */}
@@ -988,24 +1027,27 @@ function RewardCard({
             style={{
               flexDirection: "row",
               alignItems: "center",
-              gap: 5,
+              gap: 6,
               flexWrap: "wrap",
+              marginBottom: 3,
             }}
           >
             <Text
               style={{
-                fontFamily: "Peachi-Bold",
-                fontSize: 14,
-                color: "#1A0200",
+                fontFamily: "SpaceGrotesk_700Bold",
+                fontSize: 9.5,
+                letterSpacing: 1.4,
+                color: theme.accent,
+                textTransform: "uppercase",
               }}
               numberOfLines={1}
             >
-              {reward.name}
+              {categoryLabel}
             </Text>
             {urgency && (
               <View
                 style={{
-                  backgroundColor: "#C05040",
+                  backgroundColor: theme.accent,
                   paddingHorizontal: 5,
                   paddingVertical: 1,
                   borderRadius: 3,
@@ -1013,7 +1055,7 @@ function RewardCard({
               >
                 <Text
                   style={{
-                    color: "#FFFFFF",
+                    color: pillFg,
                     fontFamily: "SpaceGrotesk_700Bold",
                     fontSize: 8.5,
                     letterSpacing: 0.8,
@@ -1028,73 +1070,76 @@ function RewardCard({
 
           <Text
             style={{
-              marginTop: 1,
-              color: "rgba(26,2,0,0.60)",
+              fontFamily: "Peachi-Bold",
+              fontSize: 17,
+              color: theme.fg,
+              lineHeight: 21,
+            }}
+            numberOfLines={1}
+          >
+            {reward.name}
+          </Text>
+
+          <Text
+            style={{
+              marginTop: 2,
+              color: theme.fgDim,
               fontFamily: "SpaceGrotesk_500Medium",
               fontSize: 11,
             }}
             numberOfLines={1}
           >
-            <Text style={{ color: canClaim ? "#C05040" : "rgba(26,2,0,0.55)", fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1 }}>
-              {categoryLabel.toUpperCase()}
-            </Text>
-            {"  ·  "}
-            {formatRewardValue(reward)}
+            {canClaim
+              ? formatRewardValue(reward)
+              : `${shortBy.toLocaleString()} Beans to go`}
           </Text>
 
-          {/* Locked: progress strip — kept minimal */}
+          {/* Locked: thin progress strip — uses the card's accent so the
+              colour matches the brand theme rather than always terracotta. */}
           {!canClaim && (
-            <View style={{ marginTop: 5 }}>
+            <View
+              style={{
+                height: 3,
+                borderRadius: 2,
+                marginTop: 6,
+                backgroundColor: theme.iconBg,
+                overflow: "hidden",
+              }}
+            >
               <View
                 style={{
-                  height: 2,
-                  borderRadius: 1,
-                  backgroundColor: "rgba(26,2,0,0.08)",
-                  overflow: "hidden",
+                  height: "100%",
+                  width: `${Math.max(progress * 100, 4)}%`,
+                  backgroundColor: theme.accent,
+                  borderRadius: 2,
                 }}
-              >
-                <View
-                  style={{
-                    height: "100%",
-                    width: `${Math.max(progress * 100, 4)}%`,
-                    backgroundColor: "#C05040",
-                    borderRadius: 1,
-                  }}
-                />
-              </View>
-              <Text
-                style={{
-                  marginTop: 3,
-                  color: "rgba(26,2,0,0.55)",
-                  fontFamily: "SpaceGrotesk_500Medium",
-                  fontSize: 10,
-                }}
-              >
-                {`${shortBy.toLocaleString()} Beans to go`}
-              </Text>
+              />
             </View>
           )}
         </View>
 
-        {/* Right side — claim button when affordable, Bean cost otherwise. */}
+        {/* CTA — Claim pill when affordable, BEANS cost when locked. */}
         {canClaim ? (
           <Pressable
             onPress={onClaim}
             disabled={claimMutation.isPending}
-            className="active:opacity-80"
+            className="active:opacity-85"
             style={{
-              backgroundColor: "#C05040",
-              paddingHorizontal: 12,
-              paddingVertical: 7,
+              backgroundColor: theme.accent,
+              paddingHorizontal: 14,
+              paddingVertical: 8,
               borderRadius: 999,
               opacity: claimMutation.isPending ? 0.6 : 1,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
             }}
           >
             <Text
               style={{
-                color: "#FFFFFF",
+                color: pillFg,
                 fontFamily: "SpaceGrotesk_700Bold",
-                fontSize: 10.5,
+                fontSize: 11,
                 letterSpacing: 0.8,
                 textTransform: "uppercase",
               }}
@@ -1103,21 +1148,22 @@ function RewardCard({
             </Text>
           </Pressable>
         ) : (
-          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 2 }}>
+          <View style={{ flexDirection: "column", alignItems: "flex-end" }}>
             <Text
               style={{
-                color: "rgba(26,2,0,0.55)",
+                color: theme.fg,
                 fontFamily: "Peachi-Bold",
-                fontSize: 14,
+                fontSize: 17,
+                lineHeight: 19,
               }}
             >
               {required.toLocaleString()}
             </Text>
             <Text
               style={{
-                color: "rgba(26,2,0,0.45)",
+                color: theme.fgDim,
                 fontFamily: "SpaceGrotesk_700Bold",
-                fontSize: 8.5,
+                fontSize: 9,
                 letterSpacing: 1,
               }}
             >

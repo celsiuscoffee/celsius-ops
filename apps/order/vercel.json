@@ -5,6 +5,9 @@
     { "path": "/api/cron/loyalty-pushes?job=birthday",        "schedule": "0 1 * * *" },
     { "path": "/api/cron/loyalty-pushes?job=reward-expiring", "schedule": "30 1 * * *" },
     { "path": "/api/cron/loyalty-pushes?job=tier-at-risk",    "schedule": "0 2 * * *" },
-    { "path": "/api/cron/loyalty-pushes?job=miss-you",        "schedule": "0 3 * * 1" }
+    { "path": "/api/cron/voucher-expiring",                   "schedule": "0 2 * * *" },
+    { "path": "/api/cron/milestone-scan",                     "schedule": "30 2 * * *" },
+    { "path": "/api/cron/loyalty-pushes?job=miss-you",        "schedule": "0 3 * * 1" },
+    { "path": "/api/cron/streak-update",                      "schedule": "0 4 * * 1" }
   ]
 }

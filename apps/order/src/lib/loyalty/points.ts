@@ -57,7 +57,7 @@ export async function awardBonusBeans(args: {
   outletId?:   string;
   description: string;
   referenceId?: string;
-  txnType?:    "mystery_bonus" | "milestone_bonus" | "manual_bonus";
+  txnType?:    "mystery_bonus" | "milestone_bonus" | "manual_bonus" | "mission_bonus";
 }): Promise<number | null> {
   if (args.amount <= 0) return null;
   try {
