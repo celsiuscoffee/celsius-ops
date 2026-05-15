@@ -1,9 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Plus, Search, RefreshCw, Pencil, Trash2, Loader2, X, Check, CloudDownload, ImagePlus, ZoomIn, ArrowUp, ArrowDown, Star } from "lucide-react";
+import { Plus, Search, RefreshCw, Pencil, Trash2, Loader2, X, Check, CloudDownload, ImagePlus, ZoomIn, Star, GripVertical } from "lucide-react";
 import { useConfirm, toast } from "@celsius/ui";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
+import {
+  DndContext, closestCenter, PointerSensor, KeyboardSensor,
+  useSensor, useSensors,
+} from "@dnd-kit/core";
+import type { DragEndEvent } from "@dnd-kit/core";
+import {
+  SortableContext, sortableKeyboardCoordinates,
+  verticalListSortingStrategy, useSortable, arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface ModifierOption {
   id: string;
@@ -41,6 +51,67 @@ interface Category { id: string; name: string; slug: string; position?: number }
 
 const BEST_SELLERS_ID = "__best_sellers__";
 
+// ─── Sortable wrappers ──────────────────────────────────────────────
+// Drag-and-drop powered by @dnd-kit. Each wrapper wires the drag
+// handle + ref + transform, then renders the visible row content as
+// children. The handle is a small grip icon on the left edge — only
+// the handle starts a drag, so clicks on edit/toggle/etc. buttons
+// inside the row are unaffected.
+
+function SortableCategoryHeader({ id, name, children }: { id: string; name: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+    position: "relative",
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="bg-white rounded-2xl overflow-hidden">
+      <div className="px-5 py-3 border-b bg-muted/20 flex items-center gap-3">
+        <button
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-[#160800] -ml-1 touch-none"
+          title="Drag to reorder category"
+          aria-label="Drag to reorder category"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+        <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wide">{name}</h2>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SortableProductRow({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    background: isDragging ? "#fff" : undefined,
+    zIndex: isDragging ? 10 : undefined,
+    position: "relative",
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-4 px-5 py-3.5 bg-white">
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-[#160800] -ml-1 shrink-0 touch-none"
+        title="Drag to reorder"
+        aria-label="Drag to reorder product"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      {children}
+    </div>
+  );
+}
+
 function emptyForm(categories: Category[]) {
   return {
     id:            "",
@@ -76,7 +147,6 @@ export default function PickupMenu() {
   const [isDragging, setIsDragging] = useState(false);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [previewZoom, setPreviewZoom] = useState(100);
-  const [reordering, setReordering] = useState<string | null>(null);
   const [togglingPopular, setTogglingPopular] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -218,76 +288,63 @@ export default function PickupMenu() {
     }
   }
 
-  async function moveProduct(
-    p: DbProduct,
-    direction: "up" | "down",
-    siblingItems: DbProduct[],
-    field: "position" | "featured_position" = "position",
+  // Drag-and-drop sensors. PointerSensor requires 8px of movement
+  // before activating so clicking on the row (edit/toggle/etc.)
+  // doesn't accidentally start a drag.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  async function handleProductDragEnd(
+    event: DragEndEvent,
+    items: DbProduct[],
+    field: "position" | "featured_position",
   ) {
-    const idx = siblingItems.findIndex((x) => x.id === p.id);
-    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= siblingItems.length) return;
-    const other = siblingItems[swapIdx];
-    setReordering(p.id);
-    const newP     = other[field];
-    const newOther = p[field];
-    setProducts((prev) => prev.map((x) => {
-      if (x.id === p.id)     return { ...x, [field]: newP };
-      if (x.id === other.id) return { ...x, [field]: newOther };
-      return x;
-    }));
-    await Promise.all([
-      adminFetch(`/api/pickup/products/${p.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: newP }),
-      }),
-      adminFetch(`/api/pickup/products/${other.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: newOther }),
-      }),
-    ]);
-    await load();
-    setReordering(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = items.findIndex((p) => p.id === active.id);
+    const newIndex = items.findIndex((p) => p.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const newOrder = arrayMove(items, oldIndex, newIndex);
+    const newPosById = new Map(newOrder.map((p, i) => [p.id, i + 1]));
+    // Optimistic local update — don't await /load(), the server PATCH
+    // is fire-and-forget for UI snappiness. If it fails we'll surface
+    // a toast and let the next load reconcile.
+    setProducts((prev) => prev.map((p) =>
+      newPosById.has(p.id) ? { ...p, [field]: newPosById.get(p.id)! } : p
+    ));
+    const res = await adminFetch("/api/pickup/products/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: newOrder.map((p) => p.id), field }),
+    });
+    if (!res.ok) {
+      toast.error("Reorder failed — refresh to reload");
+    }
   }
 
-  async function moveCategory(
-    cat: Category,
-    direction: "up" | "down",
-    visibleCats: Category[],
-  ) {
-    // Swap relative to what the user can SEE — categories with zero
-    // products are filtered out of `grouped`, so swapping against the
-    // raw `categories` array would silently jump over them.
-    const idx = visibleCats.findIndex((c) => c.id === cat.id);
-    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= visibleCats.length) return;
-    const other = visibleCats[swapIdx];
-    setReordering(cat.id);
-    // Use the actual position values from the DB (not array index) so
-    // partial migrations / gaps don't get clobbered.
-    const newCatPos = other.position ?? swapIdx + 1;
-    const newOtherPos = cat.position ?? idx + 1;
-    setCategories((prev) => prev.map((c) => {
-      if (c.id === cat.id) return { ...c, position: newCatPos };
-      if (c.id === other.id) return { ...c, position: newOtherPos };
-      return c;
-    }).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)));
-    await Promise.all([
-      adminFetch(`/api/pickup/categories/${cat.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: newCatPos }),
-      }),
-      adminFetch(`/api/pickup/categories/${other.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: newOtherPos }),
-      }),
-    ]);
-    await load();
-    setReordering(null);
+  async function handleCategoryDragEnd(event: DragEndEvent, visibleCats: Category[]) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = visibleCats.findIndex((c) => c.id === active.id);
+    const newIndex = visibleCats.findIndex((c) => c.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const newOrder = arrayMove(visibleCats, oldIndex, newIndex);
+    const newPosById = new Map(newOrder.map((c, i) => [c.id, i + 1]));
+    setCategories((prev) =>
+      prev
+        .map((c) => ({ ...c, position: newPosById.get(c.id) ?? c.position ?? 9999 }))
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    );
+    const res = await adminFetch("/api/pickup/categories/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: newOrder.map((c) => c.id) }),
+    });
+    if (!res.ok) {
+      toast.error("Category reorder failed — refresh to reload");
+    }
   }
 
   async function syncFromStoreHub() {
@@ -416,137 +473,134 @@ export default function PickupMenu() {
         <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>
       ) : (
         <div className="space-y-4">
-          {grouped.map(({ cat, items }, gIdx) => {
-            // Category reorder arrows only make sense when viewing the
-            // full list (multiple categories visible, no search). Skip
-            // for Best Sellers (virtual) and single-category filters.
-            const canReorderCategory = !inBestSellers && catFilter === "all" && !search;
-            const isFirstCategory = gIdx === 0;
-            const isLastCategory = gIdx === grouped.length - 1;
-            const visibleCats = grouped.map((g) => g.cat);
-            return (
-            <div key={cat.id} className="bg-white rounded-2xl overflow-hidden">
-              <div className="px-5 py-3 border-b bg-muted/20 flex items-center gap-3">
-                {canReorderCategory && (
-                  <div className="flex flex-col gap-0.5 shrink-0">
-                    <button
-                      onClick={() => moveCategory(cat, "up", visibleCats)}
-                      disabled={isFirstCategory || reordering === cat.id}
-                      className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                      title="Move category up"
-                    >
-                      <ArrowUp className="h-3 w-3" />
-                    </button>
-                    <button
-                      onClick={() => moveCategory(cat, "down", visibleCats)}
-                      disabled={isLastCategory || reordering === cat.id}
-                      className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                      title="Move category down"
-                    >
-                      <ArrowDown className="h-3 w-3" />
-                    </button>
-                  </div>
+          {(() => {
+            // Categories are draggable only in the default "all + no
+            // search" view. In single-category filter or Best Sellers
+            // the drag would mean nothing; we just render the heading
+            // without a drag handle but still let products drag.
+            const canDragCategories = !inBestSellers && catFilter === "all" && !search;
+            const productField: "position" | "featured_position" = inBestSellers ? "featured_position" : "position";
+
+            const renderProductRowContent = (p: DbProduct) => (
+              <>
+                {p.image && (
+                  <button
+                    type="button"
+                    onClick={() => setZoomedImage(p.image)}
+                    className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 group focus:outline-none"
+                    title="Click to zoom"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.image} alt={p.name} className="w-full h-full object-cover" style={{ transform: `scale(${(p.image_zoom ?? 100) / 100})`, transformOrigin: "center" }} />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                      <ZoomIn className="h-3.5 w-3.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </button>
                 )}
-                <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wide">{cat.name}</h2>
-              </div>
-              <div className="divide-y">
-                {items.map((p, pIdx) => (
-                  <div key={p.id} className="flex items-center gap-4 px-5 py-3.5">
-                    {/* Up/down reorder buttons. In Best Sellers view we
-                        reorder by featured_position so the change only
-                        affects the Best Sellers ranking, not the
-                        product's per-category position. */}
-                    <div className="flex flex-col gap-0.5 shrink-0">
-                      <button
-                        onClick={() => moveProduct(p, "up", items, inBestSellers ? "featured_position" : "position")}
-                        disabled={pIdx === 0 || reordering === p.id}
-                        className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                        title={inBestSellers ? "Move up in Best Sellers" : "Move up"}
-                      >
-                        <ArrowUp className="h-3 w-3" />
-                      </button>
-                      <button
-                        onClick={() => moveProduct(p, "down", items, inBestSellers ? "featured_position" : "position")}
-                        disabled={pIdx === items.length - 1 || reordering === p.id}
-                        className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                        title={inBestSellers ? "Move down in Best Sellers" : "Move down"}
-                      >
-                        <ArrowDown className="h-3 w-3" />
-                      </button>
-                    </div>
-                    {p.image && (
-                      <button
-                        type="button"
-                        onClick={() => setZoomedImage(p.image)}
-                        className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 group focus:outline-none"
-                        title="Click to zoom"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={p.image} alt={p.name} className="w-full h-full object-cover" style={{ transform: `scale(${(p.image_zoom ?? 100) / 100})`, transformOrigin: "center" }} />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                          <ZoomIn className="h-3.5 w-3.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </button>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className={`text-sm font-semibold ${!p.is_available ? "text-muted-foreground line-through" : "text-[#160800]"}`}>
-                          {p.name}
-                        </p>
-                        {p.is_new     && <span className="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">NEW</span>}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">RM {(p.base_price / 100).toFixed(2)}</p>
-                      {p.modifiers.length > 0 && (
-                        <p className="text-xs text-muted-foreground/70 mt-0.5">
-                          {p.modifiers.map((g) => g.name).join(" · ")}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {/* Best Seller badge toggle */}
-                      <button
-                        onClick={() => togglePopular(p)}
-                        disabled={togglingPopular === p.id}
-                        title={p.is_popular ? "Remove from Best Sellers" : "Mark as Best Seller"}
-                        className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors disabled:opacity-50 ${
-                          p.is_popular
-                            ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                            : "bg-muted text-muted-foreground hover:bg-amber-50 hover:text-amber-600"
-                        }`}
-                      >
-                        <Star className={`h-2.5 w-2.5 ${p.is_popular ? "fill-amber-500 text-amber-500" : ""}`} />
-                        {p.is_popular ? "Best Seller" : ""}
-                      </button>
-                      {!p.is_available && (
-                        <span className="text-[11px] font-semibold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">86&apos;d</span>
-                      )}
-                      <button
-                        onClick={() => toggleAvailable(p)}
-                        disabled={toggling === p.id}
-                        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 ${p.is_available ? "bg-green-500" : "bg-gray-300"}`}
-                      >
-                        <span className={`inline-block h-5 w-5 mt-0.5 rounded-full bg-white shadow transition-transform duration-200 ${p.is_available ? "translate-x-5.5" : "translate-x-0.5"}`} />
-                      </button>
-                      <button
-                        onClick={() => openEdit(p)}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 transition-colors"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(p.id)}
-                        disabled={deleting === p.id}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
-                      >
-                        {deleting === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                      </button>
-                    </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className={`text-sm font-semibold ${!p.is_available ? "text-muted-foreground line-through" : "text-[#160800]"}`}>
+                      {p.name}
+                    </p>
+                    {p.is_new && <span className="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">NEW</span>}
                   </div>
-                ))}
-              </div>
-            </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">RM {(p.base_price / 100).toFixed(2)}</p>
+                  {p.modifiers.length > 0 && (
+                    <p className="text-xs text-muted-foreground/70 mt-0.5">
+                      {p.modifiers.map((g) => g.name).join(" · ")}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => togglePopular(p)}
+                    disabled={togglingPopular === p.id}
+                    title={p.is_popular ? "Remove from Best Sellers" : "Mark as Best Seller"}
+                    className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors disabled:opacity-50 ${
+                      p.is_popular
+                        ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                        : "bg-muted text-muted-foreground hover:bg-amber-50 hover:text-amber-600"
+                    }`}
+                  >
+                    <Star className={`h-2.5 w-2.5 ${p.is_popular ? "fill-amber-500 text-amber-500" : ""}`} />
+                    {p.is_popular ? "Best Seller" : ""}
+                  </button>
+                  {!p.is_available && (
+                    <span className="text-[11px] font-semibold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">86&apos;d</span>
+                  )}
+                  <button
+                    onClick={() => toggleAvailable(p)}
+                    disabled={toggling === p.id}
+                    className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 ${p.is_available ? "bg-green-500" : "bg-gray-300"}`}
+                  >
+                    <span className={`inline-block h-5 w-5 mt-0.5 rounded-full bg-white shadow transition-transform duration-200 ${p.is_available ? "translate-x-5.5" : "translate-x-0.5"}`} />
+                  </button>
+                  <button
+                    onClick={() => openEdit(p)}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 transition-colors"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(p.id)}
+                    disabled={deleting === p.id}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                  >
+                    {deleting === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              </>
             );
-          })}
+
+            const productsList = (items: DbProduct[]) => (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(e) => handleProductDragEnd(e, items, productField)}
+              >
+                <SortableContext items={items.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+                  <div className="divide-y">
+                    {items.map((p) => (
+                      <SortableProductRow key={p.id} id={p.id}>
+                        {renderProductRowContent(p)}
+                      </SortableProductRow>
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            );
+
+            const categoryCards = grouped.map(({ cat, items }) =>
+              canDragCategories ? (
+                <SortableCategoryHeader key={cat.id} id={cat.id} name={cat.name}>
+                  {productsList(items)}
+                </SortableCategoryHeader>
+              ) : (
+                <div key={cat.id} className="bg-white rounded-2xl overflow-hidden">
+                  <div className="px-5 py-3 border-b bg-muted/20">
+                    <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wide">{cat.name}</h2>
+                  </div>
+                  {productsList(items)}
+                </div>
+              )
+            );
+
+            if (canDragCategories) {
+              const visibleCats = grouped.map((g) => g.cat);
+              return (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={(e) => handleCategoryDragEnd(e, visibleCats)}
+                >
+                  <SortableContext items={visibleCats.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-4">{categoryCards}</div>
+                  </SortableContext>
+                </DndContext>
+              );
+            }
+            return <>{categoryCards}</>;
+          })()}
           {grouped.length === 0 && (
             <div className="py-12 text-center text-sm text-muted-foreground">No products found</div>
           )}

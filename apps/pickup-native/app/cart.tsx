@@ -215,9 +215,24 @@ export default function Cart() {
         <>
           <ScrollView contentContainerClassName="px-4 py-4 pb-40 gap-3">
             {cart.map((item) => (
-              <View
+              // Whole row tappable → opens the product page in edit
+              // mode so customers can change modifiers / notes / qty
+              // without removing + re-adding. The qty +/- and trash
+              // Pressables below stop the press from bubbling up so
+              // tapping them still does just the inline action.
+              <Pressable
                 key={item.cartId}
-                className="bg-surface rounded-2xl border border-border p-3 flex-row gap-3"
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  router.push({
+                    pathname: "/product/[id]",
+                    params: { id: item.productId, cartId: item.cartId },
+                  });
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${item.name}`}
+                accessibilityHint="Opens the product page to change modifiers, quantity, or notes"
+                className="bg-surface rounded-2xl border border-border p-3 flex-row gap-3 active:opacity-80"
                 style={{
                   shadowColor: "#000",
                   shadowOpacity: 0.04,
@@ -278,7 +293,12 @@ export default function Cart() {
                   <View className="flex-row justify-between items-center mt-2">
                     <View className="flex-row items-center gap-2">
                       <Pressable
-                        onPress={() => {
+                        onPress={(e) => {
+                          // Stop the press from bubbling to the row
+                          // Pressable that wraps this card — otherwise
+                          // tapping − would also open the product
+                          // editor, which is jarring.
+                          e.stopPropagation();
                           Haptics.selectionAsync();
                           updateQuantity(item.cartId, item.quantity - 1);
                         }}
@@ -303,7 +323,8 @@ export default function Cart() {
                         {item.quantity}
                       </Text>
                       <Pressable
-                        onPress={() => {
+                        onPress={(e) => {
+                          e.stopPropagation();
                           Haptics.selectionAsync();
                           updateQuantity(item.cartId, item.quantity + 1);
                         }}
@@ -316,7 +337,8 @@ export default function Cart() {
                       </Pressable>
                     </View>
                     <Pressable
-                      onPress={() => {
+                      onPress={(e) => {
+                        e.stopPropagation();
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                         removeFromCart(item.cartId);
                       }}
@@ -329,7 +351,7 @@ export default function Cart() {
                     </Pressable>
                   </View>
                 </View>
-              </View>
+              </Pressable>
             ))}
           </ScrollView>
 

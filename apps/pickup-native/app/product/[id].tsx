@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   Image,
   TextInput,
   useWindowDimensions,
+  Keyboard,
+  Platform,
 } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -20,19 +22,54 @@ import { formatPrice } from "../../lib/api";
 import { CelsiusLoader } from "../../components/CelsiusLoader";
 
 export default function ProductScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `cartId` is set when the customer tapped an existing cart line to
+  // edit it. When present we run in edit mode: prefill modifiers / qty
+  // / notes from the existing line, swap the CTA to "Update cart", and
+  // replace the line in-place on submit (so it keeps its position).
+  // Without `cartId` we behave as before — fresh "Add to cart" flow.
+  const { id, cartId } = useLocalSearchParams<{ id: string; cartId?: string }>();
+  const editingCartId = typeof cartId === "string" && cartId.length > 0 ? cartId : null;
+  const isEditing = editingCartId !== null;
   const insets = useSafeAreaInsets();
   const { height: screenH } = useWindowDimensions();
+  const scrollRef = useRef<ScrollView>(null);
+  const noteY = useRef<number | null>(null);
+  const [noteFocused, setNoteFocused] = useState(false);
+  // Track keyboard visibility so we can collapse the bottom Add to
+  // Cart bar while the customer is typing notes — frees the screen
+  // from "input + huge dead zone + button + keyboard" stacking and
+  // matches the pattern used by Twitter/iMessage/Notion compose flows.
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setKeyboardOpen(true),
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardOpen(false),
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
   const outletId = useApp((s) => s.outletId);
   const { data, isLoading } = useQuery({
     queryKey: ["menu", outletId],
     queryFn: () => fetchMenu(outletId),
   });
   const product = data?.products.find((p) => p.id === id);
+  // Look up the existing cart line up-front when we're in edit mode so
+  // the prefill effect below has something concrete to read from.
+  const existingCartItem = useApp((s) =>
+    editingCartId ? s.cart.find((i) => i.cartId === editingCartId) ?? null : null,
+  );
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
   const addToCart = useApp((s) => s.addToCart);
+  const replaceCartItem = useApp((s) => s.replaceCartItem);
 
   // Modifier groups hidden from customer view. Same set the order
   // PWA uses (product-detail-content.tsx) — keeps the two surfaces
@@ -48,29 +85,48 @@ export default function ProductScreen() {
     [product, HIDDEN_GROUPS],
   );
 
-  // Pre-fill single-select modifier groups with their default option
-  // (or first option as a fallback) the first time we see the product.
-  // Without this, customers can tap Add to cart without selecting a
-  // size and end up with an ambiguous line. Multi-select groups stay
-  // empty — those are genuinely optional. Only walks VISIBLE groups
-  // so the hidden packaging group doesn't sneak into selections /
-  // the cart payload.
+  // Pre-fill modifiers / qty / notes. Two paths:
+  //
+  // 1. Edit mode (`existingCartItem` set): rebuild `selections` from
+  //    the cart line's saved modifiers, restore qty + notes verbatim.
+  //    The customer should land on the product page seeing exactly
+  //    what's currently in their cart, with no surprise re-selection.
+  //
+  // 2. Fresh add (default): seed single-select VISIBLE groups with
+  //    their default option (or first option as a fallback). Without
+  //    this, customers can tap Add to cart without selecting a size
+  //    and end up with an ambiguous line. Multi-select groups stay
+  //    empty — those are genuinely optional. Only walks VISIBLE
+  //    groups so the hidden packaging group doesn't sneak into the
+  //    cart payload.
   useEffect(() => {
     if (!product) return;
-    const initial: Record<string, string[]> = {};
-    for (const g of visibleModifiers) {
-      if (g.multiSelect) continue;
-      const def = g.options.find((o) => o.isDefault) ?? g.options[0];
-      if (def) initial[g.id] = [def.id];
+    if (existingCartItem) {
+      const fromCart: Record<string, string[]> = {};
+      for (const m of existingCartItem.modifiers) {
+        const list = fromCart[m.groupId] ?? [];
+        list.push(m.optionId);
+        fromCart[m.groupId] = list;
+      }
+      setSelections((cur) => (Object.keys(cur).length === 0 ? fromCart : cur));
+      setQty((cur) => (cur === 1 ? existingCartItem.quantity : cur));
+      setNotes((cur) => (cur === "" ? existingCartItem.specialInstructions ?? "" : cur));
+    } else {
+      const initial: Record<string, string[]> = {};
+      for (const g of visibleModifiers) {
+        if (g.multiSelect) continue;
+        const def = g.options.find((o) => o.isDefault) ?? g.options[0];
+        if (def) initial[g.id] = [def.id];
+      }
+      setSelections((cur) => (Object.keys(cur).length === 0 ? initial : cur));
     }
-    setSelections((cur) => (Object.keys(cur).length === 0 ? initial : cur));
     trackEvent("product_viewed", {
       productId:   product.id,
       productName: product.name,
       price:       product.price,
       outletId,
     });
-  }, [product, outletId, visibleModifiers]);
+  }, [product, outletId, visibleModifiers, existingCartItem]);
 
   // Required = every single-select VISIBLE group must have one
   // selected. Hidden groups never block the button.
@@ -140,7 +196,7 @@ export default function ProductScreen() {
         })
         .filter((x): x is ModifierSelection => x !== null)
     );
-    addToCart({
+    const payload = {
       productId: product.id,
       name: product.name,
       image: product.image_url ?? undefined,
@@ -150,15 +206,31 @@ export default function ProductScreen() {
       modifiers: flatSelections,
       specialInstructions: notes || undefined,
       totalPrice,
-    });
-    trackEvent("cart_add", {
-      productId:   product.id,
-      productName: product.name,
-      quantity:    qty,
-      totalPrice,
-      hasNotes:    !!notes,
-      outletId,
-    });
+    };
+    if (isEditing && editingCartId) {
+      // Edit mode: swap the existing line in-place so it stays where
+      // the customer last saw it in the cart list, and emit a distinct
+      // analytics event so we can tell edits apart from net-new adds.
+      replaceCartItem(editingCartId, payload);
+      trackEvent("cart_edit", {
+        productId:   product.id,
+        productName: product.name,
+        quantity:    qty,
+        totalPrice,
+        hasNotes:    !!notes,
+        outletId,
+      });
+    } else {
+      addToCart(payload);
+      trackEvent("cart_add", {
+        productId:   product.id,
+        productName: product.name,
+        quantity:    qty,
+        totalPrice,
+        hasNotes:    !!notes,
+        outletId,
+      });
+    }
     router.back();
   };
 
@@ -166,7 +238,21 @@ export default function ProductScreen() {
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
 
-      <ScrollView contentContainerClassName="pb-32" stickyHeaderIndices={[]}>
+      <ScrollView
+        ref={scrollRef}
+        // Dynamic bottom padding — big enough to clear the absolute
+        // Add-to-Cart bar when the keyboard is closed (~120px), then
+        // collapses to a small breathing space when the keyboard is
+        // up (the bar is hidden anyway). Stops the customer from
+        // scrolling into a giant empty zone past the actual content,
+        // matching the bounded-scroll feel of Grab/Foodpanda's
+        // product modal.
+        contentContainerStyle={{ paddingBottom: keyboardOpen ? 16 : 120 }}
+        stickyHeaderIndices={[]}
+        automaticallyAdjustKeyboardInsets
+        automaticallyAdjustsScrollIndicatorInsets
+        keyboardShouldPersistTaps="handled"
+      >
         {product.image_url && (
           <Image
             source={{ uri: product.image_url }}
@@ -254,17 +340,55 @@ export default function ProductScreen() {
             </View>
           ))}
 
-          <View className="mt-6">
-            <Text className="text-espresso text-xs font-bold uppercase tracking-wider">
-              Special instructions
-            </Text>
+          <View
+            className="mt-6"
+            onLayout={(e) => { noteY.current = e.nativeEvent.layout.y; }}
+          >
+            <View className="flex-row items-center justify-between">
+              <Text className="text-espresso text-xs font-bold uppercase tracking-wider">
+                Special instructions
+              </Text>
+              <Text className="text-muted-fg text-[10px] uppercase tracking-wider">
+                Optional
+              </Text>
+            </View>
             <TextInput
               value={notes}
               onChangeText={setNotes}
-              placeholder="Anything we should know?"
+              placeholder="Anything we should know? (e.g. less sweet, no ice)"
               placeholderTextColor="#8E8E93"
-              className="mt-2 bg-surface border border-border rounded-2xl px-4 py-3 text-espresso"
               multiline
+              textAlignVertical="top"
+              maxLength={140}
+              style={{
+                marginTop: 8,
+                backgroundColor: "#FAF7F2",
+                borderWidth: 1,
+                borderColor: noteFocused ? "#C05040" : "rgba(26,8,0,0.10)",
+                borderRadius: 16,
+                paddingHorizontal: 14,
+                paddingTop: 12,
+                paddingBottom: 12,
+                fontSize: 14,
+                color: "#160800",
+                fontFamily: "SpaceGrotesk_400Regular",
+                minHeight: 92,
+              }}
+              onFocus={() => {
+                setNoteFocused(true);
+                // The bottom Add-to-Cart bar hides while the
+                // keyboard is up, so the auto-adjust on iOS already
+                // clears the input. Scroll a touch more so the
+                // section header stays visible above the input —
+                // orients the customer when they glance back up.
+                if (noteY.current != null) {
+                  scrollRef.current?.scrollTo({
+                    y: Math.max(0, noteY.current - 24),
+                    animated: true,
+                  });
+                }
+              }}
+              onBlur={() => setNoteFocused(false)}
             />
           </View>
 
@@ -309,6 +433,11 @@ export default function ProductScreen() {
         </View>
       </ScrollView>
 
+      {/* Bottom Add-to-Cart bar — hidden while the keyboard is up so
+          the customer typing in Special Instructions sees their text
+          docked just above the keyboard with no dead space below.
+          The bar pops back the moment they dismiss the keyboard. */}
+      {!keyboardOpen && (
       <View
         className="absolute bottom-0 left-0 right-0 px-4 pt-3 bg-background border-t border-border"
         style={{ paddingBottom: insets.bottom + 12 }}
@@ -320,12 +449,14 @@ export default function ProductScreen() {
             allRequiredPicked ? "bg-primary" : "bg-primary/40"
           }`}
           accessibilityRole="button"
-          accessibilityLabel={`Add to cart, ${formatPrice(totalPrice)}`}
+          accessibilityLabel={`${isEditing ? "Update cart" : "Add to cart"}, ${formatPrice(totalPrice)}`}
           accessibilityState={{ disabled: !allRequiredPicked }}
         >
           {allRequiredPicked ? (
             <>
-              <Text className="text-white font-bold text-base">Add to cart</Text>
+              <Text className="text-white font-bold text-base">
+                {isEditing ? "Update cart" : "Add to cart"}
+              </Text>
               <Text className="text-white font-bold text-base">·</Text>
               <Text className="text-white font-bold text-base">{formatPrice(totalPrice)}</Text>
             </>
@@ -334,6 +465,7 @@ export default function ProductScreen() {
           )}
         </Pressable>
       </View>
+      )}
     </View>
   );
 }

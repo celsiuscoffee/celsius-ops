@@ -102,6 +102,12 @@ type AppState = {
 
   setOutlet: (id: string, name: string) => void;
   addToCart: (item: Omit<CartItem, "cartId">) => void;
+  /** Replace an existing cart line in-place — preserves its position
+   *  in the array (so the customer's edit doesn't reshuffle the cart)
+   *  and atomically swaps the modifiers / qty / notes / totalPrice. The
+   *  cart-row "tap to edit" flow uses this so the edited line lands
+   *  exactly where the original was, not at the bottom. */
+  replaceCartItem: (cartId: string, item: Omit<CartItem, "cartId">) => void;
   updateQuantity: (cartId: string, qty: number) => void;
   removeFromCart: (cartId: string) => void;
   clearCart: () => void;
@@ -139,6 +145,10 @@ export const useApp = create<AppState>()(
             ...s.cart,
             { ...item, cartId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` },
           ],
+        })),
+      replaceCartItem: (cartId, item) =>
+        set((s) => ({
+          cart: s.cart.map((i) => (i.cartId === cartId ? { ...item, cartId } : i)),
         })),
       updateQuantity: (cartId, qty) =>
         set((s) => ({
