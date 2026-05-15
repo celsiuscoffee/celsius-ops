@@ -28,6 +28,11 @@ interface Promotion {
    *  promos these are the gate AND the discount target. Empty array
    *  means "any product" (only meaningful for percentage / fixed). */
   applicable_products: string[];
+  /** Categories this promo applies to (sale scope, not combo gate).
+   *  E.g. ["mocktails"] = "20% off all Mocktails". Customer-side
+   *  product-sales lib uses this to render strikethrough on every
+   *  product in those categories. */
+  applicable_categories: string[];
   /** Combo gate — when set, every product id here must be in the
    *  cart for the discount to trigger. */
   combo_product_ids: string[];
@@ -448,13 +453,24 @@ function PromoModal({
               <select
                 className="w-full px-3 py-2 rounded-md border bg-background"
                 value={draft.discount_type ?? "percentage_off"}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const next = e.target.value as Promotion["discount_type"];
+                  // Switching AWAY from combo_price means the category +
+                  // product COMBO gates no longer apply — clear them so
+                  // the evaluator doesn't surprise the customer with a
+                  // stale all-or-nothing gate after admin thinks they
+                  // saved a plain sale. Mirror selection back into
+                  // applicable_* if needed when switching to combo mode
+                  // is unnecessary because the picker writes to the right
+                  // field directly when in combo mode.
                   setDraft({
                     ...draft,
-                    discount_type: e.target
-                      .value as Promotion["discount_type"],
-                  })
-                }
+                    discount_type: next,
+                    ...(next !== "combo_price"
+                      ? { combo_category_ids: [], combo_product_ids: [] }
+                      : {}),
+                  });
+                }}
               >
                 <option value="percentage_off">Percentage off</option>
                 <option value="fixed_amount_off">Fixed amount off (RM)</option>
@@ -676,51 +692,78 @@ function PromoModal({
             </div>
           )}
 
-          {/* Category combo gate — picks 2+ category slugs. ANY product
-              from each selected category in the cart satisfies that
-              slot. This is the most useful combo shape for F&B
-              ("any classic drink + any roti bakar — RM2 off") because
-              the admin doesn't have to enumerate every product pairing. */}
-          <Field
-            label="Combo categories (gate)"
-            hint="At least one product from each of these categories must be in cart"
-          >
-            <div className="flex flex-wrap gap-1.5">
-              {categories.length === 0 ? (
-                <span className="text-xs text-muted-foreground">Loading categories…</span>
-              ) : (
-                categories.map((c) => {
-                  const selected = (draft.combo_category_ids ?? []).includes(c.id);
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => {
-                        const current = draft.combo_category_ids ?? [];
-                        const next = selected
-                          ? current.filter((x) => x !== c.id)
-                          : [...current, c.id];
-                        setDraft({ ...draft, combo_category_ids: next });
-                      }}
-                      className={cn(
-                        "px-2.5 py-1 rounded-full text-xs border transition",
-                        selected
-                          ? "bg-amber-600 text-white border-amber-600"
-                          : "bg-background hover:bg-muted/50 border-muted-foreground/30",
-                      )}
-                    >
-                      {c.name}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-            {(draft.combo_category_ids?.length ?? 0) >= 2 && (
-              <p className="mt-2 text-[11px] text-emerald-700">
-                Combo gate: any {draft.combo_category_ids!.map((id) => categories.find((c) => c.id === id)?.name ?? id).join(" + any ")}
-              </p>
-            )}
-          </Field>
+          {/* Category picker — dual-purpose:
+                - combo_price → writes to combo_category_ids (COMBO GATE:
+                  pick 2+ categories that must all be in cart together).
+                - everything else → writes to applicable_categories
+                  (SALE SCOPE: pick categories whose products this promo
+                  applies to, e.g. "All Mocktails 20% off").
+              The field-name swap matters because the loyalty evaluator
+              reads them for different purposes; the customer-side
+              product-sales lib also distinguishes (combo gate hides
+              from the strikethrough surface, sale scope shows it). */}
+          {(() => {
+            const isComboMode = draft.discount_type === "combo_price";
+            const targetField: "combo_category_ids" | "applicable_categories" =
+              isComboMode ? "combo_category_ids" : "applicable_categories";
+            const selectedList = (isComboMode
+              ? draft.combo_category_ids
+              : draft.applicable_categories) ?? [];
+            return (
+              <Field
+                label={
+                  isComboMode
+                    ? "Combo categories (gate)"
+                    : "Apply to categories (optional)"
+                }
+                hint={
+                  isComboMode
+                    ? "At least one product from each of these categories must be in cart"
+                    : "Pick categories to scope this sale (e.g. all Mocktails 20% off). Leave empty to scope by products only."
+                }
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  {categories.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">Loading categories…</span>
+                  ) : (
+                    categories.map((c) => {
+                      const selected = selectedList.includes(c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            const next = selected
+                              ? selectedList.filter((x) => x !== c.id)
+                              : [...selectedList, c.id];
+                            setDraft({ ...draft, [targetField]: next } as typeof draft);
+                          }}
+                          className={cn(
+                            "px-2.5 py-1 rounded-full text-xs border transition",
+                            selected
+                              ? "bg-amber-600 text-white border-amber-600"
+                              : "bg-background hover:bg-muted/50 border-muted-foreground/30",
+                          )}
+                        >
+                          {c.name}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+                {isComboMode && selectedList.length >= 2 && (
+                  <p className="mt-2 text-[11px] text-emerald-700">
+                    Combo gate: any {selectedList.map((id) => categories.find((c) => c.id === id)?.name ?? id).join(" + any ")}
+                  </p>
+                )}
+                {!isComboMode && selectedList.length > 0 && (
+                  <p className="mt-2 text-[11px] text-emerald-700">
+                    Sale applies to: {selectedList.map((id) => categories.find((c) => c.id === id)?.name ?? id).join(", ")}
+                  </p>
+                )}
+              </Field>
+            );
+          })()}
 
           {/* Product picker — visible for ANY discount type because
               every promo can be scoped to specific products. For
@@ -733,12 +776,12 @@ function PromoModal({
                 ? "Combo products — all of these must be in cart"
                 : draft.discount_type === "override_price"
                 ? "Apply override to these products"
-                : "Restrict to products (optional)"
+                : "Apply to products (optional)"
             }
             hint={
               draft.discount_type === "combo_price"
                 ? "Pick 2+ products that combine for the bundle price"
-                : "Leave empty to apply to all products"
+                : "Pick the products this sale applies to. Combined with category scope above — leave both empty for a cart-wide promo (won't show as sale price on menu)."
             }
           >
             <input
