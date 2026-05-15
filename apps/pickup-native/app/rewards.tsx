@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { View, Text, ScrollView, Pressable, Alert, Image, Dimensions } from "react-native";
 import { Stack, router } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Gift, ChevronRight, Clock } from "lucide-react-native";
+import { Gift, ChevronRight, Clock, Lock } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { BottomNav } from "../components/BottomNav";
 import { EspressoHeader } from "../components/EspressoHeader";
@@ -133,6 +133,25 @@ function compactProgressLabel(m: ActiveMission): string {
     return `RM${Math.floor(cur / 100)}/${Math.floor(tgt / 100)}`;
   }
   return `${cur}/${tgt}`;
+}
+
+// Lock copy under the challenge reward — parallels the "45 Beans to go"
+// pattern on discount vouchers so the customer instantly reads "this is
+// gated, here's what's still needed" rather than guessing whether the
+// reward is already in their wallet.
+function challengeRemainingLabel(m: ActiveMission): string {
+  const remaining = Math.max(0, m.goal_threshold - m.progress_current);
+  if (remaining === 0) return "Ready to claim";
+  if (m.goal_type === "single_order_total_at_least") {
+    // progress + threshold are in cents — round up so we never tell the
+    // customer "RM0 more" while progress is still short by a few sen.
+    const ringgit = Math.ceil(remaining / 100);
+    return `RM${ringgit} more to unlock`;
+  }
+  if (m.goal_type === "drinks_count" || m.goal_type === "cups_count") {
+    return remaining === 1 ? "1 drink to go" : `${remaining} drinks to go`;
+  }
+  return remaining === 1 ? "1 more to unlock" : `${remaining} more to unlock`;
 }
 
 // ─── Main screen ───────────────────────────────────────────────────────
@@ -798,12 +817,16 @@ function ChallengeCard({
               marginTop: 8,
             }}
           >
-            <Gift size={15} color={theme.accent} strokeWidth={2.2} />
+            {isActive ? (
+              <Lock size={13} color={theme.fgDim} strokeWidth={2.4} />
+            ) : (
+              <Gift size={15} color={theme.accent} strokeWidth={2.2} />
+            )}
             <Text
               style={{
                 fontFamily: "Peachi-Bold",
                 fontSize: 15,
-                color: theme.accent,
+                color: isActive ? theme.fgDim : theme.accent,
                 letterSpacing: -0.1,
                 lineHeight: 19,
               }}
@@ -812,6 +835,22 @@ function ChallengeCard({
               {isCompleted ? `${displayedReward} — ready` : displayedReward}
             </Text>
           </View>
+          {isActive ? (
+            <Text
+              style={{
+                marginTop: 3,
+                marginLeft: 19,
+                fontFamily: "SpaceGrotesk_700Bold",
+                fontSize: 10.5,
+                letterSpacing: 0.6,
+                color: theme.accent,
+                textTransform: "uppercase",
+              }}
+              numberOfLines={1}
+            >
+              {challengeRemainingLabel(mission)}
+            </Text>
+          ) : null}
           <View
             style={{
               flexDirection: "row",
