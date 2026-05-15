@@ -480,41 +480,83 @@ export function PairWith({ current, allProducts, stagedIds, onToggle }: PairWith
                 >
                   {p.name}
                 </Text>
-                <View className="flex-row items-baseline gap-1.5 mt-0.5">
-                  {/* Strikethrough original price when a combo applies,
-                      with the new effective bundle-share price next to
-                      it. Conveys "you save by combining" without
-                      needing to break out a separate combo line. */}
-                  {combo ? (
-                    <>
-                      <Text
-                        className="text-muted-fg text-[11px]"
-                        style={{ fontFamily: "SpaceGrotesk_500Medium", textDecorationLine: "line-through" }}
-                      >
-                        {formatPrice(defaultPairLinePrice(p))}
-                      </Text>
-                      <Text
-                        className="text-green-700 text-[12px]"
-                        style={{ fontFamily: "Peachi-Bold" }}
-                      >
-                        with combo
-                      </Text>
-                    </>
-                  ) : (
-                    <PriceTag
-                      basePrice={defaultPairLinePrice(p)}
-                      sale={bestSaleForProduct({
-                        sales,
-                        productId: p.id,
-                        productCategory: p.category,
-                        productBasePrice: defaultPairLinePrice(p),
-                        outletId,
-                      })}
-                      size="sm"
-                      hideBadge
-                    />
-                  )}
-                </View>
+                {(() => {
+                  // Both sale AND combo can apply to the same line at
+                  // checkout (promos are stackable=true on the combos
+                  // we seed). The pair-with card should reflect both
+                  // savings paths so the customer sees the FULL deal.
+                  //
+                  // Four states:
+                  //   - none      → just price
+                  //   - sale only → PriceTag with strikethrough
+                  //   - combo only → strikethrough + "with combo"
+                  //   - sale + combo → sale price + strikethrough +
+                  //     "with combo" hint
+                  const pairBase = defaultPairLinePrice(p);
+                  const sale = bestSaleForProduct({
+                    sales,
+                    productId: p.id,
+                    productCategory: p.category,
+                    productBasePrice: pairBase,
+                    outletId,
+                  });
+                  // Combo savings sit ON TOP of any sale price; we show
+                  // the sale's effective price as the headline (since
+                  // that's the per-line price) and the combo as a
+                  // qualifier next to it.
+                  if (combo && sale) {
+                    return (
+                      <View className="flex-row items-baseline gap-1.5 mt-0.5 flex-wrap">
+                        <Text
+                          className="text-primary text-[12px]"
+                          style={{ fontFamily: "Peachi-Bold" }}
+                        >
+                          {formatPrice(sale.effective_price)}
+                        </Text>
+                        <Text
+                          className="text-muted-fg text-[11px]"
+                          style={{ fontFamily: "SpaceGrotesk_500Medium", textDecorationLine: "line-through" }}
+                        >
+                          {formatPrice(pairBase)}
+                        </Text>
+                        <Text
+                          className="text-green-700 text-[11px]"
+                          style={{ fontFamily: "Peachi-Bold" }}
+                        >
+                          + combo
+                        </Text>
+                      </View>
+                    );
+                  }
+                  if (combo) {
+                    return (
+                      <View className="flex-row items-baseline gap-1.5 mt-0.5">
+                        <Text
+                          className="text-muted-fg text-[11px]"
+                          style={{ fontFamily: "SpaceGrotesk_500Medium", textDecorationLine: "line-through" }}
+                        >
+                          {formatPrice(pairBase)}
+                        </Text>
+                        <Text
+                          className="text-green-700 text-[12px]"
+                          style={{ fontFamily: "Peachi-Bold" }}
+                        >
+                          with combo
+                        </Text>
+                      </View>
+                    );
+                  }
+                  return (
+                    <View className="mt-0.5">
+                      <PriceTag
+                        basePrice={pairBase}
+                        sale={sale}
+                        size="sm"
+                        hideBadge
+                      />
+                    </View>
+                  );
+                })()}
               </View>
             </Pressable>
           );
