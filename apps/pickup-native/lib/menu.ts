@@ -31,6 +31,7 @@ export type Product = {
   is_available: boolean;
   is_featured: boolean;
   modifiers: ModifierGroup[];
+  featured_position?: number;
 };
 
 type RawProduct = Product & { hidden_modifier_ids?: string[] };
@@ -40,8 +41,9 @@ export async function fetchMenu(
 ): Promise<{ categories: Category[]; products: Product[] }> {
   const productsQuery = supabase
     .from("products")
-    .select("id,name,category,description,price,image_url,is_available,is_featured,modifiers,hidden_modifier_ids")
+    .select("id,name,category,description,price,image_url,is_available,is_featured,modifiers,hidden_modifier_ids,featured_position")
     .eq("brand_id", "brand-celsius")
+    .order("position")
     .order("name");
 
   // Per-outlet OOS overrides — sparse table populated by KDS staff

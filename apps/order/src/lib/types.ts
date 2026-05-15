@@ -49,6 +49,7 @@ export interface Product {
   isPopular?: boolean;
   isNew?: boolean;
   isAvailable: boolean;
+  featuredPosition?: number;
 }
 
 export interface CartModifierSelection {

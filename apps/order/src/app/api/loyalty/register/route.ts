@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-
-// .trim() guards against accidental trailing newlines in env var values
-const LOYALTY_BASE = (process.env.LOYALTY_BASE_URL ?? "https://loyalty.celsiuscoffee.com").trim();
-const BRAND_ID     = (process.env.LOYALTY_BRAND_ID  ?? "brand-celsius").trim();
+import { findOrCreateMember } from "@/lib/loyalty/member-direct";
 
 // POST /api/loyalty/register — enrol a phone number in loyalty (idempotent)
+//
+// Writes to Supabase directly via findOrCreateMember instead of
+// proxying to the loyalty app's POST /api/members. Keeps member-row
+// shape identical to backoffice-created rows so consolidation holds
+// regardless of where the customer signs up from.
 export async function POST(request: NextRequest) {
   try {
     const { phone } = await request.json();
@@ -12,45 +14,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Phone required" }, { status: 400 });
     }
 
-    // Check if member already exists
-    const membersRes = await fetch(
-      `${LOYALTY_BASE}/api/members?brand_id=${BRAND_ID}&phone=${encodeURIComponent(phone)}`,
-      { headers: { "Content-Type": "application/json" } }
-    );
-    const members = await membersRes.json();
-    let member = Array.isArray(members) && members.length > 0 ? members[0] : null;
-
-    // Create if new. source="pickup_app" lets the loyalty service know
-    // this signup came from the customer-facing pickup app, which is
-    // the only path that should trigger new-member auto-issue rewards
-    // (Welcome BOGO etc.).
-    if (!member) {
-      const createRes = await fetch(`${LOYALTY_BASE}/api/members`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ phone, brand_id: BRAND_ID, source: "pickup_app" }),
-      });
-      if (!createRes.ok) {
-        return NextResponse.json({ success: false, error: "Failed to create member" }, { status: 500 });
-      }
-      member = await createRes.json();
-    }
-
+    const member = await findOrCreateMember(phone);
     if (!member) {
       return NextResponse.json({ success: false, error: "Failed to enrol" }, { status: 500 });
     }
 
-    const brandData = member.brand_data ?? {};
     return NextResponse.json({
       success: true,
       enrolled: true,
       member: {
         id:                member.id,
         phone:             member.phone,
-        name:              member.name ?? null,
-        pointsBalance:     brandData.points_balance      ?? 0,
-        totalPointsEarned: brandData.total_points_earned ?? 0,
-        totalVisits:       brandData.total_visits         ?? 0,
+        name:              member.name,
+        pointsBalance:     member.points_balance,
+        totalPointsEarned: member.total_points_earned,
+        totalVisits:       member.total_visits,
       },
     });
   } catch (err) {

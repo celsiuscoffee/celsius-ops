@@ -34,7 +34,7 @@ export type IssuedVoucher = {
   id: string;
   member_id: string;
   voucher_template_id: string | null;
-  source_type: "mission" | "mystery" | "birthday" | "referral" | "milestone" | "manual" | "points_redemption" | null;
+  source_type: "mission" | "mystery" | "birthday" | "referral" | "manual" | "points_redemption" | null;
   source_ref_id: string | null;
   // DB CHECK constraint allows: 'active' | 'used' | 'expired'. ('redeemed'
   // and 'voided' are intentionally NOT in the enum — earlier code that
@@ -197,105 +197,63 @@ export async function redeemPointsShopReward(args: {
   const freeProductName      = (reward.free_product_name as string | null);
 
   const pointsRequired = (reward.points_required as number) ?? 0;
-
-  // Atomic deduction via existing RPC — returns the new balance or
-  // throws when balance < pointsRequired.
-  if (pointsRequired > 0) {
-    const { data: newBalance, error: rpcErr } = await supabase.rpc("deduct_points", {
-      p_member_id: args.memberId,
-      p_brand_id:  BRAND_ID,
-      p_points:    pointsRequired,
-    });
-    if (rpcErr) {
-      // RPC raises a specific error on insufficient balance — surface it.
-      return { ok: false, reason: "insufficient_beans" };
-    }
-
-    // Insert the voucher into the wallet.
-    const id = `ir-redeem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const validityDays = (reward.validity_days as number | null) ?? 30;
-    const expiresAt = validityDays
-      ? new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000).toISOString()
-      : null;
-
-    const { data: inserted, error: insErr } = await supabase
-      .from("issued_rewards")
-      .insert({
-        id,
-        brand_id: BRAND_ID,
-        member_id: args.memberId,
-        reward_id: reward.id,
-        source_type: "points_redemption",
-        source_ref_id: reward.id,
-        title:                 reward.name,
-        description:           reward.description,
-        icon:                  reward.category ?? "ticket",
-        category:              reward.category ?? "special",
-        discount_type:         discountType,
-        discount_value:        discountValue,
-        min_order_value:       minOrderValue,
-        applicable_categories: applicableCategories,
-        applicable_products:   applicableProducts,
-        free_product_name:     freeProductName,
-        stacks_with_beans:     false, // points-shop redemptions don't stack with Beans by default
-        status: "active",
-        issued_at: new Date().toISOString(),
-        expires_at: expiresAt,
-      })
-      .select()
-      .single();
-
-    if (insErr || !inserted) {
-      // Beans already deducted — caller decides whether to refund. We
-      // log loud + return insert_failed so the route handler can refund
-      // via awardBonusBeans before responding 500.
-      console.error("[v2] redeemPointsShopReward: insert failed", insErr?.message);
-      return { ok: false, reason: "insert_failed" };
-    }
-
-    return {
-      ok: true,
-      voucher: inserted as IssuedVoucher,
-      newBalance: newBalance as number,
-      pointsSpent: pointsRequired,
-    };
-  }
-
-  // Zero-cost reward (admin-grant flavours). Issue without touching balance.
   const id = `ir-redeem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const validityDays = (reward.validity_days as number | null) ?? 30;
   const expiresAt = validityDays
     ? new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000).toISOString()
     : null;
 
-  const { data: inserted, error: insErr } = await supabase
+  // Atomic deduct + voucher insert in a single transaction.
+  // Earlier this was two separate writes (deduct_points RPC, then a
+  // Supabase insert) — if the insert failed after the deduct
+  // succeeded, the member lost their points with no voucher to show
+  // for it. The redeem_points_shop_reward function does both inside
+  // a Postgres transaction so either both happen or neither does.
+  const { data, error: rpcErr } = await supabase.rpc("redeem_points_shop_reward", {
+    p_member_id: args.memberId,
+    p_brand_id:  BRAND_ID,
+    p_reward_id: reward.id as string,
+    p_voucher_id: id,
+    p_points_required: pointsRequired,
+    p_title: reward.name as string,
+    p_description: (reward.description as string | null) ?? "",
+    p_icon: (reward.category as string | null) ?? "ticket",
+    p_category: (reward.category as string | null) ?? "special",
+    p_discount_type: discountType,
+    p_discount_value: discountValue,
+    p_min_order_value: minOrderValue,
+    p_applicable_categories: applicableCategories,
+    p_applicable_products: applicableProducts,
+    p_free_product_name: freeProductName,
+    p_expires_at: expiresAt,
+  });
+  if (rpcErr) {
+    if (rpcErr.message?.includes("insufficient_beans")) {
+      return { ok: false, reason: "insufficient_beans" };
+    }
+    console.error("[v2] redeemPointsShopReward: rpc error", rpcErr.message);
+    return { ok: false, reason: "insert_failed" };
+  }
+
+  const newBalance = Array.isArray(data) && data.length > 0
+    ? Number((data[0] as { new_balance: number }).new_balance)
+    : 0;
+
+  // Hydrate the voucher row for the caller. The RPC inserted it
+  // already, this is just a read-back so we return the same shape
+  // the previous TS code did.
+  const { data: voucher } = await supabase
     .from("issued_rewards")
-    .insert({
-      id,
-      brand_id: BRAND_ID,
-      member_id: args.memberId,
-      reward_id: reward.id,
-      source_type: "points_redemption",
-      source_ref_id: reward.id,
-      title:                 reward.name,
-      description:           reward.description,
-      icon:                  reward.category ?? "ticket",
-      category:              reward.category ?? "special",
-      discount_type:         discountType,
-      discount_value:        discountValue,
-      min_order_value:       minOrderValue,
-      applicable_categories: applicableCategories,
-      applicable_products:   applicableProducts,
-      free_product_name:     freeProductName,
-      stacks_with_beans:     false,
-      status: "active",
-      issued_at: new Date().toISOString(),
-      expires_at: expiresAt,
-    })
-    .select()
+    .select("*")
+    .eq("id", id)
     .single();
-  if (insErr || !inserted) return { ok: false, reason: "insert_failed" };
-  return { ok: true, voucher: inserted as IssuedVoucher, newBalance: 0, pointsSpent: 0 };
+
+  return {
+    ok: true,
+    voucher: (voucher ?? { id }) as IssuedVoucher,
+    newBalance,
+    pointsSpent: pointsRequired,
+  };
 }
 
 // ─── Referrals ───────────────────────────────────────────────────────
@@ -360,7 +318,14 @@ export async function attributeReferralOnSignup(args: {
 
 /** Called from the order completion path. If this is the referee's
  *  first qualifying order, issue both-side vouchers and flip the
- *  attribution to 'rewarded'. */
+ *  attribution to 'rewarded'.
+ *
+ *  Configuration source: the active reward_missions row with
+ *  goal.type='referrals_count'. reward_voucher_template_ids drives
+ *  the REFERRER side, referee_reward_voucher_template_ids drives the
+ *  REFEREE side. The referrals admin page that used to live on
+ *  /loyalty/referrals was retired — referral templates are now edited
+ *  on the mission row inside the Challenges admin. */
 export async function maybeRewardReferralOnFirstOrder(args: {
   memberId: string;
   orderId: string;
@@ -376,26 +341,48 @@ export async function maybeRewardReferralOnFirstOrder(args: {
     .maybeSingle();
   if (!attr) return;
 
-  // Look up voucher template ids from AppConfig. value is jsonb so
-  // callers may store a bare string or an object; unwrap both shapes.
-  const { data: cfg } = await supabase
-    .from("AppConfig")
-    .select("key, value")
-    .in("key", ["referral_referrer_voucher_template_id", "referral_referee_voucher_template_id"]);
-
-  function unwrap(raw: unknown): string | null {
-    if (typeof raw === "string") return raw;
-    if (raw && typeof raw === "object" && "value" in (raw as Record<string, unknown>)) {
-      return String((raw as Record<string, unknown>).value);
-    }
-    return null;
+  // Load referral mission config — single source of truth. Falls back
+  // to the first active referrals_count row if multiple exist (should
+  // be one).
+  const { data: mission, error: missionErr } = await supabase
+    .from("reward_missions")
+    .select("id, reward_voucher_template_ids, referee_reward_voucher_template_ids")
+    .eq("is_active", true)
+    .filter("goal->>type", "eq", "referrals_count")
+    .limit(1)
+    .maybeSingle();
+  if (missionErr) {
+    console.error(
+      `[v2] maybeRewardReferralOnFirstOrder: failed to load referral mission`,
+      `attribution=${attr.id}`,
+      `referrer=${attr.referrer_id}`,
+      `referee=${args.memberId}`,
+      `error=${missionErr.message}`,
+    );
+    return;
   }
-  const cfgMap = new Map((cfg ?? []).map((c) => [c.key as string, unwrap(c.value)]));
-  const referrerTpl = cfgMap.get("referral_referrer_voucher_template_id");
-  const refereeTpl  = cfgMap.get("referral_referee_voucher_template_id");
-  if (!referrerTpl || !refereeTpl) return; // referral disabled until configured
+  const referrerTpl = ((mission?.reward_voucher_template_ids ?? []) as string[])[0] ?? null;
+  const refereeTpl  = ((mission?.referee_reward_voucher_template_ids ?? []) as string[])[0] ?? null;
+  if (!referrerTpl || !refereeTpl) {
+    // Misconfigured referral mission. Both sides expected a reward,
+    // neither gets one — log loud so an admin can spot the gap in
+    // observability without waiting for customers to complain. We
+    // do NOT mark the attribution rewarded so when admin fixes the
+    // config the next paid order from this referee can still trigger
+    // payout (idempotent on referee_id).
+    console.error(
+      `[v2] maybeRewardReferralOnFirstOrder: referral mission misconfigured — referrer + referee got nothing`,
+      `attribution=${attr.id}`,
+      `mission=${mission?.id ?? "missing"}`,
+      `referrerTpl=${referrerTpl ?? "null"}`,
+      `refereeTpl=${refereeTpl ?? "null"}`,
+      `referrer=${attr.referrer_id}`,
+      `referee=${args.memberId}`,
+    );
+    return;
+  }
 
-  const refereeVoucher  = await issueVoucher({ memberId: args.memberId,          templateId: refereeTpl,  sourceType: "referral", sourceRefId: attr.id });
+  const refereeVoucher  = await issueVoucher({ memberId: args.memberId,             templateId: refereeTpl,  sourceType: "referral", sourceRefId: attr.id });
   const referrerVoucher = await issueVoucher({ memberId: attr.referrer_id as string, templateId: referrerTpl, sourceType: "referral", sourceRefId: attr.id });
 
   await supabase
@@ -422,37 +409,112 @@ export async function maybeRewardReferralOnFirstOrder(args: {
 
 // ─── Mission progress ────────────────────────────────────────────────
 
-type GoalFilter = { order_hour_lt?: number };
-type Goal = { type: string; threshold: number; filter?: GoalFilter };
+type GoalFilter = {
+  // Bill placed strictly before this hour (0-23). Used for time-of-day
+  // gated single-order goals.
+  order_hour_lt?: number;
+  // Bill placed on these days. JS Date.getDay() values — 0=Sun, 6=Sat.
+  // Used for weekend / weekday gated goals.
+  order_day_in?: number[];
+};
+type Goal = {
+  type: string;
+  threshold: number;
+  filter?: GoalFilter;
+  // For single_order_has_groups + single_order_group_count — names
+  // resolved against CATEGORY_GROUPS below. Keeps mission JSON terse
+  // ("drinks" / "food" / "pastry") instead of inlining 6-8 fine-grained
+  // category strings that drift as the menu evolves.
+  groups?: string[];
+  group?: string;
+};
+
+type OrderItemForMission = {
+  product_id: string;
+  category: string | null;
+  quantity: number;
+};
 
 type OrderForMission = {
   id: string;
   outlet_id: string;
+  items: OrderItemForMission[];
   item_ids: string[];
   item_count: number;
   total_sen: number;
   created_at: string;
 };
 
+// Group fine-grained product categories into the broad buckets the
+// challenge engine cares about. New menu categories can be added here
+// without touching mission seed JSON.
+const CATEGORY_GROUPS: Record<string, ReadonlyArray<string>> = {
+  drinks: [
+    "classic", "flavoured", "mocha", "artisan-choc", "artisan-matcha",
+    "fruit-tea", "gourmet-tea", "mocktails",
+  ],
+  food: [
+    "nasi-lemak", "noodle", "pasta", "roti-bakar", "sandwiches", "fries",
+  ],
+  pastry: ["cakes", "cookies", "croissant"],
+};
+
 function evalGoalOnOrder(goal: Goal, order: OrderForMission): number {
   // Returns the increment to add to progress_current for this single order.
   // Most goals add 1 per qualifying order; some (like
-  // "single_order_item_count") add the item count of one order. Goals
+  // "single_order_item_count" or "single_order_total_at_least") complete
+  // the goal in one shot when the order crosses the threshold. Goals
   // that require seeing the member's PRIOR orders (distinct_outlets,
   // distinct_new_products) are handled in evalDedupedGoal below — this
   // function returns 0 for them so callers know they need the async
-  // dedup path.
-  const hour = new Date(order.created_at).getHours();
-  if (goal.filter?.order_hour_lt !== undefined && hour >= goal.filter.order_hour_lt) {
+  // dedup path. Referrals are configured on the referrals_count
+  // mission row but are NOT progressed via this evaluator anymore —
+  // the per-referral voucher is issued directly in
+  // maybeRewardReferralOnFirstOrder, so the mission's only role is
+  // to hold the voucher templates as config.
+  const created = new Date(order.created_at);
+  if (goal.filter?.order_hour_lt !== undefined && created.getHours() >= goal.filter.order_hour_lt) {
+    return 0;
+  }
+  if (goal.filter?.order_day_in && !goal.filter.order_day_in.includes(created.getDay())) {
     return 0;
   }
   switch (goal.type) {
-    case "orders_count":             return 1;
-    case "single_order_item_count":  return order.item_count >= goal.threshold ? goal.threshold : 0;
-    case "spend_amount":             return order.total_sen;
-    case "distinct_outlets":         return 0; // dedup: see evalDedupedGoal
-    case "distinct_new_products":    return 0; // dedup: see evalDedupedGoal
-    default:                          return 0;
+    case "orders_count":               return goal.threshold > 0 ? 1 : 0;
+    case "single_order_item_count":    return order.item_count >= goal.threshold ? goal.threshold : 0;
+    case "single_order_total_at_least":
+      // total_sen is the order subtotal in sen. The threshold lives in
+      // sen too (set via the seed migration) so we compare directly.
+      // Completes the mission in one shot when the bill clears the bar.
+      return order.total_sen >= goal.threshold ? goal.threshold : 0;
+    case "single_order_has_groups": {
+      // Bill must contain at least one item from EVERY listed group
+      // (e.g. "Make it a Meal" needs drink + food in the same bill).
+      const groups = goal.groups ?? [];
+      if (groups.length === 0) return 0;
+      const cats = new Set(order.items.map((i) => i.category).filter((c): c is string => !!c));
+      const hasAll = groups.every((g) => {
+        const list = CATEGORY_GROUPS[g] ?? [];
+        return list.some((c) => cats.has(c));
+      });
+      return hasAll ? goal.threshold : 0;
+    }
+    case "single_order_group_count": {
+      // Bill must contain at least `threshold` items from a named
+      // group (e.g. "Pastry Pair" needs 2+ pastries in one bill).
+      const group = goal.group;
+      if (!group) return 0;
+      const list = new Set(CATEGORY_GROUPS[group] ?? []);
+      const count = order.items
+        .filter((i) => i.category && list.has(i.category))
+        .reduce((s, i) => s + (i.quantity ?? 1), 0);
+      return count >= goal.threshold ? goal.threshold : 0;
+    }
+    case "spend_amount":               return order.total_sen;
+    case "distinct_outlets":           return 0; // dedup: see evalDedupedGoal
+    case "distinct_new_products":      return 0; // dedup: see evalDedupedGoal
+    case "referrals_count":            return 0; // referral mission is config-only; vouchers fire from maybeRewardReferralOnFirstOrder
+    default:                            return 0;
   }
 }
 
@@ -498,108 +560,107 @@ async function evalDedupedGoal(
   return 0;
 }
 
-/** Apply an order to the customer's active mission. Updates progress,
- *  flips status to 'completed' on threshold, and issues the configured
- *  voucher templates. Idempotent within a single order via order_id
- *  guard (TODO: track which orders we already processed). */
+/** Issue vouchers + bump completion counter + push. Shared by every code
+ *  path that flips a mission_assignment to 'completed' so the side
+ *  effects stay in one place.
+ *
+ *  Bonus-Beans award was dropped: challenges grant vouchers only now
+ *  ("focus on rewards only, no need +beans"). Beans-multiplier vouchers
+ *  in the catalogue still work the same way at order time. */
+async function fulfilCompletedAssignment(args: {
+  memberId: string;
+  assignmentId: string;
+  missionId: string;
+  missionTitle: string;
+  voucherTemplateIds: string[];
+}): Promise<void> {
+  const supabase = getSupabaseAdmin();
+
+  let issuedCount = 0;
+  for (const tplId of args.voucherTemplateIds) {
+    const v = await issueVoucher({
+      memberId: args.memberId,
+      templateId: tplId,
+      sourceType: "mission",
+      sourceRefId: args.assignmentId,
+    });
+    if (v) issuedCount++;
+  }
+
+  try {
+    await supabase.rpc("increment_mission_completed", { mission_id_param: args.missionId });
+  } catch { /* analytics bump is non-critical */ }
+
+  notifyMissionCompleted({
+    memberId: args.memberId,
+    missionTitle: args.missionTitle,
+    voucherCount: issuedCount,
+  }).catch(() => {});
+}
+
+/** Apply an order to ALL of the customer's active mission assignments
+ *  for the current week. Each assignment is evaluated independently;
+ *  one order can advance multiple missions. Idempotency within a single
+ *  order is not yet enforced (TODO: track processed order_ids per
+ *  assignment) — the current callers fire once per completed order. */
 export async function applyOrderToMission(args: {
   memberId: string;
   order: OrderForMission;
-}): Promise<{ completed: boolean; missionId: string | null }> {
+}): Promise<{ completedMissionIds: string[] }> {
   const supabase = getSupabaseAdmin();
-  const noResult = { completed: false, missionId: null };
 
-  // Look up active assignment.
-  const { data: assignment } = await supabase
+  const { data: assignments } = await supabase
     .from("mission_assignments")
     .select("id, mission_id, progress_current, progress_target")
     .eq("member_id", args.memberId)
-    .eq("status", "active")
-    .maybeSingle();
+    .eq("status", "active");
 
-  if (!assignment) return noResult;
-
-  const { data: mission } = await supabase
-    .from("reward_missions")
-    .select("id, goal, reward_voucher_template_ids, reward_bonus_beans")
-    .eq("id", assignment.mission_id)
-    .single();
-
-  if (!mission) return noResult;
-
-  const goal = mission.goal as Goal;
-  let inc = evalGoalOnOrder(goal, args.order);
-  if (inc === 0 && (goal.type === "distinct_outlets" || goal.type === "distinct_new_products")) {
-    inc = await evalDedupedGoal(supabase, args.memberId, goal, args.order);
+  if (!assignments || assignments.length === 0) {
+    return { completedMissionIds: [] };
   }
-  if (inc === 0) return { completed: false, missionId: assignment.mission_id };
 
-  const newProgress = assignment.progress_current + inc;
-  const completed = newProgress >= assignment.progress_target;
+  const completedMissionIds: string[] = [];
 
-  await supabase
-    .from("mission_assignments")
-    .update({
-      progress_current: newProgress,
-      status: completed ? "completed" : "active",
-      completed_at: completed ? new Date().toISOString() : null,
-    })
-    .eq("id", assignment.id);
-
-  if (completed) {
-    // Look up mission title for the push.
-    const { data: meta } = await supabase
+  for (const assignment of assignments) {
+    const { data: mission } = await supabase
       .from("reward_missions")
-      .select("title")
-      .eq("id", mission.id)
+      .select("id, title, goal, reward_voucher_template_ids, reward_bonus_beans")
+      .eq("id", assignment.mission_id)
       .single();
+    if (!mission) continue;
 
-    // Issue all configured voucher templates.
-    let issuedCount = 0;
-    for (const tplId of mission.reward_voucher_template_ids ?? []) {
-      const v = await issueVoucher({
+    const goal = mission.goal as Goal;
+    let inc = evalGoalOnOrder(goal, args.order);
+    if (inc === 0 && (goal.type === "distinct_outlets" || goal.type === "distinct_new_products")) {
+      inc = await evalDedupedGoal(supabase, args.memberId, goal, args.order);
+    }
+    if (inc === 0) continue;
+
+    const newProgress = assignment.progress_current + inc;
+    const completed = newProgress >= assignment.progress_target;
+
+    await supabase
+      .from("mission_assignments")
+      .update({
+        progress_current: newProgress,
+        status: completed ? "completed" : "active",
+        completed_at: completed ? new Date().toISOString() : null,
+      })
+      .eq("id", assignment.id);
+
+    if (completed) {
+      completedMissionIds.push(assignment.mission_id);
+      await fulfilCompletedAssignment({
         memberId: args.memberId,
-        templateId: tplId,
-        sourceType: "mission",
-        sourceRefId: assignment.id,
+        assignmentId: assignment.id,
+        missionId: mission.id,
+        missionTitle: (mission.title as string) ?? "Challenge",
+        voucherTemplateIds: (mission.reward_voucher_template_ids ?? []) as string[],
       });
-      if (v) issuedCount++;
     }
-
-    // Credit any reward_bonus_beans configured on the mission. Was
-    // ignored before — completing a mission with bonus_beans > 0 would
-    // tick the assignment to 'completed' but never actually award the
-    // Beans. Wrapped in try/catch since a balance update failure
-    // shouldn't block voucher issuance / push.
-    const bonusBeans = (mission.reward_bonus_beans as number | null) ?? 0;
-    if (bonusBeans > 0) {
-      try {
-        await awardBonusBeans({
-          memberId: args.memberId,
-          amount: bonusBeans,
-          description: `Mission complete — ${(meta?.title as string) ?? "Challenge"}`,
-          referenceId: assignment.id,
-          txnType: "mission_bonus",
-        });
-      } catch (e) {
-        console.warn("[v2] mission bonus beans failed", e);
-      }
-    }
-
-    // Bump completion counter on the mission (analytics). Best-effort.
-    try {
-      await supabase.rpc("increment_mission_completed", { mission_id_param: mission.id });
-    } catch { /* analytics bump is non-critical */ }
-
-    // Fire-and-forget push so the customer knows their challenge landed.
-    notifyMissionCompleted({
-      memberId: args.memberId,
-      missionTitle: (meta?.title as string) ?? "Challenge",
-      voucherCount: issuedCount,
-    }).catch(() => {});
   }
 
-  return { completed, missionId: assignment.mission_id };
+  return { completedMissionIds };
 }
 
 // ─── Mystery Bean drop ───────────────────────────────────────────────
@@ -641,9 +702,22 @@ export async function generateMysteryDrop(args: {
   const pool = (poolRaw ?? []) as MysteryPoolEntry[];
   if (pool.length === 0) return noResult;
 
-  // Tier-gate. Without a clear ladder we just admit everything when
-  // min_tier is null. (TODO: proper tier rank check vs args.memberTier)
-  const eligible = pool.filter((e) => !e.min_tier || (args.memberTier && args.memberTier === e.min_tier));
+  // Tier-gate by rank: an outcome with min_tier='silver' should be
+  // available to silver / gold / platinum, not just silver. Earlier
+  // exact-match filter excluded higher tiers from gold/silver-only
+  // outcomes — invisible to anyone above the min. Invitation tiers
+  // (Staff, Black Card) are ranked above Platinum so they see
+  // everything that's available to Platinum + their own tier.
+  const TIER_RANK: Record<string, number> = {
+    bronze: 1, silver: 2, gold: 3, elite: 4,
+    "arba-staff": 5, "black-card": 5,
+  };
+  const memberRank = args.memberTier ? (TIER_RANK[args.memberTier] ?? 1) : 1;
+  const eligible = pool.filter((e) => {
+    if (!e.min_tier) return true;
+    const need = TIER_RANK[e.min_tier] ?? 99;
+    return memberRank >= need;
+  });
   if (eligible.length === 0) return noResult;
 
   // Birthday boost — double weight when birthday_month_boost AND the
@@ -879,25 +953,59 @@ export async function applyOrderV2Hooks(args: {
     }
   }
 
-  // Mission progress. Looks up the active assignment + the goal, evals
-  // this order against it, increments progress, completes + issues
-  // voucher templates on threshold.
+  // Mission progress. Looks up all the customer's active assignments,
+  // evals this order against each, increments progress, and completes
+  // any that crossed the threshold. We pull per-item categories so the
+  // category-aware goal types (Make it a Meal / Pastry Pair / Double
+  // Up) can match against the bill.
   try {
-    const { data: items } = await supabase
-      .from("order_items")
-      .select("product_id, quantity")
-      .eq("order_id", orderId);
-    const itemIds = (items ?? []).map((i) => i.product_id as string);
-    const itemCount = (items ?? []).reduce((sum, i) => sum + ((i.quantity as number) ?? 0), 0);
+    const [{ data: items }, { data: orderRow }] = await Promise.all([
+      supabase
+        .from("order_items")
+        .select("product_id, quantity")
+        .eq("order_id", orderId),
+      supabase
+        .from("orders")
+        .select("total")
+        .eq("id", orderId)
+        .single(),
+    ]);
+    const itemRows = items ?? [];
+    const itemIds = itemRows.map((i) => i.product_id as string);
+    const itemCount = itemRows.reduce((sum, i) => sum + ((i.quantity as number) ?? 0), 0);
+    const totalSen = Number((orderRow as { total?: number | null } | null)?.total ?? 0);
+
+    // Resolve product → category via a single batched lookup. order_items
+    // doesn't denormalise category and a Supabase FK join needs PostgREST
+    // relationship metadata that isn't configured for this pair, so a
+    // separate query keeps things robust.
+    const categoryById = new Map<string, string>();
+    if (itemIds.length > 0) {
+      const { data: productsData } = await supabase
+        .from("products")
+        .select("id, category")
+        .in("id", itemIds);
+      for (const p of productsData ?? []) {
+        if (p.id && p.category) {
+          categoryById.set(p.id as string, p.category as string);
+        }
+      }
+    }
+    const itemsForMission = itemRows.map((i) => ({
+      product_id: i.product_id as string,
+      category: categoryById.get(i.product_id as string) ?? null,
+      quantity: (i.quantity as number) ?? 1,
+    }));
 
     await applyOrderToMission({
       memberId,
       order: {
         id: orderId,
         outlet_id: outletId,
+        items: itemsForMission,
         item_ids: itemIds,
         item_count: itemCount,
-        total_sen: 0,
+        total_sen: totalSen,
         created_at: orderCreatedAt,
       },
     });

@@ -1,10 +1,8 @@
 // GET /api/loyalty/me/claimable — offers waiting for one-tap claim.
 //
-// Three sources, unioned:
+// Two sources, unioned:
 //   1. Pending mystery drops (un-revealed, the customer hasn't tapped yet)
-//   2. Pending milestone-earned rewards
-//   3. Admin-pushed promo claimables (placeholder — TODO when promo
-//      push table lands)
+//   2. Admin-pushed promo claimables
 //
 // Welcome offer is a separate one-time flow handled on signup, not here.
 

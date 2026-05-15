@@ -217,7 +217,7 @@ function Modal({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-card rounded-2xl w-full max-w-lg my-8 max-h-[90vh] overflow-y-auto">
+      <div className="bg-card rounded-2xl w-full max-w-lg md:max-w-3xl my-8 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b">
           <h2 className="text-lg font-semibold">{claimable ? "Edit Claimable" : "New Claimable"}</h2>
           <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X className="w-5 h-5" /></button>

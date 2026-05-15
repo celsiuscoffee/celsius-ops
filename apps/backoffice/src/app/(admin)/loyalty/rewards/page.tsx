@@ -180,14 +180,14 @@ export default function RewardsPage() {
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             <Gift className="w-6 h-6" />
-            Rewards
+            Points Shop
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Catalog of redeemable items. Discount mechanics live on{" "}
+            Catalogue of items a member can buy with Beans. Discount mechanics live on{" "}
             <a href="/loyalty/promotions" className="underline">
-              Promotions
+              Discount Engine
             </a>
-            ; link a promotion below to apply a discount when a reward is redeemed.
+            ; link a discount rule below to apply it when a reward is redeemed.
           </p>
         </div>
         <button
@@ -453,7 +453,7 @@ function RewardModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-card rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-card rounded-2xl shadow-xl w-full max-w-xl md:max-w-3xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b">
           <h2 className="text-lg font-semibold">
             {reward ? "Edit reward" : "New reward"}

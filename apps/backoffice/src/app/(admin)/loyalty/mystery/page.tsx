@@ -5,6 +5,19 @@ import { Sparkles, Plus, Pencil, Trash2, X, Gift, Coffee, Croissant, ArrowUp } f
 
 type OutcomeType = "beans_multiplier" | "flat_beans" | "voucher" | "no_bonus" | "surprise_in_store";
 
+// Mirrors the row shape of /api/loyalty/reward-kinds — labels are
+// admin-editable now, but the id/behaviour is still code-defined
+// (the OutcomeType union above is still the source of truth for what
+// kinds the engine knows how to act on).
+interface RewardKind {
+  id: string;
+  label: string;
+  description: string | null;
+  category: string | null;
+  sort_order: number;
+  is_active: boolean;
+}
+
 interface MysteryEntry {
   id: string;
   brand_id: string;
@@ -25,6 +38,9 @@ interface VoucherTemplate { id: string; title: string; category: string }
 
 const BRAND_ID = "brand-celsius";
 const TIERS = ["Bronze", "Silver", "Gold", "Platinum"];
+// Fallback labels used only if /api/loyalty/reward-kinds fails to load —
+// the source of truth is now the reward_kinds table (editable via the
+// Reward Library → Reward Kinds admin page).
 const OUTCOME_LABELS: Record<OutcomeType, string> = {
   beans_multiplier: "Bean Multiplier",
   flat_beans: "Flat Bonus Beans",
@@ -36,6 +52,7 @@ const OUTCOME_LABELS: Record<OutcomeType, string> = {
 export default function MysteryPage() {
   const [entries, setEntries] = useState<MysteryEntry[]>([]);
   const [templates, setTemplates] = useState<VoucherTemplate[]>([]);
+  const [kinds, setKinds] = useState<RewardKind[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<MysteryEntry | null>(null);
   const [creating, setCreating] = useState(false);
@@ -43,14 +60,26 @@ export default function MysteryPage() {
   async function load() {
     setLoading(true);
     try {
-      const [r1, r2] = await Promise.all([
+      const [r1, r2, r3] = await Promise.all([
         fetch(`/api/loyalty/mystery?brand_id=${BRAND_ID}`, { credentials: "include" }),
         fetch(`/api/loyalty/voucher-templates?brand_id=${BRAND_ID}`, { credentials: "include" }),
+        fetch(`/api/loyalty/reward-kinds`, { credentials: "include" }),
       ]);
-      setEntries(await r1.json());
-      setTemplates(await r2.json());
-    } catch { setEntries([]); setTemplates([]); }
+      const [entriesData, templatesData, kindsData] = await Promise.all([
+        r1.json(), r2.json(), r3.json(),
+      ]);
+      setEntries(Array.isArray(entriesData) ? entriesData : []);
+      setTemplates(Array.isArray(templatesData) ? templatesData : []);
+      setKinds(Array.isArray(kindsData) ? kindsData : []);
+    } catch { setEntries([]); setTemplates([]); setKinds([]); }
     finally { setLoading(false); }
+  }
+
+  // Resolve an outcome_type id to its display label. Prefers the
+  // admin-editable reward_kinds.label, falls back to the hardcoded
+  // OUTCOME_LABELS if reward-kinds didn't load.
+  function kindLabel(id: OutcomeType): string {
+    return kinds.find((k) => k.id === id)?.label ?? OUTCOME_LABELS[id];
   }
 
   useEffect(() => { load(); }, []);
@@ -142,7 +171,7 @@ export default function MysteryPage() {
                     </div>
                     {e.min_tier && <div className="text-xs text-muted-foreground">{e.min_tier}+ only</div>}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{OUTCOME_LABELS[e.outcome_type]}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{kindLabel(e.outcome_type)}</td>
                   <td className="px-4 py-3">
                     {e.outcome_type === "beans_multiplier" && <strong>{e.multiplier_value}×</strong>}
                     {e.outcome_type === "flat_beans" && <strong>+{e.flat_beans_value} Beans</strong>}
@@ -187,6 +216,7 @@ export default function MysteryPage() {
         <MysteryModal
           entry={editing}
           templates={templates}
+          kinds={kinds}
           onClose={() => { setEditing(null); setCreating(false); }}
           onSaved={async () => { setEditing(null); setCreating(false); await load(); }}
         />
@@ -209,13 +239,25 @@ function Stat({ label, value }: { label: string; value: string }) {
 // ─── Modal ───────────────────────────────────────────────────────────────
 
 function MysteryModal({
-  entry, templates, onClose, onSaved,
+  entry, templates, kinds, onClose, onSaved,
 }: {
   entry: MysteryEntry | null;
   templates: VoucherTemplate[];
+  kinds: RewardKind[];
   onClose: () => void;
   onSaved: () => void;
 }) {
+  // Filter to active kinds for the dropdown; if the existing entry
+  // references a kind that has since been deactivated, surface it
+  // anyway (with a "(inactive)" suffix) so the admin can save the
+  // form without an orphaned dropdown value.
+  const activeKinds = kinds.filter((k) => k.is_active);
+  const dropdownKinds: RewardKind[] = entry && !activeKinds.some((k) => k.id === entry.outcome_type)
+    ? [
+        ...activeKinds,
+        ...kinds.filter((k) => k.id === entry.outcome_type),
+      ]
+    : activeKinds;
   const [label, setLabel] = useState(entry?.label ?? "");
   const [outcomeType, setOutcomeType] = useState<OutcomeType>(entry?.outcome_type ?? "beans_multiplier");
   const [multiplier, setMultiplier] = useState<number>(entry?.multiplier_value ?? 2);
@@ -275,7 +317,7 @@ function MysteryModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-card rounded-2xl w-full max-w-xl my-8 max-h-[90vh] overflow-y-auto">
+      <div className="bg-card rounded-2xl w-full max-w-xl md:max-w-3xl my-8 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b">
           <h2 className="text-lg font-semibold">{entry ? "Edit Outcome" : "New Outcome"}</h2>
           <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X className="w-5 h-5" /></button>
@@ -288,8 +330,21 @@ function MysteryModal({
 
           <Field label="Outcome type">
             <select value={outcomeType} onChange={(e) => setOutcomeType(e.target.value as OutcomeType)} className="w-full border rounded-lg px-3 py-2 bg-background">
-              {Object.entries(OUTCOME_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              {dropdownKinds.length === 0 ? (
+                // Defensive: if reward-kinds API failed, fall back to
+                // the hardcoded enum so the form still works.
+                Object.entries(OUTCOME_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)
+              ) : (
+                dropdownKinds.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.label}{!k.is_active ? " (inactive)" : ""}
+                  </option>
+                ))
+              )}
             </select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Edit labels under Reward Library → Reward Kinds.
+            </p>
           </Field>
 
           {outcomeType === "beans_multiplier" && (

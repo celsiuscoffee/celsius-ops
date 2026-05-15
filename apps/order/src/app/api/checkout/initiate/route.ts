@@ -181,12 +181,30 @@ export async function POST(request: NextRequest) {
     const { data: settingsRows } = await supabase
       .from("app_settings")
       .select("key, value")
-      .in("key", ["points_per_rm", "min_order_value", "first_order_discount", "sst"]);
+      .in("key", ["points_per_rm", "min_order_value", "sst"]);
     const settingsMap = new Map((settingsRows ?? []).map((r) => [r.key, r.value]));
     const pointsPerRm  = Number((settingsMap.get("points_per_rm") as any)?.rate ?? 1);
     const minOrderRm   = Number((settingsMap.get("min_order_value") as any)?.rm ?? 0);
-    const fodConfig    = settingsMap.get("first_order_discount") as
-      { enabled: boolean; type: "percent" | "fixed"; amount: number } | undefined;
+
+    // First-order discount lives on the promotions table now (see
+    // orders/route.ts for the same lookup). Reads the most recent
+    // active row with trigger_type='first_order'.
+    const { data: fodRow } = await supabase
+      .from("promotions")
+      .select("discount_type, discount_value, is_active")
+      .eq("brand_id", "brand-celsius")
+      .eq("trigger_type", "first_order")
+      .eq("is_active", true)
+      .order("priority", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const fodConfig = fodRow
+      ? {
+          enabled: true,
+          type: (fodRow.discount_type as string) === "percentage_off" ? "percent" : "fixed",
+          amount: Number(fodRow.discount_value ?? 0),
+        }
+      : undefined;
 
     // ── Server-side monetary validation ────────────────────────────────────
     const rawDiscountSen = discountSen ?? 0;

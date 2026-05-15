@@ -46,7 +46,13 @@ export function MenuContent({ products, categories }: MenuContentProps) {
   const storeId = searchParams.get("store");
   const visibleCategories = categories
     .filter((c) => !HIDDEN_CATEGORIES.has(c.id));
-  const bestSellers = products.filter((p) => p.isPopular);
+  const bestSellers = products
+    .filter((p) => p.isPopular)
+    .slice()
+    .sort((a, b) =>
+      (a.featuredPosition ?? 9999) - (b.featuredPosition ?? 9999)
+      || a.name.localeCompare(b.name)
+    );
   const hasBestSellers = bestSellers.length > 0;
   const defaultCategory = hasBestSellers ? BEST_SELLERS_ID : (visibleCategories[0]?.id ?? "");
   const [activeCategory, setActiveCategory] = useState(defaultCategory);
@@ -63,7 +69,7 @@ export function MenuContent({ products, categories }: MenuContentProps) {
         p.name.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : activeCategory === BEST_SELLERS_ID
-    ? products.filter((p) => p.isPopular)
+    ? bestSellers
     : products.filter((p) => p.categoryId === activeCategory);
 
   function handleAddSimple(e: React.MouseEvent, product: Product) {

@@ -59,7 +59,43 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ orders: [] });
     }
 
-    return NextResponse.json({ orders: data ?? [] });
+    // Resolve store_id → outlet name once for the whole batch. The
+    // orders table just stores the raw store_id; the Orders tab in
+    // the pickup app needs to render "Conezion" / "Putrajaya" /
+    // etc. next to each order so the customer can tell where they
+    // ordered from without tapping in.
+    type OrderRow = {
+      id: string;
+      order_number: string;
+      status: string;
+      total: number;
+      created_at: string;
+      payment_method: string | null;
+      store_id: string | null;
+      order_items: unknown;
+    };
+    const rows = (data ?? []) as unknown as OrderRow[];
+    const storeIds = Array.from(
+      new Set(rows.map((o) => o.store_id).filter((id): id is string => !!id)),
+    );
+    const storeNameById = new Map<string, string>();
+    if (storeIds.length > 0) {
+      const { data: outlets } = await supabase
+        .from("outlet_settings")
+        .select("store_id, name")
+        .in("store_id", storeIds);
+      for (const row of (outlets ?? []) as Array<{ store_id: string | null; name: string | null }>) {
+        if (row?.store_id && row?.name) {
+          storeNameById.set(row.store_id, row.name);
+        }
+      }
+    }
+    const orders = rows.map((o) => ({
+      ...o,
+      store_name: o.store_id ? (storeNameById.get(o.store_id) ?? null) : null,
+    }));
+
+    return NextResponse.json({ orders });
   } catch (err) {
     console.error("orders history route error:", err);
     return NextResponse.json({ orders: [] });

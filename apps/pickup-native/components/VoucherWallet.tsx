@@ -15,11 +15,38 @@
  */
 
 import { useState, useMemo } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, Image } from "react-native";
 import { router } from "expo-router";
-import { Sparkles, ChevronRight } from "lucide-react-native";
+import {
+  Sparkles, ChevronRight, Cake, Sandwich, Cookie, Croissant,
+  Coffee, Percent, Plus, Gift, Ticket,
+} from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { type Voucher, voucherUrgencyLabel } from "../lib/rewards-v2";
+
+// Pick a lucide icon that matches what the reward actually is. The
+// title is the primary signal (admins write it for human readability),
+// the icon key set on the voucher template is a fallback. Falls all
+// the way through to Ticket for generic "Reward" entries.
+export function pickRewardIcon(title: string, iconKey?: string | null) {
+  const k = (iconKey ?? "").toLowerCase();
+  const t = (title ?? "").toLowerCase();
+  if (k === "cake" || t.includes("cake"))             return Cake;
+  if (k === "sandwich" || t.includes("sandwich"))     return Sandwich;
+  if (k === "croissant" || t.includes("croissant"))   return Croissant;
+  if (k === "cookie" || t.includes("cookie"))         return Cookie;
+  if (k === "coffee" || t.includes("drink") || t.includes("coffee")) return Coffee;
+  // 2× Beans Boost / Beans Multiplier / Sparkle-coded mystery rewards.
+  if (k === "sparkle" || t.includes("boost") || t.includes("beans") || t.includes("multiplier"))
+    return Sparkles;
+  if (t.includes("birthday"))                          return Cake;
+  // Money-off vouchers / discount-typed.
+  if (k === "percent" || t.includes("off") || /\brm\d/i.test(t) || t.includes("discount"))
+    return Percent;
+  if (k === "plus" || t.includes("add") || t.includes("upgrade")) return Plus;
+  if (k === "gift" || t.includes("gift") || t.includes("welcome")) return Gift;
+  return Ticket;
+}
 import { useApp, type AppliedReward } from "../lib/store";
 import { CelsiusCup } from "./brand/CelsiusCup";
 import { CelsiusGift } from "./brand/CelsiusGift";
@@ -63,67 +90,122 @@ export type VoucherTheme = {
   glyphIcon?: GlyphIcon;
 };
 
-export const VOUCHER_THEME: Record<Voucher["category"], VoucherTheme> = {
-  free_item: {
-    bg:         "#1A0200",
-    border:     "rgba(251,191,36,0.32)",
-    accent:     "#FBBF24",
-    fg:         "#FFF6E0",
-    fgDim:      "rgba(255,246,224,0.66)",
-    iconBg:     "rgba(251,191,36,0.20)",
-    iconColor:  "#FBBF24",
-    iconKind:   "brand",
-    brandIcon:  CelsiusCup,
-  },
-  discount: {
-    bg:         "#C05040",
-    border:     "rgba(255,255,255,0.30)",
-    accent:     "#FFFFFF",
-    fg:         "#FFFFFF",
-    fgDim:      "rgba(255,255,255,0.78)",
-    iconBg:     "rgba(255,255,255,0.22)",
-    iconColor:  "#FFFFFF",
-    iconKind:   "brand",
-    brandIcon:  CelsiusTag,
-  },
-  upgrade: {
-    bg:         "#FBEBE8",
-    border:     "rgba(192,80,64,0.22)",
-    accent:     "#C05040",
-    fg:         "#1A0200",
-    fgDim:      "rgba(26,2,0,0.60)",
-    iconBg:     "rgba(192,80,64,0.18)",
-    iconColor:  "#C05040",
-    iconKind:   "brand",
-    brandIcon:  CelsiusGift,
-  },
-  multiplier: {
-    bg:         "#FBBF24",
-    border:     "rgba(26,2,0,0.14)",
-    accent:     "#1A0200",
-    fg:         "#1A0200",
-    fgDim:      "rgba(26,2,0,0.65)",
-    iconBg:     "rgba(26,2,0,0.10)",
-    iconColor:  "#1A0200",
-    iconKind:   "glyph",
-    glyphIcon:  Sparkles,
-  },
-  special: {
-    bg:         "#FFF6E0",
-    border:     "rgba(217,148,4,0.30)",
-    accent:     "#D99404",
-    fg:         "#1A0200",
-    fgDim:      "rgba(26,2,0,0.60)",
-    iconBg:     "rgba(217,148,4,0.22)",
-    iconColor:  "#D99404",
-    iconKind:   "brand",
-    brandIcon:  CelsiusGift,
-  },
+// Four source-bucket themes — answer "where did this reward come from?"
+// at a glance, before the customer reads the title. Each bucket pairs a
+// distinct background + accent so a deck of mixed rewards reads as four
+// visually grouped families:
+//   • Challenge (missions)             → espresso + gold
+//   • Mystery   (mystery bag outcomes) → indigo + lavender
+//   • Gift      (birthday, welcome,    → peach + terracotta
+//                referral, promo)
+//   • Bean      (catalogue / points    → terracotta + gold
+//                redemption)
+// Each theme can be overridden per-reward-kind from the backoffice
+// (reward_kinds.color). When a voucher / mission outcome / mystery
+// outcome references a kind with a custom colour, it wins over the
+// bucket default — falls back to the bucket when null.
+
+export const THEME_CHALLENGE: VoucherTheme = {
+  bg:         "#1A0200",  // espresso
+  border:     "rgba(251,191,36,0.32)",
+  accent:     "#FBBF24",  // gold
+  fg:         "#FFFFFF",
+  fgDim:      "rgba(255,255,255,0.65)",
+  iconBg:     "rgba(251,191,36,0.20)",
+  iconColor:  "#FBBF24",
+  iconKind:   "glyph",
+  glyphIcon:  Sparkles,
 };
 
-export function themeForVoucher(v: Voucher): VoucherTheme {
-  return VOUCHER_THEME[v.category] ?? VOUCHER_THEME.special;
+export const THEME_MYSTERY: VoucherTheme = {
+  bg:         "#2D1B69",  // deep indigo
+  border:     "rgba(199,181,255,0.32)",
+  accent:     "#C7B5FF",  // lavender
+  fg:         "#FFFFFF",
+  fgDim:      "rgba(255,255,255,0.70)",
+  iconBg:     "rgba(199,181,255,0.18)",
+  iconColor:  "#C7B5FF",
+  iconKind:   "glyph",
+  glyphIcon:  Sparkles,
+};
+
+export const THEME_GIFT: VoucherTheme = {
+  bg:         "#F4D3B0",  // warm peach
+  border:     "rgba(192,80,64,0.28)",
+  accent:     "#C05040",  // terracotta
+  fg:         "#1A0200",
+  fgDim:      "rgba(26,2,0,0.62)",
+  iconBg:     "rgba(192,80,64,0.14)",
+  iconColor:  "#C05040",
+  iconKind:   "glyph",
+  glyphIcon:  Gift,
+};
+
+export const THEME_BEAN: VoucherTheme = {
+  bg:         "#C05040",  // terracotta
+  border:     "rgba(251,191,36,0.36)",
+  accent:     "#FBBF24",  // gold
+  fg:         "#FFFFFF",
+  fgDim:      "rgba(255,245,225,0.78)",
+  iconBg:     "rgba(255,245,225,0.18)",
+  iconColor:  "#FBBF24",
+  iconKind:   "glyph",
+  glyphIcon:  Ticket,
+};
+
+// Map a source_type to one of the four bucket themes. Source is the
+// strongest signal for "where did this come from" so it drives the
+// theme; category (free_item / discount / etc.) only nudges icon
+// selection inside pickRewardIcon().
+export function themeForSource(source: Voucher["source_type"] | null | undefined): VoucherTheme {
+  switch (source) {
+    case "mission":            return THEME_CHALLENGE;
+    case "mystery":            return THEME_MYSTERY;
+    case "birthday":           return THEME_GIFT;
+    case "referral":           return THEME_GIFT;
+    case "manual":             return THEME_GIFT;
+    case "points_redemption":  return THEME_BEAN;
+    default:                    return THEME_GIFT;  // welcome / unknown promo
+  }
 }
+
+// Apply a per-kind colour override on top of a base theme. The
+// backoffice (reward_kinds.color / illustration_url) lets admin tune a
+// specific kind's card colour without touching code. When colour is
+// set, we recompute border / iconBg / accent against the override so
+// the card stays internally consistent.
+function withKindOverride(base: VoucherTheme, color: string | null | undefined): VoucherTheme {
+  if (!color || !/^#[0-9a-fA-F]{3,8}$/.test(color)) return base;
+  // Override only the accent (pill + eyebrow + icon stroke). Background
+  // stays bucket-default so the four-family read survives — the
+  // override is a per-kind highlight, not a full re-skin.
+  return {
+    ...base,
+    accent:    color,
+    iconColor: color,
+    border:    `${color}55`,  // ~33% alpha border
+    iconBg:    `${color}22`,  // ~13% alpha tile
+  };
+}
+
+// Resolve theme for a wallet voucher: bucket from source, optional
+// per-kind accent override.
+export function themeForVoucher(v: Voucher): VoucherTheme {
+  const base = themeForSource(v.source_type ?? null);
+  return withKindOverride(base, (v as { kind_color?: string | null }).kind_color);
+}
+
+// Legacy export — five voucher categories all mapped to source-derived
+// themes. Kept so existing callers that pass a category-keyed lookup
+// keep compiling; new code should call themeForSource / themeForVoucher
+// directly.
+export const VOUCHER_THEME: Record<Voucher["category"], VoucherTheme> = {
+  free_item:  THEME_GIFT,
+  discount:   THEME_BEAN,
+  upgrade:    THEME_BEAN,
+  multiplier: THEME_MYSTERY,
+  special:    THEME_GIFT,
+};
 
 type Props = {
   vouchers: Voucher[];
@@ -235,7 +317,25 @@ export function VoucherWallet({ vouchers, maxVisible = 3, hideViewAll = false }:
   );
 }
 
-function VoucherRow({ voucher }: { voucher: Voucher }) {
+// Source-driven eyebrow — answers "where did I get this?". Wallet
+// vouchers used to read out category ("Free Item" / "Discount") which
+// told the customer WHAT the reward was; the unified rewards list cares
+// more about WHERE the reward came from since the deck mixes earned,
+// purchased, and challenge rewards on one screen. Falls back to a
+// generic label when source_type is unset (legacy rows).
+function voucherSourceLabel(v: Voucher): string {
+  switch (v.source_type) {
+    case "mystery":            return "Mystery Bag";
+    case "birthday":           return "Birthday Gift";
+    case "referral":           return "Referral Gift";
+    case "manual":             return "Promo";
+    case "points_redemption":  return "Bean Points";
+    case "mission":            return "Challenge";
+    default:                    return "Reward";
+  }
+}
+
+export function VoucherRow({ voucher }: { voucher: Voucher }) {
   const theme = themeForVoucher(voucher);
   const urgency = voucherUrgencyLabel(voucher);
   const setReservedVoucher = useApp((s) => s.setReservedVoucher);
@@ -275,14 +375,8 @@ function VoucherRow({ voucher }: { voucher: Voucher }) {
     router.push("/menu" as never);
   }
 
-  // Friendly category label — mirrors what the Claim card shows.
-  const categoryLabel = (
-    voucher.category === "free_item" ? "Free Item"
-      : voucher.category === "upgrade" ? "Add-on"
-      : voucher.category === "discount" ? "Discount"
-      : voucher.category === "multiplier" ? "Boost"
-      : "Reward"
-  );
+  // Source-driven eyebrow — see voucherSourceLabel above.
+  const categoryLabel = voucherSourceLabel(voucher);
 
   // Picks the right text colour for the Use pill's label so it has
   // contrast on whatever the category theme sets the accent to.
@@ -335,7 +429,10 @@ function VoucherRow({ voucher }: { voucher: Voucher }) {
           gap: 14,
         }}
       >
-        {/* Foreground brand icon tile. */}
+        {/* Foreground icon tile — Celsius illustration if set on the
+            linked reward_kind, else fall back to a category-aware
+            Lucide glyph so empty backoffice config never reads as
+            broken. */}
         <View
           style={{
             width: 48,
@@ -344,13 +441,19 @@ function VoucherRow({ voucher }: { voucher: Voucher }) {
             backgroundColor: theme.iconBg,
             alignItems: "center",
             justifyContent: "center",
+            overflow: "hidden",
           }}
         >
-          {theme.iconKind === "brand" && theme.brandIcon
-            ? <theme.brandIcon size={28} color={theme.iconColor} />
-            : theme.glyphIcon
-              ? <theme.glyphIcon size={24} color={theme.iconColor} strokeWidth={2} />
-              : null}
+          {voucher.illustration_url ? (
+            <Image
+              source={{ uri: voucher.illustration_url }}
+              style={{ width: 40, height: 40 }}
+              resizeMode="contain"
+            />
+          ) : (() => {
+            const RewardIcon = pickRewardIcon(voucher.title, voucher.icon);
+            return <RewardIcon size={24} color={theme.iconColor} strokeWidth={2} />;
+          })()}
         </View>
 
         {/* Title + meta */}

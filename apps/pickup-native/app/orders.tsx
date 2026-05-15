@@ -17,6 +17,7 @@ import {
   Clock,
   XCircle,
   Coffee,
+  MapPin,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { EspressoHeader } from "../components/EspressoHeader";
@@ -349,11 +350,10 @@ function TabPill({
     >
       <Text
         style={{
-          // Aligned with the Rewards-tab strip (Challenges / Rewards /
-          // Milestones) — same 15pt Space Grotesk, same weight pair
-          // (700Bold active, 600SemiBold inactive), same inactive
-          // muted-grey. The Orders strip and the Rewards strip now
-          // read as the same component family.
+          // 15pt Space Grotesk, weight pair (700Bold active, 600SemiBold
+          // inactive) on muted-grey. The Rewards tab strip has been
+          // removed in favour of a single-page layout, so this is now
+          // the only tab strip in the app.
           fontFamily: active ? "SpaceGrotesk_700Bold" : "SpaceGrotesk_600SemiBold",
           fontSize: 15,
           color: active ? "#1A0200" : "#6B6B6B",
@@ -470,6 +470,23 @@ function OrderRow({
         >
           {itemSummary || "Order"}
         </Text>
+        {/* Outlet row — pin icon + "Celsius Coffee Putrajaya" so the
+            customer can tell where each order was placed without
+            opening it. Falls back to skip the row when store_name
+            isn't resolved (e.g. legacy orders with a store_id that
+            no longer maps to a configured outlet). */}
+        {order.store_name ? (
+          <View className="flex-row items-center mt-1.5" style={{ gap: 4 }}>
+            <MapPin size={11} color="#8E8E93" strokeWidth={2} />
+            <Text
+              className="text-muted-fg text-[12px]"
+              style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+              numberOfLines={1}
+            >
+              {order.store_name}
+            </Text>
+          </View>
+        ) : null}
         <Text
           className="text-muted-fg text-[12px] mt-0.5"
           style={{ fontFamily: "SpaceGrotesk_400Regular" }}

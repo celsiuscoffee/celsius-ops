@@ -27,6 +27,7 @@ import {
   Shield,
   Trash2,
   Sparkles,
+  Gift,
 } from "lucide-react-native";
 import QRCode from "react-native-qrcode-svg";
 import * as Haptics from "expo-haptics";
@@ -34,14 +35,52 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollView } from "react-native";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { BottomNav } from "../components/BottomNav";
-import { TierHero } from "../components/TierHero";
-import { tierStyle } from "../lib/tier-styles";
+import { TierCardCarousel, type TierLite } from "../components/TierCardCarousel";
 import { useApp } from "../lib/store";
 import { api } from "../lib/api";
-import { fetchMember, fetchTier, type MemberTier } from "../lib/rewards";
+import { fetchMember, fetchRewards, fetchTier, type MemberTier } from "../lib/rewards";
+import { supabase } from "../lib/supabase";
 import { deregisterPush } from "../lib/notifications";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CelsiusLoader } from "../components/CelsiusLoader";
+
+/** ISO YYYY-MM-DD → display DD/MM/YYYY. Empty/invalid in → empty out. */
+function isoToDMY(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}
+
+/** Display DD/MM/YYYY → ISO YYYY-MM-DD. Returns null for empty or any
+ *  shape that isn't a complete, calendar-valid date (e.g. 31/02/1990
+ *  rejects since Feb has no 31st). The save flow treats null as
+ *  "leave birthday unset" rather than surfacing a validation error —
+ *  customers shouldn't be blocked from saving name + email because of
+ *  a typo in a field they're allowed to leave blank. */
+function dmyToIso(dmy: string): string | null {
+  const cleaned = dmy.trim();
+  if (!cleaned) return null;
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(cleaned);
+  if (!m) return null;
+  const dd = Number(m[1]);
+  const mm = Number(m[2]);
+  const yyyy = Number(m[3]);
+  if (yyyy < 1900 || yyyy > new Date().getUTCFullYear()) return null;
+  if (mm < 1 || mm > 12) return null;
+  const daysInMonth = new Date(yyyy, mm, 0).getDate();
+  if (dd < 1 || dd > daysInMonth) return null;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+/** Live-format a DD/MM/YYYY input — strip non-digits, cap at 8, splice
+ *  in slashes at positions 2 and 4. Lets the customer type 31011990
+ *  and see 31/01/1990 emerge as they go without managing the cursor. */
+function formatDMYAsType(raw: string): string {
+  const d = raw.replace(/\D/g, "").slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+}
 
 function normalisePhone(input: string): string {
   const digits = input.replace(/\D/g, "");
@@ -75,8 +114,13 @@ export default function AccountTab() {
         setMember({
           id: m.id,
           name: m.name,
-          email: null,
-          birthday: null,
+          // The server now returns email + birthday from the
+          // members table — earlier this hardcoded null, which
+          // wiped any locally-saved value every time the member
+          // fetch ran and made the "Complete profile" pill
+          // reappear after the customer thought they were done.
+          email: m.email ?? null,
+          birthday: m.birthday ?? null,
           pointsBalance: m.pointsBalance,
           totalVisits: m.totalVisits,
           totalPointsEarned: m.totalPointsEarned,
@@ -121,6 +165,22 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
   });
   const tier = tierQ.data ?? null;
 
+  // Live points balance — the rewards endpoint is the source of truth
+  // post-order. fetchMember() below caches member fields once on mount
+  // and the cached pointsBalance ends up stale after the customer
+  // earns/spends beans on a checkout. The TierCardCarousel pulled
+  // member.pointsBalance straight, which is why the rewards tab and
+  // the account tab disagreed by an order or two. Same React Query
+  // key the Rewards screen + Home use, so the three surfaces now read
+  // from a single cached value.
+  const rewardsQ = useQuery({
+    queryKey: ["rewards", phone ?? "anonymous"],
+    queryFn: () => fetchRewards(phone),
+    enabled: !!phone,
+    staleTime: 60_000,
+  });
+  const livePoints = rewardsQ.data?.pointsBalance ?? member?.pointsBalance ?? 0;
+
   // Refresh member fields (points balance, name, etc.) on screen focus.
   // Member is in zustand for write-through to the rest of the app, so
   // we keep the imperative fetch here. fetchTier runs through the
@@ -132,8 +192,14 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
         setMember({
           id: m.id,
           name: m.name,
-          email: null,
-          birthday: null,
+          // Sourced from the API now so the local store stays in
+          // sync with whatever the customer last saved on the
+          // Edit Profile screen. Previously hardcoded to null
+          // here, which clobbered freshly-saved values on the
+          // next mount and forced the "Complete profile" pill to
+          // reappear.
+          email: m.email ?? null,
+          birthday: m.birthday ?? null,
           pointsBalance: m.pointsBalance,
           totalVisits: m.totalVisits,
           totalPointsEarned: m.totalPointsEarned,
@@ -143,8 +209,15 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const ts = tierStyle(tier);
-  const showTierEyebrow = !!tier?.tier_slug;
+  // All tiers — drives the swipeable carousel. 5-min cache because the
+  // tier ladder rarely changes; React Query keeps it warm across tabs.
+  const allTiersQ = useQuery({
+    queryKey: ["all-tiers"],
+    queryFn: fetchAllTiers,
+    staleTime: 5 * 60_000,
+  });
+  const allTiers = allTiersQ.data ?? [];
+
   const memberName = member?.name || "Add your name";
   // Format phone to "+60 10 933 5369" — visual breathing room.
   const formattedPhone = phone.replace(/^(\+\d{2})(\d{2})(\d{3})(\d{4})$/, "$1 $2 $3 $4");
@@ -161,46 +234,107 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
         title="Account"
         showCart={false}
         rightSlot={
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync();
-              setEditing(true);
-            }}
-            hitSlop={10}
-            className="p-1 active:opacity-70"
-          >
-            <Pencil size={18} color="#FFFFFF" />
-          </Pressable>
+          // When any profile field (name / email / birthday) is still
+          // missing, the edit button doubles as a CTA — labelled
+          // "Complete profile" with a leading gift icon so the
+          // customer reads it as "claim a perk" rather than "tedious
+          // profile chore". Once all three are filled in, the pill
+          // collapses back to the bare pencil icon.
+          (!member?.birthday || !member?.email || !member?.name) ? (
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                setEditing(true);
+              }}
+              hitSlop={10}
+              accessibilityLabel="Complete your profile to unlock rewards"
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 999,
+                backgroundColor: "rgba(255,255,255,0.14)",
+              }}
+              className="active:opacity-70"
+            >
+              <Gift size={14} color="#FBBF24" strokeWidth={2.2} />
+              <Text
+                style={{
+                  fontFamily: "SpaceGrotesk_700Bold",
+                  fontSize: 11,
+                  color: "#FFFFFF",
+                  letterSpacing: 0.3,
+                }}
+              >
+                Complete profile
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                setEditing(true);
+              }}
+              hitSlop={10}
+              className="p-1 active:opacity-70"
+            >
+              <Pencil size={18} color="#FFFFFF" />
+            </Pressable>
+          )
         }
       />
 
       <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 }}
+        contentContainerStyle={{ paddingTop: 16, paddingBottom: 100 }}
       >
-        {/* Identity card — espresso panel with the customer's name,
-            phone, a scannable QR for fast cashier lookup at the
-            counter, and a small tier pill. Tier ladder + stats are
-            on the Rewards tab; here we focus on "who am I, how do I
-            identify at the till". */}
-        <IdentityCard
-          memberId={loyaltyId}
-          name={memberName}
-          phone={formattedPhone}
-          tierName={tier?.tier_name ?? null}
-          tierColor={ts.accentColor}
-          tierMultiplier={tier?.tier_multiplier ?? null}
-        />
+        {/* Membership tier carousel — same TierCardCarousel that powers
+            the legacy /tier-benefits screen. The customer's current
+            tier is auto-scrolled into view, embedded stats (Points /
+            Visits / Earned) render on that card only, and the page
+            indicator dots underneath signal swipability. */}
+        <Text
+          style={{
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 11,
+            letterSpacing: 2,
+            color: "rgba(26,2,0,0.55)",
+            paddingHorizontal: 16,
+            marginBottom: 8,
+            textTransform: "uppercase",
+          }}
+        >
+          Membership tiers
+        </Text>
+        <View style={{ marginBottom: 18 }}>
+          <TierCardCarousel
+            tiers={allTiers}
+            currentSlug={tier?.tier_slug ?? null}
+            memberVisits={tier?.visits_this_period ?? 0}
+            memberSpend={tier?.spend_this_period ?? 0}
+            quarterEnd={tier?.quarter_end ?? null}
+            stats={{
+              points: livePoints,
+              visits: member?.totalVisits ?? 0,
+              earned: member?.totalPointsEarned ?? 0,
+            }}
+          />
+        </View>
+
+        {/* Action rows are inset 16 horizontal to match the previous
+            layout; the carousel above intentionally bleeds edge-to-edge
+            so its cards feel premium. */}
+        <View style={{ paddingHorizontal: 16 }}>
 
         {/* Action rows — same big-Peachii-on-cream rhythm. Grouped
             into sections so the page reads as labelled blocks rather
-            than one long undifferentiated list. */}
+            than one long undifferentiated list. The legacy
+            "Membership benefits" row pointed at /tier-benefits which
+            had its own ladder UI; that's redundant now that the
+            TierCardCarousel above exposes every tier inline. */}
 
         <SectionLabel>ACCOUNT</SectionLabel>
-        <ActionRow
-          icon={Star}
-          label="Membership benefits"
-          onPress={() => router.push("/tier-benefits" as never)}
-        />
         <ActionRow
           icon={ShoppingBag}
           label="Order history"
@@ -294,6 +428,7 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
             Delete account
           </Text>
         </Pressable>
+        </View>
       </ScrollView>
 
       <BottomNav />
@@ -307,6 +442,21 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
     </View>
   );
 }
+
+// Tiers come from the DB so any backoffice change (rename, add, drop)
+// flows into the carousel without a redeploy. Source of truth lives in
+// public.tiers — the same table the loyalty app's evaluator reads.
+async function fetchAllTiers(): Promise<TierLite[]> {
+  const { data, error } = await supabase
+    .from("tiers")
+    .select("id,slug,name,min_visits,min_spend,multiplier,color,icon,benefits,benefit_rules,qualification_metric,sort_order,discount_percent,stackable,invitation_only")
+    .eq("brand_id", "brand-celsius")
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true, nullsFirst: true });
+  if (error) throw error;
+  return (data ?? []) as TierLite[];
+}
+
 
 function ActionRow({
   icon: Icon,
@@ -560,13 +710,16 @@ function ProfileEditModal({
   const insets = useSafeAreaInsets();
   const [name, setName] = useState(member?.name ?? "");
   const [email, setEmail] = useState(member?.email ?? "");
-  const [birthday, setBirthday] = useState(member?.birthday ?? "");
+  // Birthday is shown to the customer as DD/MM/YYYY (MY convention) but
+  // persisted as ISO YYYY-MM-DD in member.birthday. Convert at the
+  // display boundary, auto-format the slashes as the user types.
+  const [birthday, setBirthday] = useState(isoToDMY(member?.birthday));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setName(member?.name ?? "");
     setEmail(member?.email ?? "");
-    setBirthday(member?.birthday ?? "");
+    setBirthday(isoToDMY(member?.birthday));
   }, [member, visible]);
 
   const save = async () => {
@@ -574,6 +727,13 @@ function ProfileEditModal({
       Alert.alert("Sign in first", "Please verify your phone first.");
       return;
     }
+    // Validate DD/MM/YYYY → ISO. Empty is fine (user can clear the
+    // birthday); a partial entry is treated as not-set rather than an
+    // error so the customer can save name/email even if they typed a
+    // wrong digit in birthday and gave up. A fully entered but
+    // invalid date (e.g. 31/02/1990) becomes null too — server side
+    // tolerates null.
+    const birthdayIso = dmyToIso(birthday);
     setSaving(true);
     try {
       await api.updateProfile({
@@ -581,13 +741,13 @@ function ProfileEditModal({
         phone,
         name: name.trim() || undefined,
         email: email.trim() || undefined,
-        birthday: birthday.trim() || undefined,
+        birthday: birthdayIso ?? undefined,
       });
       setMember({
         ...member,
         name: name.trim() || null,
         email: email.trim() || null,
-        birthday: birthday.trim() || null,
+        birthday: birthdayIso,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onClose();
@@ -656,13 +816,15 @@ function ProfileEditModal({
               className="text-muted-fg text-[11px] tracking-widest uppercase mb-1"
               style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
             >
-              Birthday (YYYY-MM-DD)
+              Birthday (DD/MM/YYYY)
             </Text>
             <TextInput
               value={birthday}
-              onChangeText={setBirthday}
-              placeholder="1990-01-31"
+              onChangeText={(raw) => setBirthday(formatDMYAsType(raw))}
+              placeholder="31/01/1990"
               placeholderTextColor="#8E8E93"
+              keyboardType="number-pad"
+              maxLength={10}
               className="bg-surface border border-border rounded-2xl px-4 py-3 text-espresso text-base"
               style={{ fontFamily: "SpaceGrotesk_500Medium" }}
             />
@@ -683,7 +845,12 @@ function ProfileEditModal({
             style={{ paddingVertical: 16 }}
           >
             {saving ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <View className="flex-row items-center justify-center" style={{ gap: 10 }}>
+                <ActivityIndicator color="#FFFFFF" />
+                <Text className="text-white text-base" style={{ fontFamily: "Peachi-Bold" }}>
+                  Saving…
+                </Text>
+              </View>
             ) : (
               <Text
                 className="text-white text-base"
@@ -914,7 +1081,12 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
               style={{ paddingVertical: 16 }}
             >
               {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <View className="flex-row items-center justify-center" style={{ gap: 10 }}>
+                  <ActivityIndicator color="#FFFFFF" />
+                  <Text className="text-white text-base" style={{ fontFamily: "Peachi-Bold" }}>
+                    Sending code…
+                  </Text>
+                </View>
               ) : (
                 <Text
                   className="text-white text-base"
@@ -1060,7 +1232,12 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
               style={{ paddingVertical: 16 }}
             >
               {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <View className="flex-row items-center justify-center" style={{ gap: 10 }}>
+                  <ActivityIndicator color="#FFFFFF" />
+                  <Text className="text-white text-base" style={{ fontFamily: "Peachi-Bold" }}>
+                    Checking code…
+                  </Text>
+                </View>
               ) : (
                 <Text
                   className="text-white text-base"

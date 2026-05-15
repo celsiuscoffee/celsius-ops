@@ -1,17 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureNewMemberRewards } from "@/lib/loyalty/welcome";
+import { findOrCreateMember } from "@/lib/loyalty/member-direct";
 
 // .trim() guards against accidental trailing newlines in env var values
 const LOYALTY_BASE = (process.env.LOYALTY_BASE_URL ?? "https://loyalty.celsiuscoffee.com").trim();
-const BRAND_ID     = (process.env.LOYALTY_BRAND_ID  ?? "brand-celsius").trim();
 
 // POST /api/loyalty/otp/verify — verify OTP then fetch/create member
+//
+// Step 1 (OTP code validation) still proxies to the loyalty app
+// because the SMS gateway lives there. Step 2/3 (member lookup +
+// auto-register) NOW write to Supabase directly via
+// findOrCreateMember — the loyalty proxy used to silently drop
+// email/birthday and produce a different row shape from
+// backoffice-admin signups, which was the root cause of the
+// "Complete profile" pill resurfacing across mounts.
 export async function POST(request: NextRequest) {
   try {
     const { phone, code } = await request.json();
     if (!phone || !code) return NextResponse.json({ success: false, error: "Phone and code required" }, { status: 400 });
 
-    // Step 1: Verify OTP
+    // Step 1: Verify OTP (still via loyalty app — SMS gateway lives there)
     const verifyRes = await fetch(`${LOYALTY_BASE}/api/otp/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -23,29 +31,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: verifyData.error ?? "Invalid or expired code" });
     }
 
-    // Step 2: Look up member
-    const membersRes = await fetch(
-      `${LOYALTY_BASE}/api/members?brand_id=${BRAND_ID}&phone=${encodeURIComponent(phone)}`,
-      { headers: { "Content-Type": "application/json" } }
-    );
-    const members = await membersRes.json();
-    let member = Array.isArray(members) && members.length > 0 ? members[0] : null;
-
-    // Step 3: Auto-register if new. source="pickup_app" tells the
-    // loyalty service to fire the new-member auto-issue rewards
-    // (Welcome BOGO etc.) — those are scoped to app signups only,
-    // so members created via POS / backoffice / web don't get them.
-    if (!member) {
-      const createRes = await fetch(`${LOYALTY_BASE}/api/members`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, brand_id: BRAND_ID, source: "pickup_app" }),
-      });
-      if (createRes.ok) {
-        member = await createRes.json();
-      }
-    }
-
+    // Step 2/3: Find or create the member row in Supabase directly.
+    // Phone-variant lookup so a customer who previously signed up as
+    // "0123..." doesn't get a duplicate "+60123..." row.
+    const member = await findOrCreateMember(phone);
     if (!member) {
       return NextResponse.json({ success: true, member: null });
     }
@@ -57,17 +46,15 @@ export async function POST(request: NextRequest) {
     // who later sign in here get their voucher at this point.
     await ensureNewMemberRewards(member.id);
 
-    const brandData = member.brand_data ?? {};
-
     return NextResponse.json({
       success: true,
       member: {
         id:                member.id,
         phone:             member.phone,
-        name:              member.name ?? null,
-        pointsBalance:     brandData.points_balance     ?? 0,
-        totalPointsEarned: brandData.total_points_earned ?? 0,
-        totalVisits:       brandData.total_visits        ?? 0,
+        name:              member.name,
+        pointsBalance:     member.points_balance,
+        totalPointsEarned: member.total_points_earned,
+        totalVisits:       member.total_visits,
       },
     });
   } catch (err) {

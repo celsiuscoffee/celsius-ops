@@ -2,7 +2,7 @@
  * ClaimableSection — one-tap-claim row group for the Rewards screen.
  *
  * Surfaces vouchers the customer can grab with a single tap (welcome
- * offers, admin promos, pending mystery reveals, pending milestones).
+ * offers, admin promos, pending mystery reveals).
  *
  * Visual treatment is distinct from the main wallet:
  *   - Terracotta side-stripe + NEW badge → "this is fresh"
@@ -34,7 +34,6 @@ const SOURCE_ICON: Partial<Record<ClaimableVoucher["source_type"], React.Compone
   welcome:           Coffee,
   promo:             Gift,
   mystery_pending:   Sparkles,
-  milestone_pending: Sparkles,
 };
 
 type Props = {
@@ -197,7 +196,15 @@ function ClaimableRow({ claimable }: { claimable: ClaimableVoucher }) {
         }}
       >
         {claimMutation.isPending ? (
-          <ActivityIndicator size="small" color="#FFFFFF" />
+          <>
+            <ActivityIndicator size="small" color="#FFFFFF" />
+            <Text
+              className="text-white text-[12px]"
+              style={{ fontFamily: "Peachi-Bold" }}
+            >
+              Claiming…
+            </Text>
+          </>
         ) : (
           <>
             <Text

@@ -77,7 +77,15 @@ export function PosterCarousel({ posters, aspect = 4 / 3 }: Props) {
           <Pressable
             key={p.id}
             onPress={() => onPosterTap(p)}
-            style={{ width: slideW, height: slideH }}
+            // Espresso placeholder under the Image so the network
+            // download window (a beat or two after sign-in) shows
+            // the brand colour instead of a stark white frame. The
+            // Image fades in on top once the bitmap arrives.
+            style={{
+              width: slideW,
+              height: slideH,
+              backgroundColor: "#160800",
+            }}
           >
             <Image
               source={{ uri: p.imageUrl }}

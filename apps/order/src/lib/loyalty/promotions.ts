@@ -2,6 +2,8 @@
 // Server-to-server only — used at checkout to evaluate the discount
 // stack and to record promotion applications post-fulfillment.
 
+import { getSupabaseAdmin } from "@/lib/supabase/server";
+
 const LOYALTY_BASE = (process.env.LOYALTY_BASE_URL ?? "https://loyalty.celsiuscoffee.com").trim();
 const BRAND_ID     = (process.env.LOYALTY_BRAND_ID  ?? "brand-celsius").trim();
 const CRON_SECRET  = (process.env.CRON_SECRET ?? "").trim();
@@ -43,6 +45,87 @@ interface EvaluateInput {
 }
 
 /**
+ * Tier discount post-step. After the loyalty promo engine runs, layer
+ * the member's tier % discount on top:
+ *   - Stackable tier (Member / Silver / Gold / Platinum): tier % applies
+ *     to the subtotal AFTER reward voucher discounts. Both discounts
+ *     show in the line list so the customer sees what saved them what.
+ *   - Non-stackable tier (Arba & Staff / Black Card): tier % REPLACES
+ *     the reward voucher discount entirely. Whatever wallet voucher the
+ *     customer reserved is dropped from the stack — invitation tiers
+ *     trade voucher flexibility for a much higher flat discount.
+ */
+async function applyTierDiscount(
+  evaluated: EvaluatedCart,
+  memberTierId: string | null | undefined,
+): Promise<EvaluatedCart> {
+  if (!memberTierId) return evaluated;
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data: tier } = await supabase
+      .from("tiers")
+      .select("id, name, discount_percent, stackable, invitation_only")
+      .eq("id", memberTierId)
+      .maybeSingle();
+    if (!tier) return evaluated;
+
+    const pct = Number((tier.discount_percent as number | null) ?? 0);
+    if (pct <= 0) return evaluated;
+
+    const stackable = (tier.stackable as boolean | null) ?? true;
+    const tierName  = (tier.name as string | null) ?? "Tier";
+
+    if (!stackable) {
+      // Invitation-tier rule: tier % applies on the raw subtotal, voucher
+      // discounts are wiped out. The customer's reserved voucher is
+      // effectively locked out at checkout — the order pipeline still
+      // marks it unused in this scenario (we don't burn it).
+      const amount = round2(evaluated.subtotal * (pct / 100));
+      const tierDiscount: AppliedDiscount = {
+        promotion_id:    `tier:${tier.id as string}`,
+        promotion_name:  `${tierName} — ${pct}% off`,
+        discount_type:   "percentage_off",
+        discount_amount: amount,
+        affected_lines:  [],
+        reason:          "tier_perk",
+      };
+      return {
+        subtotal:       evaluated.subtotal,
+        discounts:      [tierDiscount],
+        total_discount: amount,
+        total:          round2(evaluated.subtotal - amount),
+      };
+    }
+
+    // Stackable tier — apply % on whatever's left after reward discounts.
+    const remaining  = Math.max(0, evaluated.subtotal - evaluated.total_discount);
+    const amount     = round2(remaining * (pct / 100));
+    if (amount <= 0) return evaluated;
+
+    const tierDiscount: AppliedDiscount = {
+      promotion_id:    `tier:${tier.id as string}`,
+      promotion_name:  `${tierName} — ${pct}% off`,
+      discount_type:   "percentage_off",
+      discount_amount: amount,
+      affected_lines:  [],
+      reason:          "tier_perk",
+    };
+    return {
+      subtotal:       evaluated.subtotal,
+      discounts:      [...evaluated.discounts, tierDiscount],
+      total_discount: round2(evaluated.total_discount + amount),
+      total:          round2(evaluated.total - amount),
+    };
+  } catch {
+    return evaluated;
+  }
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
  * Evaluate the promotion stack against a cart.
  * Returns subtotal/discounts/total in RM. Failure → no discount.
  */
@@ -60,6 +143,7 @@ export async function evaluatePromotions(
     total: subtotal,
   };
 
+  let data: EvaluatedCart = empty;
   try {
     const res = await fetch(`${LOYALTY_BASE}/api/promotions/evaluate`, {
       method: "POST",
@@ -77,12 +161,16 @@ export async function evaluatePromotions(
       },
       body: JSON.stringify({ brand_id: BRAND_ID, ...input }),
     });
-    if (!res.ok) return empty;
-    const data = (await res.json()) as EvaluatedCart;
-    return data;
+    if (res.ok) {
+      data = (await res.json()) as EvaluatedCart;
+    }
   } catch {
-    return empty;
+    data = empty;
   }
+
+  // Layer the tier % discount on top. Lookups against tiers.id are tiny
+  // and only run once per cart evaluation.
+  return applyTierDiscount(data, input.member_tier_id);
 }
 
 /**

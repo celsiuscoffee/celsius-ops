@@ -57,10 +57,18 @@ export async function GET(request: NextRequest) {
       const isDayOpen = hours.daysOpen.includes(dayNum);
       const isOpen    = isDayOpen && currentMinutes >= openMins && currentMinutes < closeMins;
 
+      // Writes to outlet_settings (snake_case) — the table the native
+      // pickup app reads via supabase.from("outlet_settings"). The
+      // earlier version targeted the CamelCase `Outlet` table managed
+      // by Prisma in the backoffice, which is a separate read path
+      // the customer client never queries, so the scheduled open/close
+      // never propagated to the app. Customers were seeing the manual
+      // toggle on outlet_settings while the cron silently updated a
+      // ghost table.
       const { error } = await supabase
-        .from("Outlet")
-        .update({ isOpen: isOpen, updatedAt: new Date().toISOString() })
-        .eq("pickupStoreId", storeId);
+        .from("outlet_settings")
+        .update({ is_open: isOpen, updated_at: new Date().toISOString() })
+        .eq("store_id", storeId);
 
       if (!error) {
         updated.push(`${storeId}=${isOpen ? "open" : "closed"}`);

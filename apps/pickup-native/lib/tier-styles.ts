@@ -85,6 +85,30 @@ const STYLES: Record<string, TierStyle> = {
     pointsPillBg: "rgba(251,191,36,0.18)",
     pointsTextColor: "#FBBF24",
   },
+  // Invitation-only — Celsius staff (Arba). Warm terracotta gradient
+  // anchored in espresso so it visually reads as "Celsius family".
+  "arba-staff": {
+    displayName: "ARBA & STAFF",
+    gradient: ["#A04A35", "#5A1F16", "#1A0200"],
+    eyebrowColor: "#FBBF24",
+    textColor: "#FFFFFF",
+    mutedColor: "rgba(255,255,255,0.72)",
+    accentColor: "#FBBF24",
+    pointsPillBg: "rgba(251,191,36,0.18)",
+    pointsTextColor: "#FBBF24",
+  },
+  // Invitation-only — investor/owner Black Card. Pure black with gold
+  // accent — the most premium card surface in the deck.
+  "black-card": {
+    displayName: "BLACK CARD",
+    gradient: ["#1a0c02", "#000000", "#000000"],
+    eyebrowColor: "#FBBF24",
+    textColor: "#FFFFFF",
+    mutedColor: "rgba(255,255,255,0.72)",
+    accentColor: "#FBBF24",
+    pointsPillBg: "rgba(251,191,36,0.18)",
+    pointsTextColor: "#FBBF24",
+  },
 };
 
 /**

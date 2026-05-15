@@ -26,7 +26,7 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withSequence, withSpring,
   withTiming, withRepeat, Easing, cancelAnimation,
 } from "react-native-reanimated";
-import { Gift, Sparkles, ChevronRight, Check, Wallet } from "lucide-react-native";
+import { Gift, Sparkles, ChevronRight, Check } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { revealMysteryDrop, type MysteryDropRevealed } from "../lib/rewards-v2";
 
@@ -178,7 +178,15 @@ export function MysteryBean({ dropId, baseBeansEarned, prerevealed, onRevealed, 
             style={{ gap: 6 }}
           >
             {loading ? (
-              <ActivityIndicator size="small" color="#1A0200" />
+              <>
+                <ActivityIndicator size="small" color="#1A0200" />
+                <Text
+                  className="text-espresso text-[13px]"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Revealing…
+                </Text>
+              </>
             ) : (
               <>
                 <Text
@@ -214,17 +222,28 @@ function MysteryReveal({
   baseBeansEarned: number;
   onDismiss?: () => void;
 }) {
+  // Reveal entrance: scale-pop with a slight overshoot so the prize
+  // feels like it "lands" on screen, paired with a success haptic so
+  // the customer FEELS the win as much as they see it. Previous
+  // fade+slide read as "another card loading" rather than "ta-da".
   const opacity = useSharedValue(0);
-  const translateY = useSharedValue(20);
+  const scale = useSharedValue(0.82);
 
   useEffect(() => {
-    opacity.value = withTiming(1, { duration: 320 });
-    translateY.value = withSpring(0, { damping: 12, stiffness: 110 });
-  }, [opacity, translateY]);
+    opacity.value = withTiming(1, { duration: 220 });
+    scale.value = withSpring(1, { damping: 9, stiffness: 160, mass: 0.6 });
+    // Haptic anchored to the reveal — the no-bonus path uses a Warning
+    // pattern so the customer still feels something, but distinct.
+    const pattern =
+      drop.outcome_type === "no_bonus"
+        ? Haptics.NotificationFeedbackType.Warning
+        : Haptics.NotificationFeedbackType.Success;
+    Haptics.notificationAsync(pattern).catch(() => {});
+  }, [opacity, scale, drop.outcome_type]);
 
   const containerStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
-    transform: [{ translateY: translateY.value }],
+    transform: [{ scale: scale.value }],
   }));
 
   const isMultiplier =
@@ -349,7 +368,7 @@ function MysteryReveal({
             className="text-white/75 text-[13px] mt-1.5 text-center"
             style={{ fontFamily: "SpaceGrotesk_500Medium" }}
           >
-            Added to your voucher wallet
+            Added to your rewards
           </Text>
         </>
       )}
@@ -395,8 +414,8 @@ function MysteryReveal({
       <DismissPill
         onPress={handlePrimary}
         variant="amber"
-        label={isVoucher ? "View in wallet" : "Got it"}
-        leadingIcon={isVoucher ? "wallet" : "check"}
+        label={isVoucher ? "View in rewards" : "Got it"}
+        leadingIcon={isVoucher ? "gift" : "check"}
       />
     </Animated.View>
   );
@@ -412,7 +431,7 @@ function DismissPill({
   onPress: () => void;
   label: string;
   variant: "amber" | "quiet";
-  leadingIcon?: "wallet" | "check";
+  leadingIcon?: "gift" | "check";
 }) {
   const amberBg   = "#FBBF24";
   const amberFg   = "#1A0200";
@@ -438,8 +457,8 @@ function DismissPill({
       }}
       className="active:opacity-85"
     >
-      {leadingIcon === "wallet" && <Wallet size={15} color={fg} strokeWidth={2.4} />}
-      {leadingIcon === "check"  && <Check  size={15} color={fg} strokeWidth={2.6} />}
+      {leadingIcon === "gift"  && <Gift  size={15} color={fg} strokeWidth={2.4} />}
+      {leadingIcon === "check" && <Check size={15} color={fg} strokeWidth={2.6} />}
       <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: fg }}>
         {label}
       </Text>

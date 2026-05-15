@@ -18,8 +18,9 @@ export async function getMenuData(): Promise<MenuData> {
     const [{ data: dbProducts, error: prodError }, { data: dbCategories, error: catError }] = await Promise.all([
       supabase
         .from("products")
-        .select("id, name, category, description, price, image_url, is_available, is_featured, modifiers")
+        .select("id, name, category, description, price, image_url, is_available, is_featured, modifiers, featured_position")
         .eq("brand_id", "brand-celsius")
+        .order("position")
         .order("name"),
       supabase
         .from("categories")
@@ -43,6 +44,7 @@ export async function getMenuData(): Promise<MenuData> {
         isNew:          false,
         variants:       [],
         modifierGroups: Array.isArray(p.modifiers) ? (p.modifiers as Product["modifierGroups"]) : [],
+        featuredPosition: (p.featured_position as number) ?? 9999,
       }));
 
       const categories: Category[] = (dbCategories as Record<string, unknown>[]).map((c) => ({

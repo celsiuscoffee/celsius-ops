@@ -15,7 +15,11 @@ export type Voucher = {
   icon: string;
   category: "free_item" | "upgrade" | "discount" | "multiplier" | "special";
   status: "active" | "used" | "expired";
-  source_type: "mission" | "mystery" | "birthday" | "referral" | "milestone" | "manual" | "points_redemption" | null;
+  source_type: "mission" | "mystery" | "birthday" | "referral" | "manual" | "points_redemption" | null;
+  // Back-reference to whatever issued the voucher — e.g. a
+  // mission_assignments.id for source_type='mission'. Lets the Challenge
+  // card find its linked wallet voucher and route Use without a picker.
+  source_ref_id?: string | null;
   issued_at: string;
   expires_at: string | null;
   redeemed_at: string | null;
@@ -28,6 +32,11 @@ export type Voucher = {
   applicable_categories?: string[] | null;
   applicable_products?: string[] | null;
   free_product_name?: string | null;
+  // Optional visual overrides — sourced from a linked reward_kind row
+  // in the backoffice. When null the native card falls back to the
+  // source-bucket theme + Lucide glyph.
+  kind_color?: string | null;
+  illustration_url?: string | null;
 };
 
 // ─── Mission ────────────────────────────────────────────────────────────
@@ -38,6 +47,10 @@ export type Mission = {
   description: string;
   icon: string;
   difficulty: "easy" | "medium" | "hard";
+  // Drives client-side progress formatting (RM amounts for Big Bill,
+  // cups for Group Order, etc.). Server-controlled; client treats
+  // unknown values as a plain "X/Y" count.
+  goal_type: string;
   goal_threshold: number;
   reward_summary: string;        // pre-formatted, e.g. "🥐 Free Pastry + 50 Beans"
 };
@@ -52,8 +65,7 @@ export type ActiveMission = Mission & {
 
 // ─── Claimable vouchers ─────────────────────────────────────────────────
 // One-tap claim. Offers the customer can convert into a real wallet voucher.
-// Sources: welcome (post-signup), promo (admin push), mystery-pending (un-revealed drop),
-// milestone-pending (just hit a milestone).
+// Sources: welcome (post-signup), promo (admin push), mystery-pending (un-revealed drop).
 
 export type ClaimableVoucher = {
   id: string;                     // claimable id (not yet a voucher)
@@ -61,7 +73,7 @@ export type ClaimableVoucher = {
   description: string;
   icon: string;
   category: Voucher["category"];
-  source_type: "welcome" | "promo" | "mystery_pending" | "milestone_pending";
+  source_type: "welcome" | "promo" | "mystery_pending";
   expires_at: string | null;      // claim window
   cta_label?: string;             // optional override e.g. "Reveal"
 };
@@ -114,25 +126,17 @@ export async function fetchVoucher(id: string): Promise<Voucher> {
 }
 
 // ─── Missions ───────────────────────────────────────────────────────────
+// Customer-facing model: 3 weekly challenges per member, auto-rotated.
+// The server lazy-seeds 3 picks from the active mission pool the first
+// time a member fetches in a new Mon–Sun window; subsequent fetches
+// return the same trio so progress is stable.
 
-export async function fetchActiveMission(): Promise<ActiveMission | null> {
+export async function fetchActiveMissions(): Promise<ActiveMission[]> {
   try {
-    return await get<ActiveMission>("/api/loyalty/me/mission/active");
+    return await get<ActiveMission[]>("/api/loyalty/me/missions/active");
   } catch {
-    return null;
+    return [];
   }
-}
-
-export async function fetchMissionPool(): Promise<Mission[]> {
-  return get<Mission[]>("/api/loyalty/me/missions/pool");
-}
-
-export async function pickMission(missionId: string): Promise<ActiveMission> {
-  return post<ActiveMission>("/api/loyalty/me/mission/pick", { mission_id: missionId });
-}
-
-export async function swapMission(): Promise<{ swapped: boolean }> {
-  return post<{ swapped: boolean }>("/api/loyalty/me/mission/swap");
 }
 
 // ─── Claimable voucher API ──────────────────────────────────────────────
@@ -164,124 +168,6 @@ export async function redeemPointsReward(rewardId: string): Promise<{
   return post<{ voucher: Voucher; newBalance: number; pointsSpent: number }>(
     `/api/loyalty/me/rewards/${rewardId}/redeem`,
   );
-}
-
-// ─── Streak ─────────────────────────────────────────────────────────────
-
-export type StreakState = {
-  current_streak_weeks: number;
-  longest_streak_weeks: number;
-  last_order_week_start: string | null;
-  saver_available: boolean;
-};
-
-export async function fetchMyStreak(): Promise<StreakState | null> {
-  try {
-    return await get<StreakState>("/api/loyalty/me/streak");
-  } catch {
-    return null;
-  }
-}
-
-// ─── Streak chests ──────────────────────────────────────────────────
-
-export type StreakChestTier = {
-  streak_floor: number;
-  label: string;
-  description: string | null;
-  bonus_beans: number;
-  voucher_template_id: string | null;
-  voucher_title: string | null;
-  emoji: string;
-};
-
-export type StreakChest = {
-  id: string;
-  week_start: string;
-  streak_at_qualify: number;
-  tier_floor: number;
-  qualified_at?: string;
-  expires_at?: string;
-  claimed_at?: string | null;
-  claim_outcome?: StreakChestClaimOutcome | null;
-};
-
-export type StreakChestClaimOutcome = {
-  bonus_beans: number;
-  voucher_id: string | null;
-  voucher_title: string | null;
-  label: string;
-  emoji: string;
-};
-
-export type StreakChestsResponse = {
-  claimable: StreakChest[];
-  recent: StreakChest[];
-  tier_ladder: StreakChestTier[];
-};
-
-export async function fetchStreakChests(): Promise<StreakChestsResponse> {
-  try {
-    return await get<StreakChestsResponse>("/api/loyalty/me/streak/chests");
-  } catch {
-    return { claimable: [], recent: [], tier_ladder: [] };
-  }
-}
-
-export async function claimStreakChest(chestId: string): Promise<{
-  already_claimed: boolean;
-  claimed_at: string | null;
-  outcome: StreakChestClaimOutcome;
-}> {
-  return post(`/api/loyalty/me/streak/chests/${chestId}/claim`);
-}
-
-// ─── Milestones ─────────────────────────────────────────────────────────
-
-export type Milestone = {
-  id: string;
-  title: string;
-  description: string | null;
-  icon: string | null;
-  trigger_type: "lifetime_orders" | "lifetime_beans" | "distinct_outlets" | "streak_weeks";
-  trigger_value: number;
-  reward_voucher_template_ids: string[];
-  reward_bonus_beans: number;
-  reward_unlock: string | null;
-  progress_current: number;
-  // Three-state lifecycle:
-  //   locked     → progress < threshold, no reward to give yet
-  //   claimable  → cron detected the threshold cross; customer hasn't
-  //                tapped Claim yet, vouchers + beans still pending
-  //   claimed    → customer collected, reward landed in the wallet
-  state: "locked" | "claimable" | "claimed";
-  earned_at: string | null;
-  claimed_at: string | null;
-};
-
-export type MilestoneClaimOutcome = {
-  voucher_ids: string[];
-  bonus_beans: number;
-  voucher_titles: string[];
-};
-
-export type MilestoneClaimResponse = {
-  already_claimed: boolean;
-  claimed_at: string | null;
-  outcome: MilestoneClaimOutcome;
-};
-
-export async function fetchMyMilestones(): Promise<Milestone[]> {
-  try {
-    const r = await get<{ milestones: Milestone[] }>("/api/loyalty/me/milestones");
-    return r.milestones ?? [];
-  } catch {
-    return [];
-  }
-}
-
-export async function claimMilestone(milestoneId: string): Promise<MilestoneClaimResponse> {
-  return post<MilestoneClaimResponse>(`/api/loyalty/me/milestones/${milestoneId}/claim`);
 }
 
 // ─── Referrals ──────────────────────────────────────────────────────────

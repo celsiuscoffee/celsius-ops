@@ -17,6 +17,10 @@ interface Mission {
   difficulty: Difficulty;
   goal: { type: string; threshold: number; filter?: Record<string, unknown> };
   reward_voucher_template_ids: string[];
+  // Only set for referrals_count missions — the voucher templates
+  // issued to the REFEREE on their first paid order. reward_voucher_
+  // template_ids drives the referrer side.
+  referee_reward_voucher_template_ids?: string[];
   reward_bonus_beans: number;
   cooldown_weeks: number;
   is_active: boolean;
@@ -42,6 +46,7 @@ const GOAL_TYPES = [
   { value: "distinct_outlets",        label: "Distinct outlets visited" },
   { value: "distinct_new_products",   label: "New products tried" },
   { value: "spend_amount",            label: "Spend amount (RM)" },
+  { value: "referrals_count",         label: "Referrals (config — per-referral payout)" },
 ];
 
 const DIFF_STYLES: Record<Difficulty, string> = {
@@ -259,6 +264,9 @@ function MissionModal({
     (mission?.goal?.filter as { order_hour_lt?: number })?.order_hour_lt ?? ""
   );
   const [voucherIds, setVoucherIds] = useState<string[]>(mission?.reward_voucher_template_ids ?? []);
+  const [refereeVoucherIds, setRefereeVoucherIds] = useState<string[]>(
+    mission?.referee_reward_voucher_template_ids ?? [],
+  );
   const [bonusBeans, setBonusBeans] = useState(mission?.reward_bonus_beans ?? 0);
   const [cooldownWeeks, setCooldownWeeks] = useState(mission?.cooldown_weeks ?? 4);
   const [isActive, setIsActive] = useState(mission?.is_active ?? true);
@@ -275,6 +283,8 @@ function MissionModal({
         brand_id: BRAND_ID,
         title, description, icon, difficulty, goal,
         reward_voucher_template_ids: voucherIds,
+        referee_reward_voucher_template_ids:
+          goalType === "referrals_count" ? refereeVoucherIds : [],
         reward_bonus_beans: bonusBeans,
         cooldown_weeks: cooldownWeeks,
         is_active: isActive,
@@ -313,7 +323,7 @@ function MissionModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-card rounded-2xl w-full max-w-xl my-8 max-h-[90vh] overflow-y-auto">
+      <div className="bg-card rounded-2xl w-full max-w-xl md:max-w-3xl my-8 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b">
           <h2 className="text-lg font-semibold">{mission ? "Edit Mission" : "New Mission"}</h2>
           <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X className="w-5 h-5" /></button>
@@ -361,10 +371,12 @@ function MissionModal({
           </div>
 
           <div className="border rounded-lg p-3 space-y-3 bg-foreground/[0.02]">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Reward on Completion</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {goalType === "referrals_count" ? "Referrer Reward (per successful referral)" : "Reward on Completion"}
+            </div>
             <Field label="Vouchers granted">
               {templates.length === 0 ? (
-                <div className="text-xs text-muted-foreground">No voucher templates yet. Create some in Voucher Templates first.</div>
+                <div className="text-xs text-muted-foreground">No voucher templates yet. Create some in Voucher Library first.</div>
               ) : (
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {templates.map((t) => (
@@ -381,6 +393,43 @@ function MissionModal({
               <input type="number" min={0} value={bonusBeans} onChange={(e) => setBonusBeans(Number(e.target.value))} className="w-full border rounded-lg px-3 py-2 bg-background" />
             </Field>
           </div>
+
+          {goalType === "referrals_count" && (
+            <div className="border rounded-lg p-3 space-y-3 bg-foreground/[0.02]">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Referee Reward (issued on new signup's first paid order)
+              </div>
+              <Field label="Vouchers granted to referee">
+                {templates.length === 0 ? (
+                  <div className="text-xs text-muted-foreground">No voucher templates yet. Create some in Voucher Library first.</div>
+                ) : (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {templates.map((t) => (
+                      <label key={t.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={refereeVoucherIds.includes(t.id)}
+                          onChange={() =>
+                            setRefereeVoucherIds((prev) =>
+                              prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id],
+                            )
+                          }
+                        />
+                        <span className="text-sm">{t.title}</span>
+                        <span className="text-xs text-muted-foreground ml-auto">{t.category}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </Field>
+              <div className="text-xs text-muted-foreground">
+                Referrals are paid per-successful-attribution. The referrer gets the vouchers from the
+                section above; the referee gets the vouchers here. Both fire when the referee's first
+                paid order lands. This mission is NOT shown to customers as a weekly challenge — it's
+                config for the referral mechanic.
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Cooldown (weeks before re-offering)">

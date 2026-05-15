@@ -71,6 +71,11 @@ export default function Cart() {
   });
   const bestSellers = (menu.data?.products ?? [])
     .filter((p) => p.is_featured && p.is_available)
+    .slice()
+    .sort((a, b) =>
+      (a.featured_position ?? 9999) - (b.featured_position ?? 9999)
+      || a.name.localeCompare(b.name)
+    )
     .slice(0, 4);
 
   return (

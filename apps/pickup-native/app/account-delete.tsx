@@ -170,7 +170,12 @@ export default function AccountDelete() {
                 }`}
               >
                 {deleting ? (
-                  <ActivityIndicator color="#fff" />
+                  <View className="flex-row items-center justify-center" style={{ gap: 8 }}>
+                    <ActivityIndicator color="#fff" />
+                    <Text className="text-white text-[14px]" style={fontPeachi}>
+                      Deleting…
+                    </Text>
+                  </View>
                 ) : (
                   <Text className="text-white text-[14px]" style={fontPeachi}>
                     Delete

@@ -37,15 +37,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Customer session check. New pickup-native builds send a Bearer
-    // token issued at OTP verify; the body's `phone` and `member_id`
-    // must match the signed payload, otherwise anyone who guesses a
-    // phone number can wipe that account. Old builds without a token
-    // fall through to the rate-limit + DB-match path below — the
-    // token becomes mandatory once the OTA propagates and we flip
-    // to fail-closed.
+    // Customer session check — fail-closed. Earlier this was
+    // opt-in: requests without a session passed through to the
+    // rate-limited path below, which meant anyone who knew a
+    // member_id + phone (member_id is a UUID — guessable from a
+    // leaked order, etc.) could wipe a stranger's account. The
+    // pickup-native OTA shipping the Bearer token has propagated;
+    // this route now requires the signed payload and the session
+    // phone MUST match the request body phone.
     const session = readCustomerSession(request);
-    if (session && session.phone !== phone) {
+    if (!session) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+    if (session.phone !== phone) {
       return NextResponse.json(
         { error: "Session does not match the supplied phone" },
         { status: 403 }

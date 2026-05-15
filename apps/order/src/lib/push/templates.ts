@@ -521,68 +521,6 @@ export async function notifyClaimableReady(args: {
   );
 }
 
-/** Weekly streak bean bag ready — fired by the streak-update cron
- *  the morning after a member's qualifying week. Body teases the
- *  reward tier so the customer feels the upgrade as their streak
- *  grows (Week 1 → "Daily Bag", Week 12 → "Specialty Bag"). */
-export async function notifyStreakChestReady(args: {
-  memberId: string;
-  streakWeeks: number;
-  label: string;
-  bonusBeans: number;
-  hasVoucher: boolean;
-}): Promise<SendResult> {
-  const tokens = await tokensForMember(args.memberId);
-  if (tokens.length === 0) return zero();
-  const teases: string[] = [];
-  if (args.bonusBeans > 0) teases.push(`+${args.bonusBeans} Beans`);
-  if (args.hasVoucher)     teases.push("a voucher");
-  const body = teases.length > 0
-    ? `Tap to open · ${teases.join(" + ")}`
-    : "Tap to open";
-  return sendExpoPush(
-    tokens.map((to) => ({
-      to,
-      title: `🫘 Week ${args.streakWeeks} ${args.label} is ready!`,
-      body,
-      sound: "default",
-      priority: "high",
-      channelId: CH_LOYALTY,
-      data: { type: "streak_chest_ready", deeplink: "rewards?tab=challenges" },
-    })),
-  );
-}
-
-/** Milestone earned — fired by the milestone-scan cron the moment a
- *  member crosses a lifetime achievement threshold (50 cups, 3 outlets,
- *  longest-streak weeks, etc.). The reward isn't issued yet; customer
- *  taps Claim in the Milestones tab to collect it. Body teases what
- *  they'll get so the push earns the tap. */
-export async function notifyMilestoneEarned(args: {
-  memberId: string;
-  milestoneTitle: string;
-  voucherCount: number;
-  bonusBeans: number;
-}): Promise<SendResult> {
-  const tokens = await tokensForMember(args.memberId);
-  if (tokens.length === 0) return zero();
-  const parts: string[] = [];
-  if (args.voucherCount > 0) parts.push(`${args.voucherCount} voucher${args.voucherCount === 1 ? "" : "s"}`);
-  if (args.bonusBeans   > 0) parts.push(`+${args.bonusBeans} Beans`);
-  const tease = parts.length > 0 ? parts.join(" · ") : "a surprise reward";
-  return sendExpoPush(
-    tokens.map((to) => ({
-      to,
-      title: `🏆 ${args.milestoneTitle} — ready to claim!`,
-      body: `Tap to collect ${tease}`,
-      sound: "default",
-      priority: "high",
-      channelId: CH_LOYALTY,
-      data: { type: "milestone_earned", deeplink: "rewards?tab=milestones" },
-    })),
-  );
-}
-
 /** Referral reward landed — both sides ping at the same moment. */
 export async function notifyReferralRewarded(args: {
   memberId: string;

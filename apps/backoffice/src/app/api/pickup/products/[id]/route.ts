@@ -23,6 +23,12 @@ export async function PATCH(
   if (typeof body.image === "string")        update.image_url    = body.image;
   if (typeof body.is_available === "boolean") update.is_available = body.is_available;
   if (typeof body.is_popular === "boolean")  update.is_featured  = body.is_popular;
+  if (typeof body.position === "number" && Number.isFinite(body.position)) {
+    update.position = Math.round(body.position);
+  }
+  if (typeof body.featured_position === "number" && Number.isFinite(body.featured_position)) {
+    update.featured_position = Math.round(body.featured_position);
+  }
 
   // Soft-blacklist of modifier group IDs / option IDs the merchant wants to
   // hide from customers. Stored as jsonb array; sync from StoreHub leaves

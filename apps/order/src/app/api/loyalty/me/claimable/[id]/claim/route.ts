@@ -5,8 +5,7 @@
 //   - mystery_pending → routes through revealMysteryDrop (issues voucher
 //     if drop was a voucher outcome) but doesn't show the reveal UI; we
 //     just claim the underlying voucher and let the wallet update.
-//   - milestone_pending / promo / welcome → issues the underlying voucher
-//     template directly (TODO when those flows land).
+//   - promo / welcome → issues the underlying voucher template directly.
 
 import { NextRequest, NextResponse } from "next/server";
 import { resolveMember } from "@/lib/loyalty/v2-auth";

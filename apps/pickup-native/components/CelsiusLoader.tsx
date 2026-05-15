@@ -24,37 +24,43 @@ type Props = {
   style?: ViewStyle;
 };
 
-// Rotating Celsius mark used in place of ActivityIndicator across the app.
-// Continuous 1s linear rotation paired with a soft 1.4s breath (0.92↔1.0)
-// so it reads as "alive" rather than mechanical. Animation is cancelled on
-// unmount to keep the JS thread clean.
+// Heartbeat-style Celsius mark — replaces the previous spinning
+// loader. The continuous 1s linear rotation read as mechanical
+// (laptop fan, app crashed) for a coffee brand. The mark now stays
+// upright (logo always readable) and pulses scale + opacity together
+// on a 1.2s heartbeat cadence — quick squeeze (200ms), slow breath
+// out (1s). Reads as "alive / thinking" without the spinner trope.
 export function CelsiusLoader({ size = "md", style }: Props) {
   const { box, radius } = DIMENSIONS[size];
-  const rotate = useSharedValue(0);
   const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
 
   useEffect(() => {
-    rotate.value = withRepeat(
-      withTiming(360, { duration: 1000, easing: Easing.linear }),
+    scale.value = withRepeat(
+      withSequence(
+        withTiming(1.06, { duration: 200, easing: Easing.out(Easing.quad) }),
+        withTiming(0.92, { duration: 1000, easing: Easing.inOut(Easing.quad) }),
+      ),
       -1,
       false,
     );
-    scale.value = withRepeat(
+    opacity.value = withRepeat(
       withSequence(
-        withTiming(0.92, { duration: 700, easing: Easing.inOut(Easing.quad) }),
-        withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }),
+        withTiming(1.0, { duration: 200, easing: Easing.out(Easing.quad) }),
+        withTiming(0.55, { duration: 1000, easing: Easing.inOut(Easing.quad) }),
       ),
       -1,
       false,
     );
     return () => {
-      cancelAnimation(rotate);
       cancelAnimation(scale);
+      cancelAnimation(opacity);
     };
-  }, [rotate, scale]);
+  }, [scale, opacity]);
 
   const animStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotate.value}deg` }, { scale: scale.value }],
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
   }));
 
   return (

@@ -1011,7 +1011,7 @@ export default function NotificationsPage() {
           onClick={() => setViewingMsg(null)}
         >
           <div
-            className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl"
+            className="relative w-full max-w-lg md:max-w-3xl rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button

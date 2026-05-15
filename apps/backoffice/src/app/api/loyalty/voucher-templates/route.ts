@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
       stacks_with_other: body.stacks_with_other ?? false,
       validity_days: body.validity_days ?? 14,
       is_active: body.is_active ?? true,
+      reward_kind_id: body.reward_kind_id ?? null,
     })
     .select()
     .single();

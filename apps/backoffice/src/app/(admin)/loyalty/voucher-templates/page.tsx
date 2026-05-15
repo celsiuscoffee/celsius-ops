@@ -21,6 +21,16 @@ interface VoucherTemplate {
   stacks_with_beans: boolean;
   stacks_with_other: boolean;
   is_active: boolean;
+  /** Optional link to an Outcome Type. When set, the native voucher
+   *  card uses the kind's color/illustration_url as a per-voucher
+   *  visual override on top of the source-bucket theme. */
+  reward_kind_id: string | null;
+}
+
+interface RewardKindOption {
+  id: string;
+  label: string;
+  color: string | null;
 }
 
 const BRAND_ID = "brand-celsius";
@@ -43,6 +53,7 @@ const CATEGORY_STYLES: Record<Category, string> = {
 
 export default function VoucherTemplatesPage() {
   const [templates, setTemplates] = useState<VoucherTemplate[]>([]);
+  const [kinds, setKinds] = useState<RewardKindOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<VoucherTemplate | null>(null);
   const [creating, setCreating] = useState(false);
@@ -50,8 +61,13 @@ export default function VoucherTemplatesPage() {
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/loyalty/voucher-templates?brand_id=${BRAND_ID}`, { credentials: "include" });
-      setTemplates(await res.json());
+      const [tplRes, kindsRes] = await Promise.all([
+        fetch(`/api/loyalty/voucher-templates?brand_id=${BRAND_ID}`, { credentials: "include" }),
+        fetch(`/api/loyalty/reward-kinds`, { credentials: "include" }),
+      ]);
+      setTemplates(await tplRes.json());
+      const kindRows = await kindsRes.json();
+      setKinds(Array.isArray(kindRows) ? kindRows.filter((k) => k.is_active) : []);
     } catch { setTemplates([]); }
     finally { setLoading(false); }
   }
@@ -70,15 +86,14 @@ export default function VoucherTemplatesPage() {
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             <Ticket className="w-6 h-6" />
-            Voucher Templates
+            Voucher Library
           </h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-            Reusable voucher definitions <em>earned through engagement</em> — Missions, Mystery Bean, Birthday
-            treats, Referrals, and Milestones grant voucher instances from these templates into customers' wallets.
+            Every voucher shape that can land in a customer's wallet. Channels (Challenges, Mystery,
+            Birthday, Referrals, Admin Claimables) issue instances from these templates.
             <br />
             <span className="text-xs text-muted-foreground/80">
-              Not the same as <strong>Points Catalog</strong> (rewards a customer can buy with Beans — defined under
-              <em>Earning</em>).
+              Different from <strong>Points Shop</strong> (rewards bought with Beans — defined under <em>Channels</em>).
             </span>
           </p>
         </div>
@@ -136,6 +151,7 @@ export default function VoucherTemplatesPage() {
       {(editing || creating) && (
         <TemplateModal
           template={editing}
+          kinds={kinds}
           onClose={() => { setEditing(null); setCreating(false); }}
           onSaved={async () => { setEditing(null); setCreating(false); await load(); }}
         />
@@ -145,8 +161,8 @@ export default function VoucherTemplatesPage() {
 }
 
 function TemplateModal({
-  template, onClose, onSaved,
-}: { template: VoucherTemplate | null; onClose: () => void; onSaved: () => void }) {
+  template, kinds, onClose, onSaved,
+}: { template: VoucherTemplate | null; kinds: RewardKindOption[]; onClose: () => void; onSaved: () => void }) {
   const [title, setTitle] = useState(template?.title ?? "");
   const [description, setDescription] = useState(template?.description ?? "");
   const [category, setCategory] = useState<Category>(template?.category ?? "free_item");
@@ -159,6 +175,7 @@ function TemplateModal({
   const [stacksBeans, setStacksBeans] = useState(template?.stacks_with_beans ?? true);
   const [stacksOther, setStacksOther] = useState(template?.stacks_with_other ?? false);
   const [isActive, setIsActive] = useState(template?.is_active ?? true);
+  const [rewardKindId, setRewardKindId] = useState<string | "">(template?.reward_kind_id ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -177,6 +194,7 @@ function TemplateModal({
         stacks_with_beans: stacksBeans,
         stacks_with_other: stacksOther,
         is_active: isActive,
+        reward_kind_id: rewardKindId || null,
       };
 
       const res = template
@@ -208,7 +226,7 @@ function TemplateModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-card rounded-2xl w-full max-w-lg my-8 max-h-[90vh] overflow-y-auto">
+      <div className="bg-card rounded-2xl w-full max-w-lg md:max-w-3xl my-8 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b">
           <h2 className="text-lg font-semibold">{template ? "Edit Template" : "New Voucher Template"}</h2>
           <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X className="w-5 h-5" /></button>
@@ -271,6 +289,30 @@ function TemplateModal({
               <input type="checkbox" checked={stacksOther} onChange={(e) => setStacksOther(e.target.checked)} />
               Stacks with other vouchers
             </label>
+          </div>
+
+          <div className="border rounded-lg p-3 space-y-2 bg-foreground/[0.02]">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Card visual (Outcome Type)
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Optional. When set, the customer's voucher card uses this Outcome Type's colour +
+              illustration as a visual override on top of the default source-bucket theme. Manage
+              the palette under <em>Rewards → Setup → Outcome Types</em>.
+            </div>
+            <select
+              value={rewardKindId}
+              onChange={(e) => setRewardKindId(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
+            >
+              <option value="">— No override (use default bucket theme) —</option>
+              {kinds.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.label}
+                  {k.color ? `  (${k.color})` : ""}
+                </option>
+              ))}
+            </select>
           </div>
 
           <label className="flex items-center gap-2">

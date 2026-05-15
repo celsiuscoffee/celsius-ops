@@ -4,6 +4,9 @@ const API_BASE = "https://order.celsiuscoffee.com";
 const CACHE_PREFIX = "celsius-setting-v1-";
 
 // Type contracts for each settings key — kept narrow so consumers get autocomplete.
+// `first_order_discount` was retired here when the FOD config moved to
+// the Discount Engine (promotions row with trigger_type='first_order').
+// The server now resolves FOD at order create time; no client read.
 export type Settings = {
   sst: { rate: number; enabled: boolean };
   points_per_rm: { rate: number };
@@ -11,11 +14,9 @@ export type Settings = {
   maintenance: { enabled: boolean; message: string };
   min_app_version: { ios: string; android: string; forceUpdate: boolean };
   payments_enabled: { enabled: boolean };
-  first_order_discount: { enabled: boolean; type: "percent" | "fixed"; amount: number; label: string };
 };
 
 const DEFAULTS: Settings = {
-  first_order_discount: { enabled: false, type: "percent", amount: 0, label: "" },
   sst: { rate: 0.06, enabled: true },
   points_per_rm: { rate: 1 },
   min_order_value: { rm: 0 },

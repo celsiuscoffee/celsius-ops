@@ -6,6 +6,8 @@ export type Member = {
   id: string;
   phone: string;
   name: string | null;
+  email: string | null;
+  birthday: string | null;
   pointsBalance: number;
   totalPointsEarned: number;
   totalVisits: number;
@@ -80,10 +82,20 @@ export type MemberTier = {
   tier_multiplier: number | null;
   tier_benefits: string[] | null;
   tier_qualification: "visits" | "spend" | "spend_lifetime" | "either" | null;
+  // Tier model v2 — quarterly % discount + invitation-only tiers.
+  // discount_percent is 0-100; stackable=true means it adds on top of
+  // reward voucher discounts at checkout; invitation_only=true means
+  // the tier was admin-granted (Arba/Staff, Black Card).
+  tier_discount_percent?: number | null;
+  tier_stackable?: boolean | null;
+  tier_invitation_only?: boolean | null;
+  tier_locked_until?: string | null;
   visits_this_period: number;
   spend_this_period: number;
   spend_lifetime: number;
   period_days: number;
+  quarter_start?: string | null;
+  quarter_end?: string | null;
   next_tier_id: string | null;
   next_tier_name: string | null;
   next_tier_min_visits: number | null;
@@ -239,6 +251,11 @@ export type OrderHistoryEntry = {
   created_at: string;
   payment_method: string | null;
   store_id: string | null;
+  /** Resolved outlet name from outlet_settings — server joins on
+   *  store_id so the Orders tab can render "Conezion" / "Putrajaya"
+   *  next to each entry. Null when the order's store_id no longer
+   *  matches a configured outlet. */
+  store_name: string | null;
   order_items: OrderHistoryItem[];
 };
 

@@ -9,7 +9,7 @@ interface Promotion {
   brand_id: string;
   name: string;
   description: string | null;
-  trigger_type: "auto" | "code" | "tier_perk" | "reward_link";
+  trigger_type: "auto" | "code" | "tier_perk" | "reward_link" | "first_order";
   promo_code: string | null;
   tier_id: string | null;
   eligible_member_tags: string[];
@@ -43,6 +43,7 @@ const triggerLabels: Record<Promotion["trigger_type"], string> = {
   code: "Promo code",
   tier_perk: "Tier perk",
   reward_link: "Reward redemption",
+  first_order: "First order",
 };
 
 const triggerColors: Record<Promotion["trigger_type"], string> = {
@@ -50,6 +51,7 @@ const triggerColors: Record<Promotion["trigger_type"], string> = {
   code: "bg-purple-50 text-purple-700",
   tier_perk: "bg-amber-50 text-amber-700",
   reward_link: "bg-emerald-50 text-emerald-700",
+  first_order: "bg-pink-50 text-pink-700",
 };
 
 const discountLabels: Record<Promotion["discount_type"], string> = {
@@ -128,12 +130,12 @@ export default function PromotionsPage() {
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             <Tag className="w-6 h-6" />
-            Promotions
+            Discount Engine
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Discount engine. Auto-apply, promo codes, tier perks, and reward
-            redemptions all flow through here. Higher priority promos apply
-            first; non-stackable promos block lower-priority ones.
+            One place for every discount rule that runs at checkout. Auto-apply, promo codes, tier
+            perks, and reward redemptions all flow through here. Higher priority rules apply first;
+            non-stackable rules block lower-priority ones.
           </p>
         </div>
         <button
@@ -352,7 +354,7 @@ function PromoModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-card rounded-2xl shadow-xl w-full max-w-2xl md:max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b">
           <h2 className="text-lg font-semibold">
             {promo ? "Edit promotion" : "New promotion"}
@@ -397,6 +399,7 @@ function PromoModal({
                 <option value="code">Promo code</option>
                 <option value="tier_perk">Tier perk</option>
                 <option value="reward_link">Reward redemption</option>
+                <option value="first_order">First order</option>
               </select>
             </Field>
             <Field label="Discount type">

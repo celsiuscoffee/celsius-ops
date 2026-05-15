@@ -6,12 +6,16 @@ import { TicketPercent } from "lucide-react";
 interface IssuedVoucher {
   id: string;
   member_id: string;
+  member_name: string | null;
+  member_phone: string | null;
   voucher_template_id: string | null;
+  reward_id: string | null;
   source_type: string | null;
   status: string;
   issued_at: string;
   expires_at: string | null;
   redeemed_at: string | null;
+  title: string | null;
 }
 
 const BRAND_ID = "brand-celsius";
@@ -40,10 +44,10 @@ export default function ActiveVouchersPage() {
         </h1>
         <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
           Per-customer voucher wallet — issued by Missions, Mystery Bean, Birthday treats, Referrals,
-          Milestones, or manual grants. Includes active, used, and expired states.
+          or manual grants. Includes active, used, and expired states.
           <br />
           <span className="text-xs text-muted-foreground/80">
-            Not the same as <strong>Points Redemptions</strong> (when a customer spends Beans on a Points Catalog reward — separate log).
+            Not the same as <strong>Points Redemptions</strong> (when a customer spends Beans on a Points Shop reward — separate log).
           </span>
         </p>
       </div>
@@ -55,6 +59,7 @@ export default function ActiveVouchersPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
+                <th className="text-left px-4 py-3">Voucher</th>
                 <th className="text-left px-4 py-3">Member</th>
                 <th className="text-left px-4 py-3">Source</th>
                 <th className="text-left px-4 py-3">Status</th>
@@ -65,12 +70,16 @@ export default function ActiveVouchersPage() {
             </thead>
             <tbody className="divide-y">
               {vouchers.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">No vouchers issued yet.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">No vouchers issued yet.</td></tr>
               ) : (
                 vouchers.map((v) => (
                   <tr key={v.id} className="hover:bg-muted/20">
-                    <td className="px-4 py-3 font-mono text-xs">{v.member_id.slice(0, 8)}…</td>
-                    <td className="px-4 py-3 text-muted-foreground">{v.source_type ?? "—"}</td>
+                    <td className="px-4 py-3 font-medium">{v.title ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-sm">{v.member_name ?? <span className="text-muted-foreground italic">No name</span>}</div>
+                      <div className="text-xs text-muted-foreground">{v.member_phone ?? v.member_id.slice(0, 8) + "…"}</div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground capitalize">{v.source_type ? v.source_type.replace(/_/g, " ") : "—"}</td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded font-medium ${
                         v.status === "active" ? "bg-emerald-500/10 text-emerald-500" :

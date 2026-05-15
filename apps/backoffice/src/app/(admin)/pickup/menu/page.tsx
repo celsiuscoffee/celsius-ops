@@ -34,9 +34,12 @@ interface DbProduct {
   modifiers: ModifierGroup[];
   hidden_modifier_ids: string[];
   position: number;
+  featured_position: number;
 }
 
-interface Category { id: string; name: string; slug: string }
+interface Category { id: string; name: string; slug: string; position?: number }
+
+const BEST_SELLERS_ID = "__best_sellers__";
 
 function emptyForm(categories: Category[]) {
   return {
@@ -215,29 +218,72 @@ export default function PickupMenu() {
     }
   }
 
-  async function moveProduct(p: DbProduct, direction: "up" | "down", categoryItems: DbProduct[]) {
-    const idx = categoryItems.findIndex((x) => x.id === p.id);
+  async function moveProduct(
+    p: DbProduct,
+    direction: "up" | "down",
+    siblingItems: DbProduct[],
+    field: "position" | "featured_position" = "position",
+  ) {
+    const idx = siblingItems.findIndex((x) => x.id === p.id);
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= categoryItems.length) return;
-    const other = categoryItems[swapIdx];
+    if (swapIdx < 0 || swapIdx >= siblingItems.length) return;
+    const other = siblingItems[swapIdx];
     setReordering(p.id);
-    const newPosP     = other.position;
-    const newPosOther = p.position;
+    const newP     = other[field];
+    const newOther = p[field];
     setProducts((prev) => prev.map((x) => {
-      if (x.id === p.id)     return { ...x, position: newPosP };
-      if (x.id === other.id) return { ...x, position: newPosOther };
+      if (x.id === p.id)     return { ...x, [field]: newP };
+      if (x.id === other.id) return { ...x, [field]: newOther };
       return x;
     }));
     await Promise.all([
       adminFetch(`/api/pickup/products/${p.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: newPosP }),
+        body: JSON.stringify({ [field]: newP }),
       }),
       adminFetch(`/api/pickup/products/${other.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: newPosOther }),
+        body: JSON.stringify({ [field]: newOther }),
+      }),
+    ]);
+    await load();
+    setReordering(null);
+  }
+
+  async function moveCategory(
+    cat: Category,
+    direction: "up" | "down",
+    visibleCats: Category[],
+  ) {
+    // Swap relative to what the user can SEE — categories with zero
+    // products are filtered out of `grouped`, so swapping against the
+    // raw `categories` array would silently jump over them.
+    const idx = visibleCats.findIndex((c) => c.id === cat.id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= visibleCats.length) return;
+    const other = visibleCats[swapIdx];
+    setReordering(cat.id);
+    // Use the actual position values from the DB (not array index) so
+    // partial migrations / gaps don't get clobbered.
+    const newCatPos = other.position ?? swapIdx + 1;
+    const newOtherPos = cat.position ?? idx + 1;
+    setCategories((prev) => prev.map((c) => {
+      if (c.id === cat.id) return { ...c, position: newCatPos };
+      if (c.id === other.id) return { ...c, position: newOtherPos };
+      return c;
+    }).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)));
+    await Promise.all([
+      adminFetch(`/api/pickup/categories/${cat.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ position: newCatPos }),
+      }),
+      adminFetch(`/api/pickup/categories/${other.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ position: newOtherPos }),
       }),
     ]);
     await load();
@@ -277,15 +323,29 @@ export default function PickupMenu() {
     setUploading(false);
   }
 
+  const inBestSellers = catFilter === BEST_SELLERS_ID;
+
   const filtered = products.filter((p) => {
-    const matchCat    = catFilter === "all" || p.category_id === catFilter;
+    const matchCat = catFilter === "all"
+      || (inBestSellers ? p.is_popular : p.category_id === catFilter);
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch;
   });
 
-  const grouped = categories
-    .map((cat) => ({ cat, items: filtered.filter((p) => p.category_id === cat.id) }))
-    .filter(({ items }) => items.length > 0);
+  // Best Sellers view: one flat list across all categories, ordered by
+  // featured_position. Reorder arrows update featured_position (the
+  // independent "rank in Best Sellers" — separate from per-category
+  // position which still drives the customer's category browsing).
+  const grouped = inBestSellers
+    ? [{
+        cat: { id: BEST_SELLERS_ID, name: "Best Sellers", slug: "best-sellers" } as Category,
+        items: [...filtered].sort((a, b) =>
+          a.featured_position - b.featured_position || a.name.localeCompare(b.name)
+        ),
+      }]
+    : categories
+        .map((cat) => ({ cat, items: filtered.filter((p) => p.category_id === cat.id) }))
+        .filter(({ items }) => items.length > 0);
 
   const unavailableCount = products.filter((p) => !p.is_available).length;
 
@@ -346,6 +406,7 @@ export default function PickupMenu() {
           className="border rounded-xl px-3 py-2 text-sm focus:outline-none"
         >
           <option value="all">All categories</option>
+          <option value={BEST_SELLERS_ID}>★ Best Sellers (order)</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
@@ -355,29 +416,60 @@ export default function PickupMenu() {
         <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>
       ) : (
         <div className="space-y-4">
-          {grouped.map(({ cat, items }) => (
+          {grouped.map(({ cat, items }, gIdx) => {
+            // Category reorder arrows only make sense when viewing the
+            // full list (multiple categories visible, no search). Skip
+            // for Best Sellers (virtual) and single-category filters.
+            const canReorderCategory = !inBestSellers && catFilter === "all" && !search;
+            const isFirstCategory = gIdx === 0;
+            const isLastCategory = gIdx === grouped.length - 1;
+            const visibleCats = grouped.map((g) => g.cat);
+            return (
             <div key={cat.id} className="bg-white rounded-2xl overflow-hidden">
-              <div className="px-5 py-3 border-b bg-muted/20">
+              <div className="px-5 py-3 border-b bg-muted/20 flex items-center gap-3">
+                {canReorderCategory && (
+                  <div className="flex flex-col gap-0.5 shrink-0">
+                    <button
+                      onClick={() => moveCategory(cat, "up", visibleCats)}
+                      disabled={isFirstCategory || reordering === cat.id}
+                      className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="Move category up"
+                    >
+                      <ArrowUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => moveCategory(cat, "down", visibleCats)}
+                      disabled={isLastCategory || reordering === cat.id}
+                      className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="Move category down"
+                    >
+                      <ArrowDown className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
                 <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wide">{cat.name}</h2>
               </div>
               <div className="divide-y">
                 {items.map((p, pIdx) => (
                   <div key={p.id} className="flex items-center gap-4 px-5 py-3.5">
-                    {/* Up/down reorder buttons */}
+                    {/* Up/down reorder buttons. In Best Sellers view we
+                        reorder by featured_position so the change only
+                        affects the Best Sellers ranking, not the
+                        product's per-category position. */}
                     <div className="flex flex-col gap-0.5 shrink-0">
                       <button
-                        onClick={() => moveProduct(p, "up", items)}
+                        onClick={() => moveProduct(p, "up", items, inBestSellers ? "featured_position" : "position")}
                         disabled={pIdx === 0 || reordering === p.id}
                         className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                        title="Move up"
+                        title={inBestSellers ? "Move up in Best Sellers" : "Move up"}
                       >
                         <ArrowUp className="h-3 w-3" />
                       </button>
                       <button
-                        onClick={() => moveProduct(p, "down", items)}
+                        onClick={() => moveProduct(p, "down", items, inBestSellers ? "featured_position" : "position")}
                         disabled={pIdx === items.length - 1 || reordering === p.id}
                         className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                        title="Move down"
+                        title={inBestSellers ? "Move down in Best Sellers" : "Move down"}
                       >
                         <ArrowDown className="h-3 w-3" />
                       </button>
@@ -453,7 +545,8 @@ export default function PickupMenu() {
                 ))}
               </div>
             </div>
-          ))}
+            );
+          })}
           {grouped.length === 0 && (
             <div className="py-12 text-center text-sm text-muted-foreground">No products found</div>
           )}

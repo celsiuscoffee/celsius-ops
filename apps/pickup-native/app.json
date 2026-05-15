@@ -16,7 +16,7 @@
     "ios": {
       "bundleIdentifier": "com.celsiuscoffee.pickup.next",
       "supportsTablet": false,
-      "buildNumber": "2",
+      "buildNumber": "6",
       "entitlements": {
         "aps-environment": "production"
       },

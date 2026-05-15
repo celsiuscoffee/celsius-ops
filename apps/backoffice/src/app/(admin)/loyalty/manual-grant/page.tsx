@@ -36,8 +36,9 @@ export default function ManualGrantPage() {
     setLoading(true);
     try {
       // Re-use existing members lookup endpoint.
-      const r = await fetch(`/api/loyalty/members?brand_id=${BRAND_ID}&q=${encodeURIComponent(memberQuery.trim())}`, { credentials: "include" });
-      const rows = await r.json();
+      const r = await fetch(`/api/loyalty/members?brand_id=${BRAND_ID}&search=${encodeURIComponent(memberQuery.trim())}&limit=8`, { credentials: "include" });
+      const json = await r.json();
+      const rows = Array.isArray(json) ? json : json?.members;
       setMatches(Array.isArray(rows) ? rows.slice(0, 8) : []);
     } catch { setMatches([]); }
     finally { setLoading(false); }

@@ -57,7 +57,7 @@ export async function awardBonusBeans(args: {
   outletId?:   string;
   description: string;
   referenceId?: string;
-  txnType?:    "mystery_bonus" | "milestone_bonus" | "manual_bonus" | "mission_bonus";
+  txnType?:    "mystery_bonus" | "manual_bonus" | "mission_bonus";
 }): Promise<number | null> {
   if (args.amount <= 0) return null;
   try {
@@ -169,91 +169,24 @@ export async function earnLoyaltyPoints(
     const cappedCouponMul = Math.min(couponMultiplier, 20);
     const effectivePoints = Math.max(0, Math.round(points * cappedCouponMul));
 
-    // Fetch member_brands row
-    const { data: member, error: memberErr } = await supabase
-      .from("member_brands")
-      .select("points_balance, total_points_earned, total_visits")
-      .eq("member_id", loyaltyId)
-      .eq("brand_id", BRAND_ID)
-      .single();
-
-    if (memberErr || !member) {
-      console.warn("[loyalty] earnLoyaltyPoints: member not found for store");
-      return;
-    }
-
-    const currentBalance = member.points_balance as number;
-    const newBalance     = currentBalance + effectivePoints;
-
-    // Optimistic-concurrency update
-    const { data: updated, error: updateErr } = await supabase
-      .from("member_brands")
-      .update({
-        points_balance:      newBalance,
-        total_points_earned: (member.total_points_earned as number) + effectivePoints,
-        total_visits:        (member.total_visits as number) + 1,
-        last_visit_at:       new Date().toISOString(),
-      })
-      .eq("member_id", loyaltyId)
-      .eq("brand_id", BRAND_ID)
-      .eq("points_balance", currentBalance)
-      .select("points_balance")
-      .maybeSingle();
-
-    if (updateErr) {
-      console.error("[loyalty] earnLoyaltyPoints: update error", updateErr.message);
-      return;
-    }
-
-    if (!updated) {
-      // Concurrent update — retry once with latest balance
-      const { data: fresh } = await supabase
-        .from("member_brands")
-        .select("points_balance, total_points_earned, total_visits")
-        .eq("member_id", loyaltyId)
-        .eq("brand_id", BRAND_ID)
-        .single();
-
-      if (!fresh) {
-        console.warn("[loyalty] earnLoyaltyPoints: retry fetch failed");
-        return;
-      }
-
-      const retryBalance    = (fresh.points_balance as number) + effectivePoints;
-      const { error: retryErr } = await supabase
-        .from("member_brands")
-        .update({
-          points_balance:      retryBalance,
-          total_points_earned: (fresh.total_points_earned as number) + effectivePoints,
-          total_visits:        (fresh.total_visits as number) + 1,
-          last_visit_at:       new Date().toISOString(),
-        })
-        .eq("member_id", loyaltyId)
-        .eq("brand_id", BRAND_ID);
-
-      if (retryErr) {
-        console.error("[loyalty] earnLoyaltyPoints: retry update error", retryErr.message);
-        return;
-      }
-    }
-
-    // Insert point_transaction
-    const txnId = `txn-pickup-${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}`;
-    const { error: txnErr } = await supabase.from("point_transactions").insert({
-      id:          txnId,
-      member_id:   loyaltyId,
-      brand_id:    BRAND_ID,
-      outlet_id:   outletId,
-      type:        "earn",
-      points:      effectivePoints,
-      balance_after: newBalance,
-      description: "Points earned for pickup order",
-      reference_id: orderId,
-      multiplier:  cappedCouponMul,
+    // Atomic increment + ledger write via add_loyalty_points RPC.
+    // Replaces an OCC retry pattern where a missed retry was silently
+    // dropped — caller never knew points didn't land. The RPC raises
+    // 'member_brand_not_found' if the member row doesn't exist for
+    // this brand; everything else either succeeds atomically or
+    // rolls back.
+    const { error: rpcErr } = await supabase.rpc("add_loyalty_points", {
+      p_member_id:  loyaltyId,
+      p_brand_id:   BRAND_ID,
+      p_points:     effectivePoints,
+      p_outlet_id:  outletId,
+      p_order_id:   orderId,
+      p_multiplier: cappedCouponMul,
+      p_description: "Points earned for pickup order",
     });
-
-    if (txnErr) {
-      console.error("[loyalty] earnLoyaltyPoints: transaction insert error", txnErr.message);
+    if (rpcErr) {
+      console.error("[loyalty] earnLoyaltyPoints: add_loyalty_points rpc error", rpcErr.message);
+      return;
     }
 
     // Burn the post-purchase coupon if it was applied.
@@ -382,45 +315,62 @@ export async function deductLoyaltyPoints(
       redemptionCode += charset[Math.floor(Math.random() * charset.length)];
     }
 
-    const now          = new Date().toISOString();
     const redemptionId = `rdm-pickup-${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}`;
 
-    // Insert redemption — points_spent reflects what actually came off
-    // the member's balance (0 for voucher redemptions).
-    const { error: rdmErr } = await supabase.from("redemptions").insert({
-      id:              redemptionId,
-      member_id:       loyaltyId,
-      reward_id:       rewardId,
-      brand_id:        BRAND_ID,
-      outlet_id:       outletId,
-      points_spent:    pointsToSpend,
-      status:          "confirmed",
-      code:            redemptionCode,
-      redemption_type: "pickup",
-      source:          "pickup_app",
-      confirmed_at:    now,
-    });
-
-    if (rdmErr) {
-      console.error("[loyalty] deductLoyaltyPoints: redemption insert error", rdmErr.message);
-      return false;
-    }
-
-    // Mark the voucher consumed so it disappears from the member's app
-    // and can't be re-redeemed. Done after the redemption row is in so
-    // we don't burn the voucher on a partial failure.
     if (isVoucherRedemption && voucher) {
-      const { error: voucherErr } = await supabase
-        .from("issued_rewards")
-        .update({ status: "used" })
-        .eq("id", voucher.id);
-      if (voucherErr) {
-        console.error(
-          `[loyalty] deductLoyaltyPoints: failed to mark voucher ${voucher.id} used — RECONCILE MANUALLY`,
-          voucherErr.message,
-        );
-        // Don't return false — the redemption is already booked. Manual
-        // cleanup is safer than re-deducting points.
+      // Atomic CAS voucher-consume + redemption insert. Earlier the
+      // sequence was insert-redemption then update-voucher; a
+      // concurrent call could read the still-active voucher between
+      // those two steps and double-redeem. The RPC does a CAS update
+      // (must be status='active') then inserts the redemption inside
+      // one transaction — Postgres rolls back the voucher consume if
+      // anything else fails.
+      const { data: consumeResult, error: consumeErr } = await supabase.rpc("consume_voucher_for_redemption", {
+        p_voucher_id:    voucher.id,
+        p_member_id:     loyaltyId,
+        p_redemption_id: redemptionId,
+        p_reward_id:     rewardId,
+        p_brand_id:      BRAND_ID,
+        p_outlet_id:     outletId,
+        p_points_spent:  pointsToSpend,
+        p_code:          redemptionCode,
+      });
+      if (consumeErr) {
+        console.error("[loyalty] deductLoyaltyPoints: consume rpc error", consumeErr.message);
+        return false;
+      }
+      const consumed = Array.isArray(consumeResult) && consumeResult.length > 0
+        ? Boolean((consumeResult[0] as { consumed: boolean }).consumed)
+        : false;
+      if (!consumed) {
+        // Voucher was claimed by a concurrent redemption between the
+        // earlier lookup and the CAS. Refuse cleanly — the member's
+        // points were never debited (voucher path) and the redemption
+        // row was never inserted.
+        console.warn(`[loyalty] deductLoyaltyPoints: voucher ${voucher.id} no longer active — concurrent redeem?`);
+        return false;
+      }
+    } else {
+      // Non-voucher (standard points-shop) path: just insert the
+      // redemption row. Points were already deducted via deduct_points
+      // RPC above.
+      const now = new Date().toISOString();
+      const { error: rdmErr } = await supabase.from("redemptions").insert({
+        id:              redemptionId,
+        member_id:       loyaltyId,
+        reward_id:       rewardId,
+        brand_id:        BRAND_ID,
+        outlet_id:       outletId,
+        points_spent:    pointsToSpend,
+        status:          "confirmed",
+        code:            redemptionCode,
+        redemption_type: "pickup",
+        source:          "pickup_app",
+        confirmed_at:    now,
+      });
+      if (rdmErr) {
+        console.error("[loyalty] deductLoyaltyPoints: redemption insert error", rdmErr.message);
+        return false;
       }
     }
 

@@ -867,7 +867,188 @@ export default function LoyaltyDashboard() {
             </div>
           </div>
         )}
+
+        {/* Rewards mechanics — merged from the retired /loyalty/analytics
+            page so admins see mission/mystery/voucher/referral health
+            in the same view as core loyalty KPIs. Last 30 days. */}
+        <RewardsMechanicsSection />
       </div>
+    </div>
+  );
+}
+
+interface MechanicsResponse {
+  range: { since: string; generated_at: string };
+  missions: {
+    total: number;
+    active: number;
+    rows: Array<{
+      id: string; title: string; difficulty: string;
+      picked: number; completed: number; completion_rate: number; is_active: boolean;
+    }>;
+  };
+  mystery: {
+    total_drops: number; revealed: number; reveal_rate: number;
+    distribution: Array<{ type: string; count: number; pct: number }>;
+  };
+  vouchers: {
+    total_issued: number; total_redeemed: number;
+    by_source: Array<{ source: string; issued: number; redeemed: number; expired: number; redemption_rate: number }>;
+  };
+  referrals: { total: number; pending: number; rewarded: number; voided: number };
+}
+
+function RewardsMechanicsSection() {
+  const [data, setData] = useState<MechanicsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/loyalty/v2-analytics?brand_id=brand-celsius`, { credentials: "include" });
+        setData(await res.json());
+      } catch { /* ignore */ }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="rounded-xl border bg-white p-5 text-sm text-gray-500">
+        Loading rewards mechanics…
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900">Rewards mechanics</h2>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Mission completion, mystery distribution, voucher funnel by source, referral attribution. Last 30 days.
+        </p>
+      </div>
+
+      {/* KPI row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MechKpi label="Missions active"      value={`${data.missions.active}/${data.missions.total}`} />
+        <MechKpi label="Mystery reveal rate"  value={`${data.mystery.reveal_rate}%`} sub={`${data.mystery.revealed}/${data.mystery.total_drops}`} />
+        <MechKpi label="Vouchers issued"      value={data.vouchers.total_issued.toString()} sub={`${data.vouchers.total_redeemed} redeemed`} />
+        <MechKpi label="Referrals rewarded"   value={`${data.referrals.rewarded}`} sub={`${data.referrals.pending} pending`} />
+      </div>
+
+      {/* Mission completion table */}
+      <section className="rounded-xl border bg-white overflow-hidden">
+        <div className="px-4 py-3 border-b bg-gray-50">
+          <h3 className="text-sm font-semibold">Mission completion rates</h3>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50/60 text-xs uppercase tracking-wide text-gray-500">
+            <tr>
+              <th className="text-left px-4 py-2">Mission</th>
+              <th className="text-left px-4 py-2">Difficulty</th>
+              <th className="text-right px-4 py-2">Picked</th>
+              <th className="text-right px-4 py-2">Completed</th>
+              <th className="text-right px-4 py-2">Rate</th>
+              <th className="text-left px-4 py-2">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {data.missions.rows.length === 0 ? (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">No missions yet</td></tr>
+            ) : (
+              data.missions.rows.map((m) => (
+                <tr key={m.id} className="hover:bg-gray-50/60">
+                  <td className="px-4 py-2.5 font-medium">{m.title}</td>
+                  <td className="px-4 py-2.5">
+                    <span className={cn(
+                      "text-xs px-2 py-0.5 rounded font-medium",
+                      m.difficulty === "easy"   && "bg-emerald-50 text-emerald-700",
+                      m.difficulty === "medium" && "bg-amber-50 text-amber-700",
+                      m.difficulty === "hard"   && "bg-rose-50 text-rose-700",
+                    )}>{m.difficulty}</span>
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{m.picked}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{m.completed}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{m.completion_rate}%</td>
+                  <td className="px-4 py-2.5">
+                    <span className={cn("text-xs", m.is_active ? "text-emerald-600" : "text-gray-400")}>
+                      {m.is_active ? "● Active" : "○ Paused"}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </section>
+
+      {/* Mystery distribution + Voucher funnel side-by-side on md+ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <section className="rounded-xl border bg-white p-5">
+          <h3 className="text-sm font-semibold mb-3">Mystery outcome distribution</h3>
+          {data.mystery.distribution.length === 0 ? (
+            <div className="text-sm text-gray-500">No drops yet</div>
+          ) : (
+            <div className="space-y-2">
+              {data.mystery.distribution.map((d) => (
+                <div key={d.type}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-medium">{d.type}</span>
+                    <span className="text-gray-500 tabular-nums">{d.count} · {d.pct}%</span>
+                  </div>
+                  <div className="h-2 rounded bg-gray-100 overflow-hidden">
+                    <div className="h-full bg-gray-900" style={{ width: `${d.pct}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-xl border bg-white overflow-hidden">
+          <div className="px-4 py-3 border-b bg-gray-50">
+            <h3 className="text-sm font-semibold">Voucher funnel by source</h3>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50/60 text-xs uppercase tracking-wide text-gray-500">
+              <tr>
+                <th className="text-left px-4 py-2">Source</th>
+                <th className="text-right px-4 py-2">Issued</th>
+                <th className="text-right px-4 py-2">Redeemed</th>
+                <th className="text-right px-4 py-2">Expired</th>
+                <th className="text-right px-4 py-2">Rate</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {data.vouchers.by_source.length === 0 ? (
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">No vouchers issued yet</td></tr>
+              ) : (
+                data.vouchers.by_source.map((v) => (
+                  <tr key={v.source} className="hover:bg-gray-50/60">
+                    <td className="px-4 py-2.5 font-medium capitalize">{v.source.replace("_", " ")}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{v.issued}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{v.redeemed}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-gray-500">{v.expired}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{v.redemption_rate}%</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function MechKpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-xl border bg-white px-4 py-3">
+      <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
+      <div className="text-2xl font-semibold mt-1">{value}</div>
+      {sub && <div className="text-xs text-gray-500 mt-0.5">{sub}</div>}
     </div>
   );
 }

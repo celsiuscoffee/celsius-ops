@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, Text } from "react-native";
+import { View, Text, AppState } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AlertCircle } from "lucide-react-native";
 import { getSetting } from "../lib/settings";
@@ -7,16 +7,37 @@ import { getSetting } from "../lib/settings";
 // Top banner shown app-wide when admin has flipped maintenance mode on
 // from backoffice. Pickup orders keep working but customers see the
 // message — useful for "Back at 11am after a brief outage" style notices.
+//
+// The banner re-reads the setting on a 60s poll AND on every
+// foreground transition. Without this it stayed at whatever state the
+// app booted into, so admins flipping the toggle mid-session never
+// reached the customer until they killed + relaunched the app.
 export function MaintenanceBanner() {
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState("");
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    getSetting("maintenance").then((m) => {
-      setVisible(Boolean(m.enabled && m.message));
-      setMessage(m.message ?? "");
+    let cancelled = false;
+    const sync = () => {
+      getSetting("maintenance").then((m) => {
+        if (cancelled) return;
+        setVisible(Boolean(m.enabled && m.message));
+        setMessage(m.message ?? "");
+      }).catch(() => { /* defaults already shown */ });
+    };
+
+    sync();
+    const interval = setInterval(sync, 60_000);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") sync();
     });
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      sub.remove();
+    };
   }, []);
 
   if (!visible) return null;

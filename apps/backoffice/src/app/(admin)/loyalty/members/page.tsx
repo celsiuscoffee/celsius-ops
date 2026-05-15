@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { Search, MoreHorizontal, X, Download, Eye, Pencil, Trash2, Store, AlertTriangle, Filter, ChevronDown, ChevronLeft, ChevronRight, Plus, Tag, Save, Bookmark, MessageSquare, Send, Phone, Loader2, Coins } from "lucide-react";
+import { Search, MoreHorizontal, X, Download, Eye, Pencil, Trash2, Store, AlertTriangle, Filter, ChevronDown, ChevronLeft, ChevronRight, Plus, Tag, Save, Bookmark, MessageSquare, Send, Phone, Loader2, Coins, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchMembers, fetchMembersPage, fetchRewards } from "@/lib/loyalty/api";
 import type { MemberWithBrand, Reward } from "@/lib/loyalty/types";
@@ -128,6 +128,18 @@ export default function MembersPage() {
   const [adjustDelta, setAdjustDelta] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
   const [adjustSaving, setAdjustSaving] = useState(false);
+
+  // Grant-tier dialog — only invitation tiers (Arba & Staff, Black Card)
+  // can be assigned here. Earned tiers (Member/Silver/Gold/Platinum)
+  // come from quarterly spend via the evaluate_member_tier RPC.
+  const [grantingMember, setGrantingMember] = useState<{
+    id: string;
+    name: string | null;
+    phone: string;
+    current_tier_id: string | null;
+  } | null>(null);
+  const [grantTierId, setGrantTierId] = useState<string | null>("");
+  const [grantSaving, setGrantSaving] = useState(false);
 
   // Outlet filter
   const [outlets, setOutlets] = useState<{ id: string; name: string }[]>([]);
@@ -1477,12 +1489,158 @@ export default function MembersPage() {
             Adjust points
           </button>
           <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const m = serverMembers.find((sm) => sm.id === openMenu) ?? allMembers.find((sm) => sm.id === openMenu);
+              if (m) {
+                setGrantingMember({
+                  id: m.id,
+                  name: m.name,
+                  phone: m.phone,
+                  current_tier_id: (m as MappedMember & { current_tier_id?: string | null }).current_tier_id ?? null,
+                });
+                setGrantTierId("");
+              }
+              setOpenMenu(null);
+              setMenuPos(null);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
+          >
+            <Crown className="h-3.5 w-3.5" />
+            Grant tier
+          </button>
+          <button
             onClick={(e) => { e.stopPropagation(); setDeleteConfirm(openMenu); }}
             className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Delete
           </button>
+        </div>
+      )}
+
+      {/* Grant-tier dialog. Only invitation-only tiers are listed here —
+          earned tiers (Member/Silver/Gold/Platinum) are driven by the
+          quarterly spend evaluator and can't be granted manually. */}
+      {grantingMember && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => {
+            setGrantingMember(null);
+            setGrantTierId("");
+          }}
+        >
+          <div
+            className="w-[420px] rounded-2xl bg-white dark:bg-neutral-800 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center gap-2">
+              <Crown className="h-5 w-5 text-terracotta" />
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Grant invitation tier</h3>
+            </div>
+            <div className="mb-4 rounded-lg bg-gray-50 dark:bg-neutral-700 px-3 py-2.5">
+              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                {grantingMember.name || "Unnamed"}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
+                {grantingMember.phone}
+              </p>
+            </div>
+
+            <p className="text-xs text-gray-500 dark:text-neutral-400 mb-3">
+              Only invitation-only tiers can be granted manually. Earned tiers
+              (Member/Silver/Gold/Platinum) come from quarterly spend.
+            </p>
+
+            <div className="space-y-2 mb-4">
+              {[
+                { id: "tier-celsius-arba-staff", name: "Staff",      desc: "30% off · for Celsius staff" },
+                { id: "tier-celsius-black-card", name: "Black Card", desc: "50% off · for investors / owners" },
+                { id: "",                          name: "Reset to auto", desc: "Re-evaluate from quarterly spend (clears any invitation grant)" },
+              ].map((opt) => {
+                const selected = grantTierId === opt.id;
+                return (
+                  <label
+                    key={opt.id || "reset"}
+                    className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
+                      selected
+                        ? "border-terracotta bg-terracotta/5"
+                        : "border-gray-200 dark:border-neutral-600 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="grant-tier"
+                      value={opt.id}
+                      checked={selected}
+                      onChange={() => setGrantTierId(opt.id)}
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-gray-900 dark:text-white">
+                        {opt.name}
+                      </span>
+                      <span className="block text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
+                        {opt.desc}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setGrantingMember(null);
+                  setGrantTierId("");
+                }}
+                disabled={grantSaving}
+                className="flex-1 rounded-lg border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-600 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={grantSaving || grantTierId === ""}
+                onClick={async () => {
+                  if (!grantingMember || grantTierId === "") return;
+                  setGrantSaving(true);
+                  try {
+                    const res = await fetch(
+                      `/api/loyalty/members/${grantingMember.id}/grant-tier`,
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          // Empty string in UI → null in API = reset path.
+                          tier_id: grantTierId === "" ? null : grantTierId,
+                        }),
+                      },
+                    );
+                    const json = await res.json();
+                    if (!res.ok) {
+                      toast.error(json.error ?? "Failed to grant tier");
+                      return;
+                    }
+                    if (json.action === "reset") {
+                      toast.success("Tier reset — auto-evaluation will resume on next visit");
+                    } else {
+                      toast.success(`Granted "${json.tier_name}"`);
+                    }
+                    setGrantingMember(null);
+                    setGrantTierId("");
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Network error");
+                  } finally {
+                    setGrantSaving(false);
+                  }
+                }}
+                className="flex-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+              >
+                {grantSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Apply"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1633,7 +1791,7 @@ export default function MembersPage() {
       {/* ── SMS Blast Modal ──────────────────────────── */}
       {showSmsModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 pt-10 pb-10">
-          <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl">
+          <div className="relative w-full max-w-md md:max-w-2xl rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl">
             <button
               onClick={() => setShowSmsModal(false)}
               className="absolute right-4 top-4 rounded-lg p-1 text-gray-400 dark:text-neutral-500 hover:bg-gray-100 dark:hover:bg-neutral-700"
@@ -1796,7 +1954,7 @@ export default function MembersPage() {
       {/* ── Edit Member Modal ─────────────────────────── */}
       {editingMember && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 pt-10 pb-10">
-          <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl">
+          <div className="relative w-full max-w-md md:max-w-2xl rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl">
             <button
               onClick={() => setEditingMember(null)}
               className="absolute right-4 top-4 rounded-lg p-1 text-gray-400 dark:text-neutral-500 hover:bg-gray-100 dark:hover:bg-neutral-700"

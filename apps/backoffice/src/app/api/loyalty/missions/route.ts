@@ -29,7 +29,9 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const {
     brand_id, title, description, icon, difficulty, goal,
-    reward_voucher_template_ids = [], reward_bonus_beans = 0,
+    reward_voucher_template_ids = [],
+    referee_reward_voucher_template_ids = [],
+    reward_bonus_beans = 0,
     cooldown_weeks = 4, is_active = true, starts_at, ends_at,
   } = body;
 
@@ -43,7 +45,9 @@ export async function POST(request: NextRequest) {
       brand_id, title, description,
       icon: icon ?? "sparkle",
       difficulty, goal,
-      reward_voucher_template_ids, reward_bonus_beans,
+      reward_voucher_template_ids,
+      referee_reward_voucher_template_ids,
+      reward_bonus_beans,
       cooldown_weeks, is_active, starts_at, ends_at,
       created_by: auth.user.id,
     })

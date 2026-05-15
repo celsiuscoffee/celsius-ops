@@ -35,6 +35,8 @@ export async function PUT(request: NextRequest) {
       'name', 'min_visits', 'min_spend', 'qualification_metric',
       'period_days', 'color', 'icon',
       'benefits', 'multiplier', 'sort_order', 'is_active',
+      // Tier v2 fields — quarterly percent-discount model.
+      'discount_percent', 'stackable', 'invitation_only',
     ];
     const updates: Record<string, unknown> = {};
     for (const key of allowedKeys) {

@@ -90,6 +90,13 @@ export default function Checkout() {
       setPromoEvalError(false);
       return;
     }
+    // Wait for the tier fetch to finish before the first evaluate
+    // when the customer is signed in. Otherwise the effect would
+    // fire once with tier=null (no tier perk in the response) and a
+    // second time after the tier loads (with the perk) — the
+    // summary would bounce from "no tier discount" → "with tier"
+    // over ~500ms, which the customer perceives as flicker.
+    if (loyaltyId && !tier) return;
     const lines: PromoLine[] = cart.map((c) => ({
       product_id: c.productId,
       quantity: c.quantity,
@@ -120,13 +127,16 @@ export default function Checkout() {
       });
     }, 300);
     return () => clearTimeout(handle);
-  }, [cart, loyaltyId, outletId, tier?.tier_id, promoEvalError]);
+  }, [cart, loyaltyId, outletId, tier?.tier_id, tier, promoEvalError]);
 
   const promoDiscount = promoEval?.total_discount ?? 0;
 
-  // Pull live outlet record so the pickup card shows status + ETA — same
-  // info the home page surfaces, kept consistent here so the customer
-  // confirms exactly what they're committing to.
+  // Pull live outlet record so the pickup card shows status + ETA.
+  // Polled every 30s while the checkout screen is mounted so the
+  // customer doesn't commit to an outlet that closed mid-flow —
+  // e.g. they took 4 min on payment selection and the outlet
+  // shuttered for the night. refetchOnWindowFocus catches the
+  // common "switched apps to grab card, came back" pattern.
   const outlets = useQuery({
     queryKey: ["outlets"],
     queryFn: async (): Promise<Outlet[]> => {
@@ -137,12 +147,45 @@ export default function Checkout() {
       if (error) throw error;
       return data ?? [];
     },
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
   const currentOutlet = (outlets.data ?? []).find((o) => o.store_id === outletId) ?? null;
+  const outletClosed = currentOutlet ? currentOutlet.is_open === false : false;
 
   const subtotal = cartTotal(cart);
-  const rewardDiscount = calcRewardDiscount(appliedReward, cart, subtotal);
-  const afterDiscount = Math.max(0, subtotal - rewardDiscount - promoDiscount);
+  const rewardDiscountRaw = calcRewardDiscount(appliedReward, cart, subtotal);
+
+  // Non-stackable tier exclusivity (Staff, Black Card). Mirrors the
+  // server-side auto-pick-larger so the cart, summary, and Place
+  // Order button all read the same number. Without this, both
+  // discounts stack client-side, hit the Math.max(0, ...) floor at
+  // 0, and produce a bug: button "RM0.00" + summary "Total RM7.45"
+  // (the leftover tier-perk after the cap absorbs the voucher).
+  const isNonStackableTier = tier?.tier_stackable === false;
+  const rawTierPerk = (promoEval?.discounts ?? []).find((d) => d.reason === "tier_perk");
+  const rawTierPerkAmt = rawTierPerk?.discount_amount ?? 0;
+  const rawOtherPromoSum = (promoEval?.discounts ?? [])
+    .filter((d) => d.reason !== "tier_perk")
+    .reduce((s, d) => s + d.discount_amount, 0);
+
+  let rewardDiscount = rewardDiscountRaw;
+  let effectivePromoDiscount = promoDiscount;
+  let dropTierPerk = false;
+  if (isNonStackableTier && rawTierPerkAmt > 0) {
+    if (rewardDiscountRaw >= rawTierPerkAmt) {
+      // Voucher wins — drop the tier perk, keep voucher + any other
+      // promo-engine discounts (auto, reward_link).
+      dropTierPerk = true;
+      effectivePromoDiscount = rawOtherPromoSum;
+    } else if (rewardDiscountRaw > 0) {
+      // Tier wins — drop the voucher, keep tier perk + any other
+      // promo-engine discounts.
+      rewardDiscount = 0;
+    }
+  }
+
+  const afterDiscount = Math.max(0, subtotal - rewardDiscount - effectivePromoDiscount);
   const sst = sstConfig.enabled ? +(afterDiscount * sstConfig.rate).toFixed(2) : 0;
   const grandTotal = +(afterDiscount + sst).toFixed(2);
 
@@ -150,6 +193,12 @@ export default function Checkout() {
   const [phoneInput, setPhoneInput] = useState(phoneFromStore ?? "");
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
+  // Contextual message shown next to the spinner during checkout. Lets
+  // the customer see WHAT is happening at each step instead of a bare
+  // spinner — particularly important after the Stripe sheet dismisses,
+  // when the wait between "paid" and the order-detail screen used to
+  // feel like a stall.
+  const [busyLabel, setBusyLabel] = useState<string | undefined>(undefined);
   // Single Stripe-routed payment flow. The sheet presents whatever
   // methods are enabled in Stripe Dashboard (card, Apple Pay, FPX,
   // GrabPay, etc.) via automatic_payment_methods, so the app no
@@ -218,6 +267,7 @@ export default function Checkout() {
       return;
     }
     setBusy(true);
+    setBusyLabel("Sending code…");
     try {
       await api.sendOtp(normalized);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -226,12 +276,14 @@ export default function Checkout() {
       Alert.alert("Couldn't send code", String(e));
     } finally {
       setBusy(false);
+      setBusyLabel(undefined);
     }
   };
 
   const onVerifyOtp = async () => {
     if (otp.length < 4) return;
     setBusy(true);
+    setBusyLabel("Checking code…");
     try {
       await api.verifyOtp(phoneInput.trim(), otp.trim());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -242,6 +294,7 @@ export default function Checkout() {
       Alert.alert("Couldn't verify", String(e));
     } finally {
       setBusy(false);
+      setBusyLabel(undefined);
     }
   };
 
@@ -301,6 +354,7 @@ export default function Checkout() {
     }
 
     setBusy(true);
+    setBusyLabel("Reviewing your order…");
     setLastError(null);
     let stage = "init";
     try {
@@ -380,6 +434,12 @@ export default function Checkout() {
       queryClient.invalidateQueries({ queryKey: ["order-history"] });
       queryClient.invalidateQueries({ queryKey: ["recent-orders"] });
 
+      // Pre-flight: a zero-amount order (full reward / 100%-off promo)
+      // skips Stripe entirely, so "Opening secure payment…" would be
+      // a lie. Show "Sending to kitchen…" up-front for those — the
+      // server confirms the order in the same PaymentIntent call.
+      const isFreeOrder = grandTotal <= 0.001;
+      setBusyLabel(isFreeOrder ? "Sending to kitchen…" : "Opening secure payment…");
       stage = "create-payment-intent";
       // 2. Card / ewallet — Stripe native PaymentSheet. The server mints a
       //    PaymentIntent for this orderId; we hand the clientSecret to the
@@ -461,6 +521,11 @@ export default function Checkout() {
         return;
       }
       trackEvent("payment_success", { orderId: res.orderId });
+      // The Stripe sheet has dismissed, payment is captured, and the
+      // server is finishing the loop (confirm-stripe + mystery drop
+      // mint). This is the gap the customer used to stare at a bare
+      // spinner — now they get a clear cue that work is happening.
+      setBusyLabel("Sending to kitchen…");
 
       // Payment succeeded — confirm server-side immediately so the order is
       // already "preparing" by the time we navigate.
@@ -493,6 +558,7 @@ export default function Checkout() {
       console.warn("[checkout]", detail, e);
     } finally {
       setBusy(false);
+      setBusyLabel(undefined);
     }
   };
 
@@ -562,7 +628,7 @@ export default function Checkout() {
               className="mt-3 bg-background border border-border rounded-2xl px-4 py-3 text-espresso text-lg"
             />
             <View className="mt-5">
-              <PrimaryButton label="Text me the code" onPress={onSendOtp} loading={busy} />
+              <PrimaryButton label="Text me the code" onPress={onSendOtp} loading={busy} loadingLabel={busyLabel} />
             </View>
           </View>
         )}
@@ -584,7 +650,7 @@ export default function Checkout() {
               className="mt-3 bg-background border border-border rounded-2xl px-4 py-3 text-espresso text-2xl tracking-widest text-center"
             />
             <View className="mt-5">
-              <PrimaryButton label="Let me in" onPress={onVerifyOtp} loading={busy} />
+              <PrimaryButton label="Let me in" onPress={onVerifyOtp} loading={busy} loadingLabel={busyLabel} />
             </View>
             <Pressable onPress={() => setStep("phone")} className="mt-3 items-center active:opacity-70">
               <Text className="text-muted-fg text-sm">Wrong number? Edit</Text>
@@ -709,38 +775,75 @@ export default function Checkout() {
               {(() => {
                 const items          = frozenSummary?.items          ?? cart;
                 const dispSubtotal   = frozenSummary?.subtotal       ?? subtotal;
+                // Reward + promo lists already reflect the
+                // non-stackable-tier exclusivity (computed at
+                // component-top so the Place Order button stays in
+                // sync). When frozenSummary is in effect (payment
+                // in progress) we use the snapshot verbatim — that's
+                // a frozen receipt of what got billed.
                 const dispReward     = frozenSummary?.rewardDiscount ?? rewardDiscount;
-                const dispRewardName = frozenSummary?.rewardName     ?? (appliedReward?.name ?? null);
-                const dispPromos     = frozenSummary?.promoDiscounts ?? promoEval?.discounts ?? [];
+                const dispRewardName = frozenSummary?.rewardName     ?? (rewardDiscount > 0 ? (appliedReward?.name ?? null) : null);
+                const rawDispPromos  = frozenSummary?.promoDiscounts ?? promoEval?.discounts ?? [];
+                const dispPromos     = frozenSummary
+                  ? rawDispPromos
+                  : dropTierPerk
+                    ? rawDispPromos.filter((d) => d.reason !== "tier_perk")
+                    : rawDispPromos;
                 const dispSst        = frozenSummary?.sst            ?? sst;
                 const dispGrand      = frozenSummary?.grandTotal     ?? grandTotal;
                 const dispAfter      = frozenSummary?.afterDiscount  ?? afterDiscount;
+                const effRewardName  = dispRewardName;
+                const effReward      = dispReward;
                 return (
                   <View className="mt-2 gap-1.5">
                     {items.map((i) => (
-                      <View key={i.cartId} className="flex-row justify-between">
-                        <Text className="text-espresso flex-1">
-                          {i.quantity}× {i.name}
-                        </Text>
-                        <Text className="text-espresso">{formatPrice(i.totalPrice)}</Text>
+                      <View key={i.cartId} style={{ gap: 2 }}>
+                        <View className="flex-row justify-between">
+                          <Text className="text-espresso flex-1">
+                            {i.quantity}× {i.name}
+                          </Text>
+                          <Text className="text-espresso">{formatPrice(i.totalPrice)}</Text>
+                        </View>
+                        {/* Modifier chips and special instructions —
+                            previously hidden on checkout. Customer
+                            confirms exactly what they're ordering, including
+                            "oat milk · less sweet" and any free-text note
+                            for the barista, before paying. */}
+                        {i.modifiers.length > 0 && (
+                          <Text
+                            className="text-muted-fg text-[12px]"
+                            numberOfLines={2}
+                            style={{ paddingRight: 60 }}
+                          >
+                            {i.modifiers.map((m) => m.label).join(" · ")}
+                          </Text>
+                        )}
+                        {i.specialInstructions ? (
+                          <Text
+                            className="text-muted-fg text-[12px] italic"
+                            numberOfLines={2}
+                            style={{ paddingRight: 60 }}
+                          >
+                            “{i.specialInstructions}”
+                          </Text>
+                        ) : null}
                       </View>
                     ))}
                     <View className="flex-row justify-between mt-3 pt-3 border-t border-border">
                       <Text className="text-muted-fg">Subtotal</Text>
                       <Text className="text-espresso">{formatPrice(dispSubtotal)}</Text>
                     </View>
-                    {dispRewardName && dispReward > 0 && (
+                    {effRewardName && effReward > 0 && (
                       <View className="flex-row justify-between">
                         <Text className="text-primary text-[13px]" numberOfLines={1}>
-                          Reward · {dispRewardName}
+                          Reward · {effRewardName}
                         </Text>
-                        <Text className="text-primary">−{formatPrice(dispReward)}</Text>
+                        <Text className="text-primary">−{formatPrice(effReward)}</Text>
                       </View>
                     )}
                     {dispPromos.map((d) => (
                       <View key={d.promotion_id} className="flex-row justify-between">
                         <Text className="text-primary text-[13px]" numberOfLines={1}>
-                          {d.reason === "tier_perk" ? "🎁 " : ""}
                           {d.promotion_name}
                         </Text>
                         <Text className="text-primary">
@@ -768,7 +871,7 @@ export default function Checkout() {
                     {tier && tier.tier_name && (
                       <View className="flex-row justify-between mt-2">
                         <Text className="text-muted-fg text-[13px]" numberOfLines={1}>
-                          {tier.tier_icon} {tier.tier_name} · earning {tier.tier_multiplier}×
+                          {tier.tier_name} · earning {tier.tier_multiplier}×
                         </Text>
                         <Text
                           className="text-[13px]"
@@ -832,15 +935,31 @@ export default function Checkout() {
               </Text>
             </Pressable>
           )}
+          {outletClosed && (
+            <View
+              className="bg-amber-50 border border-amber-200 rounded-2xl px-3 py-2 mb-2 flex-row items-start gap-2"
+            >
+              <AlertCircle size={14} color="#92400e" />
+              <Text
+                className="text-amber-900 text-[12px] flex-1"
+                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+              >
+                {currentOutlet?.name ?? "This outlet"} just closed. Switch to another outlet to place your order.
+              </Text>
+            </View>
+          )}
           <PrimaryButton
             label={
-              paymentsEnabled
-                ? `Place order · ${formatPrice(grandTotal)}`
-                : "Online ordering paused"
+              !paymentsEnabled
+                ? "Online ordering paused"
+                : outletClosed
+                  ? "Outlet closed — switch outlet"
+                  : `Place order · ${formatPrice(grandTotal)}`
             }
             onPress={onPlaceOrder}
             loading={busy}
-            disabled={!paymentsEnabled}
+            loadingLabel={busyLabel}
+            disabled={!paymentsEnabled || outletClosed}
           />
         </View>
       )}

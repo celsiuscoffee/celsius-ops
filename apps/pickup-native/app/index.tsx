@@ -22,7 +22,7 @@ import {
 import {
   fetchMyVouchers,
   fetchClaimableVouchers,
-  fetchActiveMission,
+  fetchActiveMissions,
   voucherUrgencyLabel,
   type Voucher,
 } from "../lib/rewards-v2";
@@ -148,16 +148,21 @@ export default function Home() {
     enabled: !!phone,
     staleTime: 60_000,
   });
-  const activeMissionQ = useQuery({
-    queryKey: ["active-mission", phone ?? "anon"],
-    queryFn: fetchActiveMission,
+  const activeMissionsQ = useQuery({
+    queryKey: ["active-missions", phone ?? "anon"],
+    queryFn: fetchActiveMissions,
     enabled: !!phone,
     staleTime: 60_000,
   });
 
   const walletVouchers = (myVouchersQ.data ?? []).filter((v) => v.status === "active");
   const claimables     = claimableQ.data ?? [];
-  const activeMission  = activeMissionQ.data ?? null;
+  // Home rail surfaces only IN-PROGRESS missions (status === 'active').
+  // Completed challenges already issue their voucher to the wallet,
+  // so the home teaser focuses on what the customer still has to do.
+  const activeMissions = activeMissionsQ.data ?? [];
+  const inProgressMissions = activeMissions.filter((m) => m.status === "active");
+  const activeMission = inProgressMissions[0] ?? null;
   // Prefer the LIVE rewards-query balance over the cached member.points
   // Balance — `member` is set once at sign-in and never refreshed, so on
   // a customer who's earned + redeemed since signing in it shows a stale
@@ -219,6 +224,11 @@ export default function Home() {
 
   const featured = (menu.data?.products ?? [])
     .filter((p) => p.is_featured && p.is_available)
+    .slice()
+    .sort((a, b) =>
+      (a.featured_position ?? 9999) - (b.featured_position ?? 9999)
+      || a.name.localeCompare(b.name)
+    )
     .slice(0, 6);
 
   const onOrderNow = () => {
@@ -270,15 +280,37 @@ export default function Home() {
   const posters: HomePoster[] = postersQ.data ?? [];
 
   const heroBalance = rewardsQ.data?.pointsBalance ?? 0;
-  // Voucher KPI on the tier card — strictly "what's in my wallet right
-  // now." Previously this also counted (a) every legacy points-shop
-  // catalog row the customer could afford, and (b) pending claimables.
-  // That inflated the number with stuff that isn't yet a redeemable
-  // voucher in the wallet sense, and the count never matched the
-  // wallet tab. Now: just active wallet vouchers (issued_rewards
-  // status='active'). Catalog affordability is surfaced inside the
-  // Rewards tab, not as a count here.
-  const voucherCount = walletVouchers.filter((v) => v.status === "active").length;
+  // Rewards KPI on the home hero — sums everything the customer can
+  // act on right now. Same definition as the bottom-nav badge so the
+  // two counts always match.
+  //   1. Active wallet vouchers (already owned)
+  //   2. Claimables (welcome / promo / mystery_pending — one-tap to
+  //                 mint into the wallet)
+  //   3. Affordable points-shop catalog entries (can be redeemed
+  //                 against the current Beans balance, valid window,
+  //                 in stock, pickup-capable, under per-member cap)
+  // affordableRewards below is `.slice(0, 6)` for the rail; we reuse
+  // the un-sliced source so the count covers the FULL inventory.
+  const activeVoucherCount = walletVouchers.filter((v) => v.status === "active").length;
+  const claimableCount = claimables.length;
+  const redeemableCatalogCount = (rewardsQ.data?.rewards ?? []).filter((r: Reward) => {
+    if (!r.is_active) return false;
+    if (r.points_required <= 0 || r.points_required > points) return false;
+    const now = Date.now();
+    if (r.valid_from && new Date(r.valid_from).getTime() > now) return false;
+    if (r.valid_until && new Date(r.valid_until).getTime() < now) return false;
+    if (r.stock != null && r.stock <= 0) return false;
+    if (
+      r.max_redemptions_per_member != null &&
+      (r.redemption_count ?? 0) >= r.max_redemptions_per_member
+    ) {
+      return false;
+    }
+    const ft = r.fulfillment_type;
+    if (Array.isArray(ft) && ft.length > 0 && !ft.includes("pickup")) return false;
+    return true;
+  }).length;
+  const voucherCount = activeVoucherCount + claimableCount + redeemableCatalogCount;
 
   return (
     <View className="flex-1 bg-background">
@@ -393,21 +425,10 @@ export default function Home() {
           >
             {firstName ? `Hi, ${firstName}.` : showTierEyebrow ? "Welcome." : `${greeting}.`}
           </Text>
-          {showTierEyebrow && tier && (
-            <View className="flex-row items-center" style={{ gap: 5 }}>
-              <Sparkles size={11} color={ts.accentColor} fill={ts.accentColor} />
-              <Text
-                style={{
-                  fontFamily: "SpaceGrotesk_700Bold",
-                  fontSize: 10.5,
-                  letterSpacing: 1.4,
-                  color: ts.accentColor,
-                }}
-              >
-                {ts.displayName}
-              </Text>
-            </View>
-          )}
+          {/* Tier eyebrow removed — member detail (tier name, % off,
+              quarterly progress, lock) lives on the Account tab now,
+              consolidated into the MembershipCard there. Home stays
+              focused on actionable rewards. */}
         </View>
 
         {/* KPI strip — Points and Vouchers split into their own pressables
@@ -664,8 +685,8 @@ export default function Home() {
 
         {/* Claimable peek — one-tap claim cards from rewards-v2.
             Surfaces freshly granted offers (welcome, promo, pending
-            mystery / milestone). Drives the home → Rewards screen flow:
-            tap → Vouchers tab → claim. Hidden if nothing's claimable. */}
+            mystery). Drives the home → Rewards screen flow:
+            tap → claim. Hidden if nothing's claimable. */}
         {phone && claimables.length > 0 && (
           <Pressable
             onPress={() => {
@@ -721,67 +742,16 @@ export default function Home() {
           </Pressable>
         )}
 
-        {/* No active mission CTA — only when signed in + no mission picked
-            yet this week. Drives the customer to the picker so they have
-            a goal running. */}
-        {phone && !activeMission && !activeMissionQ.isLoading && (
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync();
-              router.push("/mission-picker" as never);
-            }}
-            className="mx-4 mt-3 active:opacity-80"
-            style={{
-              backgroundColor: "#FFFFFF",
-              borderRadius: 16,
-              padding: 14,
-              flexDirection: "row",
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: "#C05040",
-              borderStyle: "dashed",
-              gap: 12,
-            }}
-          >
-            <View
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 12,
-                backgroundColor: "#FBEBE8",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Sparkles size={20} color="#C05040" strokeWidth={1.8} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#1A0200" }}>
-                Pick this week's challenge
-              </Text>
-              <Text
-                style={{
-                  fontFamily: "SpaceGrotesk_500Medium",
-                  fontSize: 11,
-                  color: "#6B6B6B",
-                  marginTop: 1,
-                }}
-              >
-                Earn rewards by Sunday
-              </Text>
-            </View>
-            <ChevronRight size={16} color="#C05040" strokeWidth={2.2} />
-          </Pressable>
-        )}
-
-        {/* Active challenge — small banner that surfaces the customer's
-            current weekly mission with one-tap into the Challenges tab.
-            Hidden while no mission is picked / nothing's loaded. */}
+        {/* Active challenge teaser — surfaces ONE of the customer's 3
+            weekly missions, preferring the still-in-progress one. The
+            Rewards screen is now a single page (no tabs) so the
+            deeplink target is just /rewards. The "pick this week's
+            challenge" CTA is gone — missions auto-rotate, no picker. */}
         {activeMission && (
           <Pressable
             onPress={() => {
               Haptics.selectionAsync();
-              router.push("/rewards?tab=challenges" as never);
+              router.push("/rewards" as never);
             }}
             className="mt-5 mx-4 active:opacity-80 rounded-2xl flex-row items-center"
             style={{
@@ -846,13 +816,14 @@ export default function Home() {
           </Pressable>
         )}
 
-        {/* Available rewards — wallet vouchers the customer can use right
-            now (no Beans cost, no extra steps). Rendered as the same
-            ticket-stub silhouette the points-shop catalogue uses so the
-            home rail stays visually consistent, but the bottom-stub sub
-            line reads "Expires …" instead of a PTS cost. Tap any card
-            or the All link → /rewards?tab=vouchers. */}
-        {walletVouchers.length > 0 && (
+        {/* Available rewards — anything the customer can use right now,
+            mixed into a single rail:
+              · wallet vouchers (mystery / birthday / promo / referral)
+              · challenge rewards (mission-source wallet vouchers)
+              · redeemable Bean Points catalogue items they can afford
+            Tickets cycle black / terracotta / yellow tones so the rail
+            reads as a deck of distinct rewards. */}
+        {(walletVouchers.length > 0 || affordableRewards.length > 0) && (
           <View className="mt-5">
             <View className="flex-row items-center justify-between mb-2 px-4">
               <Text
@@ -862,7 +833,7 @@ export default function Home() {
                 Available rewards
               </Text>
               <Pressable
-                onPress={() => router.push("/rewards?tab=vouchers" as never)}
+                onPress={() => router.push("/rewards" as never)}
                 className="flex-row items-center gap-0.5 active:opacity-70"
               >
                 <Text className="text-primary text-xs font-bold">All</Text>
@@ -874,13 +845,34 @@ export default function Home() {
               showsHorizontalScrollIndicator={false}
               contentContainerClassName="gap-3 px-4"
             >
-              {walletVouchers.slice(0, 8).map((v) => (
-                <HomeVoucherTicket
-                  key={v.id}
-                  voucher={v}
-                  onPress={() => router.push("/rewards?tab=vouchers" as never)}
-                />
-              ))}
+              {(() => {
+                // Cap each subgroup independently before merging so the
+                // rail doesn't lopside when one bucket is huge.
+                const vouchers = walletVouchers.slice(0, 6);
+                const catalog  = affordableRewards.slice(0, 6);
+                let toneIdx = 0;
+                const nextTone = () => TICKET_TONES[(toneIdx++) % TICKET_TONES.length];
+                return (
+                  <>
+                    {vouchers.map((v) => (
+                      <HomeVoucherTicket
+                        key={`v-${v.id}`}
+                        voucher={v}
+                        tone={nextTone()}
+                        onPress={() => router.push("/rewards" as never)}
+                      />
+                    ))}
+                    {catalog.map((r) => (
+                      <HomeCatalogTicket
+                        key={`r-${r.id}`}
+                        reward={r}
+                        tone={nextTone()}
+                        onPress={() => router.push("/rewards" as never)}
+                      />
+                    ))}
+                  </>
+                );
+              })()}
             </ScrollView>
           </View>
         )}
@@ -1494,20 +1486,40 @@ type TicketDescriptor = {
   BrandIcon: React.ComponentType<{ size: number; color: string; knockout?: string }>;
 };
 
-function describeVoucherTicket(v: Voucher): TicketDescriptor {
-  const autoIssued =
-    v.source_type === "birthday" ||
-    v.source_type === "mission" ||
-    v.source_type === "mystery" ||
-    v.source_type === "milestone" ||
-    v.source_type === "referral";
+// Three brand tones the home reward rail rotates through. Visual
+// variety so the rail reads as "a deck of rewards" rather than a
+// uniform row — espresso for premium/gold rewards, terracotta for
+// the brand's primary accent, gold/yellow as a high-energy headliner.
+type TicketTone = "black" | "terracotta" | "yellow";
+const TICKET_TONES: TicketTone[] = ["black", "terracotta", "yellow"];
+function ticketToneColors(tone: TicketTone): {
+  topBg: string; topAccent: string; topMuted: string;
+} {
+  switch (tone) {
+    case "terracotta":
+      return {
+        topBg: "#C05040",
+        topAccent: "#FFFFFF",
+        topMuted: "rgba(255,255,255,0.75)",
+      };
+    case "yellow":
+      return {
+        topBg: "#FBBF24",
+        topAccent: "#1A0200",
+        topMuted: "rgba(26,2,0,0.65)",
+      };
+    case "black":
+    default:
+      return {
+        topBg: "#1A0200",
+        topAccent: "#FBBF24",
+        topMuted: "rgba(251,191,36,0.65)",
+      };
+  }
+}
 
-  // Gold tone for vouchers Celsius gifted (auto-issued) — visually
-  // distinguishes them from points-shop redemptions on the same rail.
-  const tone: "gold" | "terracotta" = autoIssued ? "gold" : "terracotta";
-  const topBg     = tone === "gold" ? "#1A0200" : "#C05040";
-  const topAccent = tone === "gold" ? "#FBBF24" : "#FFFFFF";
-  const topMuted  = tone === "gold" ? "rgba(251,191,36,0.65)" : "rgba(255,255,255,0.75)";
+function describeVoucherTicket(v: Voucher, tone: TicketTone = "black"): TicketDescriptor {
+  const { topBg, topAccent, topMuted } = ticketToneColors(tone);
 
   // Headline mirrors RewardTicket's value-led copy: customers read
   // "RM 5 off" / "Free drink" off the card without scanning the
@@ -1518,7 +1530,6 @@ function describeVoucherTicket(v: Voucher): TicketDescriptor {
   if (v.source_type === "birthday")           { eyebrow = "Birthday gift"; }
   else if (v.source_type === "mission")       { eyebrow = "Challenge reward"; }
   else if (v.source_type === "mystery")       { eyebrow = "Mystery bonus"; }
-  else if (v.source_type === "milestone")     { eyebrow = "Milestone"; }
   else if (v.source_type === "referral")      { eyebrow = "Referral gift"; }
 
   const dv = Number(v.discount_value ?? 0);
@@ -1559,14 +1570,136 @@ function describeVoucherTicket(v: Voucher): TicketDescriptor {
   return { eyebrow, headline, topBg, topAccent, topMuted, BrandIcon };
 }
 
+// Mirror of HomeVoucherTicket for points-shop catalogue entries. Same
+// ticket-stub silhouette + tone rotation; bottom stub shows the reward
+// name + Bean cost instead of an expiry line.
+function HomeCatalogTicket({
+  reward,
+  tone = "black",
+  onPress,
+}: {
+  reward: Reward;
+  tone?: TicketTone;
+  onPress?: () => void;
+}) {
+  const { topBg, topAccent, topMuted } = ticketToneColors(tone);
+  // Pick a friendly headline based on what the reward actually does.
+  let headline = reward.name;
+  const dv = Number(reward.discount_value ?? 0);
+  if ((reward.discount_type === "flat" || reward.discount_type === "fixed_amount") && dv > 0) {
+    const rm = reward.discount_type === "flat" ? dv / 100 : dv;
+    headline = `RM${rm.toFixed(rm % 1 === 0 ? 0 : 2)} off`;
+  } else if ((reward.discount_type === "percent" || reward.discount_type === "percentage") && dv > 0) {
+    headline = `${dv}% off`;
+  } else if (reward.discount_type === "free_item") {
+    headline = reward.name;
+  }
+  const eyebrow = "Bean Points";
+  // Brand icon per discount type (mirrors RewardTicket's family).
+  let BrandIcon: typeof CelsiusGift = CelsiusGift;
+  if (reward.discount_type === "free_item")                                                    BrandIcon = CelsiusCup;
+  else if (reward.discount_type === "flat" || reward.discount_type === "percent" ||
+           reward.discount_type === "fixed_amount" || reward.discount_type === "percentage")   BrandIcon = CelsiusTag;
+
+  return (
+    <Pressable
+      onPress={() => {
+        if (!onPress) return;
+        Haptics.selectionAsync();
+        onPress();
+      }}
+      className="active:opacity-80"
+      style={{
+        width: 144,
+        borderRadius: 14,
+        overflow: "hidden",
+        shadowColor: "#000",
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={`${headline}. ${reward.name}. ${reward.points_required} Beans.`}
+    >
+      <View style={{ backgroundColor: topBg, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 14, minHeight: 92 }}>
+        <View style={{ position: "absolute", right: 6, bottom: 6, opacity: 0.85 }} pointerEvents="none">
+          <BrandIcon size={36} color={topAccent} knockout={topBg} />
+        </View>
+        <Text
+          style={{
+            color: topMuted,
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 9,
+            letterSpacing: 1.6,
+            textTransform: "uppercase",
+          }}
+        >
+          {eyebrow}
+        </Text>
+        <Text
+          style={{
+            color: topAccent,
+            fontFamily: "Peachi-Bold",
+            fontSize: 19,
+            lineHeight: 21,
+            marginTop: 5,
+            paddingRight: 36,
+          }}
+          numberOfLines={2}
+        >
+          {headline}
+        </Text>
+      </View>
+      <View style={{ position: "relative", height: 0 }}>
+        <View style={{ position: "absolute", left: -7, top: -7, width: 14, height: 14, borderRadius: 7, backgroundColor: "#FFFFFF" }} />
+        <View style={{ position: "absolute", right: -7, top: -7, width: 14, height: 14, borderRadius: 7, backgroundColor: "#FFFFFF" }} />
+        <View style={{ position: "absolute", left: 12, right: 12, top: -1, height: 2, borderTopWidth: 1, borderTopColor: "rgba(26, 2, 0, 0.18)", borderStyle: "dashed" }} />
+      </View>
+      <View
+        style={{
+          backgroundColor: "#FFFFFF",
+          paddingHorizontal: 12,
+          paddingTop: 13,
+          paddingBottom: 10,
+          borderWidth: 1,
+          borderTopWidth: 0,
+          borderColor: "rgba(26, 2, 0, 0.10)",
+        }}
+      >
+        <Text
+          style={{ color: "#1A0200", fontFamily: "Peachi-Bold", fontSize: 12 }}
+          numberOfLines={1}
+        >
+          {reward.name}
+        </Text>
+        <Text
+          style={{
+            color: "rgba(26, 2, 0, 0.55)",
+            fontFamily: "SpaceGrotesk_700Bold",
+            fontSize: 10,
+            letterSpacing: 1.2,
+            textTransform: "uppercase",
+            marginTop: 4,
+          }}
+          numberOfLines={1}
+        >
+          {reward.points_required.toLocaleString()} Beans
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
 function HomeVoucherTicket({
   voucher,
+  tone = "black",
   onPress,
 }: {
   voucher: Voucher;
+  tone?: TicketTone;
   onPress?: () => void;
 }) {
-  const { eyebrow, headline, topBg, topAccent, topMuted, BrandIcon } = describeVoucherTicket(voucher);
+  const { eyebrow, headline, topBg, topAccent, topMuted, BrandIcon } = describeVoucherTicket(voucher, tone);
   const urgency = voucherUrgencyLabel(voucher);
 
   return (

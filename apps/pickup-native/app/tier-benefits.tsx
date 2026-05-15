@@ -22,7 +22,7 @@ type Tier = TierLite & { benefit_rules: BenefitRule[] | null };
 async function fetchAllTiers(): Promise<Tier[]> {
   const { data, error } = await supabase
     .from("tiers")
-    .select("id,slug,name,min_visits,min_spend,multiplier,color,icon,benefits,benefit_rules,qualification_metric,sort_order")
+    .select("id,slug,name,min_visits,min_spend,multiplier,color,icon,benefits,benefit_rules,qualification_metric,sort_order,discount_percent,stackable,invitation_only")
     .eq("brand_id", "brand-celsius")
     .eq("is_active", true)
     .order("sort_order", { ascending: true, nullsFirst: true })
@@ -35,7 +35,7 @@ export default function TierBenefits() {
   const loyaltyId = useApp((s) => s.loyaltyId);
   const tiersQ = useQuery({ queryKey: ["tiers"], queryFn: fetchAllTiers, staleTime: 5 * 60_000 });
   const memberTierQ = useQuery({
-    queryKey: ["member-tier", loyaltyId],
+    queryKey: ["tier", loyaltyId],
     queryFn: () => (loyaltyId ? fetchTier(loyaltyId) : Promise.resolve(null)),
     enabled: !!loyaltyId,
     staleTime: 60_000,
@@ -76,6 +76,7 @@ export default function TierBenefits() {
             currentSlug={currentSlug}
             memberVisits={memberTierQ.data?.visits_this_period ?? 0}
             memberSpend={memberTierQ.data?.spend_this_period ?? 0}
+            quarterEnd={memberTierQ.data?.quarter_end ?? null}
             // Tap a card → make it the "active" one for the benefits list below.
             onCardPress={(t) => {
               const idx = tiers.findIndex((x) => x.id === t.id);

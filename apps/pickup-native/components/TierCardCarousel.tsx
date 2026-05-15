@@ -38,6 +38,12 @@ export type TierLite = {
   benefit_rules: unknown;
   qualification_metric: string | null;
   sort_order: number | null;
+  // Tier v2 — the percent-discount model. discount_percent is the
+  // headline benefit (e.g. 5 → "5% off every order"); invitation_only
+  // tiers are admin-granted and skip the spend qualifier.
+  discount_percent?: number | null;
+  stackable?:        boolean | null;
+  invitation_only?:  boolean | null;
 };
 
 export type MemberStats = {
@@ -51,6 +57,11 @@ export type CarouselProps = {
   currentSlug:  string | null;
   memberVisits: number;
   memberSpend:  number;
+  /** End-of-quarter ISO date for the current qualification window
+   *  (from MemberTier.quarter_end). Drives the "Spend RMx by 31 Mar"
+   *  copy on locked + current cards. Falls back to "end of quarter"
+   *  when null. */
+  quarterEnd?: string | null;
   /** When set, the customer's CURRENT tier card folds in a
    *  Points / Visits / Earned row at the bottom — so the
    *  surrounding screen doesn't need a separate stats card. */
@@ -64,11 +75,24 @@ export type CarouselProps = {
   title?: string;
 };
 
+/** Days from now to an ISO timestamp. Rounds UP so today reads as "1
+ *  day" instead of "0 days". Returns null when the input is
+ *  missing/unparseable or already past — caller falls back to a soft
+ *  phrase. Used in tier qualifier copy ("Spend RMx in 47 days"). */
+function daysUntil(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return null;
+  const ms = t - Date.now();
+  if (ms <= 0) return null;
+  return Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
+
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Themes                                                                     */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-type TierTheme = {
+export type TierTheme = {
   gradTop:        string;
   gradBottom:     string;
   accent:         string;
@@ -135,6 +159,36 @@ const TIER_THEMES: Record<string, TierTheme> = {
     pattern:        "stars",
     patternOpacity: 0.18,
   },
+  // Invitation-only — Celsius staff. Anchored in the brand terracotta
+  // so it reads as "Celsius family" rather than a metallic earned tier.
+  "arba-staff": {
+    gradTop:        "#5A1F16",
+    gradBottom:     "#1A0200",
+    accent:         "#FBBF24",
+    accentDeep:     "#FFE08C",
+    subtle:         "rgba(251,191,36,0.72)",
+    cupCream:       "#FBBF24",
+    cupCoffee:      "#5A1F16",
+    cupGlass:       "#FBBF24",
+    watermark:      "rgba(251,191,36,0.08)",
+    pattern:        "stars",
+    patternOpacity: 0.14,
+  },
+  // Invitation-only — investor / owner Black Card. Pure black + gold —
+  // the most premium card in the deck.
+  "black-card": {
+    gradTop:        "#1A1A1A",
+    gradBottom:     "#000000",
+    accent:         "#FBBF24",
+    accentDeep:     "#FFE08C",
+    subtle:         "rgba(251,191,36,0.72)",
+    cupCream:       "#FBBF24",
+    cupCoffee:      "#5C3A0A",
+    cupGlass:       "#FBBF24",
+    watermark:      "rgba(251,191,36,0.10)",
+    pattern:        "stars",
+    patternOpacity: 0.20,
+  },
 };
 
 export function themeForTier(tier: TierLite): TierTheme {
@@ -155,6 +209,7 @@ export function TierCardCarousel({
   currentSlug,
   memberVisits,
   memberSpend,
+  quarterEnd,
   stats,
   cardHeight = 192,
   onCardPress,
@@ -218,7 +273,17 @@ export function TierCardCarousel({
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 4 }}
         onMomentumScrollEnd={onScroll}
       >
-        {tiers.map((t, idx) => (
+        {tiers.map((t, idx) => {
+          // Next earned tier for the current card — drives the
+          // "Spend RMx in X days to unlock {Silver}" qualifier. Skip
+          // invitation-only tiers (Staff, Black Card) since they
+          // can't be unlocked by spend; the customer needs to be
+          // manually granted them.
+          const nextEarned =
+            idx === currentIdx
+              ? tiers.slice(idx + 1).find((n) => !n.invitation_only) ?? null
+              : null;
+          return (
           <View key={t.id} style={{ width: CARD_W, marginRight: idx < tiers.length - 1 ? CARD_GAP : 0 }}>
             <Pressable
               onPress={onCardPress ? () => onCardPress(t) : undefined}
@@ -233,12 +298,15 @@ export function TierCardCarousel({
                 isAchieved={idx < currentIdx}
                 memberVisits={memberVisits}
                 memberSpend={memberSpend}
+                quarterEnd={quarterEnd ?? null}
+                nextTier={nextEarned}
                 height={effectiveHeight}
                 stats={idx === currentIdx ? stats : undefined}
               />
             </Pressable>
           </View>
-        ))}
+          );
+        })}
       </ScrollView>
 
       {/* Page indicator dots */}
@@ -270,6 +338,8 @@ export function TierHeroCard({
   isAchieved,
   memberVisits,
   memberSpend,
+  quarterEnd = null,
+  nextTier = null,
   height = 192,
   stats,
 }: {
@@ -279,6 +349,15 @@ export function TierHeroCard({
   isAchieved:   boolean;
   memberVisits: number;
   memberSpend:  number;
+  /** End-of-quarter ISO timestamp from the member's tier evaluation.
+   *  Drives "Spend RMx in X days" copy on the locked + current tiers. */
+  quarterEnd?:  string | null;
+  /** On the customer's current tier card, the next earned tier the
+   *  spend window is climbing toward. Null when they're at the top
+   *  (Platinum) — the qualifier line is hidden in that case so no
+   *  awkward "Top of this tier" placeholder appears. Locked-tier
+   *  cards use `tier.min_spend` directly and don't need this. */
+  nextTier?:    TierLite | null;
   height?:      number;
   /** When set on the current tier card, renders a Points / Visits /
    *  Earned row below the progress strip. Hidden on locked/achieved
@@ -288,14 +367,25 @@ export function TierHeroCard({
   const theme = themeForTier(tier);
   const isDark = tier.slug === "elite";
 
-  const needVisits  = tier.min_visits ?? 0;
-  const needSpend   = Number(tier.min_spend ?? 0);
-  const cupsAway    = Math.max(0, needVisits - memberVisits);
-  const ringgitAway = Math.max(0, needSpend - memberSpend);
-  const useVisits   = needVisits > 0;
-  const progressPct = useVisits
-    ? Math.min(1, memberVisits / Math.max(1, needVisits))
-    : Math.min(1, memberSpend / Math.max(1, needSpend));
+  // Spend-based qualification is the only model now. For LOCKED cards
+  // we measure against this card's own min_spend (e.g. "RM300 to
+  // unlock Gold"). For the CURRENT card we measure against the NEXT
+  // earned tier's min_spend so the progress strip reads as forward
+  // motion ("Spend RM30 to unlock Silver") instead of always "Top of
+  // this tier". When the customer is at the top earned tier the
+  // qualifier is hidden entirely.
+  const targetSpend   = isCurrent
+    ? Number(nextTier?.min_spend ?? 0)
+    : Number(tier.min_spend ?? 0);
+  const ringgitAway   = Math.max(0, targetSpend - memberSpend);
+  const progressPct   = targetSpend > 0
+    ? Math.min(1, memberSpend / targetSpend)
+    : 0;
+  const daysLeft      = daysUntil(quarterEnd);
+  const windowClause  = daysLeft != null && daysLeft > 0
+    ? `in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`
+    : "this quarter";
+  void memberVisits;  // accepted for API compat; not displayed
 
   return (
     <View
@@ -319,9 +409,11 @@ export function TierHeroCard({
           recognisable backdrop without competing with the mascot. */}
       <CelsiusWordmark theme={theme} cardHeight={height} />
 
-      <View style={{ position: "absolute", right: 12, bottom: 8 }}>
-        <TierMascot theme={theme} slug={tier.slug} size={Math.min(height * 0.65, 130)} />
-      </View>
+      {/* The takeaway-cup mascot was previously rendered here (TierMascot)
+          but read as visual noise once each card had its own colour theme
+          + pattern + wordmark watermark. Removed in favour of letting the
+          gradient + pattern do the talking. TierMascot is kept defined
+          below for future use but no longer mounted. */}
 
       <View style={{ padding: 18, height: "100%", justifyContent: "space-between" }}>
         <View>
@@ -387,12 +479,43 @@ export function TierHeroCard({
             {tier.name}
           </Text>
 
-          <View className="flex-row items-center" style={{ marginTop: 4, gap: 4 }}>
-            <Coffee size={12} color={theme.accent} />
-            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, color: theme.accent }}>
-              {formatMul(tier.multiplier)}× points
+          {/* Headline benefit — the percent discount that applies at
+              checkout. Peachi at 20pt makes "5% off every order" the
+              dominant visual element on the card, beating out the
+              tier name + brand mascot. Member (0%) gets a "start
+              earning" subtitle instead so the card doesn't read as
+              "nothing on offer". */}
+          <Text
+            style={{
+              marginTop: 6,
+              fontFamily: "Peachi-Bold",
+              fontSize: 20,
+              color: theme.accent,
+              lineHeight: 24,
+            }}
+            numberOfLines={1}
+          >
+            {Number(tier.discount_percent ?? 0) > 0
+              ? `${tier.discount_percent}% off every order`
+              : "Earn beans on every visit"}
+          </Text>
+
+          {/* Stack rule — only on invitation tiers (where it changes
+              the customer's mental model). Earned tiers all stack by
+              default so the chip would be noise. */}
+          {tier.invitation_only && tier.stackable === false ? (
+            <Text
+              style={{
+                marginTop: 4,
+                fontFamily: "SpaceGrotesk_500Medium",
+                fontSize: 11,
+                color: theme.subtle,
+              }}
+              numberOfLines={1}
+            >
+              Doesn't stack with other rewards
             </Text>
-          </View>
+          ) : null}
         </View>
 
         {/* Progress / requirement strip — kept inside left 62% so the
@@ -419,37 +542,67 @@ export function TierHeroCard({
                     }}
                   />
                 </View>
+                {nextTier && ringgitAway > 0 ? (
+                  <Text
+                    style={{
+                      marginTop: 6,
+                      fontFamily: "SpaceGrotesk_500Medium",
+                      fontSize: 12,
+                      color: theme.subtle,
+                      lineHeight: 16,
+                    }}
+                    numberOfLines={2}
+                  >
+                    {`Spend RM${ringgitAway.toFixed(0)} ${windowClause} to unlock ${nextTier.name}`}
+                  </Text>
+                ) : null}
+              </>
+            ) : isLocked ? (
+              tier.invitation_only ? (
+                // Invitation tiers don't qualify by spend — surface
+                // who they're for so the customer reads the gate, not
+                // a phantom RM threshold.
                 <Text
                   style={{
-                    marginTop: 6,
                     fontFamily: "SpaceGrotesk_500Medium",
                     fontSize: 12,
                     color: theme.subtle,
+                    lineHeight: 16,
                   }}
-                  numberOfLines={1}
+                  numberOfLines={2}
                 >
-                  {cupsAway === 0 && ringgitAway === 0
-                    ? "Top of this tier"
-                    : useVisits
-                      ? `${cupsAway} cup${cupsAway === 1 ? "" : "s"} this period`
-                      : `RM${ringgitAway.toFixed(0)} more this period`}
+                  By invitation only{" — "}
+                  <Text style={{ fontFamily: "SpaceGrotesk_700Bold", color: theme.accent }}>
+                    {tier.slug === "black-card" ? "Investors" : "Staff"}
+                  </Text>
                 </Text>
-              </>
-            ) : isLocked ? (
-              <Text
-                style={{
-                  fontFamily: "SpaceGrotesk_500Medium",
-                  fontSize: 12,
-                  color: theme.subtle,
-                  lineHeight: 16,
-                }}
-                numberOfLines={2}
-              >
-                Achieving {tier.name} requires{" "}
-                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", color: theme.accent }}>
-                  {useVisits ? `${needVisits} cups` : `RM${needSpend.toFixed(0)}`}
+              ) : (
+                // Earned tiers — name the REMAINING spend (the gap
+                // between member's current quarterly spend and this
+                // tier's threshold) + the calendar deadline. Reads
+                // as "Spend RM222 in 47 days to unlock" — the number
+                // shrinks live as the customer racks up orders, same
+                // dynamic as the current-tier card progress line.
+                <Text
+                  style={{
+                    fontFamily: "SpaceGrotesk_500Medium",
+                    fontSize: 12,
+                    color: theme.subtle,
+                    lineHeight: 16,
+                  }}
+                  numberOfLines={2}
+                >
+                  Spend{" "}
+                  <Text style={{ fontFamily: "SpaceGrotesk_700Bold", color: theme.accent }}>
+                    RM{ringgitAway.toFixed(0)}
+                  </Text>
+                  {" "}
+                  <Text style={{ fontFamily: "SpaceGrotesk_700Bold", color: theme.accent }}>
+                    {windowClause}
+                  </Text>
+                  {" "}to unlock
                 </Text>
-              </Text>
+              )
             ) : (
               <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12, color: theme.subtle }}>
                 Achieved · perks unlocked
@@ -546,7 +699,7 @@ function StatDivider({ isDark }: { isDark: boolean }) {
    React Native Text (not SVG) so the typeface matches the rest of
    the brand surfaces 1:1 — same "c" the customer sees on the
    takeaway cup sleeve and the app icon. */
-function CelsiusWordmark({ theme, cardHeight }: { theme: TierTheme; cardHeight: number }) {
+export function CelsiusWordmark({ theme, cardHeight }: { theme: TierTheme; cardHeight: number }) {
   const size = cardHeight * 1.15;
   return (
     <View
@@ -591,7 +744,7 @@ function CelsiusWordmark({ theme, cardHeight }: { theme: TierTheme; cardHeight: 
   );
 }
 
-function CardBackground({ theme, width, height }: { theme: TierTheme; width: number; height: number }) {
+export function CardBackground({ theme, width, height }: { theme: TierTheme; width: number; height: number }) {
   return (
     <Svg width={width} height={height} style={{ position: "absolute", top: 0, left: 0 }} pointerEvents="none">
       <Defs>

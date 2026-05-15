@@ -29,8 +29,9 @@
   "submit": {
     "production": {
       "android": {
-        "track":         "internal",
-        "releaseStatus": "draft"
+        "serviceAccountKeyPath": "/Users/ammarshahrin/.google-keys/celsius-play-submit.json",
+        "track":                 "internal",
+        "releaseStatus":         "draft"
       },
       "ios": {
         "appleTeamId": "9U2R774T9W",

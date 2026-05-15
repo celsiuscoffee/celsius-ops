@@ -21,6 +21,14 @@ interface Tier {
   multiplier: number;
   sort_order: number;
   is_active: boolean;
+  // Tier v2 — quarterly percent-discount model.
+  //  • discount_percent: flat % off applied at checkout (0-100)
+  //  • stackable:        true → stacks on top of voucher discounts
+  //  • invitation_only:  admin grants (Arba & Staff, Black Card) —
+  //                      auto-evaluation skips these tiers
+  discount_percent: number;
+  stackable: boolean;
+  invitation_only: boolean;
 }
 
 const qualLabels: Record<QualificationMetric, string> = {
@@ -76,6 +84,9 @@ export default function TiersPage() {
           benefits: updated.benefits,
           multiplier: updated.multiplier,
           is_active: updated.is_active,
+          discount_percent: updated.discount_percent,
+          stackable: updated.stackable,
+          invitation_only: updated.invitation_only,
         }),
       });
       const data = await res.json();
@@ -101,8 +112,11 @@ export default function TiersPage() {
             Member Tiers
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Members are placed into the highest tier they qualify for, based on
-            visits in the rolling period. Higher tiers earn a bigger points multiplier.
+            Members are placed into the highest earned tier they qualify for
+            each calendar quarter (Member / Silver / Gold / Platinum). Higher
+            earned tiers get a bigger percent discount at checkout and the
+            tier locks until the quarter ends. Invitation-only tiers (Arba &
+            Staff, Black Card) are admin-granted and never auto-evaluated.
           </p>
         </div>
       </div>
@@ -162,21 +176,29 @@ function TierCard({ tier, onEdit }: { tier: Tier; onEdit: () => void }) {
       </div>
 
       <div className="space-y-2 text-sm">
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Qualifies on</span>
-          <span className="font-medium text-xs">{qualLabels[tier.qualification_metric]}</span>
+        {/* Discount % is the primary v2 benefit — surface it big. */}
+        <div className="flex justify-between items-baseline">
+          <span className="text-muted-foreground">Discount</span>
+          <span className="font-semibold text-xl">{tier.discount_percent}%</span>
         </div>
+        {tier.invitation_only ? (
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Granted</span>
+            <span className="font-medium text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-900">
+              Invitation only
+            </span>
+          </div>
+        ) : (
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Qualifies on</span>
+            <span className="font-medium">RM{tier.min_spend} / quarter</span>
+          </div>
+        )}
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Min visits</span>
-          <span className="font-medium">{tier.min_visits} / {tier.period_days}d</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Min spend</span>
-          <span className="font-medium">RM{tier.min_spend}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Earn multiplier</span>
-          <span className="font-medium">{tier.multiplier}×</span>
+          <span className="text-muted-foreground">Stacks with vouchers</span>
+          <span className={cn("font-medium text-xs", tier.stackable ? "text-emerald-600" : "text-rose-600")}>
+            {tier.stackable ? "Yes" : "No"}
+          </span>
         </div>
         <div className="flex justify-between">
           <span className="text-muted-foreground">Status</span>
@@ -313,15 +335,16 @@ function EditModal({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Multiplier (e.g. 1.5)">
+            <Field label="Discount % at checkout (0-100)">
               <input
                 type="number"
-                step="0.05"
-                min={1}
+                min={0}
+                max={100}
+                step="1"
                 className="w-full px-3 py-2 rounded-md border bg-background"
-                value={draft.multiplier}
+                value={draft.discount_percent}
                 onChange={(e) =>
-                  setDraft({ ...draft, multiplier: Number(e.target.value) })
+                  setDraft({ ...draft, discount_percent: Number(e.target.value) })
                 }
               />
             </Field>
@@ -333,6 +356,50 @@ function EditModal({
               />
             </Field>
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex items-start gap-2 text-sm border rounded-md p-3">
+              <input
+                type="checkbox"
+                checked={draft.stackable}
+                onChange={(e) => setDraft({ ...draft, stackable: e.target.checked })}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium block">Stackable</span>
+                <span className="text-xs text-muted-foreground">
+                  Tier % adds on top of reward vouchers at checkout.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm border rounded-md p-3">
+              <input
+                type="checkbox"
+                checked={draft.invitation_only}
+                onChange={(e) => setDraft({ ...draft, invitation_only: e.target.checked })}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium block">Invitation only</span>
+                <span className="text-xs text-muted-foreground">
+                  Skips auto-evaluation — admins grant this tier manually.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <Field label="Earn multiplier (legacy, kept for back-compat)">
+            <input
+              type="number"
+              step="0.05"
+              min={1}
+              className="w-full px-3 py-2 rounded-md border bg-background"
+              value={draft.multiplier}
+              onChange={(e) =>
+                setDraft({ ...draft, multiplier: Number(e.target.value) })
+              }
+            />
+          </Field>
 
           <Field label="Color (hex)">
             <div className="flex items-center gap-2">

@@ -179,10 +179,16 @@ export default function Menu() {
   // free-text search. Otherwise hiding categories was cosmetic.
   const bestSellers = useMemo(
     () =>
-      (data?.products ?? []).filter(
-        (p) =>
-          p.is_featured && p.is_available && !HIDDEN_CATEGORIES.has(p.category),
-      ),
+      (data?.products ?? [])
+        .filter(
+          (p) =>
+            p.is_featured && p.is_available && !HIDDEN_CATEGORIES.has(p.category),
+        )
+        .slice()
+        .sort((a, b) =>
+          (a.featured_position ?? 9999) - (b.featured_position ?? 9999)
+          || a.name.localeCompare(b.name)
+        ),
     [data]
   );
   const hasBestSellers = bestSellers.length > 0;

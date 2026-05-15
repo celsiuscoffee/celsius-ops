@@ -99,7 +99,12 @@ export default function OrderStatus() {
       data?.status !== "pending" &&
       !mysteryDismissed &&
       !mysteryRevealed,
-    refetchInterval: 6000,
+    // Tight poll — the drop is minted server-side during confirm-stripe
+    // and we want the reveal to appear within ~1 cycle of landing on
+    // this screen, not the previous 6s gap that made it feel like a
+    // late delivery instead of an instant reward.
+    refetchInterval: 1500,
+    refetchOnMount: "always",
   });
   // Pin to the first drop we saw so the card identity stays stable
   // across refetches. Effect-based — the previous queueMicrotask in
@@ -331,14 +336,48 @@ export default function OrderStatus() {
               Items
             </Text>
             <View className="mt-2 gap-1.5">
-              {(data.order_items ?? []).map((i, idx) => (
-                <View key={idx} className="flex-row justify-between">
-                  <Text className="text-espresso flex-1">
-                    {i.quantity}× {i.product_name}
-                  </Text>
-                  <Text className="text-espresso">{formatPrice((i.item_total ?? 0) / 100)}</Text>
-                </View>
-              ))}
+              {(data.order_items ?? []).map((i, idx) => {
+                // order_items.modifiers is jsonb on the server. The
+                // shape is { selections: [{label,...}], specialInstructions }
+                // — see apps/order/.../orders/route.ts where it's
+                // persisted. Defensively destructure so an older row
+                // shape doesn't crash the receipt.
+                const mods = (i.modifiers ?? null) as
+                  | { selections?: Array<{ label?: string }>; specialInstructions?: string }
+                  | null;
+                const labels = (mods?.selections ?? [])
+                  .map((s) => s?.label)
+                  .filter((l): l is string => !!l);
+                const note = mods?.specialInstructions?.trim() || null;
+                return (
+                  <View key={idx} style={{ gap: 2 }}>
+                    <View className="flex-row justify-between">
+                      <Text className="text-espresso flex-1">
+                        {i.quantity}× {i.product_name}
+                      </Text>
+                      <Text className="text-espresso">{formatPrice((i.item_total ?? 0) / 100)}</Text>
+                    </View>
+                    {labels.length > 0 && (
+                      <Text
+                        className="text-muted-fg text-[12px]"
+                        numberOfLines={2}
+                        style={{ paddingRight: 60 }}
+                      >
+                        {labels.join(" · ")}
+                      </Text>
+                    )}
+                    {note ? (
+                      <Text
+                        className="text-muted-fg text-[12px] italic"
+                        numberOfLines={2}
+                        style={{ paddingRight: 60 }}
+                      >
+                        “{note}”
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })}
 
               <View className="flex-row justify-between mt-3 pt-3 border-t border-border">
                 <Text className="text-muted-fg">Subtotal</Text>

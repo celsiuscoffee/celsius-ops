@@ -35,12 +35,31 @@ export async function POST(request: NextRequest) {
     shProducts.map((p) => p.category).filter(Boolean)
   )].sort();
 
-  const categoryRows = categoryNames.map((name, i) => ({
-    id:       slugify(name),
-    name:     name,
-    slug:     slugify(name),
-    position: i + 1,
-  }));
+  // Preserve admin-set category ordering across syncs: only assign a
+  // position to NEW categories (existing ones keep their current
+  // position). New ones land at the end, in alphabetical order
+  // relative to each other.
+  const { data: existingCats } = await supabase
+    .from("categories")
+    .select("id, position");
+  const existingPosById = new Map(
+    (existingCats ?? []).map((c) => [c.id as string, (c.position as number) ?? 0])
+  );
+  const maxExistingPos = existingCats && existingCats.length > 0
+    ? Math.max(...existingCats.map((c) => (c.position as number) ?? 0))
+    : 0;
+  let nextNewPos = maxExistingPos + 1;
+
+  const categoryRows = categoryNames.map((name) => {
+    const id = slugify(name);
+    const existingPos = existingPosById.get(id);
+    return {
+      id,
+      name,
+      slug: id,
+      position: existingPos ?? nextNewPos++,
+    };
+  });
 
   const { error: catError } = await supabase
     .from("categories")

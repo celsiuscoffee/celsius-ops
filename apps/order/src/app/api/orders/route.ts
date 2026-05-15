@@ -9,11 +9,33 @@ import {
   recordPromotionApplications,
   type CartLine,
 } from "@/lib/loyalty/promotions";
+import { requireCustomerSession } from "@/lib/customer-jwt";
 
-// GET /api/orders?phone=+60123456789 — fetch orders by customer phone
+function normalisePhoneForLookup(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("60")) return `+${digits}`;
+  if (digits.startsWith("0")) return `+6${digits}`;
+  return `+60${digits}`;
+}
+
+// GET /api/orders?phone=+60123456789 — fetch orders by customer phone.
+// Hardened: returns the caller's full order history (totals, items,
+// timestamps). Previously open — anyone could enumerate phone numbers
+// and read order history. Now requires a customer session and the
+// session phone must match the requested phone.
 export async function GET(request: NextRequest) {
-  const phone = request.nextUrl.searchParams.get("phone");
-  if (!phone) return NextResponse.json({ error: "Missing phone" }, { status: 400 });
+  const rawPhone = request.nextUrl.searchParams.get("phone");
+  if (!rawPhone) return NextResponse.json({ error: "Missing phone" }, { status: 400 });
+  const phone = normalisePhoneForLookup(rawPhone);
+
+  const guard = requireCustomerSession(request);
+  if (guard.error) return guard.error as unknown as NextResponse;
+  if (!guard.session) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+  if (guard.session.phone !== phone) {
+    return NextResponse.json({ error: "Session does not match phone" }, { status: 403 });
+  }
 
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -154,16 +176,26 @@ export async function POST(request: NextRequest) {
       total,
       sst,
       discountSen,
-      voucherCode,
+      voucherCode: voucherCodeInput,
       voucherId,
       rewardDiscountSen,
-      rewardId,
-      rewardName,
-      walletVoucherId,
+      rewardId: rewardIdInput,
+      rewardName: rewardNameInput,
+      walletVoucherId: walletVoucherIdInput,
       loyaltyPhone,
       loyaltyId,
       clientSupportsSkipPayment,
     } = body;
+    // walletVoucherId / rewardId / rewardName / voucherCode are mutable
+    // because the non-stackable-tier exclusivity path below may decide
+    // to drop the voucher in favour of the bigger tier discount. We
+    // initialise from the request, then narrow before the order
+    // insert so the row records what actually applied, not what the
+    // customer hopefully picked.
+    let walletVoucherId: string | null = walletVoucherIdInput ?? null;
+    let rewardId:        string | null = rewardIdInput ?? null;
+    let rewardName:      string | null = rewardNameInput ?? null;
+    let voucherCode:     string | null = voucherCodeInput ?? null;
 
     if (!items?.length || !selectedStore || !paymentMethod) {
       return NextResponse.json({ error: "Invalid order data" }, { status: 400 });
@@ -239,12 +271,31 @@ export async function POST(request: NextRequest) {
     const { data: settingsRows } = await supabase
       .from("app_settings")
       .select("key, value")
-      .in("key", ["points_per_rm", "min_order_value", "first_order_discount", "sst"]);
+      .in("key", ["points_per_rm", "min_order_value", "sst"]);
     const settingsMap = new Map((settingsRows ?? []).map((r) => [r.key, r.value]));
     const pointsPerRm  = Number((settingsMap.get("points_per_rm") as any)?.rate ?? 1);
     const minOrderRm   = Number((settingsMap.get("min_order_value") as any)?.rm ?? 0);
-    const fodConfig    = settingsMap.get("first_order_discount") as
-      { enabled: boolean; type: "percent" | "fixed"; amount: number } | undefined;
+
+    // First-order discount — config moved into the Discount Engine
+    // (promotions table) so all checkout discounts live in one place.
+    // Reads the most recent active row with trigger_type='first_order'.
+    // Falls back to disabled when nothing's configured.
+    const { data: fodRow } = await supabase
+      .from("promotions")
+      .select("discount_type, discount_value, is_active")
+      .eq("brand_id", "brand-celsius")
+      .eq("trigger_type", "first_order")
+      .eq("is_active", true)
+      .order("priority", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const fodConfig = fodRow
+      ? {
+          enabled: true,
+          type: (fodRow.discount_type as string) === "percentage_off" ? "percent" : "fixed",
+          amount: Number(fodRow.discount_value ?? 0),
+        }
+      : undefined;
     // SST is server-authoritative — we never trust the client-supplied
     // `sst` because (a) the pickup-native client doesn't send it and
     // (b) honoring it would let a stale or malicious client zero out
@@ -280,7 +331,7 @@ export async function POST(request: NextRequest) {
 
     const orderNumber        = generateOrderNumber();
     const subtotalSen        = Math.round(total * 100);
-    const voucherDiscountSen = Math.round(discountSen ?? 0);
+    let   voucherDiscountSen = Math.round(discountSen ?? 0);
 
     // Server-side reward validation + bound. Was: trust the client's
     // rewardDiscountSen blindly. A stale or malicious client could
@@ -288,10 +339,19 @@ export async function POST(request: NextRequest) {
     // or claim a value larger than the cart subtotal.
     let rewardDiscountSenAmt = 0;
     if (walletVoucherId) {
-      // Wallet voucher path — different table (issued_rewards).
+      // Wallet voucher path — pull the full applicability rule so we
+      // can verify the discount server-side. Earlier the route just
+      // capped the client's rewardDiscountSen at subtotal, which let a
+      // crafted client claim a "Free Drink" voucher on a cake-only
+      // cart. Now we recompute the eligible discount from the cart +
+      // voucher rule and cap the client's claim at that.
       const { data: voucher } = await supabase
         .from("issued_rewards")
-        .select("id, member_id, status, expires_at, min_order_value")
+        .select(`
+          id, member_id, status, expires_at, min_order_value,
+          discount_type, discount_value,
+          applicable_categories, applicable_products, free_product_name
+        `)
         .eq("id", walletVoucherId)
         .single();
       if (!voucher || voucher.member_id !== loyaltyId) {
@@ -306,8 +366,90 @@ export async function POST(request: NextRequest) {
       if (voucher.min_order_value && subtotalSen < ((voucher.min_order_value as number) * 100)) {
         return NextResponse.json({ error: "Minimum order not met for voucher" }, { status: 400 });
       }
-      // Trust the client's rewardDiscountSen but cap at subtotal.
-      rewardDiscountSenAmt = Math.max(0, Math.min(rewardDiscountSen ?? 0, subtotalSen));
+
+      const cats  = (voucher.applicable_categories as string[] | null) ?? null;
+      const prods = (voucher.applicable_products as string[] | null) ?? null;
+      const hasFilter = (cats && cats.length > 0) || (prods && prods.length > 0);
+
+      // Build a lite cart-line shape locally. The full cartLines used
+      // by evaluatePromotions is constructed further down (after the
+      // tier lookup) so we can't reuse it here.
+      type CartLineLite = { product_id: string; quantity: number; unit_price: number };
+      const localLines: CartLineLite[] = (items as Array<{
+        product?: { id?: string };
+        productId?: string;
+        product_id?: string;
+        quantity: number;
+        basePrice?: number;
+        totalPrice?: number;
+      }>).map((i) => {
+        const pid = i.product?.id ?? i.productId ?? i.product_id ?? "";
+        const unit = i.basePrice != null
+          ? i.basePrice
+          : (i.totalPrice ?? 0) / Math.max(1, i.quantity);
+        return { product_id: pid, quantity: i.quantity, unit_price: unit };
+      });
+
+      // When the voucher has no category/product filter every cart
+      // line is eligible. Otherwise look up product → category from
+      // the products table to enforce server-authoritatively.
+      let eligibleLines: CartLineLite[] = localLines;
+      if (hasFilter) {
+        const productIds = Array.from(new Set(
+          localLines.map((l) => l.product_id).filter((id): id is string => !!id),
+        ));
+        const categoryByProductId = new Map<string, string | null>();
+        if (productIds.length > 0) {
+          const { data: prodRows } = await supabase
+            .from("products")
+            .select("id, category")
+            .in("id", productIds);
+          for (const p of ((prodRows ?? []) as Array<{ id: string; category: string | null }>)) {
+            categoryByProductId.set(p.id, p.category);
+          }
+        }
+        eligibleLines = localLines.filter((l) => {
+          if (prods && prods.length > 0 && prods.includes(l.product_id)) return true;
+          if (cats && cats.length > 0) {
+            const cat = categoryByProductId.get(l.product_id);
+            if (cat && cats.includes(cat)) return true;
+          }
+          return false;
+        });
+      }
+
+      // Server-recompute the discount based on the voucher's
+      // discount_type + the eligible cart slice. If the customer
+      // claimed more than this, we silently cap them — the order
+      // proceeds, the wallet voucher still gets consumed, but they
+      // only get what they were entitled to. Catches both honest
+      // client bugs and dishonest client tampering.
+      const dt = voucher.discount_type as string | null;
+      const dv = (voucher.discount_value as number | null) ?? 0;
+      let serverDiscountSen = 0;
+      if (eligibleLines.length > 0) {
+        const eligibleSubSen = Math.round(
+          eligibleLines.reduce((s, l) => s + l.unit_price * l.quantity, 0) * 100,
+        );
+        if (dt === "free_item" || dt === "free_upgrade") {
+          // Free item covers the cheapest eligible line's unit price.
+          // Modifier upgrades on top still cost — we only zero out the
+          // base price which lives on the cart line as unit_price.
+          serverDiscountSen = Math.round(
+            Math.min(...eligibleLines.map((l) => l.unit_price)) * 100,
+          );
+        } else if (dt === "percent") {
+          serverDiscountSen = Math.round(eligibleSubSen * (dv / 100));
+        } else if (dt === "flat") {
+          // discount_value stored in sen for flat type.
+          serverDiscountSen = Math.min(Math.round(dv), eligibleSubSen);
+        } else if (dt === "fixed_amount") {
+          // discount_value stored in RM for fixed_amount type.
+          serverDiscountSen = Math.min(Math.round(dv * 100), eligibleSubSen);
+        }
+      }
+
+      rewardDiscountSenAmt = Math.max(0, Math.min(rewardDiscountSen ?? 0, serverDiscountSen));
     } else if (rewardId) {
       const validated = await validateAppliedReward(supabase, {
         rewardId,
@@ -342,14 +484,17 @@ export async function POST(request: NextRequest) {
     // Promotion engine: auto, tier-perk, reward-link discounts.
     // (Customer-typed promo codes were removed end-to-end.)
     let memberTierId: string | null = null;
+    let memberTierStackable = true;
     if (loyaltyId) {
       const { data: mb } = await supabase
         .from("member_brands")
-        .select("current_tier_id")
+        .select("current_tier_id, tiers(stackable)")
         .eq("member_id", loyaltyId)
         .eq("brand_id", "brand-celsius")
         .single();
       memberTierId = (mb as { current_tier_id?: string | null } | null)?.current_tier_id ?? null;
+      const tierRow = (mb as { tiers?: { stackable?: boolean | null } | null } | null)?.tiers;
+      memberTierStackable = (tierRow?.stackable as boolean | null) ?? true;
     }
 
     type IncomingItem = {
@@ -373,6 +518,50 @@ export async function POST(request: NextRequest) {
       outlet_id: selectedStore.id,
       member_tier_id: memberTierId,
     });
+
+    // Non-stackable tier exclusivity (Staff, Black Card). The flat
+    // tier % trades stacking for a higher rate, so a wallet voucher
+    // and the tier perk shouldn't BOTH discount the same order. Pick
+    // whichever saves more:
+    //   • voucher wins → drop the tier perk from evaluated
+    //   • tier wins    → drop the voucher (don't burn it; null out
+    //                    walletVoucherId + zero the wallet voucher /
+    //                    reward / FOD legs so the order route doesn't
+    //                    mark the voucher consumed)
+    // Stackable tiers (Member / Silver / Gold / Platinum) skip this
+    // entirely and just layer both — same as before.
+    const round2cents = (n: number) => Math.round(n * 100) / 100;
+    if (memberTierId && !memberTierStackable) {
+      const tierPerk = evaluated.discounts.find((d) => d.reason === "tier_perk");
+      const tierPerkSen = Math.round((tierPerk?.discount_amount ?? 0) * 100);
+      const externalSen = voucherDiscountSen + rewardDiscountSenAmt + fodDiscountSen;
+      if (externalSen >= tierPerkSen && tierPerk) {
+        // Voucher / reward / FOD beats the tier perk — drop the tier
+        // perk from the evaluated discount list.
+        evaluated.discounts = evaluated.discounts.filter(
+          (d) => d.reason !== "tier_perk",
+        );
+        evaluated.total_discount = round2cents(
+          evaluated.total_discount - (tierPerk.discount_amount ?? 0),
+        );
+        evaluated.total = round2cents(evaluated.subtotal - evaluated.total_discount);
+      } else if (tierPerkSen > 0 && externalSen > 0) {
+        // Tier perk wins — drop the voucher / reward / FOD so it stays
+        // available for a future order. walletVoucherId is nulled so
+        // applyOrderV2Hooks doesn't mark the voucher used; the
+        // rewardId / rewardName / voucherCode fields are nulled so
+        // the order row + receipt don't render a phantom "Reward · X"
+        // line for a discount that never actually applied.
+        voucherDiscountSen = 0;
+        rewardDiscountSenAmt = 0;
+        fodDiscountSen = 0;
+        walletVoucherId = null;
+        rewardId = null;
+        rewardName = null;
+        voucherCode = null;
+      }
+    }
+
     const promoDiscountSen = Math.round(evaluated.total_discount * 100);
 
     const totalDiscountSen   = voucherDiscountSen + rewardDiscountSenAmt + fodDiscountSen + promoDiscountSen;

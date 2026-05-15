@@ -26,7 +26,7 @@ type PaymentsEnabled = { enabled: boolean };
 type OutletHours = { open: string; close: string; daysOpen: number[] };
 type OutletHoursMap = Record<string, OutletHours>;
 
-type FirstOrderDiscount = { enabled: boolean; type: "percent" | "fixed"; amount: number; label: string };
+// FirstOrderDiscount config moved to the promotions table (Discount Engine).
 
 const OUTLET_LABELS: Record<string, string> = {
   conezion:   "Putrajaya (Conezion)",
@@ -36,8 +36,6 @@ const OUTLET_LABELS: Record<string, string> = {
 const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 
 const DEFAULT_OUTLET_HOURS: OutletHours = { open: "08:00", close: "22:00", daysOpen: [1, 2, 3, 4, 5, 6, 7] };
-const DEFAULT_FIRST_ORDER: FirstOrderDiscount = { enabled: false, type: "percent", amount: 10, label: "" };
-
 const SETTINGS_API = "/api/settings";
 
 export default function PickupSettingsPage() {
@@ -50,7 +48,6 @@ export default function PickupSettingsPage() {
     "shah-alam": { ...DEFAULT_OUTLET_HOURS },
     tamarind:    { ...DEFAULT_OUTLET_HOURS },
   });
-  const [firstOrder, setFirstOrder] = useState<FirstOrderDiscount>(DEFAULT_FIRST_ORDER);
 
   // Push blast (action — not a persisted setting)
   const [blastTitle, setBlastTitle] = useState("");
@@ -70,7 +67,6 @@ export default function PickupSettingsPage() {
           "min_app_version",
           "payments_enabled",
           "outlet_hours",
-          "first_order_discount",
         ];
         const [settingsResults, tokenCountRes] = await Promise.all([
           Promise.all(
@@ -88,7 +84,6 @@ export default function PickupSettingsPage() {
         if (results[2]) setAppVer(results[2]);
         if (results[3]) setPayments(results[3]);
         if (results[4]) setOutletHours(results[4]);
-        if (results[5]) setFirstOrder(results[5]);
         if (tokenCountRes?.count !== undefined) setBlastTokenCount(tokenCountRes.count);
       } finally {
         setLoading(false);
@@ -279,37 +274,10 @@ export default function PickupSettingsPage() {
           <SaveBtn busy={saving === "outlet_hours"} onClick={() => save("outlet_hours", outletHours)} />
         </Card>
 
-        {/* First-order discount */}
-        <Card icon={<Tag className="h-4.5 w-4.5 text-pink-600" />} bg="bg-pink-50"
-              title="First-order discount"
-              sub="Applied automatically when a member has zero prior completed orders">
-          <Field label="Enabled">
-            <Toggle checked={firstOrder.enabled} onChange={(v) => setFirstOrder({ ...firstOrder, enabled: v })} />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Type">
-              <select value={firstOrder.type}
-                onChange={(e) => setFirstOrder({ ...firstOrder, type: e.target.value as "percent" | "fixed" })}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm">
-                <option value="percent">Percent (%)</option>
-                <option value="fixed">Fixed (RM)</option>
-              </select>
-            </Field>
-            <Field label={firstOrder.type === "percent" ? "Discount %" : "Discount RM"}>
-              <input type="number" step="1" min={0} max={firstOrder.type === "percent" ? 100 : 999}
-                value={firstOrder.amount}
-                onChange={(e) => setFirstOrder({ ...firstOrder, amount: Number(e.target.value) })}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
-            </Field>
-          </div>
-          <Field label="Label shown to customer (optional)">
-            <input type="text" value={firstOrder.label}
-              onChange={(e) => setFirstOrder({ ...firstOrder, label: e.target.value })}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-              placeholder="Welcome — 10% off your first order" />
-          </Field>
-          <SaveBtn busy={saving === "first_order_discount"} onClick={() => save("first_order_discount", firstOrder)} />
-        </Card>
+        {/* First-order discount used to live here; moved to the Discount
+            Engine (Rewards → Setup → Discount Engine) so every checkout
+            discount rule lives in one place. The card was removed in the
+            FOD consolidation migration. */}
 
         {/* Push blast */}
         <Card icon={<Bell className="h-4.5 w-4.5 text-blue-600" />} bg="bg-blue-50"
