@@ -25,12 +25,24 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useConfirm, toast } from "@celsius/ui";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/loyalty/utils";
 import { exportToCSV } from "@/lib/loyalty/export";
 import { fetchMembers } from "@/lib/loyalty/api";
 import Link from "next/link";
 import type { MemberWithBrand } from "@/lib/loyalty/types";
+import PushRemindersTab from "./_components/PushRemindersTab";
+
+// ---------------------------------------------------------------------------
+// Top-level surfaces inside Engage. Push reminders is the auto/triggered
+// engine driven by cron + the campaign engine; SMS broadcasts is the
+// manual one-off send flow that's lived here historically. We default to
+// push because that's where the day-to-day signal is — admins look here
+// to see open rate / attribution, not to draft new SMS blasts.
+// ---------------------------------------------------------------------------
+type TopTab = "push" | "sms";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -170,6 +182,27 @@ const variables = [
 // Component
 // ---------------------------------------------------------------------------
 export default function NotificationsPage() {
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+  // Top-level Push vs SMS tab. URL-syncable so the legacy
+  // /loyalty/push-reminders redirect can land on the right tab and
+  // copy/paste links survive a reload.
+  const initialTopTab: TopTab = searchParams?.get("tab") === "sms" ? "sms" : "push";
+  const [topTab, setTopTab] = useState<TopTab>(initialTopTab);
+
+  // Reflect tab changes in the URL without forcing a navigation.
+  // We don't refetch SMS data when switching to push (and vice versa);
+  // the underlying queries fire on mount + on visibility, so the cost
+  // is paid once.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (topTab === "push") params.delete("tab");
+    else params.set("tab", topTab);
+    const qs = params.toString();
+    router.replace(`/loyalty/engage${qs ? `?${qs}` : ""}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topTab]);
+
   const [activeTab, setActiveTab] = useState<MessageStatus | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
@@ -515,6 +548,44 @@ export default function NotificationsPage() {
   return (
     <div className="p-3 sm:p-6 space-y-6 pb-20 md:pb-0">
       <ConfirmDialog />
+
+      {/* ── Page header + tab switcher ───────────────────────── */}
+      <div>
+        <h1 className="text-xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
+          <MessageSquare className="h-5 w-5 text-amber-600" />
+          Engage
+        </h1>
+        <p className="text-xs text-gray-500 mt-0.5">
+          How we reach customers — automatic push reminders + manual SMS broadcasts.
+        </p>
+        <div className="mt-3 inline-flex rounded-lg border border-gray-200 p-0.5 bg-white text-sm">
+          <button
+            onClick={() => setTopTab("push")}
+            className={`px-4 py-1.5 rounded-md transition flex items-center gap-1.5 ${
+              topTab === "push" ? "bg-amber-100 text-amber-900 font-semibold" : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            <Bell className="h-3.5 w-3.5" />
+            Push reminders
+          </button>
+          <button
+            onClick={() => setTopTab("sms")}
+            className={`px-4 py-1.5 rounded-md transition flex items-center gap-1.5 ${
+              topTab === "sms" ? "bg-amber-100 text-amber-900 font-semibold" : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            <Phone className="h-3.5 w-3.5" />
+            SMS broadcasts
+          </button>
+        </div>
+      </div>
+
+      {/* Push tab — campaign engine */}
+      {topTab === "push" && <PushRemindersTab />}
+
+      {/* SMS tab — existing manual broadcast flow */}
+      {topTab === "sms" && (
+      <>
       {/* ── KPI Cards ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         {/* SMS123 Balance */}
@@ -1591,6 +1662,8 @@ export default function NotificationsPage() {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );
