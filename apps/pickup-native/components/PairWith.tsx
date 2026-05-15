@@ -8,7 +8,8 @@ import { useApp } from "../lib/store";
 import { formatPrice } from "../lib/api";
 import { cloudinaryThumb, prefetchImages } from "../lib/image";
 import { ProductImage } from "./ProductImage";
-import { fetchActiveCombos, bestComboForPair } from "../lib/combos";
+import { fetchActiveCombos, bestComboForPair, type ComboPromotion } from "../lib/combos";
+import { fetchCoPurchasedProducts, type CoPurchaseScore } from "../lib/co-purchase";
 
 /**
  * Pair-with cross-sell on the product detail screen. Stage-and-commit
@@ -89,24 +90,106 @@ export function defaultPairLinePrice(p: Product): number {
   return p.price + defaultModTotal;
 }
 
-/** Build the pair-with suggestion list. Exported so the product page
- *  can prefetch the exact same images this component will render —
- *  the loader holds until those are cached, eliminating the
- *  "image-arrives-after-page" flash that reads as broken. */
+/** Build the pair-with suggestion list using three layered signals,
+ *  in priority order:
+ *
+ *    1. Combo pair  — anything that triggers a backoffice combo with
+ *       the current product. These are real money-saving deals so they
+ *       deserve the top slots even if they're same-kind (a drink+drink
+ *       combo is fine here). Sorted by combo savings, descending.
+ *
+ *    2. Co-purchase — products customers have HISTORICALLY bought with
+ *       this one (POS data via product_co_purchase_scores view).
+ *       Filtered to opposite kind so the section header ("Pair with a
+ *       bite") still reads true. Sorted by co_count descending.
+ *
+ *    3. Category fallback — opposite-kind products by featured_position
+ *       + name. Pads slots when combo + co-purchase don't fill MAX_PAIRS,
+ *       and provides the entire list for new products with no signal yet.
+ *
+ *  Dedupes by product id so a product that appears in both combo and
+ *  co-purchase doesn't take two slots. Caps at MAX_PAIRS total. */
 export function buildPairSuggestions(args: {
   current: Product;
   allProducts: Product[];
   cartProductIds: Set<string>;
+  /** Optional — when present, combo-eligible products jump to the top
+   *  of the list. Pass an empty array (or omit) to skip this layer. */
+  combos?: ComboPromotion[];
+  /** Optional — when present, co-purchase data drives the middle slot.
+   *  Pass an empty array (or omit) to skip this layer. */
+  coPurchaseScores?: CoPurchaseScore[];
+  /** Outlet ID — passed to the combo-eligibility check so we don't
+   *  surface combos that don't apply at the customer's outlet. */
+  outletId?: string | null;
 }): Product[] {
-  const { current, allProducts, cartProductIds } = args;
+  const { current, allProducts, cartProductIds, combos = [], coPurchaseScores = [], outletId = null } = args;
+
   const currentKind = CATEGORY_KIND[current.category] ?? "drink";
   const targetKind: "drink" | "food" = currentKind === "drink" ? "food" : "drink";
-  return allProducts
+
+  // Index for fast lookup.
+  const byId = new Map<string, Product>();
+  for (const p of allProducts) byId.set(p.id, p);
+
+  // Reusable predicate: skip the current product, in-cart products,
+  // and unavailable products. Doesn't filter by kind here — the
+  // combo layer is allowed to break kind, the others enforce it.
+  const isCandidate = (p: Product): boolean =>
+    p.id !== current.id && p.is_available && !cartProductIds.has(p.id);
+
+  const result: Product[] = [];
+  const seen = new Set<string>();
+
+  function tryAdd(p: Product | undefined): void {
+    if (!p || seen.has(p.id) || !isCandidate(p)) return;
+    if (result.length >= MAX_PAIRS) return;
+    seen.add(p.id);
+    result.push(p);
+  }
+
+  // ── Layer 1: combo-eligible (any kind) ──────────────────────────
+  if (combos.length > 0) {
+    type Scored = { product: Product; savings: number };
+    const scored: Scored[] = [];
+    for (const candidate of allProducts) {
+      if (!isCandidate(candidate)) continue;
+      const best = bestComboForPair({
+        combos,
+        currentProductId:       current.id,
+        currentProductCategory: current.category,
+        currentProductPrice:    current.price,
+        pairProductId:          candidate.id,
+        pairProductCategory:    candidate.category,
+        pairProductPrice:       candidate.price,
+        outletId,
+      });
+      if (best && best.savings > 0) scored.push({ product: candidate, savings: best.savings });
+    }
+    scored.sort((a, b) => b.savings - a.savings);
+    for (const s of scored) tryAdd(s.product);
+  }
+
+  // ── Layer 2: co-purchase, opposite kind ─────────────────────────
+  if (coPurchaseScores.length > 0) {
+    for (const score of coPurchaseScores) {
+      const p = byId.get(score.paired_with);
+      if (!p) continue;
+      // Section header reads "Pair with a bite/drink" so keep co-purchase
+      // suggestions on the opposite-kind axis. Same-kind co-purchase
+      // (e.g. someone always orders Black + Latte) shows up in the
+      // wider rotation when we add a "frequently bought together"
+      // surface, not in the pair-with section.
+      if ((CATEGORY_KIND[p.category] ?? "drink") !== targetKind) continue;
+      tryAdd(p);
+    }
+  }
+
+  // ── Layer 3: category fallback (opposite kind by featured order) ─
+  const fallback = allProducts
     .filter((p) =>
-      p.id !== current.id &&
-      p.is_available &&
-      (CATEGORY_KIND[p.category] ?? "drink") === targetKind &&
-      !cartProductIds.has(p.id),
+      isCandidate(p) &&
+      (CATEGORY_KIND[p.category] ?? "drink") === targetKind,
     )
     .sort((a, b) => {
       if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1;
@@ -114,8 +197,10 @@ export function buildPairSuggestions(args: {
       const bp = b.featured_position ?? 9999;
       if (ap !== bp) return ap - bp;
       return a.name.localeCompare(b.name);
-    })
-    .slice(0, MAX_PAIRS);
+    });
+  for (const p of fallback) tryAdd(p);
+
+  return result;
 }
 
 export function PairWith({ current, allProducts, stagedIds, onToggle }: PairWithProps) {
@@ -131,45 +216,29 @@ export function PairWith({ current, allProducts, stagedIds, onToggle }: PairWith
     staleTime: 5 * 60_000,
   });
 
-  const suggestions = useMemo(
+  // Co-purchase scores from POS data — "what people actually buy with
+  // this drink". Per-product, cached 10min. Empty when the product is
+  // too new to have signal; builder falls back to category logic.
+  const { data: coPurchaseScores = [] } = useQuery({
+    queryKey: ["co-purchase", current.id],
+    queryFn: () => fetchCoPurchasedProducts(current.id, 30),
+    staleTime: 10 * 60_000,
+    enabled: !!current.id,
+  });
+
+  // The builder now does combo + co-purchase + category fallback in
+  // one pass with proper de-dup. No post-sort needed.
+  const suggestionsSorted = useMemo(
     () => buildPairSuggestions({
       current,
       allProducts,
       cartProductIds: new Set(cart.map((c) => c.productId)),
+      combos,
+      coPurchaseScores,
+      outletId,
     }),
-    [current, allProducts, cart],
+    [current, allProducts, cart, combos, coPurchaseScores, outletId],
   );
-
-  // Reorder suggestions: combo-eligible items first (descending by
-  // savings) so customers see the best-value pairings up top. Same
-  // category logic still picks the candidate set; combo pre-sort
-  // just promotes within it.
-  const suggestionsSorted = useMemo(() => {
-    if (combos.length === 0) return suggestions;
-    return [...suggestions].sort((a, b) => {
-      const aSaving = bestComboForPair({
-        combos,
-        currentProductId:       current.id,
-        currentProductCategory: current.category,
-        currentProductPrice:    current.price,
-        pairProductId:          a.id,
-        pairProductCategory:    a.category,
-        pairProductPrice:       a.price,
-        outletId,
-      })?.savings ?? 0;
-      const bSaving = bestComboForPair({
-        combos,
-        currentProductId:       current.id,
-        currentProductCategory: current.category,
-        currentProductPrice:    current.price,
-        pairProductId:          b.id,
-        pairProductCategory:    b.category,
-        pairProductPrice:       b.price,
-        outletId,
-      })?.savings ?? 0;
-      return bSaving - aSaving;
-    });
-  }, [suggestions, combos, current, outletId]);
 
   // Warm the image cache as soon as we know the suggestion list.
   // The horizontal scroll lazy-renders offscreen items, but
