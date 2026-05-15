@@ -10,11 +10,9 @@ import { formatPrice } from "../lib/api";
 import { cloudinaryThumb } from "../lib/image";
 import {
   calcRewardDiscount,
-  evaluatePromotions,
   fetchTier,
-  type EvaluatedCart,
-  type PromoLine,
 } from "../lib/rewards";
+import { useEvaluatePromotions } from "../lib/use-evaluate-promotions";
 import { fetchMenu } from "../lib/menu";
 import { getSetting } from "../lib/settings";
 import { supabase, type Outlet } from "../lib/supabase";
@@ -61,14 +59,16 @@ export default function Cart() {
   // already clamps the actual charge.
   const rewardDiscount = Math.min(calcRewardDiscount(appliedReward, cart, subtotal), subtotal);
 
-  // Promotion engine preview. We fire the same evaluator that
-  // checkout.tsx uses so the cart screen reflects the SAME total
-  // the customer will pay — not just raw subtotal. Without this the
-  // customer eyes "RM 13.80" on the cart, taps Continue, then sees
-  // "RM 10.42" at checkout — confusing, even though the cheaper
-  // number is the right one. Showing it here removes ambiguity.
+  // Promotion engine preview. Uses the shared useEvaluatePromotions
+  // hook so the cart screen and the checkout screen share one
+  // network round-trip via React Query's queryKey dedup. Without
+  // this each screen fired its own debounced fetch (~800ms each via
+  // the order→loyalty proxy), and the cart→checkout transition felt
+  // laggy. Now the second screen is instant when the cart hasn't
+  // changed.
   //
-  // Tier is fetched alongside so tier-perk discounts layer correctly.
+  // Tier loads in parallel; eval holds until it's available so
+  // tier-perk discounts layer correctly.
   const loyaltyId = useApp((s) => s.loyaltyId);
   const tierQ = useQuery({
     queryKey: ["tier", loyaltyId],
@@ -77,36 +77,11 @@ export default function Cart() {
     staleTime: 60_000,
   });
   const memberTierId = tierQ.data?.tier_id ?? null;
-  const [promoEval, setPromoEval] = useState<EvaluatedCart | null>(null);
-
-  // Debounced eval — fires when cart, outlet, or tier changes.
-  // Skips when the cart is empty (no point in pinging the engine
-  // when there's nothing to discount).
-  useEffect(() => {
-    if (cart.length === 0) {
-      setPromoEval(null);
-      return;
-    }
-    if (loyaltyId && tierQ.isLoading && !tierQ.data) return;
-    const lines: PromoLine[] = cart.map((c) => ({
-      product_id: c.productId,
-      category: c.category,
-      quantity: c.quantity,
-      unit_price: c.totalPrice / c.quantity,
-    }));
-    const handle = setTimeout(() => {
-      evaluatePromotions({
-        lines,
-        member_id: loyaltyId,
-        outlet_id: outletId,
-        member_tier_id: memberTierId,
-      }).then((res) => {
-        if (res.kind === "ok") setPromoEval(res.data);
-        else setPromoEval(null);
-      });
-    }, 200);
-    return () => clearTimeout(handle);
-  }, [cart, loyaltyId, outletId, memberTierId, tierQ.isLoading, tierQ.data]);
+  const promoEvalReady = !loyaltyId || !tierQ.isLoading || !!tierQ.data;
+  const { data: promoEval } = useEvaluatePromotions({
+    memberTierId,
+    enabled: promoEvalReady,
+  });
 
   const promoDiscount = promoEval?.total_discount ?? 0;
   // Customer's reward voucher comes off AFTER promo engine has done

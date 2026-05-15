@@ -92,6 +92,38 @@ export interface EvaluatedCart {
   total: number;
 }
 
+// ─── Active-promotion cache ─────────────────────────
+//
+// Per-brand 60s in-memory cache. Cuts ~100-200ms off every eval
+// (DB query + supabase RTT). The cache lives in the function-instance
+// memory; on Vercel each warm instance keeps its own copy. Cold
+// starts go straight to the DB (no negative caching), so a deploy
+// or scale-up just gets the freshest data.
+//
+// Invalidation: 60s TTL only. Admins toggling a promotion in
+// backoffice see customer-side effect within a minute, which is
+// well within the bounds of any reasonable rollout cadence.
+type CacheEntry = { at: number; data: Promotion[] };
+const promoCache = new Map<string, CacheEntry>();
+const PROMO_CACHE_TTL_MS = 60_000;
+
+async function getActivePromosForBrand(brandId: string): Promise<Promotion[] | null> {
+  const cached = promoCache.get(brandId);
+  if (cached && Date.now() - cached.at < PROMO_CACHE_TTL_MS) {
+    return cached.data;
+  }
+  const { data, error } = await supabaseAdmin
+    .from('promotions')
+    .select('*')
+    .eq('brand_id', brandId)
+    .eq('is_active', true)
+    .order('priority', { ascending: false });
+  if (error || !data) return null;
+  const list = data as Promotion[];
+  promoCache.set(brandId, { at: Date.now(), data: list });
+  return list;
+}
+
 // ─── Eligibility ───────────────────────────────────
 
 function isPromoEligible(promo: Promotion, ctx: CartContext, subtotal: number): { ok: true } | { ok: false; reason: string } {
@@ -372,15 +404,14 @@ export async function evaluateCart(
 ): Promise<EvaluatedCart> {
   const subtotal = lines.reduce((sum, l) => sum + l.unit_price * l.quantity, 0);
 
-  // Pull every active promo for the brand
-  const { data: promos, error } = await supabaseAdmin
-    .from('promotions')
-    .select('*')
-    .eq('brand_id', ctx.brand_id)
-    .eq('is_active', true)
-    .order('priority', { ascending: false });
-
-  if (error || !promos) {
+  // 60s in-memory cache of active promos per brand. The promo list
+  // is small (<50 rows) and changes infrequently, but the DB query
+  // adds 100-200ms to every eval. With cold-start latency that's
+  // a real bite of the checkout response time. 60s window means a
+  // newly-activated promo in backoffice appears in customer flows
+  // within a minute, which is the right trade-off for an F&B app.
+  const promos = await getActivePromosForBrand(ctx.brand_id);
+  if (!promos) {
     return { subtotal, discounts: [], total_discount: 0, total: subtotal };
   }
 

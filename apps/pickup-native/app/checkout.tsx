@@ -23,11 +23,10 @@ import {
   calcRewardDiscount,
   fetchTier,
   fetchRewards,
-  evaluatePromotions,
   type MemberTier,
   type EvaluatedCart,
-  type PromoLine,
 } from "../lib/rewards";
+import { useEvaluatePromotions } from "../lib/use-evaluate-promotions";
 import { getSetting } from "../lib/settings";
 import { showToast } from "../lib/toast";
 import { trackEvent } from "../lib/analytics";
@@ -72,71 +71,31 @@ export default function Checkout() {
   }, [loyaltyId]);
 
   // ── Promotion preview ──────────────────────────────────────────────────
-  // Hits the loyalty engine through the order-app proxy whenever the cart,
-  // tier, or outlet changes. Debounced so multiple rapid cart edits don't
-  // fire one request per change. Promo codes were removed end-to-end — the
-  // engine still applies auto-promos, tier perks, and reward-linked
-  // promotions; there's just no customer-entered code path anymore.
-  const [promoEval, setPromoEval] = useState<EvaluatedCart | null>(null);
-
-  // Track whether the last evaluate call failed so we can surface a
-  // toast once. We only fire the toast on the *transition* into an
-  // error state — repeating it on every debounced call would spam.
-  const [promoEvalError, setPromoEvalError] = useState(false);
-
+  // Discount engine eval — shared cache with the cart screen via
+  // the useEvaluatePromotions hook. When the customer transitions
+  // cart → checkout with an unchanged cart, the eval is instant
+  // (hits the React Query cache) instead of firing a 600-900ms
+  // network round-trip on the checkout side. Stale time = 30s, so
+  // a fresh navigation always reuses the cart's just-fetched result.
+  const promoEvalReady = !loyaltyId || !!tier;
+  const { data: promoEval, isError: promoEvalError } = useEvaluatePromotions({
+    memberTierId: tier?.tier_id ?? null,
+    enabled: promoEvalReady,
+  });
+  // Surface a one-time toast when the engine is unreachable —
+  // checkout still proceeds at full price.
+  const promoErrorToastShown = useRef(false);
   useEffect(() => {
-    if (cart.length === 0) {
-      setPromoEval(null);
-      setPromoEvalError(false);
-      return;
-    }
-    // Wait for the tier fetch to finish before the first evaluate
-    // when the customer is signed in. Otherwise the effect would
-    // fire once with tier=null (no tier perk in the response) and a
-    // second time after the tier loads (with the perk) — the
-    // summary would bounce from "no tier discount" → "with tier"
-    // over ~500ms, which the customer perceives as flicker.
-    if (loyaltyId && !tier) return;
-    const lines: PromoLine[] = cart.map((c) => ({
-      product_id: c.productId,
-      // category MUST flow through for category-gated combos to match.
-      // Without it the discount engine treats the line as category-less
-      // and combo_category_ids gates fail closed → customer never sees
-      // their "Classic + Roti Bakar — RM2 off" deal even when in the
-      // right time window. Store keeps category on the cart line; we
-      // just forgot to pass it through. Server-side has a fallback
-      // lookup so missing categories self-heal, but sending it from
-      // the start is cheaper.
-      category: c.category,
-      quantity: c.quantity,
-      unit_price: c.totalPrice / c.quantity,
-    }));
-    const handle = setTimeout(() => {
-      evaluatePromotions({
-        lines,
-        member_id: loyaltyId,
-        outlet_id: outletId,
-        member_tier_id: tier?.tier_id ?? null,
-      }).then((res) => {
-        if (res.kind === "ok") {
-          setPromoEval(res.data);
-          setPromoEvalError(false);
-        } else {
-          setPromoEval(null);
-          if (!promoEvalError) {
-            setPromoEvalError(true);
-            // Non-blocking — checkout still proceeds at full price if the
-            // discount engine is genuinely unreachable.
-            showToast({
-              message: "Couldn't check for discounts. Pull to retry.",
-              variant: "info",
-            });
-          }
-        }
+    if (promoEvalError && !promoErrorToastShown.current) {
+      promoErrorToastShown.current = true;
+      showToast({
+        message: "Couldn't check for discounts. Pull to retry.",
+        variant: "info",
       });
-    }, 300);
-    return () => clearTimeout(handle);
-  }, [cart, loyaltyId, outletId, tier?.tier_id, tier, promoEvalError]);
+    } else if (!promoEvalError) {
+      promoErrorToastShown.current = false;
+    }
+  }, [promoEvalError]);
 
   const promoDiscount = promoEval?.total_discount ?? 0;
 
