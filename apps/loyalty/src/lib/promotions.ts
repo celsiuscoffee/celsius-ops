@@ -212,43 +212,70 @@ function computeDiscount(promo: Promotion, lines: CartLine[]): { amount: number;
     }
   }
 
-  // ── Affected subset ────────────────────────────────
-  // For combos, the "affected" lines are the items that make up the
-  // bundle. We pick the CHEAPEST line per gate slot so:
-  //   - Customer ordering 2 classics + 1 roti bakar sees the discount
-  //     pegged to the cheaper classic + the roti.
-  //   - combo_price / override_price calculations apply to those lines.
-  //   - fixed_amount_off / percentage_off apply to those lines too
-  //     (so a Gold tier customer's % discount doesn't compound onto
-  //     the same bundle).
+  // ── Affected subset + combo set count ──────────────
+  // For combos, we expand each cart line into UNITS (quantity-aware),
+  // then greedy-pair them into as many full combo sets as possible.
+  // Each combo set picks the cheapest unconsumed unit per gate slot.
+  //
+  // Cart [Black, Cappuccino, HalfEggs, Roti+Curry] with gate
+  // [classic, roti-bakar] forms TWO combo sets:
+  //   Set 1: Black + HalfEggs        (cheapest classic + cheapest roti)
+  //   Set 2: Cappuccino + Roti+Curry (next cheapest in each slot)
+  // → discount fires twice → 2 × RM2 = RM4 off, not just RM2.
+  //
+  // Previously we picked one cheapest unit per slot total — the
+  // bundle was conceptually "1 of each", regardless of how many of
+  // each the customer ordered. Customers reasonably expect a combo
+  // to fire once per pair they assembled.
+  //
   // For non-combo promos, fall back to the existing lineMatches logic.
   const affected: number[] = [];
   let eligibleSubtotal = 0;
+  let comboSetsFormed  = 0;
 
   if (hasComboGate) {
-    const picked = new Set<number>();
-    // Cheapest line whose product is in the product gate (one per id).
-    for (const id of promo.combo_product_ids) {
-      const candidates = lines
-        .map((l, idx) => ({ l, idx }))
-        .filter(({ l }) => l.product_id === id)
-        .sort((a, b) => a.l.unit_price - b.l.unit_price);
-      if (candidates[0]) picked.add(candidates[0].idx);
+    // Expand lines to units so quantity > 1 contributes correctly.
+    type Unit = { lineIdx: number; price: number; productId: string; category?: string };
+    const units: Unit[] = [];
+    lines.forEach((l, idx) => {
+      for (let q = 0; q < l.quantity; q++) {
+        units.push({ lineIdx: idx, price: l.unit_price, productId: l.product_id, category: l.category });
+      }
+    });
+
+    type Slot = { kind: 'product' | 'category'; key: string };
+    const slots: Slot[] = [
+      ...promo.combo_product_ids.map((id):  Slot => ({ kind: 'product',  key: id  })),
+      ...promo.combo_category_ids.map((c):  Slot => ({ kind: 'category', key: c   })),
+    ];
+
+    const consumed = new Set<number>();
+    const affectedLineSet = new Set<number>();
+
+    // Greedy: form combos until we can't satisfy every slot anymore.
+    while (true) {
+      const picks: number[] = [];
+      let canForm = true;
+      for (const slot of slots) {
+        const candidates = units
+          .map((u, i) => ({ u, i }))
+          .filter(({ i, u }) =>
+            !consumed.has(i) && !picks.includes(i) &&
+            (slot.kind === 'product' ? u.productId === slot.key : u.category === slot.key))
+          .sort((a, b) => a.u.price - b.u.price);
+        if (candidates.length === 0) { canForm = false; break; }
+        picks.push(candidates[0].i);
+      }
+      if (!canForm) break;
+      for (const i of picks) {
+        consumed.add(i);
+        eligibleSubtotal += units[i].price;
+        affectedLineSet.add(units[i].lineIdx);
+      }
+      comboSetsFormed++;
     }
-    // Cheapest line per category in the category gate.
-    for (const cat of promo.combo_category_ids) {
-      const candidates = lines
-        .map((l, idx) => ({ l, idx }))
-        .filter(({ l, idx }) => l.category === cat && !picked.has(idx))
-        .sort((a, b) => a.l.unit_price - b.l.unit_price);
-      if (candidates[0]) picked.add(candidates[0].idx);
-    }
-    for (const idx of picked) {
-      affected.push(idx);
-      // One unit per gate slot — the bundle is "1 of each", not
-      // "every unit of every matching product".
-      eligibleSubtotal += lines[idx].unit_price;
-    }
+
+    for (const idx of affectedLineSet) affected.push(idx);
   } else {
     lines.forEach((line, idx) => {
       if (lineMatches(line, promo)) {
@@ -266,11 +293,27 @@ function computeDiscount(promo: Promotion, lines: CartLine[]): { amount: number;
     case 'percentage_off': {
       const pct = (promo.discount_value ?? 0) / 100;
       amount = eligibleSubtotal * pct;
-      if (promo.max_discount_value != null) amount = Math.min(amount, promo.max_discount_value);
+      // For combo gates the cap applies PER combo set, not once for
+      // the whole eligibleSubtotal. e.g. "5% off, cap RM3" with 2
+      // formed combos → RM3 cap × 2 = RM6 max. The non-combo path
+      // keeps the original "one cap for the whole match".
+      if (promo.max_discount_value != null) {
+        const cap = hasComboGate
+          ? promo.max_discount_value * Math.max(1, comboSetsFormed)
+          : promo.max_discount_value;
+        amount = Math.min(amount, cap);
+      }
       break;
     }
     case 'fixed_amount_off': {
-      amount = Math.min(eligibleSubtotal, promo.discount_value ?? 0);
+      // Combo gate present → discount fires once per formed combo set.
+      // Non-combo path → single discount applied to the eligible subset.
+      if (hasComboGate) {
+        amount = (promo.discount_value ?? 0) * comboSetsFormed;
+        amount = Math.min(eligibleSubtotal, amount);
+      } else {
+        amount = Math.min(eligibleSubtotal, promo.discount_value ?? 0);
+      }
       break;
     }
     case 'free_item': {
@@ -294,9 +337,12 @@ function computeDiscount(promo: Promotion, lines: CartLine[]): { amount: number;
       break;
     }
     case 'combo_price': {
-      // Whole affected subset is sold at combo_price (assumes one combo per call)
+      // Bundle sold at combo_price PER set. Two formed combos at
+      // RM18 each → 2 × RM18 = RM36 charged for the bundle subset;
+      // discount is the diff vs eligibleSubtotal.
       if (promo.combo_price != null) {
-        amount = Math.max(0, eligibleSubtotal - promo.combo_price);
+        const totalAtComboPrice = promo.combo_price * Math.max(1, comboSetsFormed);
+        amount = Math.max(0, eligibleSubtotal - totalAtComboPrice);
       }
       break;
     }
