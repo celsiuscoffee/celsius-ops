@@ -1,11 +1,13 @@
 export const dynamic = "force-dynamic";
 
-// Daily: notify customers about vouchers expiring in ~2 days so they
-// have time to plan a redemption.
-//
-// Window: expires between 24h and 60h from now. Excludes vouchers we
-// already nudged this cycle by checking a marker column we set on
-// notify success.
+// Daily voucher lifecycle cron — does TWO things in one sweep:
+//   1) Notify customers about vouchers expiring in ~2 days so they
+//      have time to plan a redemption.
+//   2) Mark already-expired vouchers as status='expired' so they
+//      stop showing up in customer wallets and stop being checked
+//      every day. The notify-only previous version left stale
+//      `status='active' AND expires_at < now()` rows accumulating
+//      forever — confusing customers + polluting analytics.
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
@@ -17,6 +19,22 @@ export async function GET(req: NextRequest) {
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   const supabase = getSupabaseAdmin();
+
+  // ── 1) Sweep already-expired vouchers ─────────────────────────────
+  // Runs first so we don't bother notifying about a voucher that's
+  // already past expiry (rare race condition but possible).
+  const { data: expired, error: expireErr } = await supabase
+    .from("issued_rewards")
+    .update({ status: "expired" })
+    .eq("status", "active")
+    .lt("expires_at", new Date().toISOString())
+    .select("id");
+  if (expireErr) {
+    console.error("[voucher-expiring] sweep failed", expireErr);
+  }
+  const sweptCount = expired?.length ?? 0;
+
+  // ── 2) Notify about upcoming expiry ───────────────────────────────
   const start = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   const end   = new Date(Date.now() + 60 * 60 * 60 * 1000).toISOString();
 
@@ -41,5 +59,9 @@ export async function GET(req: NextRequest) {
     if ((r.sent ?? 0) > 0) sent++;
   }
 
-  return NextResponse.json({ checked: vouchers?.length ?? 0, sent });
+  return NextResponse.json({
+    swept_to_expired: sweptCount,
+    checked: vouchers?.length ?? 0,
+    sent,
+  });
 }
