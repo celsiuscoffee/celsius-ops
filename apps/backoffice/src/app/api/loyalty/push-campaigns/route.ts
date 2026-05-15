@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   const { data: campaigns, error } = await supabaseAdmin
     .from("notification_campaigns")
-    .select("id, key, name, description, trigger_config, frequency_cap_count, frequency_cap_days, send_window_start_hour, send_window_end_hour, enabled, created_at, updated_at")
+    .select("id, key, name, description, trigger_config, frequency_cap_count, frequency_cap_days, send_window_start_hour, send_window_end_hour, enabled, title_template, body_template, deeplink_path, created_at, updated_at")
     .order("name", { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

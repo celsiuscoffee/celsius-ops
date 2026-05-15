@@ -128,3 +128,64 @@ export async function deregisterPush(): Promise<void> {
 
   await AsyncStorage.removeItem(STORED_TOKEN_KEY).catch(() => {});
 }
+
+/**
+ * Map a push payload's `data.type` to a notification_campaigns.key on
+ * the server. Most are 1:1 but a few legacy types differ from the
+ * campaign key (e.g. notifyRewardExpiring emits "reward_expiring" but
+ * the campaign is "voucher_expiring"). Unknown types return null and
+ * the caller skips tracking — better than guessing.
+ */
+function campaignKeyForType(type: string | undefined): string | null {
+  switch (type) {
+    case "reward_expiring":
+    case "voucher_expiring":
+      return "voucher_expiring";
+    case "sitting_on_beans":
+      return "sitting_on_beans";
+    case "miss_you":
+      return "lapsed_customer";
+    case "tier_at_risk":
+      return "tier_at_risk";
+    case "birthday":
+      return "birthday_treat";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Mark the most recent unopened send for this (campaign, member) as
+ * opened. Called from the notification-tap listener AND on cold-start
+ * when the app was launched by a notification (getLastNotificationResponseAsync).
+ *
+ * Server matches the most recent send within a 7d window so a long-tail
+ * tap (notification sat in the OS centre for hours) still attributes
+ * to the actual send that triggered the visible row, not whatever ran
+ * since.
+ *
+ * Best-effort: failures are swallowed — push-open tracking is for
+ * stats, never the user-facing flow.
+ */
+export async function trackNotificationOpen(args: {
+  data: { type?: string } | undefined;
+  memberId: string | null;
+}): Promise<void> {
+  if (!args.memberId) return;
+  const campaignKey = campaignKeyForType(args.data?.type);
+  if (!campaignKey) return;
+  try {
+    await fetch(`${API_BASE}/api/push/track-open`, {
+      method:  "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin:  API_BASE,
+        Referer: API_BASE + "/",
+      },
+      body:    JSON.stringify({ campaignKey, memberId: args.memberId }),
+    });
+  } catch {
+    // ignore — stats only
+  }
+}
+

@@ -17,7 +17,7 @@ import { MaintenanceBanner } from "../components/MaintenanceBanner";
 import { StripeUrlHandler } from "../components/StripeUrlHandler";
 import { RootErrorBoundary } from "../components/RootErrorBoundary";
 import { Toast } from "../components/Toast";
-import { registerForPush } from "../lib/notifications";
+import { registerForPush, trackNotificationOpen } from "../lib/notifications";
 import { useApp } from "../lib/store";
 import { initAnalytics, identifyMember, clearMember } from "../lib/analytics";
 import { fetchRewards, fetchTier, fetchOrderHistory } from "../lib/rewards";
@@ -222,12 +222,24 @@ const RootLayout = function RootLayout() {
     }
   }, [member?.id, member?.name, phone]);
 
+  // memberId is read live inside the handler via useApp.getState() so
+  // it always reflects the current signed-in user — using a stale
+  // closure value would mean a tap right after sign-in attributed to
+  // "no member" and the open-rate stat would undercount.
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((res) => {
+    function handleResponse(res: Notifications.NotificationResponse) {
       const data = res.notification.request.content.data as
         | { orderId?: string; deeplink?: string; type?: string }
         | undefined;
       if (!data) return;
+
+      // Stats: mark this campaign send as opened. Best-effort, runs in
+      // parallel with deep-link routing so it never delays navigation.
+      // Reads the live store snapshot so a tap right after sign-in
+      // still attributes to the freshly-signed-in member.
+      const liveMember = useApp.getState().member;
+      void trackNotificationOpen({ data, memberId: liveMember?.id ?? null });
+
       // Order-status pushes carry an orderId — route to the order detail.
       if (data.orderId) {
         router.push({ pathname: "/order/[id]", params: { id: data.orderId } });
@@ -251,12 +263,29 @@ const RootLayout = function RootLayout() {
           // something useful instead of silently doing nothing.
           if (data.type === "mission_completed" ||
               data.type === "voucher_expiring" ||
+              data.type === "reward_expiring" ||
+              data.type === "sitting_on_beans" ||
+              data.type === "miss_you" ||
+              data.type === "tier_at_risk" ||
+              data.type === "birthday" ||
               data.type === "claimable_ready" ||
               data.type === "referral_rewarded") {
             router.push("/rewards" as never);
           }
       }
-    });
+    }
+
+    const sub = Notifications.addNotificationResponseReceivedListener(handleResponse);
+
+    // Cold-start case: the tap that opened the app from a killed state
+    // doesn't fire the listener above (the listener is registered too
+    // late in the lifecycle). getLastNotificationResponseAsync returns
+    // the response that triggered launch — we replay it through the
+    // same handler so both the deep-link AND the open-tracking land.
+    Notifications.getLastNotificationResponseAsync().then((res) => {
+      if (res) handleResponse(res);
+    }).catch(() => {});
+
     return () => sub.remove();
   }, []);
 

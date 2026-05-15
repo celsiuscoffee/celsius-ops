@@ -49,6 +49,22 @@ export async function PATCH(
     if (typeof body.description === "string") {
       updates.description = body.description;
     }
+    // Phase 2 — admin-editable copy. Empty string clears back to
+    // "use default" (renderer reads NULL as "fall back to legacy
+    // notify*"). Trim trailing whitespace so a paste-with-newline
+    // doesn't quietly produce a notification with a hanging blank.
+    if (typeof body.title_template === "string") {
+      const trimmed = body.title_template.trim();
+      updates.title_template = trimmed.length > 0 ? trimmed : null;
+    }
+    if (typeof body.body_template === "string") {
+      const trimmed = body.body_template.trim();
+      updates.body_template = trimmed.length > 0 ? trimmed : null;
+    }
+    if (typeof body.deeplink_path === "string") {
+      const trimmed = body.deeplink_path.trim();
+      updates.deeplink_path = trimmed.length > 0 ? trimmed : null;
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "No editable fields supplied" }, { status: 400 });

@@ -8,6 +8,7 @@ import {
 } from "@/lib/push/templates";
 import {
   dispatchCampaign,
+  dispatchCampaignWithTemplate,
   applyOutcome,
   emptyCounters,
   getCampaign,
@@ -97,19 +98,29 @@ async function runBirthday(): Promise<SweepCounters & { matched: number }> {
 
   for (const m of list) {
     const firstName = m.name?.trim().split(/\s+/)[0];
-    const outcome = await dispatchCampaign({
+    // Prefer the editable template; fall back to legacy notify*
+    // when the campaign hasn't been customised. Both paths flow
+    // through dispatchCampaign so the policy gates apply equally.
+    let outcome = await dispatchCampaignWithTemplate({
       campaignKey: "birthday_treat",
       memberId:    m.id,
-      send: () => notifyBirthdayReward({
-        memberId:   m.id,
-        firstName,
-        rewardName: "birthday drink",
-      }),
-      payload: {
-        firstName,
-        rewardName: "birthday drink",
-      },
+      vars: { firstName: firstName ?? "" },
     });
+    if (!outcome.dispatched && outcome.reason === "no_tokens") {
+      // Could mean truly no tokens OR template not configured. Re-run
+      // through legacy path — if it ALSO returns no_tokens we know it's
+      // really tokens, not a missing template.
+      outcome = await dispatchCampaign({
+        campaignKey: "birthday_treat",
+        memberId:    m.id,
+        send: () => notifyBirthdayReward({
+          memberId:   m.id,
+          firstName,
+          rewardName: "birthday drink",
+        }),
+        payload: { firstName, rewardName: "birthday drink" },
+      });
+    }
     applyOutcome(counters, outcome);
   }
   return { ...counters, matched: list.length };
@@ -148,16 +159,23 @@ async function runRewardExpiring(): Promise<SweepCounters & { matched: number }>
     if (!v.member_id || !v.expires_at) continue;
     const daysLeft = Math.max(1, Math.ceil((new Date(v.expires_at).getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
     const name = v.reward?.name ?? "voucher";
-    const outcome = await dispatchCampaign({
+    let outcome = await dispatchCampaignWithTemplate({
       campaignKey: "voucher_expiring",
       memberId:    v.member_id,
-      send: () => notifyRewardExpiring({
-        memberId:   v.member_id!,
-        rewardName: name,
-        daysLeft,
-      }),
-      payload: { rewardName: name, daysLeft, expiresAt: v.expires_at },
+      vars: { rewardName: name, daysLeft },
     });
+    if (!outcome.dispatched && outcome.reason === "no_tokens") {
+      outcome = await dispatchCampaign({
+        campaignKey: "voucher_expiring",
+        memberId:    v.member_id,
+        send: () => notifyRewardExpiring({
+          memberId:   v.member_id!,
+          rewardName: name,
+          daysLeft,
+        }),
+        payload: { rewardName: name, daysLeft, expiresAt: v.expires_at },
+      });
+    }
     applyOutcome(counters, outcome);
   }
   return { ...counters, matched: list.length };
@@ -217,17 +235,24 @@ async function runTierAtRisk(): Promise<SweepCounters & { matched: number }> {
     const cupsShort = Math.max(0, need - have);
     if (cupsShort < minShort || cupsShort > maxShort) continue;
 
-    const outcome = await dispatchCampaign({
+    let outcome = await dispatchCampaignWithTemplate({
       campaignKey: "tier_at_risk",
       memberId:    r.member_id,
-      send: () => notifyTierAtRisk({
-        memberId:    r.member_id!,
-        currentTier: r.tier!.name ?? "tier",
-        cupsShort,
-        daysLeft,
-      }),
-      payload: { currentTier: r.tier.name, cupsShort, daysLeft },
+      vars: { currentTier: r.tier.name ?? "tier", cupsShort, daysLeft },
     });
+    if (!outcome.dispatched && outcome.reason === "no_tokens") {
+      outcome = await dispatchCampaign({
+        campaignKey: "tier_at_risk",
+        memberId:    r.member_id,
+        send: () => notifyTierAtRisk({
+          memberId:    r.member_id!,
+          currentTier: r.tier!.name ?? "tier",
+          cupsShort,
+          daysLeft,
+        }),
+        payload: { currentTier: r.tier.name, cupsShort, daysLeft },
+      });
+    }
     applyOutcome(counters, outcome);
   }
   return { ...counters, matched: counters.considered };
@@ -274,12 +299,19 @@ async function runMissYou(): Promise<SweepCounters & { matched: number }> {
       if ((count ?? 0) < minLifetimeOrders) continue;
     }
     const firstName = r.member?.name?.trim().split(/\s+/)[0];
-    const outcome = await dispatchCampaign({
+    let outcome = await dispatchCampaignWithTemplate({
       campaignKey: "lapsed_customer",
       memberId:    r.member_id,
-      send: () => notifyMissYou({ memberId: r.member_id!, firstName }),
-      payload: { firstName, lapsedDays },
+      vars: { firstName: firstName ?? "" },
     });
+    if (!outcome.dispatched && outcome.reason === "no_tokens") {
+      outcome = await dispatchCampaign({
+        campaignKey: "lapsed_customer",
+        memberId:    r.member_id,
+        send: () => notifyMissYou({ memberId: r.member_id!, firstName }),
+        payload: { firstName, lapsedDays },
+      });
+    }
     applyOutcome(counters, outcome);
   }
   return { ...counters, matched: list.length };
@@ -322,34 +354,14 @@ async function runSittingOnBeans(): Promise<SweepCounters & { matched: number }>
     if (!r.member_id) continue;
     const points = r.points_balance ?? 0;
     const firstName = r.member?.name?.trim().split(/\s+/)[0];
-    // We re-use notifyVoucherGifted's underlying send shape but with
-    // a points-specific message. Rather than add a 6th notify* helper
-    // for one-off copy, inline the dispatch here — same payload
-    // contract the wrapper expects.
-    const outcome = await dispatchCampaign({
+    // Template-driven (no legacy fallback needed — this trigger was
+    // born after the template editor landed). Server falls back to
+    // the seed copy in the migration if admins haven't customised.
+    const outcome = await dispatchCampaignWithTemplate({
       campaignKey: "sitting_on_beans",
       memberId:    r.member_id,
-      send: async () => {
-        // Local sender for this trigger — keeps templates.ts focused on
-        // long-lived flows. If we add 2nd Beans-related campaign we
-        // promote this into templates.ts.
-        const { sendExpoPush } = await import("@/lib/push/send");
-        const { tokensForMember } = await import("@/lib/push/tokens");
-        const tokens = await tokensForMember(r.member_id!);
-        if (tokens.length === 0) return { sent: 0, failed: 0, pruned: 0 };
-        const who = firstName ? `${firstName}, you` : "You";
-        return sendExpoPush(
-          tokens.map((to) => ({
-            to,
-            title: `${points} Beans waiting for you`,
-            body:  `${who}'ve got enough to redeem something good — open the app to see what's brewing`,
-            sound: "default",
-            channelId: "loyalty",
-            data: { type: "sitting_on_beans", points, deeplink: "rewards" },
-          })),
-        );
-      },
-      payload: { points, firstName, daysIdle: minDaysIdle },
+      vars: { points, firstName: firstName ?? "" },
+      extraData: { points },
     });
     applyOutcome(counters, outcome);
   }

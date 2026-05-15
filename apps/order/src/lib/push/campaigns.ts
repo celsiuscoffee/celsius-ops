@@ -1,5 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import type { SendResult } from "./send";
+import { sendExpoPush, type SendResult } from "./send";
+import { tokensForMember } from "./tokens";
+import { renderTemplate, type TemplateVars } from "./render";
 
 /**
  * Campaign-aware dispatcher. Wraps the per-flow `notify*` functions
@@ -42,6 +44,12 @@ type CampaignRow = {
   frequency_cap_days: number;
   send_window_start_hour: number;
   send_window_end_hour: number;
+  // Phase 2 — admin-editable copy. Null means "use the helper's
+  // hardcoded default" so we don't break legacy crons that still
+  // call notify* directly.
+  title_template: string | null;
+  body_template:  string | null;
+  deeplink_path:  string | null;
 };
 
 /** Cache campaign config for the duration of a single cron run.
@@ -57,7 +65,7 @@ async function loadCampaigns(): Promise<Map<string, CampaignRow>> {
   const supabase = getSupabaseAdmin();
   const { data } = await supabase
     .from("notification_campaigns")
-    .select("id, key, enabled, trigger_config, frequency_cap_count, frequency_cap_days, send_window_start_hour, send_window_end_hour");
+    .select("id, key, enabled, trigger_config, frequency_cap_count, frequency_cap_days, send_window_start_hour, send_window_end_hour, title_template, body_template, deeplink_path");
   const rows = new Map<string, CampaignRow>();
   for (const r of (data ?? []) as CampaignRow[]) rows.set(r.key, r);
   campaignCache = { at: Date.now(), rows };
@@ -245,3 +253,94 @@ export function applyOutcome(c: SweepCounters, o: DispatchOutcome): void {
     c.skipped[o.reason]++;
   }
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Template-driven dispatch                                                   */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+const CHANNEL_FOR_KEY: Record<string, string> = {
+  voucher_expiring: "loyalty",
+  sitting_on_beans: "loyalty",
+  lapsed_customer:  "promotions",
+  birthday_treat:   "loyalty",
+  tier_at_risk:     "loyalty",
+};
+
+const FALLBACK_DEEPLINK: Record<string, string> = {
+  voucher_expiring: "rewards/vouchers",
+  sitting_on_beans: "rewards",
+  lapsed_customer:  "menu",
+  birthday_treat:   "rewards/vouchers",
+  tier_at_risk:     "rewards",
+};
+
+/** Render the campaign's editable title/body with the supplied vars
+ *  and send via Expo. Used by cron branches that have migrated to
+ *  the template editor (Phase 2). Falls back to the legacy notify*
+ *  path when title_template is null — the cron caller controls that
+ *  branch with the renderUsingTemplate flag.
+ *
+ *  All policy gates (enabled / cap / opt-out / quiet hours) still
+ *  flow through dispatchCampaign — this function just constructs the
+ *  send closure and payload.
+ */
+export async function dispatchCampaignWithTemplate(args: {
+  campaignKey: CampaignKey;
+  memberId: string;
+  vars: TemplateVars;
+  /** Optional override — used by the "test send" admin button so an
+   *  unsaved draft template can preview without persisting. Falls
+   *  back to the campaign row when undefined. */
+  override?: { title?: string; body?: string };
+  /** Extra payload merged into the notification's data so deep-links
+   *  / type detection / open-tracking still work. The campaign key
+   *  is added automatically as data.type. */
+  extraData?: Record<string, unknown>;
+}): Promise<DispatchOutcome> {
+  const campaign = await getCampaign(args.campaignKey);
+
+  const title = args.override?.title ?? campaign?.title_template ?? null;
+  const body  = args.override?.body  ?? campaign?.body_template  ?? null;
+
+  // No template configured AND no override → caller should fall back
+  // to the legacy notify* path. We surface this as no_tokens so the
+  // sweep counter shows the row was skipped, then the cron branch
+  // can call dispatchCampaign() with the legacy notify* closure.
+  if (!title || !body) {
+    return { dispatched: false, reason: "no_tokens" };
+  }
+
+  return dispatchCampaign({
+    campaignKey: args.campaignKey,
+    memberId:    args.memberId,
+    payload: {
+      title:    renderTemplate(title, args.vars),
+      body:     renderTemplate(body,  args.vars),
+      vars:     args.vars,
+      override: args.override ?? null,
+    },
+    send: async () => {
+      const tokens = await tokensForMember(args.memberId);
+      if (tokens.length === 0) return { sent: 0, failed: 0, pruned: 0 };
+      const renderedTitle = renderTemplate(title, args.vars);
+      const renderedBody  = renderTemplate(body,  args.vars);
+      const deeplink = campaign?.deeplink_path ?? FALLBACK_DEEPLINK[args.campaignKey] ?? null;
+      const channel  = CHANNEL_FOR_KEY[args.campaignKey] ?? "loyalty";
+      return sendExpoPush(
+        tokens.map((to) => ({
+          to,
+          title: renderedTitle,
+          body:  renderedBody,
+          sound: "default",
+          channelId: channel,
+          data: {
+            type: args.campaignKey,
+            ...(deeplink ? { deeplink } : {}),
+            ...(args.extraData ?? {}),
+          },
+        })),
+      );
+    },
+  });
+}
+
