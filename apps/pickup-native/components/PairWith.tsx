@@ -270,9 +270,16 @@ export function PairWith({ current, allProducts, stagedIds, onToggle }: PairWith
   // surface a section-level "Combo unlocked" hint above the cards
   // so the customer sees confirmation that the savings will apply
   // when they tap Add to cart.
-  const stagedComboSavings = combos.length === 0 ? 0 : suggestionsSorted
-    .filter((p) => stagedIds.has(p.id))
-    .reduce((sum, p) => {
+  // Combo savings preview for the section banner. A combo fires
+  // ONCE per cart at evaluation time (the gate is "all categories
+  // present", not "all categories present multiple times"), so we
+  // pick the best single combo savings across staged pairs rather
+  // than summing — summing would over-promise vs what the server
+  // actually applies. Matches the math used by the product page CTA.
+  let stagedComboSavings = 0;
+  if (combos.length > 0) {
+    for (const p of suggestionsSorted) {
+      if (!stagedIds.has(p.id)) continue;
       const c = bestComboForPair({
         combos,
         currentProductId:       current.id,
@@ -283,8 +290,9 @@ export function PairWith({ current, allProducts, stagedIds, onToggle }: PairWith
         pairProductPrice:       p.price,
         outletId,
       });
-      return sum + (c?.savings ?? 0);
-    }, 0);
+      if (c && c.savings > stagedComboSavings) stagedComboSavings = c.savings;
+    }
+  }
 
   return (
     <View className="mt-8">

@@ -27,6 +27,7 @@ import { cloudinaryThumb } from "../../lib/image";
 import { useActiveSales } from "../../lib/use-active-sales";
 import { bestSaleForProduct } from "../../lib/product-sales";
 import { PriceTag } from "../../components/PriceTag";
+import { fetchActiveCombos, bestComboForPair } from "../../lib/combos";
 
 export default function ProductScreen() {
   // `cartId` is set when the customer tapped an existing cart line to
@@ -203,7 +204,46 @@ export default function ProductScreen() {
   // modifier-driven price delta stays at full price; only the base
   // is discounted per the standard promo math.
   const saleSavingsThisLine = productSale ? productSale.savings * qty : 0;
-  const grandTotal = Math.max(0, totalPrice + stagedPairsTotal - saleSavingsThisLine);
+
+  // Combo savings preview — when the customer has staged a pair-with
+  // item that triggers a combo with the current product, subtract
+  // those savings from the bottom CTA so the price the customer sees
+  // matches what hits the cart. Without this the CTA showed full
+  // bundle price while the green "Combo unlocked — saves RM2" banner
+  // above promised the discount, leaving the customer to wonder
+  // which number was real. Server still authoritative; this is just
+  // the preview lining up with the banner.
+  const { data: activeCombos = [] } = useQuery({
+    queryKey: ["active-combos"],
+    queryFn: fetchActiveCombos,
+    staleTime: 5 * 60_000,
+  });
+  const stagedComboSavings = useMemo(() => {
+    if (activeCombos.length === 0 || !product || stagedPairs.length === 0) return 0;
+    // Pick the BEST single combo any staged pair unlocks. Combos
+    // fire once per cart by the gate semantics, so we don't sum
+    // across multiple staged pairs (would over-promise the discount).
+    let best = 0;
+    for (const p of stagedPairs) {
+      const c = bestComboForPair({
+        combos:                 activeCombos,
+        currentProductId:       product.id,
+        currentProductCategory: product.category,
+        currentProductPrice:    product.price,
+        pairProductId:          p.id,
+        pairProductCategory:    p.category,
+        pairProductPrice:       p.price,
+        outletId,
+      });
+      if (c && c.savings > best) best = c.savings;
+    }
+    return best;
+  }, [activeCombos, product, stagedPairs, outletId]);
+
+  const grandTotal = Math.max(
+    0,
+    totalPrice + stagedPairsTotal - saleSavingsThisLine - stagedComboSavings,
+  );
   // "items" count for the CTA: 1 for the main product (regardless of qty,
   // because qty multiplies the same line — feels weird to say "Add 5
   // items" when it's the same drink) + 1 for each staged pair.
