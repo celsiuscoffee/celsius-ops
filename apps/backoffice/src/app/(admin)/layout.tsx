@@ -39,6 +39,7 @@ import {
   TicketPercent,
   Megaphone,
   MessageSquare,
+  Bell,
   Sparkles,
   Building2,
   UserCog,
@@ -261,8 +262,9 @@ const NAV_SECTIONS: NavSection[] = [
       {
         label: "Marketing",
         items: [
-          { label: "Campaigns", href: "/loyalty/campaigns", icon: <Megaphone className={ICON_SIZE} />, moduleKey: "loyalty:campaigns" },
-          { label: "Engage",    href: "/loyalty/engage",    icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
+          { label: "Campaigns",       href: "/loyalty/campaigns",       icon: <Megaphone className={ICON_SIZE} />,     moduleKey: "loyalty:campaigns" },
+          { label: "Push Reminders",  href: "/loyalty/push-reminders",  icon: <Bell className={ICON_SIZE} />,          moduleKey: "loyalty:campaigns" },
+          { label: "Engage",          href: "/loyalty/engage",          icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
         ],
       },
     ],

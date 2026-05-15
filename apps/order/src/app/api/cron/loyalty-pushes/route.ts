@@ -6,6 +6,13 @@ import {
   notifyTierAtRisk,
   notifyMissYou,
 } from "@/lib/push/templates";
+import {
+  dispatchCampaign,
+  applyOutcome,
+  emptyCounters,
+  getCampaign,
+  type SweepCounters,
+} from "@/lib/push/campaigns";
 
 /**
  * Cron-driven loyalty push fan-out. One endpoint, one sweep per
@@ -13,11 +20,18 @@ import {
  * config. Each branch is independent — failures in one sweep
  * never poison the others.
  *
- * Schedule (suggested vercel.json):
- *   "0  1 * * *"   /api/cron/loyalty-pushes?job=birthday
- *   "30 1 * * *"   /api/cron/loyalty-pushes?job=reward-expiring
- *   "0  2 * * *"   /api/cron/loyalty-pushes?job=tier-at-risk
- *   "0  3 * * MON" /api/cron/loyalty-pushes?job=miss-you
+ * All sweeps now route through dispatchCampaign() which enforces
+ * the per-campaign on/off toggle, frequency cap, opt-out, and
+ * quiet-hours configured in the notification_campaigns table.
+ * Backoffice toggles take effect on the next cron tick (cache
+ * is per-request).
+ *
+ * Schedule (vercel.json):
+ *   "0  1 * * *"     /api/cron/loyalty-pushes?job=birthday        (9am MYT)
+ *   "30 1 * * *"     /api/cron/loyalty-pushes?job=reward-expiring (9:30am MYT)
+ *   "0  2 * * *"     /api/cron/loyalty-pushes?job=tier-at-risk    (10am MYT)
+ *   "0  3 * * *"     /api/cron/loyalty-pushes?job=sitting-on-beans (11am MYT)
+ *   "0  3 * * 1"     /api/cron/loyalty-pushes?job=miss-you        (11am MYT Mon)
  *
  * Auth: header `Authorization: Bearer ${CRON_SECRET}` OR Vercel-
  * native `x-vercel-cron` header. Local dev: pass ?secret= for
@@ -48,9 +62,10 @@ export async function GET(request: NextRequest) {
       case "reward-expiring":  return NextResponse.json(await runRewardExpiring());
       case "tier-at-risk":     return NextResponse.json(await runTierAtRisk());
       case "miss-you":         return NextResponse.json(await runMissYou());
+      case "sitting-on-beans": return NextResponse.json(await runSittingOnBeans());
       default:
         return NextResponse.json(
-          { error: "unknown job — expected birthday|reward-expiring|tier-at-risk|miss-you" },
+          { error: "unknown job — expected birthday|reward-expiring|tier-at-risk|miss-you|sitting-on-beans" },
           { status: 400 },
         );
     }
@@ -64,7 +79,7 @@ export async function GET(request: NextRequest) {
 /* Birthday                                                                   */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-async function runBirthday(): Promise<{ sent: number; failed: number; pruned: number; members: number }> {
+async function runBirthday(): Promise<SweepCounters & { matched: number }> {
   const supabase = getSupabaseAdmin();
   // Match birthdays by MM-DD so we don't care about the stored year.
   // `members.birthday` is a YYYY-MM-DD string.
@@ -77,33 +92,44 @@ async function runBirthday(): Promise<{ sent: number; failed: number; pruned: nu
     .select("id, name, birthday")
     .ilike("birthday", `%-${mm}-${dd}`);
 
-  let sent = 0, failed = 0, pruned = 0;
   const list = (members ?? []) as Array<{ id: string; name: string | null }>;
+  const counters = emptyCounters();
 
   for (const m of list) {
     const firstName = m.name?.trim().split(/\s+/)[0];
-    const r = await notifyBirthdayReward({
-      memberId:   m.id,
-      firstName,
-      rewardName: "birthday drink",
+    const outcome = await dispatchCampaign({
+      campaignKey: "birthday_treat",
+      memberId:    m.id,
+      send: () => notifyBirthdayReward({
+        memberId:   m.id,
+        firstName,
+        rewardName: "birthday drink",
+      }),
+      payload: {
+        firstName,
+        rewardName: "birthday drink",
+      },
     });
-    sent   += r.sent;
-    failed += r.failed;
-    pruned += r.pruned;
+    applyOutcome(counters, outcome);
   }
-  return { sent, failed, pruned, members: list.length };
+  return { ...counters, matched: list.length };
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Reward / voucher expiring soon                                             */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-async function runRewardExpiring(): Promise<{ sent: number; failed: number; pruned: number; vouchers: number }> {
+async function runRewardExpiring(): Promise<SweepCounters & { matched: number }> {
   const supabase = getSupabaseAdmin();
+  const campaign = await getCampaign("voucher_expiring");
+  // Trigger window driven from campaign config so admins can change
+  // "fire 2 days before" → "fire 7 days before" without a deploy.
+  const daysAhead =
+    typeof (campaign?.trigger_config as { days_before_expiry?: number })?.days_before_expiry === "number"
+      ? (campaign!.trigger_config as { days_before_expiry: number }).days_before_expiry
+      : 3;
   const now    = new Date();
-  // Window: expires_at within the next 3 days (inclusive) AND > now.
-  const inMs   = 3 * 24 * 60 * 60 * 1000;
-  const upper  = new Date(now.getTime() + inMs).toISOString();
+  const upper  = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
   const lower  = now.toISOString();
 
   const { data: rows } = await supabase
@@ -116,30 +142,42 @@ async function runRewardExpiring(): Promise<{ sent: number; failed: number; prun
 
   type Row = { member_id: string | null; expires_at: string | null; reward: { name?: string | null } | null };
   const list = (rows ?? []) as unknown as Row[];
+  const counters = emptyCounters();
 
-  let sent = 0, failed = 0, pruned = 0;
   for (const v of list) {
     if (!v.member_id || !v.expires_at) continue;
     const daysLeft = Math.max(1, Math.ceil((new Date(v.expires_at).getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
     const name = v.reward?.name ?? "voucher";
-    const r = await notifyRewardExpiring({
-      memberId:   v.member_id,
-      rewardName: name,
-      daysLeft,
+    const outcome = await dispatchCampaign({
+      campaignKey: "voucher_expiring",
+      memberId:    v.member_id,
+      send: () => notifyRewardExpiring({
+        memberId:   v.member_id!,
+        rewardName: name,
+        daysLeft,
+      }),
+      payload: { rewardName: name, daysLeft, expiresAt: v.expires_at },
     });
-    sent   += r.sent;
-    failed += r.failed;
-    pruned += r.pruned;
+    applyOutcome(counters, outcome);
   }
-  return { sent, failed, pruned, vouchers: list.length };
+  return { ...counters, matched: list.length };
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Tier at risk                                                               */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-async function runTierAtRisk(): Promise<{ sent: number; failed: number; pruned: number; members: number }> {
+async function runTierAtRisk(): Promise<SweepCounters & { matched: number }> {
   const supabase = getSupabaseAdmin();
+  const campaign = await getCampaign("tier_at_risk");
+  const cfg = (campaign?.trigger_config ?? {}) as {
+    min_cups_short?: number;
+    max_cups_short?: number;
+    days_left_window?: number;
+  };
+  const minShort = cfg.min_cups_short ?? 1;
+  const maxShort = cfg.max_cups_short ?? 3;
+  const daysLeft = cfg.days_left_window ?? 14;
 
   // Customers above the base tier. We re-evaluate their tier via the
   // RPC and compare visits_this_period to the threshold for the tier
@@ -158,8 +196,8 @@ async function runTierAtRisk(): Promise<{ sent: number; failed: number; pruned: 
     tier: { name?: string; min_visits?: number | null; period_days?: number | null; sort_order?: number | null } | null;
   };
   const list = (rows ?? []) as unknown as Row[];
+  const counters = emptyCounters();
 
-  let sent = 0, failed = 0, pruned = 0, considered = 0;
   for (const r of list) {
     if (!r.member_id || !r.tier || (r.tier.sort_order ?? 0) <= 1) continue;
     const periodDays   = r.tier.period_days ?? 90;
@@ -177,33 +215,37 @@ async function runTierAtRisk(): Promise<{ sent: number; failed: number; pruned: 
 
     const have      = visits ?? 0;
     const cupsShort = Math.max(0, need - have);
-    // Only nudge if they're 1-3 cups away from losing the tier in
-    // the next 14 days. Spam guard.
-    if (cupsShort < 1 || cupsShort > 3) continue;
+    if (cupsShort < minShort || cupsShort > maxShort) continue;
 
-    considered++;
-    const pr = await notifyTierAtRisk({
+    const outcome = await dispatchCampaign({
+      campaignKey: "tier_at_risk",
       memberId:    r.member_id,
-      currentTier: r.tier.name ?? "tier",
-      cupsShort,
-      daysLeft:    14,
+      send: () => notifyTierAtRisk({
+        memberId:    r.member_id!,
+        currentTier: r.tier!.name ?? "tier",
+        cupsShort,
+        daysLeft,
+      }),
+      payload: { currentTier: r.tier.name, cupsShort, daysLeft },
     });
-    sent   += pr.sent;
-    failed += pr.failed;
-    pruned += pr.pruned;
+    applyOutcome(counters, outcome);
   }
-  return { sent, failed, pruned, members: considered };
+  return { ...counters, matched: counters.considered };
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Miss-you re-engagement                                                     */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-async function runMissYou(): Promise<{ sent: number; failed: number; pruned: number; members: number }> {
+async function runMissYou(): Promise<SweepCounters & { matched: number }> {
   const supabase = getSupabaseAdmin();
-  const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+  const campaign = await getCampaign("lapsed_customer");
+  const cfg = (campaign?.trigger_config ?? {}) as { lapsed_days?: number; min_lifetime_orders?: number };
+  const lapsedDays = cfg.lapsed_days ?? 14;
+  const minLifetimeOrders = cfg.min_lifetime_orders ?? 0;
+  const cutoff = new Date(Date.now() - lapsedDays * 24 * 60 * 60 * 1000).toISOString();
 
-  // Members whose last visit was >14 days ago AND who have a push
+  // Members whose last visit was >N days ago AND who have a push
   // token (no point notifying tokenless members). Cap at 1000 to
   // keep the cron under the Vercel function timeout.
   const { data: rows } = await supabase
@@ -216,15 +258,100 @@ async function runMissYou(): Promise<{ sent: number; failed: number; pruned: num
 
   type Row = { member_id: string | null; member: { name?: string | null } | null };
   const list = (rows ?? []) as unknown as Row[];
+  const counters = emptyCounters();
 
-  let sent = 0, failed = 0, pruned = 0;
   for (const r of list) {
     if (!r.member_id) continue;
+    // Optional gating on lifetime orders — admins can require members
+    // have ordered at least N times before win-back nudges go out.
+    // First-orderers tend to ignore "miss you" because they barely
+    // know us; better to skip them.
+    if (minLifetimeOrders > 0) {
+      const { count } = await supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("loyalty_member_id", r.member_id);
+      if ((count ?? 0) < minLifetimeOrders) continue;
+    }
     const firstName = r.member?.name?.trim().split(/\s+/)[0];
-    const pr = await notifyMissYou({ memberId: r.member_id, firstName });
-    sent   += pr.sent;
-    failed += pr.failed;
-    pruned += pr.pruned;
+    const outcome = await dispatchCampaign({
+      campaignKey: "lapsed_customer",
+      memberId:    r.member_id,
+      send: () => notifyMissYou({ memberId: r.member_id!, firstName }),
+      payload: { firstName, lapsedDays },
+    });
+    applyOutcome(counters, outcome);
   }
-  return { sent, failed, pruned, members: list.length };
+  return { ...counters, matched: list.length };
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Sitting on Beans — Phase 1 new trigger                                     */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/** Members with N+ Beans who haven't ordered in M+ days. The "concrete
+ *  value sitting unused" angle converts higher than novel offers because
+ *  the customer already feels they own the value (endowment effect).
+ *  Reuses notifyVoucherGifted's loyalty channel + copy shape but with
+ *  points-specific phrasing. */
+async function runSittingOnBeans(): Promise<SweepCounters & { matched: number }> {
+  const supabase = getSupabaseAdmin();
+  const campaign = await getCampaign("sitting_on_beans");
+  const cfg = (campaign?.trigger_config ?? {}) as { min_points?: number; min_days_idle?: number };
+  const minPoints   = cfg.min_points ?? 100;
+  const minDaysIdle = cfg.min_days_idle ?? 5;
+
+  const idleCutoff = new Date(Date.now() - minDaysIdle * 24 * 60 * 60 * 1000).toISOString();
+
+  // member_brands carries the running points balance + last_visit_at
+  // already, so this is one bounded query.
+  const { data: rows } = await supabase
+    .from("member_brands")
+    .select("member_id, points_balance, last_visit_at, member:members(name)")
+    .eq("brand_id", BRAND_ID)
+    .gte("points_balance", minPoints)
+    .lt("last_visit_at", idleCutoff)
+    .order("points_balance", { ascending: false })
+    .limit(1000);
+
+  type Row = { member_id: string | null; points_balance: number | null; member: { name?: string | null } | null };
+  const list = (rows ?? []) as unknown as Row[];
+  const counters = emptyCounters();
+
+  for (const r of list) {
+    if (!r.member_id) continue;
+    const points = r.points_balance ?? 0;
+    const firstName = r.member?.name?.trim().split(/\s+/)[0];
+    // We re-use notifyVoucherGifted's underlying send shape but with
+    // a points-specific message. Rather than add a 6th notify* helper
+    // for one-off copy, inline the dispatch here — same payload
+    // contract the wrapper expects.
+    const outcome = await dispatchCampaign({
+      campaignKey: "sitting_on_beans",
+      memberId:    r.member_id,
+      send: async () => {
+        // Local sender for this trigger — keeps templates.ts focused on
+        // long-lived flows. If we add 2nd Beans-related campaign we
+        // promote this into templates.ts.
+        const { sendExpoPush } = await import("@/lib/push/send");
+        const { tokensForMember } = await import("@/lib/push/tokens");
+        const tokens = await tokensForMember(r.member_id!);
+        if (tokens.length === 0) return { sent: 0, failed: 0, pruned: 0 };
+        const who = firstName ? `${firstName}, you` : "You";
+        return sendExpoPush(
+          tokens.map((to) => ({
+            to,
+            title: `${points} Beans waiting for you`,
+            body:  `${who}'ve got enough to redeem something good — open the app to see what's brewing`,
+            sound: "default",
+            channelId: "loyalty",
+            data: { type: "sitting_on_beans", points, deeplink: "rewards" },
+          })),
+        );
+      },
+      payload: { points, firstName, daysIdle: minDaysIdle },
+    });
+    applyOutcome(counters, outcome);
+  }
+  return { ...counters, matched: list.length };
 }

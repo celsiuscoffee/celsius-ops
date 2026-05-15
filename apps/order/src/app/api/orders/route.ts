@@ -10,6 +10,7 @@ import {
   type CartLine,
 } from "@/lib/loyalty/promotions";
 import { requireCustomerSession } from "@/lib/customer-jwt";
+import { attributeOrderToCampaign } from "@/lib/push/attribution";
 
 function normalisePhoneForLookup(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -708,6 +709,16 @@ export async function POST(request: NextRequest) {
         err,
       );
     }
+
+    // Notification → order attribution. Tag the most recent
+    // unattributed push send for this member (within 24h) with this
+    // order so the backoffice campaign stats can show "orders driven"
+    // per campaign. Fire-and-forget; never blocks the response.
+    void attributeOrderToCampaign({
+      orderId:   order.id,
+      memberId:  loyaltyId ?? null,
+      revenueRm: totalSen / 100,
+    });
 
     return NextResponse.json({
       orderId:     order.id,
