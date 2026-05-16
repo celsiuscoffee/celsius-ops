@@ -39,11 +39,40 @@ if (html.includes("/manifest.json")) {
 const NEW_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />';
 
+// Expo's default expo-reset CSS uses `height: 100%`, which on
+// iOS PWA standalone with viewport-fit=cover doesn't match the
+// dynamic viewport — content stops short of the home-indicator
+// area and leaves a white band below the bottom nav. Swap to
+// 100dvh with a 100vh fallback for browsers that don't support
+// the dynamic viewport unit yet (iOS <16.4, older Android).
+const EXPO_RESET_OLD = `      html,
+      body {
+        height: 100%;
+      }`;
+const EXPO_RESET_NEW = `      html,
+      body {
+        height: 100vh; /* fallback for browsers without 100dvh */
+        height: 100dvh;
+      }`;
+const ROOT_OLD = `      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }`;
+const ROOT_NEW = `      #root {
+        display: flex;
+        height: 100vh; /* fallback */
+        height: 100dvh;
+        flex: 1;
+      }`;
+
 const patched = html
   .replace(
     /<meta name="viewport"[^>]*\/?>/i,
     NEW_VIEWPORT,
   )
+  .replace(EXPO_RESET_OLD, EXPO_RESET_NEW)
+  .replace(ROOT_OLD, ROOT_NEW)
   .replace("</head>", `${HEAD_EXTRA}</head>`)
   .replace("</body>", `${BODY_EXTRA}</body>`);
 
