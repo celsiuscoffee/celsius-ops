@@ -30,7 +30,20 @@ if (html.includes("/manifest.json")) {
   process.exit(0);
 }
 
+// Replace Expo's default viewport meta — it ships with `shrink-to-fit=no`
+// but not `viewport-fit=cover`, which iOS needs to extend the dark
+// content behind the notch / dynamic island. Without it, installed
+// PWAs render with a white status-bar band on top instead of the
+// translucent immersive look apple-mobile-web-app-status-bar-style
+// implies.
+const NEW_VIEWPORT =
+  '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />';
+
 const patched = html
+  .replace(
+    /<meta name="viewport"[^>]*\/?>/i,
+    NEW_VIEWPORT,
+  )
   .replace("</head>", `${HEAD_EXTRA}</head>`)
   .replace("</body>", `${BODY_EXTRA}</body>`);
 
