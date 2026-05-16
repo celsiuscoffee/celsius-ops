@@ -1,4 +1,4 @@
-import { View, Text, Pressable } from "react-native";
+import { Platform, View, Text, Pressable } from "react-native";
 import { router, usePathname } from "expo-router";
 import { Home, ClipboardList, Gift, User } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -81,6 +81,25 @@ export function BottomNav() {
   }).length;
   const rewardsCount = activeWalletCount + claimableCount + affordableCatalogCount;
 
+  // Web (PWA standalone, especially iOS) needs `position: fixed`
+  // anchored to the viewport — `position: absolute; bottom: 0` resolves
+  // against the nearest positioned ancestor, which expo-router's
+  // Stack wrapper sizes via the document body height. On iOS PWA
+  // standalone the body's reported height can be ~150px shorter than
+  // the visual viewport, leaving a white strip below the nav. Fixed
+  // positioning + an env() safe-area pad sidesteps the whole thing.
+  const isWeb = Platform.OS === "web";
+  const webBottomFix = isWeb
+    ? ({
+        position: "fixed" as unknown as "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingBottom:
+          "max(env(safe-area-inset-bottom, 0px), 8px)" as unknown as number,
+      } as const)
+    : null;
+
   return (
     <View
       className="absolute bottom-0 left-0 right-0 bg-surface border-t border-border flex-row justify-around px-1 pt-2"
@@ -90,6 +109,7 @@ export function BottomNav() {
         shadowOpacity: 0.06,
         shadowRadius: 6,
         shadowOffset: { width: 0, height: -1 },
+        ...(webBottomFix ?? {}),
       }}
     >
       {TABS.map((tab) => {

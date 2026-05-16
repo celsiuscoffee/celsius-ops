@@ -51,8 +51,9 @@ const EXPO_RESET_OLD = `      html,
       }`;
 const EXPO_RESET_NEW = `      html,
       body {
-        height: 100vh; /* fallback for browsers without 100dvh */
-        height: 100dvh;
+        height: 100vh;   /* baseline */
+        height: 100lvh;  /* iOS PWA standalone reports the larger viewport */
+        height: 100dvh;  /* dynamic — preferred where supported */
       }`;
 const ROOT_OLD = `      #root {
         display: flex;
@@ -61,7 +62,8 @@ const ROOT_OLD = `      #root {
       }`;
 const ROOT_NEW = `      #root {
         display: flex;
-        height: 100vh; /* fallback */
+        height: 100vh;
+        height: 100lvh;
         height: 100dvh;
         flex: 1;
       }`;
