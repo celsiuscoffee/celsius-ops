@@ -50,7 +50,10 @@ if (!(await exists(PICKUP_NATIVE))) {
 // Install once when absent. Local dev keeps deps warm so this no-ops.
 if (!(await exists(resolve(PICKUP_NATIVE, "node_modules")))) {
   console.log("[build-pwa] Installing pickup-native deps (first run)…");
-  await exec("npm", ["install", "--no-audit", "--no-fund", "--prefer-offline"], {
+  // --include=dev forces devDependencies even when NODE_ENV=production
+  // (Vercel build context). patch-package itself is in regular deps as
+  // a belt-and-braces guard against that flag being ignored.
+  await exec("npm", ["install", "--no-audit", "--no-fund", "--include=dev"], {
     cwd: PICKUP_NATIVE,
   });
 }

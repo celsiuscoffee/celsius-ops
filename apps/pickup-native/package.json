@@ -43,6 +43,7 @@
     "expo-web-browser": "~15.0.7",
     "lucide-react-native": "^1.14.0",
     "nativewind": "^4.1.23",
+    "patch-package": "^8.0.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
@@ -61,7 +62,6 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.1.0",
-    "patch-package": "^8.0.1",
     "typescript": "~5.9.2"
   }
 }
