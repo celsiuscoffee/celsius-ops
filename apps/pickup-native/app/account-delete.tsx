@@ -7,8 +7,8 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
-  Alert,
 } from "react-native";
+import { Alert } from "@/lib/alert";
 import { Stack, router } from "expo-router";
 import { Trash2, AlertTriangle } from "lucide-react-native";
 import * as Haptics from "@/lib/haptics";

@@ -5,8 +5,8 @@ import {
   ScrollView,
   Pressable,
   RefreshControl,
-  Alert,
 } from "react-native";
+import { Alert } from "@/lib/alert";
 import { Stack, router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import {

@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StripeProvider } from "@/lib/stripe-shim";
 import { useEffect, useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Platform, Text, TextInput, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import * as SystemUI from "expo-system-ui";
 import * as Notifications from "expo-notifications";
@@ -101,12 +101,18 @@ const RootLayout = function RootLayout() {
     SpaceGrotesk_700Bold,
   });
 
-  // Cold-launch sequence:
+  // Cold-launch sequence on native:
   //   1. <LogoIntro />     ← brand animation (~1.7s)
   //   2. <SplashPoster />  ← backoffice-managed promo image
   //   3. App content
-  const [showLogo, setShowLogo] = useState(true);
-  const [showSplash, setShowSplash] = useState(true);
+  //
+  // On web (PWA): skip both. Reanimated v4's worklet timing callbacks
+  // don't fire reliably in browser worklet emulation, so LogoIntro can
+  // hang full-screen forever, trapping users on the °c logo. Web users
+  // also expect instant content — the dramatic intro reads as broken.
+  const isWeb = Platform.OS === "web";
+  const [showLogo, setShowLogo] = useState(!isWeb);
+  const [showSplash, setShowSplash] = useState(!isWeb);
 
   useEffect(() => {
     // Hand off from native iOS launch screen to our JS splash as fast as

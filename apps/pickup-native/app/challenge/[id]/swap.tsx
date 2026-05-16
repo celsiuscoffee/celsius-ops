@@ -10,7 +10,8 @@
 //      pop back to the (now-replaced) detail screen.
 
 import { useState } from "react";
-import { View, Text, ScrollView, Pressable, Alert } from "react-native";
+import { View, Text, ScrollView, Pressable } from "react-native";
+import { Alert } from "@/lib/alert";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRightLeft, ChevronRight, Sparkles, Info } from "lucide-react-native";

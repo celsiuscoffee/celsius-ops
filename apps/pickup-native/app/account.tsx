@@ -8,8 +8,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
-  Alert,
 } from "react-native";
+import { Alert } from "@/lib/alert";
 import { Stack, router } from "expo-router";
 import {
   User,

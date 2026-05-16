@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { View, Text, ScrollView, Pressable, Alert, Image, Dimensions } from "react-native";
+import { View, Text, ScrollView, Pressable, Image, Dimensions } from "react-native";
+import { Alert } from "@/lib/alert";
 import { Stack, router } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Gift, ChevronRight, Clock, Lock } from "lucide-react-native";

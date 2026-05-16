@@ -5,10 +5,10 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  Alert,
   Animated,
   Easing,
 } from "react-native";
+import { Alert } from "@/lib/alert";
 // TextInput stays imported — it's still used by the phone / OTP entry steps.
 import { Stack, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
