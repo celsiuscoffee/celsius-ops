@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StripeProvider } from "@/lib/stripe-shim";
 import { useEffect, useState } from "react";
 import { Platform, Text, TextInput, View } from "react-native";
+import { DebugViewport } from "../components/DebugViewport";
 import * as SplashScreen from "expo-splash-screen";
 import * as SystemUI from "expo-system-ui";
 import * as Notifications from "expo-notifications";
@@ -349,6 +350,7 @@ const RootLayout = function RootLayout() {
         </QueryClientProvider>
       </StripeProvider>
     </SafeAreaProvider>
+    <DebugViewport />
     </GestureHandlerRootView>
   );
 };
