@@ -100,7 +100,12 @@ export function BottomNav() {
       } as const)
     : null;
 
-  return (
+  // Web portal: render the nav as a direct child of <body> so its
+  // `position: fixed` is anchored to the viewport itself, free of any
+  // height-mismatched React Native View ancestor. This is the most
+  // defensive option we have against iOS Safari's PWA quirks. Falls
+  // back to the regular tree on native.
+  const navTree = (
     <View
       className="absolute bottom-0 left-0 right-0 bg-surface border-t border-border flex-row justify-around px-1 pt-2"
       style={{
@@ -207,4 +212,16 @@ export function BottomNav() {
       })}
     </View>
   );
+
+  // On web, escape the React Native View tree entirely by portalling
+  // the nav onto <body>. Any "white band below" bugs caused by an
+  // ancestor with a constrained height get bypassed because
+  // position:fixed on a body-child resolves against the visual
+  // viewport with no other containing block in the way.
+  if (isWeb && typeof document !== "undefined") {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createPortal } = require("react-dom") as typeof import("react-dom");
+    return createPortal(navTree, document.body);
+  }
+  return navTree;
 }
