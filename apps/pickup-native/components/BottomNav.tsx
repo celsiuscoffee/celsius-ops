@@ -81,30 +81,28 @@ export function BottomNav() {
   }).length;
   const rewardsCount = activeWalletCount + claimableCount + affordableCatalogCount;
 
-  // On web we abandon the fixed/portalled-to-body approach. Per
-  // product feedback, the entire page should scroll as one unit
-  // (hero + content + bottom nav, no separate scroll regions). The
-  // nav becomes a regular bottom-of-document element: visible at the
-  // bottom of the viewport on short pages, scrolled into view at the
-  // end of the document on long pages. This also lets iOS Safari
-  // detect body-level scroll and minimize its URL bar.
+  // Web: nav pins to viewport bottom via position:fixed so it
+  // follows the user as they scroll. Body owns the scroll (so iOS
+  // Safari minimizes its URL bar — see postbuild-web.mjs); the nav
+  // sits ON TOP of the body scroll. The earlier "white band below
+  // the nav" symptom is now neutralized by the body-scroll setup —
+  // the visual viewport bottom and the layout viewport bottom track
+  // the same edge once body is the scrolling element.
   //
-  // Native keeps the fixed/absolute behaviour — RN ScrollView owns
-  // scroll on iOS / Android, and the nav must stay docked.
+  // Native keeps absolute/bottom-0 — RN ScrollView owns scroll there.
   const isWeb = Platform.OS === "web";
   const webBottomFix = isWeb
     ? ({
-        position: "relative" as const,
-        bottom: undefined,
-        left: undefined,
-        right: undefined,
+        position: "fixed" as unknown as "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 100,
         paddingBottom:
           "max(env(safe-area-inset-bottom, 0px), 8px)" as unknown as number,
       } as const)
     : null;
 
-  // Use the absolute/bottom-0 className only on native — on web it
-  // creates a positioned container that fights the in-flow rendering.
   const className = isWeb
     ? "left-0 right-0 bg-surface border-t border-border flex-row justify-around px-1 pt-2"
     : "absolute bottom-0 left-0 right-0 bg-surface border-t border-border flex-row justify-around px-1 pt-2";
@@ -217,8 +215,13 @@ export function BottomNav() {
     </View>
   );
 
-  // No portal on web anymore — nav renders in normal document flow
-  // alongside the rest of the screen content, so the whole page is
-  // one continuous scroll region.
+  // Portal the nav onto <body> on web so position:fixed anchors
+  // unambiguously to the visual viewport — no RN View ancestor in
+  // the way to create an alternate containing block.
+  if (isWeb && typeof document !== "undefined") {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createPortal } = require("react-dom") as typeof import("react-dom");
+    return createPortal(navTree, document.body);
+  }
   return navTree;
 }

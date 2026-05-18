@@ -166,6 +166,13 @@ const ROOT_NEW = `      #root {
         max-height: none !important;
         -ms-overflow-style: none !important;
         scrollbar-width: none !important;
+      }
+      /* Bottom nav is portalled to <body> and uses position: fixed
+         at the viewport bottom. Reserve space at the end of body so
+         the last content row isn't covered by it. ~84px = nav row
+         + safe-area-inset-bottom on iPhone. */
+      body {
+        padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
       }`;
 
 const patched = html
