@@ -639,34 +639,80 @@ export default function Menu() {
 
       {/* Cart pill — sits above bottom nav */}
       {cartCount(cart) > 0 && (
-        <View
-          className="absolute left-4 right-4"
-          style={{ bottom: insets.bottom + 70 }}
-        >
-          <Pressable
-            onPress={() => router.push("/cart")}
-            className="bg-primary rounded-full py-3 px-5 flex-row items-center justify-between active:opacity-80"
-            style={{
-              shadowColor: "#C05040",
-              shadowOpacity: 0.3,
-              shadowRadius: 12,
-              shadowOffset: { width: 0, height: 4 },
-            }}
-          >
-            <View className="flex-row items-center gap-2">
-              <View className="bg-white rounded-full w-6 h-6 items-center justify-center">
-                <Text className="text-primary text-xs font-bold">{cartCount(cart)}</Text>
-              </View>
-              <Text className="text-white font-bold">View cart</Text>
-            </View>
-            <Text className="text-white font-bold">{formatPrice(cartTotal(cart))}</Text>
-          </Pressable>
-        </View>
+        <MenuCartFloatingBar
+          count={cartCount(cart)}
+          priceLabel={formatPrice(cartTotal(cart))}
+          insetBottom={insets.bottom}
+          onPress={() => router.push("/cart")}
+        />
       )}
 
       <BottomNav />
     </View>
   );
+}
+
+// Floating cart pill — same pattern as the home screen's ViewCart bar.
+// Portals to <body> + position:fixed on web so it pins to the viewport
+// over the body-scroll layout. Native keeps in-tree absolute.
+function MenuCartFloatingBar({
+  count,
+  priceLabel,
+  insetBottom,
+  onPress,
+}: {
+  count: number;
+  priceLabel: string;
+  insetBottom: number;
+  onPress: () => void;
+}) {
+  const isWeb = Platform.OS === "web";
+  const webOverrides = isWeb
+    ? ({
+        position: "fixed" as unknown as "absolute",
+        bottom:
+          "calc(env(safe-area-inset-bottom, 0px) + 80px)" as unknown as number,
+        left: 16,
+        right: 16,
+        zIndex: 99,
+      } as const)
+    : null;
+
+  const bar = (
+    <View
+      className="absolute left-4 right-4"
+      style={{
+        bottom: insetBottom + 70,
+        ...(webOverrides ?? {}),
+      }}
+    >
+      <Pressable
+        onPress={onPress}
+        className="bg-primary rounded-full py-3 px-5 flex-row items-center justify-between active:opacity-80"
+        style={{
+          shadowColor: "#C05040",
+          shadowOpacity: 0.3,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 4 },
+        }}
+      >
+        <View className="flex-row items-center gap-2">
+          <View className="bg-white rounded-full w-6 h-6 items-center justify-center">
+            <Text className="text-primary text-xs font-bold">{count}</Text>
+          </View>
+          <Text className="text-white font-bold">View cart</Text>
+        </View>
+        <Text className="text-white font-bold">{priceLabel}</Text>
+      </Pressable>
+    </View>
+  );
+
+  if (isWeb && typeof document !== "undefined") {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createPortal } = require("react-dom") as typeof import("react-dom");
+    return createPortal(bar, document.body);
+  }
+  return bar;
 }
 
 function SideCategoryPill({
