@@ -89,14 +89,16 @@ const EXPO_RESET_OLD = `      html,
       }`;
 const EXPO_RESET_NEW = `      html,
       body {
-        /* JS sets --vph to window.innerHeight in real pixels — see
-           the inline script in <body>. iOS Safari's CSS viewport
-           units (vh/dvh/lvh/svh) under-report by ~150px in PWA
-           standalone, leaving a white band below the bottom nav.
-           A measured pixel value is the only thing that's actually
-           the full visible viewport on iPhone. */
-        height: 100vh; /* fallback */
-        height: var(--vph, 100vh);
+        /* One continuous scroll: body owns the scroll, not React
+           Native ScrollView. min-height keeps the viewport filled
+           when content is short; height auto lets long content grow
+           the page so body actually scrolls (and iOS Safari hides
+           its URL bar). --vph is set by JS to window.innerHeight
+           in real pixels — sidesteps iOS Safari's lying viewport
+           units. */
+        min-height: 100vh; /* fallback */
+        min-height: var(--vph, 100vh);
+        height: auto;
       }`;
 const ROOT_OLD = `      #root {
         display: flex;
@@ -105,9 +107,24 @@ const ROOT_OLD = `      #root {
       }`;
 const ROOT_NEW = `      #root {
         display: flex;
-        height: 100vh;
-        height: var(--vph, 100vh);
+        flex-direction: column;
+        min-height: 100vh;
+        min-height: var(--vph, 100vh);
         flex: 1;
+      }
+      /* Kill the internal scroll on every react-native-web ScrollView
+         that's tall enough to hit its overflow:auto. We want the body
+         to do the scrolling instead so iOS Safari can hide its URL
+         bar AND so the whole document scrolls as one unit (the bottom
+         nav is now an inline element at the end of flow, no longer
+         pinned). Targets the dynamically-generated class
+         react-native-web emits for ScrollView's outer wrapper —
+         every ScrollView has \`overflow-y: scroll\` or \`auto\` on its
+         host node. */
+      [class*="r-overflowY"] {
+        overflow-y: visible !important;
+        height: auto !important;
+        max-height: none !important;
       }`;
 
 const patched = html

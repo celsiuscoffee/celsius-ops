@@ -81,33 +81,37 @@ export function BottomNav() {
   }).length;
   const rewardsCount = activeWalletCount + claimableCount + affordableCatalogCount;
 
-  // Web (PWA standalone, especially iOS) needs `position: fixed`
-  // anchored to the viewport — `position: absolute; bottom: 0` resolves
-  // against the nearest positioned ancestor, which expo-router's
-  // Stack wrapper sizes via the document body height. On iOS PWA
-  // standalone the body's reported height can be ~150px shorter than
-  // the visual viewport, leaving a white strip below the nav. Fixed
-  // positioning + an env() safe-area pad sidesteps the whole thing.
+  // On web we abandon the fixed/portalled-to-body approach. Per
+  // product feedback, the entire page should scroll as one unit
+  // (hero + content + bottom nav, no separate scroll regions). The
+  // nav becomes a regular bottom-of-document element: visible at the
+  // bottom of the viewport on short pages, scrolled into view at the
+  // end of the document on long pages. This also lets iOS Safari
+  // detect body-level scroll and minimize its URL bar.
+  //
+  // Native keeps the fixed/absolute behaviour — RN ScrollView owns
+  // scroll on iOS / Android, and the nav must stay docked.
   const isWeb = Platform.OS === "web";
   const webBottomFix = isWeb
     ? ({
-        position: "fixed" as unknown as "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
+        position: "relative" as const,
+        bottom: undefined,
+        left: undefined,
+        right: undefined,
         paddingBottom:
           "max(env(safe-area-inset-bottom, 0px), 8px)" as unknown as number,
       } as const)
     : null;
 
-  // Web portal: render the nav as a direct child of <body> so its
-  // `position: fixed` is anchored to the viewport itself, free of any
-  // height-mismatched React Native View ancestor. This is the most
-  // defensive option we have against iOS Safari's PWA quirks. Falls
-  // back to the regular tree on native.
+  // Use the absolute/bottom-0 className only on native — on web it
+  // creates a positioned container that fights the in-flow rendering.
+  const className = isWeb
+    ? "left-0 right-0 bg-surface border-t border-border flex-row justify-around px-1 pt-2"
+    : "absolute bottom-0 left-0 right-0 bg-surface border-t border-border flex-row justify-around px-1 pt-2";
+
   const navTree = (
     <View
-      className="absolute bottom-0 left-0 right-0 bg-surface border-t border-border flex-row justify-around px-1 pt-2"
+      className={className}
       style={{
         paddingBottom: Math.max(insets.bottom, 8),
         shadowColor: "#000",
@@ -213,15 +217,8 @@ export function BottomNav() {
     </View>
   );
 
-  // On web, escape the React Native View tree entirely by portalling
-  // the nav onto <body>. Any "white band below" bugs caused by an
-  // ancestor with a constrained height get bypassed because
-  // position:fixed on a body-child resolves against the visual
-  // viewport with no other containing block in the way.
-  if (isWeb && typeof document !== "undefined") {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createPortal } = require("react-dom") as typeof import("react-dom");
-    return createPortal(navTree, document.body);
-  }
+  // No portal on web anymore — nav renders in normal document flow
+  // alongside the rest of the screen content, so the whole page is
+  // one continuous scroll region.
   return navTree;
 }
