@@ -327,7 +327,7 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Recruitment (Indeed)",
         items: [
           { label: "Overview", href: "/ads/recruitment",          icon: <LayoutDashboard className={ICON_SIZE} />,   moduleKey: "ads:recruitment" },
-          { label: "Jobs",     href: "/ads/recruitment/jobs",     icon: <Briefcase className={ICON_SIZE} />,         moduleKey: "ads:recruitment" },
+          { label: "Postings", href: "/ads/recruitment/jobs",     icon: <Briefcase className={ICON_SIZE} />,         moduleKey: "ads:recruitment" },
           { label: "Invoices", href: "/ads/recruitment/invoices", icon: <Receipt className={ICON_SIZE} />,           moduleKey: "ads:recruitment" },
           { label: "Settings", href: "/ads/recruitment/settings", icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "ads:recruitment" },
         ],

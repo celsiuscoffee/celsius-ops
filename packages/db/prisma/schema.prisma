@@ -1479,6 +1479,29 @@ model IndeedAdsSyncLog {
   @@map("indeed_ads_sync_log")
 }
 
+// Indeed bills are not exposed via the Sponsored Jobs API for direct
+// employers (only ATS partners). Invoices are entered manually from
+// Indeed's billing portal so we can reconcile spend totals against
+// actual amounts charged.
+model IndeedAdsInvoice {
+  id              String   @id @default(uuid())
+  invoiceNumber   String?  @unique @map("invoice_number")
+  issueDate       DateTime @map("issue_date") @db.Date
+  periodStart     DateTime @map("period_start") @db.Date
+  periodEnd       DateTime @map("period_end") @db.Date
+  amountUsd       Decimal  @map("amount_usd") @db.Decimal(12, 2)
+  amountMyr       Decimal? @map("amount_myr") @db.Decimal(12, 2)
+  status          String   @default("unpaid")
+  pdfUrl          String?  @map("pdf_url")
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([issueDate(sort: Desc)])
+  @@index([status])
+  @@map("indeed_ads_invoice")
+}
+
 // ─── FINANCE / CASHFLOW ─────────────────────────────────────
 //
 // BankStatement: Finance uploads a periodic bank statement (PDF + manual
