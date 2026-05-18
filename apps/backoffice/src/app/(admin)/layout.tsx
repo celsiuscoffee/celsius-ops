@@ -310,25 +310,28 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: "Marketing Ads",
+    label: "Ads",
     icon: <Megaphone className={ICON_SIZE} />,
     railIcon: <Megaphone className={RAIL_ICON_SIZE} />,
-    items: [
-      { label: "Overview",  href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />,     moduleKey: "ads:overview" },
-      { label: "Campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,           moduleKey: "ads:campaigns" },
-      { label: "Invoices",  href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,             moduleKey: "ads:invoices" },
-      { label: "Settings",  href: "/ads/settings",  icon: <SlidersHorizontal className={ICON_SIZE} />,   moduleKey: "ads:settings" },
-    ],
-  },
-  {
-    label: "Recruitment Ads",
-    icon: <Briefcase className={ICON_SIZE} />,
-    railIcon: <Briefcase className={RAIL_ICON_SIZE} />,
-    items: [
-      { label: "Overview", href: "/ads/recruitment",          icon: <LayoutDashboard className={ICON_SIZE} />,   moduleKey: "ads:recruitment" },
-      { label: "Jobs",     href: "/ads/recruitment/jobs",     icon: <BarChart3 className={ICON_SIZE} />,         moduleKey: "ads:recruitment" },
-      { label: "Invoices", href: "/ads/recruitment/invoices", icon: <Receipt className={ICON_SIZE} />,           moduleKey: "ads:recruitment" },
-      { label: "Settings", href: "/ads/recruitment/settings", icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "ads:recruitment" },
+    subgroups: [
+      {
+        label: "Marketing (Google)",
+        items: [
+          { label: "Overview",  href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />,   moduleKey: "ads:overview" },
+          { label: "Campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,         moduleKey: "ads:campaigns" },
+          { label: "Invoices",  href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,           moduleKey: "ads:invoices" },
+          { label: "Settings",  href: "/ads/settings",  icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "ads:settings" },
+        ],
+      },
+      {
+        label: "Recruitment (Indeed)",
+        items: [
+          { label: "Overview", href: "/ads/recruitment",          icon: <LayoutDashboard className={ICON_SIZE} />,   moduleKey: "ads:recruitment" },
+          { label: "Jobs",     href: "/ads/recruitment/jobs",     icon: <Briefcase className={ICON_SIZE} />,         moduleKey: "ads:recruitment" },
+          { label: "Invoices", href: "/ads/recruitment/invoices", icon: <Receipt className={ICON_SIZE} />,           moduleKey: "ads:recruitment" },
+          { label: "Settings", href: "/ads/recruitment/settings", icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "ads:recruitment" },
+        ],
+      },
     ],
   },
   {
