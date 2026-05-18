@@ -60,6 +60,23 @@ if (html.includes("/manifest.json")) {
 const NEW_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />';
 
+// Expo's expo-reset ships `body { overflow: hidden }` — fine on
+// native, but on iOS Safari it prevents the URL bar from auto-hiding
+// on scroll because the body never receives scroll events
+// (everything is intercepted by React Native ScrollView). Override
+// to `auto` so iOS Safari detects scroll and shrinks the URL bar
+// the way Google / first-party web apps do. Combined with the
+// --vph JS measurement, the bottom nav re-anchors as the viewport
+// grows.
+const BODY_OVERFLOW_OLD = `      body {
+        overflow: hidden;
+      }`;
+const BODY_OVERFLOW_NEW = `      body {
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: none;
+      }`;
+
 // Expo's default expo-reset CSS uses `height: 100%`, which on
 // iOS PWA standalone with viewport-fit=cover doesn't match the
 // dynamic viewport — content stops short of the home-indicator
@@ -99,6 +116,7 @@ const patched = html
     NEW_VIEWPORT,
   )
   .replace(EXPO_RESET_OLD, EXPO_RESET_NEW)
+  .replace(BODY_OVERFLOW_OLD, BODY_OVERFLOW_NEW)
   .replace(ROOT_OLD, ROOT_NEW)
   .replace("</head>", `${HEAD_EXTRA}</head>`)
   .replace("</body>", `${BODY_EXTRA}</body>`);
