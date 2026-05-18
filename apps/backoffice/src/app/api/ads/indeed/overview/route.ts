@@ -82,6 +82,18 @@ export async function GET(req: NextRequest) {
     byJob.set(m.jobId, row);
   }
 
+  // Daily trend (spend + applies per date) for the chart
+  const byDate = new Map<string, { date: string; spendUsd: number; applies: number; clicks: number }>();
+  for (const m of metrics) {
+    const key = m.date.toISOString().slice(0, 10);
+    const row = byDate.get(key) ?? { date: key, spendUsd: 0, applies: 0, clicks: 0 };
+    row.spendUsd += Number(m.spendUsd);
+    row.applies  += Number(m.applies);
+    row.clicks   += Number(m.clicks);
+    byDate.set(key, row);
+  }
+  const trend = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+
   const lastSync = await prisma.indeedAdsSyncLog.findFirst({
     orderBy: { startedAt: "desc" },
   });
@@ -90,6 +102,7 @@ export async function GET(req: NextRequest) {
     window:    { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) },
     byOutlet:  Array.from(byOutletId.values()).sort((a, b) => b.spendUsd - a.spendUsd),
     byJob:     Array.from(byJob.values()).sort((a, b) => b.spendUsd - a.spendUsd),
+    trend,
     lastSync:  lastSync ? {
       kind:   lastSync.kind,
       status: lastSync.status,

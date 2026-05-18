@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, Briefcase, MapPin, Megaphone } from "lucide-react";
+import { Loader2, RefreshCw, Briefcase, MapPin, Megaphone, TrendingUp } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 type OverviewData = {
   window: { from: string; to: string };
@@ -27,6 +28,7 @@ type OverviewData = {
     clicks:      number;
     applies:     number;
   }>;
+  trend: Array<{ date: string; spendUsd: number; applies: number; clicks: number }>;
   lastSync: { kind: string; status: string; at: string } | null;
 };
 
@@ -126,6 +128,26 @@ export default function RecruitmentPage() {
               <div className="text-2xl font-semibold mt-1">{totalApplies > 0 ? fmtUSD(totalSpend / totalApplies) : "—"}</div>
             </Card>
           </div>
+
+          {data.trend && data.trend.length > 0 && (
+            <Card className="p-4">
+              <h2 className="font-medium mb-3 flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Daily spend & applies</h2>
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={data.trend} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="left"  tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
+                  <Tooltip
+                    formatter={(value: number, key) => key === "spendUsd" ? fmtUSD(value) : fmtInt(value)}
+                    contentStyle={{ fontSize: 12 }}
+                  />
+                  <Line yAxisId="left"  type="monotone" dataKey="spendUsd" stroke="#c4642d" name="Spend"   strokeWidth={2} dot={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="applies"  stroke="#3b82f6" name="Applies" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </Card>
+          )}
 
           <Card className="p-4">
             <h2 className="font-medium mb-3 flex items-center gap-2"><MapPin className="h-4 w-4" /> Spend by outlet</h2>
