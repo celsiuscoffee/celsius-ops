@@ -1,166 +1,183 @@
 /**
  * Sync Indeed Sponsored Jobs into indeed_ads_job + indeed_ads_metric_daily.
  *
- * Strategy:
- *   1. List all campaigns                          → /v1/campaigns
- *   2. For each campaign, list jobs                → /v1/campaigns/{id}/jobs
- *   3. For each job, pull daily stats over window  → /v1/campaigns/{id}/stats/{date}
+ * Indeed Sponsored Jobs API base URL is `https://apis.indeed.com/ads`
+ * (handled in client.ts). Endpoints used:
+ *
+ *   GET /v1/campaigns
+ *     → { data: { Campaigns: [{ Id, Name, Status, ... }] } }
+ *
+ *   GET /v1/campaigns/{campaignId}/jobDetails
+ *     → { data: { Jobs: [{ JobKey, JobTitle, JobLocation, Status, ... }] } }
+ *
+ *   GET /v1/campaigns/{campaignId}/stats?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ *     → { data: { Stats: [{ Date, Impressions, Clicks, ApplyStarts, Applies, Spend }] } }
+ *
+ * (Per-job daily stats are not available to direct employers — Indeed only
+ *  exposes per-campaign daily breakdowns. We attribute the campaign daily
+ *  spend to its single job by default, or split it evenly if a campaign
+ *  has multiple jobs.)
  *
  * Writes are idempotent — upsert by (indeedJobId) for jobs, by
  * (date, jobId) for daily metrics.
- *
- * NOTE: Indeed's API surface is partner-gated; the exact endpoint shapes
- * may differ slightly per account tier. If a call 404s, check the
- * Sponsored Jobs API reference at docs.indeed.com and adjust the path /
- * response field names below — the OAuth flow and DB write pattern stay
- * the same.
  */
 
 import { prisma } from "@/lib/prisma";
 import { indeedFetch } from "./client";
 import { resolveOutletId } from "./outlet-map";
 
-type IndeedCampaign = {
-  id: string;
-  name: string;
-  status?: string;
+type IndeedListResponse<K extends string, T> = {
+  meta?: { status?: number };
+  data: Record<K, T[]>;
 };
 
-type IndeedJob = {
-  jobKey: string;
-  jobTitle: string;
-  jobLocation?: { city?: string; admin1?: string };
-  status?: string;
-  premium?: boolean;
+type RawCampaign = {
+  Id:     string;
+  Name?:  string;
+  Status?: string;
 };
 
-type IndeedDailyStat = {
-  date: string;          // YYYY-MM-DD
-  impressions?: number;
-  clicks?: number;
-  applyStarts?: number;
-  applies?: number;
-  spend?: number;        // USD
+type RawJob = {
+  JobKey:        string;
+  JobTitle?:     string;
+  JobLocation?:  { City?: string; State?: string; Country?: string } | string;
+  Status?:       string;
+  Premium?:      boolean;
+};
+
+type RawStat = {
+  Date:          string; // YYYY-MM-DD
+  Impressions?:  number;
+  Clicks?:       number;
+  ApplyStarts?:  number;
+  Applies?:      number;
+  Spend?:        number; // USD
 };
 
 export type SyncResult = {
-  campaignsSeen: number;
-  jobsUpserted:  number;
+  campaignsSeen:   number;
+  jobsUpserted:    number;
   metricsUpserted: number;
 };
 
-/**
- * Pull data for the given date window (inclusive).
- * Defaults to last 30 days ending today.
- */
 export async function syncIndeed(opts: { from?: Date; to?: Date } = {}): Promise<SyncResult> {
-  const to = opts.to ?? new Date();
+  const to   = opts.to   ?? new Date();
   const from = opts.from ?? new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const fromStr = formatDate(from);
+  const toStr   = formatDate(to);
 
   let campaignsSeen = 0;
-  let jobsUpserted = 0;
+  let jobsUpserted  = 0;
   let metricsUpserted = 0;
 
-  // 1. List campaigns
-  const { campaigns } = await indeedFetch<{ campaigns: IndeedCampaign[] }>("/v1/campaigns");
+  const campaignsRes = await indeedFetch<IndeedListResponse<"Campaigns", RawCampaign>>("/v1/campaigns");
+  const campaigns = campaignsRes.data?.Campaigns ?? [];
   campaignsSeen = campaigns.length;
 
   for (const campaign of campaigns) {
-    // 2. List jobs in this campaign
-    let jobs: IndeedJob[] = [];
+    // 1. List jobs in the campaign so we know what to attribute spend to.
+    let jobs: RawJob[] = [];
     try {
-      const r = await indeedFetch<{ jobs: IndeedJob[] }>(`/v1/campaigns/${campaign.id}/jobs`);
-      jobs = r.jobs ?? [];
+      const r = await indeedFetch<IndeedListResponse<"Jobs", RawJob>>(`/v1/campaigns/${campaign.Id}/jobDetails`);
+      jobs = r.data?.Jobs ?? [];
     } catch (err) {
-      console.warn(`[indeed] campaign ${campaign.id} jobs fetch failed:`, err);
+      console.warn(`[indeed] campaign ${campaign.Id} jobDetails fetch failed:`, err);
       continue;
     }
 
+    if (jobs.length === 0) continue;
+
+    // Upsert each job row.
+    const dbJobs: Array<{ id: string; indeedJobId: string }> = [];
     for (const job of jobs) {
-      const city  = job.jobLocation?.city ?? null;
-      const state = job.jobLocation?.admin1 ?? null;
+      const loc = typeof job.JobLocation === "object" ? job.JobLocation : null;
+      const city  = loc?.City ?? null;
+      const state = loc?.State ?? null;
       const outletId = await resolveOutletId(city);
 
       const upserted = await prisma.indeedAdsJob.upsert({
-        where:  { indeedJobId: job.jobKey },
+        where:  { indeedJobId: job.JobKey },
         create: {
-          indeedJobId:   job.jobKey,
-          campaignId:    campaign.id,
-          campaignName:  campaign.name,
-          title:         job.jobTitle,
+          indeedJobId:   job.JobKey,
+          campaignId:    campaign.Id,
+          campaignName:  campaign.Name ?? null,
+          title:         job.JobTitle ?? "(untitled)",
           locationCity:  city,
           locationState: state,
           outletId,
-          status:        job.status,
-          premium:       job.premium ?? false,
+          status:        job.Status,
+          premium:       job.Premium ?? false,
         },
         update: {
-          campaignId:    campaign.id,
-          campaignName:  campaign.name,
-          title:         job.jobTitle,
+          campaignId:    campaign.Id,
+          campaignName:  campaign.Name ?? null,
+          title:         job.JobTitle ?? "(untitled)",
           locationCity:  city,
           locationState: state,
-          outletId,
-          status:        job.status,
-          premium:       job.premium ?? false,
+          // Preserve manual outlet overrides — only auto-set on first insert.
+          status:        job.Status,
+          premium:       job.Premium ?? false,
           lastSyncedAt:  new Date(),
         },
       });
+      dbJobs.push({ id: upserted.id, indeedJobId: job.JobKey });
       jobsUpserted++;
+    }
 
-      // 3. Daily stats for this job's campaign over the window.
-      //    Indeed reports daily stats at campaign granularity, not job,
-      //    on most plans. If you have job-level reports, swap the
-      //    endpoint to /v1/jobs/{jobKey}/stats/{date}.
-      for (const date of eachDay(from, to)) {
-        try {
-          const stat = await indeedFetch<IndeedDailyStat>(
-            `/v1/campaigns/${campaign.id}/stats/${formatDate(date)}`,
-          );
-          await prisma.indeedAdsMetricDaily.upsert({
-            where:  { date_jobId: { date, jobId: upserted.id } },
-            create: {
-              date,
-              jobId:        upserted.id,
-              impressions:  BigInt(stat.impressions ?? 0),
-              clicks:       BigInt(stat.clicks ?? 0),
-              applyStarts:  BigInt(stat.applyStarts ?? 0),
-              applies:      BigInt(stat.applies ?? 0),
-              spendUsd:     stat.spend ?? 0,
-              costPerClick: stat.clicks && stat.clicks > 0  ? (stat.spend ?? 0) / stat.clicks : null,
-              costPerApply: stat.applies && stat.applies > 0 ? (stat.spend ?? 0) / stat.applies : null,
-            },
-            update: {
-              impressions:  BigInt(stat.impressions ?? 0),
-              clicks:       BigInt(stat.clicks ?? 0),
-              applyStarts:  BigInt(stat.applyStarts ?? 0),
-              applies:      BigInt(stat.applies ?? 0),
-              spendUsd:     stat.spend ?? 0,
-              costPerClick: stat.clicks && stat.clicks > 0  ? (stat.spend ?? 0) / stat.clicks : null,
-              costPerApply: stat.applies && stat.applies > 0 ? (stat.spend ?? 0) / stat.applies : null,
-              syncedAt:     new Date(),
-            },
-          });
-          metricsUpserted++;
-        } catch (err) {
-          console.warn(`[indeed] stat fetch failed for ${campaign.id} ${formatDate(date)}:`, err);
-        }
+    // 2. Get campaign daily stats over the window in one call.
+    let stats: RawStat[] = [];
+    try {
+      const r = await indeedFetch<IndeedListResponse<"Stats", RawStat>>(
+        `/v1/campaigns/${campaign.Id}/stats?startDate=${fromStr}&endDate=${toStr}`,
+      );
+      stats = r.data?.Stats ?? [];
+    } catch (err) {
+      console.warn(`[indeed] campaign ${campaign.Id} stats fetch failed:`, err);
+      continue;
+    }
+
+    // Attribute campaign-level daily spend evenly across the campaign's jobs.
+    // (Indeed exposes per-campaign daily breakdowns, not per-job daily.)
+    const share = 1 / dbJobs.length;
+    for (const stat of stats) {
+      const date = new Date(stat.Date + "T00:00:00Z");
+      for (const dbJob of dbJobs) {
+        const impressions = Math.round((stat.Impressions ?? 0) * share);
+        const clicks      = Math.round((stat.Clicks      ?? 0) * share);
+        const applyStarts = Math.round((stat.ApplyStarts ?? 0) * share);
+        const applies     = Math.round((stat.Applies     ?? 0) * share);
+        const spend       = (stat.Spend ?? 0) * share;
+
+        await prisma.indeedAdsMetricDaily.upsert({
+          where:  { date_jobId: { date, jobId: dbJob.id } },
+          create: {
+            date,
+            jobId:        dbJob.id,
+            impressions:  BigInt(impressions),
+            clicks:       BigInt(clicks),
+            applyStarts:  BigInt(applyStarts),
+            applies:      BigInt(applies),
+            spendUsd:     spend.toFixed(2),
+            costPerClick: clicks  > 0 ? +(spend / clicks ).toFixed(4) : null,
+            costPerApply: applies > 0 ? +(spend / applies).toFixed(4) : null,
+          },
+          update: {
+            impressions:  BigInt(impressions),
+            clicks:       BigInt(clicks),
+            applyStarts:  BigInt(applyStarts),
+            applies:      BigInt(applies),
+            spendUsd:     spend.toFixed(2),
+            costPerClick: clicks  > 0 ? +(spend / clicks ).toFixed(4) : null,
+            costPerApply: applies > 0 ? +(spend / applies).toFixed(4) : null,
+            syncedAt:     new Date(),
+          },
+        });
+        metricsUpserted++;
       }
     }
   }
 
   return { campaignsSeen, jobsUpserted, metricsUpserted };
-}
-
-function eachDay(from: Date, to: Date): Date[] {
-  const days: Date[] = [];
-  const cursor = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
-  const end    = new Date(Date.UTC(to.getUTCFullYear(),   to.getUTCMonth(),   to.getUTCDate()));
-  while (cursor <= end) {
-    days.push(new Date(cursor));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-  return days;
 }
 
 function formatDate(d: Date): string {

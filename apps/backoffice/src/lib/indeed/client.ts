@@ -21,7 +21,10 @@
  */
 
 const TOKEN_URL = "https://apis.indeed.com/oauth/v2/tokens";
-const API_BASE  = "https://apis.indeed.com";
+// Sponsored Jobs API lives under the /ads namespace. Calling /v1/campaigns
+// without the /ads prefix returns a 403 HTML page (Indeed's catch-all error
+// for unknown paths), not a JSON API error.
+const API_BASE  = "https://apis.indeed.com/ads";
 
 // Scopes required for Sponsored Jobs API reporting endpoints.
 const SCOPE = "employer_access employer.advertising.account.read employer.advertising.campaign.read employer.advertising.campaign_report.read";
