@@ -489,23 +489,7 @@ export default function Menu() {
         {!query && (
           <View
             className="bg-surface border-r border-border"
-            style={{
-              width: 80,
-              flexShrink: 0,
-              // Web: pin the category sidebar to the viewport top so
-              // it stays visible while body scrolls past the product
-              // list. Native keeps the in-flow ScrollView behaviour
-              // (RN ScrollView owns scroll on iOS / Android).
-              ...(Platform.OS === "web"
-                ? ({
-                    position: "sticky" as unknown as "absolute",
-                    top: 0,
-                    alignSelf: "flex-start",
-                    maxHeight:
-                      "var(--vph, 100vh)" as unknown as number,
-                  } as const)
-                : null),
-            }}
+            style={{ width: 80, flexShrink: 0 }}
           >
           <ScrollView
             ref={sidebarRef}
