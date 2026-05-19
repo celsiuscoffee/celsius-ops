@@ -462,7 +462,18 @@ export default function Checkout() {
         merchantDisplayName: "Celsius Coffee",
         paymentIntentClientSecret: piJson.clientSecret,
         applePay: { merchantCountryCode: "MY" },
-        googlePay: { merchantCountryCode: "MY", currencyCode: "myr", testEnv: false },
+        // Google Pay's live-mode "Buying Intent" check denies any AAB that
+        // isn't on the public Play Store (we're still on internal testing).
+        // The Stripe publishable key prefix is the authoritative signal:
+        // pk_test_* → not real money → test wallet is the right surface and
+        // also bypasses the Play Store presence check. pk_live_* keeps the
+        // live wallet so production builds work the moment we hit the public
+        // store. No env toggle needed — flips automatically when keys swap.
+        googlePay: {
+          merchantCountryCode: "MY",
+          currencyCode: "myr",
+          testEnv: (process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "").startsWith("pk_test_"),
+        },
         defaultBillingDetails: { phone: phoneInput.trim() },
         returnURL: "celsiuscoffee://stripe-redirect",
         allowsDelayedPaymentMethods: false,

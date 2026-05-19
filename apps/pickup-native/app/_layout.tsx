@@ -228,6 +228,25 @@ const RootLayout = function RootLayout() {
     }
   }, [member?.id, member?.name, phone]);
 
+  // Clear the launcher badge whenever the app comes to the foreground.
+  // Without this the unread count from order-ready pushes piles up on
+  // the icon — even after the customer has opened the order from the
+  // notification — because we don't dismiss the notification tray
+  // entries automatically. Resetting on every foreground keeps the
+  // badge in sync with what the user has actually seen.
+  useEffect(() => {
+    Notifications.setBadgeCountAsync(0).catch(() => {});
+    const sub = (
+      require("react-native") as typeof import("react-native")
+    ).AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        Notifications.setBadgeCountAsync(0).catch(() => {});
+        Notifications.dismissAllNotificationsAsync().catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   // memberId is read live inside the handler via useApp.getState() so
   // it always reflects the current signed-in user — using a stale
   // closure value would mean a tap right after sign-in attributed to

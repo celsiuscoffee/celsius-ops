@@ -3,1030 +3,408 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Pickup App — Product Manual · Celsius Coffee</title>
+<title>Pickup App — Feature × Objective × Metric · Celsius Coffee</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+  @font-face{font-family:"Peachi";src:url("assets/fonts/Peachi-Regular.otf") format("opentype");font-weight:400;font-style:normal;font-display:block}
+  @font-face{font-family:"Peachi";src:url("assets/fonts/Peachi-Medium.otf") format("opentype");font-weight:500;font-style:normal;font-display:block}
+  @font-face{font-family:"Peachi";src:url("assets/fonts/Peachi-Bold.otf") format("opentype");font-weight:700;font-style:normal;font-display:block}
+
   :root{
-    --espresso:#1A0200;
-    --espresso-deep:#5A1F16;
-    --terracotta:#C05040;
-    --terracotta-soft:#FBEBE8;
-    --terracotta-mid:#F5D2CC;
-    --amber:#FBBF24;
-    --amber-deep:#F59E0B;
-    --ink:#1A0200;
-    --ink-2:#4A4A4A;
-    --ink-3:#6B6B6B;
-    --ink-4:#8E8E93;
-    --paper:#FFFFFF;
-    --cream:#FBF7F2;
-    --line:#EFE7E0;
-    --line-2:#E2D7CC;
-    --good:#137E58;
-    --good-bg:#E4F4EC;
-    --warn:#9A6A00;
-    --warn-bg:#FFF4D6;
-    --bad:#9B2C2C;
-    --bad-bg:#FCE6E6;
-    --serif:"Fraunces", "Times New Roman", serif;
-    --sans:"Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
-    --mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
-    --shadow-sm:0 1px 2px rgba(26,2,0,.04), 0 1px 3px rgba(26,2,0,.05);
-    --shadow-md:0 4px 16px rgba(26,2,0,.06), 0 1px 3px rgba(26,2,0,.05);
-    --shadow-lg:0 24px 60px rgba(26,2,0,.16), 0 4px 16px rgba(26,2,0,.08);
+    --espresso:#1A0200;--espresso-deep:#5A1F16;
+    --terracotta:#C05040;--terracotta-soft:#FBEBE8;--terracotta-mid:#F5D2CC;
+    --amber:#FBBF24;--amber-deep:#F59E0B;--amber-soft:#FFF4D6;
+    --ink:#1A0200;--ink-2:#3F2E2A;--ink-3:#6B5A55;--ink-4:#A89A95;
+    --paper:#FFFFFF;--cream:#FBF7F2;--line:#EFE7E0;--line-2:#E2D7CC;
+    --good:#137E58;--good-bg:#E4F4EC;--warn:#9A6A00;--warn-bg:#FFF4D6;
+    --display:"Peachi","Times New Roman",serif;
+    --sans:"Space Grotesk",system-ui,-apple-system,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,monospace;
   }
-
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
-  a{color:var(--terracotta);text-decoration:none;border-bottom:1px solid transparent;transition:border-color .15s}
-  a:hover{border-bottom-color:var(--terracotta)}
-  h1,h2,h3,h4{font-family:var(--serif);font-weight:600;letter-spacing:-.01em;color:var(--ink);margin:0}
-  h1{font-size:clamp(40px,6vw,72px);line-height:1.02;letter-spacing:-.03em;font-weight:500}
-  h2{font-size:34px;line-height:1.15;letter-spacing:-.02em;margin:0 0 8px}
-  h3{font-size:22px;line-height:1.25;margin:0 0 6px;font-weight:600}
-  h4{font-size:15px;font-family:var(--sans);font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--terracotta);margin:0 0 10px}
-  p{margin:0 0 12px;color:var(--ink-2)}
-  code{font-family:var(--mono);font-size:12.5px;background:var(--cream);border:1px solid var(--line);padding:1.5px 6px;border-radius:5px;color:var(--espresso-deep)}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:10pt;line-height:1.5;-webkit-font-smoothing:antialiased}
+  h1,h2,h3,h4{font-family:var(--display);font-weight:500;letter-spacing:-.01em;color:var(--ink);margin:0}
+  p{margin:0 0 6pt;color:var(--ink-2)}
+  code{font-family:var(--mono);font-size:.86em;background:var(--cream);border:1px solid var(--line);padding:1px 4px;border-radius:3px;color:var(--espresso-deep)}
 
-  /* layout */
-  .shell{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
-  @media (max-width:980px){.shell{grid-template-columns:1fr}}
+  @page{size:A4;margin:11mm}
+  h2,h3,h4,.section-head,.surf-head{page-break-after:avoid;break-after:avoid}
+  table{page-break-inside:auto}
+  tr{page-break-inside:avoid;break-inside:avoid}
 
-  /* sidebar */
-  aside{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;background:var(--cream);border-right:1px solid var(--line);padding:36px 28px 60px}
-  @media (max-width:980px){aside{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}}
-  .brand{display:flex;align-items:center;gap:10px;margin-bottom:28px}
-  .brand .mark{width:28px;height:28px;border-radius:50%;background:var(--espresso);display:grid;place-items:center;color:var(--amber);font-family:var(--serif);font-weight:600;font-size:18px;line-height:1}
-  .brand .word{font-family:var(--serif);font-weight:600;font-size:18px;letter-spacing:-.01em;color:var(--ink)}
-  .brand .tag{display:block;font-family:var(--sans);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin-top:1px}
+  /* ─────────── COVER ─────────── */
+  .cover{position:relative;background:radial-gradient(70% 90% at 75% 5%,#2A0703 0%,#1A0200 55%,#160800 100%);color:#FFF;padding:38mm 18mm 16mm;min-height:271mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;overflow:hidden}
+  .cover::before{content:"";position:absolute;top:-10%;right:-20%;width:80%;height:70%;background:radial-gradient(circle,rgba(251,191,36,.18) 0%,transparent 60%)}
+  .cover::after{content:"";position:absolute;bottom:-20%;left:-15%;width:60%;height:60%;background:radial-gradient(circle,rgba(192,80,64,.28) 0%,transparent 60%)}
+  .cover-top,.cover-body,.cover-foot{position:relative}
+  .cover-top{display:flex;align-items:center;justify-content:space-between}
+  .cover-wordmark{height:18pt;filter:brightness(0) invert(1)}
+  .cover-tag{font-family:var(--sans);font-size:8.5pt;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.55)}
+  .cover-eyebrow{font-family:var(--sans);font-size:9pt;letter-spacing:.22em;text-transform:uppercase;color:var(--amber);margin-bottom:14pt;display:flex;align-items:center;gap:10px}
+  .cover-eyebrow::before{content:"";width:18pt;height:1pt;background:var(--amber)}
+  .cover h1{color:#fff;font-size:52pt;line-height:.98;margin-bottom:14pt;font-weight:500}
+  .cover h1 em{font-style:italic;color:var(--amber);font-weight:400}
+  .cover .sub{font-size:11.5pt;line-height:1.45;color:rgba(255,255,255,.78);max-width:130mm;font-weight:400;margin-bottom:0}
+  .cover .formula{margin-top:22pt;padding:16pt 20pt;background:rgba(0,0,0,.25);border:1px solid rgba(251,191,36,.22);border-radius:7pt;max-width:158mm;position:relative}
+  .cover .formula .lbl{font-family:var(--sans);font-size:8.5pt;letter-spacing:.2em;text-transform:uppercase;color:var(--amber);margin-bottom:6pt;font-weight:600}
+  .cover .formula .eq{font-family:var(--display);font-size:22pt;color:#fff;line-height:1.2;font-weight:500;letter-spacing:-.005em}
+  .cover .formula .eq em{font-style:italic;color:var(--amber);font-weight:400}
+  .cover .formula .x{color:rgba(255,255,255,.4);font-style:normal;margin:0 4pt}
+  .cover-foot{display:flex;flex-wrap:wrap;gap:14pt 28pt;border-top:1px solid rgba(255,255,255,.14);padding-top:11pt}
+  .cover-foot .k{font-family:var(--sans);font-size:7.5pt;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:3pt}
+  .cover-foot .v{font-family:var(--sans);font-size:10pt;color:#fff;font-weight:500}
 
-  .toc-eyebrow{font-family:var(--sans);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin:20px 0 8px}
-  .toc{list-style:none;margin:0;padding:0}
-  .toc li{margin:0}
-  .toc a{display:block;padding:5px 10px;margin:0 -10px;border-radius:6px;border:none;color:var(--ink-2);font-size:13.5px;line-height:1.4}
-  .toc a:hover{background:var(--terracotta-soft);color:var(--ink)}
-  .toc a.sub{padding-left:24px;font-size:13px;color:var(--ink-3)}
+  /* ─────────── CONTENT ─────────── */
+  .body{padding:0}
+  .body section{margin-bottom:14pt}
 
-  /* main */
-  main{padding:0;background:var(--paper)}
-  .container{max-width:880px;margin:0 auto;padding:80px 60px 100px}
-  @media (max-width:980px){.container{padding:40px 24px 60px}}
+  .section-head{display:flex;align-items:baseline;gap:10pt;border-bottom:1px solid var(--line);padding-bottom:6pt;margin-bottom:10pt}
+  .section-head .n{font-family:var(--display);font-style:italic;font-size:11pt;color:var(--terracotta);font-weight:500}
+  .section-head h2{flex:1;font-size:22pt;line-height:1.05;font-weight:500}
+  .section-head .pg{font-family:var(--sans);font-size:8pt;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)}
 
-  /* hero */
-  .hero{position:relative;background:radial-gradient(80% 100% at 80% 0%, #2A0703 0%, #1A0200 60%, #160800 100%);color:#FFF;padding:120px 60px 100px;overflow:hidden;margin-bottom:60px}
-  .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(40% 50% at 90% 10%, rgba(251,191,36,.18) 0%, transparent 70%);pointer-events:none}
-  .hero::after{content:"";position:absolute;inset:0;background:radial-gradient(50% 40% at 0% 100%, rgba(192,80,64,.22) 0%, transparent 70%);pointer-events:none}
-  .hero-inner{position:relative;max-width:760px;margin:0 auto}
-  .hero .eyebrow{font-family:var(--sans);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--amber);margin-bottom:24px;display:flex;align-items:center;gap:10px}
-  .hero .eyebrow::before{content:"";width:24px;height:1.5px;background:var(--amber)}
-  .hero h1{color:#fff;margin-bottom:24px}
-  .hero h1 em{font-style:italic;color:var(--amber);font-weight:400}
-  .hero .sub{font-size:18px;line-height:1.5;color:rgba(255,255,255,.78);max-width:560px;margin-bottom:48px;font-family:var(--sans);font-weight:400}
-  .hero-meta{display:flex;flex-wrap:wrap;gap:32px 48px;border-top:1px solid rgba(255,255,255,.12);padding-top:28px}
-  .hero-meta div{font-family:var(--sans)}
-  .hero-meta .k{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:6px}
-  .hero-meta .v{font-size:15px;color:#fff;font-weight:500}
+  .lede{font-size:10.5pt;color:var(--ink-2);line-height:1.45;margin:0 0 10pt;max-width:160mm}
+  .lede strong{color:var(--ink);font-weight:600}
 
-  /* section */
-  section{margin-bottom:72px;scroll-margin-top:24px}
-  .sec-head{margin-bottom:28px;padding-bottom:14px;border-bottom:1px solid var(--line)}
-  .sec-head .num{font-family:var(--serif);font-size:13px;font-weight:500;color:var(--terracotta);letter-spacing:.04em;margin-bottom:8px;display:block;font-style:italic}
-  .lede{font-size:17px;color:var(--ink-2);max-width:680px;line-height:1.55;margin-bottom:24px}
+  /* The Frame strip */
+  .frame{background:linear-gradient(180deg,#1A0200 0%,#2A0703 100%);color:#fff;border-radius:7pt;padding:12pt 16pt;margin:0 0 14pt;position:relative;overflow:hidden;page-break-inside:avoid}
+  .frame::before{content:"";position:absolute;top:-50%;right:-10%;width:50%;height:200%;background:radial-gradient(circle,rgba(251,191,36,.12) 0%,transparent 60%)}
+  .frame .row{display:flex;align-items:center;justify-content:space-between;gap:20pt;position:relative}
+  .frame .l .lbl{font-family:var(--sans);font-size:7.5pt;letter-spacing:.18em;text-transform:uppercase;color:var(--amber);font-weight:600;margin-bottom:3pt}
+  .frame .l .title{font-family:var(--display);font-size:14pt;font-weight:500;color:#fff;line-height:1.1;letter-spacing:-.005em}
+  .frame .eq{font-family:var(--display);font-size:16pt;font-weight:500;color:#fff;line-height:1.1;letter-spacing:-.005em}
+  .frame .eq em{font-style:italic;color:var(--amber);font-weight:400}
+  .frame .eq .x{color:rgba(255,255,255,.4);margin:0 4pt}
+  .frame .key{display:flex;gap:10pt;margin-top:10pt;position:relative;flex-wrap:wrap}
+  .frame .key-item{font-family:var(--sans);font-size:8.5pt;color:rgba(255,255,255,.85);line-height:1.4}
+  .frame .key-item .pill{display:inline-flex;align-items:center;gap:3pt;padding:1pt 7pt;border-radius:99pt;font-family:var(--sans);font-size:7pt;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-right:4pt}
+  .frame .pill-orders{background:rgba(192,80,64,.85);color:#fff}
+  .frame .pill-aov{background:rgba(251,191,36,.85);color:#1A0200}
+  .frame .pill-both{background:linear-gradient(90deg,rgba(192,80,64,.85) 50%,rgba(251,191,36,.85) 50%);color:#fff}
 
-  /* screen card */
-  .screen{background:#fff;border:1px solid var(--line);border-radius:14px;padding:28px 30px;margin-bottom:24px;box-shadow:var(--shadow-sm);scroll-margin-top:24px}
-  .screen-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px;flex-wrap:wrap}
-  .screen-head .idx{font-family:var(--serif);font-size:14px;color:var(--terracotta);font-style:italic;font-weight:500}
-  .screen-head h3{flex:1;min-width:0}
-  .screen .route{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);background:var(--cream);padding:3px 8px;border-radius:5px;border:1px solid var(--line)}
-  .screen .purpose{margin:14px 0 22px;color:var(--ink-2);font-size:14.5px}
-  .screen .purpose strong{color:var(--ink);font-weight:600}
-
-  .subhead{font-family:var(--sans);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin:22px 0 10px}
+  /* surface section */
+  .surf{margin-bottom:11pt;page-break-inside:auto}
+  .surf-head{display:flex;align-items:baseline;justify-content:space-between;gap:10pt;margin-bottom:5pt;padding:5pt 9pt;background:var(--cream);border:1px solid var(--line);border-radius:5pt}
+  .surf-head .l{display:flex;align-items:baseline;gap:7pt}
+  .surf-head .n{font-family:var(--display);font-style:italic;font-size:11pt;color:var(--terracotta);font-weight:500}
+  .surf-head h3{font-size:14pt;font-weight:500;line-height:1}
+  .surf-head .route{font-family:var(--mono);font-size:7.5pt;color:var(--ink-3)}
+  .surf-head .desc{font-family:var(--sans);font-size:8.5pt;color:var(--ink-3);font-style:italic}
 
   /* table */
-  table{width:100%;border-collapse:collapse;margin:6px 0 6px;font-size:13.5px}
-  thead th{text-align:left;font-family:var(--sans);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:10px 12px;border-bottom:1.5px solid var(--line-2);background:var(--cream)}
-  tbody td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2);line-height:1.5}
+  table{width:100%;border-collapse:collapse;margin:0;font-size:9pt;line-height:1.35;table-layout:fixed}
+  table col.c-feat{width:24%}
+  table col.c-obj{width:10%}
+  table col.c-how{width:38%}
+  table col.c-metric{width:28%}
+  thead th{text-align:left;font-family:var(--sans);font-size:7pt;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:700;padding:5pt 7pt;border-bottom:1pt solid var(--line-2)}
+  tbody td{padding:5pt 7pt;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2);line-height:1.4;word-wrap:break-word;overflow-wrap:break-word}
   tbody tr:last-child td{border-bottom:none}
-  tbody tr:hover{background:var(--cream)}
-  td.feat{color:var(--ink);font-weight:600;width:32%}
-  td.metric code{display:inline-block;margin:1px 2px 1px 0}
+  td.feat{color:var(--ink);font-weight:600;font-size:9pt;white-space:normal}
+  td.obj{text-align:center}
+  td.metric{font-size:8.5pt;color:var(--ink-2)}
+  td.metric code{font-family:var(--mono);font-size:.95em;background:var(--cream);border:1px solid var(--line);padding:1pt 4pt;border-radius:3pt;color:var(--espresso-deep);display:inline-block;line-height:1.5}
 
-  /* badges */
-  .pill{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:99px;font-family:var(--sans);font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;line-height:1.4;white-space:nowrap}
-  .pill.good{background:var(--good-bg);color:var(--good)}
-  .pill.warn{background:var(--warn-bg);color:var(--warn)}
-  .pill.bad{background:var(--bad-bg);color:var(--bad)}
-  .pill.brand{background:var(--terracotta-soft);color:var(--terracotta)}
-  .pill.dark{background:var(--espresso);color:var(--amber)}
-  .pill .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+  /* objective pills */
+  .obj-pill{display:inline-flex;align-items:center;padding:1pt 7pt;border-radius:99pt;font-family:var(--sans);font-size:6.8pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.5;white-space:nowrap}
+  .obj-pill.orders{background:var(--terracotta-soft);color:var(--terracotta);border:1px solid var(--terracotta-mid)}
+  .obj-pill.aov{background:var(--amber-soft);color:var(--warn);border:1px solid #F0DDA9}
+  .obj-pill.both{background:linear-gradient(90deg,var(--terracotta-soft) 50%,var(--amber-soft) 50%);color:var(--terracotta);border:1px solid var(--terracotta-mid)}
+
+  /* state pills */
+  .pill{display:inline-flex;align-items:center;gap:3pt;padding:1pt 6pt;border-radius:99pt;font-family:var(--sans);font-size:6.5pt;font-weight:700;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;white-space:nowrap;margin-left:4pt;vertical-align:1pt}
+  .pill .dot{width:3pt;height:3pt;border-radius:50%;background:currentColor;flex-shrink:0}
+  .pill.tracked{background:var(--good-bg);color:var(--good)}
+  .pill.gap{background:var(--warn-bg);color:var(--warn)}
 
   /* callout */
-  .callout{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:flex-start;background:var(--cream);border:1px solid var(--line);border-left:3px solid var(--terracotta);padding:18px 22px;border-radius:8px;margin:18px 0}
-  .callout .icon{width:32px;height:32px;border-radius:50%;background:var(--terracotta);color:#fff;display:grid;place-items:center;font-family:var(--serif);font-weight:600;font-size:16px;line-height:1}
-  .callout.amber{border-left-color:var(--amber-deep)}
-  .callout.amber .icon{background:var(--amber-deep)}
-  .callout h4{margin-bottom:4px;color:var(--ink);font-family:var(--sans);font-size:13px;letter-spacing:.04em;text-transform:none}
-  .callout p{margin:0;font-size:13.5px;color:var(--ink-2)}
-  .callout code{background:#fff}
+  .callout{display:grid;grid-template-columns:auto 1fr;gap:10pt;align-items:flex-start;background:var(--cream);border:1px solid var(--line);border-left:2pt solid var(--terracotta);padding:9pt 12pt;border-radius:5pt;margin:10pt 0;page-break-inside:avoid}
+  .callout .ico{width:18pt;height:18pt;border-radius:50%;background:var(--terracotta);color:#fff;display:grid;place-items:center;font-family:var(--display);font-weight:600;font-size:10pt;line-height:1}
+  .callout h4{margin:0 0 3pt;font-family:var(--sans);font-size:9.5pt;color:var(--ink);font-weight:700;letter-spacing:0;text-transform:none}
+  .callout p{margin:0;font-size:9pt;color:var(--ink-2);line-height:1.45}
 
-  /* objective cards grid */
-  .obj-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin:24px 0}
-  @media (max-width:680px){.obj-grid{grid-template-columns:1fr}}
-  .obj{background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px;box-shadow:var(--shadow-sm)}
-  .obj .ico{width:36px;height:36px;border-radius:8px;background:var(--terracotta-soft);color:var(--terracotta);display:grid;place-items:center;font-family:var(--serif);font-weight:600;font-size:18px;margin-bottom:14px}
-  .obj h3{font-size:18px;margin-bottom:6px}
-  .obj p{font-size:13.5px;margin-bottom:14px;color:var(--ink-2)}
-  .obj .ns{font-family:var(--mono);font-size:11.5px;color:var(--espresso-deep);padding-top:12px;border-top:1px solid var(--line);display:block}
-  .obj .ns-label{font-family:var(--sans);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:4px}
-
-  /* IA map */
-  .ia{background:linear-gradient(180deg,#1A0200 0%, #2A0703 100%);color:#fff;border-radius:14px;padding:36px;margin:24px 0;position:relative;overflow:hidden}
-  .ia::before{content:"";position:absolute;top:-40%;right:-20%;width:60%;height:120%;background:radial-gradient(circle, rgba(251,191,36,.12) 0%, transparent 60%);pointer-events:none}
-  .ia h3{color:var(--amber);margin-bottom:24px;font-family:var(--serif);font-weight:500;position:relative}
-  .ia .tier{display:flex;align-items:center;gap:14px;margin-bottom:14px;position:relative}
-  .ia .tier-label{flex-shrink:0;width:90px;font-family:var(--sans);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
-  .ia .tier-nodes{display:flex;flex-wrap:wrap;gap:8px}
-  .ia .node{padding:6px 12px;border-radius:99px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);font-family:var(--sans);font-size:12.5px;color:#fff;font-weight:500}
-  .ia .node.primary{background:rgba(192,80,64,.25);border-color:rgba(192,80,64,.6);color:#FFD9D2}
-  .ia .node.secondary{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.3);color:#FBBF24}
-
-  /* palette swatches */
-  .palette{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:18px 0}
-  @media (max-width:680px){.palette{grid-template-columns:repeat(2,1fr)}}
-  .swatch{border-radius:10px;overflow:hidden;border:1px solid var(--line);background:#fff}
-  .swatch .chip{height:88px}
-  .swatch .meta{padding:12px 14px}
-  .swatch .meta .nm{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink)}
-  .swatch .meta .hex{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-top:2px}
-
-  /* metric priority list */
-  .prio{counter-reset:p;list-style:none;padding:0;margin:18px 0}
-  .prio li{counter-increment:p;display:grid;grid-template-columns:auto 1fr;gap:18px;padding:18px 22px;background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;box-shadow:var(--shadow-sm)}
-  .prio li::before{content:counter(p,decimal-leading-zero);font-family:var(--serif);font-size:22px;font-weight:500;color:var(--terracotta);font-style:italic;line-height:1}
-  .prio strong{font-family:var(--sans);font-size:14px;font-weight:700;color:var(--ink);display:block;margin-bottom:3px}
-  .prio strong code{font-family:var(--mono);font-size:12.5px;font-weight:500;background:var(--terracotta-soft);border-color:var(--terracotta-mid);color:var(--terracotta);margin-right:6px}
-  .prio p{margin:0;font-size:13px;color:var(--ink-2)}
+  /* priority events */
+  .prio{counter-reset:p;list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(5,1fr);gap:6pt}
+  .prio li{counter-increment:p;background:#fff;border:1px solid var(--line);border-radius:5pt;padding:9pt 10pt;page-break-inside:avoid;display:flex;flex-direction:column}
+  .prio li::before{content:counter(p,decimal-leading-zero);font-family:var(--display);font-style:italic;font-size:13pt;color:var(--terracotta);line-height:1;font-weight:500;margin-bottom:5pt}
+  .prio code{font-family:var(--mono);font-size:7.5pt;font-weight:500;background:var(--terracotta-soft);border-color:var(--terracotta-mid);color:var(--terracotta);display:inline-block;margin-bottom:4pt;padding:1pt 5pt;line-height:1.4;align-self:flex-start}
+  .prio strong{font-family:var(--sans);font-size:8.5pt;font-weight:700;color:var(--ink);display:block;margin-bottom:3pt;line-height:1.3}
+  .prio p{margin:0;font-size:8pt;color:var(--ink-2);line-height:1.4}
 
   /* footer */
-  footer{border-top:1px solid var(--line);padding:36px 0 0;margin-top:48px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:18px;color:var(--ink-3);font-size:12.5px;font-family:var(--sans)}
-  footer .colophon{max-width:380px}
-  footer strong{color:var(--ink);font-weight:600}
-
-  /* print */
-  @media print{
-    aside{display:none}
-    .shell{grid-template-columns:1fr}
-    .hero{padding:50px 30px;margin-bottom:30px;page-break-after:always}
-    .screen{break-inside:avoid;box-shadow:none;border:1px solid #ddd}
-    a{color:var(--ink);border-bottom:none}
-    .container{padding:30px;max-width:none}
-    section{break-inside:avoid-page}
-    body{font-size:11pt}
-  }
+  .pgfoot{display:flex;justify-content:space-between;align-items:flex-end;gap:14pt;padding-top:10pt;margin-top:14pt;border-top:1px solid var(--line);font-family:var(--sans);font-size:8pt;color:var(--ink-3)}
+  .pgfoot strong{color:var(--ink);font-weight:600;font-size:9pt;display:block;margin-bottom:2pt}
+  .pgfoot .mark{display:flex;align-items:center;gap:6pt}
+  .pgfoot .mark img{height:9pt;opacity:.55}
 </style>
 </head>
 <body>
 
-<div class="shell">
+<!-- ─────────── COVER ─────────── -->
+<div class="cover">
+  <div class="cover-top">
+    <img class="cover-wordmark" src="assets/celsius-wordmark-white.png" alt="Celsius Coffee">
+    <div class="cover-tag">Pickup app · Strategy</div>
+  </div>
+  <div class="cover-body">
+    <div class="cover-eyebrow">Feature × Objective × Metric</div>
+    <h1>Every feature<br>has <em>one job:</em><br>sell more coffee.</h1>
+    <p class="sub">A strategic audit of every UI box in the Celsius Coffee pickup app — mapped to the one thing each is supposed to do, and the metric that proves it's doing it.</p>
+    <div class="formula">
+      <div class="lbl">The frame</div>
+      <div class="eq">Sales = <em>Orders</em> <span class="x">×</span> <em>AOV</em></div>
+    </div>
+  </div>
+  <div class="cover-foot">
+    <div><div class="k">Product</div><div class="v">Pickup Native</div></div>
+    <div><div class="k">Audience</div><div class="v">Founder · Product · Ops</div></div>
+    <div><div class="k">Last reviewed</div><div class="v">15 May 2026</div></div>
+    <div><div class="k">Maintainer</div><div class="v">Ammar Shahrin</div></div>
+  </div>
+</div>
 
-  <aside>
-    <div class="brand">
-      <div class="mark">°c</div>
+<!-- ─────────── BODY ─────────── -->
+<div class="body">
+
+  <!-- The strategic frame -->
+  <section>
+    <div class="section-head">
+      <span class="n">01.</span>
+      <h2>The strategic frame</h2>
+    </div>
+    <p class="lede">The pickup app's only reason to exist is to grow sales. Sales is the product of <strong>orders</strong> (how many transactions) and <strong>AOV</strong> (how much each transaction is worth). Every feature in the app must push one of these — or both. The table below tags each feature by which lever it pulls.</p>
+
+    <div class="frame">
+      <div class="row">
+        <div class="l">
+          <div class="lbl">The whole game</div>
+          <div class="title">Two levers. Every feature ladders to one.</div>
+        </div>
+        <div class="eq">Sales <span class="x">=</span> <em>Orders</em> <span class="x">×</span> <em>AOV</em></div>
+      </div>
+      <div class="key">
+        <div class="key-item"><span class="pill pill-orders">Orders</span> drives transaction count — acquisition, retention, frequency, friction reduction.</div>
+        <div class="key-item"><span class="pill pill-aov">AOV</span> drives basket size — modifiers, cross-sell, bundles, multi-item incentives.</div>
+        <div class="key-item"><span class="pill pill-both">Both</span> does both. Rare and powerful.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature audit -->
+  <section>
+    <div class="section-head">
+      <span class="n">02.</span>
+      <h2>Feature audit · every box, every metric</h2>
+    </div>
+
+    <!-- HOME -->
+    <div class="surf">
+      <div class="surf-head">
+        <div class="l"><span class="n">01.</span><h3>Home</h3><span class="route">app/index.tsx</span></div>
+        <span class="desc">Get the user from app-open to "I know what I want" in &lt; 10 seconds.</span>
+      </div>
+      <table>
+        <colgroup><col class="c-feat"><col class="c-obj"><col class="c-how"><col class="c-metric"></colgroup>
+        <thead><tr><th>Feature</th><th>Objective</th><th>How it drives sales</th><th>Metric</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">Poster carousel</td><td class="obj"><span class="obj-pill both">Both</span></td><td>Pushes new launches (new orders) + premium SKUs (AOV).</td><td class="metric"><code>poster_tapped</code> · per-poster CTR <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Member greeting + points</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Shows balance &amp; tier on landing — a forward reason to come back.</td><td class="metric">badge → /rewards CTR <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Outlet picker pill</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Surfaces real-time busy/closed state — prevents wasted-trip churn.</td><td class="metric">mismatched-outlet rate at checkout <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">"Your usual" carousel</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>One-tap reorder of last drink — collapses decision time, raises frequency.</td><td class="metric">usual → cart conversion <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Claimable vouchers row</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>One-tap claim of welcome/promo/mystery — creates urgency to visit.</td><td class="metric">claim → order conversion <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Active missions row</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>"3 visits this week → reward" — engineers a frequency streak.</td><td class="metric">mission completion % <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Featured products</td><td class="obj"><span class="obj-pill aov">AOV</span></td><td>Curated cross-sell — pulls add-ons into baskets the user wasn't there for.</td><td class="metric">featured CTR · featured-driven AOV <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- MENU + PRODUCT -->
+    <div class="surf">
+      <div class="surf-head">
+        <div class="l"><span class="n">02.</span><h3>Menu &amp; product detail</h3><span class="route">app/menu.tsx · app/product/[id].tsx</span></div>
+        <span class="desc">Turn intent into a fully-configured cart-add.</span>
+      </div>
+      <table>
+        <colgroup><col class="c-feat"><col class="c-obj"><col class="c-how"><col class="c-metric"></colgroup>
+        <thead><tr><th>Feature</th><th>Objective</th><th>How it drives sales</th><th>Metric</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">Category pills</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Fast browse → faster decision → more sessions converting.</td><td class="metric">category CTR <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Search bar</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Bypasses browse for known intent — high-conversion path.</td><td class="metric">search → cart conversion <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Product detail</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Gateway to add-to-cart. PDP views = top of order funnel.</td><td class="metric"><code>product_viewed</code> <span class="pill tracked"><span class="dot"></span>tracked</span></td></tr>
+          <tr><td class="feat">Modifiers (required + optional)</td><td class="obj"><span class="obj-pill aov">AOV</span></td><td><strong>The single biggest AOV lever.</strong> Size, milk, syrups, shots — each priced incrementally.</td><td class="metric">modifier attach rate · AOV uplift <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Quantity stepper</td><td class="obj"><span class="obj-pill aov">AOV</span></td><td>Encourages multi-item orders without leaving PDP.</td><td class="metric">avg qty per add <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Add to cart CTA</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>The conversion event. Sticky bottom, live total shown.</td><td class="metric"><code>cart_add</code> · PDP → cart conv. <span class="pill tracked"><span class="dot"></span>tracked</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- CART + CHECKOUT -->
+    <div class="surf">
+      <div class="surf-head">
+        <div class="l"><span class="n">03.</span><h3>Cart &amp; checkout</h3><span class="route">app/cart.tsx · app/checkout.tsx</span></div>
+        <span class="desc">Convert cart into a paid order with zero friction.</span>
+      </div>
+      <table>
+        <colgroup><col class="c-feat"><col class="c-obj"><col class="c-how"><col class="c-metric"></colgroup>
+        <thead><tr><th>Feature</th><th>Objective</th><th>How it drives sales</th><th>Metric</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">Apply voucher slot</td><td class="obj"><span class="obj-pill both">Both</span></td><td>Pulls deadline-urgent visits forward (Orders). "Free pastry with drink" forces multi-item (AOV).</td><td class="metric"><code>reward_reserved</code> · voucher apply rate <span class="pill tracked"><span class="dot"></span>tracked</span></td></tr>
+          <tr><td class="feat">Price summary &amp; SST</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Transparent breakdown reduces abandon at total reveal.</td><td class="metric">cart → checkout conv. <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Payment methods (4)</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Card · Apple Pay · FPX · GrabPay — meets the buyer where they pay.</td><td class="metric">method mix · per-method success <span class="pill tracked"><span class="dot"></span>tracked</span></td></tr>
+          <tr><td class="feat">Zero-amount bypass</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Skips Stripe sheet on fully-discounted orders → no payment-step abandonment.</td><td class="metric"><code>payment_skipped</code> rate <span class="pill tracked"><span class="dot"></span>tracked</span></td></tr>
+          <tr><td class="feat">Place order CTA</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>The final conversion event in the funnel.</td><td class="metric"><code>checkout_started</code>→<code>order_placed</code> <span class="pill tracked"><span class="dot"></span>tracked</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ORDERS + ORDER DETAIL -->
+    <div class="surf">
+      <div class="surf-head">
+        <div class="l"><span class="n">04.</span><h3>Orders list &amp; order detail</h3><span class="route">app/orders.tsx · app/order/[id].tsx</span></div>
+        <span class="desc">Close the loop from order to "drink in hand". Set up the next order.</span>
+      </div>
+      <table>
+        <colgroup><col class="c-feat"><col class="c-obj"><col class="c-how"><col class="c-metric"></colgroup>
+        <thead><tr><th>Feature</th><th>Objective</th><th>How it drives sales</th><th>Metric</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">Reorder button</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td><strong>Highest-value action in the app.</strong> Hydrates cart from past order → one tap to a new order.</td><td class="metric">reorder → <code>order_placed</code> <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Order stepper (live status)</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Reduces "is it ready?" anxiety → trust → repeat use.</td><td class="metric">time-to-ready by outlet <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Mystery Bean reveal</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Variable-reward scratch card. Dopamine hook that drives the next order.</td><td class="metric">reveal rate · post-reveal D7 return <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Swipe-to-collect</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Confirms pickup without barista — operationally cheaper, faster handoff.</td><td class="metric">swipe / auto / barista mix <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Pending-payment retry</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Recovers orders that failed payment — direct revenue rescue.</td><td class="metric">retry → success rate <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- REWARDS / LOYALTY -->
+    <div class="surf">
+      <div class="surf-head">
+        <div class="l"><span class="n">05.</span><h3>Rewards &amp; loyalty</h3><span class="route">app/rewards.tsx</span></div>
+        <span class="desc">Convert points and vouchers into next visits. Hoarded rewards = failed loop.</span>
+      </div>
+      <table>
+        <colgroup><col class="c-feat"><col class="c-obj"><col class="c-how"><col class="c-metric"></colgroup>
+        <thead><tr><th>Feature</th><th>Objective</th><th>How it drives sales</th><th>Metric</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">Points (Beans) balance</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Earnable forward currency — a reason to return that compounds with each visit.</td><td class="metric">orders / active member / month <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Voucher wallet</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Active vouchers visible → next-visit prompt every app open.</td><td class="metric">voucher utilisation (used / issued) <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Voucher expiry deadlines</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td><strong>The urgency engine.</strong> "Use by Friday" pulls a visit forward.</td><td class="metric">expired-without-use % <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Free-item vouchers</td><td class="obj"><span class="obj-pill aov">AOV</span></td><td>"Free pastry with drink" — looks like a discount, behaves like an AOV lift.</td><td class="metric">avg items / order with voucher <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Missions / challenges</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Behavioural nudge that engineers a 2-3 visit streak.</td><td class="metric">mission completion % · post-streak D30 <span class="pill tracked"><span class="dot"></span>tracked</span></td></tr>
+          <tr><td class="feat">Spend Beans catalog</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Points sink. Redemption brings the user back in.</td><td class="metric">redemption rate <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- TIER -->
+    <div class="surf">
+      <div class="surf-head">
+        <div class="l"><span class="n">06.</span><h3>Tier &amp; membership</h3><span class="route">app/tier-benefits.tsx</span></div>
+        <span class="desc">Status + fixed discount per tier. Retains the top of the customer pyramid.</span>
+      </div>
+      <table>
+        <colgroup><col class="c-feat"><col class="c-obj"><col class="c-how"><col class="c-metric"></colgroup>
+        <thead><tr><th>Feature</th><th>Objective</th><th>How it drives sales</th><th>Metric</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">Tier ladder (6 tiers)</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Bronze→Silver→Gold→Elite. Status retains; loss-aversion locks in.</td><td class="metric">tier retention quarter-over-quarter <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Earn multiplier per tier</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Higher tier = more Beans per RM = stronger reason to keep ordering on app.</td><td class="metric">app share by tier <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Quarterly unlock window</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>"Spend RM X in Y days to unlock {next}" — quarter-end spike pressure.</td><td class="metric">quarter-end-week order spike <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Free birthday drink</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Annual emotional moment — forces the user back into the app once a year minimum.</td><td class="metric">birthday-month visit rate <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Tier perks ("3rd drink free")</td><td class="obj"><span class="obj-pill aov">AOV</span></td><td>Multi-item-unlock reward — pulls 1-item orders into 2- or 3-item orders.</td><td class="metric">items / order, by tier <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ACCOUNT / IDENTITY -->
+    <div class="surf">
+      <div class="surf-head">
+        <div class="l"><span class="n">07.</span><h3>Account &amp; identity</h3><span class="route">app/account.tsx</span></div>
+        <span class="desc">Sign-up, profile, and the link between the app member and the in-store customer.</span>
+      </div>
+      <table>
+        <colgroup><col class="c-feat"><col class="c-obj"><col class="c-how"><col class="c-metric"></colgroup>
+        <thead><tr><th>Feature</th><th>Objective</th><th>How it drives sales</th><th>Metric</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">Phone+OTP sign-in</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Frictionless onboarding → faster first order.</td><td class="metric"><code>login_success</code> · OTP funnel <span class="pill tracked"><span class="dot"></span>tracked</span></td></tr>
+          <tr><td class="feat">Browse-without-auth</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Lets curious users see menu before committing → softens the signup gate.</td><td class="metric">browse → signup rate <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Profile completion (birthday)</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Birthday field gates the free-birthday-drink reward.</td><td class="metric">% members with birthday filled <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Identity QR / member card</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Connects walk-in orders to the member — extends loyalty to in-store too.</td><td class="metric">POS scan rate <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- VIRAL -->
+    <div class="surf">
+      <div class="surf-head">
+        <div class="l"><span class="n">08.</span><h3>Viral surfaces</h3><span class="route">app/referral.tsx · app/wrapped.tsx</span></div>
+        <span class="desc">Turn existing customers into the acquisition channel. The cheapest CAC.</span>
+      </div>
+      <table>
+        <colgroup><col class="c-feat"><col class="c-obj"><col class="c-how"><col class="c-metric"></colgroup>
+        <thead><tr><th>Feature</th><th>Objective</th><th>How it drives sales</th><th>Metric</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">Referral code share</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Existing customer brings in a new buyer; both sides get a free drink.</td><td class="metric">referral → first-order conv. · CAC <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Coffee Wrapped</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Annual recap, share-as-image → organic social distribution + retention moment.</td><td class="metric">share rate · attributed installs <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Welcome voucher (new user)</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Lowers the bar to the first transaction post-signup.</td><td class="metric">signup → first-order conv. <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- INFRASTRUCTURE / CROSS-CUTTING -->
+    <div class="surf">
+      <div class="surf-head">
+        <div class="l"><span class="n">09.</span><h3>Cross-cutting surfaces</h3><span class="route">Push · BottomNav · Posters · MaintenanceBanner</span></div>
+        <span class="desc">Mechanisms that aren't on one screen but affect every order.</span>
+      </div>
+      <table>
+        <colgroup><col class="c-feat"><col class="c-obj"><col class="c-how"><col class="c-metric"></colgroup>
+        <thead><tr><th>Feature</th><th>Objective</th><th>How it drives sales</th><th>Metric</th></tr></thead>
+        <tbody>
+          <tr><td class="feat">Push notifications</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Re-activation channel — "order ready", "voucher expiring", "back in stock". Free re-engagement.</td><td class="metric">push → open → order rate <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Reward badge on BottomNav</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>Persistent visual cue of unclaimed value → drives /rewards visits.</td><td class="metric">badge → /rewards CTR <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+          <tr><td class="feat">Pickup speed (the app itself)</td><td class="obj"><span class="obj-pill orders">Orders</span></td><td>If app orders aren't faster than walk-in, frequency caps. Core promise.</td><td class="metric">app share of outlet orders · median wait <span class="pill gap"><span class="dot"></span>gap</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </section>
+
+  <!-- WHAT TO MEASURE -->
+  <section>
+    <div class="section-head">
+      <span class="n">03.</span>
+      <h2>The instrumentation gap</h2>
+    </div>
+    <p class="lede">11 Amplitude events fire today. They cover the order-funnel mechanics well but say <strong>almost nothing about the loyalty &amp; viral machine</strong> — which is where the orders multiplier lives. Below: the five events that unlock the rest.</p>
+
+    <div class="callout">
+      <div class="ico">!</div>
       <div>
-        <div class="word">Celsius Coffee</div>
-        <span class="tag">Pickup app · Manual</span>
+        <h4>Before you trust any number</h4>
+        <p>Amplitude is gated on a non-empty <code>EXPO_PUBLIC_AMPLITUDE_API_KEY</code> <em>and</em> a fresh native build that bakes in the native module. Confirm both before treating dashboards as real.</p>
       </div>
     </div>
 
-    <div class="toc-eyebrow">Contents</div>
-    <ol class="toc">
-      <li><a href="#about">About this manual</a></li>
-      <li><a href="#product">The product</a></li>
-      <li><a href="#objectives">App-level objectives</a></li>
-      <li><a href="#ia">Information architecture</a></li>
-      <li><a href="#screens">Screen reference</a>
-        <ol class="toc">
-          <li><a class="sub" href="#s-home">01 · Home</a></li>
-          <li><a class="sub" href="#s-menu">02 · Menu</a></li>
-          <li><a class="sub" href="#s-product">03 · Product detail</a></li>
-          <li><a class="sub" href="#s-cart">04 · Cart</a></li>
-          <li><a class="sub" href="#s-checkout">05 · Checkout</a></li>
-          <li><a class="sub" href="#s-orders">06 · Orders list</a></li>
-          <li><a class="sub" href="#s-order">07 · Order detail</a></li>
-          <li><a class="sub" href="#s-rewards">08 · Rewards</a></li>
-          <li><a class="sub" href="#s-tier">09 · Tier benefits</a></li>
-          <li><a class="sub" href="#s-account">10 · Account</a></li>
-          <li><a class="sub" href="#s-referral">11 · Referral</a></li>
-          <li><a class="sub" href="#s-wrapped">12 · Coffee Wrapped</a></li>
-          <li><a class="sub" href="#s-store">13 · Store picker</a></li>
-          <li><a class="sub" href="#s-misc">14 · Support · Privacy · Settings · Delete</a></li>
-        </ol>
-      </li>
-      <li><a href="#components">Persistent components</a></li>
-      <li><a href="#analytics">Analytics &amp; metrics</a></li>
-      <li><a href="#palette">Brand appendix</a></li>
+    <ol class="prio">
+      <li><code>screen_viewed</code><strong>Funnel for free</strong><p>Fire on every screen mount with <code>screen_name</code>. Unlocks landing-rate metrics across the whole app.</p></li>
+      <li><code>voucher_claimed</code> <code>voucher_used</code><strong>Loyalty loop</strong><p>Issued ÷ claimed ÷ used. Tells us whether vouchers are a cost or a sales lever.</p></li>
+      <li><code>order_collected</code><strong>Skip-queue proof</strong><p>Include method (<code>swipe</code>/<code>auto</code>/<code>barista</code>). Measures the core value prop.</p></li>
+      <li><code>reorder_tapped</code><strong>Highest-value action</strong><p>One-tap reorder is the cheapest path to a repeat order. Track CTR + reorder→<code>order_placed</code>.</p></li>
+      <li><code>referral_shared</code><strong>Viral lever</strong><p>The one event that lights up acquisition. Without it, viral CAC is faith-based.</p></li>
     </ol>
-  </aside>
 
-  <main>
-
-    <!-- HERO -->
-    <div class="hero">
-      <div class="hero-inner">
-        <div class="eyebrow">Product Manual · v1.0</div>
-        <h1>Pickup App<br><em>Features, objectives &amp; metrics.</em></h1>
-        <p class="sub">A field guide to every screen, every box, and every button in the Celsius Coffee pickup app — what it does, why it's there, and how we know it's working.</p>
-        <div class="hero-meta">
-          <div><div class="k">Product</div><div class="v">Pickup Native (Expo)</div></div>
-          <div><div class="k">Audience</div><div class="v">Product · Ops · Engineering</div></div>
-          <div><div class="k">Last reviewed</div><div class="v">15 May 2026</div></div>
-          <div><div class="k">Maintainer</div><div class="v">Ammar Shahrin</div></div>
-        </div>
+    <div class="pgfoot">
+      <div><strong>Celsius Coffee · Pickup app strategy</strong>Source at <code>apps/pickup-native/docs/manual.html</code>. Update in the same PR as a strategic shift.</div>
+      <div class="mark">
+        <img src="assets/celsius-wordmark.png" alt="Celsius Coffee">
+        <span style="font-family:var(--mono);font-size:7.5pt">v3.0 · 15 May 2026</span>
       </div>
     </div>
-
-    <div class="container">
-
-      <!-- ABOUT -->
-      <section id="about">
-        <div class="sec-head">
-          <span class="num">i.</span>
-          <h2>About this manual</h2>
-        </div>
-        <p class="lede">This is the single source of truth for the Pickup app's product surface. It maps every feature to a purpose, and every purpose to a metric — so we never ship a UI box we can't justify, and never claim a win we can't measure.</p>
-        <div class="callout">
-          <div class="icon">?</div>
-          <div>
-            <h4>How to read this</h4>
-            <p>Each screen entry has three parts: <strong>Purpose</strong> (the one-line reason it exists), <strong>Features</strong> (every meaningful UI box on the screen with its role), and <strong>Metrics</strong> (what we measure to know it's pulling its weight). Pills mark instrumentation state: <span class="pill good"><span class="dot"></span>tracked</span> means an Amplitude event fires today; <span class="pill warn"><span class="dot"></span>gap</span> means the metric matters but isn't wired yet.</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- PRODUCT -->
-      <section id="product">
-        <div class="sec-head">
-          <span class="num">ii.</span>
-          <h2>The product</h2>
-        </div>
-        <p class="lede">The Pickup app is the Celsius Coffee customer's primary channel for ordering ahead, earning loyalty points, and skipping the queue. It runs as a native iOS/Android Expo app, bundled with OTA updates on the <code>.pickup.next</code> channel during development.</p>
-        <table>
-          <tbody>
-            <tr><td class="feat">Tech</td><td>Expo Router · React Native · Supabase backend · Stripe PaymentSheet · Amplitude analytics · Expo Push (APNs + FCM V1)</td></tr>
-            <tr><td class="feat">Outlets supported</td><td>Shah Alam, Conezion, Tamarind — selected per session before browsing</td></tr>
-            <tr><td class="feat">Payments</td><td>Card, Apple Pay, FPX (Malaysia), GrabPay — Stripe-mediated. Zero-amount bypass for fully-discounted orders.</td></tr>
-            <tr><td class="feat">Loyalty model</td><td>Points (Beans) · tiered membership · vouchers · missions · mystery drops · referrals · annual Wrapped</td></tr>
-            <tr><td class="feat">Auth</td><td>Phone (Malaysian +60) → OTP, browse-without-auth fallback for menu/posters</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <!-- OBJECTIVES -->
-      <section id="objectives">
-        <div class="sec-head">
-          <span class="num">iii.</span>
-          <h2>App-level objectives</h2>
-        </div>
-        <p class="lede">Every feature in this manual ladders up to one of six objectives. If a feature doesn't, it shouldn't exist.</p>
-        <div class="obj-grid">
-          <div class="obj">
-            <div class="ico">↻</div>
-            <h3>Drive repeat purchase</h3>
-            <p>Coffee is habitual; LTV is the business. We want every customer ordering more often than they would without the app.</p>
-            <span class="ns-label">North-star</span>
-            <span class="ns">orders / active member / month · D30 repeat rate</span>
-          </div>
-          <div class="obj">
-            <div class="ico">⏵</div>
-            <h3>Skip the queue</h3>
-            <p>The core promise vs. walk-in. If app orders aren't faster, the product fails.</p>
-            <span class="ns-label">North-star</span>
-            <span class="ns">app share of outlet orders · median pickup wait</span>
-          </div>
-          <div class="obj">
-            <div class="ico">＋</div>
-            <h3>Increase basket size</h3>
-            <p>Modifiers, recommendations, and missions should lift the average order.</p>
-            <span class="ns-label">North-star</span>
-            <span class="ns">AOV (RM) · items per order · modifier attach rate</span>
-          </div>
-          <div class="obj">
-            <div class="ico">✦</div>
-            <h3>Build loyalty habit</h3>
-            <p>Points, tiers, and vouchers exist to convert visits into a quarterly streak.</p>
-            <span class="ns-label">North-star</span>
-            <span class="ns">active member ratio · voucher redemption %</span>
-          </div>
-          <div class="obj">
-            <div class="ico">∞</div>
-            <h3>Cheap viral CAC</h3>
-            <p>Referrals and Wrapped should beat paid acquisition cost-per-customer.</p>
-            <span class="ns-label">North-star</span>
-            <span class="ns">referral → first-order conversion · CAC vs. paid</span>
-          </div>
-          <div class="obj">
-            <div class="ico">⚙</div>
-            <h3>Operational efficiency</h3>
-            <p>Less barista friction, fewer disputes, faster handoff at the counter.</p>
-            <span class="ns-label">North-star</span>
-            <span class="ns">auto-collection rate · order dispute rate</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- IA -->
-      <section id="ia">
-        <div class="sec-head">
-          <span class="num">iv.</span>
-          <h2>Information architecture</h2>
-        </div>
-        <p class="lede">Five-tab bottom nav, with deep flows hanging off Account and Rewards.</p>
-        <div class="ia">
-          <h3>Pickup app navigation</h3>
-          <div class="tier">
-            <div class="tier-label">Bottom nav</div>
-            <div class="tier-nodes">
-              <span class="node primary">Home</span>
-              <span class="node primary">Menu</span>
-              <span class="node primary">Orders</span>
-              <span class="node primary">Rewards</span>
-              <span class="node primary">Account</span>
-            </div>
-          </div>
-          <div class="tier">
-            <div class="tier-label">Order flow</div>
-            <div class="tier-nodes">
-              <span class="node">Store picker</span>
-              <span class="node">Menu</span>
-              <span class="node">Product detail</span>
-              <span class="node">Cart</span>
-              <span class="node">Checkout</span>
-              <span class="node">Order detail</span>
-            </div>
-          </div>
-          <div class="tier">
-            <div class="tier-label">Loyalty</div>
-            <div class="tier-nodes">
-              <span class="node secondary">Tier benefits</span>
-              <span class="node secondary">Voucher wallet</span>
-              <span class="node secondary">Mystery bean</span>
-              <span class="node secondary">Missions</span>
-              <span class="node secondary">Points shop</span>
-            </div>
-          </div>
-          <div class="tier">
-            <div class="tier-label">Identity</div>
-            <div class="tier-nodes">
-              <span class="node">Phone+OTP</span>
-              <span class="node">Profile edit</span>
-              <span class="node">Member QR</span>
-              <span class="node">Referral</span>
-              <span class="node">Wrapped</span>
-            </div>
-          </div>
-          <div class="tier">
-            <div class="tier-label">Compliance</div>
-            <div class="tier-nodes">
-              <span class="node">Support</span>
-              <span class="node">Privacy</span>
-              <span class="node">Settings</span>
-              <span class="node">Delete account</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- SCREENS -->
-      <section id="screens">
-        <div class="sec-head">
-          <span class="num">v.</span>
-          <h2>Screen reference</h2>
-        </div>
-        <p class="lede">Every screen, in route order. Each entry lists the major UI boxes, what they're for, and the metrics that prove they work.</p>
-
-        <!-- HOME -->
-        <div class="screen" id="s-home">
-          <div class="screen-head">
-            <span class="idx">01</span>
-            <h3>Home</h3>
-            <span class="route">app/index.tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Get the user from app-open to "I know what I want next" in under ten seconds — by surfacing their usual drink, claimable rewards, in-progress missions, and current promos.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Poster carousel</td><td>Full-width promo hero, auto-advances every 4.5s, deep-links to product/menu/external URL on tap.</td></tr>
-              <tr><td class="feat">Info card</td><td>Sticky greeting with name, points balance, current tier, and live count badges for claimables and active missions.</td></tr>
-              <tr><td class="feat">Outlet picker pill</td><td>Shows selected outlet plus busy/closed status. Taps into the store picker.</td></tr>
-              <tr><td class="feat">"Your usual" carousel</td><td>Up to 8 thumbnails of recent or top-3 most-ordered products. One tap to product detail.</td></tr>
-              <tr><td class="feat">Claimable vouchers row</td><td>Welcome / promo / mystery vouchers eligible to claim. Inline green-state "Claim" button.</td></tr>
-              <tr><td class="feat">Active missions row</td><td>Mission progress bars with days-remaining countdown. Tap to /rewards.</td></tr>
-              <tr><td class="feat">Featured products carousel</td><td>5–8 curated picks — best sellers or seasonal pushes.</td></tr>
-              <tr><td class="feat">Pull-to-refresh</td><td>Force-refreshes posters, orders, vouchers, missions.</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Home overall</td><td class="metric">Time-to-first-tap; sessions reaching cart; D7/D30 home-return rate</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Poster carousel</td><td class="metric">Per-poster CTR; <code>poster_tapped</code> rate by position; promo → order attribution</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">"Your usual"</td><td class="metric">Tap rate; usual-driven cart-adds vs. menu-driven</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Claimables row</td><td class="metric">Claim rate; time-to-claim; claim → order conversion</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Active missions</td><td class="metric">Progress velocity; completion %; expired-without-completion %</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Featured carousel</td><td class="metric">Featured CTR; featured-driven AOV uplift</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- MENU -->
-        <div class="screen" id="s-menu">
-          <div class="screen-head">
-            <span class="idx">02</span>
-            <h3>Menu</h3>
-            <span class="route">app/menu.tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Let the user find what they want fast — by browse (category) or by search — and move them into product detail.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Category pills (sticky)</td><td>Horizontal pill bar mapping to product groups; first category auto-selected; scroll-syncs with grid.</td></tr>
-              <tr><td class="feat">Search bar (sticky)</td><td>Real-time filter on product name across the catalogue.</td></tr>
-              <tr><td class="feat">Product grid rows</td><td>Each row: 88×88 image, name, short description, base price. Tap → /product/[id].</td></tr>
-              <tr><td class="feat">Empty search state</td><td>"No products found" — signals a catalogue gap when frequent.</td></tr>
-              <tr><td class="feat">Pull-to-refresh</td><td>Re-pulls the menu for the selected outlet.</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Category pills</td><td class="metric">Category CTR; sessions touching ≥2 categories; first-category dwell</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Search</td><td class="metric">Search-usage rate; search → add-to-cart %; zero-result query log</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Product rows</td><td class="metric">Impressions/product; menu → PDP conversion</td><td><span class="pill good"><span class="dot"></span>product_viewed</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- PRODUCT -->
-        <div class="screen" id="s-product">
-          <div class="screen-head">
-            <span class="idx">03</span>
-            <h3>Product detail</h3>
-            <span class="route">app/product/[id].tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Turn intent into a configured cart-add — with required modifiers chosen, optional add-ons surfaced, and quantity set.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Hero image</td><td>Half-screen product photo with floating back chevron.</td></tr>
-              <tr><td class="feat">Product info header</td><td>Name, multi-line description, base price in terracotta.</td></tr>
-              <tr><td class="feat">Modifiers</td><td>Required single-select groups (pre-filled default), optional multi-select groups (empty default). Group label flags requirement.</td></tr>
-              <tr><td class="feat">Special instructions</td><td>500-char text input for custom requests.</td></tr>
-              <tr><td class="feat">Quantity stepper (sticky)</td><td>Minus/plus with haptics; disabled at 1 (min) and 99 (max).</td></tr>
-              <tr><td class="feat">Add to cart (sticky)</td><td>Full-width CTA; disabled until required mods chosen; shows live total (base + mods × qty).</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">PDP overall</td><td class="metric"><code>product_viewed</code>; time-on-PDP; PDP → cart conversion</td><td><span class="pill good"><span class="dot"></span>product_viewed</span></td></tr>
-              <tr><td class="feat">Modifiers</td><td class="metric">Required-mod completion %; modifier attach rate; AOV uplift from optionals</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Special instructions</td><td class="metric">% orders with notes; dispute rate on notes orders</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Add to cart</td><td class="metric"><code>cart_add</code> rate; avg quantity per add; abandonment after PDP view</td><td><span class="pill good"><span class="dot"></span>cart_add</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- CART -->
-        <div class="screen" id="s-cart">
-          <div class="screen-head">
-            <span class="idx">04</span>
-            <h3>Cart</h3>
-            <span class="route">app/cart.tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Let the user review and edit line items, apply a voucher, see the full price breakdown, and commit to checkout — with no surprises.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Line items</td><td>Each item with modifiers, notes, qty stepper, and remove control.</td></tr>
-              <tr><td class="feat">Apply voucher slot</td><td>Surfaces eligible wallet vouchers; one tap reserves and applies.</td></tr>
-              <tr><td class="feat">Price summary</td><td>Subtotal, itemised discounts (reward / voucher / promo), SST, total.</td></tr>
-              <tr><td class="feat">Continue to checkout</td><td>Sticky CTA; gates if outlet not yet picked.</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Cart overall</td><td class="metric">Cart → checkout conversion; cart abandonment rate; time-on-cart</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Line edits</td><td class="metric">Item-edit and item-removal rate</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Voucher slot</td><td class="metric"><code>reward_reserved</code>; voucher apply rate; discount-driven order share</td><td><span class="pill good"><span class="dot"></span>reward_reserved</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- CHECKOUT -->
-        <div class="screen" id="s-checkout">
-          <div class="screen-head">
-            <span class="idx">05</span>
-            <h3>Checkout</h3>
-            <span class="route">app/checkout.tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Take payment without friction — supporting every Malaysian-relevant method, handling fully-discounted orders, and recovering from failures.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Outlet + pickup time</td><td>Confirms fulfillment context and shows ETA.</td></tr>
-              <tr><td class="feat">Payment method selector</td><td>Card, Apple Pay, FPX, GrabPay — Stripe PaymentSheet handles UI.</td></tr>
-              <tr><td class="feat">Stripe PaymentSheet</td><td>Native sheet; supports saved methods and Apple Pay tokens.</td></tr>
-              <tr><td class="feat">Zero-amount bypass</td><td>Skips payment when discounts fully cover total; fires <code>payment_skipped</code>.</td></tr>
-              <tr><td class="feat">Place order CTA</td><td>Final commit; triggers <code>checkout_started</code> then <code>order_placed</code>.</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Checkout funnel</td><td class="metric"><code>checkout_started</code> → <code>order_placed</code> conversion</td><td><span class="pill good"><span class="dot"></span>tracked</span></td></tr>
-              <tr><td class="feat">Payment methods</td><td class="metric">Method mix; completion rate per method; <code>payment_success</code> / <code>_failed</code> / <code>_cancelled</code></td><td><span class="pill good"><span class="dot"></span>tracked</span></td></tr>
-              <tr><td class="feat">Zero-amount</td><td class="metric"><code>payment_skipped</code> rate; share of fully-discounted orders</td><td><span class="pill good"><span class="dot"></span>tracked</span></td></tr>
-              <tr><td class="feat">Stripe sheet</td><td class="metric">Sheet-open → completion %; in-sheet abandonment</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-            </tbody>
-          </table>
-          <div class="callout amber">
-            <div class="icon">★</div>
-            <div>
-              <h4>Best-instrumented screen in the app</h4>
-              <p>Checkout has 5 of the 11 tracked events. Use this as the template when wiring up the rest.</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- ORDERS LIST -->
-        <div class="screen" id="s-orders">
-          <div class="screen-head">
-            <span class="idx">06</span>
-            <h3>Orders list</h3>
-            <span class="route">app/orders.tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Two jobs in one screen — live status for in-flight orders, and one-tap reorder from history.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">In Progress / Past tabs</td><td>Segmented control. Badge on "In Progress" shows active order count.</td></tr>
-              <tr><td class="feat">Order row</td><td>Order number, item count, location, ETA or date, total, status badge (color-coded), View and Reorder buttons.</td></tr>
-              <tr><td class="feat">Reorder confirmation modal</td><td>Confirms "same items, same modifiers". On confirm, hydrates cart and routes to /menu.</td></tr>
-              <tr><td class="feat">Pull-to-refresh</td><td>Forces order-list refetch.</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Tab split</td><td class="metric">In Progress vs Past usage; In Progress dwell during live orders</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">View button</td><td class="metric">Order-detail open rate per status</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Reorder button</td><td class="metric">Reorder CTR; reorder → <code>order_placed</code> conversion; reorder AOV vs. fresh order</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- ORDER DETAIL -->
-        <div class="screen" id="s-order">
-          <div class="screen-head">
-            <span class="idx">07</span>
-            <h3>Order detail</h3>
-            <span class="route">app/order/[id].tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Close the loop from "order placed" to "drink in hand" — with live status, a delight moment, and a clean handoff at the counter.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Order stepper</td><td>3-step pipeline (Received → Brewing → Ready) with infinite-pulse animation on current step. Reduces "is it ready yet?" anxiety.</td></tr>
-              <tr><td class="feat">Mystery Bean card</td><td>Tap-to-reveal scratch card on ready/collected. Outcomes: multiplier, voucher, flat beans, surprise-in-store, or no-bonus.</td></tr>
-              <tr><td class="feat">Order summary</td><td>Line items, modifiers, notes, discounts, SST, total — receipt and dispute reference.</td></tr>
-              <tr><td class="feat">Swipe-to-collect</td><td>Customer slides a thumb across the track to confirm pickup. Replaces barista action.</td></tr>
-              <tr><td class="feat">Collected card</td><td>Terracotta confirmation with checkmark once status = completed.</td></tr>
-              <tr><td class="feat">Pending payment retry</td><td>Re-opens Stripe sheet for orders in pending_payment state.</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Stepper</td><td class="metric">Time-in-step per state; time-to-ready by outlet (median, p95)</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Mystery Bean</td><td class="metric">Reveal rate; time-to-reveal; outcome distribution; post-reveal session length</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Swipe-to-collect</td><td class="metric">Swipe-completion rate; % orders auto-collected vs. swipe vs. barista</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Pending payment retry</td><td class="metric">Retry attempt rate; retry → success rate (recovered revenue)</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- REWARDS -->
-        <div class="screen" id="s-rewards">
-          <div class="screen-head">
-            <span class="idx">08</span>
-            <h3>Rewards</h3>
-            <span class="route">app/rewards.tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Make issued rewards get <em>used</em>. Hoarded points and unredeemed vouchers are a failed loyalty loop.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Points hero</td><td>Large balance display with current tier badge.</td></tr>
-              <tr><td class="feat">Voucher wallet</td><td>Active vouchers grouped by source (mission / mystery / gift / points). "Use" applies and routes to menu.</td></tr>
-              <tr><td class="feat">Claimable section</td><td>One-tap claim for welcome / promo / mystery-pending vouchers. Green-state confirmation.</td></tr>
-              <tr><td class="feat">Active missions</td><td>Progress bars with claim-on-completion CTA and countdown.</td></tr>
-              <tr><td class="feat">Spend Beans catalog</td><td>Points-shop grid, sorted by affordability. "Redeem for free" CTA. Locked items show points gap.</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Rewards overall</td><td class="metric">Screen views per active member / week</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Voucher wallet</td><td class="metric">Utilisation = used / issued; days-to-use; expired-without-use %</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Claimables</td><td class="metric">Claim rate by source_type; <code>challenge_use_tapped</code> proxy</td><td><span class="pill good"><span class="dot"></span>challenge_use_tapped</span></td></tr>
-              <tr><td class="feat">Missions</td><td class="metric">Completion %; claim-button CTR; missions-driven order frequency lift</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Points shop</td><td class="metric">Redemption rate; "almost there" view-without-buy gap</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- TIER -->
-        <div class="screen" id="s-tier">
-          <div class="screen-head">
-            <span class="idx">09</span>
-            <h3>Tier benefits</h3>
-            <span class="route">app/tier-benefits.tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Convert tier visibility into incremental spend toward the next unlock — especially in the last weeks of a quarter.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Tier card carousel</td><td>Swipeable 6-tier pager (bronze · silver · gold · elite · staff · black-card) with bespoke theme per tier.</td></tr>
-              <tr><td class="feat">Progress bar + unlock window</td><td>"Spend RM X in Y days to unlock {next tier}" or "Achieved · perks unlocked".</td></tr>
-              <tr><td class="feat">Benefit sections</td><td>Member Rewards (multiplier), Birthday Gifts, Member Perks, VIP Special — rendered from benefit_rules.</td></tr>
-              <tr><td class="feat">"See rewards" CTA</td><td>Amber pill at the bottom routing to /rewards.</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Carousel</td><td class="metric">Swipes/session; % users who view tiers above their current</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Progress bar</td><td class="metric">RM-to-next-tier distribution; quarter-end-week order spike among "close" members</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">CTA</td><td class="metric">CTA CTR → /rewards landing → redemption</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- ACCOUNT -->
-        <div class="screen" id="s-account">
-          <div class="screen-head">
-            <span class="idx">10</span>
-            <h3>Account</h3>
-            <span class="route">app/account.tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Two modes in one screen — onboard new users via phone+OTP, and serve as the profile / identity hub for signed-in users.</p>
-
-          <div class="subhead">Features — signed-out</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Phone step</td><td>Hardcoded +60 prefix, 9–11 digit input with live preview formatting.</td></tr>
-              <tr><td class="feat">OTP step</td><td>6-digit code, optional uppercase referral code, 30s resend timer, back arrow.</td></tr>
-              <tr><td class="feat">"Continue browsing" link</td><td>Escape-hatch to /menu — reduces auth-wall friction.</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Features — signed-in</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Tier card (embedded)</td><td>Carousel + stats row (Points / Visits / Earned).</td></tr>
-              <tr><td class="feat">Identity card</td><td>QR code (<code>celsius:member:{id}</code>) for in-store recognition.</td></tr>
-              <tr><td class="feat">Account section</td><td>Order history, "Your usual" drinks, Coffee Wrapped link.</td></tr>
-              <tr><td class="feat">Preferences</td><td>Settings hub link.</td></tr>
-              <tr><td class="feat">About</td><td>Support, Privacy policy.</td></tr>
-              <tr><td class="feat">Profile edit modal</td><td>Name, email, birthday (auto-formats DD/MM/YYYY).</td></tr>
-              <tr><td class="feat">Sign out / Delete account</td><td>Bottom-of-screen actions; delete is destructive (red).</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">OTP funnel</td><td class="metric">Phone-entered → OTP-requested → <code>login_success</code>; resend rate; time-to-verify</td><td><span class="pill good"><span class="dot"></span>login_success</span></td></tr>
-              <tr><td class="feat">Continue browsing</td><td class="metric">% users in browse-without-auth; downstream conversion to signed-in</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Profile completion</td><td class="metric">% members with email + birthday filled (gate for birthday rewards)</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Identity QR</td><td class="metric">Scan rate at POS (server-side join with checkout events)</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Delete account</td><td class="metric">Delete request rate (anomaly signal); post-delete re-signup %</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- REFERRAL -->
-        <div class="screen" id="s-referral">
-          <div class="screen-head">
-            <span class="idx">11</span>
-            <h3>Referral</h3>
-            <span class="route">app/referral.tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Cheap viral CAC. Each existing customer becomes an acquisition channel with a one-tap share.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Hero card</td><td>Dark espresso card with the user's referral code (40px Peachi, amber, 4px tracking) and "Share code" button.</td></tr>
-              <tr><td class="feat">Share template</td><td>Pre-filled message: "Try Celsius Coffee with me ☕ Use my code {code}…" + order.celsiuscoffee.com link.</td></tr>
-              <tr><td class="feat">Stats row</td><td>Total / Pending / Rewarded counters in three cards.</td></tr>
-              <tr><td class="feat">How it works</td><td>4-step numbered list with terracotta badges.</td></tr>
-              <tr><td class="feat">Recent referrals list</td><td>Last 10 referrals with status badge (Rewarded / Pending order).</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Hero card</td><td class="metric">Screen views per signed-in member; views without share</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Share button</td><td class="metric">Share rate; share-sheet completion channel mix</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Full funnel</td><td class="metric">Referral code → install → first-order conversion; CAC vs. paid channels</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- WRAPPED -->
-        <div class="screen" id="s-wrapped">
-          <div class="screen-head">
-            <span class="idx">12</span>
-            <h3>Coffee Wrapped</h3>
-            <span class="route">app/wrapped.tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> An annual retention moment that doubles as an organic-social distribution channel.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Headline number</td><td>"You drank X cups" — 120px Peachi in amber. The vanity moment.</td></tr>
-              <tr><td class="feat">Big-card stats grid</td><td>Favourite drink · Favourite hour (converted UTC → MYT) · Outlets visited · Longest streak · The damage (spent vs. saved).</td></tr>
-              <tr><td class="feat">Empty state</td><td>"You're still warming up" — shown to users with zero orders.</td></tr>
-              <tr><td class="feat">Share button</td><td>Native share sheet with text + image export for social.</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Wrapped overall</td><td class="metric">Eligible-user view rate; time-on-screen; scroll completion</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Share button</td><td class="metric">Share rate among viewers; attributed installs from shared content</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- STORE -->
-        <div class="screen" id="s-store">
-          <div class="screen-head">
-            <span class="idx">13</span>
-            <h3>Store picker</h3>
-            <span class="route">app/store.tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Always route the customer to a real, open outlet with a realistic ETA.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Outlet cards</td><td>Map-pin icon · name · status badges (Busy / Closed / open) · address · ETA · selected-state border.</td></tr>
-              <tr><td class="feat">Closed-outlet disable</td><td>50% opacity, non-pressable — prevents bad-state orders.</td></tr>
-              <tr><td class="feat">Smart routing</td><td>On select, routes to /cart if items in cart, else <code>?next</code> param or /menu.</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Outlet selection</td><td class="metric">Outlet share; outlet-switch frequency mid-session; wrong-outlet orders requiring refund/move</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Busy state</td><td class="metric">Busy-state shown → still-selected rate (does it deter?)</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- MISC -->
-        <div class="screen" id="s-misc">
-          <div class="screen-head">
-            <span class="idx">14</span>
-            <h3>Support · Privacy · Settings · Delete</h3>
-            <span class="route">app/{support,privacy,settings,account-delete}.tsx</span>
-          </div>
-          <p class="purpose"><strong>Purpose.</strong> Compliance, deflection, and graceful exit. Apple/Google require these; they should also reduce support load.</p>
-
-          <div class="subhead">Features</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Role</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Support FAQ (7 items)</td><td>Collapsible blocks covering OTP, failed orders, missing points, redemption, profile update, SMS opt-out, account deletion.</td></tr>
-              <tr><td class="feat">Contact rows</td><td>Email (barista@celsiuscoffee.com) + Instagram (@celsius.coffee).</td></tr>
-              <tr><td class="feat">Privacy policy</td><td>PDPA-compliant. Last reviewed 29 April 2026.</td></tr>
-              <tr><td class="feat">Settings hub</td><td>Three rows: Support · Privacy · Delete account (destructive).</td></tr>
-              <tr><td class="feat">Account deletion flow</td><td>Type-DELETE-to-confirm modal; clears Zustand, deregisters push, clears React Query cache.</td></tr>
-            </tbody>
-          </table>
-
-          <div class="subhead">Metrics</div>
-          <table>
-            <thead><tr><th>UI element</th><th>Metric</th><th>State</th></tr></thead>
-            <tbody>
-              <tr><td class="feat">Support FAQ</td><td class="metric">FAQ expansion rate per item; FAQ-view without follow-up contact = self-serve resolution</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Contact rows</td><td class="metric">Contact-method tap rate (email vs IG)</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-              <tr><td class="feat">Account deletion</td><td class="metric">Delete completion rate; post-delete re-signup % within 90d</td><td><span class="pill warn"><span class="dot"></span>gap</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-
-      </section>
-
-      <!-- COMPONENTS -->
-      <section id="components">
-        <div class="sec-head">
-          <span class="num">vi.</span>
-          <h2>Persistent components</h2>
-        </div>
-        <p class="lede">Reusable UI surfaces that show up across multiple screens. They get measured wherever they appear.</p>
-        <table>
-          <thead><tr><th>Component</th><th>Where</th><th>Purpose &amp; key metric</th></tr></thead>
-          <tbody>
-            <tr><td class="feat">BottomNav</td><td>Every screen</td><td>Five-tab global nav with a reward badge that surfaces unclaimed value. <strong>Metric:</strong> tab CTR; reward-badge → /rewards conversion.</td></tr>
-            <tr><td class="feat">OrderStepper</td><td>Order detail</td><td>Animated 3-step pipeline. <strong>Metric:</strong> dwell time per state; perceived-progress score.</td></tr>
-            <tr><td class="feat">VoucherWallet</td><td>Rewards, Cart</td><td>Source-typed reward cards with filter chips. <strong>Metric:</strong> "Use" CTR; voucher utilisation %.</td></tr>
-            <tr><td class="feat">TierCardCarousel</td><td>Tier benefits, Account</td><td>Six-tier swipeable pager. <strong>Metric:</strong> swipes/session; cards-viewed-above-current %.</td></tr>
-            <tr><td class="feat">RewardTicket</td><td>Home, Rewards</td><td>Ticket-stub card UI. <strong>Metric:</strong> ticket impression → press rate.</td></tr>
-            <tr><td class="feat">MysteryBean</td><td>Order detail</td><td>Tap-to-reveal scratch card. <strong>Metric:</strong> reveal rate; outcome distribution; post-reveal session length.</td></tr>
-            <tr><td class="feat">PosterCarousel</td><td>Home</td><td>Hero promo with auto-advance. <strong>Metric:</strong> per-poster CTR; promo-to-purchase attribution.</td></tr>
-            <tr><td class="feat">ClaimableSection</td><td>Home, Rewards</td><td>One-tap claim row group. <strong>Metric:</strong> claim rate per source_type.</td></tr>
-            <tr><td class="feat">SwipeToCollect</td><td>Order detail</td><td>Gesture-based collection confirm. <strong>Metric:</strong> swipe completion rate; auto vs. swipe vs. barista mix.</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <!-- ANALYTICS -->
-      <section id="analytics">
-        <div class="sec-head">
-          <span class="num">vii.</span>
-          <h2>Analytics &amp; metrics</h2>
-        </div>
-        <p class="lede">Where we are today, and the five events that unlock everything.</p>
-
-        <div class="subhead">What's tracked right now</div>
-        <table>
-          <thead><tr><th>Event</th><th>Fired from</th><th>Measures</th></tr></thead>
-          <tbody>
-            <tr><td><code>product_viewed</code></td><td>Product detail</td><td>PDP impressions; menu → PDP conversion</td></tr>
-            <tr><td><code>cart_add</code></td><td>Product detail</td><td>Cart-add success; quantity per add</td></tr>
-            <tr><td><code>reward_reserved</code></td><td>Cart / Voucher wallet</td><td>Voucher application</td></tr>
-            <tr><td><code>challenge_use_tapped</code></td><td>Rewards</td><td>Mission/challenge engagement</td></tr>
-            <tr><td><code>checkout_started</code></td><td>Checkout</td><td>Funnel entry</td></tr>
-            <tr><td><code>order_placed</code></td><td>Checkout</td><td>Funnel completion</td></tr>
-            <tr><td><code>payment_success</code></td><td>Checkout</td><td>Successful capture</td></tr>
-            <tr><td><code>payment_failed</code></td><td>Checkout</td><td>Capture failure (recovery candidate)</td></tr>
-            <tr><td><code>payment_cancelled</code></td><td>Checkout</td><td>User-cancelled sheet</td></tr>
-            <tr><td><code>payment_skipped</code></td><td>Checkout</td><td>Zero-amount order share</td></tr>
-            <tr><td><code>login_success</code></td><td>Account (OTP)</td><td>Auth completion</td></tr>
-          </tbody>
-        </table>
-
-        <div class="callout">
-          <div class="icon">!</div>
-          <div>
-            <h4>The gap is wide</h4>
-            <p>11 events cover roughly 15% of the app's surface. The funnel between login → home → menu → PDP → cart → checkout works, but nothing measures rewards, mystery, referral, wrapped, tier, or order-detail outcomes. Amplitude is also gated on a non-empty <code>EXPO_PUBLIC_AMPLITUDE_API_KEY</code> + a fresh native build — confirm both before treating any number as real.</p>
-          </div>
-        </div>
-
-        <div class="subhead">If you fix five events, do these</div>
-        <ol class="prio">
-          <li>
-            <div>
-              <strong><code>screen_viewed</code> · the funnel-for-free move</strong>
-              <p>Fire on every screen mount with <code>screen_name</code>. Unlocks landing-rate metrics for every screen above without any per-screen wiring.</p>
-            </div>
-          </li>
-          <li>
-            <div>
-              <strong><code>voucher_claimed</code> + <code>voucher_used</code> · the loyalty loop</strong>
-              <p>Issued ÷ claimed ÷ used. Without these we can't tell whether vouchers are a P&amp;L expense or a growth lever.</p>
-            </div>
-          </li>
-          <li>
-            <div>
-              <strong><code>order_collected</code> · closes the order funnel</strong>
-              <p>Include the method (<code>swipe</code> / <code>auto</code> / <code>barista_marked</code>). Measures the swipe-to-collect feature and tells us how often the queue is actually being skipped.</p>
-            </div>
-          </li>
-          <li>
-            <div>
-              <strong><code>reorder_tapped</code> · the highest-value action</strong>
-              <p>One-tap reorder is the cheapest path to a repeat order. Track CTR and reorder → <code>order_placed</code> conversion.</p>
-            </div>
-          </li>
-          <li>
-            <div>
-              <strong><code>poster_tapped</code> · proves marketing works</strong>
-              <p>Include <code>poster_id</code> + <code>deeplink</code>. Without this, promos are pure faith.</p>
-            </div>
-          </li>
-        </ol>
-      </section>
-
-      <!-- PALETTE -->
-      <section id="palette">
-        <div class="sec-head">
-          <span class="num">viii.</span>
-          <h2>Brand appendix</h2>
-        </div>
-        <p class="lede">The colours, type, and tone every screen in the app honours.</p>
-
-        <div class="subhead">Palette</div>
-        <div class="palette">
-          <div class="swatch"><div class="chip" style="background:#1A0200"></div><div class="meta"><div class="nm">Espresso</div><div class="hex">#1A0200 · brand black</div></div></div>
-          <div class="swatch"><div class="chip" style="background:#C05040"></div><div class="meta"><div class="nm">Terracotta</div><div class="hex">#C05040 · primary</div></div></div>
-          <div class="swatch"><div class="chip" style="background:#FBBF24"></div><div class="meta"><div class="nm">Amber</div><div class="hex">#FBBF24 · accent</div></div></div>
-          <div class="swatch"><div class="chip" style="background:#FBEBE8"></div><div class="meta"><div class="nm">Peach 50</div><div class="hex">#FBEBE8 · surface</div></div></div>
-          <div class="swatch"><div class="chip" style="background:#F5D2CC"></div><div class="meta"><div class="nm">Peach 100</div><div class="hex">#F5D2CC · hover</div></div></div>
-          <div class="swatch"><div class="chip" style="background:#5A1F16"></div><div class="meta"><div class="nm">Espresso Deep</div><div class="hex">#5A1F16 · ink-strong</div></div></div>
-          <div class="swatch"><div class="chip" style="background:#FFFFFF;border-bottom:1px solid #EFE7E0"></div><div class="meta"><div class="nm">Paper</div><div class="hex">#FFFFFF · body bg</div></div></div>
-          <div class="swatch"><div class="chip" style="background:#8E8E93"></div><div class="meta"><div class="nm">Muted</div><div class="hex">#8E8E93 · ink-3</div></div></div>
-        </div>
-
-        <div class="subhead">Type</div>
-        <table>
-          <tbody>
-            <tr><td class="feat">Display</td><td><strong style="font-family:var(--serif);font-size:18px;font-weight:500;letter-spacing:-.01em">Peachi</strong> — used for headlines, big numbers, prices, tier names. Italic for accents.</td></tr>
-            <tr><td class="feat">Body</td><td><strong style="font-family:var(--sans);font-weight:500">Space Grotesk</strong> — UI labels, body copy, buttons. Bold for emphasis.</td></tr>
-            <tr><td class="feat">Eyebrows / pills</td><td>Space Grotesk Bold, uppercase, 1.4–2.2px letter-spacing, 9–11px.</td></tr>
-          </tbody>
-        </table>
-
-        <div class="subhead">Voice principles</div>
-        <table>
-          <tbody>
-            <tr><td class="feat">Warm, not chatty</td><td>"Tap to reveal" not "Click here to see your reward!"</td></tr>
-            <tr><td class="feat">Specific over vague</td><td>"Spend RM12 in 47 days to unlock Gold" beats "almost there"</td></tr>
-            <tr><td class="feat">Reward the user's time</td><td>Empty states are honest moments, not apologies: "You're still warming up"</td></tr>
-            <tr><td class="feat">Bilingual when it lands</td><td>BM phrases like "Cuti staff" appear naturally in HR-adjacent surfaces; Pickup stays English-first.</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <footer>
-        <div class="colophon">
-          <strong>Celsius Coffee · Pickup App Manual</strong><br>
-          Maintained by the product team. Source of truth lives alongside the code at <code>apps/pickup-native/docs/manual.html</code>. Update this doc in the same PR as the feature.
-        </div>
-        <div>v1.0 · 15 May 2026</div>
-      </footer>
-
-    </div>
-  </main>
+  </section>
 
 </div>
+
 </body>
 </html>

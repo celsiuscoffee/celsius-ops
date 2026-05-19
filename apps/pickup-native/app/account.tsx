@@ -288,7 +288,7 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
       />
 
       <ScrollView
-        contentContainerStyle={{ paddingTop: 16, paddingBottom: 100 }}
+        contentContainerStyle={{ paddingTop: 16, paddingBottom: 160 }}
       >
         {/* Membership tier carousel — same TierCardCarousel that powers
             the legacy /tier-benefits screen. The customer's current

@@ -356,7 +356,7 @@ export default function RewardsTab() {
         <EspressoHeader title="Rewards" showCart={false} />
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 160 }}
         >
           <SignInPrompt />
         </ScrollView>
@@ -378,7 +378,7 @@ export default function RewardsTab() {
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 22 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 160, gap: 22 }}
         showsVerticalScrollIndicator={false}
       >
         <BeansHero

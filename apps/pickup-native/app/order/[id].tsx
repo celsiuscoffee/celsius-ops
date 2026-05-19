@@ -3,7 +3,7 @@ import { View, Text, Pressable, ScrollView, ActivityIndicator } from "react-nati
 import { Alert } from "@/lib/alert";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, CreditCard } from "lucide-react-native";
+import { Clock, CreditCard, XCircle } from "lucide-react-native";
 import * as Haptics from "@/lib/haptics";
 import { useStripe } from "@/lib/stripe-shim";
 import { fetchOrder } from "../../lib/menu";
@@ -207,9 +207,17 @@ export default function OrderStatus() {
     }
   };
 
-  const isPendingPayment =
-    data?.status === "pending" &&
+  // A retry sheet makes sense for two states: the customer landed back
+  // here mid-checkout (status === "pending") OR the first attempt got
+  // rejected by Stripe (status === "failed"). Both can be cleared by
+  // re-minting a PaymentIntent — server enforces the actual state
+  // transition. "cancelled" is terminal; no retry there.
+  const isRetryable =
+    (data?.status === "pending" || data?.status === "failed") &&
     ["card", "ewallet", "fpx"].includes(String(data?.payment_method));
+  // Old name kept for any downstream references — points at the same
+  // boolean so the retry button shows in both pending and failed.
+  const isPendingPayment = isRetryable;
 
   return (
     <View className="flex-1 bg-background">
@@ -252,19 +260,21 @@ export default function OrderStatus() {
               shadowOffset: { width: 0, height: 2 },
             }}
           >
-            {data.status === "pending" ? (
+            {data.status === "pending" || data.status === "failed" ? (
               <View className="items-center py-2">
-                <Clock size={28} color="#C05040" />
+                <Clock size={28} color={data.status === "failed" ? "#B0413E" : "#C05040"} />
                 <Text
                   className="text-espresso text-lg mt-2"
                   style={{ fontFamily: "Peachi-Bold" }}
                 >
-                  Awaiting payment
+                  {data.status === "failed" ? "Payment failed" : "Awaiting payment"}
                 </Text>
                 <Text className="text-muted-fg text-sm mt-1 text-center">
-                  Complete payment to start preparing
+                  {data.status === "failed"
+                    ? "Your card was declined or the sheet was closed before payment finished. Try again to start preparing your order."
+                    : "Complete payment to start preparing"}
                 </Text>
-                {isPendingPayment && (
+                {isRetryable && (
                   <Pressable
                     onPress={reopenStripe}
                     disabled={retrying}
@@ -284,10 +294,30 @@ export default function OrderStatus() {
                       className="text-white text-[14px]"
                       style={{ fontFamily: "Peachi-Bold" }}
                     >
-                      {retrying ? "Opening Stripe…" : "Complete payment"}
+                      {retrying
+                        ? "Opening Stripe…"
+                        : data.status === "failed"
+                        ? "Try again"
+                        : "Complete payment"}
                     </Text>
                   </Pressable>
                 )}
+              </View>
+            ) : data.status === "cancelled" ? (
+              // Terminal — staff cancelled the order. No retry path; the
+              // customer needs to start a new order if they still want the
+              // drink. Mirrors the cancelled empty-state on the Orders tab.
+              <View className="items-center py-2">
+                <XCircle size={28} color="#B0413E" />
+                <Text
+                  className="text-espresso text-lg mt-2"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Order cancelled
+                </Text>
+                <Text className="text-muted-fg text-sm mt-1 text-center">
+                  This order was cancelled. Any payment will be refunded automatically.
+                </Text>
               </View>
             ) : (
               // Horizontal pipeline: ●━━●━━○ with the active node pulsing.
