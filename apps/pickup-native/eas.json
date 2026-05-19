@@ -27,6 +27,13 @@
     }
   },
   "submit": {
+    "internal": {
+      "android": {
+        "serviceAccountKeyPath": "/Users/ammarshahrin/.google-keys/celsius-play-submit.json",
+        "track":                 "internal",
+        "releaseStatus":         "draft"
+      }
+    },
     "production": {
       "android": {
         "serviceAccountKeyPath": "/Users/ammarshahrin/.google-keys/celsius-play-submit.json",
