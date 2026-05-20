@@ -42,6 +42,7 @@ import {
   X,
   ImageIcon,
   Sparkles,
+  Filter,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -188,10 +189,21 @@ export default function OrdersPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    const t = setTimeout(() => setDebouncedSearch(search), 500);
     return () => clearTimeout(t);
   }, [search]);
-  const url = `/api/inventory/orders?tab=${tab}${debouncedSearch ? `&search=${debouncedSearch}` : ""}`;
+  // Created-date range filter — mirrors the invoices page pattern.
+  const [showFilters, setShowFilters] = useState(false);
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
+  const activeOrderFilterCount = [createdFrom, createdTo].filter(Boolean).length;
+  const url = (() => {
+    const params = new URLSearchParams({ tab });
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (createdFrom) params.set("createdFrom", createdFrom);
+    if (createdTo) params.set("createdTo", createdTo);
+    return `/api/inventory/orders?${params.toString()}`;
+  })();
   type OrdersResponse = { orders: Order[]; summary: { total: number; draft: number; active: number; completed: number; totalValue: number } };
   const { data, isLoading: loading, mutate: loadOrders } = useFetch<OrdersResponse>(url);
   const orders: Order[] = data?.orders ?? [];
@@ -713,7 +725,56 @@ export default function OrdersPage() {
             </button>
           ))}
         </div>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`relative flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${showFilters || activeOrderFilterCount > 0 ? "border-blue-400 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+        >
+          <Filter className="h-3 w-3" />
+          Filters
+          {activeOrderFilterCount > 0 && (
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white">{activeOrderFilterCount}</span>
+          )}
+        </button>
+        {activeOrderFilterCount > 0 && (
+          <button
+            onClick={() => { setCreatedFrom(""); setCreatedTo(""); }}
+            className="flex items-center gap-1 rounded-full border border-gray-200 px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-50"
+          >
+            <X className="h-3 w-3" /> Clear filters
+          </button>
+        )}
       </div>
+
+      {/* Expanded filter panel */}
+      {showFilters && (
+        <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/30 p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+                <CalendarDays className="h-3 w-3" /> Created From
+              </label>
+              <input
+                type="date"
+                value={createdFrom}
+                onChange={(e) => setCreatedFrom(e.target.value)}
+                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+                <CalendarDays className="h-3 w-3" /> Created To
+              </label>
+              <input
+                type="date"
+                value={createdTo}
+                onChange={(e) => setCreatedTo(e.target.value)}
+                min={createdFrom || undefined}
+                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Orders table */}
       <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">

@@ -329,7 +329,7 @@ export default function SuppliersPage() {
                       <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{supplier.leadTimeDays}d lead</span>
                       {supplier.depositPercent != null && supplier.depositPercent > 0 && (
                         <span
-                          title={supplier.depositTermsDays ? `Balance due ${supplier.depositTermsDays}d after deposit` : "Deposit required"}
+                          title={supplier.depositTermsDays ? `Balance due ${supplier.depositTermsDays}d after invoice date` : "Deposit required"}
                           className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800"
                         >
                           {supplier.depositPercent}% deposit

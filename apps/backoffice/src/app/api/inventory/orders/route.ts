@@ -24,6 +24,17 @@ export async function GET(req: NextRequest) {
     ];
   }
 
+  // Created-date range — filters by Order.createdAt. `createdTo` is inclusive
+  // (end-of-day). Mirrors the dueDate filter pattern on the invoices API.
+  const createdFrom = req.nextUrl.searchParams.get("createdFrom") || "";
+  const createdTo = req.nextUrl.searchParams.get("createdTo") || "";
+  if (createdFrom || createdTo) {
+    const createdFilter: Record<string, Date> = {};
+    if (createdFrom) createdFilter.gte = new Date(createdFrom);
+    if (createdTo) createdFilter.lte = new Date(createdTo + "T23:59:59Z");
+    where.createdAt = createdFilter;
+  }
+
   // Cross-tab summary — runs in parallel with the filtered list. The
   // summary cards on the page should always show all-time totals, not
   // shift counts when the user changes the tab filter.

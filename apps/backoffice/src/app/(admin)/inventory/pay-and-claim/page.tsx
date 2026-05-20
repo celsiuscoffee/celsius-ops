@@ -215,7 +215,7 @@ export default function PayAndClaimPage() {
 
   // Debounced search
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    const t = setTimeout(() => setDebouncedSearch(search), 500);
     return () => clearTimeout(t);
   }, [search]);
 
@@ -732,17 +732,26 @@ export default function PayAndClaimPage() {
   // Mark invoice as paid (reimbursed) with payment details
   const handleReimburse = async () => {
     if (!reimburseClaim?.invoice) return;
+    if (!reimbursePaymentRef.trim()) {
+      alert("Payment reference is required.");
+      return;
+    }
     setReimburseSaving(true);
     try {
-      await fetch(`/api/inventory/invoices/${reimburseClaim.invoice.id}`, {
+      const res = await fetch(`/api/inventory/invoices/${reimburseClaim.invoice.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: "PAID",
           paidVia: reimbursePaymentVia,
-          paymentRef: reimbursePaymentRef || undefined,
+          paymentRef: reimbursePaymentRef.trim(),
         }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body.error ?? "Failed to record payment.");
+        return;
+      }
       setReimburseDialogOpen(false);
       mutate();
     } finally {
@@ -1889,12 +1898,13 @@ export default function PayAndClaimPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">Payment Reference (optional)</label>
+                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">Payment Reference <span className="text-red-600">*</span></label>
                   <Input
                     value={reimbursePaymentRef}
                     onChange={(e) => setReimbursePaymentRef(e.target.value)}
                     placeholder="e.g. transfer ref, cheque no."
                     className="h-9 text-sm"
+                    required
                   />
                 </div>
               </div>

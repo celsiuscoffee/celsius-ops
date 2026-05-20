@@ -507,6 +507,9 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
             where: { claimBatchId: batch.id },
             data: { status: "PAID", paidAt: now, paidVia: "bank_transfer", paymentRef: ref, popShortLink: photoUrl },
           });
+          // amountPaid must mirror each row's `amount`, which updateMany can't
+          // do (no self-reference in data). One SQL UPDATE handles it.
+          await tx.$executeRaw`UPDATE "Invoice" SET "amountPaid" = "amount" WHERE "claimBatchId" = ${batch.id} AND status = 'PAID'`;
         });
         await sendMessage(
           chatId,
@@ -777,6 +780,28 @@ async function resolvePop(
   // Prefer full-amount match when both could apply (safest default).
   const isDepositMatch = !matchesFull && matchesDeposit;
 
+  // Pre-flight: refuse to re-attach a paymentRef that's already on another
+  // paid invoice (same bank payment recorded twice). Bails BEFORE renaming
+  // the file or updating anything — operator must resolve manually.
+  if (pop.referenceNumber) {
+    const existingRef = await prisma.invoice.findFirst({
+      where: {
+        OR: [{ paymentRef: pop.referenceNumber }, { depositRef: pop.referenceNumber }],
+        status: { in: ["PAID", "DEPOSIT_PAID"] },
+        NOT: { id: invoice.id },
+      },
+      select: { invoiceNumber: true, paidAt: true },
+    });
+    if (existingRef) {
+      await sendMessage(
+        chatId,
+        `⛔ <b>Duplicate POP blocked</b>\nRef <code>${pop.referenceNumber}</code> is already attached to <b>${existingRef.invoiceNumber}</b>${existingRef.paidAt ? ` (paid ${existingRef.paidAt.toISOString().slice(0, 10)})` : ""}.\n\nSame bank ref can't be on two invoices. Verify before retrying.`,
+        msgId,
+      );
+      return;
+    }
+  }
+
   // Rename the Supabase file to something human-readable now that we know
   // which invoice it belongs to. Falls back to the original URL if the file
   // lives outside Supabase (e.g. Cloudinary images) or if rename fails.
@@ -798,12 +823,13 @@ async function resolvePop(
   const shortLink = await createShortLink(renamedUrl, popSlug).catch(() => null);
 
   // DEPOSIT_PAID: stamp depositPaidAt + depositRef and compute balance due
-  // from supplier.depositTermsDays (mirrors PATCH endpoint logic).
+  // as invoice.issueDate + termsDays (the deposit itself is due on issueDate;
+  // the balance runs from the same anchor, not from when the deposit was paid).
   let depositDueDate: Date | null = null;
   if (isDepositMatch) {
     const termsDays = invoice.supplier?.depositTermsDays;
-    if (termsDays && termsDays > 0) {
-      depositDueDate = new Date();
+    if (termsDays && termsDays > 0 && invoice.issueDate) {
+      depositDueDate = new Date(invoice.issueDate);
       depositDueDate.setDate(depositDueDate.getDate() + termsDays);
     }
   }
@@ -815,6 +841,7 @@ async function resolvePop(
           status: "DEPOSIT_PAID",
           depositPaidAt: new Date(),
           depositRef: pop.referenceNumber,
+          amountPaid: Number(invoice.depositAmount),
           photos: { push: renamedUrl },
           ...(shortLink ? { popShortLink: shortLink } : {}),
           ...(depositDueDate ? { dueDate: depositDueDate } : {}),
@@ -824,6 +851,7 @@ async function resolvePop(
           paidAt: new Date(),
           paidVia: "Maybank Transfer",
           paymentRef: pop.referenceNumber,
+          amountPaid: Number(invoice.amount),
           photos: { push: renamedUrl },
           ...(shortLink ? { popShortLink: shortLink } : {}),
         },

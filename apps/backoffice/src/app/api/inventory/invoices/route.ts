@@ -122,6 +122,7 @@ export async function GET(req: NextRequest) {
       { invoiceNumber: { contains: search, mode: "insensitive" } },
       { supplier: { name: { contains: search, mode: "insensitive" } } },
       { outlet: { name: { contains: search, mode: "insensitive" } } },
+      { order: { orderNumber: { contains: search, mode: "insensitive" } } },
     ];
   }
 

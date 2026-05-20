@@ -287,7 +287,7 @@ export default function InvoicesPage() {
   const [rejectSaving, setRejectSaving] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    const t = setTimeout(() => setDebouncedSearch(search), 500);
     return () => clearTimeout(t);
   }, [search]);
 
@@ -1697,7 +1697,7 @@ export default function InvoicesPage() {
                         />
                       </div>
                       <div>
-                        <label className="mb-1 block text-[11px] font-medium text-amber-900/80">Balance due (days after deposit)</label>
+                        <label className="mb-1 block text-[11px] font-medium text-amber-900/80">Balance due (days after invoice date)</label>
                         <Input
                           type="number"
                           min="0"
