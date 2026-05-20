@@ -31,7 +31,11 @@ export async function POST(request: NextRequest) {
     }
 
     const order = data as Pick<OrderRow, "id" | "order_number" | "store_id" | "total">;
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3001";
+    // .trim() guards against accidental trailing newlines in the
+    // Vercel env var textarea — without it the resulting notifyUrl
+    // would contain a \n and RM rejects with "The notifyUrl format
+    // is invalid".
+    const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3001").trim();
 
     const paymentUrl = await createPayment({
       orderId:       order.id,
