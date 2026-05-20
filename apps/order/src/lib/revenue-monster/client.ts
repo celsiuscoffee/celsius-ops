@@ -26,13 +26,20 @@ let _tokenExpiry = 0;
 async function getToken(): Promise<string> {
   if (_token && Date.now() < _tokenExpiry) return _token;
 
+  // RM's token endpoint deviates from the OAuth 2.0 spec in two ways:
+  //   1. The body is application/json, not application/x-www-form-urlencoded.
+  //   2. The grant_type key is camelCased to "grantType".
+  // Response keys are likewise camelCase: accessToken, expiresIn, etc.
+  // The previous form-encoded body returned {"error":{"code":"INVALID_GRANT"}}
+  // because RM couldn't find "grantType" in the parsed JSON.
+  // Reference: https://doc.revenuemonster.my/docs/quickstart/accesstoken/client-credentials
   const res = await fetch(`${OAUTH_URL}/v1/token`, {
     method: "POST",
     headers: {
       Authorization: `Basic ${Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64")}`,
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
     },
-    body: "grant_type=client_credentials",
+    body: JSON.stringify({ grantType: "client_credentials" }),
   });
 
   if (!res.ok) {
@@ -42,9 +49,15 @@ async function getToken(): Promise<string> {
     const detail = await res.text().catch(() => "");
     throw new Error(`RM token failed: ${res.status} ${detail.slice(0, 200)}`);
   }
-  const data = await res.json();
-  _token       = data.access_token;
-  _tokenExpiry = Date.now() + (data.expires_in - 60) * 1000; // 1 min buffer
+  const data = (await res.json()) as { accessToken?: string; expiresIn?: number };
+  if (!data.accessToken) {
+    throw new Error("RM token response missing accessToken");
+  }
+  _token       = data.accessToken;
+  // expiresIn is in seconds. RM tokens typically last ~30 days; subtract
+  // 60s so we refresh slightly before expiry and never present a stale
+  // token to /v3/payment/online.
+  _tokenExpiry = Date.now() + ((data.expiresIn ?? 3600) - 60) * 1000;
   return _token!;
 }
 
