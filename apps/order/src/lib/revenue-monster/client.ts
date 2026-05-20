@@ -1,4 +1,4 @@
-import { createHmac, createHash } from "crypto";
+import { createSign, createVerify } from "crypto";
 
 // RM splits its API across two hostnames:
 //   - BASE_URL  hosts the v3 payment endpoints (/v3/payment/online, ...)
@@ -17,6 +17,20 @@ const OAUTH_URL     = (process.env.RM_OAUTH_URL     || "https://sb-oauth.revenue
 const CLIENT_ID     = (process.env.RM_CLIENT_ID     || "").trim();
 const CLIENT_SECRET = (process.env.RM_CLIENT_SECRET || "").trim();
 const STORE_ID      = (process.env.RM_STORE_ID      || "").trim();
+
+// RSA private key (PEM) used to sign /v3 payment requests. RM verifies
+// this with the client public key uploaded to the merchant portal. The
+// env var should contain the full -----BEGIN/END----- PEM including
+// newlines; Vercel's textarea preserves them. CLIENT_SECRET is unused
+// here — it only authenticates the /v1/token call via Basic auth.
+const PRIVATE_KEY   = (process.env.RM_PRIVATE_KEY   || "").trim();
+
+// RM's server public key (PEM) used to verify webhook signatures. The
+// merchant portal application page surfaces this under "Server public
+// key". Optional at boot — without it we fall back to skipping
+// verification and logging a warning rather than rejecting legitimate
+// callbacks.
+const SERVER_PUBLIC_KEY = (process.env.RM_SERVER_PUBLIC_KEY || "").trim();
 
 // ─── Token cache ──────────────────────────────────────────────────────────────
 
@@ -61,34 +75,86 @@ async function getToken(): Promise<string> {
   return _token!;
 }
 
-// ─── HMAC signature ───────────────────────────────────────────────────────────
+// ─── RSA-SHA256 signature ────────────────────────────────────────────────────
+//
+// RM's signature spec (see
+// https://doc.revenuemonster.my/docs/quickstart/signature-algorithm):
+//   1. Sort the JSON body keys alphabetically — recursively, nested
+//      objects included.
+//   2. Compact-stringify the sorted body. Replace `<`, `>`, `&` with
+//      their unicode escape sequences (< / > / &) so the
+//      same bytes encode whether the receiver double-decodes JSON.
+//   3. Base64-encode that string into the `data` parameter.
+//   4. Build the canonical plain-text in alphabetical parameter order:
+//        data=<b64>&method=post&nonceStr=...&requestUrl=...&signType=sha256&timestamp=...
+//      (When the body is empty, omit `data`; when verifying a callback,
+//      omit `requestUrl` — RM doesn't have it on their end.)
+//   5. RSA-SHA256-sign the plain text with the CLIENT private key. The
+//      X-Signature header value is `sha256 <base64(signature)>`.
+// RM verifies our signature against the client public key we uploaded
+// to the merchant portal earlier in the integration setup.
+
+function sortKeys(obj: unknown): unknown {
+  if (Array.isArray(obj)) return obj.map(sortKeys);
+  if (obj && typeof obj === "object") {
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(obj as Record<string, unknown>).sort()) {
+      sorted[key] = sortKeys((obj as Record<string, unknown>)[key]);
+    }
+    return sorted;
+  }
+  return obj;
+}
+
+function rmEscapeJson(s: string): string {
+  // RM's spec — must match server-side rewriting so the base64 of the
+  // sorted JSON is identical on both sides of the signature.
+  return s
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026");
+}
+
+function buildSigningString(
+  method: string,
+  url: string,
+  nonce: string,
+  timestamp: string,
+  body?: object,
+): string {
+  const parts: string[] = [];
+  if (body && Object.keys(body).length > 0) {
+    const sortedJson  = JSON.stringify(sortKeys(body));
+    const escapedJson = rmEscapeJson(sortedJson);
+    const dataB64     = Buffer.from(escapedJson, "utf8").toString("base64");
+    parts.push(`data=${dataB64}`);
+  }
+  parts.push(`method=${method.toLowerCase()}`);
+  parts.push(`nonceStr=${nonce}`);
+  if (url) parts.push(`requestUrl=${url}`);
+  parts.push(`signType=sha256`);
+  parts.push(`timestamp=${timestamp}`);
+  return parts.join("&");
+}
 
 function buildSignature(
   method: string,
   url: string,
   nonce: string,
   timestamp: string,
-  body?: object
+  body?: object,
 ): string {
-  let parts = [
-    `method=${method}`,
-    `nonceStr=${nonce}`,
-    `requestUrl=${url}`,
-    `signType=sha256`,
-    `timestamp=${timestamp}`,
-  ];
-
-  if (body) {
-    const hash = createHash("sha256")
-      .update(JSON.stringify(body))
-      .digest("hex");
-    parts = [...parts, `payloadHash=${hash}`];
+  if (!PRIVATE_KEY) {
+    throw new Error(
+      "RM_PRIVATE_KEY env var is missing — required to sign /v3 payment requests.",
+    );
   }
-
-  const sigString = parts.join("&");
-  return "sha256 " + createHmac("sha256", CLIENT_SECRET)
-    .update(sigString)
-    .digest("hex");
+  const signString = buildSigningString(method, url, nonce, timestamp, body);
+  const signer = createSign("RSA-SHA256");
+  signer.update(signString);
+  signer.end();
+  const sigBase64 = signer.sign(PRIVATE_KEY, "base64");
+  return `sha256 ${sigBase64}`;
 }
 
 function nonce() {
@@ -167,15 +233,39 @@ export async function createPayment(params: CreatePaymentParams): Promise<string
 }
 
 // ─── Webhook validation ───────────────────────────────────────────────────────
+//
+// RM signs callback bodies with their server's private key. We verify
+// against RM's server public key (the "Server public key" textarea in
+// the merchant portal Application page; passed in via RM_SERVER_PUBLIC_KEY).
+// The signing string follows the same algorithm as outgoing signatures
+// except `requestUrl` is omitted (RM doesn't know our exact callback URL).
 
 export function validateWebhookSignature(
   method: string,
-  url: string,
+  _url: string, // unused — RM omits requestUrl from inbound signatures
   nonce: string,
   timestamp: string,
   body: object,
-  signature: string
+  signature: string,
 ): boolean {
-  const expected = buildSignature(method, url, nonce, timestamp, body);
-  return expected === signature;
+  if (!SERVER_PUBLIC_KEY) {
+    // No public key configured — fall back to accepting the callback so
+    // the order flow isn't blocked. Logged loudly by the caller via
+    // console.warn("Webhook signature mismatch") if isValid is false.
+    console.warn("RM_SERVER_PUBLIC_KEY unset — skipping webhook signature verify");
+    return true;
+  }
+
+  // Header value is "sha256 <base64sig>" — strip the "sha256 " prefix.
+  const sigB64 = signature.startsWith("sha256 ") ? signature.slice(7) : signature;
+  const signString = buildSigningString(method, "", nonce, timestamp, body);
+
+  const verifier = createVerify("RSA-SHA256");
+  verifier.update(signString);
+  verifier.end();
+  try {
+    return verifier.verify(SERVER_PUBLIC_KEY, sigB64, "base64");
+  } catch {
+    return false;
+  }
 }
