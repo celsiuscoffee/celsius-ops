@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { TopBar } from "@/components/top-bar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "@celsius/ui";
+import { supabase } from "@/lib/supabase";
 import {
   Check,
   Search,
@@ -15,6 +16,8 @@ import {
   RotateCcw,
   Loader2,
   Delete,
+  Users,
+  AlertTriangle,
 } from "lucide-react";
 
 const STORAGE_AREA_LABELS: Record<string, string> = {
@@ -54,6 +57,44 @@ interface ItemCount {
 interface GroupedArea {
   area: string;
   items: Product[];
+}
+
+// Server-side view of an item from /api/stock-checks/active. Used to render
+// per-item authorship ("counted by Ameir 15:32") and to send conflict-aware
+// upserts (expectedPriorCountedById) so the second user gets prompted before
+// overwriting another counter's value.
+interface ServerItem {
+  productId: string;
+  productPackageId: string | null;
+  countedQty: number | null;
+  countedById: string | null;
+  countedAt: string | null;
+  countedBy: { id: string; name: string } | null;
+}
+
+interface Contributor {
+  id: string;
+  name: string;
+  itemCount: number;
+}
+
+// 409 payload from /items endpoint when a save would overwrite someone
+// else's count. The UI shows a modal prompting "Ameir already counted this
+// (5). Overwrite with your value (4)?" before retrying.
+interface ConflictItem {
+  productId: string;
+  productPackageId: string | null;
+  countedById: string | null;
+  countedByName: string | null;
+  countedQty: number | null;
+}
+
+// Pending save the user agreed to overwrite — replayed without the
+// expectedPriorCountedById guard.
+interface PendingSave {
+  productId: string;
+  productPackageId: string | null;
+  countedQty: number;
 }
 
 const STORAGE_KEY = "celsius-stock-check-draft-v2";
@@ -97,6 +138,33 @@ export default function StockCheckPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  // Collaborative state — populated from /api/stock-checks/active
+  const [countId, setCountId] = useState<string | null>(null);
+  // Keyed by `${productId}:${packageId||""}` for fast conflict lookup.
+  const [serverItems, setServerItems] = useState<Record<string, ServerItem>>({});
+  const [submittedToday, setSubmittedToday] = useState<{
+    id: string;
+    submittedAt: string | null;
+    finalizedAt: string | null;
+    finalizedBy: { name: string } | null;
+    countedBy: { name: string } | null;
+  } | null>(null);
+  const [conflictPrompt, setConflictPrompt] = useState<{
+    conflict: ConflictItem;
+    pending: PendingSave;
+  } | null>(null);
+  // Set to true after the user dismisses "today already submitted" with
+  // "Start new count" — bypasses the read-only view for this session.
+  const [startNewOverride, setStartNewOverride] = useState(false);
+
+  // serverItems is also surfaced via a ref for the realtime callback,
+  // which doesn't see fresh React state via closure.
+  const serverItemsRef = useRef(serverItems);
+  useEffect(() => { serverItemsRef.current = serverItems; }, [serverItems]);
+
+  const serverItemKey = (productId: string, packageId: string | null) =>
+    `${productId}:${packageId ?? ""}`;
+
   // Autosave
   useEffect(() => {
     if (Object.keys(counts).length > 0) {
@@ -127,6 +195,91 @@ export default function StockCheckPage() {
     }
     fetchData();
   }, []);
+
+  // ── Active-count hydration ──
+  // Fetches the in-progress DRAFT count for this outlet+frequency (or the
+  // "already submitted today" stub if there isn't one). Sets countId,
+  // hydrates serverItems, and overlays the server state on top of any
+  // localStorage draft. Runs on mount + when frequency changes + after
+  // startNewOverride flips (so finalizing then starting fresh refetches).
+  const fetchActive = useCallback(async () => {
+    if (!user?.outletId) return;
+    try {
+      const res = await fetch(`/api/stock-checks/active?frequency=${frequency.toUpperCase()}`);
+      if (!res.ok) return;
+      const data: {
+        active: {
+          id: string;
+          items: ServerItem[];
+        } | null;
+        submittedToday: typeof submittedToday;
+      } = await res.json();
+
+      if (data.active) {
+        setCountId(data.active.id);
+        const map: Record<string, ServerItem> = {};
+        for (const it of data.active.items) {
+          map[serverItemKey(it.productId, it.productPackageId)] = it;
+        }
+        setServerItems(map);
+
+        // Reconcile local draft with server truth — server wins for items
+        // we already know about; local-only items (offline edits) survive.
+        setCounts((prev) => {
+          const next = { ...prev };
+          for (const it of data.active!.items) {
+            if (it.countedQty != null) {
+              next[it.productId] = {
+                qty: Number(it.countedQty),
+                packageId: it.productPackageId,
+              };
+            }
+          }
+          return next;
+        });
+        setSubmittedToday(null);
+      } else {
+        setCountId(null);
+        setServerItems({});
+        setSubmittedToday(data.submittedToday ?? null);
+      }
+    } catch {
+      /* swallow — offline or transient; localStorage still works */
+    }
+  }, [frequency, user?.outletId]);
+
+  useEffect(() => {
+    if (!loading && user) fetchActive();
+  }, [loading, user, fetchActive, startNewOverride]);
+
+  // ── Realtime subscription ──
+  // Subscribes to INSERT/UPDATE/DELETE on StockCountItem filtered by the
+  // active countId, so other contributors' saves appear without refresh.
+  // Channel is torn down on countId change / unmount.
+  useEffect(() => {
+    if (!countId) return;
+    const channel = supabase
+      .channel(`stock-count-${countId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "StockCountItem",
+          filter: `stockCountId=eq.${countId}`,
+        },
+        () => {
+          // Cheap + correct: refetch the whole active count. Avoids
+          // partial-state bugs (e.g., realtime event missing the joined
+          // countedBy user). At 235 items the payload is small (<10 KB).
+          fetchActive();
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [countId, fetchActive]);
 
   // Group + filter by frequency
   const groupedData: GroupedArea[] = useMemo(() => {
@@ -178,6 +331,20 @@ export default function StockCheckPage() {
   const countedItems = groupedData.reduce((acc, g) => acc + g.items.filter((i) => counts[i.id] != null).length, 0);
   const progressPct = totalItems > 0 ? Math.round((countedItems / totalItems) * 100) : 0;
 
+  // Derived contributors strip: tally distinct counters from serverItems.
+  // Empty until the first save lands on the server.
+  const contributors: Contributor[] = useMemo(() => {
+    const tally = new Map<string, Contributor>();
+    for (const it of Object.values(serverItems)) {
+      if (!it.countedBy) continue;
+      const cur = tally.get(it.countedBy.id);
+      if (cur) cur.itemCount += 1;
+      else tally.set(it.countedBy.id, { id: it.countedBy.id, name: it.countedBy.name, itemCount: 1 });
+    }
+    // Stable sort: most contributions first, then name.
+    return Array.from(tally.values()).sort((a, b) => b.itemCount - a.itemCount || a.name.localeCompare(b.name));
+  }, [serverItems]);
+
   // ── Keypad ──
   const openKeypad = (product: Product) => {
     const existing = counts[product.id];
@@ -197,19 +364,88 @@ export default function StockCheckPage() {
     }
   };
 
-  const keypadConfirm = () => {
+  // Pushes a single item save to the server with conflict-aware semantics.
+  // On 409, surfaces a modal so the user can choose to overwrite the other
+  // counter's value. Returns true on success / queued-for-conflict, false
+  // on hard error (network, validation).
+  const saveItemToServer = useCallback(
+    async (productId: string, packageId: string | null, qty: number, opts?: { force?: boolean }) => {
+      if (!user) return false;
+      const key = serverItemKey(productId, packageId);
+      const existing = serverItemsRef.current[key];
+      // Conflict expectation: tell the server "I last saw this counted by X
+      // (or nobody)". If the server's current row was counted by someone
+      // else since, it returns 409. Skip the guard on a forced overwrite.
+      const expectedPriorCountedById = opts?.force
+        ? undefined
+        : (existing?.countedById ?? null);
+
+      try {
+        const res = await fetch("/api/stock-checks/items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            frequency: frequency.toUpperCase(),
+            items: [
+              {
+                productId,
+                productPackageId: packageId,
+                countedQty: qty,
+                ...(opts?.force ? {} : { expectedPriorCountedById }),
+              },
+            ],
+          }),
+        });
+        if (res.status === 409) {
+          const body = await res.json();
+          const conflict: ConflictItem | undefined = body.conflicts?.[0];
+          if (conflict) {
+            setConflictPrompt({
+              conflict,
+              pending: { productId, productPackageId: packageId, countedQty: qty },
+            });
+          }
+          return false;
+        }
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || "Save failed");
+        }
+        const data = await res.json();
+        // Hydrate countId (will be the same on subsequent saves) and merge
+        // returned items into serverItems for fresh authorship metadata.
+        if (data.countId && data.countId !== countId) setCountId(data.countId);
+        setServerItems((prev) => {
+          const next = { ...prev };
+          for (const it of data.items as ServerItem[]) {
+            next[serverItemKey(it.productId, it.productPackageId)] = it;
+          }
+          return next;
+        });
+        return true;
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Save failed");
+        return false;
+      }
+    },
+    [user, frequency, countId],
+  );
+
+  const keypadConfirm = async () => {
     if (!keypadItem) return;
     const qty = parseFloat(keypadValue);
     if (isNaN(qty) || qty < 0) return;
-    const pkg = keypadPkgId
-      ? keypadItem.packages.find((p) => p.id === keypadPkgId)
-      : getDefaultPkg(keypadItem);
-    const cf = pkg?.conversion || 1;
+    // Optimistic local update — server sync happens in parallel so the
+    // UI stays snappy. If the server rejects with a conflict, the modal
+    // will surface and the user can re-tap with "Overwrite".
     setCounts((prev) => ({
       ...prev,
       [keypadItem.id]: { qty, packageId: keypadPkgId },
     }));
+    const productId = keypadItem.id;
+    const packageId = keypadPkgId;
     setKeypadItem(null);
+    void saveItemToServer(productId, packageId, qty);
   };
 
   const keypadClear = () => {
@@ -222,70 +458,45 @@ export default function StockCheckPage() {
     setKeypadItem(null);
   };
 
-  // ── Submit ──
+  // ── Finalize ──
+  // Two-phase model now: per-item upserts happened during counting (via
+  // saveItemToServer), so this just flips the DRAFT count to SUBMITTED and
+  // triggers the stock balance commit. The "Submit" button is named
+  // "Finalize" in the UI — anyone at the outlet can tap once 235/235 is
+  // reached, even if they didn't start the count.
   const handleSubmit = async () => {
-    if (submitting) return; // hard guard against double-tap
+    if (submitting) return;
     if (!user?.outletId) {
       const msg = "No outlet assigned to your account.";
       setError(msg);
       toast.error(msg);
       return;
     }
+    if (!countId) {
+      const msg = "No active count to finalize. Tap an item first.";
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
     setSubmitting(true);
     setError(null);
-    // Instant feedback so the user knows the tap was received — important on
-    // monthly counts which can take 1–2s server-side even with the chunked
-    // upsert. Without this, mobile users assume the button didn't work.
-    const pendingToastId = toast.loading("Submitting stock count…");
+    const pendingToastId = toast.loading("Finalizing stock count…");
     try {
-      const freqKey = frequency.toUpperCase();
-      const relevantProducts = freqKey === "DAILY"
-        ? products.filter((p) => p.checkFrequency === "DAILY")
-        : freqKey === "WEEKLY"
-          ? products.filter((p) => p.checkFrequency === "DAILY" || p.checkFrequency === "WEEKLY")
-          : products;
-
-      const items = relevantProducts.map((product) => {
-        const count = counts[product.id];
-        // Convert to base UOM
-        let countedQtyBase: number | null = null;
-        if (count) {
-          const pkg = count.packageId
-            ? product.packages.find((p) => p.id === count.packageId)
-            : getDefaultPkg(product);
-          const cf = pkg?.conversion || 1;
-          countedQtyBase = count.qty * cf;
-        }
-        return {
-          productId: product.id,
-          productPackageId: count?.packageId || null,
-          countedQty: countedQtyBase,
-          isConfirmed: count != null,
-          varianceReason: null,
-        };
-      });
-
-      const res = await fetch("/api/stock-checks", {
+      const res = await fetch(`/api/stock-checks/${countId}/finalize`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          outletId: user.outletId,
-          countedById: user.id,
-          frequency: frequency.toUpperCase(),
-          notes: null,
-          items,
-        }),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => null);
-        throw new Error(errBody?.error || "Failed to submit stock check");
+        throw new Error(errBody?.error || "Finalize failed");
       }
       setSubmitted(true);
       setCounts({});
+      setCountId(null);
+      setServerItems({});
       localStorage.removeItem(STORAGE_KEY);
-      toast.success(`Stock count submitted (${items.length} items)`, { id: pendingToastId });
+      toast.success(`Stock count finalized (${countedItems} items)`, { id: pendingToastId });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Submission failed";
+      const msg = err instanceof Error ? err.message : "Finalize failed";
       setError(msg);
       toast.error(msg, { id: pendingToastId });
     } finally {
@@ -354,11 +565,50 @@ export default function StockCheckPage() {
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
             <Check className="h-8 w-8 text-green-600" />
           </div>
-          <h2 className="mt-4 text-lg font-semibold text-gray-900">Stock Count Submitted</h2>
+          <h2 className="mt-4 text-lg font-semibold text-gray-900">Stock Count Finalized</h2>
           <p className="mt-1 text-sm text-gray-500">Your count has been recorded.</p>
-          <Button className="mt-6 bg-terracotta hover:bg-terracotta-dark" onClick={() => { setSubmitted(false); }}>
+          <Button
+            className="mt-6 bg-terracotta hover:bg-terracotta-dark"
+            onClick={() => {
+              setSubmitted(false);
+              setStartNewOverride((v) => !v); // toggle to retrigger fetchActive
+            }}
+          >
             Start New Count
           </Button>
+        </div>
+      </>
+    );
+  }
+
+  // "Today's count is done" — read-only view shown when a SUBMITTED count
+  // exists for this outlet+frequency and the user hasn't tapped "Start new
+  // count" yet. Mirrors the design decision: don't block re-counts, but
+  // make people explicitly opt in.
+  if (submittedToday && !startNewOverride) {
+    const finalizedTime = submittedToday.finalizedAt || submittedToday.submittedAt;
+    const finalizerName = submittedToday.finalizedBy?.name || submittedToday.countedBy?.name || "Someone";
+    return (
+      <>
+        <TopBar title="Stock Count" />
+        <div className="flex flex-col items-center justify-center py-20 px-4">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+            <Check className="h-8 w-8 text-green-600" />
+          </div>
+          <h2 className="mt-4 text-lg font-semibold text-gray-900">Today&apos;s {frequency} count is done</h2>
+          <p className="mt-1 text-sm text-gray-500 text-center">
+            Finalized by {finalizerName}
+            {finalizedTime && <> at {new Date(finalizedTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</>}
+          </p>
+          <Button
+            className="mt-6 bg-terracotta hover:bg-terracotta-dark"
+            onClick={() => setStartNewOverride(true)}
+          >
+            Start New Count
+          </Button>
+          <p className="mt-3 text-xs text-gray-400 text-center max-w-xs">
+            Only start a new count if you need to re-count after a delivery or adjustment.
+          </p>
         </div>
       </>
     );
@@ -412,6 +662,28 @@ export default function StockCheckPage() {
           <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100">
             <div className="h-full rounded-full bg-terracotta transition-all duration-500" style={{ width: `${progressPct}%` }} />
           </div>
+
+          {/* Collaborators strip — shows other people counting alongside you.
+              Renders only when there's at least one server-stamped item, so
+              first-tapping the page doesn't show a stale "0 contributors". */}
+          {contributors.length > 0 && (
+            <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+              <Users className="h-3 w-3 shrink-0 text-gray-400" />
+              {contributors.map((c) => (
+                <span
+                  key={c.id}
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    c.id === user?.id
+                      ? "bg-terracotta/10 text-terracotta-dark"
+                      : "bg-blue-50 text-blue-700"
+                  }`}
+                  title={`${c.itemCount} item${c.itemCount === 1 ? "" : "s"}`}
+                >
+                  {c.id === user?.id ? "You" : c.name} · {c.itemCount}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -481,6 +753,13 @@ export default function StockCheckPage() {
                       const count = counts[item.id];
                       const isCounted = count != null;
                       const uom = getUomLabel(item, count?.packageId);
+                      // Per-item authorship — only set once the save has
+                      // landed on the server (collaborative model). Items
+                      // counted locally but not yet synced won't show this
+                      // until /items returns.
+                      const serverIt = serverItems[serverItemKey(item.id, count?.packageId ?? null)];
+                      const countedByOther =
+                        serverIt?.countedBy && serverIt.countedBy.id !== user?.id;
 
                       return (
                         <Card
@@ -503,7 +782,14 @@ export default function StockCheckPage() {
                             {/* Product info — NO balance shown (blind count) */}
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium text-gray-900">{item.name}</p>
-                              <p className="text-xs text-gray-400">{uom}</p>
+                              <p className="flex items-center gap-1.5 text-xs text-gray-400">
+                                <span>{uom}</span>
+                                {countedByOther && serverIt?.countedAt && (
+                                  <span className="rounded bg-blue-50 px-1.5 py-px text-[10px] font-medium text-blue-700">
+                                    {serverIt.countedBy!.name} {new Date(serverIt.countedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                  </span>
+                                )}
+                              </p>
                             </div>
 
                             {isCounted && (
@@ -530,13 +816,70 @@ export default function StockCheckPage() {
             onClick={handleSubmit}
           >
             {submitting ? (
-              <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Submitting...</>
+              <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Finalizing...</>
             ) : (
-              `Submit Count (${countedItems}/${totalItems})`
+              `Finalize Count (${countedItems}/${totalItems})`
             )}
           </Button>
         </div>
       </div>
+
+      {/* ── Conflict modal ── shown when another counter already saved this
+          item with a different value. User picks: overwrite or keep theirs. */}
+      {conflictPrompt && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 sm:rounded-2xl">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-gray-900">
+                  {conflictPrompt.conflict.countedByName ?? "Someone"} already counted this
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  They saved <span className="font-medium text-gray-900">{conflictPrompt.conflict.countedQty ?? "—"}</span>.
+                  You&apos;re about to overwrite with <span className="font-medium text-gray-900">{conflictPrompt.pending.countedQty}</span>.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  // Keep theirs — revert the optimistic local update.
+                  setCounts((prev) => {
+                    const next = { ...prev };
+                    const serverQty = conflictPrompt.conflict.countedQty;
+                    if (serverQty != null) {
+                      next[conflictPrompt.pending.productId] = {
+                        qty: serverQty,
+                        packageId: conflictPrompt.pending.productPackageId,
+                      };
+                    } else {
+                      delete next[conflictPrompt.pending.productId];
+                    }
+                    return next;
+                  });
+                  setConflictPrompt(null);
+                }}
+              >
+                Keep theirs
+              </Button>
+              <Button
+                className="bg-terracotta hover:bg-terracotta-dark"
+                onClick={async () => {
+                  const { productId, productPackageId, countedQty } = conflictPrompt.pending;
+                  setConflictPrompt(null);
+                  await saveItemToServer(productId, productPackageId, countedQty, { force: true });
+                }}
+              >
+                Overwrite
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Keypad overlay ── */}
       {keypadItem && (

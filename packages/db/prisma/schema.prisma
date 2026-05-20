@@ -149,7 +149,9 @@ model User {
   checklistItems   ChecklistItem[]   @relation("ChecklistItemCompletedBy")
   sopSchedules     SopSchedule[]     @relation("ScheduleAssignedTo")
   checklistsAssigned Checklist[]     @relation("ChecklistAssignedTo")
-  stockCounts      StockCount[]
+  stockCounts          StockCount[]     @relation("StockCountStartedBy")
+  stockCountsFinalized StockCount[]     @relation("StockCountFinalizedBy")
+  stockCountItemsCounted StockCountItem[] @relation("StockCountItemCountedBy")
   stockAdjustments StockAdjustment[]
   receivings       Receiving[]
   transfers          StockTransfer[]
@@ -614,14 +616,22 @@ model StockCount {
   outletId    String
   outlet      Outlet           @relation(fields: [outletId], references: [id])
   frequency   CountFrequency
+  // Starter — whoever opened the count. Multiple users may contribute items
+  // (see StockCountItem.countedById); this field records who *initiated* the
+  // session so the staff app can pre-load it as the first contributor.
   countedById String
-  countedBy   User             @relation(fields: [countedById], references: [id])
+  countedBy   User             @relation("StockCountStartedBy", fields: [countedById], references: [id])
   countDate   DateTime         @default(now())
   status      StockCountStatus @default(DRAFT)
   notes       String?
   createdAt   DateTime         @default(now())
   submittedAt DateTime?
   reviewedAt  DateTime?
+  // Finalization audit — whoever tapped "Finalize Count" (could be a
+  // different person from the starter in a collaborative count).
+  finalizedById String?
+  finalizedBy   User?    @relation("StockCountFinalizedBy", fields: [finalizedById], references: [id])
+  finalizedAt   DateTime?
 
   items StockCountItem[]
 }
@@ -644,6 +654,14 @@ model StockCountItem {
   countedQty       Decimal?
   isConfirmed      Boolean    @default(false)
   varianceReason   String?
+  // Per-item authorship for collaborative counts. Two baristas on the same
+  // outlet contributing items into one shared StockCount session each stamp
+  // their items with countedById + countedAt. UI uses this to show "Aina
+  // 15:32" under each row and to flag conflicts when someone overwrites
+  // another counter's value.
+  countedById      String?
+  countedBy        User?      @relation("StockCountItemCountedBy", fields: [countedById], references: [id])
+  countedAt        DateTime?
 
   @@unique([stockCountId, productId, productPackageId])
 }
