@@ -55,16 +55,30 @@ export async function PATCH(req: NextRequest) {
   // rejects orders when is_open is false, separate from is_active
   // (which is the administrative "outlet is part of the business at
   // all" flag — set once at outlet creation, not used as a toggle).
-  const allowed = ["rm_enabled", "bukku_enabled", "stripe_enabled", "is_open"];
-  if (!storeId || !allowed.includes(field)) {
+  //
+  // Wire format uses the snake_case names the API exposes (consistent
+  // with the view that the customer client reads). Internally we have
+  // to write to the underlying camelCase `Outlet` table because
+  // `outlet_settings` is a view with COALESCE wrappers, which Postgres
+  // refuses to update through (PostgREST returns 400). Reads through
+  // the view stay consistent because the view selects from the same
+  // rows we're updating.
+  const FIELD_MAP: Record<string, string> = {
+    rm_enabled:     "rmEnabled",
+    bukku_enabled:  "bukkuEnabled",
+    stripe_enabled: "stripeEnabled",
+    is_open:        "isOpen",
+  };
+  const dbField = FIELD_MAP[field];
+  if (!storeId || !dbField) {
     return NextResponse.json({ error: "Invalid params" }, { status: 400 });
   }
 
   const supabase = getSupabaseAdmin();
   const { error } = await supabase
-    .from("outlet_settings")
-    .update({ [field]: value, updated_at: new Date().toISOString() })
-    .eq("store_id", storeId);
+    .from("Outlet")
+    .update({ [dbField]: value, updatedAt: new Date().toISOString() })
+    .eq("pickupStoreId", storeId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

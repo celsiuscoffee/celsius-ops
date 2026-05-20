@@ -81,18 +81,20 @@ export async function GET(request: NextRequest) {
       const isDayOpen = hours.daysOpen.includes(dayNum);
       const isOpen    = isDayOpen && currentMinutes >= openMins && currentMinutes < closeMins;
 
-      // Writes to outlet_settings (snake_case) — the table the native
-      // pickup app reads via supabase.from("outlet_settings"). The
-      // earlier version targeted the CamelCase `Outlet` table managed
-      // by Prisma in the backoffice, which is a separate read path
-      // the customer client never queries, so the scheduled open/close
-      // never propagated to the app. Customers were seeing the manual
-      // toggle on outlet_settings while the cron silently updated a
-      // ghost table.
+      // Writes target the underlying `Outlet` table (camelCase), not
+      // the `outlet_settings` view. The view wraps `isOpen` in a
+      // COALESCE("isOpen", false) which Postgres treats as not
+      // auto-updatable — PATCHing the view returns HTTP 400 silently.
+      // The pickup-native read path through outlet_settings still sees
+      // the new value because the view selects directly from this row.
+      // storeId in this codebase is the customer-facing `pickupStoreId`
+      // (e.g. "conezion"), which is also what the view aliases to
+      // `store_id`, so the eq() filter matches one-to-one with the
+      // view's store_id.
       const { error } = await supabase
-        .from("outlet_settings")
-        .update({ is_open: isOpen, updated_at: new Date().toISOString() })
-        .eq("store_id", storeId);
+        .from("Outlet")
+        .update({ isOpen, updatedAt: new Date().toISOString() })
+        .eq("pickupStoreId", storeId);
 
       if (!error) {
         updated.push(`${storeId}=${isOpen ? "open" : "closed"}`);
