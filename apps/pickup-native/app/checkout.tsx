@@ -12,8 +12,9 @@ import { Alert } from "@/lib/alert";
 // TextInput stays imported — it's still used by the phone / OTP entry steps.
 import { Stack, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Check, AlertCircle, Coffee, MapPin, Clock, Wallet } from "lucide-react-native";
+import { Check, AlertCircle, Coffee, MapPin, Clock, Wallet, QrCode } from "lucide-react-native";
 import * as Haptics from "@/lib/haptics";
+import * as WebBrowser from "expo-web-browser";
 import { useStripe } from "@/lib/stripe-shim";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Outlet } from "../lib/supabase";
@@ -199,6 +200,13 @@ export default function Checkout() {
     afterDiscount:  number;
   };
   const [frozenSummary, setFrozenSummary] = useState<FrozenSummary | null>(null);
+
+  // Payment provider picker. Defaults to Stripe because the Stripe sheet
+  // covers card + Apple/Google Pay + Link + FPX + GrabPay in one shot;
+  // RM is the second tile for customers who prefer TNG eWallet, Boost,
+  // DuitNow QR, or any other RM-issued method. Selection drives the
+  // branch in the Place Order handler.
+  const [paymentProvider, setPaymentProvider] = useState<"stripe" | "rm">("stripe");
   const successOpacity = useRef(new Animated.Value(0)).current;
   const successScale   = useRef(new Animated.Value(0.6)).current;
 
@@ -408,6 +416,60 @@ export default function Checkout() {
       // server confirms the order in the same PaymentIntent call.
       const isFreeOrder = grandTotal <= 0.001;
       setBusyLabel(isFreeOrder ? "Sending to kitchen…" : "Opening secure payment…");
+
+      // ─── Revenue Monster branch ─────────────────────────────────
+      // For non-free orders where the customer picked the RM tile, we
+      // skip Stripe entirely and open RM's hosted checkout page in an
+      // in-app browser. RM's page handles method selection (TNG, Boost,
+      // GrabPay, FPX, etc.). On payment completion RM redirects to the
+      // celsiuscoffee:// scheme which dismisses the browser and lands
+      // the user back on the order page. The webhook (signed via the
+      // same CLIENT_SECRET we ship in env) marks the order as preparing
+      // server-side — no client-side state mutation needed.
+      if (paymentProvider === "rm" && !isFreeOrder) {
+        stage = "create-rm-payment";
+        const rmRes = await fetch(
+          `https://order.celsiuscoffee.com/api/payments/create`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Origin:  "https://order.celsiuscoffee.com",
+              Referer: "https://order.celsiuscoffee.com/",
+            },
+            body: JSON.stringify({
+              orderId: res.orderId,
+              paymentMethod: "all",        // RM hosts the full method picker
+              redirectUrl: "celsiuscoffee://rm-return",
+            }),
+          },
+        );
+        const rmJson = (await rmRes.json()) as { paymentUrl?: string; error?: string };
+        if (!rmRes.ok || !rmJson.paymentUrl) {
+          throw new Error(`create-rm-payment HTTP ${rmRes.status}: ${rmJson.error || "no paymentUrl"}`);
+        }
+        trackEvent("payment_rm_opened", { orderId: res.orderId });
+        const wb = await WebBrowser.openAuthSessionAsync(
+          rmJson.paymentUrl,
+          "celsiuscoffee://rm-return",
+        );
+        // openAuthSessionAsync resolves with { type: "success" | "cancel" | "dismiss" }.
+        // "success" → RM hit our redirect scheme (payment flow ran);
+        // the webhook is authoritative for actual payment state, so we
+        // route to the order page regardless and let it surface
+        // pending / preparing / failed based on what the webhook recorded.
+        // "cancel" / "dismiss" → customer backed out; order stays pending
+        // and the retry sheet on the order page handles re-open.
+        if (wb.type === "success") {
+          trackEvent("payment_rm_returned", { orderId: res.orderId });
+          setBusyLabel("Sending to kitchen…");
+        } else {
+          trackEvent("payment_rm_cancelled", { orderId: res.orderId, type: wb.type });
+        }
+        router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
+        return;
+      }
+
       stage = "create-payment-intent";
       // 2. Card / ewallet — Stripe native PaymentSheet. The server mints a
       //    PaymentIntent for this orderId; we hand the clientSecret to the
@@ -722,23 +784,64 @@ export default function Checkout() {
               <Text className="text-muted-fg text-[11px] font-bold uppercase tracking-wider px-1 mb-2">
                 Payment
               </Text>
-              {/* Stripe sheet handles method selection — Card, Apple Pay,
-                  FPX, GrabPay, etc. are surfaced based on what's enabled
-                  in the Stripe Dashboard. No app-side picker so customers
-                  don't get a misleading pre-selection that doesn't actually
-                  filter the sheet. */}
-              <View className="bg-surface rounded-2xl border border-border px-4 py-3 flex-row items-center gap-3">
-                <View className="w-9 h-9 rounded-2xl items-center justify-center bg-primary/15">
-                  <Wallet size={18} color="#C05040" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-espresso font-bold">
-                    Pay securely via Stripe
-                  </Text>
-                  <Text className="text-muted-fg text-xs">
-                    Card · Apple Pay · FPX · GrabPay — pick on the next screen
-                  </Text>
-                </View>
+              {/* Two-tile picker. Customer chooses the provider; the
+                  provider's hosted UI (Stripe PaymentSheet or RM checkout
+                  page) handles the specific method selection. Default is
+                  Stripe because it covers the broadest set in a single
+                  sheet; RM is the path for customers who prefer local
+                  Malaysian e-wallets (TNG, Boost, DuitNow QR). */}
+              <View className="gap-2">
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setPaymentProvider("stripe");
+                  }}
+                  className={`bg-surface rounded-2xl border px-4 py-3 flex-row items-center gap-3 ${
+                    paymentProvider === "stripe" ? "border-primary" : "border-border"
+                  }`}
+                  style={paymentProvider === "stripe" ? { borderWidth: 2 } : undefined}
+                >
+                  <View className="w-9 h-9 rounded-2xl items-center justify-center bg-primary/15">
+                    <Wallet size={18} color="#C05040" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-espresso font-bold">
+                      Pay securely via Stripe
+                    </Text>
+                    <Text className="text-muted-fg text-xs">
+                      Card · Apple Pay · FPX · GrabPay — pick on the next screen
+                    </Text>
+                  </View>
+                  {paymentProvider === "stripe" && (
+                    <Check size={18} color="#C05040" />
+                  )}
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setPaymentProvider("rm");
+                  }}
+                  className={`bg-surface rounded-2xl border px-4 py-3 flex-row items-center gap-3 ${
+                    paymentProvider === "rm" ? "border-primary" : "border-border"
+                  }`}
+                  style={paymentProvider === "rm" ? { borderWidth: 2 } : undefined}
+                >
+                  <View className="w-9 h-9 rounded-2xl items-center justify-center bg-primary/15">
+                    <QrCode size={18} color="#C05040" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-espresso font-bold">
+                      Pay with TNG, Boost, GrabPay, FPX
+                    </Text>
+                    <Text className="text-muted-fg text-xs">
+                      Local Malaysian e-wallets via Revenue Monster
+                    </Text>
+                  </View>
+                  {paymentProvider === "rm" && (
+                    <Check size={18} color="#C05040" />
+                  )}
+                </Pressable>
               </View>
             </View>
 

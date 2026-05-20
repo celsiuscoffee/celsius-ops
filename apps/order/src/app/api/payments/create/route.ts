@@ -5,7 +5,15 @@ import type { OrderRow } from "@/lib/supabase/types";
 
 export async function POST(request: NextRequest) {
   try {
-    const { orderId, paymentMethod } = await request.json();
+    const {
+      orderId,
+      paymentMethod,
+      // Optional override — the native pickup app passes a custom-scheme
+      // URL like "celsiuscoffee://rm-return" so WebBrowser.openAuthSession
+      // can dismiss the in-app browser when RM redirects back. Browser-
+      // based flows omit this and get the default web order page.
+      redirectUrl: redirectUrlOverride,
+    } = await request.json();
 
     if (!orderId || !paymentMethod) {
       return NextResponse.json({ error: "Missing orderId or paymentMethod" }, { status: 400 });
@@ -31,7 +39,7 @@ export async function POST(request: NextRequest) {
       storeId:       order.store_id,
       amountSen:     order.total,
       paymentMethod,
-      redirectUrl:   `${baseUrl}/order/${order.id}?payment=done`,
+      redirectUrl:   redirectUrlOverride || `${baseUrl}/order/${order.id}?payment=done`,
       notifyUrl:     `${baseUrl}/api/payments/webhook`,
     });
 
