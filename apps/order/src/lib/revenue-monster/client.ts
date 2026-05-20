@@ -193,15 +193,18 @@ export async function createPayment(params: CreatePaymentParams): Promise<string
   const nonceStr  = nonce();
   const timestamp = String(Math.floor(Date.now() / 1000));
 
+  // RM caps order.id at 24 characters and treats it as globally unique
+  // per merchant forever — once any attempt creates a payment with id
+  // "C-6319", every later attempt for the same order is rejected with
+  // ORDER_ID_DUPLICATE. Customers retrying a failed/closed payment hit
+  // this constantly. We suffix the order_number with a base36 timestamp
+  // ("C-6319-lvk0a2b3", ~17 chars) so each attempt has a fresh id. The
+  // webhook handler strips the suffix back to the base order_number
+  // before looking up our row.
+  const rmOrderId = `${params.orderNumber}-${Date.now().toString(36)}`;
   const body = {
     order: {
-      // RM caps order.id at 24 characters and we use 36-char Supabase
-      // UUIDs internally, so we use the customer-facing order_number
-      // (e.g. "C-6319", 6 chars) as RM's reference. The webhook handler
-      // looks up our row by order_number when RM echoes this back as
-      // referenceId. The full UUID still lives in additionalData below
-      // for any debug/reconciliation purposes.
-      id:             params.orderNumber,
+      id:             rmOrderId,
       title:          "Celsius Coffee Order",
       detail:         `Pickup order #${params.orderNumber}`,
       additionalData: params.orderId,

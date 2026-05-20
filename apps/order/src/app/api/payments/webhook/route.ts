@@ -46,18 +46,22 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
+    // referenceId echoes the order.id we sent to RM. createPayment
+    // suffixes the order_number with a base36 timestamp ("C-6319-lvk0a2b3")
+    // so retried orders get a fresh RM id — strip that suffix to recover
+    // the base order_number for the lookup. Legacy rows pre-suffix
+    // (just "C-6319") match the first capture group too.
+    const baseOrderNumber =
+      data.referenceId.match(/^(C-\d+)/)?.[1] ?? data.referenceId;
+
     if (data.status === "SUCCESS") {
-      // referenceId is what we passed to RM as order.id — and that's
-      // the customer-facing order_number (e.g. "C-6319"), not the
-      // Supabase UUID. RM caps order.id at 24 chars so we couldn't
-      // send the UUID. Look up by order_number instead.
       const { data: order } = await supabase
         .from("orders")
         .update({
           status: "preparing",
           payment_provider_ref: data.transactionId,
         } as Record<string, unknown>)
-        .eq("order_number", data.referenceId)
+        .eq("order_number", baseOrderNumber)
         .eq("status", "pending")
         .select("id, loyalty_id, loyalty_points_earned, reward_id, store_id")
         .single<{
@@ -90,12 +94,10 @@ export async function POST(request: NextRequest) {
         }
       }
     } else if (data.status === "FAILED") {
-      // Same order_number lookup — referenceId is the order_number we
-      // sent to RM, not the Supabase UUID.
       await supabase
         .from("orders")
         .update({ status: "failed" } as Record<string, unknown>)
-        .eq("order_number", data.referenceId);
+        .eq("order_number", baseOrderNumber);
     }
 
     return NextResponse.json({ code: "SUCCESS" });
