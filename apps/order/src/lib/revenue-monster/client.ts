@@ -195,10 +195,16 @@ export async function createPayment(params: CreatePaymentParams): Promise<string
 
   const body = {
     order: {
-      id:             params.orderId,
+      // RM caps order.id at 24 characters and we use 36-char Supabase
+      // UUIDs internally, so we use the customer-facing order_number
+      // (e.g. "C-6319", 6 chars) as RM's reference. The webhook handler
+      // looks up our row by order_number when RM echoes this back as
+      // referenceId. The full UUID still lives in additionalData below
+      // for any debug/reconciliation purposes.
+      id:             params.orderNumber,
       title:          "Celsius Coffee Order",
       detail:         `Pickup order #${params.orderNumber}`,
-      additionalData: params.storeId,
+      additionalData: params.orderId,
       currencyType:   "MYR",
       amount:         params.amountSen,
     },

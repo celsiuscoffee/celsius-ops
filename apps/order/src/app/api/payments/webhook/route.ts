@@ -47,16 +47,21 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin();
 
     if (data.status === "SUCCESS") {
+      // referenceId is what we passed to RM as order.id — and that's
+      // the customer-facing order_number (e.g. "C-6319"), not the
+      // Supabase UUID. RM caps order.id at 24 chars so we couldn't
+      // send the UUID. Look up by order_number instead.
       const { data: order } = await supabase
         .from("orders")
         .update({
           status: "preparing",
           payment_provider_ref: data.transactionId,
         } as Record<string, unknown>)
-        .eq("id", data.referenceId)
+        .eq("order_number", data.referenceId)
         .eq("status", "pending")
-        .select("loyalty_id, loyalty_points_earned, reward_id, store_id")
+        .select("id, loyalty_id, loyalty_points_earned, reward_id, store_id")
         .single<{
+          id: string;
           loyalty_id: string | null;
           loyalty_points_earned: number;
           reward_id: string | null;
@@ -66,9 +71,11 @@ export async function POST(request: NextRequest) {
       if (order?.loyalty_id) {
         const outletId = order.store_id;
         if (order.loyalty_points_earned > 0) {
+          // earn/deduct loyalty calls expect the internal UUID, not
+          // RM's truncated reference, so use the row we just fetched.
           await earnLoyaltyPoints(
             order.loyalty_id,
-            data.referenceId,
+            order.id,
             order.loyalty_points_earned,
             outletId,
           );
@@ -77,16 +84,18 @@ export async function POST(request: NextRequest) {
           const ok = await deductLoyaltyPoints(order.loyalty_id, order.reward_id, outletId);
           if (!ok) {
             console.error(
-              `[loyalty] RM webhook: FAILED to deduct points for order=${data.referenceId} reward=${order.reward_id} — RECONCILE MANUALLY`,
+              `[loyalty] RM webhook: FAILED to deduct points for order=${order.id} reward=${order.reward_id} — RECONCILE MANUALLY`,
             );
           }
         }
       }
     } else if (data.status === "FAILED") {
+      // Same order_number lookup — referenceId is the order_number we
+      // sent to RM, not the Supabase UUID.
       await supabase
         .from("orders")
         .update({ status: "failed" } as Record<string, unknown>)
-        .eq("id", data.referenceId);
+        .eq("order_number", data.referenceId);
     }
 
     return NextResponse.json({ code: "SUCCESS" });
