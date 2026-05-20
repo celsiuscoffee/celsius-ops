@@ -96,6 +96,11 @@ export default function PickupSettingsPage() {
   // without an extra confirmation step. Distinct from outletHours
   // above, which describes the *scheduled* hours.
   const [outletOpen, setOutletOpen] = useState<Record<string, boolean>>({});
+  // Manual override flag per outlet — when true, the auto-hours cron
+  // skips this outlet so the schedule doesn't undo the admin's
+  // decision. Clearing it (via "Resume schedule") returns control to
+  // the cron, which will flip is_open on the next tick (every 10 min).
+  const [outletOverride, setOutletOverride] = useState<Record<string, boolean>>({});
   const [togglingOutlet, setTogglingOutlet] = useState<string | null>(null);
 
   // Push blast (action — not a persisted setting)
@@ -116,6 +121,7 @@ export default function PickupSettingsPage() {
           "min_app_version",
           "payments_enabled",
           "outlet_hours",
+          "outlet_open_override",
         ];
         const [settingsResults, tokenCountRes, gatewaysRes, outletsRes] = await Promise.all([
           Promise.all(
@@ -142,6 +148,7 @@ export default function PickupSettingsPage() {
         if (results[2]) setAppVer(results[2]);
         if (results[3]) setPayments(results[3]);
         if (results[4]) setOutletHours(results[4]);
+        if (results[5]) setOutletOverride(results[5]);
         if (tokenCountRes?.count !== undefined) setBlastTokenCount(tokenCountRes.count);
         if (Array.isArray(gatewaysRes)) setGateways(gatewaysRes);
         if (Array.isArray(outletsRes)) {
@@ -208,24 +215,68 @@ export default function PickupSettingsPage() {
   };
 
   const toggleOutletOpen = async (storeId: string, nextValue: boolean) => {
-    // Optimistic flip + immediate PATCH so the barista doesn't have to
-    // click a separate Save. The integrations/outlets endpoint accepts
-    // is_open in its allowed-fields list (see route.ts).
+    // Two writes in one user gesture:
+    //   1. PATCH outlet_settings.is_open (immediate effect — pickup app
+    //      stops/starts accepting orders for this outlet on next request).
+    //   2. PUT app_settings.outlet_open_override with this storeId=true
+    //      so the auto-hours cron skips this outlet on its next tick
+    //      and doesn't undo the manual choice 10 min later.
     setOutletOpen((prev) => ({ ...prev, [storeId]: nextValue }));
+    setOutletOverride((prev) => ({ ...prev, [storeId]: true }));
     setTogglingOutlet(storeId);
     try {
-      const res = await adminFetch("/api/pickup/integrations/outlets", {
-        method:  "PATCH",
+      const nextOverride = { ...outletOverride, [storeId]: true };
+      const [openRes, overrideRes] = await Promise.all([
+        adminFetch("/api/pickup/integrations/outlets", {
+          method:  "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ storeId, field: "is_open", value: nextValue }),
+        }),
+        adminFetch(SETTINGS_API, {
+          method:  "PUT",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ key: "outlet_open_override", value: nextOverride }),
+        }),
+      ]);
+      if (!openRes.ok || !overrideRes.ok) throw new Error("Save failed");
+      toast.success(
+        `${OUTLET_LABELS[storeId] ?? storeId} ${nextValue ? "open" : "closed"} (manual)`,
+      );
+    } catch (e: unknown) {
+      // Roll back so the UI reflects DB truth on failure.
+      setOutletOpen((prev) => ({ ...prev, [storeId]: !nextValue }));
+      setOutletOverride((prev) => ({ ...prev, [storeId]: !!outletOverride[storeId] }));
+      const msg = e instanceof Error ? e.message : "Save failed";
+      toast.error(msg);
+    } finally {
+      setTogglingOutlet(null);
+    }
+  };
+
+  const resumeOutletSchedule = async (storeId: string) => {
+    // Clears the override so the next auto-hours cron tick (every 10 min)
+    // sets is_open from the configured schedule. Doesn't change is_open
+    // immediately — the customer-visible flip happens on the cron tick.
+    setOutletOverride((prev) => {
+      const next = { ...prev };
+      delete next[storeId];
+      return next;
+    });
+    setTogglingOutlet(storeId);
+    try {
+      const next = { ...outletOverride };
+      delete next[storeId];
+      const res = await adminFetch(SETTINGS_API, {
+        method:  "PUT",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ storeId, field: "is_open", value: nextValue }),
+        body:    JSON.stringify({ key: "outlet_open_override", value: next }),
       });
       if (!res.ok) throw new Error("Save failed");
       toast.success(
-        `${OUTLET_LABELS[storeId] ?? storeId} ${nextValue ? "open" : "closed"}`,
+        `${OUTLET_LABELS[storeId] ?? storeId} back on schedule`,
       );
     } catch (e: unknown) {
-      // Roll back so the toggle reflects DB truth.
-      setOutletOpen((prev) => ({ ...prev, [storeId]: !nextValue }));
+      setOutletOverride((prev) => ({ ...prev, [storeId]: true }));
       const msg = e instanceof Error ? e.message : "Save failed";
       toast.error(msg);
     } finally {
@@ -407,11 +458,12 @@ export default function PickupSettingsPage() {
         {/* Outlet open / closed (manual override) */}
         <Card icon={<Clock className="h-4.5 w-4.5 text-emerald-600" />} bg="bg-emerald-50"
               title="Outlet open / closed"
-              sub="Manual override per outlet. Flipping this off rejects new pickup orders for that outlet until you turn it back on.">
+              sub="Manual override per outlet. Flipping this off rejects new pickup orders for that outlet until you turn it back on, or until you click Resume schedule to hand control back to the auto-hours cron.">
           <div className="mt-2 space-y-2">
             {Object.keys(OUTLET_LABELS).map((storeId) => {
-              const open  = outletOpen[storeId] !== false; // default true while loading
-              const busy  = togglingOutlet === storeId;
+              const open      = outletOpen[storeId] !== false; // default true while loading
+              const overridden = outletOverride[storeId] === true;
+              const busy      = togglingOutlet === storeId;
               return (
                 <div key={storeId}
                      className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
@@ -423,6 +475,21 @@ export default function PickupSettingsPage() {
                     <span className={`text-[10px] font-semibold uppercase tracking-wide ${open ? "text-emerald-600" : "text-gray-500"}`}>
                       {open ? "Open" : "Closed"}
                     </span>
+                    {overridden && (
+                      <>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">
+                          Manual
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => resumeOutletSchedule(storeId)}
+                          disabled={busy}
+                          className="text-[11px] text-blue-600 hover:underline disabled:opacity-50"
+                        >
+                          Resume schedule
+                        </button>
+                      </>
+                    )}
                   </div>
                   <Toggle
                     checked={open}

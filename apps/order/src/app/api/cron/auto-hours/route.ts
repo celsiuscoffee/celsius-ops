@@ -27,18 +27,31 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseAdmin();
 
-    // Fetch outlet_hours config
-    const { data: settingRow, error: settingError } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "outlet_hours")
-      .single();
+    // Fetch outlet_hours config + the per-outlet manual override map.
+    // outlet_open_override is { [storeId]: true } for outlets the
+    // backoffice has manually toggled — we skip those so the schedule
+    // doesn't undo an admin's decision (e.g. early close for low staff).
+    const [{ data: hoursRow, error: hoursError }, { data: overrideRow }] =
+      await Promise.all([
+        supabase
+          .from("app_settings")
+          .select("value")
+          .eq("key", "outlet_hours")
+          .maybeSingle(),
+        supabase
+          .from("app_settings")
+          .select("value")
+          .eq("key", "outlet_open_override")
+          .maybeSingle(),
+      ]);
 
-    if (settingError || !settingRow) {
+    if (hoursError || !hoursRow) {
       return NextResponse.json({ updated: [], message: "No outlet_hours config found" });
     }
 
-    const hoursMap = settingRow.value as OutletHoursMap;
+    const hoursMap = hoursRow.value as OutletHoursMap;
+    const overrideMap =
+      (overrideRow?.value as Record<string, boolean> | undefined) ?? {};
 
     // Current Malaysia time (UTC+8)
     const nowUtc  = new Date();
@@ -50,8 +63,19 @@ export async function GET(request: NextRequest) {
     const currentMinutes = myDate.getUTCHours() * 60 + myDate.getUTCMinutes();
 
     const updated: string[] = [];
+    const skipped: string[] = [];
 
     for (const [storeId, hours] of Object.entries(hoursMap)) {
+      // Manual override wins. The backoffice toggle sets this flag
+      // when an admin flips an outlet open/closed mid-schedule, so the
+      // next cron tick doesn't undo their decision. The admin can
+      // clear the override (returning the outlet to schedule control)
+      // by clicking "Resume schedule" in /pickup/settings.
+      if (overrideMap[storeId] === true) {
+        skipped.push(`${storeId}=override`);
+        continue;
+      }
+
       const openMins  = timeToMinutes(hours.open);
       const closeMins = timeToMinutes(hours.close);
       const isDayOpen = hours.daysOpen.includes(dayNum);
@@ -75,7 +99,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ updated });
+    return NextResponse.json({ updated, skipped });
   } catch (err) {
     console.error("Auto-hours cron error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

@@ -9,6 +9,7 @@
     { "path": "/api/cron/loyalty-pushes?job=sitting-on-beans","schedule": "0 3 * * *" },
     { "path": "/api/cron/loyalty-pushes?job=custom",          "schedule": "30 3 * * *" },
     { "path": "/api/cron/loyalty-pushes?job=miss-you",        "schedule": "0 3 * * 1" },
-    { "path": "/api/cron/streak-update",                      "schedule": "0 4 * * 1" }
+    { "path": "/api/cron/streak-update",                      "schedule": "0 4 * * 1" },
+    { "path": "/api/cron/auto-hours",                         "schedule": "*/10 * * * *" }
   ]
 }
