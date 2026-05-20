@@ -57,13 +57,20 @@ interface MethodDef {
 }
 
 const METHOD_DEFS: MethodDef[] = [
-  { id: "fpx", name: "FPX Online Banking", icon: "🏦", providers: ["revenue_monster", "stripe"], defaultProvider: "revenue_monster" },
-  { id: "card", name: "Credit / Debit Card", icon: "💳", providers: ["stripe", "revenue_monster"], defaultProvider: "stripe" },
-  { id: "tng", name: "TNG eWallet", icon: "📱", providers: ["revenue_monster"], defaultProvider: "revenue_monster" },
-  { id: "grabpay", name: "GrabPay", icon: "🟢", providers: ["revenue_monster"], defaultProvider: "revenue_monster" },
-  { id: "boost", name: "Boost", icon: "🔴", providers: ["revenue_monster"], defaultProvider: "revenue_monster" },
-  { id: "apple_pay", name: "Apple Pay", icon: "🍎", providers: ["stripe"], defaultProvider: "stripe" },
-  { id: "google_pay", name: "Google Pay", icon: "🔵", providers: ["stripe"], defaultProvider: "stripe" },
+  // Defaults aligned with the gateway-config defaults in /apps/order:
+  // card/fpx/tng/grabpay/boost/shopeepay route through Revenue Monster;
+  // apple_pay/google_pay stay on Stripe (only Stripe supports the native
+  // platform wallet sheets). Keep this list in sync with apps/order's
+  // /api/payments/gateway-config DEFAULT_METHODS + the pickup-native
+  // checkout METHOD_LABELS.
+  { id: "card",       name: "Credit / Debit Card", icon: "💳", providers: ["revenue_monster", "stripe"], defaultProvider: "revenue_monster" },
+  { id: "fpx",        name: "FPX Online Banking",  icon: "🏦", providers: ["revenue_monster", "stripe"], defaultProvider: "revenue_monster" },
+  { id: "tng",        name: "TNG eWallet",         icon: "📱", providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
+  { id: "boost",      name: "Boost",               icon: "🔴", providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
+  { id: "shopeepay",  name: "ShopeePay",           icon: "🛒", providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
+  { id: "grabpay",    name: "GrabPay",             icon: "🟢", providers: ["stripe", "revenue_monster"], defaultProvider: "stripe" },
+  { id: "apple_pay",  name: "Apple Pay",           icon: "🍎", providers: ["stripe"],                     defaultProvider: "stripe" },
+  { id: "google_pay", name: "Google Pay",          icon: "🔵", providers: ["stripe"],                     defaultProvider: "stripe" },
 ];
 
 /* ─── Helpers ───────────────────────────────────────────────────────────── */
@@ -537,8 +544,8 @@ export default function IntegrationsPage() {
       >
         <div className="mt-4 space-y-3">
           <InfoBanner>
-            Revenue Monster processes FPX, TNG, GrabPay, Boost, and credit/debit card payments.
-            Each outlet needs its own merchant credentials from the Revenue Monster dashboard.
+            Revenue Monster processes FPX, TNG, GrabPay, Boost, ShopeePay, and credit/debit card
+            payments. Each outlet needs its own merchant credentials from the Revenue Monster dashboard.
           </InfoBanner>
 
           <div className="space-y-2">

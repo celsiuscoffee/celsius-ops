@@ -101,11 +101,21 @@ export async function POST(request: NextRequest) {
     {
       const { data: outletRow } = await supabase
         .from("outlet_settings")
-        .select("store_id, is_active")
+        .select("store_id, is_active, is_open")
         .eq("store_id", storeId)
         .maybeSingle();
       if (!outletRow || outletRow.is_active === false) {
         return NextResponse.json({ error: "Outlet is not accepting orders" }, { status: 400 });
+      }
+      // is_open is the manual "we're closed right now" toggle. Distinct
+      // from is_active (administrative) — the backoffice flips this from
+      // /pickup/settings when the outlet wants to stop taking orders
+      // without removing themselves from the system entirely.
+      if (outletRow.is_open === false) {
+        return NextResponse.json(
+          { error: "Outlet is currently closed for orders" },
+          { status: 400 },
+        );
       }
     }
 

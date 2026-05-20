@@ -50,7 +50,12 @@ export async function PATCH(req: NextRequest) {
 
   const { storeId, field, value } = await req.json();
 
-  const allowed = ["rm_enabled", "bukku_enabled", "stripe_enabled"];
+  // is_open is the manual "outlet open/closed right now" toggle the
+  // backoffice flips from /pickup/settings. /api/checkout/initiate
+  // rejects orders when is_open is false, separate from is_active
+  // (which is the administrative "outlet is part of the business at
+  // all" flag — set once at outlet creation, not used as a toggle).
+  const allowed = ["rm_enabled", "bukku_enabled", "stripe_enabled", "is_open"];
   if (!storeId || !allowed.includes(field)) {
     return NextResponse.json({ error: "Invalid params" }, { status: 400 });
   }

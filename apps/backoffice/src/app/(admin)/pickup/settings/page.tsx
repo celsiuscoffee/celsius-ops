@@ -90,6 +90,13 @@ export default function PickupSettingsPage() {
     "shah-alam": { ...DEFAULT_OUTLET_HOURS },
     tamarind:    { ...DEFAULT_OUTLET_HOURS },
   });
+  // is_open per outlet — the manual "stop taking orders right now"
+  // toggle. Saves immediately via the integrations/outlets PATCH (no
+  // separate Save button) so a barista can flip a closing outlet
+  // without an extra confirmation step. Distinct from outletHours
+  // above, which describes the *scheduled* hours.
+  const [outletOpen, setOutletOpen] = useState<Record<string, boolean>>({});
+  const [togglingOutlet, setTogglingOutlet] = useState<string | null>(null);
 
   // Push blast (action — not a persisted setting)
   const [blastTitle, setBlastTitle] = useState("");
@@ -110,7 +117,7 @@ export default function PickupSettingsPage() {
           "payments_enabled",
           "outlet_hours",
         ];
-        const [settingsResults, tokenCountRes, gatewaysRes] = await Promise.all([
+        const [settingsResults, tokenCountRes, gatewaysRes, outletsRes] = await Promise.all([
           Promise.all(
             keys.map((k) =>
               adminFetch(`${SETTINGS_API}?key=${encodeURIComponent(k)}`).then((r) =>
@@ -122,6 +129,12 @@ export default function PickupSettingsPage() {
           adminFetch("/api/pickup/integrations/payment-gateway").then((r) =>
             r.json().catch(() => [])
           ),
+          // Outlet-level state (is_open per outlet) — shares the same
+          // table the integrations page edits, but here we only care
+          // about the open/closed flag.
+          adminFetch("/api/pickup/integrations/outlets").then((r) =>
+            r.json().catch(() => [])
+          ),
         ]);
         const results = settingsResults;
         if (results[0]) setMinOrder(results[0]);
@@ -131,6 +144,16 @@ export default function PickupSettingsPage() {
         if (results[4]) setOutletHours(results[4]);
         if (tokenCountRes?.count !== undefined) setBlastTokenCount(tokenCountRes.count);
         if (Array.isArray(gatewaysRes)) setGateways(gatewaysRes);
+        if (Array.isArray(outletsRes)) {
+          const openMap: Record<string, boolean> = {};
+          for (const o of outletsRes as Array<{ store_id: string; is_open?: boolean }>) {
+            // Default true so a new outlet that hasn't had its flag set
+            // is treated as open — matches the order app's GET /stores
+            // which uses `is_open` for the visible badge.
+            openMap[o.store_id] = o.is_open !== false;
+          }
+          setOutletOpen(openMap);
+        }
       } finally {
         setLoading(false);
       }
@@ -182,6 +205,32 @@ export default function PickupSettingsPage() {
         : [...prev, { method_id, enabled: false, provider: "stripe", ...patch } as GatewayMethod];
       return next;
     });
+  };
+
+  const toggleOutletOpen = async (storeId: string, nextValue: boolean) => {
+    // Optimistic flip + immediate PATCH so the barista doesn't have to
+    // click a separate Save. The integrations/outlets endpoint accepts
+    // is_open in its allowed-fields list (see route.ts).
+    setOutletOpen((prev) => ({ ...prev, [storeId]: nextValue }));
+    setTogglingOutlet(storeId);
+    try {
+      const res = await adminFetch("/api/pickup/integrations/outlets", {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ storeId, field: "is_open", value: nextValue }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      toast.success(
+        `${OUTLET_LABELS[storeId] ?? storeId} ${nextValue ? "open" : "closed"}`,
+      );
+    } catch (e: unknown) {
+      // Roll back so the toggle reflects DB truth.
+      setOutletOpen((prev) => ({ ...prev, [storeId]: !nextValue }));
+      const msg = e instanceof Error ? e.message : "Save failed";
+      toast.error(msg);
+    } finally {
+      setTogglingOutlet(null);
+    }
   };
 
   const toggleOutletDay = (storeId: string, day: number) => {
@@ -355,6 +404,37 @@ export default function PickupSettingsPage() {
           <SaveBtn busy={saving === "min_app_version"} onClick={() => save("min_app_version", appVer)} />
         </Card>
 
+        {/* Outlet open / closed (manual override) */}
+        <Card icon={<Clock className="h-4.5 w-4.5 text-emerald-600" />} bg="bg-emerald-50"
+              title="Outlet open / closed"
+              sub="Manual override per outlet. Flipping this off rejects new pickup orders for that outlet until you turn it back on.">
+          <div className="mt-2 space-y-2">
+            {Object.keys(OUTLET_LABELS).map((storeId) => {
+              const open  = outletOpen[storeId] !== false; // default true while loading
+              const busy  = togglingOutlet === storeId;
+              return (
+                <div key={storeId}
+                     className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${open ? "bg-emerald-500" : "bg-gray-300"}`} />
+                    <span className="text-sm font-medium text-gray-800">
+                      {OUTLET_LABELS[storeId] ?? storeId}
+                    </span>
+                    <span className={`text-[10px] font-semibold uppercase tracking-wide ${open ? "text-emerald-600" : "text-gray-500"}`}>
+                      {open ? "Open" : "Closed"}
+                    </span>
+                  </div>
+                  <Toggle
+                    checked={open}
+                    onChange={(v) => toggleOutletOpen(storeId, v)}
+                    disabled={busy}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
         {/* Outlet ordering hours */}
         <Card icon={<Clock className="h-4.5 w-4.5 text-teal-600" />} bg="bg-teal-50"
               title="Ordering hours"
@@ -466,15 +546,29 @@ function Field({ label, children, inline }: {
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
-    <button type="button" onClick={() => onChange(!checked)}
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      disabled={disabled}
       className={`relative inline-flex h-6 w-10 items-center rounded-full transition-colors ${
         checked ? "bg-emerald-500" : "bg-gray-300"
-      }`}>
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-        checked ? "translate-x-5" : "translate-x-1"
-      }`} />
+      } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+          checked ? "translate-x-5" : "translate-x-1"
+        }`}
+      />
     </button>
   );
 }
