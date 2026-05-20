@@ -78,8 +78,36 @@ export async function GET(request: NextRequest) {
 
       const openMins  = timeToMinutes(hours.open);
       const closeMins = timeToMinutes(hours.close);
-      const isDayOpen = hours.daysOpen.includes(dayNum);
-      const isOpen    = isDayOpen && currentMinutes >= openMins && currentMinutes < closeMins;
+
+      // Overnight schedules — close time is past midnight (e.g. 08:00 →
+      // 02:00 AM). When close <= open we treat the window as spanning
+      // into the next calendar day, so we check two windows:
+      //
+      //   1. Today's evening: started at open today, still rolling.
+      //      Requires today to be an open day and time >= openMins.
+      //
+      //   2. Yesterday's carryover: yesterday opened, we're still inside
+      //      the post-midnight tail. Requires yesterday to be an open
+      //      day and time < closeMins.
+      //
+      // Same-day schedules (close > open) use the original single
+      // inclusive-exclusive check.
+      const yesterdayNum = dayNum === 1 ? 7 : dayNum - 1;
+      const isOvernight  = closeMins <= openMins;
+
+      let isOpen: boolean;
+      if (isOvernight) {
+        const inTodayEvening    =
+          hours.daysOpen.includes(dayNum) && currentMinutes >= openMins;
+        const inYesterdayTail   =
+          hours.daysOpen.includes(yesterdayNum) && currentMinutes < closeMins;
+        isOpen = inTodayEvening || inYesterdayTail;
+      } else {
+        isOpen =
+          hours.daysOpen.includes(dayNum) &&
+          currentMinutes >= openMins &&
+          currentMinutes < closeMins;
+      }
 
       // Writes target the underlying `Outlet` table (camelCase), not
       // the `outlet_settings` view. The view wraps `isOpen` in a
