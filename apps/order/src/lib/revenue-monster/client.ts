@@ -189,16 +189,18 @@ function nonce() {
 // method name is just "FPX". Sending without the suffix returns
 // DOES_NOT_HAVE_ACTIVE_WALLET.
 //
-// Card has no wallet-app deep link, so we use the hosted card page (step 1)
-// for card payments — see the `directMethod === "CARD_MY"` branch in
-// createPayment below, which mirrors the FPX-no-bank fallback.
+// Card has no documented method code in any of RM's SDKs or the public
+// payment-method appendix. Passing "CARD_MY" returns CARD_MALAYSIA_NOT_ACTIVE
+// because RM doesn't recognize the code at all. RM's own WooCommerce gateway
+// sends `method: []` and lets the hosted page surface every method the
+// merchant has enabled — card included once activated. We do the same.
 export const PAYMENT_METHOD_MAP: Record<string, string[]> = {
   tng:       ["TNG_MY"],
   grabpay:   ["GRABPAY_MY"],
   fpx:       ["FPX_MY"],
   boost:     ["BOOST_MY"],
   shopeepay: ["SHOPEEPAY_MY"],
-  card:      ["CARD_MY"],
+  card:      [],
   // "all" → empty array tells RM's hosted page to show every method
   // enabled on the merchant account.
   all:       [],
@@ -302,6 +304,17 @@ export async function createPayment(params: CreatePaymentParams): Promise<Create
     throw new Error(`RM hosted checkout missing checkoutId: ${JSON.stringify(hosted.item)}`);
   }
 
+  // Card has no documented RM method code and no Direct deep-link flow.
+  // We sent method:[] in step 1 above, so RM's hosted page lists every
+  // method enabled on the merchant (including card). Return that URL
+  // and skip Direct Payment Checkout entirely.
+  if (params.paymentMethod === "card") {
+    if (!hosted.item?.url) {
+      throw new Error("Card fallback failed: hosted checkout returned no url");
+    }
+    return { paymentUrl: hosted.item.url, checkoutId };
+  }
+
   // ─── Step 2: Direct Payment Checkout (Mode: URL or Mode: FPX) ─────────
   // Mints the wallet/bank-specific deep link. Customer's app opens this
   // URL and is taken straight into the wallet (TNG / Boost / ShopeePay)
@@ -321,17 +334,6 @@ export async function createPayment(params: CreatePaymentParams): Promise<Create
   if (directMethod === "FPX_MY" && !params.fpxBankCode) {
     if (!hosted.item?.url) {
       throw new Error("FPX fallback failed: hosted checkout returned no url");
-    }
-    return { paymentUrl: hosted.item.url, checkoutId };
-  }
-
-  // Card has no wallet-app deep link — RM serves the card form on the
-  // hosted page from step 1. The hosted body already filters method to
-  // ["CARD_MY"], so the customer lands directly on the card form rather
-  // than RM's consolidated picker.
-  if (directMethod === "CARD_MY") {
-    if (!hosted.item?.url) {
-      throw new Error("Card fallback failed: hosted checkout returned no url");
     }
     return { paymentUrl: hosted.item.url, checkoutId };
   }
