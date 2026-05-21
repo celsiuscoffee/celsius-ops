@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { View, Text, Platform, Image } from "react-native";
+import type { ImageSourcePropType } from "react-native";
 import { SvgUri } from "react-native-svg";
 import { Wallet, CreditCard } from "lucide-react-native";
 
@@ -34,30 +35,36 @@ function isPngLike(url: string): boolean {
 //
 // Adding a brand: paste its iconUrl from wherever you sourced it into
 // the BRANDS map below. No other changes needed.
+// Local PNG assets — bundled at build time. Metro statically resolves
+// require() calls so each path must be a string literal.
+const FPX_ICON       = require("../assets/pay-icons/FPX Logo.png");
+const TNG_ICON       = require("../assets/pay-icons/tng.png");
+const BOOST_ICON     = require("../assets/pay-icons/boost.png");
+const GRABPAY_ICON   = require("../assets/pay-icons/grab.png");
+const SHOPEEPAY_ICON = require("../assets/pay-icons/shopee.png");
+
 type Brand = {
-  bg:        string;
-  fg:        string;
-  label:     string;
-  iconUrl?:  string;   // full URL → renders on white chip
-  iconSlug?: string;   // simpleicons.org slug → tinted on brand chip
-  iconFg?:   string;   // hex (no #) for slug tinting; defaults to brand.fg
-  border?:   string;
+  bg:          string;
+  fg:          string;
+  label:       string;
+  // Preferred: bundled PNG via require(). Renders fast, works offline,
+  // no hot-link issues. Falls back to iconUrl / iconSlug / monogram if
+  // the asset fails to decode (extremely rare for bundled raster).
+  iconSource?: ImageSourcePropType;
+  iconUrl?:    string;
+  iconSlug?:   string;
+  iconFg?:     string;
+  border?:     string;
 };
 
 const BRANDS: Record<string, Brand> = {
   apple_pay:  { bg: "#000000", fg: "#FFFFFF", label: "Pay",   iconSlug: "applepay", iconFg: "FFFFFF" },
   google_pay: { bg: "#FFFFFF", fg: "#3C4043", label: "GPay",  iconSlug: "googlepay", border: "#E5E7EB" },
-  fpx:        { bg: "#1B7A8F", fg: "#FFFFFF", label: "FPX",
-                iconUrl: "https://vectorise.net/logo/wp-content/uploads/2019/09/Logo-FPX.png" },
-  grabpay:    { bg: "#00B14F", fg: "#FFFFFF", label: "Grab",  iconSlug: "grab", iconFg: "FFFFFF" },
-  tng:        { bg: "#005AAA", fg: "#FFD400", label: "tng",
-                // Wikimedia's 960px PNG thumbnail of the same file — sidesteps the
-                // <style>-block rendering issue that left the SVG blank in
-                // react-native-svg.
-                iconUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fb/Touch_%27n_Go_eWallet_logo.svg/960px-Touch_%27n_Go_eWallet_logo.svg.png" },
-  boost:      { bg: "#EC008C", fg: "#FFFFFF", label: "Boost",
-                iconUrl: "https://myboost.co/sites/default/files/styles/card_vertical/public/2023-06/boost_logo_thumbnail_0.png.webp?itok=W4ZkKa0X" },
-  shopeepay:  { bg: "#EE4D2D", fg: "#FFFFFF", label: "Pay",   iconSlug: "shopee", iconFg: "FFFFFF" },
+  fpx:        { bg: "#1B7A8F", fg: "#FFFFFF", label: "FPX",   iconSource: FPX_ICON       },
+  grabpay:    { bg: "#00B14F", fg: "#FFFFFF", label: "Grab",  iconSource: GRABPAY_ICON   },
+  tng:        { bg: "#005AAA", fg: "#FFD400", label: "tng",   iconSource: TNG_ICON       },
+  boost:      { bg: "#EC008C", fg: "#FFFFFF", label: "Boost", iconSource: BOOST_ICON     },
+  shopeepay:  { bg: "#EE4D2D", fg: "#FFFFFF", label: "Pay",   iconSource: SHOPEEPAY_ICON },
 };
 
 type Props = {
@@ -134,14 +141,26 @@ export function PaymentBrandIcon({ methodId, size = 36 }: Props) {
     );
   }
 
-  const useUrl = !!brand.iconUrl && !iconFailed;
-  // When rendering a full-color SVG via iconUrl, switch the chip to a
-  // white card surface with a thin border so the logo's native colors
+  const useSource = !!brand.iconSource && !iconFailed;
+  const useUrl    = !useSource && !!brand.iconUrl && !iconFailed;
+  // When rendering a full-color logo (local or URL), switch the chip to
+  // a white card surface with a thin border so the logo's native colors
   // aren't fighting a tinted background.
-  const chipBg     = useUrl ? "#FFFFFF" : brand.bg;
-  const chipBorder = useUrl ? "#E5E7EB" : brand.border;
+  const chipBg     = (useSource || useUrl) ? "#FFFFFF" : brand.bg;
+  const chipBorder = (useSource || useUrl) ? "#E5E7EB" : brand.border;
 
   const inner = (() => {
+    if (useSource) {
+      const iconSize = Math.round(size * 0.92);
+      return (
+        <Image
+          source={brand.iconSource}
+          style={{ width: iconSize, height: iconSize }}
+          resizeMode="contain"
+          onError={() => setIconFailed(true)}
+        />
+      );
+    }
     if (useUrl) {
       // Fill close to the chip edge — small inset so the logo doesn't
       // touch the chip border. Logos with their own internal padding
