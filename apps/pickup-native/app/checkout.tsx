@@ -667,15 +667,17 @@ export default function Checkout() {
         const result = await openRmCheckout(rmJson.paymentUrl, methodLabel, formatPrice(grandTotal), selectedMethodId!);
         if (result === "success") {
           trackEvent("payment_rm_returned", { orderId: res.orderId });
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setBusyLabel("Sending to kitchen…");
-          // Optimistic: RM redirected back, so the customer completed the
-          // wallet flow. The order is still "pending" until our webhook /
-          // poll reconciles (typically 5-30s). Show the success animation
-          // now and pass justPaid so the order page renders a "Confirming
-          // payment…" state instead of the misleading retry UI during
-          // that reconciliation window.
-          routeAfterSuccess(res.orderId, { params: { justPaid: "1" } });
+          // RM redirected back to celsiuscoffee://rm-return — this happens
+          // for BOTH paid and cancelled/failed payments (RM doesn't reliably
+          // expose status in the redirect URL). Skip the green-check
+          // animation here; the order page polls RM and flips between
+          // "Confirming payment…" → "Brewing now" / "Payment failed"
+          // based on the actual server-side status within 5–30s.
+          router.replace({
+            pathname: "/order/[id]",
+            params: { id: res.orderId, justPaid: "1" },
+          });
         } else {
           // User explicitly cancelled the RM modal (X button). The order
           // is now pending+unpaid and lives in /orders → In progress, so

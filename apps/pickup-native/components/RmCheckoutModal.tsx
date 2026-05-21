@@ -6,6 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
   Linking,
+  Platform,
   StatusBar,
 } from "react-native";
 import { WebView } from "react-native-webview";
@@ -139,8 +140,12 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, method
       <StatusBar barStyle="light-content" />
       <View
         className="bg-espresso"
+        // useSafeAreaInsets returns 0 inside iOS modal portals in some
+        // RN versions. Floor at 50 on iOS so the Cancel pill always
+        // clears the notch / dynamic island, and 24 on Android for the
+        // status bar.
         style={{
-          paddingTop: insets.top,
+          paddingTop: Math.max(insets.top, Platform.OS === "ios" ? 50 : 24),
           zIndex: 10,
           elevation: 10,
         }}
