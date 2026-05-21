@@ -64,6 +64,7 @@ import { EspressoHeader } from "../components/EspressoHeader";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { FpxBankPicker } from "../components/FpxBankPicker";
 import { PaymentBrandIcon } from "../components/PaymentBrandIcon";
+import { BottomSheet } from "../components/BottomSheet";
 
 type Step = "phone" | "otp" | "review";
 
@@ -344,6 +345,11 @@ export default function Checkout() {
   // FPX bank from FPX_BANKS — required when the online banking category
   // is selected. Same reset rule as selectedWalletId.
   const [fpxBankCode, setFpxBankCode] = useState<string | null>(null);
+  // Bottom-sheet visibility for the wallet + bank pickers. Sub-pickers
+  // open as modal sheets instead of inline expansion so the layout stays
+  // compact and the picker has its own focused surface.
+  const [walletSheetOpen, setWalletSheetOpen] = useState(false);
+  const [bankSheetOpen, setBankSheetOpen]     = useState(false);
 
   const selectedMethodId: string | null = (() => {
     if (selectedCategory === "online_banking") return "fpx";
@@ -1010,87 +1016,54 @@ export default function Checkout() {
                     />
                   )}
 
-                  {/* E-Wallet — expands to show TNG / Boost / ShopeePay / GrabPay */}
+                  {/* E-Wallet — taps open a bottom-sheet sub-picker. The
+                      group tile itself shows the chosen wallet's icon +
+                      label as the subtitle so the customer sees what's
+                      currently selected without opening the sheet. */}
                   {wallets.length > 0 && (
-                    <>
-                      <CategoryRow
-                        selected={selectedCategory === "ewallet"}
-                        onPress={() => {
-                          Haptics.selectionAsync();
-                          setSelectedCategory("ewallet");
-                          setFpxBankCode(null);
-                          if (!selectedWalletId) setSelectedWalletId(wallets[0].method_id);
-                        }}
-                        title="E-Wallet"
-                        subtitle={
-                          selectedCategory === "ewallet" && selectedWalletId
-                            ? METHOD_LABELS[selectedWalletId] ?? selectedWalletId
-                            : undefined
-                        }
-                        iconMethodId={
-                          selectedCategory === "ewallet" && selectedWalletId
-                            ? selectedWalletId
-                            : wallets[0].method_id
-                        }
-                        expandable
-                        expanded={selectedCategory === "ewallet"}
-                        hasDivider
-                      />
-                      {selectedCategory === "ewallet" && (
-                        <View className="bg-background px-4 py-3 gap-2">
-                          {wallets.map((w) => {
-                            const picked = selectedWalletId === w.method_id;
-                            return (
-                              <Pressable
-                                key={w.method_id}
-                                onPress={() => {
-                                  Haptics.selectionAsync();
-                                  setSelectedWalletId(w.method_id);
-                                }}
-                                className={`bg-surface rounded-xl border px-3 py-2.5 flex-row items-center gap-3 ${
-                                  picked ? "border-primary" : "border-border"
-                                }`}
-                                style={picked ? { borderWidth: 2 } : undefined}
-                              >
-                                <PaymentBrandIcon methodId={w.method_id} size={32} />
-                                <Text className="flex-1 text-espresso font-bold">
-                                  {METHOD_LABELS[w.method_id] ?? w.method_id}
-                                </Text>
-                                {picked && <Check size={16} color="#C05040" />}
-                              </Pressable>
-                            );
-                          })}
-                        </View>
-                      )}
-                    </>
+                    <CategoryRow
+                      selected={selectedCategory === "ewallet"}
+                      onPress={() => {
+                        Haptics.selectionAsync();
+                        setSelectedCategory("ewallet");
+                        setFpxBankCode(null);
+                        if (!selectedWalletId) setSelectedWalletId(wallets[0].method_id);
+                        setWalletSheetOpen(true);
+                      }}
+                      title="E-Wallet"
+                      subtitle={
+                        selectedCategory === "ewallet" && selectedWalletId
+                          ? METHOD_LABELS[selectedWalletId] ?? selectedWalletId
+                          : undefined
+                      }
+                      iconMethodId={
+                        selectedCategory === "ewallet" && selectedWalletId
+                          ? selectedWalletId
+                          : wallets[0].method_id
+                      }
+                      expandable
+                      expanded={false}
+                      hasDivider
+                    />
                   )}
 
-                  {/* Online Banking — expands to bank picker */}
+                  {/* Online Banking — taps open the FPX bank-picker sheet. */}
                   {onlineBanking && (
-                    <>
-                      <CategoryRow
-                        selected={selectedCategory === "online_banking"}
-                        onPress={() => {
-                          Haptics.selectionAsync();
-                          setSelectedCategory("online_banking");
-                          setSelectedWalletId(null);
-                        }}
-                        title="Online Banking"
-                        subtitle={selectedCategory === "online_banking" ? "FPX" : undefined}
-                        iconMethodId="fpx"
-                        expandable
-                        expanded={selectedCategory === "online_banking"}
-                        hasDivider
-                      />
-                      {selectedCategory === "online_banking" && (
-                        <View className="bg-background px-4 py-3">
-                          <FpxBankPicker
-                            selectedCode={fpxBankCode}
-                            onSelect={setFpxBankCode}
-                          />
-                        </View>
-                      )}
-                    </>
+                    <CategoryRow
+                      selected={selectedCategory === "online_banking"}
+                      onPress={() => {
+                        Haptics.selectionAsync();
+                        setSelectedCategory("online_banking");
+                        setSelectedWalletId(null);
+                        setBankSheetOpen(true);
+                      }}
+                      title="Online Banking"
+                      subtitle={selectedCategory === "online_banking" ? "FPX" : undefined}
+                      iconMethodId="fpx"
+                      expandable
+                      expanded={false}
+                      hasDivider
+                    />
                   )}
                 </View>
               </View>
@@ -1366,6 +1339,58 @@ export default function Checkout() {
           </Animated.Text>
         </Animated.View>
       )}
+
+      {/* E-Wallet picker sheet — tapping the E-Wallet group row opens
+          this. Selecting a wallet sets selectedWalletId + closes. */}
+      <BottomSheet
+        visible={walletSheetOpen}
+        onClose={() => setWalletSheetOpen(false)}
+        title="Select your E-Wallet"
+      >
+        <View style={{ paddingHorizontal: 16, gap: 4 }}>
+          {wallets.map((w, idx) => {
+            const picked = selectedWalletId === w.method_id;
+            return (
+              <Pressable
+                key={w.method_id}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setSelectedWalletId(w.method_id);
+                  setWalletSheetOpen(false);
+                }}
+                className={`flex-row items-center gap-3 py-3 ${
+                  idx > 0 ? "border-t border-border" : ""
+                } active:opacity-70`}
+              >
+                <PaymentBrandIcon methodId={w.method_id} size={40} />
+                <Text className="flex-1 text-espresso text-[15px] font-bold">
+                  {METHOD_LABELS[w.method_id] ?? w.method_id}
+                </Text>
+                {picked && <Check size={18} color="#C05040" />}
+              </Pressable>
+            );
+          })}
+        </View>
+      </BottomSheet>
+
+      {/* FPX bank picker sheet — same pattern, but the row component
+          (FpxBankPicker) renders its own list. We dismiss as soon as a
+          bank is picked. */}
+      <BottomSheet
+        visible={bankSheetOpen}
+        onClose={() => setBankSheetOpen(false)}
+        title="Select your Bank"
+      >
+        <View style={{ paddingHorizontal: 16 }}>
+          <FpxBankPicker
+            selectedCode={fpxBankCode}
+            onSelect={(code) => {
+              setFpxBankCode(code);
+              setBankSheetOpen(false);
+            }}
+          />
+        </View>
+      </BottomSheet>
     </View>
   );
 }
