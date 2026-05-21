@@ -1,7 +1,8 @@
-import { View, Text, Pressable, Platform } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { Check } from "lucide-react-native";
 import * as Haptics from "@/lib/haptics";
 import { FPX_BANKS } from "../lib/fpx-banks";
+import { BankChip } from "./BankChip";
 
 type Props = {
   selectedCode: string | null;
@@ -32,28 +33,7 @@ export function FpxBankPicker({ selectedCode, onSelect }: Props) {
                 idx > 0 ? "border-t border-border" : ""
               } active:bg-background`}
             >
-              <View
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 10,
-                  backgroundColor: bank.bg,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text
-                  style={{
-                    color: bank.fg,
-                    fontFamily: "Peachi-Bold",
-                    fontSize: bank.short.length > 2 ? 11 : 14,
-                    letterSpacing: -0.3,
-                    lineHeight: Platform.OS === "ios" ? 14 : undefined,
-                  }}
-                >
-                  {bank.short}
-                </Text>
-              </View>
+              <BankChip bank={bank} size={32} />
               <Text className="flex-1 text-espresso text-[14px]" numberOfLines={1}>
                 {bank.name}
               </Text>

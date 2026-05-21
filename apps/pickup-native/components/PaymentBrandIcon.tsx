@@ -1,7 +1,16 @@
 import { useState } from "react";
-import { View, Text, Platform } from "react-native";
+import { View, Text, Platform, Image } from "react-native";
 import { SvgUri } from "react-native-svg";
 import { Wallet, CreditCard } from "lucide-react-native";
+
+// Pick the renderer per file extension. SVGs go through SvgUri (handles
+// raster scaling on every device pixel ratio); PNGs and JPGs go through
+// the React Native Image component which already handles remote fetch +
+// cache. Treat unknown extensions as SVG since most brand kits ship SVG.
+function isPngLike(url: string): boolean {
+  const lower = url.toLowerCase().split(/[?#]/)[0];
+  return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg");
+}
 
 // Per-method visual identity for the checkout tiles. Three rendering
 // modes, picked per brand:
@@ -40,7 +49,7 @@ const BRANDS: Record<string, Brand> = {
     label:   "tng",
     // Wikimedia Special:FilePath redirects (302) to the upload.wikimedia.org
     // CDN URL. SvgUri follows the redirect on both iOS and Android.
-    iconUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Touch_%27n_Go_eWallet_logo.svg",
+    iconUrl: "https://upload.wikimedia.org/wikipedia/commons/f/fb/Touch_%27n_Go_eWallet_logo.svg",
   },
   boost:      { bg: "#EC008C", fg: "#FFFFFF", label: "Boost" },
   shopeepay:  { bg: "#EE4D2D", fg: "#FFFFFF", label: "Pay",   iconSlug: "shopee", iconFg: "FFFFFF" },
@@ -130,6 +139,18 @@ export function PaymentBrandIcon({ methodId, size = 36 }: Props) {
   const inner = (() => {
     if (useUrl) {
       const iconSize = Math.round(size * 0.72);
+      // PNG / JPG → Image (handles raster fetch + cache natively). SVG
+      // (or unknown ext) → SvgUri (renders crisp at any pixel ratio).
+      if (isPngLike(brand.iconUrl!)) {
+        return (
+          <Image
+            source={{ uri: brand.iconUrl! }}
+            style={{ width: iconSize, height: iconSize }}
+            resizeMode="contain"
+            onError={() => setIconFailed(true)}
+          />
+        );
+      }
       return (
         <SvgUri
           width={iconSize}

@@ -13,10 +13,16 @@ export type FpxBank = {
   short:    string;   // monogram used in the icon chip
   bg:       string;   // chip background color
   fg:       string;   // text color over bg
+  // Optional logo URL. When present the chip renders on a white card
+  // surface (so the logo's native colors aren't fighting bg/fg), and
+  // falls back to the monogram chip on load error. PNG / JPG / SVG all
+  // supported — extension determines the renderer (Image vs SvgUri).
+  iconUrl?: string;
 };
 
 export const FPX_BANKS: ReadonlyArray<FpxBank> = [
-  { code: "MB2U0227:B2C",  name: "Maybank2U",               short: "M",   bg: "#FFC72C", fg: "#0A0A0A" },
+  { code: "MB2U0227:B2C",  name: "Maybank2U",               short: "M",   bg: "#FFC72C", fg: "#0A0A0A",
+    iconUrl: "https://vectorise.net/logo/wp-content/uploads/2011/09/2011maybanklogo.png" },
   { code: "MBB0228:B2C",   name: "Maybank2E",               short: "M2E", bg: "#FFC72C", fg: "#0A0A0A" },
   { code: "BCBB0235:B2C",  name: "CIMB Bank",               short: "C",   bg: "#A1132E", fg: "#FFFFFF" },
   { code: "PBB0233:B2C",   name: "Public Bank",             short: "PB",  bg: "#BF2A2C", fg: "#FFFFFF" },

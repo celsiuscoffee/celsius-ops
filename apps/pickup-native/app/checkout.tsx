@@ -64,6 +64,7 @@ import { EspressoHeader } from "../components/EspressoHeader";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { FpxBankPicker } from "../components/FpxBankPicker";
 import { FPX_BANKS } from "../lib/fpx-banks";
+import { BankChip } from "../components/BankChip";
 import { PaymentBrandIcon } from "../components/PaymentBrandIcon";
 import { BottomSheet } from "../components/BottomSheet";
 
@@ -1069,32 +1070,7 @@ export default function Checkout() {
                               : undefined
                         }
                         iconMethodId="fpx"
-                        iconNode={
-                          pickedBank ? (
-                            <View
-                              style={{
-                                width: 36,
-                                height: 36,
-                                borderRadius: 10,
-                                backgroundColor: pickedBank.bg,
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                            >
-                              <Text
-                                style={{
-                                  color: pickedBank.fg,
-                                  fontFamily: "Peachi-Bold",
-                                  fontSize: pickedBank.short.length > 2 ? 12 : 15,
-                                  letterSpacing: -0.3,
-                                  lineHeight: Platform.OS === "ios" ? 16 : undefined,
-                                }}
-                              >
-                                {pickedBank.short}
-                              </Text>
-                            </View>
-                          ) : undefined
-                        }
+                        iconNode={pickedBank ? <BankChip bank={pickedBank} size={36} /> : undefined}
                         expandable
                         expanded={false}
                         hasDivider
