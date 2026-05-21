@@ -843,16 +843,17 @@ export default function StockCheckPage() {
         </div>
       </div>
 
-      {/* Bottom submit bar */}
-      <div className="fixed bottom-14 left-0 right-0 z-40 border-t border-gray-200 bg-white px-4 py-2.5">
+      {/* Bottom submit bar — taller Finalize button for an obvious primary
+          action at the bottom of long count lists. */}
+      <div className="fixed bottom-14 left-0 right-0 z-40 border-t border-gray-200 bg-white px-4 py-3">
         <div className="mx-auto flex max-w-lg gap-2">
           <Button
-            className="flex-1 bg-terracotta hover:bg-terracotta-dark"
+            className="flex-1 h-14 bg-terracotta hover:bg-terracotta-dark text-base font-semibold"
             disabled={countedItems < totalItems || submitting}
             onClick={handleSubmit}
           >
             {submitting ? (
-              <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Finalizing...</>
+              <><Loader2 className="mr-1.5 h-5 w-5 animate-spin" /> Finalizing...</>
             ) : (
               `Finalize Count (${countedItems}/${totalItems})`
             )}
@@ -993,37 +994,40 @@ export default function StockCheckPage() {
             </div>
           </div>
 
-          {/* Keypad grid */}
+          {/* Keypad grid — large tap targets so staff can count single-handed
+              without misclicks. h-18 = 4.5rem, well above the 44px iOS
+              accessibility minimum. */}
           <div className="border-t border-gray-200 bg-gray-50 px-4 pb-24 pt-3">
-            <div className="mx-auto grid max-w-xs grid-cols-3 gap-2">
+            <div className="mx-auto grid max-w-sm grid-cols-3 gap-2.5">
               {["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "backspace"].map((key) => (
                 <button
                   key={key}
                   onClick={() => keypadPress(key)}
-                  className={`flex h-14 items-center justify-center rounded-xl text-xl font-semibold transition-colors active:scale-95 ${
+                  className={`flex h-[4.5rem] items-center justify-center rounded-2xl text-2xl font-semibold transition-colors active:scale-95 ${
                     key === "backspace"
                       ? "bg-gray-200 text-gray-600 active:bg-gray-300"
                       : "bg-white text-gray-900 shadow-sm active:bg-gray-100"
                   }`}
                 >
-                  {key === "backspace" ? <Delete className="h-5 w-5" /> : key}
+                  {key === "backspace" ? <Delete className="h-6 w-6" /> : key}
                 </button>
               ))}
             </div>
 
-            {/* Action buttons */}
-            <div className="mx-auto mt-3 flex max-w-xs gap-2">
+            {/* Action buttons — match keypad scale so the Save target is
+                obvious and easy to hit single-handed. */}
+            <div className="mx-auto mt-3 flex max-w-sm gap-2.5">
               {counts[keypadItem.id] != null && (
                 <Button
                   variant="outline"
-                  className="flex-1 h-12 text-red-500 border-red-200 hover:bg-red-50"
+                  className="flex-1 h-14 text-base text-red-500 border-red-200 hover:bg-red-50"
                   onClick={keypadClear}
                 >
                   Clear
                 </Button>
               )}
               <Button
-                className="flex-1 h-12 bg-terracotta hover:bg-terracotta-dark text-base"
+                className="flex-1 h-14 bg-terracotta hover:bg-terracotta-dark text-lg font-semibold"
                 onClick={keypadConfirm}
                 disabled={!keypadValue && !counts[keypadItem.id]}
               >
