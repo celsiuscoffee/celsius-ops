@@ -44,7 +44,9 @@ const DEFAULT_METHODS: Array<{ method_id: string; enabled: boolean; provider: Ga
   { method_id: "shopeepay",  enabled: true,  provider: "revenue_monster" },
 ];
 
-const METHOD_ORDER = ["card", "apple_pay", "google_pay", "fpx", "grabpay", "tng", "boost", "shopeepay"];
+// Matches the ZUS-style grouping the customer is familiar with:
+// Online Banking first, then e-wallets, then card, then platform wallets.
+const METHOD_ORDER = ["fpx", "tng", "boost", "shopeepay", "grabpay", "card", "apple_pay", "google_pay"];
 
 export async function GET() {
   const supabase = getSupabaseAdmin();

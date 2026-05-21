@@ -274,7 +274,16 @@ export default function OrderStatus() {
         if (!rmRes.ok || !rmJson.paymentUrl) {
           throw new Error(rmJson.error || "Couldn't start payment");
         }
-        await WebBrowser.openAuthSessionAsync(rmJson.paymentUrl, "celsiuscoffee://rm-return");
+        await WebBrowser.openAuthSessionAsync(
+          rmJson.paymentUrl,
+          "celsiuscoffee://rm-return",
+          {
+            presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+            dismissButtonStyle: "close",
+            controlsColor: "#C05040",
+            toolbarColor: "#3D1F1A",
+          },
+        );
         // Webhook is authoritative for status — we don't mutate locally.
         // The 5s React Query poll will pick up the new status.
       } else {

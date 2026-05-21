@@ -527,6 +527,16 @@ export default function Checkout() {
         const wb = await WebBrowser.openAuthSessionAsync(
           rmJson.paymentUrl,
           "celsiuscoffee://rm-return",
+          {
+            // Page-sheet presentation makes the wallet/bank web step
+            // look like a modal sheet inside our app rather than a full
+            // Safari window — closer to how ZUS / Coffee Bean / etc.
+            // present their in-app payment redirects.
+            presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+            dismissButtonStyle: "close",
+            controlsColor: "#C05040",
+            toolbarColor: "#3D1F1A",
+          },
         );
         // openAuthSessionAsync resolves with { type: "success" | "cancel" | "dismiss" }.
         // "success" → RM hit our redirect scheme (payment flow ran);
