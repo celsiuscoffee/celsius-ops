@@ -368,12 +368,12 @@ export default function Checkout() {
   // card.revenuemonster.my / tngdigital.com.my). The modal hides chrome
   // entirely and intercepts the celsiuscoffee:// return scheme. openRmCheckout
   // wraps the modal in a Promise so onPlaceOrder can `await` it as before.
-  const [rmModal, setRmModal] = useState<{ url: string; method: string } | null>(null);
+  const [rmModal, setRmModal] = useState<{ url: string; method: string; amount: string } | null>(null);
   const rmModalResolveRef = useRef<((r: "success" | "cancel") => void) | null>(null);
-  const openRmCheckout = (url: string, method: string): Promise<"success" | "cancel"> =>
+  const openRmCheckout = (url: string, method: string, amount: string): Promise<"success" | "cancel"> =>
     new Promise((resolve) => {
       rmModalResolveRef.current = resolve;
-      setRmModal({ url, method });
+      setRmModal({ url, method, amount });
     });
   const [bankSheetOpen, setBankSheetOpen]     = useState(false);
 
@@ -663,7 +663,7 @@ export default function Checkout() {
         }
         trackEvent("payment_rm_opened", { orderId: res.orderId });
         const methodLabel = METHOD_LABELS[selectedMethodId!] ?? selectedMethodId!;
-        const result = await openRmCheckout(rmJson.paymentUrl, methodLabel);
+        const result = await openRmCheckout(rmJson.paymentUrl, methodLabel, formatPrice(grandTotal));
         if (result === "success") {
           trackEvent("payment_rm_returned", { orderId: res.orderId });
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1427,6 +1427,7 @@ export default function Checkout() {
         visible={!!rmModal}
         url={rmModal?.url ?? null}
         methodLabel={rmModal?.method ?? ""}
+        amountLabel={rmModal?.amount}
         onSuccess={() => {
           setRmModal(null);
           rmModalResolveRef.current?.("success");
@@ -1436,9 +1437,6 @@ export default function Checkout() {
           setRmModal(null);
           rmModalResolveRef.current?.("cancel");
           rmModalResolveRef.current = null;
-        }}
-        onError={(msg) => {
-          Alert.alert("Payment", msg);
         }}
       />
     </View>

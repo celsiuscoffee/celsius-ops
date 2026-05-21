@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Modal,
   View,
@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { WebView } from "react-native-webview";
 import type { WebViewNavigation } from "react-native-webview";
-import { X } from "lucide-react-native";
+import { X, RefreshCw } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // In-app webview for Revenue Monster payment redirects. Replaces
@@ -35,15 +35,26 @@ interface Props {
   visible:     boolean;
   url:         string | null;
   methodLabel: string;
+  amountLabel?: string;    // e.g. "RM 4.45" — shown under the title as a trust signal
   onSuccess:   () => void;
   onCancel:    () => void;
-  onError:     (msg: string) => void;
 }
 
 const RETURN_SCHEME = "celsiuscoffee://rm-return";
 
-export function RmCheckoutModal({ visible, url, methodLabel, onSuccess, onCancel, onError }: Props) {
+export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, onSuccess, onCancel }: Props) {
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const webViewRef = useRef<WebView | null>(null);
+
+  // Reset state whenever the modal opens with a new URL — without this
+  // the previous error state lingers across consecutive payment attempts.
+  useEffect(() => {
+    if (visible) {
+      setLoading(true);
+      setErrorMsg(null);
+    }
+  }, [visible, url]);
 
   const handleShouldStart = (req: WebViewNavigation): boolean => {
     const target = req.url;
@@ -53,14 +64,23 @@ export function RmCheckoutModal({ visible, url, methodLabel, onSuccess, onCancel
     }
     if (!target.startsWith("http://") && !target.startsWith("https://")) {
       Linking.openURL(target).catch(() => {
-        // Wallet/bank app not installed; surface a soft error but keep
-        // the modal open so the customer can retry via the in-page
-        // fallback (e.g. TNG's "Sign in and continue via browser").
-        onError(`Couldn't open ${methodLabel} app. Tap the in-page web option instead.`);
+        // Wallet/bank app not installed. Surface in the in-modal error
+        // strip so the customer can either tap Retry (re-fetch the RM
+        // page) or use the in-page "Sign in and continue via browser"
+        // fallback most RM intermediaries provide.
+        setErrorMsg(
+          `Couldn't open ${methodLabel} app. Use the in-page web option instead, or tap retry.`,
+        );
       });
       return false;
     }
     return true;
+  };
+
+  const reload = () => {
+    setErrorMsg(null);
+    setLoading(true);
+    webViewRef.current?.reload();
   };
 
   return (
@@ -80,13 +100,23 @@ export function RmCheckoutModal({ visible, url, methodLabel, onSuccess, onCancel
           >
             <X size={18} color="#FFFFFF" />
           </Pressable>
-          <Text
-            className="text-white text-base flex-1 text-center"
-            style={{ fontFamily: "Peachi-Bold" }}
-            numberOfLines={1}
-          >
-            Pay with {methodLabel}
-          </Text>
+          <View className="flex-1 items-center">
+            <Text
+              className="text-white text-base"
+              style={{ fontFamily: "Peachi-Bold" }}
+              numberOfLines={1}
+            >
+              Pay with {methodLabel}
+            </Text>
+            {amountLabel && (
+              <Text
+                className="text-white/70 text-xs mt-0.5"
+                numberOfLines={1}
+              >
+                {amountLabel}
+              </Text>
+            )}
+          </View>
           <View className="w-9 h-9" />
         </View>
       </SafeAreaView>
@@ -94,11 +124,15 @@ export function RmCheckoutModal({ visible, url, methodLabel, onSuccess, onCancel
       <View className="flex-1 bg-white">
         {url && (
           <WebView
+            ref={webViewRef}
             source={{ uri: url }}
             onShouldStartLoadWithRequest={handleShouldStart}
             onLoadEnd={() => setLoading(false)}
             onError={({ nativeEvent }) =>
-              onError(nativeEvent.description || "Couldn't load payment page")
+              setErrorMsg(nativeEvent.description || "Couldn't load payment page")
+            }
+            onHttpError={({ nativeEvent }) =>
+              setErrorMsg(`Payment page returned HTTP ${nativeEvent.statusCode}`)
             }
             javaScriptEnabled
             domStorageEnabled
@@ -107,12 +141,26 @@ export function RmCheckoutModal({ visible, url, methodLabel, onSuccess, onCancel
             originWhitelist={["*"]}
           />
         )}
-        {loading && (
+        {loading && !errorMsg && (
           <View className="absolute inset-0 items-center justify-center bg-white/90">
             <ActivityIndicator size="large" color="#C05040" />
             <Text className="text-muted-fg text-sm mt-3">
               Loading {methodLabel}…
             </Text>
+          </View>
+        )}
+        {errorMsg && (
+          <View className="absolute inset-x-4 bottom-6 bg-espresso rounded-2xl p-4 shadow-2xl">
+            <Text className="text-white text-sm" numberOfLines={3}>
+              {errorMsg}
+            </Text>
+            <Pressable
+              onPress={reload}
+              className="mt-3 flex-row items-center justify-center gap-2 bg-terracotta rounded-xl py-3 active:opacity-80"
+            >
+              <RefreshCw size={16} color="#FFFFFF" />
+              <Text className="text-white text-sm font-bold">Retry</Text>
+            </Pressable>
           </View>
         )}
       </View>

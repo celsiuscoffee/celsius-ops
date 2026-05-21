@@ -222,12 +222,12 @@ export default function OrderStatus() {
   // RM checkout modal — same in-app WebView wrapper used by the checkout
   // screen. Replaces expo-web-browser so the retry flow doesn't surface
   // a system URL bar over the RM page.
-  const [rmModal, setRmModal] = useState<{ url: string; method: string } | null>(null);
+  const [rmModal, setRmModal] = useState<{ url: string; method: string; amount: string } | null>(null);
   const rmModalResolveRef = useRef<((r: "success" | "cancel") => void) | null>(null);
-  const openRmCheckout = (url: string, method: string): Promise<"success" | "cancel"> =>
+  const openRmCheckout = (url: string, method: string, amount: string): Promise<"success" | "cancel"> =>
     new Promise((resolve) => {
       rmModalResolveRef.current = resolve;
-      setRmModal({ url, method });
+      setRmModal({ url, method, amount });
     });
   useEffect(() => {
     fetch("https://order.celsiuscoffee.com/api/payments/gateway-config")
@@ -292,8 +292,9 @@ export default function OrderStatus() {
         if (!rmRes.ok || !rmJson.paymentUrl) {
           throw new Error(rmJson.error || "Couldn't start payment");
         }
-        const label = METHOD_LABELS[methodId] ?? methodId;
-        await openRmCheckout(rmJson.paymentUrl, label);
+        const label  = METHOD_LABELS[methodId] ?? methodId;
+        const amount = typeof data?.total === "number" ? formatPrice(data.total) : "";
+        await openRmCheckout(rmJson.paymentUrl, label, amount);
         // Webhook is authoritative for status — we don't mutate locally.
         // The 5s React Query poll will pick up the new status.
       } else {
@@ -827,6 +828,7 @@ export default function OrderStatus() {
         visible={!!rmModal}
         url={rmModal?.url ?? null}
         methodLabel={rmModal?.method ?? ""}
+        amountLabel={rmModal?.amount}
         onSuccess={() => {
           setRmModal(null);
           rmModalResolveRef.current?.("success");
@@ -836,9 +838,6 @@ export default function OrderStatus() {
           setRmModal(null);
           rmModalResolveRef.current?.("cancel");
           rmModalResolveRef.current = null;
-        }}
-        onError={(msg) => {
-          Alert.alert("Payment", msg);
         }}
       />
     </View>
