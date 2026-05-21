@@ -335,13 +335,24 @@ export default function StockCheckPage() {
   const displayLabel = (area: string) =>
     STORAGE_AREA_LABELS[area] || area.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
+  // Pick the smallest-conversion package as default for counting. The old
+  // logic defaulted to the BULK (non-default) package on monthly counts,
+  // which caused unit-confusion bugs: staff typed "31" intending 31 bottles
+  // but the system multiplied by 24,000g/Carton → 744kg stored.
+  //
+  // Always defaulting to the smallest package matches how staff physically
+  // count (individual bottles/packs/rolls), and they can still tap up to a
+  // bigger package via the selector if needed. The conversion preview under
+  // the keypad shows the resulting base-UOM total either way.
   const getDefaultPkg = useCallback((product: Product) => {
-    if (frequency === "monthly") {
-      const bulkPkg = product.packages.find((p) => !p.isDefault);
-      if (bulkPkg) return bulkPkg;
-    }
-    return product.packages.find((p) => p.isDefault) || product.packages[0] || null;
-  }, [frequency]);
+    if (product.packages.length === 0) return null;
+    // Smallest conversion first; ties broken by isDefault flag.
+    return [...product.packages].sort((a, b) => {
+      const diff = a.conversion - b.conversion;
+      if (diff !== 0) return diff;
+      return (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0);
+    })[0];
+  }, []);
 
   const getUomLabel = useCallback((product: Product, packageId?: string | null) => {
     if (packageId) {
