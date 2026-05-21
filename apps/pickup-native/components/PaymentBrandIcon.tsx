@@ -41,7 +41,8 @@ type Brand = {
 const BRANDS: Record<string, Brand> = {
   apple_pay:  { bg: "#000000", fg: "#FFFFFF", label: "Pay",   iconSlug: "applepay", iconFg: "FFFFFF" },
   google_pay: { bg: "#FFFFFF", fg: "#3C4043", label: "GPay",  iconSlug: "googlepay", border: "#E5E7EB" },
-  fpx:        { bg: "#1B7A8F", fg: "#FFFFFF", label: "FPX"   },
+  fpx:        { bg: "#1B7A8F", fg: "#FFFFFF", label: "FPX",
+                iconUrl: "https://vectorise.net/logo/wp-content/uploads/2019/09/Logo-FPX.png" },
   grabpay:    { bg: "#00B14F", fg: "#FFFFFF", label: "Grab",  iconSlug: "grab", iconFg: "FFFFFF" },
   // tng: Wikimedia's SVG uses a <style> block to set fills, which
   // react-native-svg's renderer doesn't fully apply — chip rendered
