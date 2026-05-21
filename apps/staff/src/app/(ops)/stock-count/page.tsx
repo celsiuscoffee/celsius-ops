@@ -553,7 +553,7 @@ export default function StockCheckPage() {
       setCounts({});
       setCountId(null);
       setServerItems({});
-      localStorage.removeItem(STORAGE_KEY);
+      try { localStorage.removeItem(STORAGE_KEY); } catch { /* iOS private mode */ }
       toast.success(`Stock count finalized (${countedItems} items)`, { id: pendingToastId });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Finalize failed";
