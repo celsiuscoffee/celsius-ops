@@ -128,13 +128,19 @@ function CategoryRow({
         )}
       </View>
       <PaymentBrandIcon methodId={iconMethodId} size={36} />
-      {expandable && (
-        <ChevronDown
-          size={16}
-          color="#8E8E93"
-          style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }] }}
-        />
-      )}
+      {/* Always reserve the chevron column — invisible on non-expandable
+          rows — so the brand icons line up vertically across every row.
+          Without this the right edge "shifts" between expandable and
+          non-expandable categories. */}
+      <View style={{ width: 16, alignItems: "center", justifyContent: "center" }}>
+        {expandable && (
+          <ChevronDown
+            size={16}
+            color="#8E8E93"
+            style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }] }}
+          />
+        )}
+      </View>
     </Pressable>
   );
 }
@@ -634,30 +640,13 @@ export default function Checkout() {
           rmJson.paymentUrl,
           "celsiuscoffee://rm-return",
           {
-            // Page-sheet presentation makes the wallet/bank web step
-            // look like a modal sheet inside our app rather than a full
-            // Safari window — closer to how ZUS / Coffee Bean / etc.
-            // present their in-app payment redirects.
             presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
             dismissButtonStyle: "close",
             controlsColor: "#C05040",
             toolbarColor: "#3D1F1A",
-            // Ephemeral session avoids iOS's "App wants to use website to
-            // sign in" prompt that ASWebAuthenticationSession otherwise
-            // shows the first time per app+host pair. This is the bit
-            // that makes the redirect feel like an in-app sheet rather
-            // than a system-mediated handoff (the difference between our
-            // old experience and ZUS's seamless one).
             preferEphemeralSession: true,
           },
         );
-        // openAuthSessionAsync resolves with { type: "success" | "cancel" | "dismiss" }.
-        // "success" → RM hit our redirect scheme (payment flow ran);
-        // the webhook is authoritative for actual payment state, so we
-        // route to the order page regardless and let it surface
-        // pending / preparing / failed based on what the webhook recorded.
-        // "cancel" / "dismiss" → customer backed out; order stays pending
-        // and the retry sheet on the order page handles re-open.
         if (wb.type === "success") {
           trackEvent("payment_rm_returned", { orderId: res.orderId });
           setBusyLabel("Sending to kitchen…");
