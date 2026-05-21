@@ -75,7 +75,7 @@ export default function OrderStatus() {
   // then sees the new status on the next 5s tick.
   useEffect(() => {
     if (!id || !data || data.status !== "pending") return;
-    const rmMethods = new Set(["fpx", "tng", "boost", "shopeepay", "card"]);
+    const rmMethods = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "card"]);
     if (!data.payment_method || !rmMethods.has(data.payment_method)) return;
     let cancelled = false;
     const poll = async () => {
