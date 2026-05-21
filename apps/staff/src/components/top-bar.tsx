@@ -24,9 +24,19 @@ export function TopBar({ title, outlet, onOutletSwitch }: TopBarProps) {
   const [userId, setUserId] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  // Always start the dropdown list scrolled to the top — iOS Safari (and
+  // some Android browsers) sometimes auto-scroll the overflow container to
+  // bring the active option into view, partially clipping the first items.
+  useEffect(() => {
+    if (open && listRef.current) {
+      listRef.current.scrollTop = 0;
+    }
+  }, [open]);
 
   // Fetch user session to get current outlet name + fetch outlets list
   useEffect(() => {
@@ -126,7 +136,7 @@ export function TopBar({ title, outlet, onOutletSwitch }: TopBarProps) {
       {mounted && open && createPortal(
         <>
           <div
-            className="fixed inset-0 z-[100] bg-black/20 animate-in fade-in duration-150"
+            className="fixed inset-0 z-[100] bg-black/40 animate-in fade-in duration-150"
             onClick={() => setOpen(false)}
             aria-hidden="true"
           />
@@ -138,7 +148,10 @@ export function TopBar({ title, outlet, onOutletSwitch }: TopBarProps) {
               left: Math.min(panelPos?.left ?? 16, window.innerWidth - 296),
             }}
           >
-            <div className="max-h-[60vh] overflow-y-auto py-1">
+            <div
+              ref={listRef}
+              className="max-h-[min(60vh,calc(100vh-160px))] overflow-y-auto py-1"
+            >
               {outlets.map((o) => {
                 const isActive = o.name === currentOutlet;
                 return (
