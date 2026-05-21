@@ -43,7 +43,7 @@ type GatewayMethod = {
   provider: "stripe" | "revenue_monster";
 };
 import * as Haptics from "@/lib/haptics";
-import * as WebBrowser from "expo-web-browser";
+import { RmCheckoutModal } from "../components/RmCheckoutModal";
 import { useStripe } from "@/lib/stripe-shim";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Outlet } from "../lib/supabase";
@@ -362,6 +362,19 @@ export default function Checkout() {
   // open as modal sheets instead of inline expansion so the layout stays
   // compact and the picker has its own focused surface.
   const [walletSheetOpen, setWalletSheetOpen] = useState(false);
+
+  // RM checkout modal — full-screen WebView wrapper that replaces the
+  // expo-web-browser flow (which surfaced an iOS system URL bar like
+  // card.revenuemonster.my / tngdigital.com.my). The modal hides chrome
+  // entirely and intercepts the celsiuscoffee:// return scheme. openRmCheckout
+  // wraps the modal in a Promise so onPlaceOrder can `await` it as before.
+  const [rmModal, setRmModal] = useState<{ url: string; method: string } | null>(null);
+  const rmModalResolveRef = useRef<((r: "success" | "cancel") => void) | null>(null);
+  const openRmCheckout = (url: string, method: string): Promise<"success" | "cancel"> =>
+    new Promise((resolve) => {
+      rmModalResolveRef.current = resolve;
+      setRmModal({ url, method });
+    });
   const [bankSheetOpen, setBankSheetOpen]     = useState(false);
 
   const selectedMethodId: string | null = (() => {
@@ -649,18 +662,9 @@ export default function Checkout() {
           throw new Error(`create-rm-payment HTTP ${rmRes.status}: ${rmJson.error || "no paymentUrl"}`);
         }
         trackEvent("payment_rm_opened", { orderId: res.orderId });
-        const wb = await WebBrowser.openAuthSessionAsync(
-          rmJson.paymentUrl,
-          "celsiuscoffee://rm-return",
-          {
-            presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-            dismissButtonStyle: "close",
-            controlsColor: "#C05040",
-            toolbarColor: "#3D1F1A",
-            preferEphemeralSession: true,
-          },
-        );
-        if (wb.type === "success") {
+        const methodLabel = METHOD_LABELS[selectedMethodId!] ?? selectedMethodId!;
+        const result = await openRmCheckout(rmJson.paymentUrl, methodLabel);
+        if (result === "success") {
           trackEvent("payment_rm_returned", { orderId: res.orderId });
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setBusyLabel("Sending to kitchen…");
@@ -672,7 +676,7 @@ export default function Checkout() {
           // that reconciliation window.
           routeAfterSuccess(res.orderId, { params: { justPaid: "1" } });
         } else {
-          trackEvent("payment_rm_cancelled", { orderId: res.orderId, type: wb.type });
+          trackEvent("payment_rm_cancelled", { orderId: res.orderId, type: result });
           router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
         }
         return;
@@ -1418,6 +1422,25 @@ export default function Checkout() {
           />
         </View>
       </BottomSheet>
+
+      <RmCheckoutModal
+        visible={!!rmModal}
+        url={rmModal?.url ?? null}
+        methodLabel={rmModal?.method ?? ""}
+        onSuccess={() => {
+          setRmModal(null);
+          rmModalResolveRef.current?.("success");
+          rmModalResolveRef.current = null;
+        }}
+        onCancel={() => {
+          setRmModal(null);
+          rmModalResolveRef.current?.("cancel");
+          rmModalResolveRef.current = null;
+        }}
+        onError={(msg) => {
+          Alert.alert("Payment", msg);
+        }}
+      />
     </View>
   );
 }

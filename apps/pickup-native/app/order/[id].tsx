@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, ScrollView, ActivityIndicator, Platform } from "react-native";
 import { Alert } from "@/lib/alert";
 import { Stack, router, useLocalSearchParams } from "expo-router";
@@ -11,7 +11,7 @@ import {
   Check,
 } from "lucide-react-native";
 import * as Haptics from "@/lib/haptics";
-import * as WebBrowser from "expo-web-browser";
+import { RmCheckoutModal } from "../../components/RmCheckoutModal";
 import { useStripe } from "@/lib/stripe-shim";
 
 // Same customer-facing labels checkout uses, no provider names.
@@ -218,6 +218,17 @@ export default function OrderStatus() {
   // once they choose a bank. Toggled off when they switch to a different
   // method so a stale picker doesn't linger.
   const [showFpxPicker, setShowFpxPicker] = useState(false);
+
+  // RM checkout modal — same in-app WebView wrapper used by the checkout
+  // screen. Replaces expo-web-browser so the retry flow doesn't surface
+  // a system URL bar over the RM page.
+  const [rmModal, setRmModal] = useState<{ url: string; method: string } | null>(null);
+  const rmModalResolveRef = useRef<((r: "success" | "cancel") => void) | null>(null);
+  const openRmCheckout = (url: string, method: string): Promise<"success" | "cancel"> =>
+    new Promise((resolve) => {
+      rmModalResolveRef.current = resolve;
+      setRmModal({ url, method });
+    });
   useEffect(() => {
     fetch("https://order.celsiuscoffee.com/api/payments/gateway-config")
       .then((r) => r.json())
@@ -281,19 +292,8 @@ export default function OrderStatus() {
         if (!rmRes.ok || !rmJson.paymentUrl) {
           throw new Error(rmJson.error || "Couldn't start payment");
         }
-        await WebBrowser.openAuthSessionAsync(
-          rmJson.paymentUrl,
-          "celsiuscoffee://rm-return",
-          {
-            presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-            dismissButtonStyle: "close",
-            controlsColor: "#C05040",
-            toolbarColor: "#3D1F1A",
-            // Same in-app-sheet feel as checkout (no "App wants to use
-            // website to sign in" iOS prompt).
-            preferEphemeralSession: true,
-          },
-        );
+        const label = METHOD_LABELS[methodId] ?? methodId;
+        await openRmCheckout(rmJson.paymentUrl, label);
         // Webhook is authoritative for status — we don't mutate locally.
         // The 5s React Query poll will pick up the new status.
       } else {
@@ -811,6 +811,25 @@ export default function OrderStatus() {
           )}
         </ScrollView>
       )}
+
+      <RmCheckoutModal
+        visible={!!rmModal}
+        url={rmModal?.url ?? null}
+        methodLabel={rmModal?.method ?? ""}
+        onSuccess={() => {
+          setRmModal(null);
+          rmModalResolveRef.current?.("success");
+          rmModalResolveRef.current = null;
+        }}
+        onCancel={() => {
+          setRmModal(null);
+          rmModalResolveRef.current?.("cancel");
+          rmModalResolveRef.current = null;
+        }}
+        onError={(msg) => {
+          Alert.alert("Payment", msg);
+        }}
+      />
     </View>
   );
 }
