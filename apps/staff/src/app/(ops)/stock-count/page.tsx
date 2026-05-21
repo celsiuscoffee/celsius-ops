@@ -99,29 +99,10 @@ interface PendingSave {
 
 const STORAGE_KEY = "celsius-stock-check-draft-v2";
 
-// Probe `new WebSocket(...)` once. In iOS Lockdown Mode / Firefox
-// private mode / certain content blockers, the constructor throws
-// "The operation is insecure" even though `typeof WebSocket` is
-// "function". We cache the result so we don't probe on every
-// re-render, and skip the realtime subscribe entirely when it fails
-// — otherwise phoenix's pageshow/visibilitychange listeners would
-// re-fire the same throw async and re-report to Sentry.
-let websocketUsable: boolean | null = null;
-function canUseWebSocket(): boolean {
-  if (websocketUsable !== null) return websocketUsable;
-  if (typeof WebSocket === "undefined") {
-    websocketUsable = false;
-    return false;
-  }
-  try {
-    const probe = new WebSocket("wss://celsius-ws-probe.invalid");
-    try { probe.close(); } catch { /* ignore */ }
-    websocketUsable = true;
-  } catch {
-    websocketUsable = false;
-  }
-  return websocketUsable;
-}
+// Set once WebSocket throws. Subsequent subscribe attempts skip,
+// so phoenix's pageshow/visibilitychange listeners don't async-re-fire
+// the same throw later.
+let websocketBroken = false;
 
 function loadDraft(freq: string): Record<string, ItemCount> {
   try {
@@ -288,14 +269,12 @@ export default function StockCheckPage() {
   // 3-second polling fallback below guarantees updates regardless.
   //
   // Best-effort: WebSocket can throw "operation is insecure" in iOS
-  // Lockdown Mode / Firefox private mode / content blockers. We probe
-  // up front so the phoenix Socket's pageshow/visibilitychange
-  // listeners don't re-fire the same throw later. If the initial
-  // subscribe still throws, disconnect to reset closeWasClean so those
-  // listeners stay quiet. Polling fallback covers updates regardless.
+  // Lockdown Mode / Firefox private mode / content blockers. Catch
+  // the initial throw and disconnect so phoenix's pageshow /
+  // visibilitychange listeners don't re-fire the same throw later.
+  // Polling fallback covers updates regardless.
   useEffect(() => {
-    if (!countId) return;
-    if (!canUseWebSocket()) return;
+    if (!countId || websocketBroken) return;
     let channel: ReturnType<typeof supabase.channel> | null = null;
     try {
       channel = supabase
@@ -314,7 +293,7 @@ export default function StockCheckPage() {
         )
         .subscribe();
     } catch {
-      channel = null;
+      websocketBroken = true;
       try { supabase.realtime.disconnect(); } catch { /* ignore */ }
     }
     return () => {
