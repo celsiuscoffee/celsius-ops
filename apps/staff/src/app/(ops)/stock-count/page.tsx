@@ -958,6 +958,27 @@ export default function StockCheckPage() {
               <p className="mt-2 text-sm text-gray-400">
                 {getUomLabel(keypadItem, keypadPkgId)}
               </p>
+              {/* Conversion preview — shows the typed value translated into
+                  base units so the counter sees what's actually being stored.
+                  Helps catch unit confusion like "31 cartons" vs "31 bottles"
+                  before saving. Hidden when typed value is 0/empty or when the
+                  package conversion factor is 1 (no multiplication anyway). */}
+              {(() => {
+                const typed = parseFloat(keypadValue);
+                if (!keypadValue || isNaN(typed) || typed <= 0) return null;
+                const pkg = keypadPkgId
+                  ? keypadItem.packages.find((p) => p.id === keypadPkgId)
+                  : getDefaultPkg(keypadItem);
+                const cf = pkg?.conversion || 1;
+                if (cf <= 1) return null;
+                const total = typed * cf;
+                return (
+                  <p className="mt-3 text-xs text-amber-700">
+                    = <span className="font-semibold">{total.toLocaleString()}</span> {keypadItem.baseUom}
+                    <span className="ml-1 text-amber-500/70">({typed} × {cf.toLocaleString()})</span>
+                  </p>
+                );
+              })()}
             </div>
           </div>
 
