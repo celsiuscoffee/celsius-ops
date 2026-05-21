@@ -43,14 +43,14 @@ const BRANDS: Record<string, Brand> = {
   google_pay: { bg: "#FFFFFF", fg: "#3C4043", label: "GPay",  iconSlug: "googlepay", border: "#E5E7EB" },
   fpx:        { bg: "#1B7A8F", fg: "#FFFFFF", label: "FPX"   },
   grabpay:    { bg: "#00B14F", fg: "#FFFFFF", label: "Grab",  iconSlug: "grab", iconFg: "FFFFFF" },
-  tng:        {
-    bg:      "#005AAA",
-    fg:      "#FFD400",
-    label:   "tng",
-    // Wikimedia Special:FilePath redirects (302) to the upload.wikimedia.org
-    // CDN URL. SvgUri follows the redirect on both iOS and Android.
-    iconUrl: "https://upload.wikimedia.org/wikipedia/commons/f/fb/Touch_%27n_Go_eWallet_logo.svg",
-  },
+  // tng: Wikimedia's SVG uses a <style> block to set fills, which
+  // react-native-svg's renderer doesn't fully apply — chip rendered
+  // blank. And Wikimedia disables PNG thumbnail generation for this
+  // file, so the upload.wikimedia.org PNG fallback URL 400s. Drop the
+  // iconUrl and let the brand-color "tng" monogram chip render until
+  // we have a logo URL that renders cleanly via SvgUri (no <style>
+  // block) or via Image (a real PNG/JPG).
+  tng:        { bg: "#005AAA", fg: "#FFD400", label: "tng" },
   boost:      { bg: "#EC008C", fg: "#FFFFFF", label: "Boost" },
   shopeepay:  { bg: "#EE4D2D", fg: "#FFFFFF", label: "Pay",   iconSlug: "shopee", iconFg: "FFFFFF" },
 };
