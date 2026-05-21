@@ -257,30 +257,39 @@ export default function StockCheckPage() {
   // active countId, so other contributors' saves appear without refresh.
   // Channel is torn down on countId change / unmount.
   //
-  // NOTE: as of 2026-05-20, postgres_changes events aren't being delivered
-  // to the anon client in this Supabase project (not specific to our tables
-  // — even tables that worked previously now don't). Realtime stays wired
-  // as the fast-path for when the project-level config gets sorted; the
-  // 3-second polling fallback below guarantees updates regardless.
+  // Best-effort. iOS Safari PWA (and Firefox private mode, content blockers,
+  // etc.) can throw synchronously from `new WebSocket(...)` with "The
+  // operation is insecure" or similar — that propagates out of supabase-js's
+  // .subscribe() into the React render tree and trips the global error
+  // boundary ("Something went wrong"). The polling fallback below already
+  // covers peer updates, so wrap and swallow.
   useEffect(() => {
     if (!countId) return;
-    const channel = supabase
-      .channel(`stock-count-${countId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "StockCountItem",
-          filter: `stockCountId=eq.${countId}`,
-        },
-        () => {
-          fetchActive();
-        },
-      )
-      .subscribe();
+    if (typeof WebSocket === "undefined") return;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`stock-count-${countId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "StockCountItem",
+            filter: `stockCountId=eq.${countId}`,
+          },
+          () => {
+            fetchActive();
+          },
+        )
+        .subscribe();
+    } catch {
+      channel = null;
+    }
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try { supabase.removeChannel(channel); } catch { /* ignore */ }
+      }
     };
   }, [countId, fetchActive]);
 
@@ -289,20 +298,29 @@ export default function StockCheckPage() {
   // progress. Cheap (small JSON payload, ~5–10 KB for 235 items) and
   // unconditional — works regardless of realtime config. Pauses when the
   // tab is hidden (PWA backgrounded) to save battery + cellular data.
+  //
+  // Defensive: if `document`/`window` is unexpectedly unavailable (e.g.
+  // during SSR or some browser sandbox), bail rather than crash the tree.
   useEffect(() => {
     if (!countId) return;
+    if (typeof window === "undefined" || typeof document === "undefined") return;
     let cancelled = false;
     const tick = () => {
       if (cancelled || document.hidden) return;
       fetchActive();
     };
-    const interval = window.setInterval(tick, 3000);
+    let interval: number | null = null;
     const onVisibility = () => { if (!document.hidden) fetchActive(); };
-    document.addEventListener("visibilitychange", onVisibility);
+    try {
+      interval = window.setInterval(tick, 3000);
+      document.addEventListener("visibilitychange", onVisibility);
+    } catch { /* ignore */ }
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisibility);
+      if (interval !== null) {
+        try { window.clearInterval(interval); } catch { /* ignore */ }
+      }
+      try { document.removeEventListener("visibilitychange", onVisibility); } catch { /* ignore */ }
     };
   }, [countId, fetchActive]);
 
