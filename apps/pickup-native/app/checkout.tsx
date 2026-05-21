@@ -389,7 +389,7 @@ export default function Checkout() {
   useEffect(() => {
     if (selectedCategory !== null) return;
     if (card)          { setSelectedCategory("card"); return; }
-    if (wallets[0])    { setSelectedCategory("ewallet"); setSelectedWalletId(wallets[0].method_id); return; }
+    if (wallets[0])    { setSelectedCategory("ewallet"); return; }
     if (onlineBanking) { setSelectedCategory("online_banking"); return; }
     if (applePay)      { setSelectedCategory("apple_pay"); return; }
     if (googlePay)     { setSelectedCategory("google_pay"); return; }
@@ -401,7 +401,10 @@ export default function Checkout() {
   // brief hold. Used by every "we're done, get out of checkout"
   // path (Stripe success, zero-amount skipPayment, payment-cancel
   // fallback) so the customer always sees the same exit moment.
-  const routeAfterSuccess = (orderId: string, opts?: { holdMs?: number }) => {
+  const routeAfterSuccess = (
+    orderId: string,
+    opts?: { holdMs?: number; params?: Record<string, string> },
+  ) => {
     const holdMs = opts?.holdMs ?? 1400;
     setPaymentSuccess(true);
     Animated.parallel([
@@ -419,7 +422,10 @@ export default function Checkout() {
       }),
     ]).start();
     setTimeout(() => {
-      router.replace({ pathname: "/order/[id]", params: { id: orderId } });
+      router.replace({
+        pathname: "/order/[id]",
+        params: { id: orderId, ...(opts?.params ?? {}) },
+      });
     }, holdMs);
   };
 
@@ -656,11 +662,19 @@ export default function Checkout() {
         );
         if (wb.type === "success") {
           trackEvent("payment_rm_returned", { orderId: res.orderId });
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setBusyLabel("Sending to kitchen…");
+          // Optimistic: RM redirected back, so the customer completed the
+          // wallet flow. The order is still "pending" until our webhook /
+          // poll reconciles (typically 5-30s). Show the success animation
+          // now and pass justPaid so the order page renders a "Confirming
+          // payment…" state instead of the misleading retry UI during
+          // that reconciliation window.
+          routeAfterSuccess(res.orderId, { params: { justPaid: "1" } });
         } else {
           trackEvent("payment_rm_cancelled", { orderId: res.orderId, type: wb.type });
+          router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
         }
-        router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
         return;
       }
 
@@ -1023,7 +1037,6 @@ export default function Checkout() {
                         Haptics.selectionAsync();
                         setSelectedCategory("ewallet");
                         setFpxBankCode(null);
-                        if (!selectedWalletId) setSelectedWalletId(wallets[0].method_id);
                         setWalletSheetOpen(true);
                       }}
                       title="E-Wallet"
@@ -1272,11 +1285,13 @@ export default function Checkout() {
                 ? "Online ordering paused"
                 : outletClosed
                   ? "Outlet closed — switch outlet"
-                  : !selectedMethodId
-                    ? "Select a payment method"
-                    : selectedMethodId === "fpx" && !fpxBankCode
-                      ? "Pick your bank"
-                      : `Place order · ${formatPrice(grandTotal)}`
+                  : selectedCategory === "ewallet" && !selectedWalletId
+                    ? "Pick your wallet"
+                    : !selectedMethodId
+                      ? "Select a payment method"
+                      : selectedMethodId === "fpx" && !fpxBankCode
+                        ? "Pick your bank"
+                        : `Place order · ${formatPrice(grandTotal)}`
             }
             onPress={onPlaceOrder}
             loading={busy}
