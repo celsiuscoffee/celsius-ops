@@ -99,6 +99,30 @@ interface PendingSave {
 
 const STORAGE_KEY = "celsius-stock-check-draft-v2";
 
+// Probe `new WebSocket(...)` once. In iOS Lockdown Mode / Firefox
+// private mode / certain content blockers, the constructor throws
+// "The operation is insecure" even though `typeof WebSocket` is
+// "function". We cache the result so we don't probe on every
+// re-render, and skip the realtime subscribe entirely when it fails
+// — otherwise phoenix's pageshow/visibilitychange listeners would
+// re-fire the same throw async and re-report to Sentry.
+let websocketUsable: boolean | null = null;
+function canUseWebSocket(): boolean {
+  if (websocketUsable !== null) return websocketUsable;
+  if (typeof WebSocket === "undefined") {
+    websocketUsable = false;
+    return false;
+  }
+  try {
+    const probe = new WebSocket("wss://celsius-ws-probe.invalid");
+    try { probe.close(); } catch { /* ignore */ }
+    websocketUsable = true;
+  } catch {
+    websocketUsable = false;
+  }
+  return websocketUsable;
+}
+
 function loadDraft(freq: string): Record<string, ItemCount> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -263,12 +287,15 @@ export default function StockCheckPage() {
   // as the fast-path for when the project-level config gets sorted; the
   // 3-second polling fallback below guarantees updates regardless.
   //
-  // Best-effort: WebSocket constructor throws synchronously in Firefox
-  // private mode and behind some content blockers ("operation is
-  // insecure"). Swallow — the polling fallback covers us.
+  // Best-effort: WebSocket can throw "operation is insecure" in iOS
+  // Lockdown Mode / Firefox private mode / content blockers. We probe
+  // up front so the phoenix Socket's pageshow/visibilitychange
+  // listeners don't re-fire the same throw later. If the initial
+  // subscribe still throws, disconnect to reset closeWasClean so those
+  // listeners stay quiet. Polling fallback covers updates regardless.
   useEffect(() => {
     if (!countId) return;
-    if (typeof WebSocket === "undefined") return;
+    if (!canUseWebSocket()) return;
     let channel: ReturnType<typeof supabase.channel> | null = null;
     try {
       channel = supabase
@@ -288,6 +315,7 @@ export default function StockCheckPage() {
         .subscribe();
     } catch {
       channel = null;
+      try { supabase.realtime.disconnect(); } catch { /* ignore */ }
     }
     return () => {
       if (channel) {
