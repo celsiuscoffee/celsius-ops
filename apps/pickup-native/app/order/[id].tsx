@@ -223,12 +223,12 @@ export default function OrderStatus() {
   // RM checkout modal — same in-app WebView wrapper used by the checkout
   // screen. Replaces expo-web-browser so the retry flow doesn't surface
   // a system URL bar over the RM page.
-  const [rmModal, setRmModal] = useState<{ url: string; method: string; amount: string } | null>(null);
+  const [rmModal, setRmModal] = useState<{ url: string; method: string; amount: string; methodId: string } | null>(null);
   const rmModalResolveRef = useRef<((r: "success" | "cancel") => void) | null>(null);
-  const openRmCheckout = (url: string, method: string, amount: string): Promise<"success" | "cancel"> =>
+  const openRmCheckout = (url: string, method: string, amount: string, methodId: string): Promise<"success" | "cancel"> =>
     new Promise((resolve) => {
       rmModalResolveRef.current = resolve;
-      setRmModal({ url, method, amount });
+      setRmModal({ url, method, amount, methodId });
     });
   useEffect(() => {
     fetch("https://order.celsiuscoffee.com/api/payments/gateway-config")
@@ -295,7 +295,7 @@ export default function OrderStatus() {
         }
         const label  = METHOD_LABELS[methodId] ?? methodId;
         const amount = typeof data?.total === "number" ? formatPrice(data.total) : "";
-        await openRmCheckout(rmJson.paymentUrl, label, amount);
+        await openRmCheckout(rmJson.paymentUrl, label, amount, methodId);
         // Webhook is authoritative for status — we don't mutate locally.
         // The 5s React Query poll will pick up the new status.
       } else {
@@ -818,6 +818,7 @@ export default function OrderStatus() {
         url={rmModal?.url ?? null}
         methodLabel={rmModal?.method ?? ""}
         amountLabel={rmModal?.amount}
+        methodId={rmModal?.methodId}
         onSuccess={() => {
           setRmModal(null);
           rmModalResolveRef.current?.("success");

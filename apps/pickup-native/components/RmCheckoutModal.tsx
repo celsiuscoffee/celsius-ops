@@ -36,13 +36,54 @@ interface Props {
   url:         string | null;
   methodLabel: string;
   amountLabel?: string;    // e.g. "RM 4.45" — shown under the title as a trust signal
+  methodId?:   string;     // canonical method id ("card", "tng", …) — used to auto-tap the
+                           // Cards tab on RM's hosted picker when this is "card".
   onSuccess:   () => void;
   onCancel:    () => void;
 }
 
 const RETURN_SCHEME = "celsiuscoffee://rm-return";
 
-export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, onSuccess, onCancel }: Props) {
+// Inject when the customer picks "Card" so RM's consolidated hosted
+// picker (e-Wallets / Cards / Online Banking) doesn't force a second
+// tap. We can't pass a card-only method code to /v3/payment/online (RM
+// returns CARD_MALAYSIA_NOT_ACTIVE for `CARD_MY` and no other code is
+// publicly documented), so this is the next-best workaround: poll for
+// the "Cards" button text and click it on the customer's behalf. Safe
+// to no-op — if RM renames or restructures, the customer just sees the
+// picker as today.
+const CARD_AUTOTAP_JS = `
+(function () {
+  if (window.__celsiusCardAutoTap) return true;
+  window.__celsiusCardAutoTap = true;
+  var tries = 0;
+  var maxTries = 25;
+  var interval = setInterval(function () {
+    tries++;
+    var nodes = document.querySelectorAll(
+      'button, [role="button"], a, div, span, label, li'
+    );
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      var text = (n.textContent || '').trim().toLowerCase();
+      if (text === 'cards' || text === 'card') {
+        var clickable = n;
+        if (n.tagName === 'SPAN' || n.tagName === 'DIV' || n.tagName === 'LABEL' || n.tagName === 'LI') {
+          var anc = n.closest('button, [role="button"], a');
+          if (anc) clickable = anc;
+        }
+        try { clickable.click(); } catch (e) {}
+        clearInterval(interval);
+        return;
+      }
+    }
+    if (tries >= maxTries) clearInterval(interval);
+  }, 250);
+})();
+true;
+`;
+
+export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, methodId, onSuccess, onCancel }: Props) {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const webViewRef = useRef<WebView | null>(null);
@@ -139,6 +180,7 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, onSucc
             onHttpError={({ nativeEvent }) =>
               setErrorMsg(`Payment page returned HTTP ${nativeEvent.statusCode}`)
             }
+            injectedJavaScript={methodId === "card" ? CARD_AUTOTAP_JS : undefined}
             javaScriptEnabled
             domStorageEnabled
             startInLoadingState={false}
