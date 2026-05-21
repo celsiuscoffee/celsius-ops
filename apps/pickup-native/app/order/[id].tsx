@@ -426,7 +426,18 @@ export default function OrderStatus() {
         showCart={false}
         rightSlot={
           <Pressable
-            onPress={() => router.replace("/")}
+            onPress={() => {
+              // Go back to wherever they came from (Orders list /
+              // checkout / push-notification deep link). Falls back to
+              // /orders when there's no back stack — e.g. the order
+              // page was the first screen after a cold start from a
+              // notification tap.
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace("/orders");
+              }
+            }}
             className="p-1 active:opacity-60"
             hitSlop={12}
           >
