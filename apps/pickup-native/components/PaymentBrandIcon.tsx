@@ -3,21 +3,29 @@ import { View, Text, Platform } from "react-native";
 import { SvgUri } from "react-native-svg";
 import { Wallet, CreditCard } from "lucide-react-native";
 
-// Per-method visual identity for the checkout tiles.
+// Per-method visual identity for the checkout tiles. Three rendering
+// modes, picked per brand:
 //
-// For methods that have an officially-distributed SVG on the Simple Icons
-// CDN (CC0-licensed brand mark hosting), we render the real logo through
-// SvgUri. For methods that don't, we fall back to a brand-color chip with
-// a short monogram. The chip background stays the same in both cases so
-// the row layout never shifts when the network fetch finishes.
+//   1. iconUrl — full-color SVG hosted elsewhere (Wikimedia, brand kit,
+//      etc.). Renders on a white card-like chip so the logo's native
+//      colors aren't clobbered by a tinted background. Used when the
+//      merchant has explicitly supplied a URL for that brand.
+//   2. iconSlug — single-color mark from cdn.simpleicons.org, tinted to
+//      contrast against the brand-color chip. Convenient when the brand
+//      is on Simple Icons.
+//   3. label — brand-color chip with a short monogram (e.g. "Boost").
+//      The fallback when no URL or slug is configured (or both fail to
+//      load).
 //
-// Simple Icons URL format: https://cdn.simpleicons.org/<slug>/<hexColor>
+// Adding a brand: paste its iconUrl from wherever you sourced it into
+// the BRANDS map below. No other changes needed.
 type Brand = {
   bg:        string;
   fg:        string;
   label:     string;
-  iconSlug?: string;
-  iconFg?:   string;
+  iconUrl?:  string;   // full URL → renders on white chip
+  iconSlug?: string;   // simpleicons.org slug → tinted on brand chip
+  iconFg?:   string;   // hex (no #) for slug tinting; defaults to brand.fg
   border?:   string;
 };
 
@@ -26,11 +34,14 @@ const BRANDS: Record<string, Brand> = {
   google_pay: { bg: "#FFFFFF", fg: "#3C4043", label: "GPay",  iconSlug: "googlepay", border: "#E5E7EB" },
   fpx:        { bg: "#1B7A8F", fg: "#FFFFFF", label: "FPX"   },
   grabpay:    { bg: "#00B14F", fg: "#FFFFFF", label: "Grab",  iconSlug: "grab", iconFg: "FFFFFF" },
-  tng:        { bg: "#005AAA", fg: "#FFD400", label: "tng"   },
-  // Simple Icons' "boost" slug is the international/Boost Mobile mark,
-  // not the Malaysian Boost (My Boost Sdn Bhd) the user is paying with.
-  // Stick with the brand-color monogram chip until we have the right
-  // asset from myboost.co/media-kit.
+  tng:        {
+    bg:      "#005AAA",
+    fg:      "#FFD400",
+    label:   "tng",
+    // Wikimedia Special:FilePath redirects (302) to the upload.wikimedia.org
+    // CDN URL. SvgUri follows the redirect on both iOS and Android.
+    iconUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Touch_%27n_Go_eWallet_logo.svg",
+  },
   boost:      { bg: "#EC008C", fg: "#FFFFFF", label: "Boost" },
   shopeepay:  { bg: "#EE4D2D", fg: "#FFFFFF", label: "Pay",   iconSlug: "shopee", iconFg: "FFFFFF" },
 };
@@ -41,8 +52,8 @@ type Props = {
 };
 
 // Card chip — generic credit-card glyph on the brand navy. Stays
-// network-agnostic (no Visa / Mastercard marks) so the tile doesn't
-// imply any specific network is accepted on its own.
+// network-agnostic so the tile doesn't imply any specific network is
+// accepted on its own.
 function CardChip({ size }: { size: number }) {
   const radius = Math.round(size * 0.28);
   return (
@@ -109,7 +120,25 @@ export function PaymentBrandIcon({ methodId, size = 36 }: Props) {
     );
   }
 
+  const useUrl = !!brand.iconUrl && !iconFailed;
+  // When rendering a full-color SVG via iconUrl, switch the chip to a
+  // white card surface with a thin border so the logo's native colors
+  // aren't fighting a tinted background.
+  const chipBg     = useUrl ? "#FFFFFF" : brand.bg;
+  const chipBorder = useUrl ? "#E5E7EB" : brand.border;
+
   const inner = (() => {
+    if (useUrl) {
+      const iconSize = Math.round(size * 0.72);
+      return (
+        <SvgUri
+          width={iconSize}
+          height={iconSize}
+          uri={brand.iconUrl!}
+          onError={() => setIconFailed(true)}
+        />
+      );
+    }
     if (brand.iconSlug && !iconFailed) {
       const tint = brand.iconFg ?? brand.fg.replace("#", "");
       const iconSize = Math.round(size * 0.6);
@@ -143,11 +172,11 @@ export function PaymentBrandIcon({ methodId, size = 36 }: Props) {
         width: size,
         height: size,
         borderRadius: radius,
-        backgroundColor: brand.bg,
+        backgroundColor: chipBg,
         alignItems: "center",
         justifyContent: "center",
-        borderWidth: brand.border ? 1 : 0,
-        borderColor: brand.border,
+        borderWidth: chipBorder ? 1 : 0,
+        borderColor: chipBorder,
       }}
     >
       {inner}
