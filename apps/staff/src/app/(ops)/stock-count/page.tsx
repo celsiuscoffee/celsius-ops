@@ -90,11 +90,11 @@ interface ConflictItem {
 }
 
 // Pending save the user agreed to overwrite — replayed without the
-// expectedPriorCountedById guard.
+// expectedPriorCountedById guard. countedQty can be null when clearing.
 interface PendingSave {
   productId: string;
   productPackageId: string | null;
-  countedQty: number;
+  countedQty: number | null;
 }
 
 const STORAGE_KEY = "celsius-stock-check-draft-v2";
@@ -423,7 +423,7 @@ export default function StockCheckPage() {
   // counter's value. Returns true on success / queued-for-conflict, false
   // on hard error (network, validation).
   const saveItemToServer = useCallback(
-    async (productId: string, packageId: string | null, qty: number, opts?: { force?: boolean }) => {
+    async (productId: string, packageId: string | null, qty: number | null, opts?: { force?: boolean }) => {
       if (!user) return false;
       const key = serverItemKey(productId, packageId);
       const existing = serverItemsRef.current[key];
@@ -502,14 +502,20 @@ export default function StockCheckPage() {
     void saveItemToServer(productId, packageId, qty);
   };
 
+  // Per-item Clear: sets countedQty=null server-side so polling/realtime
+  // don't re-hydrate the value within 3 seconds. Optimistic local clear
+  // first for snappy UI.
   const keypadClear = () => {
     if (!keypadItem) return;
+    const productId = keypadItem.id;
+    const packageId = keypadPkgId;
     setCounts((prev) => {
       const next = { ...prev };
-      delete next[keypadItem.id];
+      delete next[productId];
       return next;
     });
     setKeypadItem(null);
+    if (countId) void saveItemToServer(productId, packageId, null);
   };
 
   // ── Finalize ──
