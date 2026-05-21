@@ -389,7 +389,7 @@ export default function Checkout() {
   useEffect(() => {
     if (selectedCategory !== null) return;
     if (card)          { setSelectedCategory("card"); return; }
-    if (wallets[0])    { setSelectedCategory("ewallet"); setSelectedWalletId(wallets[0].method_id); return; }
+    if (wallets[0])    { setSelectedCategory("ewallet"); return; }
     if (onlineBanking) { setSelectedCategory("online_banking"); return; }
     if (applePay)      { setSelectedCategory("apple_pay"); return; }
     if (googlePay)     { setSelectedCategory("google_pay"); return; }
@@ -1023,7 +1023,6 @@ export default function Checkout() {
                         Haptics.selectionAsync();
                         setSelectedCategory("ewallet");
                         setFpxBankCode(null);
-                        if (!selectedWalletId) setSelectedWalletId(wallets[0].method_id);
                         setWalletSheetOpen(true);
                       }}
                       title="E-Wallet"
@@ -1272,11 +1271,13 @@ export default function Checkout() {
                 ? "Online ordering paused"
                 : outletClosed
                   ? "Outlet closed — switch outlet"
-                  : !selectedMethodId
-                    ? "Select a payment method"
-                    : selectedMethodId === "fpx" && !fpxBankCode
-                      ? "Pick your bank"
-                      : `Place order · ${formatPrice(grandTotal)}`
+                  : selectedCategory === "ewallet" && !selectedWalletId
+                    ? "Pick your wallet"
+                    : !selectedMethodId
+                      ? "Select a payment method"
+                      : selectedMethodId === "fpx" && !fpxBankCode
+                        ? "Pick your bank"
+                        : `Place order · ${formatPrice(grandTotal)}`
             }
             onPress={onPlaceOrder}
             loading={busy}
