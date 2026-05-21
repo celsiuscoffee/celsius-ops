@@ -11,7 +11,7 @@ import {
 import { WebView } from "react-native-webview";
 import type { WebViewNavigation } from "react-native-webview";
 import { X, RefreshCw } from "lucide-react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // In-app webview for Revenue Monster payment redirects. Replaces
 // expo-web-browser's openAuthSessionAsync (which on iOS surfaces a
@@ -87,6 +87,11 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, method
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const webViewRef = useRef<WebView | null>(null);
+  // useSafeAreaInsets reads from a hook-level context that does propagate
+  // into Modal portals — <SafeAreaView edges={["top"]}> often returns 0
+  // here on iOS because the modal opens in a separate UIWindow without
+  // the host SafeAreaProvider tree. Hook value is reliable.
+  const insets = useSafeAreaInsets();
 
   // Reset state whenever the modal opens with a new URL — without this
   // the previous error state lingers across consecutive payment attempts.
@@ -132,8 +137,15 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, method
       onRequestClose={onCancel}
     >
       <StatusBar barStyle="light-content" />
-      <SafeAreaView edges={["top"]} className="bg-espresso" style={{ zIndex: 10, elevation: 10 }}>
-        <View className="flex-row items-center justify-between px-3 py-3">
+      <View
+        className="bg-espresso"
+        style={{
+          paddingTop: insets.top,
+          zIndex: 10,
+          elevation: 10,
+        }}
+      >
+        <View className="flex-row items-center justify-between px-3 py-2.5">
           {/* Cancel — bigger tap target + brighter chip + a "Cancel"
               text label, so it reads as actionable even when the
               WebView underneath is slow to paint and would otherwise
@@ -165,7 +177,7 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, method
           </View>
           <View className="w-20 h-11" />
         </View>
-      </SafeAreaView>
+      </View>
 
       <View className="flex-1 bg-white">
         {url && (
