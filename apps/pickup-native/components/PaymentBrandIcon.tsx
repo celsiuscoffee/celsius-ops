@@ -42,6 +42,7 @@ const TNG_ICON       = require("../assets/pay-icons/tng.png");
 const BOOST_ICON     = require("../assets/pay-icons/boost.png");
 const GRABPAY_ICON   = require("../assets/pay-icons/grab.png");
 const SHOPEEPAY_ICON = require("../assets/pay-icons/shopee.png");
+const DUITNOW_ICON   = require("../assets/pay-icons/duitnow.png");
 
 type Brand = {
   bg:          string;
@@ -65,6 +66,7 @@ const BRANDS: Record<string, Brand> = {
   tng:        { bg: "#005AAA", fg: "#FFD400", label: "tng",   iconSource: TNG_ICON       },
   boost:      { bg: "#EC008C", fg: "#FFFFFF", label: "Boost", iconSource: BOOST_ICON     },
   shopeepay:  { bg: "#EE4D2D", fg: "#FFFFFF", label: "Pay",   iconSource: SHOPEEPAY_ICON },
+  duitnow:    { bg: "#FFFFFF", fg: "#ED1A3B", label: "DuitNow", iconSource: DUITNOW_ICON, border: "#E5E7EB" },
 };
 
 type Props = {

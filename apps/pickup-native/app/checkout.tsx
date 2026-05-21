@@ -35,6 +35,7 @@ const METHOD_LABELS: Record<string, string> = {
   tng:        "Touch ’n Go eWallet",
   boost:      "Boost",
   shopeepay:  "ShopeePay",
+  duitnow:    "DuitNow QR",
 };
 
 type GatewayMethod = {
@@ -389,7 +390,7 @@ export default function Checkout() {
   // Methods grouped for the ZUS-style layout. Each row is rendered from
   // these arrays, so the visible categories follow whatever backoffice
   // enabled in payment_gateway_config without extra plumbing.
-  const wallets        = gatewayMethods.filter((m) => ["tng", "boost", "shopeepay", "grabpay"].includes(m.method_id));
+  const wallets        = gatewayMethods.filter((m) => ["tng", "boost", "shopeepay", "grabpay", "duitnow"].includes(m.method_id));
   const onlineBanking  = gatewayMethods.find((m) => m.method_id === "fpx");
   const card           = gatewayMethods.find((m) => m.method_id === "card");
   const applePay       = gatewayMethods.find((m) => m.method_id === "apple_pay");

@@ -69,6 +69,7 @@ const METHOD_DEFS: MethodDef[] = [
   { id: "boost",      name: "Boost",               icon: "🔴", providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
   { id: "shopeepay",  name: "ShopeePay",           icon: "🛒", providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
   { id: "grabpay",    name: "GrabPay",             icon: "🟢", providers: ["stripe", "revenue_monster"], defaultProvider: "stripe" },
+  { id: "duitnow",    name: "DuitNow QR",          icon: "🇲🇾", providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
   { id: "apple_pay",  name: "Apple Pay",           icon: "🍎", providers: ["stripe"],                     defaultProvider: "stripe" },
   { id: "google_pay", name: "Google Pay",          icon: "🔵", providers: ["stripe"],                     defaultProvider: "stripe" },
 ];

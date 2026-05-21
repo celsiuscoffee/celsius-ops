@@ -42,11 +42,12 @@ const DEFAULT_METHODS: Array<{ method_id: string; enabled: boolean; provider: Ga
   { method_id: "tng",        enabled: true,  provider: "revenue_monster" },
   { method_id: "boost",      enabled: true,  provider: "revenue_monster" },
   { method_id: "shopeepay",  enabled: true,  provider: "revenue_monster" },
+  { method_id: "duitnow",    enabled: false, provider: "revenue_monster" },
 ];
 
 // Matches the ZUS-style grouping the customer is familiar with:
 // Online Banking first, then e-wallets, then card, then platform wallets.
-const METHOD_ORDER = ["fpx", "tng", "boost", "shopeepay", "grabpay", "card", "apple_pay", "google_pay"];
+const METHOD_ORDER = ["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card", "apple_pay", "google_pay"];
 
 export async function GET() {
   const supabase = getSupabaseAdmin();

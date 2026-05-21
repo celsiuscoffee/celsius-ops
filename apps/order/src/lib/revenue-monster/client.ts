@@ -200,6 +200,7 @@ export const PAYMENT_METHOD_MAP: Record<string, string[]> = {
   fpx:       ["FPX_MY"],
   boost:     ["BOOST_MY"],
   shopeepay: ["SHOPEEPAY_MY"],
+  duitnow:   ["DUITNOW_MY"],
   card:      [],
   // "all" → empty array tells RM's hosted page to show every method
   // enabled on the merchant account.
