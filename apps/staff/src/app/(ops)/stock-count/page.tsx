@@ -936,17 +936,19 @@ export default function StockCheckPage() {
               </button>
             </div>
 
-            {/* Package selector */}
+            {/* Package selector — taller pills + bigger text so it's obvious
+                this is tappable. Critical control for unit-confusion: staff
+                should never miss that a smaller package option exists. */}
             {keypadItem.packages.length > 1 && (
-              <div className="mt-2 flex gap-1.5 overflow-x-auto">
+              <div className="mt-3 flex flex-wrap gap-2">
                 {keypadItem.packages.map((pkg) => (
                   <button
                     key={pkg.id}
                     onClick={() => setKeypadPkgId(pkg.id)}
-                    className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    className={`shrink-0 rounded-full border-2 px-4 py-2 text-sm font-semibold transition-colors active:scale-95 ${
                       keypadPkgId === pkg.id
-                        ? "border-terracotta bg-terracotta/10 text-terracotta"
-                        : "border-gray-200 text-gray-500"
+                        ? "border-terracotta bg-terracotta/10 text-terracotta-dark"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
                     }`}
                   >
                     {pkg.label || pkg.name}
@@ -955,8 +957,8 @@ export default function StockCheckPage() {
               </div>
             )}
             {keypadItem.packages.length === 1 && (
-              <p className="mt-1 text-xs text-gray-500">
-                Count in: <span className="font-medium text-gray-700">{keypadItem.packages[0].label || keypadItem.packages[0].name}</span>
+              <p className="mt-2 text-sm text-gray-500">
+                Count in: <span className="font-semibold text-gray-700">{keypadItem.packages[0].label || keypadItem.packages[0].name}</span>
               </p>
             )}
           </div>
