@@ -163,17 +163,23 @@ function nonce() {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+// Per RM's Payment Method appendix
+// (https://doc.revenuemonster.my/docs/payment-method) the system method needs
+// the region suffix appended — Malaysia = `_MY` — even for FPX whose system
+// method name is just "FPX". Sending without the suffix returns
+// DOES_NOT_HAVE_ACTIVE_WALLET. CARD is not a valid web-payment method on
+// /v3/payment/online (it's not listed in the appendix at all); card payments
+// have to go through a separate flow or the hosted page without a method
+// filter. We route card through Stripe instead, so it's intentionally absent
+// from this map.
 export const PAYMENT_METHOD_MAP: Record<string, string[]> = {
   tng:       ["TNG_MY"],
   grabpay:   ["GRABPAY_MY"],
-  fpx:       ["FPX"],
-  card:      ["CARD"],
+  fpx:       ["FPX_MY"],
   boost:     ["BOOST_MY"],
   shopeepay: ["SHOPEEPAY_MY"],
   // "all" → empty array tells RM's hosted page to show every method
-  // enabled on the merchant account. Useful for the native pickup app's
-  // single "Pay with RM" tile, which delegates method picking to RM's
-  // own checkout UI instead of forcing the customer to pre-select.
+  // enabled on the merchant account.
   all:       [],
 };
 
@@ -216,7 +222,10 @@ export async function createPayment(params: CreatePaymentParams): Promise<string
     storeId:       STORE_ID,
     redirectUrl:   params.redirectUrl,
     notifyUrl:     params.notifyUrl,
-    layoutVersion: "v3",
+    // Hosted Payment Checkout docs require v4. v3 was the previous (v2 API)
+    // value and silently routes to a stale renderer that doesn't surface
+    // newer wallet methods consistently.
+    layoutVersion: "v4",
   };
 
   const sig = buildSignature("POST", endpoint, nonceStr, timestamp, body);
