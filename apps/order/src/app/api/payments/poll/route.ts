@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { queryCheckoutStatus } from "@/lib/revenue-monster/client";
 import { markRmOrderPaid, markRmOrderFailed } from "@/lib/revenue-monster/order-status";
+import { notifyOrderPreparing } from "@/lib/push/templates";
 
 /**
  * Poll RM's Query Payment Checkout for a given order and reconcile.
@@ -50,7 +52,21 @@ export async function POST(request: NextRequest) {
 
     const result = await queryCheckoutStatus(order.payment_checkout_id);
     if (result.status === "SUCCESS") {
-      await markRmOrderPaid({ orderId: order.id }, result.transactionId);
+      const paid = await markRmOrderPaid({ orderId: order.id }, result.transactionId);
+      if (paid) {
+        // When the webhook is dropped and this poll is what actually
+        // reconciles the order, the customer expects a push as if the
+        // webhook had fired. Same after() pattern keeps the poll
+        // response fast — the client's React Query refetch sees the
+        // new status on the next tick regardless of push delivery.
+        after(async () => {
+          await notifyOrderPreparing({
+            orderId:       paid.orderId,
+            orderNumber:   paid.orderNumber,
+            customerPhone: paid.customerPhone,
+          }).catch((e) => console.warn("[push] order_preparing rm poll", e));
+        });
+      }
       return NextResponse.json({ status: "preparing", source: "rm", transactionId: result.transactionId });
     }
     if (result.status === "FAILED" || result.status === "EXPIRED" || result.status === "CANCELLED") {

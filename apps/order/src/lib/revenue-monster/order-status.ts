@@ -5,17 +5,24 @@ import { applyOrderV2Hooks } from "@/lib/loyalty/v2";
 // Shared between the RM webhook and the poll endpoint. Idempotent — both
 // callers gate the update on `status = 'pending'` so a duplicate delivery
 // (webhook + poll racing) doesn't double-earn points or double-deduct
-// rewards. Returns true if this call actually transitioned the row.
+// rewards. Returns the order fields the caller needs to fire the
+// "Brewing now" push, or null if no row was transitioned.
 //
 // Mirrors the Stripe confirm-stripe path: in addition to flipping status
 // and earning/burning points, it also runs the v2 hooks
 // (wallet-voucher consumption, mission progress, mystery drop mint,
 // referral payoff). Without that, RM-paid orders never got a mystery
 // bean to reveal — the customer noticed.
+export interface RmOrderPaidResult {
+  orderId:       string;
+  orderNumber:   string;
+  customerPhone: string | null;
+}
+
 export async function markRmOrderPaid(
   orderNumberOrId: { orderNumber?: string; orderId?: string },
   transactionId: string | null,
-): Promise<boolean> {
+): Promise<RmOrderPaidResult | null> {
   const supabase = getSupabaseAdmin();
   const base = supabase
     .from("orders")
@@ -28,9 +35,11 @@ export async function markRmOrderPaid(
     ? base.eq("id", orderNumberOrId.orderId)
     : base.eq("order_number", orderNumberOrId.orderNumber!);
   const { data: order } = await filtered
-    .select("id, loyalty_id, loyalty_points_earned, reward_id, store_id, created_at, wallet_voucher_id")
+    .select("id, order_number, customer_phone, loyalty_id, loyalty_points_earned, reward_id, store_id, created_at, wallet_voucher_id")
     .single<{
       id: string;
+      order_number: string;
+      customer_phone: string | null;
       loyalty_id: string | null;
       loyalty_points_earned: number;
       reward_id: string | null;
@@ -39,7 +48,7 @@ export async function markRmOrderPaid(
       wallet_voucher_id: string | null;
     }>();
 
-  if (!order) return false;
+  if (!order) return null;
 
   if (order.loyalty_id) {
     if (order.loyalty_points_earned > 0) {
@@ -73,7 +82,11 @@ export async function markRmOrderPaid(
       console.error(`[loyalty] markRmOrderPaid: v2 hooks failed for order=${order.id}`, e);
     }
   }
-  return true;
+  return {
+    orderId:       order.id,
+    orderNumber:   order.order_number,
+    customerPhone: order.customer_phone,
+  };
 }
 
 export async function markRmOrderFailed(

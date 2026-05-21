@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { validateWebhookSignature } from "@/lib/revenue-monster/client";
 import { markRmOrderPaid, markRmOrderFailed } from "@/lib/revenue-monster/order-status";
+import { notifyOrderPreparing } from "@/lib/push/templates";
 
 /**
  * Revenue Monster webhook (FPX, ewallet, card-via-RM).
@@ -52,7 +54,22 @@ export async function POST(request: NextRequest) {
       data.referenceId.match(/^(C-\d+)/)?.[1] ?? data.referenceId;
 
     if (data.status === "SUCCESS") {
-      await markRmOrderPaid({ orderNumber }, data.transactionId);
+      const paid = await markRmOrderPaid({ orderNumber }, data.transactionId);
+      if (paid) {
+        // Same "Brewing now ☕" push the Stripe webhook fires. RM-paid
+        // orders previously got no payment-confirmation notification —
+        // the customer only saw the in-app "Confirming payment…" panel
+        // until the next poll tick. after() lets us respond to RM fast
+        // (their webhook retries on slow ack) while the push goes out
+        // asynchronously.
+        after(async () => {
+          await notifyOrderPreparing({
+            orderId:       paid.orderId,
+            orderNumber:   paid.orderNumber,
+            customerPhone: paid.customerPhone,
+          }).catch((e) => console.warn("[push] order_preparing rm webhook", e));
+        });
+      }
     } else if (data.status === "FAILED") {
       await markRmOrderFailed({ orderNumber });
     }
