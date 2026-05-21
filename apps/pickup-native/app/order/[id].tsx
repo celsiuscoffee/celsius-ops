@@ -52,7 +52,14 @@ const STATUS_INDEX: Record<string, number> = {
 };
 
 export default function OrderStatus() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `justPaid` is set by the checkout screen when the customer just
+  // returned from a Revenue Monster wallet redirect. It tells us the
+  // pending→preparing reconciliation hasn't run yet, so we should show
+  // a "Confirming payment…" panel instead of the misleading retry UI.
+  const { id, justPaid } = useLocalSearchParams<{
+    id: string;
+    justPaid?: string;
+  }>();
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery({
     queryKey: ["order", id],
@@ -391,6 +398,26 @@ export default function OrderStatus() {
   const currentMethodId = (data?.payment_method as string | undefined) ?? "card";
   const currentMethodLabel = METHOD_LABELS[currentMethodId] ?? "the original method";
 
+  // "Confirming payment…" window — Revenue Monster wallet/FPX redirects
+  // back to the app before the webhook fires, so the order sits in
+  // "pending" for a few seconds. Showing the retry UI in that window is
+  // wrong: the customer just paid. Trigger via `justPaid=1` (set by
+  // checkout on successful return) OR by orders created in the last 90s
+  // for someone landing here from history. Past the window we fall
+  // through to the existing retry UI so a genuinely stuck order can be
+  // recovered.
+  const rmConfirmMethods = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay"]);
+  const isRmPending =
+    data?.status === "pending" &&
+    !!data?.payment_method &&
+    rmConfirmMethods.has(data.payment_method);
+  const createdRecently = (() => {
+    if (!data?.created_at) return false;
+    const ageMs = Date.now() - new Date(data.created_at).getTime();
+    return ageMs < 90_000;
+  })();
+  const confirmingPayment = isRmPending && (justPaid === "1" || createdRecently);
+
   return (
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
@@ -432,7 +459,21 @@ export default function OrderStatus() {
               shadowOffset: { width: 0, height: 2 },
             }}
           >
-            {data.status === "pending" || data.status === "failed" ? (
+            {confirmingPayment ? (
+              <View className="items-center py-2">
+                <ActivityIndicator size="small" color="#C05040" />
+                <Text
+                  className="text-espresso text-lg mt-2"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Confirming payment with {currentMethodLabel}…
+                </Text>
+                <Text className="text-muted-fg text-sm mt-1 text-center">
+                  This usually takes a few seconds. We'll start preparing
+                  your order as soon as it lands.
+                </Text>
+              </View>
+            ) : data.status === "pending" || data.status === "failed" ? (
               <View className="items-center py-2">
                 <Clock size={28} color={data.status === "failed" ? "#B0413E" : "#C05040"} />
                 <Text
