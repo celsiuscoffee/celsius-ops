@@ -262,25 +262,37 @@ export default function StockCheckPage() {
   // — even tables that worked previously now don't). Realtime stays wired
   // as the fast-path for when the project-level config gets sorted; the
   // 3-second polling fallback below guarantees updates regardless.
+  //
+  // Best-effort: WebSocket constructor throws synchronously in Firefox
+  // private mode and behind some content blockers ("operation is
+  // insecure"). Swallow — the polling fallback covers us.
   useEffect(() => {
     if (!countId) return;
-    const channel = supabase
-      .channel(`stock-count-${countId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "StockCountItem",
-          filter: `stockCountId=eq.${countId}`,
-        },
-        () => {
-          fetchActive();
-        },
-      )
-      .subscribe();
+    if (typeof WebSocket === "undefined") return;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`stock-count-${countId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "StockCountItem",
+            filter: `stockCountId=eq.${countId}`,
+          },
+          () => {
+            fetchActive();
+          },
+        )
+        .subscribe();
+    } catch {
+      channel = null;
+    }
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try { supabase.removeChannel(channel); } catch { /* ignore */ }
+      }
     };
   }, [countId, fetchActive]);
 
