@@ -33,7 +33,7 @@ export function BankChip({ bank, size = 32 }: Props) {
   const radius = Math.round(size * 0.3);
 
   if (useUrl) {
-    const iconSize = Math.round(size * 0.78);
+    const iconSize = Math.round(size * 0.92);
     return (
       <View
         style={{

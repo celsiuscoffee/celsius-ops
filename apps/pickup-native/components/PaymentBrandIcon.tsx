@@ -143,9 +143,12 @@ export function PaymentBrandIcon({ methodId, size = 36 }: Props) {
 
   const inner = (() => {
     if (useUrl) {
-      const iconSize = Math.round(size * 0.72);
-      // PNG / JPG → Image (handles raster fetch + cache natively). SVG
-      // (or unknown ext) → SvgUri (renders crisp at any pixel ratio).
+      // Fill close to the chip edge — small inset so the logo doesn't
+      // touch the chip border. Logos with their own internal padding
+      // (most brand kits ship this way) still look right; logos that
+      // are tight to the artwork edges look "full bleed" which matches
+      // how ZUS and similar apps present brand chips.
+      const iconSize = Math.round(size * 0.92);
       if (isPngLike(brand.iconUrl!)) {
         return (
           <Image
