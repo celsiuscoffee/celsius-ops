@@ -287,15 +287,23 @@ export async function createPayment(params: CreatePaymentParams): Promise<string
   if (!directMethod) {
     throw new Error(`No RM method mapping for "${params.paymentMethod}"`);
   }
+  // FPX needs a bank pre-selected to mint a Direct deep link. If the
+  // client didn't send one (e.g. a stale bundle without the bank picker,
+  // or a web caller skipping that flow), fall back gracefully to the
+  // hosted page from step 1 — RM filters it to FPX and lets the customer
+  // pick a bank there. Better than a 500.
+  if (directMethod === "FPX_MY" && !params.fpxBankCode) {
+    if (!hosted.item?.url) {
+      throw new Error("FPX fallback failed: hosted checkout returned no url");
+    }
+    return hosted.item.url;
+  }
   const directBody: Record<string, unknown> = {
     checkoutId,
     type:   "URL",
     method: directMethod,
   };
-  if (directMethod === "FPX_MY") {
-    if (!params.fpxBankCode) {
-      throw new Error("FPX requires fpxBankCode (customer must pick a bank)");
-    }
+  if (directMethod === "FPX_MY" && params.fpxBankCode) {
     directBody.fpx = { bankCode: params.fpxBankCode };
   }
   const direct = await rmPost<{
