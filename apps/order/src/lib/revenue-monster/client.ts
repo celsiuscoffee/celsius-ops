@@ -187,17 +187,18 @@ function nonce() {
 // (https://doc.revenuemonster.my/docs/payment-method) the system method needs
 // the region suffix appended — Malaysia = `_MY` — even for FPX whose system
 // method name is just "FPX". Sending without the suffix returns
-// DOES_NOT_HAVE_ACTIVE_WALLET. CARD is not a valid web-payment method on
-// /v3/payment/online (it's not listed in the appendix at all); card payments
-// have to go through a separate flow or the hosted page without a method
-// filter. We route card through Stripe instead, so it's intentionally absent
-// from this map.
+// DOES_NOT_HAVE_ACTIVE_WALLET.
+//
+// Card has no wallet-app deep link, so we use the hosted card page (step 1)
+// for card payments — see the `directMethod === "CARD_MY"` branch in
+// createPayment below, which mirrors the FPX-no-bank fallback.
 export const PAYMENT_METHOD_MAP: Record<string, string[]> = {
   tng:       ["TNG_MY"],
   grabpay:   ["GRABPAY_MY"],
   fpx:       ["FPX_MY"],
   boost:     ["BOOST_MY"],
   shopeepay: ["SHOPEEPAY_MY"],
+  card:      ["CARD_MY"],
   // "all" → empty array tells RM's hosted page to show every method
   // enabled on the merchant account.
   all:       [],
@@ -320,6 +321,17 @@ export async function createPayment(params: CreatePaymentParams): Promise<Create
   if (directMethod === "FPX_MY" && !params.fpxBankCode) {
     if (!hosted.item?.url) {
       throw new Error("FPX fallback failed: hosted checkout returned no url");
+    }
+    return { paymentUrl: hosted.item.url, checkoutId };
+  }
+
+  // Card has no wallet-app deep link — RM serves the card form on the
+  // hosted page from step 1. The hosted body already filters method to
+  // ["CARD_MY"], so the customer lands directly on the card form rather
+  // than RM's consolidated picker.
+  if (directMethod === "CARD_MY") {
+    if (!hosted.item?.url) {
+      throw new Error("Card fallback failed: hosted checkout returned no url");
     }
     return { paymentUrl: hosted.item.url, checkoutId };
   }

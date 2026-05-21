@@ -75,7 +75,7 @@ export default function OrderStatus() {
   // then sees the new status on the next 5s tick.
   useEffect(() => {
     if (!id || !data || data.status !== "pending") return;
-    const rmMethods = new Set(["fpx", "tng", "boost", "shopeepay"]);
+    const rmMethods = new Set(["fpx", "tng", "boost", "shopeepay", "card"]);
     if (!data.payment_method || !rmMethods.has(data.payment_method)) return;
     let cancelled = false;
     const poll = async () => {
@@ -406,7 +406,7 @@ export default function OrderStatus() {
   // for someone landing here from history. Past the window we fall
   // through to the existing retry UI so a genuinely stuck order can be
   // recovered.
-  const rmConfirmMethods = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay"]);
+  const rmConfirmMethods = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "card"]);
   const isRmPending =
     data?.status === "pending" &&
     !!data?.payment_method &&
