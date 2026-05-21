@@ -7,10 +7,6 @@ import {
   Clock,
   CreditCard,
   XCircle,
-  Wallet,
-  Smartphone,
-  Landmark,
-  QrCode,
   ChevronDown,
   Check,
 } from "lucide-react-native";
@@ -45,6 +41,7 @@ import { CelsiusLoader } from "../../components/CelsiusLoader";
 import { MysteryBean } from "../../components/MysteryBean";
 import { fetchPendingMysteryDrop, type MysteryDropRevealed } from "../../lib/rewards-v2";
 import { FpxBankPicker } from "../../components/FpxBankPicker";
+import { PaymentBrandIcon } from "../../components/PaymentBrandIcon";
 
 const STATUS_INDEX: Record<string, number> = {
   pending: -1,
@@ -507,34 +504,20 @@ export default function OrderStatus() {
                       <View className="mt-3 w-full gap-2">
                         {gatewayMethods
                           .filter((m) => m.method_id !== currentMethodId)
-                          .map((m) => {
-                            const Icon =
-                              m.method_id === "card"
-                                ? CreditCard
-                                : m.method_id === "apple_pay" || m.method_id === "google_pay"
-                                ? Smartphone
-                                : m.method_id === "fpx"
-                                ? Landmark
-                                : m.method_id === "tng" || m.method_id === "boost" || m.method_id === "shopeepay"
-                                ? QrCode
-                                : Wallet;
-                            return (
-                              <Pressable
-                                key={m.method_id}
-                                onPress={() => retryWithMethod(m.method_id)}
-                                disabled={retrying}
-                                className="bg-surface rounded-2xl border border-border px-4 py-3 flex-row items-center gap-3 active:opacity-80"
-                              >
-                                <View className="w-9 h-9 rounded-2xl items-center justify-center bg-primary/15">
-                                  <Icon size={18} color="#C05040" />
-                                </View>
-                                <Text className="flex-1 text-espresso font-bold">
-                                  {METHOD_LABELS[m.method_id] ?? m.method_id}
-                                </Text>
-                                <Check size={16} color="transparent" />
-                              </Pressable>
-                            );
-                          })}
+                          .map((m) => (
+                            <Pressable
+                              key={m.method_id}
+                              onPress={() => retryWithMethod(m.method_id)}
+                              disabled={retrying}
+                              className="bg-surface rounded-2xl border border-border px-4 py-3 flex-row items-center gap-3 active:opacity-80"
+                            >
+                              <PaymentBrandIcon methodId={m.method_id} size={36} />
+                              <Text className="flex-1 text-espresso font-bold">
+                                {METHOD_LABELS[m.method_id] ?? m.method_id}
+                              </Text>
+                              <Check size={16} color="transparent" />
+                            </Pressable>
+                          ))}
                       </View>
                     )}
 

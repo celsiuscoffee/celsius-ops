@@ -19,11 +19,6 @@ import {
   Coffee,
   MapPin,
   Clock,
-  Wallet,
-  QrCode,
-  CreditCard,
-  Smartphone,
-  Landmark,
 } from "lucide-react-native";
 
 // Customer-facing labels for each payment method. No provider names — the
@@ -67,6 +62,7 @@ import { trackEvent } from "../lib/analytics";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { FpxBankPicker } from "../components/FpxBankPicker";
+import { PaymentBrandIcon } from "../components/PaymentBrandIcon";
 
 type Step = "phone" | "otp" | "review";
 
@@ -851,18 +847,6 @@ export default function Checkout() {
                 <View className="gap-2">
                   {gatewayMethods.map((method) => {
                     const isSelected = selectedMethodId === method.method_id;
-                    // Icon picked per category, not per provider — the
-                    // customer never sees who routes the charge.
-                    const Icon =
-                      method.method_id === "card"
-                        ? CreditCard
-                        : method.method_id === "apple_pay" || method.method_id === "google_pay"
-                        ? Smartphone
-                        : method.method_id === "fpx"
-                        ? Landmark
-                        : method.method_id === "tng" || method.method_id === "boost" || method.method_id === "shopeepay"
-                        ? QrCode
-                        : Wallet;
                     return (
                       <Pressable
                         key={method.method_id}
@@ -878,9 +862,7 @@ export default function Checkout() {
                         }`}
                         style={isSelected ? { borderWidth: 2 } : undefined}
                       >
-                        <View className="w-9 h-9 rounded-2xl items-center justify-center bg-primary/15">
-                          <Icon size={18} color="#C05040" />
-                        </View>
+                        <PaymentBrandIcon methodId={method.method_id} size={36} />
                         <View className="flex-1">
                           <Text className="text-espresso font-bold">
                             {METHOD_LABELS[method.method_id] ?? method.method_id}
