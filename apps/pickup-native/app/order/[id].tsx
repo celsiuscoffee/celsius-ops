@@ -413,12 +413,11 @@ export default function OrderStatus() {
     data?.status === "pending" &&
     !!data?.payment_method &&
     rmConfirmMethods.has(data.payment_method);
-  const createdRecently = (() => {
-    if (!data?.created_at) return false;
-    const ageMs = Date.now() - new Date(data.created_at).getTime();
-    return ageMs < 90_000;
-  })();
-  const confirmingPayment = isRmPending && (justPaid === "1" || createdRecently);
+  // Only show "Confirming payment…" when the checkout screen explicitly
+  // signals a successful RM return via justPaid=1. The previous 90s
+  // creation-time fallback ran for cancelled orders too, making the
+  // customer think the payment went through when it didn't.
+  const confirmingPayment = isRmPending && justPaid === "1";
 
   return (
     <View className="flex-1 bg-background">
@@ -428,18 +427,7 @@ export default function OrderStatus() {
         showCart={false}
         rightSlot={
           <Pressable
-            onPress={() => {
-              // Go back to wherever they came from (Orders list /
-              // checkout / push-notification deep link). Falls back to
-              // /orders when there's no back stack — e.g. the order
-              // page was the first screen after a cold start from a
-              // notification tap.
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.replace("/orders");
-              }
-            }}
+            onPress={() => router.replace("/orders")}
             className="p-1 active:opacity-60"
             hitSlop={12}
           >

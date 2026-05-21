@@ -91,14 +91,19 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, onSucc
       onRequestClose={onCancel}
     >
       <StatusBar barStyle="light-content" />
-      <SafeAreaView edges={["top"]} className="bg-espresso">
-        <View className="flex-row items-center justify-between px-4 py-3">
+      <SafeAreaView edges={["top"]} className="bg-espresso" style={{ zIndex: 10, elevation: 10 }}>
+        <View className="flex-row items-center justify-between px-3 py-3">
+          {/* Cancel — bigger tap target + brighter chip + a "Cancel"
+              text label, so it reads as actionable even when the
+              WebView underneath is slow to paint and would otherwise
+              steal focus. */}
           <Pressable
             onPress={onCancel}
-            hitSlop={12}
-            className="w-9 h-9 rounded-full bg-white/10 items-center justify-center active:opacity-70"
+            hitSlop={16}
+            className="flex-row items-center gap-1.5 rounded-full bg-white/20 px-3 h-11 active:opacity-70"
           >
             <X size={18} color="#FFFFFF" />
+            <Text className="text-white text-sm font-bold">Cancel</Text>
           </Pressable>
           <View className="flex-1 items-center">
             <Text
@@ -117,7 +122,7 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, onSucc
               </Text>
             )}
           </View>
-          <View className="w-9 h-9" />
+          <View className="w-20 h-11" />
         </View>
       </SafeAreaView>
 

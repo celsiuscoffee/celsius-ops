@@ -677,8 +677,13 @@ export default function Checkout() {
           // that reconciliation window.
           routeAfterSuccess(res.orderId, { params: { justPaid: "1" } });
         } else {
+          // User explicitly cancelled the RM modal (X button). The order
+          // is now pending+unpaid and lives in /orders → In progress, so
+          // route there directly instead of the detail page (which would
+          // show "Awaiting payment" and feels like we forced them deeper
+          // than they wanted). They can retry from the list when ready.
           trackEvent("payment_rm_cancelled", { orderId: res.orderId, type: result });
-          router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
+          router.replace("/orders");
         }
         return;
       }
