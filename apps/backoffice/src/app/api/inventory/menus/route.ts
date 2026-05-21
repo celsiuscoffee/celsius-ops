@@ -32,9 +32,12 @@ export async function GET(request: NextRequest) {
     if (sp.supplier?.supplierCode === "ADHOC") continue;
     const price = Number(sp.price);
     if (price <= 0) continue;
+    // Skip rows with no package mapping — see comment in stock-valuation
+    // route. Without package context, price-per-base interpretation is wrong.
     const conversion = sp.productPackage?.conversionFactor
       ? Number(sp.productPackage.conversionFactor)
-      : 1;
+      : 0;
+    if (conversion <= 0) continue;
     const costPerBase = price / conversion;
     const existing = costMap.get(sp.productId);
     if (!existing || costPerBase < existing) {

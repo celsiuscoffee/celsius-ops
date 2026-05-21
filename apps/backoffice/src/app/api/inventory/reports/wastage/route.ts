@@ -70,12 +70,14 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  // Build cost-per-base-unit map (cheapest supplier price / conversion factor)
+  // Build cost-per-base-unit map (cheapest supplier price / conversion factor).
+  // Skip rows with no package mapping — same pattern as stock-valuation route.
   const costMap = new Map<string, number>();
   for (const sp of supplierProducts) {
     const conversion = sp.productPackage?.conversionFactor
       ? Number(sp.productPackage.conversionFactor)
-      : 1;
+      : 0;
+    if (conversion <= 0) continue;
     const costPerBase = Number(sp.price) / conversion;
     const existing = costMap.get(sp.productId);
     if (!existing || costPerBase < existing) {

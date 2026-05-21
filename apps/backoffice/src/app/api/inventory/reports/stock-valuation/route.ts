@@ -68,11 +68,20 @@ export async function GET(req: NextRequest) {
   ]);
 
   // Build cost-per-base-unit map (cheapest supplier price / conversion factor)
+  //
+  // We skip SupplierProduct rows with no productPackageId — without a package
+  // mapping we'd be forced to assume conversionFactor=1 and treat e.g. "RM 61
+  // for Monin Strawberry 1LT" as RM 61/ml, blowing valuation up by 1000×.
+  // Admin should audit those entries and add the correct package; they show
+  // up as costPerUnit=0 in the report (visible signal in the UI).
+  //
+  // Likewise skip rows with conversionFactor <= 0 (data quality guard).
   const costMap = new Map<string, number>();
   for (const sp of supplierProducts) {
     const conversion = sp.productPackage?.conversionFactor
       ? Number(sp.productPackage.conversionFactor)
-      : 1;
+      : 0;
+    if (conversion <= 0) continue; // skip — see comment above
     const costPerBase = Number(sp.price) / conversion;
     const existing = costMap.get(sp.productId);
     if (!existing || costPerBase < existing) {
