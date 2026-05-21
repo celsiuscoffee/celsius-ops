@@ -565,11 +565,30 @@ export default function StockCheckPage() {
     setSubmitted(false);
   };
 
-  const resetCheck = () => {
+  // Reset = nuke local + server. Without the DELETE call, the 3-second
+  // polling would re-hydrate the cleared local state from the still-alive
+  // DRAFT count and the reset would silently undo itself.
+  const resetCheck = async () => {
+    if (countId) {
+      const toastId = toast.loading("Resetting count…");
+      try {
+        const res = await fetch(`/api/stock-checks/${countId}`, { method: "DELETE" });
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || "Reset failed");
+        }
+        toast.success("Count reset", { id: toastId });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Reset failed", { id: toastId });
+        return;
+      }
+    }
     setCounts({});
     setSubmitted(false);
     setLastSaved(null);
-    localStorage.removeItem(STORAGE_KEY);
+    setCountId(null);
+    setServerItems({});
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   };
 
   const filteredData = groupedData
