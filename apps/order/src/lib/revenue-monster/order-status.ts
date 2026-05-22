@@ -17,6 +17,32 @@ export interface RmOrderPaidResult {
   orderId:       string;
   orderNumber:   string;
   customerPhone: string | null;
+  /** True when the order was held in "paid" (scheduled for later
+   *  pickup) rather than promoted straight to "preparing". Callers
+   *  should suppress the "Brewing now" push in this case — the
+   *  promote-scheduled cron fires that push when it flips the row to
+   *  preparing inside the brew window. */
+  scheduled:     boolean;
+}
+
+/**
+ * Decide whether a paid order should sit in "paid" (held for
+ * scheduled pickup) or go straight to "preparing".
+ *
+ * Holds when pickup_at - prep_time > now. prep_time defaults to 10
+ * min if the outlet's pickup_time_mins isn't available. The
+ * promote-scheduled cron flips held rows to preparing when this
+ * condition becomes false.
+ */
+export function shouldHoldForScheduled(
+  pickupAt: string | null,
+  prepTimeMins: number = 10,
+): boolean {
+  if (!pickupAt) return false;
+  const at = new Date(pickupAt).getTime();
+  if (Number.isNaN(at)) return false;
+  const brewWindowOpensAt = at - prepTimeMins * 60_000;
+  return Date.now() < brewWindowOpensAt;
 }
 
 export async function markRmOrderPaid(
@@ -24,10 +50,46 @@ export async function markRmOrderPaid(
   transactionId: string | null,
 ): Promise<RmOrderPaidResult | null> {
   const supabase = getSupabaseAdmin();
+  // First look up the row to read pickup_at + outlet prep_time so we
+  // can decide whether to flip status to "paid" (hold for scheduled
+  // pickup) or "preparing" (brew now). We do this BEFORE the update
+  // so the eq("status", "pending") guard still works.
+  const filterBuilder = supabase.from("orders").select(
+    "id, order_number, customer_phone, loyalty_id, loyalty_points_earned, reward_id, store_id, created_at, wallet_voucher_id, pickup_at",
+  );
+  const peeked = orderNumberOrId.orderId
+    ? await filterBuilder.eq("id", orderNumberOrId.orderId).maybeSingle()
+    : await filterBuilder.eq("order_number", orderNumberOrId.orderNumber!).maybeSingle();
+  type Row = {
+    id: string;
+    order_number: string;
+    customer_phone: string | null;
+    loyalty_id: string | null;
+    loyalty_points_earned: number;
+    reward_id: string | null;
+    store_id: string;
+    created_at: string;
+    wallet_voucher_id: string | null;
+    pickup_at: string | null;
+  };
+  const peekedRow = peeked.data as Row | null;
+  let prepTimeMins = 10;
+  if (peekedRow?.store_id) {
+    const { data: outlet } = await supabase
+      .from("outlet_settings")
+      .select("pickup_time_mins")
+      .eq("store_id", peekedRow.store_id)
+      .maybeSingle();
+    const ptm = (outlet as { pickup_time_mins?: number } | null)?.pickup_time_mins;
+    if (typeof ptm === "number" && ptm > 0) prepTimeMins = ptm;
+  }
+  const scheduled = shouldHoldForScheduled(peekedRow?.pickup_at ?? null, prepTimeMins);
+  const nextStatus = scheduled ? "paid" : "preparing";
+
   const base = supabase
     .from("orders")
     .update({
-      status: "preparing",
+      status: nextStatus,
       payment_provider_ref: transactionId,
     } as Record<string, unknown>)
     .eq("status", "pending");
@@ -86,6 +148,7 @@ export async function markRmOrderPaid(
     orderId:       order.id,
     orderNumber:   order.order_number,
     customerPhone: order.customer_phone,
+    scheduled,
   };
 }
 

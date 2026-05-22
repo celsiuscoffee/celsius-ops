@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
 import { applyOrderV2Hooks } from "@/lib/loyalty/v2";
 import { notifyOrderPreparing } from "@/lib/push/templates";
+import { shouldHoldForScheduled } from "@/lib/revenue-monster/order-status";
 
 export const preferredRegion = "iad1";
 
@@ -33,10 +34,32 @@ export async function POST(request: NextRequest) {
     const intent  = event.data.object as Stripe.PaymentIntent;
     const orderId = intent.metadata?.orderId;
     if (orderId) {
+      // Peek for pickup_at + outlet prep_time so we can hold the row
+      // in "paid" for scheduled pickups instead of jumping straight
+      // to "preparing". Mirrors the RM + confirm-stripe paths.
+      const { data: peek } = await supabase
+        .from("orders")
+        .select("store_id, pickup_at")
+        .eq("id", orderId)
+        .maybeSingle();
+      let prepTimeMins = 10;
+      if ((peek as { store_id?: string | null } | null)?.store_id) {
+        const { data: outlet } = await supabase
+          .from("outlet_settings")
+          .select("pickup_time_mins")
+          .eq("store_id", (peek as { store_id: string }).store_id)
+          .maybeSingle();
+        const ptm = (outlet as { pickup_time_mins?: number } | null)?.pickup_time_mins;
+        if (typeof ptm === "number" && ptm > 0) prepTimeMins = ptm;
+      }
+      const pickupAt = (peek as { pickup_at?: string | null } | null)?.pickup_at ?? null;
+      const scheduled = shouldHoldForScheduled(pickupAt, prepTimeMins);
+      const nextStatus = scheduled ? "paid" : "preparing";
+
       const { data: order } = await supabase
         .from("orders")
         .update({
-          status:               "preparing",
+          status:               nextStatus,
           payment_provider_ref: intent.id,
         } as Record<string, unknown>)
         .eq("id", orderId)
@@ -100,7 +123,7 @@ export async function POST(request: NextRequest) {
       // Vercel invocation alive until the Expo fetch completes.
       // Gated on the row actually transitioning (data !== null) so a
       // duplicate webhook delivery doesn't re-fire the push.
-      if (order) {
+      if (order && !scheduled) {
         const orderRow = order as { order_number: string; customer_phone: string | null };
         after(async () => {
           await notifyOrderPreparing({

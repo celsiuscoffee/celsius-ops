@@ -5,6 +5,8 @@ import Stripe from "stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
 import { checkCronAuth } from "@celsius/shared";
+import { queryCheckoutStatus } from "@/lib/revenue-monster/client";
+import { markRmOrderPaid, markRmOrderFailed } from "@/lib/revenue-monster/order-status";
 
 // Runs every minute. Finds "pending" orders between 2 and 55 minutes old and
 // reconciles them against Stripe — covers wallet cancels where confirm-stripe
@@ -24,7 +26,11 @@ type OrderLite = {
   loyalty_id: string | null;
   loyalty_points_earned: number | null;
   reward_id: string | null;
+  payment_method: string | null;
+  payment_checkout_id: string | null;
 };
+
+const RM_METHODS = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card"]);
 
 export async function GET(request: NextRequest) {
   const cronAuth = checkCronAuth(request.headers);
@@ -42,7 +48,7 @@ export async function GET(request: NextRequest) {
 
   const { data: pending, error } = await supabase
     .from("orders")
-    .select("id, order_number, store_id, loyalty_id, loyalty_points_earned, reward_id")
+    .select("id, order_number, store_id, loyalty_id, loyalty_points_earned, reward_id, payment_method, payment_checkout_id")
     .eq("status", "pending")
     .lt("created_at", olderThan)
     .gt("created_at", youngerThan);
@@ -56,6 +62,30 @@ export async function GET(request: NextRequest) {
 
   for (const order of orders) {
     try {
+      // RM-routed orders are reconciled against Revenue Monster's
+      // Query Payment Checkout endpoint via the same code path the
+      // order-page poll uses. Webhooks are best-effort on RM Direct
+      // mode, so this catches the dropped-webhook case for any RM
+      // method (TNG, FPX, Boost, ShopeePay, GrabPay, DuitNow, card).
+      if (order.payment_method && RM_METHODS.has(order.payment_method)) {
+        if (!order.payment_checkout_id) {
+          result.unresolved += 1;
+          continue;
+        }
+        const rm = await queryCheckoutStatus(order.payment_checkout_id);
+        if (rm.status === "SUCCESS") {
+          const paid = await markRmOrderPaid({ orderId: order.id }, rm.transactionId);
+          if (paid) result.advanced += 1;
+          else      result.unresolved += 1;
+        } else if (rm.status === "FAILED" || rm.status === "CANCELLED" || rm.status === "EXPIRED") {
+          await markRmOrderFailed({ orderId: order.id });
+          result.failed += 1;
+        } else {
+          result.unresolved += 1;
+        }
+        continue;
+      }
+
       // Stripe indexes metadata for search within a few seconds of intent creation.
       const search = await stripe.paymentIntents.search({
         query: `metadata['orderId']:'${order.id}'`,

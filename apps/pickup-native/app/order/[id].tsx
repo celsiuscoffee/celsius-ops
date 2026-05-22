@@ -142,6 +142,22 @@ export default function OrderStatus() {
       setOverlay("confirming");
     }
 
+    // Mount-time success: customer arrived with justPaid=1 and the
+    // order is already in preparing/ready (fast webhook beat them
+    // back to the app). Show the success overlay briefly anyway —
+    // without this, fast RM payments and all Stripe payments would
+    // land on Brewing-now with no acknowledgement moment.
+    if (
+      prev === null &&
+      cur &&
+      (cur === "preparing" || cur === "ready") &&
+      justPaid === "1" &&
+      overlay === null
+    ) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setOverlay("success");
+    }
+
     // Transition into preparing/ready while the customer is here →
     // morph to success.
     if (prev && cur && prev !== cur) {
@@ -811,11 +827,37 @@ export default function OrderStatus() {
                   </Text>
                 </View>
               </View>
+            ) : data.status === "paid" && data.pickup_at ? (
+              // Scheduled, paid, held — order is sitting in queue
+              // until the brew window opens. promote-scheduled cron
+              // flips this to "preparing" when it's time.
+              <View className="flex-row items-center py-1 gap-3">
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: "#FFF3E0",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Clock size={20} color="#C05040" strokeWidth={2.2} />
+                </View>
+                <View className="flex-1">
+                  <Text
+                    className="text-espresso text-base"
+                    style={{ fontFamily: "Peachi-Bold" }}
+                  >
+                    Scheduled
+                  </Text>
+                  <Text className="text-muted-fg text-xs mt-0.5">
+                    Brewing starts shortly before {new Date(data.pickup_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.
+                  </Text>
+                </View>
+              </View>
             ) : (
-              // paid / preparing — compact row layout. The top strip
-              // already carries the visual state; this card just
-              // names it. Was a 64px chip + xl title + sub, easily
-              // 180pt tall; now ~64pt with the same information.
+              // paid (no pickup_at) / preparing — Brewing now.
               <View className="flex-row items-center py-1 gap-3">
                 <View
                   style={{

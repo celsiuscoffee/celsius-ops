@@ -53,12 +53,10 @@ export async function POST(request: NextRequest) {
     const result = await queryCheckoutStatus(order.payment_checkout_id);
     if (result.status === "SUCCESS") {
       const paid = await markRmOrderPaid({ orderId: order.id }, result.transactionId);
-      if (paid) {
-        // When the webhook is dropped and this poll is what actually
-        // reconciles the order, the customer expects a push as if the
-        // webhook had fired. Same after() pattern keeps the poll
-        // response fast — the client's React Query refetch sees the
-        // new status on the next tick regardless of push delivery.
+      if (paid && !paid.scheduled) {
+        // Suppress for scheduled orders — promote-scheduled fires
+        // the push at brew-window-open time. See the equivalent
+        // suppression in the RM webhook handler.
         after(async () => {
           await notifyOrderPreparing({
             orderId:       paid.orderId,
@@ -67,7 +65,11 @@ export async function POST(request: NextRequest) {
           }).catch((e) => console.warn("[push] order_preparing rm poll", e));
         });
       }
-      return NextResponse.json({ status: "preparing", source: "rm", transactionId: result.transactionId });
+      return NextResponse.json({
+        status: paid?.scheduled ? "paid" : "preparing",
+        source: "rm",
+        transactionId: result.transactionId,
+      });
     }
     if (result.status === "FAILED" || result.status === "EXPIRED" || result.status === "CANCELLED") {
       await markRmOrderFailed({ orderId: order.id });

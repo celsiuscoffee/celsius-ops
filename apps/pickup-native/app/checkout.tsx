@@ -944,16 +944,21 @@ export default function Checkout() {
       stage = "present-payment-sheet";
       const presentRes = await presentPaymentSheet();
       if (presentRes.error) {
-        // User cancelled or payment failed. Order stays pending; cron will
-        // expire it after 10 min if no retry.
         if (presentRes.error.code !== "Canceled") {
+          // Hard failure (card declined, network, etc.) — route to the
+          // order page where the retry / change-method UI lives.
           trackEvent("payment_failed", { orderId: res.orderId, code: presentRes.error.code, message: presentRes.error.message });
           Alert.alert("Payment failed", presentRes.error.message);
+          router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
         } else {
+          // Customer dismissed the sheet — they decided not to pay
+          // right now. Mirror the RM cancel destination: route to
+          // /orders (In progress list) instead of the deeper detail
+          // page. Order stays pending; abandoned-orders cron expires
+          // it later.
           trackEvent("payment_cancelled", { orderId: res.orderId });
+          router.replace("/orders");
         }
-        // Always route to the order page so customer can retry from there.
-        router.replace({ pathname: "/order/[id]", params: { id: res.orderId } });
         return;
       }
       trackEvent("payment_success", { orderId: res.orderId });
@@ -986,7 +991,10 @@ export default function Checkout() {
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      routeAfterSuccess(res.orderId);
+      // Pass justPaid=1 so the order page can also fire the success
+      // overlay on mount if the customer ever lands there from
+      // history (push tap, etc.) — same path RM payments take.
+      routeAfterSuccess(res.orderId, { params: { justPaid: "1" } });
     } catch (e: any) {
       const detail = `[${stage}] ${e?.message ?? String(e)}`;
       setLastError(detail);

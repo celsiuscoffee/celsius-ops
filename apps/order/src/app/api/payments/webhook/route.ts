@@ -55,13 +55,12 @@ export async function POST(request: NextRequest) {
 
     if (data.status === "SUCCESS") {
       const paid = await markRmOrderPaid({ orderNumber }, data.transactionId);
-      if (paid) {
-        // Same "Brewing now ☕" push the Stripe webhook fires. RM-paid
-        // orders previously got no payment-confirmation notification —
-        // the customer only saw the in-app "Confirming payment…" panel
-        // until the next poll tick. after() lets us respond to RM fast
-        // (their webhook retries on slow ack) while the push goes out
-        // asynchronously.
+      if (paid && !paid.scheduled) {
+        // Same "Brewing now" push the Stripe webhook fires. Suppressed
+        // when the order was held for scheduled pickup — promote-
+        // scheduled cron fires the push at brew-window-open time
+        // instead, so the customer doesn't get a "brewing now" ping
+        // 30 min before their drink is actually being made.
         after(async () => {
           await notifyOrderPreparing({
             orderId:       paid.orderId,

@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
 import { applyOrderV2Hooks } from "@/lib/loyalty/v2";
 import { notifyOrderPreparing } from "@/lib/push/templates";
+import { shouldHoldForScheduled } from "@/lib/revenue-monster/order-status";
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY?.trim();
@@ -53,10 +54,33 @@ export async function POST(
     }
 
     const supabase = getSupabaseAdmin();
+
+    // Decide hold-for-scheduled vs preparing — same logic as the RM
+    // path. Peek at the row + outlet to know pickup_at + prep_time
+    // before the actual status update.
+    const { data: peek } = await supabase
+      .from("orders")
+      .select("store_id, pickup_at")
+      .eq("id", orderId)
+      .maybeSingle();
+    let prepTimeMins = 10;
+    if ((peek as { store_id?: string | null } | null)?.store_id) {
+      const { data: outlet } = await supabase
+        .from("outlet_settings")
+        .select("pickup_time_mins")
+        .eq("store_id", (peek as { store_id: string }).store_id)
+        .maybeSingle();
+      const ptm = (outlet as { pickup_time_mins?: number } | null)?.pickup_time_mins;
+      if (typeof ptm === "number" && ptm > 0) prepTimeMins = ptm;
+    }
+    const pickupAt = (peek as { pickup_at?: string | null } | null)?.pickup_at ?? null;
+    const scheduled = shouldHoldForScheduled(pickupAt, prepTimeMins);
+    const nextStatus = scheduled ? "paid" : "preparing";
+
     const { data: updated } = await supabase
       .from("orders")
       .update({
-        status:               "preparing",
+        status:               nextStatus,
         payment_provider_ref: intent.id,
       } as Record<string, unknown>)
       .eq("id", orderId)
@@ -91,12 +115,10 @@ export async function POST(
       });
     }
 
-    // "Brewing now ☕" push. Same template the webhook fires — whichever
-    // path lands first wins, and the row update being gated on
-    // status="pending" means the second path's select returns null and
-    // skips the push. So even if both webhook and confirm-stripe race,
-    // the customer gets exactly one preparing push.
-    if (updated) {
+    // "Brewing now" push — suppressed for scheduled orders (the
+    // promote-scheduled cron fires it at brew-window-open time
+    // instead).
+    if (updated && !scheduled) {
       const orderRow = updated as { order_number: string; customer_phone: string | null };
       after(async () => {
         await notifyOrderPreparing({

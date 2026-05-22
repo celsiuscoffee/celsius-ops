@@ -10,6 +10,9 @@
     { "path": "/api/cron/loyalty-pushes?job=custom",          "schedule": "30 3 * * *" },
     { "path": "/api/cron/loyalty-pushes?job=miss-you",        "schedule": "0 3 * * 1" },
     { "path": "/api/cron/streak-update",                      "schedule": "0 4 * * 1" },
-    { "path": "/api/cron/auto-hours",                         "schedule": "*/10 * * * *" }
+    { "path": "/api/cron/auto-hours",                         "schedule": "*/10 * * * *" },
+    { "path": "/api/cron/reconcile-pending",                  "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/expire-orders",                      "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/promote-scheduled",                  "schedule": "*/2 * * * *" }
   ]
 }
