@@ -637,47 +637,59 @@ export default function Home() {
         )}
 
         {/* Active order tracker — sits above everything else when present.
-            Brand-aligned: terracotta tint on cream-white, espresso text,
-            primary chevron. Was emerald — green isn't on the CC palette
-            (only terracotta, espresso, white, amber). */}
-        {activeOrder && (
-          <Pressable
-            onPress={() => router.push({ pathname: "/order/[id]", params: { id: activeOrder.id } })}
-            className="mx-4 mt-4 rounded-2xl active:opacity-85"
-            style={{
-              paddingHorizontal: 14,
-              paddingVertical: 12,
-              backgroundColor: "#FBEBE8",
-              borderWidth: 1,
-              borderColor: "rgba(162, 73, 44, 0.20)",
-            }}
-          >
-            <View className="flex-row items-center gap-3">
-              <View
-                className="w-9 h-9 rounded-full items-center justify-center"
-                style={{ backgroundColor: "rgba(162, 73, 44, 0.15)" }}
-              >
-                <Clock4 size={18} color="#A2492C" strokeWidth={2} />
-              </View>
-              <View className="flex-1">
-                <Text
-                  className="text-[10px] uppercase tracking-widest"
-                  style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#A2492C", letterSpacing: 1.5 }}
+            Tone follows the order status:
+              ready/completed → green (success)
+              pending/failed  → red (danger)
+              everything else (paid, preparing) → yellow (warning, in-flight)
+            so the customer's eye reads the meaning before the label.
+            Order number stays espresso for high-contrast headline. */}
+        {activeOrder && (() => {
+          const s = (activeOrder.status ?? "").toLowerCase();
+          const tone =
+            s === "ready" || s === "completed"
+              ? { fg: "#2E7D32", tint: "rgba(46,125,50,0.10)", border: "rgba(46,125,50,0.25)", chip: "rgba(46,125,50,0.15)" }
+              : s === "pending" || s === "failed" || s === "cancelled"
+                ? { fg: "#B91C1C", tint: "rgba(185,28,28,0.10)", border: "rgba(185,28,28,0.25)", chip: "rgba(185,28,28,0.15)" }
+                : { fg: "#B45309", tint: "rgba(180,83,9,0.10)", border: "rgba(180,83,9,0.25)", chip: "rgba(180,83,9,0.15)" };
+          return (
+            <Pressable
+              onPress={() => router.push({ pathname: "/order/[id]", params: { id: activeOrder.id } })}
+              className="mx-4 mt-4 rounded-2xl active:opacity-85"
+              style={{
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                backgroundColor: tone.tint,
+                borderWidth: 1,
+                borderColor: tone.border,
+              }}
+            >
+              <View className="flex-row items-center gap-3">
+                <View
+                  className="w-9 h-9 rounded-full items-center justify-center"
+                  style={{ backgroundColor: tone.chip }}
                 >
-                  {statusLabel(activeOrder.status)}
-                </Text>
-                <Text
-                  className="text-espresso text-[14px] mt-0.5"
-                  style={{ fontFamily: "Peachi-Bold" }}
-                  numberOfLines={1}
-                >
-                  Order #{activeOrder.order_number}
-                </Text>
+                  <Clock4 size={18} color={tone.fg} strokeWidth={2} />
+                </View>
+                <View className="flex-1">
+                  <Text
+                    className="text-[10px] uppercase tracking-widest"
+                    style={{ fontFamily: "SpaceGrotesk_700Bold", color: tone.fg, letterSpacing: 1.5 }}
+                  >
+                    {statusLabel(activeOrder.status)}
+                  </Text>
+                  <Text
+                    className="text-espresso text-[14px] mt-0.5"
+                    style={{ fontFamily: "Peachi-Bold" }}
+                    numberOfLines={1}
+                  >
+                    Order #{activeOrder.order_number}
+                  </Text>
+                </View>
+                <ChevronRight size={16} color={tone.fg} />
               </View>
-              <ChevronRight size={16} color="#A2492C" />
-            </View>
-          </Pressable>
-        )}
+            </Pressable>
+          );
+        })()}
 
         {/* "How was it? · Reorder" home block removed — reorder now
             lives only on the Orders tab (where the customer expects to
