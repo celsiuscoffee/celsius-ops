@@ -44,8 +44,14 @@ type GatewayMethod = {
   provider: "stripe" | "revenue_monster";
 };
 import * as Haptics from "@/lib/haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { RmCheckoutModal } from "../components/RmCheckoutModal";
 import { useStripe } from "@/lib/stripe-shim";
+
+// Remember the customer's last-used payment method so the next
+// checkout starts with it pre-selected — Uber Eats-style "collapsed"
+// feel without forcing them to re-pick every time.
+const LAST_METHOD_KEY = "celsius:lastPaymentMethod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Outlet } from "../lib/supabase";
 import { useApp, cartTotal, cartCount } from "../lib/store";
@@ -396,18 +402,48 @@ export default function Checkout() {
   const applePay       = gatewayMethods.find((m) => m.method_id === "apple_pay");
   const googlePay      = gatewayMethods.find((m) => m.method_id === "google_pay");
 
-  // Auto-select the first available category once config arrives, so the
-  // customer isn't forced to pick before they can see the rest of the
-  // checkout chrome. Preference order matches ZUS roughly: card → e-wallet
-  // → online banking → device wallets.
+  // Auto-select once gateway config arrives. Preference order: the
+  // customer's previous choice (read from AsyncStorage at mount) → ZUS
+  // fallback (card → e-wallet → online banking → device wallets).
+  // savedMethodLoaded gates the autoselect so we never race the
+  // AsyncStorage read and pick "card" by default for a customer who
+  // habitually pays with TNG.
+  const [savedMethodLoaded, setSavedMethodLoaded] = useState(false);
+  const [savedMethodId, setSavedMethodId] = useState<string | null>(null);
   useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(LAST_METHOD_KEY)
+      .then((v) => {
+        if (cancelled) return;
+        setSavedMethodId(v);
+        setSavedMethodLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSavedMethodLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    if (!savedMethodLoaded) return;
     if (selectedCategory !== null) return;
+    // Try the saved method first if it's still enabled in the current
+    // gateway config. Only set if the corresponding method is actually
+    // available on this platform (skips Apple Pay on Android, etc.).
+    if (savedMethodId) {
+      if (savedMethodId === "card" && card) { setSelectedCategory("card"); return; }
+      if (savedMethodId === "fpx"  && onlineBanking) { setSelectedCategory("online_banking"); return; }
+      if (savedMethodId === "apple_pay"  && applePay)  { setSelectedCategory("apple_pay"); return; }
+      if (savedMethodId === "google_pay" && googlePay) { setSelectedCategory("google_pay"); return; }
+      const w = wallets.find((m) => m.method_id === savedMethodId);
+      if (w) { setSelectedCategory("ewallet"); setSelectedWalletId(w.method_id); return; }
+    }
     if (card)          { setSelectedCategory("card"); return; }
     if (wallets[0])    { setSelectedCategory("ewallet"); return; }
     if (onlineBanking) { setSelectedCategory("online_banking"); return; }
     if (applePay)      { setSelectedCategory("apple_pay"); return; }
     if (googlePay)     { setSelectedCategory("google_pay"); return; }
-  }, [selectedCategory, card, wallets, onlineBanking, applePay, googlePay]);
+  }, [savedMethodLoaded, savedMethodId, selectedCategory, card, wallets, onlineBanking, applePay, googlePay]);
   const successOpacity = useRef(new Animated.Value(0)).current;
   const successScale   = useRef(new Animated.Value(0.6)).current;
 
@@ -485,6 +521,13 @@ export default function Checkout() {
     if (!outletId) {
       Alert.alert("No outlet selected", "Pick an outlet first.");
       return;
+    }
+    // Remember the customer's choice so the next checkout starts with
+    // it pre-selected. Fire-and-forget — a failure here would only mean
+    // the next visit auto-picks "card" by default; not worth blocking
+    // place-order on.
+    if (selectedMethodId) {
+      AsyncStorage.setItem(LAST_METHOD_KEY, selectedMethodId).catch(() => {});
     }
     trackEvent("checkout_started", {
       itemCount: cart.length,

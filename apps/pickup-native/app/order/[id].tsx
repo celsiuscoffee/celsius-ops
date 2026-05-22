@@ -5,6 +5,7 @@ import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Clock,
+  Coffee,
   CreditCard,
   XCircle,
   ChevronDown,
@@ -38,6 +39,7 @@ import { useApp } from "../../lib/store";
 import { EspressoHeader } from "../../components/EspressoHeader";
 import { SwipeToCollect } from "../../components/SwipeToCollect";
 import { OrderStepper } from "../../components/OrderStepper";
+import { OrderProgressStrip } from "../../components/OrderProgressStrip";
 import { CelsiusLoader } from "../../components/CelsiusLoader";
 import { MysteryBean } from "../../components/MysteryBean";
 import { fetchPendingMysteryDrop, type MysteryDropRevealed } from "../../lib/rewards-v2";
@@ -452,6 +454,17 @@ export default function OrderStatus() {
       )}
 
       {data && (
+        <>
+        {/* Sticky top progress strip — only renders for orders that
+            actually entered the brew lifecycle. Pending payment,
+            failed and cancelled orders skip it (their status card
+            below carries the visual). */}
+        {(data.status === "paid" ||
+          data.status === "preparing" ||
+          data.status === "ready" ||
+          data.status === "completed") && (
+          <OrderProgressStrip currentIndex={Math.max(0, statusIdx)} />
+        )}
         <ScrollView contentContainerClassName="px-4 py-4 pb-12 gap-4">
           {/* Status timeline */}
           <View
@@ -608,11 +621,84 @@ export default function OrderStatus() {
                   This order was cancelled. Any payment will be refunded automatically.
                 </Text>
               </View>
+            ) : data.status === "ready" ? (
+              // State-specific banner — the top strip already shows the
+              // progress, so this card now reinforces the current state
+              // with a bigger icon + on-brand message instead of
+              // repeating the stepper.
+              <View className="items-center py-2">
+                <View
+                  style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 32,
+                    backgroundColor: "#E8F5E9",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Check size={32} color="#2E7D32" strokeWidth={2.5} />
+                </View>
+                <Text
+                  className="text-espresso text-xl mt-3"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Ready for pickup ☕
+                </Text>
+                <Text className="text-muted-fg text-sm mt-1 text-center">
+                  Your order is at the counter. Swipe below to collect.
+                </Text>
+              </View>
+            ) : data.status === "completed" ? (
+              <View className="items-center py-2">
+                <View
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 28,
+                    backgroundColor: "#FBEBE8",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Check size={26} color="#C05040" strokeWidth={2.5} />
+                </View>
+                <Text
+                  className="text-espresso text-lg mt-3"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Order collected
+                </Text>
+                <Text className="text-muted-fg text-sm mt-1 text-center">
+                  Thanks for stopping by — see you soon.
+                </Text>
+              </View>
             ) : (
-              // Horizontal pipeline: ●━━●━━○ with the active node pulsing.
-              // Communicates "we're working on it" without forcing the
-              // customer to watch the screen for changes.
-              <OrderStepper currentIndex={Math.max(0, statusIdx)} />
+              // paid / preparing — show the "we're on it" banner with a
+              // pulsing coffee icon. Top strip carries the step progress.
+              <View className="items-center py-2">
+                <View
+                  style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 32,
+                    backgroundColor: "#FFF3E0",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Coffee size={32} color="#C05040" strokeWidth={2.2} />
+                </View>
+                <Text
+                  className="text-espresso text-xl mt-3"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Brewing now
+                </Text>
+                <Text className="text-muted-fg text-sm mt-1 text-center">
+                  We'll ping you the moment it's ready for pickup.
+                </Text>
+              </View>
             )}
           </View>
 
@@ -814,6 +900,7 @@ export default function OrderStatus() {
             </View>
           )}
         </ScrollView>
+        </>
       )}
 
       <RmCheckoutModal
