@@ -44,6 +44,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fetchMenu, type Product } from "../lib/menu";
 import { useApp, cartCount, cartTotal } from "../lib/store";
 import { formatPrice } from "../lib/api";
+import { EspressoHeader } from "../components/EspressoHeader";
 import { cloudinaryThumb } from "../lib/image";
 import { useActiveSales } from "../lib/use-active-sales";
 import { bestSaleForProduct } from "../lib/product-sales";
@@ -355,95 +356,107 @@ export default function Menu() {
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* White header with search + cart */}
-      <View
-        className="bg-surface border-b border-border z-10"
-        style={{
-          paddingTop: insets.top + 8,
-          shadowColor: "#000",
-          shadowOpacity: 0.04,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 1 },
-        }}
-      >
-        <View className="flex-row items-center gap-3 px-4 pb-2">
-          {searchOpen ? (
-            <View className="flex-1 flex-row items-center gap-2 bg-background rounded-full px-3 py-2">
-              <Search size={16} color="#8E8E93" />
+      {/* Standardised espresso header — matches every other page
+          (Order detail, Account, Settings, etc.). Search swaps the
+          title for an inline white-tinted search field; the cart
+          icon stays put in the right slot. Outlet picker drops to a
+          surface row directly under the header so it still reads as
+          one piece of chrome. */}
+      {searchOpen ? (
+        <View
+          className="bg-espresso px-4"
+          style={{ paddingTop: insets.top + 8, paddingBottom: 12 }}
+        >
+          <View className="flex-row items-center gap-3">
+            <View className="flex-1 flex-row items-center gap-2 rounded-full px-3 py-2" style={{ backgroundColor: "rgba(255,255,255,0.12)" }}>
+              <Search size={16} color="rgba(255,255,255,0.7)" />
               <TextInput
                 autoFocus
                 placeholder="Search menu…"
-                placeholderTextColor="#8E8E93"
+                placeholderTextColor="rgba(255,255,255,0.5)"
                 value={query}
                 onChangeText={setQuery}
-                className="flex-1 text-espresso text-sm"
+                className="flex-1 text-white text-sm"
                 style={{ fontFamily: "SpaceGrotesk_500Medium" }}
               />
               {query.length > 0 && (
                 <Pressable onPress={() => setQuery("")} hitSlop={12}>
-                  <X size={16} color="#8E8E93" />
+                  <X size={16} color="rgba(255,255,255,0.7)" />
                 </Pressable>
               )}
             </View>
-          ) : (
-            <Text
-              className="text-espresso text-[22px] flex-1"
-              style={{ fontFamily: "Peachi-Bold" }}
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                setSearchOpen(false);
+                setQuery("");
+              }}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close search"
             >
-              Pickup
-            </Text>
-          )}
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync();
-              setSearchOpen((v) => !v);
-              if (searchOpen) setQuery("");
-            }}
-            className="p-1 active:opacity-60"
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel={searchOpen ? "Close search" : "Search menu"}
-          >
-            {searchOpen ? (
-              <Text className="text-primary text-sm font-medium">Cancel</Text>
-            ) : (
-              <Search size={20} color="#8E8E93" />
-            )}
-          </Pressable>
-          <Pressable
-            onPress={() => router.push("/cart")}
-            className="p-1 relative active:opacity-60"
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel={
-              cartCount(cart) > 0
-                ? `Cart, ${cartCount(cart)} ${cartCount(cart) === 1 ? "item" : "items"}`
-                : "Cart, empty"
-            }
-          >
-            <ShoppingCart size={20} color="#160800" />
-            {cartCount(cart) > 0 && (
-              <View className="absolute -top-0.5 -right-0.5 bg-primary rounded-full w-4 h-4 items-center justify-center">
-                <Text className="text-white text-[9px] font-bold">{cartCount(cart)}</Text>
-              </View>
-            )}
-          </Pressable>
+              <Text className="text-white text-sm font-medium">Cancel</Text>
+            </Pressable>
+          </View>
         </View>
+      ) : (
+        <EspressoHeader
+          title="Pickup"
+          showCart={false}
+          rightSlot={
+            <View className="flex-row items-center gap-4">
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setSearchOpen(true);
+                }}
+                className="p-1 active:opacity-60"
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Search menu"
+              >
+                <Search size={20} color="rgba(255,255,255,0.85)" />
+              </Pressable>
+              <Pressable
+                onPress={() => router.push("/cart")}
+                className="p-1 relative active:opacity-60"
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  cartCount(cart) > 0
+                    ? `Cart, ${cartCount(cart)} ${cartCount(cart) === 1 ? "item" : "items"}`
+                    : "Cart, empty"
+                }
+              >
+                <ShoppingCart size={20} color="rgba(255,255,255,0.85)" />
+                {cartCount(cart) > 0 && (
+                  <View className="absolute -top-0.5 -right-0.5 bg-white rounded-full w-4 h-4 items-center justify-center">
+                    <Text className="text-primary text-[9px] font-bold">{cartCount(cart)}</Text>
+                  </View>
+                )}
+              </Pressable>
+            </View>
+          }
+        />
+      )}
 
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync();
-            router.push("/store");
-          }}
-          className="flex-row items-center gap-2 px-4 pb-3 active:opacity-70"
-          accessibilityLabel={`Pickup outlet: ${outletName ?? "not selected"}. Tap to change.`}
-        >
-          <MapPin size={14} color="#A2492C" />
-          <Text className="text-espresso font-bold text-sm flex-1" numberOfLines={1}>
-            {outletName ?? "Select outlet"}
-          </Text>
-          <ChevronDown size={14} color="#8E8E93" />
-        </Pressable>
+      {/* Outlet picker — surface row beneath the espresso header so it
+          reads as the secondary chrome row, like the cart's "Slide to
+          confirm" surface or the order page's pickup-details row. */}
+      <Pressable
+        onPress={() => {
+          Haptics.selectionAsync();
+          router.push("/store");
+        }}
+        className="bg-surface flex-row items-center gap-2 px-4 py-3 border-b border-border active:opacity-70"
+        accessibilityLabel={`Pickup outlet: ${outletName ?? "not selected"}. Tap to change.`}
+      >
+        <MapPin size={14} color="#A2492C" />
+        <Text className="text-espresso font-bold text-sm flex-1" numberOfLines={1}>
+          {outletName ?? "Select outlet"}
+        </Text>
+        <ChevronDown size={14} color="#8E8E93" />
+      </Pressable>
 
         {/* Guest banner — gentle pull to sign in. Sits below the outlet
             row so it never blocks the cart icon. Only shown when the
@@ -480,7 +493,6 @@ export default function Menu() {
             </View>
           </Pressable>
         )}
-      </View>
 
       <ReservedVoucherBanner />
 
