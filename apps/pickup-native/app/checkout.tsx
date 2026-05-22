@@ -371,7 +371,7 @@ export default function Checkout() {
   // compact and the picker has its own focused surface.
   const [walletSheetOpen, setWalletSheetOpen] = useState(false);
 
-  // Scheduled pickup. Null = ASAP (default, brew immediately). When
+  // Scheduled pickup. Null = Now (default, brew immediately). When
   // set, the customer wants pickup at that offset from now — server
   // stores the timestamp on the order; the future KDS gating layer
   // will hold scheduled orders until ~prep-time before pickup.
@@ -384,7 +384,7 @@ export default function Checkout() {
     ? null
     : new Date(Date.now() + pickupOffsetMin * 60_000).toISOString();
   const formatPickupLabel = (mins: number | null): string => {
-    if (mins == null) return "ASAP";
+    if (mins == null) return "Now";
     const at = new Date(Date.now() + mins * 60_000);
     const h  = at.getHours();
     const m  = at.getMinutes().toString().padStart(2, "0");
@@ -1044,7 +1044,7 @@ export default function Checkout() {
               )}
             </Pressable>
 
-            {/* Pickup time — defaults to ASAP. Tap to open the
+            {/* Pickup time — defaults to Now. Tap to open the
                 bottom-sheet picker and choose a delayed pickup so
                 the drink is freshest when the customer arrives. */}
             <Pressable
@@ -1072,7 +1072,7 @@ export default function Checkout() {
                   <CalendarClock size={14} color="#160800" />
                 )}
                 <Text className="text-espresso font-bold text-[15px] flex-1" numberOfLines={1}>
-                  {pickupOffsetMin == null ? "ASAP" : formatPickupLabel(pickupOffsetMin)}
+                  {pickupOffsetMin == null ? "Now" : formatPickupLabel(pickupOffsetMin)}
                 </Text>
               </View>
               <Text
@@ -1541,7 +1541,7 @@ export default function Checkout() {
         </View>
       </BottomSheet>
 
-      {/* Pickup time picker — ASAP row first (Starbucks default),
+      {/* Pickup time picker — Now row first (Starbucks default),
           then a list of +15/+30/+45/+60/+90/+120 min offsets with the
           absolute clock time alongside. Mirrors the wallet sheet's
           single-tap-and-close pattern. */}
@@ -1570,7 +1570,7 @@ export default function Checkout() {
             </View>
             <View className="flex-1">
               <Text className="text-espresso text-[15px] font-bold">
-                ASAP
+                Now
               </Text>
               <Text className="text-muted-fg text-[12px]">
                 {currentOutlet?.pickup_time_mins

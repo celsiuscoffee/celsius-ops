@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Celsius pickup — UX upgrades (22 May 2026)</title>
+<style>
+  :root {
+    --espresso:    #160800;
+    --terracotta:  #C05040;
+    --terra-tint:  #FBEBE8;
+    --amber-tint:  #FFF3E0;
+    --green-tint:  #E8F5E9;
+    --green:       #2E7D32;
+    --background:  #FFF8F0;
+    --surface:     #FFFFFF;
+    --border:      rgba(26,2,0,0.10);
+    --muted:       #8E8E93;
+    --rail:        rgba(26,2,0,0.10);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #1a1a1a;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+  }
+  .sub {
+    color: #aaa;
+    font-size: 14px;
+    margin-bottom: 48px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 48px;
+    align-items: start;
+  }
+  .col h2 {
+    font-size: 14px;
+    color: #ccc;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 600;
+    margin: 0 0 16px;
+  }
+  .col p {
+    color: #888;
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 12px 0 16px;
+  }
+  /* Phone frame ---------------------------------------------------- */
+  .phone {
+    width: 390px;
+    height: 844px;
+    border-radius: 56px;
+    background: #000;
+    padding: 12px;
+    box-shadow:
+      0 0 0 1px #2a2a2a,
+      0 30px 60px rgba(0,0,0,0.5);
+    position: relative;
+    margin: 0 auto;
+  }
+  .screen {
+    width: 100%;
+    height: 100%;
+    border-radius: 44px;
+    overflow: hidden;
+    background: var(--background);
+    color: var(--espresso);
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    position: relative;
+  }
+  /* iOS status bar */
+  .status-bar {
+    height: 47px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px 0 32px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .status-bar.dark { color: #000; }
+  .status-bar .indicators {
+    display: flex; align-items: center; gap: 6px;
+  }
+  /* Espresso header bar */
+  .hd {
+    background: var(--espresso);
+    color: #fff;
+    padding: 0 20px 18px;
+  }
+  .hd .title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 4px;
+  }
+  .hd .title {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .hd .x {
+    width: 28px; height: 28px;
+    color: #fff; font-size: 22px;
+    display: grid; place-items: center;
+    background: rgba(255,255,255,0.08); border-radius: 14px;
+  }
+  /* Card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    margin: 16px;
+  }
+  .card .row1 {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-weight: 700;
+  }
+  .card .change {
+    color: var(--terracotta); font-size: 11px; font-weight: 700;
+  }
+  .card .primary-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 6px;
+  }
+  .card .primary-row .label {
+    font-size: 15px; font-weight: 700;
+  }
+  .card .helper {
+    color: var(--muted); font-size: 12px; margin-top: 8px;
+    font-weight: 600;
+  }
+  .card .helper.dot::before {
+    content: ""; display: inline-block;
+    width: 6px; height: 6px; border-radius: 3px;
+    background: #22C55E; margin-right: 6px; vertical-align: 1px;
+  }
+  /* Bottom sheet */
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: var(--surface);
+    border-top-left-radius: 24px; border-top-right-radius: 24px;
+    padding: 12px 16px 28px;
+    box-shadow: 0 -10px 30px rgba(0,0,0,0.15);
+  }
+  .sheet .grab {
+    width: 36px; height: 4px; border-radius: 2px;
+    background: rgba(0,0,0,0.18);
+    margin: 0 auto 12px;
+  }
+  .sheet h3 {
+    font-size: 17px; font-weight: 700;
+    margin: 0 0 12px;
+    text-align: left;
+  }
+  .sheet-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+  }
+  .sheet-row:first-of-type { border-top: 0; }
+  .icon-chip {
+    width: 40px; height: 40px; border-radius: 20px;
+    display: grid; place-items: center;
+    background: #F5F5F5;
+    color: var(--muted);
+  }
+  .icon-chip.active { background: var(--terra-tint); color: var(--terracotta); }
+  .sheet-row .main { flex: 1; }
+  .sheet-row .name { font-size: 15px; font-weight: 700; }
+  .sheet-row .sub  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .sheet-row .check { color: var(--terracotta); font-size: 18px; font-weight: 700; }
+  .scrim {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.3);
+  }
+  /* Order page — top progress strip */
+  .strip {
+    background: var(--background);
+    padding: 14px 20px 18px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .strip .rail-wrap {
+    position: relative; height: 4px;
+    margin: 22px 0 12px;
+  }
+  .strip .rail {
+    position: absolute; left: 0; right: 0; top: 0; height: 4px;
+    background: var(--rail); border-radius: 2px;
+  }
+  .strip .fill {
+    position: absolute; left: 0; top: 0; height: 4px;
+    background: var(--terracotta); border-radius: 2px;
+  }
+  .strip .node {
+    position: absolute; top: -12px;
+    width: 28px; height: 28px; border-radius: 14px;
+    display: grid; place-items: center;
+    transform: translateX(-50%);
+    background: #fff;
+    border: 1.5px solid rgba(26,2,0,0.18);
+    color: var(--muted);
+  }
+  .strip .node.done    { background: var(--terracotta); border-color: transparent; color: #fff; }
+  .strip .node.current { background: var(--terracotta); border-color: transparent; color: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.18); transform: translateX(-50%) scale(1.1); }
+  .strip .labels {
+    display: flex; margin-top: 16px;
+  }
+  .strip .labels span {
+    flex: 1; font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .strip .labels span:first-child { text-align: left; }
+  .strip .labels span:last-child  { text-align: right; }
+  .strip .labels span.cur  { color: var(--terracotta); }
+  .strip .labels span.done { color: var(--espresso); }
+  /* State banners */
+  .state-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px 16px;
+    margin: 16px;
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  }
+  .state-icon {
+    width: 64px; height: 64px; border-radius: 32px;
+    margin: 0 auto 12px;
+    display: grid; place-items: center;
+  }
+  .state-icon.brew  { background: var(--amber-tint); color: var(--terracotta); }
+  .state-icon.ready { background: var(--green-tint); color: var(--green); }
+  .state-icon.coll  { background: var(--terra-tint); color: var(--terracotta); width: 56px; height: 56px; border-radius: 28px; }
+  .state-title {
+    font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
+  }
+  .state-title.lg { font-size: 22px; }
+  .state-sub {
+    font-size: 13px; color: var(--muted); margin-top: 6px;
+  }
+  /* SVG icons (lucide-react inspired) */
+  .icon-svg { width: 18px; height: 18px; }
+  .icon-svg.lg { width: 32px; height: 32px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Celsius Pickup — UX upgrades</h1>
+  <div class="sub">22 May 2026 · Real screens from today's OTA. Tailwind tokens match the React Native source so the rendered HTML mirrors what customers see.</div>
+
+  <div class="grid">
+
+    <!-- ─── Checkout: Pickup Time card (Now) ─────────────────────── -->
+    <div class="col">
+      <h2>1 · Checkout · Pickup Time card</h2>
+      <div class="phone"><div class="screen">
+        <div class="status-bar dark">
+          <span>9:41</span>
+          <span class="indicators">
+            <svg viewBox="0 0 16 12" width="17" height="11"><rect x="0" y="6" width="3" height="6" fill="#000"/><rect x="4" y="4" width="3" height="8" fill="#000"/><rect x="8" y="2" width="3" height="10" fill="#000"/><rect x="12" y="0" width="3" height="12" fill="#000"/></svg>
+            <svg viewBox="0 0 16 12" width="15" height="11"><path d="M8 10a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm0-3.5a4 4 0 013 1.3l1.1-1.1A5.5 5.5 0 008 5a5.5 5.5 0 00-4.1 1.7L5 7.8A4 4 0 018 6.5zm0-3.5a7.5 7.5 0 015.5 2.4l1.1-1.1A9 9 0 008 1.5a9 9 0 00-6.6 2.8l1.1 1.1A7.5 7.5 0 018 3z" fill="#000"/></svg>
+            <svg viewBox="0 0 28 12" width="26" height="12"><rect x="1" y="1" width="22" height="10" rx="2" stroke="#000" stroke-width="1" fill="none"/><rect x="24" y="4" width="2" height="4" fill="#000"/><rect x="3" y="3" width="18" height="6" rx="1" fill="#000"/></svg>
+          </span>
+        </div>
+        <div class="hd">
+          <div class="title-row">
+            <div class="title">Checkout</div>
+            <div class="x">×</div>
+          </div>
+        </div>
+
+        <!-- Pickup at outlet -->
+        <div class="card">
+          <div class="row1">
+            <span>Pickup at</span>
+            <span class="change">Change</span>
+          </div>
+          <div class="primary-row">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="#160800" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <span class="label">Celsius Coffee Putrajaya</span>
+          </div>
+          <div class="helper dot">Open · ready in ~10 min</div>
+        </div>
+
+        <!-- Pickup Time (NEW) -->
+        <div class="card" style="border-color: var(--terracotta); border-width: 1.5px;">
+          <div class="row1">
+            <span>Pickup time</span>
+            <span class="change">Change</span>
+          </div>
+          <div class="primary-row">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="#160800" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span class="label">Now</span>
+          </div>
+          <div class="helper">Brewed in ~10 min</div>
+        </div>
+
+        <p style="font-size:12px;color:var(--muted);margin:24px 16px;text-align:center;line-height:1.5">
+          New card between Pickup-at and Payment.<br/>Tap to schedule for later.
+        </p>
+
+      </div></div>
+    </div>
+
+    <!-- ─── Checkout: Time picker bottom sheet ────────────────────── -->
+    <div class="col">
+      <h2>2 · Pickup time picker · Bottom sheet</h2>
+      <div class="phone"><div class="screen">
+        <div class="status-bar dark"><span>9:41</span><span class="indicators"></span></div>
+        <div class="hd"><div class="title-row"><div class="title">Checkout</div><div class="x">×</div></div></div>
+        <div class="card" style="opacity:0.5">
+          <div class="row1"><span>Pickup time</span><span class="change">Change</span></div>
+          <div class="primary-row"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="#160800" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span class="label">Now</span></div>
+        </div>
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <h3>When do you want it?</h3>
+          <!-- Now -->
+          <div class="sheet-row">
+            <div class="icon-chip active">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div class="main">
+              <div class="name">Now</div>
+              <div class="sub">Brewed in ~10 min</div>
+            </div>
+            <div class="check">✓</div>
+          </div>
+          <!-- +15 -->
+          <div class="sheet-row">
+            <div class="icon-chip">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="2"/></svg>
+            </div>
+            <div class="main">
+              <div class="name">In 15 min</div>
+              <div class="sub">Today · 9:56 AM</div>
+            </div>
+          </div>
+          <!-- +30 -->
+          <div class="sheet-row">
+            <div class="icon-chip">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="2"/></svg>
+            </div>
+            <div class="main">
+              <div class="name">In 30 min</div>
+              <div class="sub">Today · 10:11 AM</div>
+            </div>
+          </div>
+          <!-- +45 -->
+          <div class="sheet-row">
+            <div class="icon-chip">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="2"/></svg>
+            </div>
+            <div class="main">
+              <div class="name">In 45 min</div>
+              <div class="sub">Today · 10:26 AM</div>
+            </div>
+          </div>
+          <!-- +60 -->
+          <div class="sheet-row">
+            <div class="icon-chip">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="2"/></svg>
+            </div>
+            <div class="main">
+              <div class="name">In 60 min</div>
+              <div class="sub">Today · 10:41 AM</div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- ─── Order page: Brewing state ─────────────────────────────── -->
+    <div class="col">
+      <h2>3 · Order page · Brewing (top strip + state banner)</h2>
+      <div class="phone"><div class="screen">
+        <div class="status-bar"><span>9:41</span><span class="indicators"></span></div>
+        <div class="hd"><div class="title-row"><div class="title">Order #C-9771</div><div class="x">×</div></div></div>
+
+        <!-- Top progress strip -->
+        <div class="strip">
+          <div class="rail-wrap">
+            <div class="rail"></div>
+            <div class="fill" style="width:50%"></div>
+            <div class="node done"     style="left:0%">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 2l1.5 14L8 21h8l.5-5L18 2"/><path d="M6 2h12"/></svg>
+            </div>
+            <div class="node current"  style="left:50%">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/><path d="M6 1v3M10 1v3M14 1v3"/></svg>
+            </div>
+            <div class="node"          style="left:100%">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg>
+            </div>
+          </div>
+          <div class="labels">
+            <span class="done">Received</span>
+            <span class="cur">Brewing</span>
+            <span>Ready</span>
+          </div>
+        </div>
+
+        <!-- Brewing banner -->
+        <div class="state-card">
+          <div class="state-icon brew">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/><path d="M6 1v3M10 1v3M14 1v3"/></svg>
+          </div>
+          <div class="state-title lg">Brewing now</div>
+          <div class="state-sub">We'll ping you the moment it's ready for pickup.</div>
+        </div>
+
+        <!-- Items card teaser -->
+        <div class="card">
+          <div class="row1"><span>Items</span></div>
+          <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:14px"><span>1× Black</span><span style="font-weight:700">RM8.90</span></div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px;color:var(--terracotta)"><span>Promotion</span><span>−RM4.45</span></div>
+          <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-weight:700"><span>Total</span><span style="color:var(--terracotta)">RM4.45</span></div>
+        </div>
+
+      </div></div>
+    </div>
+
+    <!-- ─── Order page: Ready state ───────────────────────────────── -->
+    <div class="col">
+      <h2>4 · Order page · Ready (full progress, green banner)</h2>
+      <div class="phone"><div class="screen">
+        <div class="status-bar"><span>9:41</span><span class="indicators"></span></div>
+        <div class="hd"><div class="title-row"><div class="title">Order #C-9771</div><div class="x">×</div></div></div>
+
+        <div class="strip">
+          <div class="rail-wrap">
+            <div class="rail"></div>
+            <div class="fill" style="width:100%"></div>
+            <div class="node done" style="left:0%">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 2l1.5 14L8 21h8l.5-5L18 2"/><path d="M6 2h12"/></svg>
+            </div>
+            <div class="node done" style="left:50%">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/><path d="M6 1v3M10 1v3M14 1v3"/></svg>
+            </div>
+            <div class="node current" style="left:100%">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg>
+            </div>
+          </div>
+          <div class="labels">
+            <span class="done">Received</span>
+            <span class="done">Brewing</span>
+            <span class="cur">Ready</span>
+          </div>
+        </div>
+
+        <div class="state-card">
+          <div class="state-icon ready">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div class="state-title lg">Ready for pickup ☕</div>
+          <div class="state-sub">Your order is at the counter. Swipe below to collect.</div>
+        </div>
+
+        <!-- Swipe-to-collect bar -->
+        <div style="margin:16px;padding:20px;border-radius:16px;background:var(--terra-tint);border:1px solid rgba(192,80,64,0.25);text-align:center;color:var(--terracotta);font-weight:700">
+          Swipe to confirm pickup →
+        </div>
+
+      </div></div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:64px;padding:24px;background:#222;border-radius:16px;color:#aaa;font-size:13px;line-height:1.6">
+    <strong style="color:#fff">What's in this OTA (5e24187):</strong>
+    <ul style="margin:12px 0 0 20px;padding:0">
+      <li><strong>(1)</strong> Remembered payment method — checkout pre-selects whatever the customer used last time.</li>
+      <li><strong>(2)</strong> State-specific status banners — Brewing (amber/coffee), Ready (green/check), Collected (terracotta/check).</li>
+      <li><strong>(3)</strong> Scheduled pickup picker — Now + 15/30/45/60/90/120 min offsets, persisted as <code>orders.pickup_at</code>.</li>
+      <li><strong>(5)</strong> Top progress strip — animated terracotta fill, pulsing current node, sticky under the header.</li>
+    </ul>
+    <div style="margin-top:16px;color:#666;font-size:12px">
+      Runtime version 1.0.1 · Branch production · Update group d9af0981
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
