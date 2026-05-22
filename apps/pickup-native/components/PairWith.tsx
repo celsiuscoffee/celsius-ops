@@ -482,9 +482,9 @@ export function PairWith({ current, allProducts, stagedIds, onToggle }: PairWith
               </View>
               <View className="px-2.5 py-2">
                 <Text
-                  className="text-espresso text-[12px]"
+                  className="text-espresso text-[12px] leading-[15px]"
                   style={{ fontFamily: "Peachi-Bold" }}
-                  numberOfLines={1}
+                  numberOfLines={2}
                 >
                   {p.name}
                 </Text>

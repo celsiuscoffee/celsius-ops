@@ -785,9 +785,9 @@ function ProductRow({
       <View className="flex-1 justify-between py-0.5 min-w-0">
         <View>
           <Text
-            className="text-espresso text-[14px]"
+            className="text-espresso text-[14px] leading-[18px]"
             style={{ fontFamily: "Peachi-Bold" }}
-            numberOfLines={1}
+            numberOfLines={2}
             ellipsizeMode="tail"
           >
             {product.name}
