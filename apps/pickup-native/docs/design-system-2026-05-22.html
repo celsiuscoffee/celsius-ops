@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Celsius pickup — design system mockups (22 May 2026)</title>
+<style>
+  :root {
+    /* Brand */
+    --espresso:    #160800;
+    --terracotta:  #C05040;
+    --terra-tint:  #FBEBE8;
+    --background:  #FFF8F0;
+    --surface:     #FFFFFF;
+    --border:      rgba(26,2,0,0.10);
+    --muted:       #8E8E93;
+    --rail:        rgba(26,2,0,0.10);
+
+    /* Semantic (NEW) — used for state, not brand */
+    --success:       #2E7D32;
+    --success-tint:  #E8F5E9;
+    --success-fg:    #1B5E20;
+
+    --warning:       #B45309;     /* amber-700 — readable on amber-tint */
+    --warning-tint:  #FEF3C7;     /* amber-100 */
+    --warning-fg:    #78350F;
+
+    --danger:        #B91C1C;     /* red-700 */
+    --danger-tint:   #FEE2E2;     /* red-100 */
+    --danger-fg:     #7F1D1D;
+
+    --info:          #1D4ED8;     /* blue-700 */
+    --info-tint:     #DBEAFE;
+    --info-fg:       #1E3A8A;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #1a1a1a; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .page { max-width: 1700px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 28px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .sub { color: #aaa; font-size: 14px; margin-bottom: 32px; max-width: 800px; line-height: 1.55; }
+  h2 { font-size: 14px; color: #ccc; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; margin: 56px 0 16px; }
+
+  /* Palette */
+  .palette { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .swatch { background: #222; border-radius: 12px; padding: 14px; }
+  .swatch .chip { width: 100%; height: 56px; border-radius: 8px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); }
+  .swatch .name { font-size: 13px; font-weight: 600; color: #fff; }
+  .swatch .role { font-size: 11px; color: #888; margin-top: 2px; }
+  .swatch .hex { font-size: 11px; color: #aaa; margin-top: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  /* Mock row */
+  .mocks { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 40px; }
+  .col h3 { font-size: 13px; color: #ccc; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; margin: 0 0 14px; }
+  .col p.note { color: #888; font-size: 12px; margin: 12px 0 0; line-height: 1.5; }
+
+  /* Phone */
+  .phone { width: 380px; height: 720px; border-radius: 52px; background: #000; padding: 10px; box-shadow: 0 0 0 1px #2a2a2a, 0 28px 56px rgba(0,0,0,0.5); margin: 0 auto; }
+  .screen { width: 100%; height: 100%; border-radius: 42px; overflow: hidden; background: var(--background); color: var(--espresso); position: relative; }
+  .status-bar { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; color: #000; font-size: 14px; font-weight: 600; }
+  .hd { background: var(--espresso); color: #fff; padding: 4px 20px 16px; }
+  .hd .title { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .hd .x { float: right; width: 26px; height: 26px; display: grid; place-items: center; background: rgba(255,255,255,0.08); border-radius: 13px; font-size: 18px; color: #fff; }
+
+  /* Strip */
+  .strip { background: var(--background); padding: 12px 20px 18px; border-bottom: 1px solid var(--border); }
+  .strip .rail-wrap { position: relative; height: 4px; margin: 22px 0 8px; }
+  .strip .rail { position: absolute; inset: 0; background: var(--rail); border-radius: 2px; }
+  .strip .fill { position: absolute; left: 0; top: 0; height: 4px; border-radius: 2px; }
+  .strip .node { position: absolute; top: -12px; width: 26px; height: 26px; border-radius: 13px; display: grid; place-items: center; transform: translateX(-50%); background: #fff; border: 1.5px solid rgba(26,2,0,0.18); color: var(--muted); }
+  .strip .labels { display: flex; margin-top: 14px; }
+  .strip .labels span { flex: 1; font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .strip .labels span:first-child { text-align: left; }
+  .strip .labels span:last-child { text-align: right; }
+
+  /* Status card */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin: 14px; }
+  .row-card { display: flex; align-items: center; gap: 12px; }
+  .chip { width: 40px; height: 40px; border-radius: 20px; display: grid; place-items: center; flex-shrink: 0; }
+  .row-card .title { font-size: 15px; font-weight: 700; }
+  .row-card .sub   { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  /* Overlay */
+  .overlay { position: absolute; inset: 0; background: rgba(255,247,231,0.96); display: grid; place-items: center; align-content: center; }
+  .overlay .disc { width: 88px; height: 88px; border-radius: 44px; display: grid; place-items: center; box-shadow: 0 6px 16px rgba(0,0,0,0.2); }
+  .overlay .title { font-weight: 700; font-size: 22px; margin-top: 18px; color: var(--espresso); }
+  .overlay .sub { font-size: 13px; color: rgba(26,2,0,0.6); margin-top: 4px; }
+
+  /* Action button */
+  .cta { margin: 16px; padding: 14px; border-radius: 14px; text-align: center; font-weight: 700; font-size: 15px; color: #fff; }
+
+  /* Items mini */
+  .items { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin: 14px; font-size: 13px; }
+  .items .row { display: flex; justify-content: space-between; padding: 4px 0; }
+  .items .row.total { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; font-weight: 700; }
+
+  /* SVG */
+  .svg { width: 18px; height: 18px; }
+  .svg.lg { width: 36px; height: 36px; }
+  .svg.disc { width: 48px; height: 48px; color: #fff; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Design system — semantic vs brand</h1>
+  <div class="sub">
+    Terracotta (<code>#C05040</code>) is the brand colour, but it sits in the same red-orange family as a typical "danger" semantic. Using it for both <em>brand action</em> and <em>state</em> makes Brewing / Failed / Cancelled all read with the same hue and lose contrast. This page splits them: terracotta stays for primary action / brand chrome only; every state moment uses an explicit semantic colour (success = green, warning/in-flight = amber, danger = red, info = blue).
+  </div>
+
+  <h2>Palette</h2>
+  <div class="palette">
+    <div class="swatch"><div class="chip" style="background: var(--terracotta);"></div><div class="name">Terracotta</div><div class="role">Brand primary · CTAs, brand chrome</div><div class="hex">#C05040</div></div>
+    <div class="swatch"><div class="chip" style="background: var(--espresso);"></div><div class="name">Espresso</div><div class="role">Headings, dark surfaces</div><div class="hex">#160800</div></div>
+    <div class="swatch"><div class="chip" style="background: var(--success); border-radius: 8px;"></div><div class="name">Success</div><div class="role">Ready, payment confirmed, collected</div><div class="hex">#2E7D32</div></div>
+    <div class="swatch"><div class="chip" style="background: var(--warning); border-radius: 8px;"></div><div class="name">Warning</div><div class="role">Brewing, confirming, awaiting, scheduled</div><div class="hex">#B45309</div></div>
+    <div class="swatch"><div class="chip" style="background: var(--danger); border-radius: 8px;"></div><div class="name">Danger</div><div class="role">Payment failed, cancelled, destructive</div><div class="hex">#B91C1C</div></div>
+    <div class="swatch"><div class="chip" style="background: var(--info); border-radius: 8px;"></div><div class="name">Info</div><div class="role">Neutral notices, "did you know" hints</div><div class="hex">#1D4ED8</div></div>
+  </div>
+
+  <h2>Order lifecycle — applied</h2>
+  <div class="mocks">
+
+    <!-- Confirming -->
+    <div class="col">
+      <h3>1 · Confirming · Warning (amber)</h3>
+      <div class="phone"><div class="screen">
+        <div class="status-bar"><span>9:41</span><span></span></div>
+        <div class="hd"><span class="x">×</span><div class="title">Order #C-0908</div></div>
+        <div class="strip">
+          <div class="rail-wrap"><div class="rail"></div><div class="fill" style="background: var(--warning); width: 0%"></div>
+            <div class="node" style="left: 0%; background: var(--surface); border-color: rgba(26,2,0,0.18); color: var(--muted)">
+              <svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2l1.5 14L8 21h8l.5-5L18 2"/><path d="M6 2h12"/></svg>
+            </div>
+            <div class="node" style="left: 50%;"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/></svg></div>
+            <div class="node" style="left: 100%;"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg></div>
+          </div>
+          <div class="labels"><span>Received</span><span>Brewing</span><span>Ready</span></div>
+        </div>
+        <div class="card">
+          <div class="row-card">
+            <div class="chip" style="background: var(--warning-tint); color: var(--warning);"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1.2s linear infinite"><circle cx="12" cy="12" r="10" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg></div>
+            <div><div class="title">Confirming payment</div><div class="sub">Usually a few seconds via TNG eWallet.</div></div>
+          </div>
+        </div>
+        <div class="overlay">
+          <div class="disc" style="background: var(--warning);"><svg viewBox="0 0 24 24" class="svg disc" fill="none" stroke="currentColor" stroke-width="3" style="animation: spin 1.2s linear infinite"><circle cx="12" cy="12" r="10" opacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10"/></svg></div>
+          <div class="title">Confirming payment</div>
+          <div class="sub">Usually a few seconds via TNG eWallet</div>
+        </div>
+      </div></div>
+      <p class="note">In-flight states use amber so they're never confused with payment success (green) or failure (red).</p>
+    </div>
+
+    <!-- Brewing -->
+    <div class="col">
+      <h3>2 · Brewing · Brand (terracotta)</h3>
+      <div class="phone"><div class="screen">
+        <div class="status-bar"><span>9:41</span><span></span></div>
+        <div class="hd"><span class="x">×</span><div class="title">Order #C-0908</div></div>
+        <div class="strip">
+          <div class="rail-wrap"><div class="rail"></div><div class="fill" style="background: var(--terracotta); width: 50%"></div>
+            <div class="node" style="left: 0%; background: var(--terracotta); border-color: transparent; color: #fff;"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 2l1.5 14L8 21h8l.5-5L18 2"/><path d="M6 2h12"/></svg></div>
+            <div class="node" style="left: 50%; background: var(--terracotta); border-color: transparent; color: #fff; transform: translateX(-50%) scale(1.1); box-shadow: 0 2px 6px rgba(0,0,0,0.18);"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/></svg></div>
+            <div class="node" style="left: 100%;"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg></div>
+          </div>
+          <div class="labels"><span style="color: var(--espresso);">Received</span><span style="color: var(--terracotta);">Brewing</span><span>Ready</span></div>
+        </div>
+        <div class="card">
+          <div class="row-card">
+            <div class="chip" style="background: var(--terra-tint); color: var(--terracotta);"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/></svg></div>
+            <div><div class="title">Brewing now</div><div class="sub">We'll ping you the moment it's ready.</div></div>
+          </div>
+        </div>
+        <div class="items"><div class="row"><span>1× Black · Hot</span><span>RM8.90</span></div><div class="row" style="color: var(--terracotta);"><span>Promotion</span><span>−RM4.45</span></div><div class="row total"><span>Total</span><span style="color: var(--terracotta);">RM4.45</span></div></div>
+      </div></div>
+      <p class="note">Brewing is the brand's "owned" moment — terracotta is appropriate here (it's brand identity, not a state warning).</p>
+    </div>
+
+    <!-- Ready -->
+    <div class="col">
+      <h3>3 · Ready · Success (green)</h3>
+      <div class="phone"><div class="screen">
+        <div class="status-bar"><span>9:41</span><span></span></div>
+        <div class="hd"><span class="x">×</span><div class="title">Order #C-0908</div></div>
+        <div class="strip">
+          <div class="rail-wrap"><div class="rail"></div><div class="fill" style="background: var(--success); width: 100%"></div>
+            <div class="node" style="left: 0%; background: var(--success); border-color: transparent; color: #fff;"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 2l1.5 14L8 21h8l.5-5L18 2"/><path d="M6 2h12"/></svg></div>
+            <div class="node" style="left: 50%; background: var(--success); border-color: transparent; color: #fff;"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/></svg></div>
+            <div class="node" style="left: 100%; background: var(--success); border-color: transparent; color: #fff; transform: translateX(-50%) scale(1.1); box-shadow: 0 2px 6px rgba(0,0,0,0.18);"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 12 11 14 15 10"/></svg></div>
+          </div>
+          <div class="labels"><span style="color: var(--espresso);">Received</span><span style="color: var(--espresso);">Brewing</span><span style="color: var(--success);">Ready</span></div>
+        </div>
+        <div class="card">
+          <div class="row-card">
+            <div class="chip" style="background: var(--success-tint); color: var(--success);"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <div><div class="title">Ready for pickup</div><div class="sub">Your order is at the counter.</div></div>
+          </div>
+        </div>
+        <div class="items"><div class="row"><span>1× Black · Hot</span><span>RM8.90</span></div><div class="row total"><span>Total</span><span style="color: var(--terracotta);">RM4.45</span></div></div>
+        <div class="cta" style="background: var(--success);">Slide to confirm pickup →</div>
+      </div></div>
+      <p class="note">Ready is a positive resolution — green. The swipe CTA also switches to success-green to signal the next step is a celebration, not a transaction.</p>
+    </div>
+
+    <!-- Failed -->
+    <div class="col">
+      <h3>4 · Payment failed · Danger (red)</h3>
+      <div class="phone"><div class="screen">
+        <div class="status-bar"><span>9:41</span><span></span></div>
+        <div class="hd"><span class="x">×</span><div class="title">Order #C-0908</div></div>
+        <div class="strip">
+          <div class="rail-wrap"><div class="rail"></div><div class="fill" style="background: var(--danger); width: 5%"></div>
+            <div class="node" style="left: 0%; background: var(--danger); border-color: transparent; color: #fff;"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg></div>
+            <div class="node" style="left: 50%;"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 8h1a4 4 0 0 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z"/></svg></div>
+            <div class="node" style="left: 100%;"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg></div>
+          </div>
+          <div class="labels"><span style="color: var(--danger);">Failed</span><span>Brewing</span><span>Ready</span></div>
+        </div>
+        <div class="card">
+          <div class="row-card">
+            <div class="chip" style="background: var(--danger-tint); color: var(--danger);"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+            <div><div class="title" style="color: var(--danger-fg);">Payment failed</div><div class="sub">Your card was declined. Tap below to try again.</div></div>
+          </div>
+        </div>
+        <div class="cta" style="background: var(--terracotta);">Try TNG eWallet again</div>
+        <div style="text-align:center; margin-top:-6px;"><span style="color: var(--terracotta); font-size:13px; text-decoration: underline;">Change payment method</span></div>
+      </div></div>
+      <p class="note">State message + chip use red. Recovery action (Try Again) stays terracotta — it's a brand-action, not a danger button.</p>
+    </div>
+
+    <!-- Cancelled -->
+    <div class="col">
+      <h3>5 · Cancelled · Danger (red, muted)</h3>
+      <div class="phone"><div class="screen">
+        <div class="status-bar"><span>9:41</span><span></span></div>
+        <div class="hd"><span class="x">×</span><div class="title">Order #C-0908</div></div>
+        <div class="card">
+          <div class="row-card">
+            <div class="chip" style="background: var(--danger-tint); color: var(--danger);"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div>
+            <div><div class="title" style="color: var(--danger-fg);">Order cancelled</div><div class="sub">This order was cancelled. Any payment will be refunded automatically.</div></div>
+          </div>
+        </div>
+        <div class="items" style="opacity:0.7"><div class="row"><span>1× Black · Hot</span><span>RM8.90</span></div><div class="row total"><span>Total</span><span style="color: var(--muted); text-decoration: line-through;">RM4.45</span></div></div>
+      </div></div>
+      <p class="note">Same danger family as Failed; muted refund line crosses out the total so it's clear no charge was kept.</p>
+    </div>
+
+    <!-- Scheduled -->
+    <div class="col">
+      <h3>6 · Scheduled · Warning (amber)</h3>
+      <div class="phone"><div class="screen">
+        <div class="status-bar"><span>9:41</span><span></span></div>
+        <div class="hd"><span class="x">×</span><div class="title">Order #C-0908</div></div>
+        <div class="strip">
+          <div class="rail-wrap"><div class="rail"></div><div class="fill" style="background: var(--warning); width: 50%"></div>
+            <div class="node" style="left: 0%; background: var(--warning); border-color: transparent; color: #fff;"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <div class="node" style="left: 50%;"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <div class="node" style="left: 100%;"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg></div>
+          </div>
+          <div class="labels"><span style="color: var(--espresso);">Paid</span><span style="color: var(--warning);">Scheduled</span><span>Ready</span></div>
+        </div>
+        <div class="card">
+          <div class="row-card">
+            <div class="chip" style="background: var(--warning-tint); color: var(--warning);"><svg viewBox="0 0 24 24" class="svg" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <div><div class="title">Scheduled</div><div class="sub">Brewing starts shortly before 10:30 AM.</div></div>
+          </div>
+        </div>
+      </div></div>
+      <p class="note">Paid-and-waiting reads as in-flight, not as a separate brand moment. Amber matches Confirming so both "we're holding" states feel related.</p>
+    </div>
+
+  </div>
+
+  <h2>Action button hierarchy</h2>
+  <div class="palette" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
+    <div class="swatch">
+      <div style="background: var(--terracotta); color:#fff; padding:14px; border-radius:14px; font-weight:700; text-align:center;">Place order · RM4.45</div>
+      <div class="name" style="margin-top:10px">Primary (brand)</div>
+      <div class="role">Place Order, Add to cart, Pay, Continue</div>
+    </div>
+    <div class="swatch">
+      <div style="background: var(--success); color:#fff; padding:14px; border-radius:14px; font-weight:700; text-align:center;">Slide to confirm pickup →</div>
+      <div class="name" style="margin-top:10px">Success (semantic)</div>
+      <div class="role">Confirm pickup, Mark received, Redeem reward</div>
+    </div>
+    <div class="swatch">
+      <div style="background: var(--danger); color:#fff; padding:14px; border-radius:14px; font-weight:700; text-align:center;">Cancel order</div>
+      <div class="name" style="margin-top:10px">Danger (semantic)</div>
+      <div class="role">Cancel order, Delete account, Remove voucher</div>
+    </div>
+    <div class="swatch">
+      <div style="background: transparent; border: 1.5px solid var(--terracotta); color: var(--terracotta); padding:13px; border-radius:14px; font-weight:700; text-align:center;">Change payment method</div>
+      <div class="name" style="margin-top:10px">Secondary (brand outline)</div>
+      <div class="role">Inline alternates next to a primary</div>
+    </div>
+  </div>
+
+  <h2>Toast / notification family</h2>
+  <div class="palette" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+    <div class="swatch" style="background:#FFF8F0;">
+      <div style="background: var(--success-tint); border: 1px solid var(--success); color: var(--success-fg); padding:12px; border-radius:12px; font-size:13px;"><strong>Payment confirmed</strong><br/>We're brewing your order now.</div>
+      <div class="name" style="margin-top:10px; color:#000">Success</div>
+    </div>
+    <div class="swatch" style="background:#FFF8F0;">
+      <div style="background: var(--warning-tint); border: 1px solid var(--warning); color: var(--warning-fg); padding:12px; border-radius:12px; font-size:13px;"><strong>Tamarind is closed right now</strong><br/>Schedule a pickup time to place this order.</div>
+      <div class="name" style="margin-top:10px; color:#000">Warning</div>
+    </div>
+    <div class="swatch" style="background:#FFF8F0;">
+      <div style="background: var(--danger-tint); border: 1px solid var(--danger); color: var(--danger-fg); padding:12px; border-radius:12px; font-size:13px;"><strong>Payment failed</strong><br/>Your card was declined. Try again or pick another method.</div>
+      <div class="name" style="margin-top:10px; color:#000">Danger</div>
+    </div>
+    <div class="swatch" style="background:#FFF8F0;">
+      <div style="background: var(--info-tint); border: 1px solid var(--info); color: var(--info-fg); padding:12px; border-radius:12px; font-size:13px;"><strong>New: scheduled pickup</strong><br/>Pick a time at checkout — your drink will be fresh on arrival.</div>
+      <div class="name" style="margin-top:10px; color:#000">Info</div>
+    </div>
+  </div>
+
+  <h2>What changes in code</h2>
+  <div style="background:#222; border-radius:16px; padding:24px; color:#ccc; font-size:13px; line-height:1.7; max-width:900px;">
+    <strong style="color:#fff">Add to Tailwind theme</strong> (in <code>tailwind.config.js</code>):
+    <pre style="background:#0a0a0a; color:#ddd; padding:12px; border-radius:8px; overflow-x:auto; font-family: ui-monospace, SFMono-Regular, monospace; font-size:12px;">colors: {
+  // brand
+  espresso:    '#160800',
+  primary:     '#C05040',      // alias: terracotta
+  terracotta:  '#C05040',
+  // semantic
+  success:     { DEFAULT: '#2E7D32', tint: '#E8F5E9', fg: '#1B5E20' },
+  warning:     { DEFAULT: '#B45309', tint: '#FEF3C7', fg: '#78350F' },
+  danger:      { DEFAULT: '#B91C1C', tint: '#FEE2E2', fg: '#7F1D1D' },
+  info:        { DEFAULT: '#1D4ED8', tint: '#DBEAFE', fg: '#1E3A8A' },
+}</pre>
+    Then replace the inline hex literals in <code>app/order/[id].tsx</code> and friends:
+    <ul style="margin:12px 0 0 20px; padding:0; line-height:1.6;">
+      <li><code>backgroundColor: "#E8F5E9"</code> → <code>bg-success-tint</code></li>
+      <li><code>backgroundColor: "#FFF3E0"</code> (in-flight states) → <code>bg-warning-tint</code></li>
+      <li><code>color: "#B0413E"</code> (failed/cancelled icons) → <code>text-danger</code></li>
+      <li>"Confirming payment" overlay disc background → <code>bg-warning</code></li>
+      <li>"Payment successful" overlay disc background → <code>bg-success</code></li>
+      <li>"Payment failed" / "Order cancelled" status card chip → <code>bg-danger-tint text-danger-fg</code></li>
+    </ul>
+  </div>
+
+</div>
+<style>@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }</style>
+</body>
+</html>
