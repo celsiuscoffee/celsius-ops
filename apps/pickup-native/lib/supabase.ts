@@ -23,4 +23,8 @@ export type Outlet = {
   is_open: boolean;
   is_busy: boolean;
   pickup_time_mins: number;
+  /** Opening hours read from app_settings.outlet_hours, joined per
+   *  store_id by the outlet-fetching call. Null if the cron hasn't
+   *  populated the map yet — callers fall back to allowing any time. */
+  hours?: { open: string; close: string; daysOpen: number[] } | null;
 };

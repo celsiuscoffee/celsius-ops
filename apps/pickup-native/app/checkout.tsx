@@ -258,12 +258,30 @@ export default function Checkout() {
   const outlets = useQuery({
     queryKey: ["outlets"],
     queryFn: async (): Promise<Outlet[]> => {
-      const { data, error } = await supabase
-        .from("outlet_settings")
-        .select("store_id,name,address,lat,lng,is_open,is_busy,pickup_time_mins")
-        .eq("is_active", true);
-      if (error) throw error;
-      return data ?? [];
+      // Pull outlet rows + the org-wide opening-hours map in parallel.
+      // Hours live in app_settings keyed by "outlet_hours" — same source
+      // the auto-hours cron reads. Map back onto each outlet row so the
+      // pickup-time picker can decide which scheduled offsets are
+      // reachable before close (or after open, when the outlet's still
+      // shut at order time).
+      const [outletsRes, hoursRes] = await Promise.all([
+        supabase
+          .from("outlet_settings")
+          .select("store_id,name,address,lat,lng,is_open,is_busy,pickup_time_mins")
+          .eq("is_active", true),
+        supabase
+          .from("app_settings")
+          .select("value")
+          .eq("key", "outlet_hours")
+          .maybeSingle(),
+      ]);
+      if (outletsRes.error) throw outletsRes.error;
+      const rows = outletsRes.data ?? [];
+      const hoursMap = (hoursRes.data?.value ?? {}) as Record<
+        string,
+        { open: string; close: string; daysOpen: number[] }
+      >;
+      return rows.map((o) => ({ ...o, hours: hoursMap[o.store_id] ?? null }));
     },
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
@@ -380,6 +398,52 @@ export default function Checkout() {
   // Offsets shown in the picker — covers most "I'll arrive in N min"
   // intents without overwhelming. Closer to ZUS/Starbucks defaults.
   const PICKUP_OFFSETS = [15, 30, 45, 60, 90, 120];
+
+  // Compute the outlet's open/close timestamps for *today*, given the
+  // "08:00"/"22:00" string format the auto-hours cron stores. JS Date
+  // arithmetic in the device's local TZ is fine — the outlets are MY
+  // and customers using the app are MY-resident; off-by-tz is a
+  // separate problem for a different day.
+  const parseTodayClock = (clock: string): Date => {
+    const [h, m] = clock.split(":").map((n) => parseInt(n, 10));
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d;
+  };
+  const outletHours = currentOutlet?.hours ?? null;
+  const todayOpen   = outletHours ? parseTodayClock(outletHours.open)  : null;
+  const todayClose  = outletHours ? parseTodayClock(outletHours.close) : null;
+  // If close is earlier than open the outlet runs past midnight; bump
+  // close to tomorrow. Same for after-close (already past today's close).
+  const closeIsAfterOpen = todayOpen && todayClose
+    ? todayClose.getTime() > todayOpen.getTime()
+    : true;
+  const effectiveClose = todayClose && !closeIsAfterOpen
+    ? new Date(todayClose.getTime() + 24 * 3600_000)
+    : todayClose;
+  // Next opening — if we're still before today's open, that's it.
+  // Otherwise it's tomorrow's open at the same clock time.
+  const nextOpenAt = (() => {
+    if (!todayOpen) return null;
+    if (Date.now() < todayOpen.getTime()) return todayOpen;
+    const tomorrow = new Date(todayOpen.getTime() + 24 * 3600_000);
+    return tomorrow;
+  })();
+  // Is the outlet currently inside its open/close window? Independent
+  // from is_open (which may be flipped manually by staff) — we use
+  // both to decide what the customer can pick.
+  const insideOpenWindow = !!(todayOpen && effectiveClose &&
+    Date.now() >= todayOpen.getTime() && Date.now() <= effectiveClose.getTime());
+  // Treat the outlet as available for a "Now" order only when both
+  // staff's manual flag AND the schedule agree.
+  const nowAvailable = !!currentOutlet?.is_open && insideOpenWindow;
+  // Filter the relative offsets to those that land inside opening
+  // hours. We accept a pickup window that ENDS by close.
+  const visibleOffsets = PICKUP_OFFSETS.filter((mins) => {
+    if (!todayOpen || !effectiveClose) return true;
+    const at = Date.now() + mins * 60_000;
+    return at >= todayOpen.getTime() && at <= effectiveClose.getTime();
+  });
   const pickupAtIso = pickupOffsetMin == null
     ? null
     : new Date(Date.now() + pickupOffsetMin * 60_000).toISOString();
@@ -1095,13 +1159,17 @@ export default function Checkout() {
                 </Text>
               </View>
               <View className="flex-row items-center gap-2 mt-1">
-                {pickupOffsetMin == null ? (
+                {pickupOffsetMin == null && nowAvailable ? (
                   <Clock size={14} color="#160800" />
                 ) : (
                   <CalendarClock size={14} color="#160800" />
                 )}
                 <Text className="text-espresso font-bold text-[15px] flex-1" numberOfLines={1}>
-                  {pickupOffsetMin == null ? "Now" : formatPickupLabel(pickupOffsetMin)}
+                  {pickupOffsetMin == null
+                    ? nowAvailable
+                      ? "Now"
+                      : "Pick a time"
+                    : formatPickupLabel(pickupOffsetMin)}
                 </Text>
               </View>
               <Text
@@ -1109,7 +1177,11 @@ export default function Checkout() {
                 style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
               >
                 {pickupOffsetMin == null
-                  ? `Ready in ${nowRangeMins} min`
+                  ? nowAvailable
+                    ? `Ready in ${nowRangeMins} min`
+                    : nextOpenAt
+                      ? `${currentOutlet?.name ?? "This outlet"} opens at ${fmtClock(nextOpenAt)}`
+                      : "Pick a pickup time to continue"
                   : `Brew starts ~${Math.max(0, pickupOffsetMin - (currentOutlet?.pickup_time_mins ?? 10))} min before pickup`}
               </Text>
             </Pressable>
@@ -1415,7 +1487,7 @@ export default function Checkout() {
               </Text>
             </Pressable>
           )}
-          {outletClosed && (
+          {outletClosed && pickupOffsetMin == null && (
             <View
               className="bg-amber-50 border border-amber-200 rounded-2xl px-3 py-2 mb-2 flex-row items-start gap-2"
             >
@@ -1424,7 +1496,7 @@ export default function Checkout() {
                 className="text-amber-900 text-[12px] flex-1"
                 style={{ fontFamily: "SpaceGrotesk_500Medium" }}
               >
-                {currentOutlet?.name ?? "This outlet"} just closed. Switch to another outlet to place your order.
+                {currentOutlet?.name ?? "This outlet"} is closed right now. Schedule a pickup time above to place this order.
               </Text>
             </View>
           )}
@@ -1432,8 +1504,8 @@ export default function Checkout() {
             label={
               !paymentsEnabled
                 ? "Online ordering paused"
-                : outletClosed
-                  ? "Outlet closed — switch outlet"
+                : outletClosed && pickupOffsetMin == null
+                  ? "Schedule a pickup time"
                   : selectedCategory === "ewallet" && !selectedWalletId
                     ? "Pick your wallet"
                     : !selectedMethodId
@@ -1447,7 +1519,7 @@ export default function Checkout() {
             loadingLabel={busyLabel}
             disabled={
               !paymentsEnabled ||
-              outletClosed ||
+              (outletClosed && pickupOffsetMin == null) ||
               !selectedMethodId ||
               (selectedMethodId === "fpx" && !fpxBankCode)
             }
@@ -1578,34 +1650,79 @@ export default function Checkout() {
         title="When do you want it?"
       >
         <View style={{ paddingHorizontal: 16, gap: 4 }}>
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync();
-              setPickupOffsetMin(null);
-              setPickupSheetOpen(false);
-            }}
-            className="flex-row items-center gap-3 py-3 active:opacity-70"
-          >
-            <View
-              style={{
-                width: 40, height: 40, borderRadius: 20,
-                backgroundColor: "#FBEBE8",
-                alignItems: "center", justifyContent: "center",
+          {/* When outlet is closed and we know next-open, surface a
+              dedicated "When we open" row at the top. Selecting it
+              schedules pickup_at to ~5 min after next_open so brew can
+              actually start at open-time. */}
+          {!nowAvailable && nextOpenAt && (() => {
+            const offsetToOpen = Math.max(
+              1,
+              Math.round((nextOpenAt.getTime() - Date.now()) / 60_000) + 5,
+            );
+            const picked = pickupOffsetMin === offsetToOpen;
+            const openLabel = fmtClock(nextOpenAt);
+            return (
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setPickupOffsetMin(offsetToOpen);
+                  setPickupSheetOpen(false);
+                }}
+                className="flex-row items-center gap-3 py-3 active:opacity-70"
+              >
+                <View
+                  style={{
+                    width: 40, height: 40, borderRadius: 20,
+                    backgroundColor: "#FBEBE8",
+                    alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <CalendarClock size={18} color="#C05040" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-espresso text-[15px] font-bold">
+                    When we open
+                  </Text>
+                  <Text className="text-muted-fg text-[12px]">
+                    {nextOpenAt.toDateString() === new Date().toDateString()
+                      ? `Today · ${openLabel}`
+                      : `Tomorrow · ${openLabel}`}
+                  </Text>
+                </View>
+                {picked && <Check size={18} color="#C05040" />}
+              </Pressable>
+            );
+          })()}
+          {nowAvailable && (
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                setPickupOffsetMin(null);
+                setPickupSheetOpen(false);
               }}
+              className="flex-row items-center gap-3 py-3 active:opacity-70"
             >
-              <Clock size={18} color="#C05040" />
-            </View>
-            <View className="flex-1">
-              <Text className="text-espresso text-[15px] font-bold">
-                Now
-              </Text>
-              <Text className="text-muted-fg text-[12px]">
-                Ready in {nowRangeMins} min
-              </Text>
-            </View>
-            {pickupOffsetMin == null && <Check size={18} color="#C05040" />}
-          </Pressable>
-          {PICKUP_OFFSETS.map((mins, idx) => {
+              <View
+                style={{
+                  width: 40, height: 40, borderRadius: 20,
+                  backgroundColor: "#FBEBE8",
+                  alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <Clock size={18} color="#C05040" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-espresso text-[15px] font-bold">
+                  Now
+                </Text>
+                <Text className="text-muted-fg text-[12px]">
+                  Ready in {nowRangeMins} min
+                </Text>
+              </View>
+              {pickupOffsetMin == null && <Check size={18} color="#C05040" />}
+            </Pressable>
+          )}
+          {visibleOffsets.map((mins) => {
             const picked = pickupOffsetMin === mins;
             return (
               <Pressable
@@ -1615,9 +1732,7 @@ export default function Checkout() {
                   setPickupOffsetMin(mins);
                   setPickupSheetOpen(false);
                 }}
-                className={`flex-row items-center gap-3 py-3 ${
-                  idx > 0 || true ? "border-t border-border" : ""
-                } active:opacity-70`}
+                className="flex-row items-center gap-3 py-3 border-t border-border active:opacity-70"
               >
                 <View
                   style={{
@@ -1640,6 +1755,13 @@ export default function Checkout() {
               </Pressable>
             );
           })}
+          {!nowAvailable && visibleOffsets.length === 0 && !nextOpenAt && (
+            <View className="py-6 items-center">
+              <Text className="text-muted-fg text-sm text-center">
+                No pickup times available right now.
+              </Text>
+            </View>
+          )}
         </View>
       </BottomSheet>
 

@@ -210,6 +210,50 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid order data" }, { status: 400 });
     }
 
+    // pickup_at sanity: must be in the future (clock skew tolerance:
+    // -2 min), within 7 days, and fall inside this outlet's opening
+    // hours per app_settings.outlet_hours. Defends against a stale
+    // client picker, manual API call, or a glitched device clock.
+    if (pickupAt) {
+      const at = new Date(pickupAt);
+      const now = Date.now();
+      if (Number.isNaN(at.getTime())) {
+        return NextResponse.json({ error: "Invalid pickupAt" }, { status: 400 });
+      }
+      if (at.getTime() < now - 2 * 60_000) {
+        return NextResponse.json({ error: "pickupAt is in the past" }, { status: 400 });
+      }
+      if (at.getTime() > now + 7 * 24 * 3600_000) {
+        return NextResponse.json({ error: "pickupAt is too far in the future" }, { status: 400 });
+      }
+      const supabase = getSupabaseAdmin();
+      const { data: hoursRow } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "outlet_hours")
+        .maybeSingle();
+      type Hours = { open: string; close: string; daysOpen: number[] };
+      const hoursMap = (hoursRow?.value ?? {}) as Record<string, Hours>;
+      const oh = hoursMap[selectedStore.id];
+      if (oh) {
+        const [oh_h, oh_m] = oh.open.split(":").map((n) => parseInt(n, 10));
+        const [ch_h, ch_m] = oh.close.split(":").map((n) => parseInt(n, 10));
+        const dayOpen  = new Date(at); dayOpen.setHours(oh_h,  oh_m,  0, 0);
+        const dayClose = new Date(at); dayClose.setHours(ch_h, ch_m, 0, 0);
+        // Past-midnight outlets — close < open means close belongs to
+        // the next calendar day.
+        const effClose = dayClose.getTime() > dayOpen.getTime()
+          ? dayClose
+          : new Date(dayClose.getTime() + 24 * 3600_000);
+        if (at.getTime() < dayOpen.getTime() || at.getTime() > effClose.getTime()) {
+          return NextResponse.json(
+            { error: "pickupAt is outside this outlet's opening hours" },
+            { status: 400 },
+          );
+        }
+      }
+    }
+
     // Quantity bounds — without these, a negative qty makes the order
     // total negative (and bypasses the `total <= 0` rate-limit check
     // by being non-positive), and an unbounded qty lets one customer
