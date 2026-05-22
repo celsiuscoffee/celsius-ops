@@ -484,7 +484,6 @@ export function PairWith({ current, allProducts, stagedIds, onToggle }: PairWith
                 <Text
                   className="text-espresso text-[12px] leading-[15px]"
                   style={{ fontFamily: "Peachi-Bold" }}
-                  numberOfLines={2}
                 >
                   {p.name}
                 </Text>

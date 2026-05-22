@@ -787,8 +787,6 @@ function ProductRow({
           <Text
             className="text-espresso text-[14px] leading-[18px]"
             style={{ fontFamily: "Peachi-Bold" }}
-            numberOfLines={2}
-            ellipsizeMode="tail"
           >
             {product.name}
           </Text>

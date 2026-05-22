@@ -117,37 +117,47 @@ export function MysteryBean({ dropId, baseBeansEarned, prerevealed, onRevealed, 
             const w = e.nativeEvent.layout.width;
             if (w !== cardWidth) setCardWidth(w);
           }}
-          className="bg-primary rounded-2xl px-5 py-6 items-center overflow-hidden"
+          className="rounded-2xl px-5 py-6 items-center overflow-hidden"
           style={[
             {
-              shadowColor: "#160800",
-              shadowOpacity: 0.18,
+              // Espresso brand-black surface with amber accents — same
+              // celebratory palette the post-reveal payload uses, so
+              // pre-reveal and reveal are visually one moment. Pulls
+              // the Mystery surface out of the brand-primary lane so
+              // it doesn't compete with Place Order CTAs.
+              backgroundColor: "#1A0200",
+              shadowColor: "#1A0200",
+              shadowOpacity: 0.28,
               shadowRadius: 14,
               shadowOffset: { width: 0, height: 6 },
               elevation: 6,
+              borderWidth: 1,
+              borderColor: "rgba(251,191,36,0.35)", // amber-tinted hairline
             },
             cardScaleStyle,
           ]}
         >
-          {/* Soft-edged shimmer band — same component the loading
-              skeletons use, parameterised here for the terracotta
-              card. Low maxOpacity so it reads as a gentle tease on
-              the colored background, not a harsh strip. */}
+          {/* Amber-tinted shimmer reads as gold sweeping across a dark
+              gift package, not a generic light bar on terracotta. */}
           {!revealed && (
             <ShimmerSweep
               containerWidth={cardWidth}
-              highlightColor="rgba(255,255,255,1)"
-              maxOpacity={0.22}
+              highlightColor="rgba(251,191,36,1)"
+              maxOpacity={0.28}
               widthRatio={0.5}
               durationMs={2200}
             />
           )}
 
-          <Gift size={44} color="#FFFFFF" strokeWidth={1.8} />
+          <Gift size={44} color="#FBBF24" /* amber */ strokeWidth={1.8} />
 
           <Text
-            className="text-white/85 text-[10px] uppercase mt-3.5"
-            style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 2 }}
+            className="text-[10px] uppercase mt-3.5"
+            style={{
+              fontFamily: "SpaceGrotesk_700Bold",
+              letterSpacing: 2,
+              color: "rgba(251,191,36,0.85)",
+            }}
           >
             Tap to Reveal
           </Text>
@@ -165,8 +175,8 @@ export function MysteryBean({ dropId, baseBeansEarned, prerevealed, onRevealed, 
           </Text>
 
           <View
-            className="bg-white rounded-full mt-4 px-5 py-2.5 flex-row items-center"
-            style={{ gap: 6 }}
+            className="rounded-full mt-4 px-5 py-2.5 flex-row items-center"
+            style={{ gap: 6, backgroundColor: "#FBBF24" /* amber */ }}
           >
             {loading ? (
               <>
