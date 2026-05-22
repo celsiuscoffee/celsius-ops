@@ -34,11 +34,26 @@ export async function getUserFromCookie(headers: Headers): Promise<SessionUser |
 }
 
 /**
- * Get the authenticated user from headers (proxy) or cookie (direct).
- * Tries proxy headers first, falls back to JWT cookie.
+ * Read user from `Authorization: Bearer <jwt>` header.
+ * Used by native apps that can't carry HttpOnly cookies reliably.
+ */
+export async function getUserFromBearer(headers: Headers): Promise<SessionUser | null> {
+  const auth = headers.get("authorization") ?? "";
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  if (!m) return null;
+  return verifyToken(m[1]);
+}
+
+/**
+ * Get the authenticated user from headers (proxy), bearer token (native),
+ * or cookie (web). Proxy headers win, then bearer, then cookie.
  */
 export async function getUser(headers: Headers): Promise<SessionUser | null> {
-  return getUserFromHeaders(headers) || getUserFromCookie(headers);
+  return (
+    getUserFromHeaders(headers) ||
+    (await getUserFromBearer(headers)) ||
+    getUserFromCookie(headers)
+  );
 }
 
 /**
@@ -68,7 +83,12 @@ export async function requireAuth(
 ): Promise<
   { user: SessionUser; error: null } | { user: null; error: NextResponse }
 > {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
+  const cookieToken = request.cookies.get(COOKIE_NAME)?.value;
+  const bearerMatch = (request.headers.get("authorization") ?? "").match(
+    /^Bearer\s+(.+)$/i,
+  );
+  const token = cookieToken ?? bearerMatch?.[1];
+
   if (!token) {
     return {
       user: null,

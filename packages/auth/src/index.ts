@@ -31,6 +31,7 @@ export { hashPin, verifyPin } from "./pin";
 export {
   getUserFromHeaders,
   getUserFromCookie,
+  getUserFromBearer,
   getUser,
   requireRole,
   requireAuth,

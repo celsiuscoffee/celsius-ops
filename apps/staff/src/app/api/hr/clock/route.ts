@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-// Use the service-role client: this route runs server-side and authenticates
-// the caller via getSession() above. The anon client lacks INSERT/UPDATE
-// grants on hr_attendance_logs ("permission denied for table"), so writes
-// would fail before RLS even runs.
+import { getUser } from "@/lib/auth";
+// Service-role client: route authenticates the caller via getUser (cookie or
+// Authorization: Bearer). Anon client lacks INSERT/UPDATE grants on
+// hr_attendance_logs ("permission denied for table"), so writes would fail
+// before RLS even runs.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { haversineDistance, GEOFENCE_RADIUS_METERS } from "@/lib/hr/constants";
 import type { AttendanceLog, GeofenceZone } from "@/lib/hr/types";
@@ -11,8 +11,8 @@ import type { AttendanceLog, GeofenceZone } from "@/lib/hr/types";
 export const dynamic = "force-dynamic";
 
 // GET: current clock-in status for the logged-in user
-export async function GET() {
-  const session = await getSession();
+export async function GET(req: NextRequest) {
+  const session = await getUser(req.headers);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Find today's open attendance log (clocked in but not out)
@@ -48,7 +48,7 @@ export async function GET() {
 
 // POST: clock in or clock out
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getUser(req.headers);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();

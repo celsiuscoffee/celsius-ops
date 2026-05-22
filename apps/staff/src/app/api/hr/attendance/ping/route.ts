@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getUser } from "@/lib/auth";
 // Service-role client — anon lacks INSERT on hr_attendance_pings.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
 
@@ -20,7 +20,7 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number): numb
 // Records a location heartbeat against the user's active attendance log.
 // Returns whether the staff is in-zone + how long they've been out (for UI warnings).
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getUser(req.headers);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { lat, lng, batteryLevel, source } = await req.json();

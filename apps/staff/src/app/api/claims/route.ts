@@ -2,6 +2,58 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
+export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const url = new URL(req.url);
+  const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 200);
+
+  try {
+    const invoices = await prisma.invoice.findMany({
+      where: {
+        paymentType: "STAFF_CLAIM",
+        claimedById: session.id,
+      },
+      orderBy: { issueDate: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        invoiceNumber: true,
+        amount: true,
+        status: true,
+        issueDate: true,
+        photos: true,
+        notes: true,
+        paidAt: true,
+        supplier: { select: { name: true } },
+        order: { select: { orderNumber: true } },
+      },
+    });
+
+    const claims = invoices.map((i) => ({
+      id: i.id,
+      invoiceNumber: i.invoiceNumber,
+      orderNumber: i.order?.orderNumber ?? null,
+      amount: Number(i.amount),
+      status: i.status,
+      supplierName: i.supplier?.name ?? null,
+      issueDate: i.issueDate.toISOString(),
+      paidAt: i.paidAt?.toISOString() ?? null,
+      photos: i.photos,
+      notes: i.notes,
+    }));
+
+    return NextResponse.json({ claims });
+  } catch (err) {
+    console.error("[claims GET]", err);
+    const message = err instanceof Error ? err.message : "Failed to list claims";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
