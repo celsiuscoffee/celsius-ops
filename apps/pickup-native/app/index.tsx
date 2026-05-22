@@ -29,6 +29,7 @@ import {
 import { CelsiusCup } from "../components/brand/CelsiusCup";
 import { CelsiusGift } from "../components/brand/CelsiusGift";
 import { CelsiusTag } from "../components/brand/CelsiusTag";
+import { themeForVoucher, THEME_BEAN, type VoucherTheme } from "../components/VoucherWallet";
 import { SafeBoundary } from "../components/SafeBoundary";
 import { TierHero } from "../components/TierHero";
 import { PosterCarousel } from "../components/PosterCarousel";
@@ -859,18 +860,20 @@ export default function Home() {
             >
               {(() => {
                 // Cap each subgroup independently before merging so the
-                // rail doesn't lopside when one bucket is huge.
+                // rail doesn't lopside when one bucket is huge. Each
+                // ticket pulls its colourway from the same source-bucket
+                // theme the Rewards tab uses — Challenge=espresso+gold,
+                // Mystery=yellow+espresso, Gift=peach+terracotta,
+                // Bean=terracotta+gold — so wallet/home/rewards-tab read
+                // as one visual system instead of three palettes.
                 const vouchers = walletVouchers.slice(0, 6);
                 const catalog  = affordableRewards.slice(0, 6);
-                let toneIdx = 0;
-                const nextTone = () => TICKET_TONES[(toneIdx++) % TICKET_TONES.length];
                 return (
                   <>
                     {vouchers.map((v) => (
                       <HomeVoucherTicket
                         key={`v-${v.id}`}
                         voucher={v}
-                        tone={nextTone()}
                         onPress={() => router.push("/rewards" as never)}
                       />
                     ))}
@@ -878,7 +881,6 @@ export default function Home() {
                       <HomeCatalogTicket
                         key={`r-${r.id}`}
                         reward={r}
-                        tone={nextTone()}
                         onPress={() => router.push("/rewards" as never)}
                       />
                     ))}
@@ -1541,40 +1543,26 @@ type TicketDescriptor = {
   BrandIcon: React.ComponentType<{ size: number; color: string; knockout?: string }>;
 };
 
-// Three brand tones the home reward rail rotates through. Visual
-// variety so the rail reads as "a deck of rewards" rather than a
-// uniform row — espresso for premium/gold rewards, terracotta for
-// the brand's primary accent, gold/yellow as a high-energy headliner.
-type TicketTone = "black" | "terracotta" | "yellow";
-const TICKET_TONES: TicketTone[] = ["black", "terracotta", "yellow"];
-function ticketToneColors(tone: TicketTone): {
+// Colours come from the same source-bucket theme the Rewards tab
+// uses (Challenge / Mystery / Gift / Bean) — keeps wallet / home
+// rail / rewards-tab reading as one visual system. Mapping mirrors
+// the rectangular VoucherRow / CatalogCard on the Rewards tab:
+//   bg ............ theme.bg
+//   icon + headline theme.accent  (brand-pop on the bg)
+//   eyebrow ....... theme.fgDim   (quieter secondary tone)
+function ticketColorsFromTheme(theme: VoucherTheme): {
   topBg: string; topAccent: string; topMuted: string;
 } {
-  switch (tone) {
-    case "terracotta":
-      return {
-        topBg: "#A2492C",
-        topAccent: "#FFFFFF",
-        topMuted: "rgba(255,255,255,0.75)",
-      };
-    case "yellow":
-      return {
-        topBg: "#FBBF24",
-        topAccent: "#1A0200",
-        topMuted: "rgba(26,2,0,0.65)",
-      };
-    case "black":
-    default:
-      return {
-        topBg: "#1A0200",
-        topAccent: "#FBBF24",
-        topMuted: "rgba(251,191,36,0.65)",
-      };
-  }
+  return {
+    topBg:     theme.bg,
+    topAccent: theme.accent,
+    topMuted:  theme.fgDim,
+  };
 }
 
-function describeVoucherTicket(v: Voucher, tone: TicketTone = "black"): TicketDescriptor {
-  const { topBg, topAccent, topMuted } = ticketToneColors(tone);
+function describeVoucherTicket(v: Voucher): TicketDescriptor {
+  const theme = themeForVoucher(v);
+  const { topBg, topAccent, topMuted } = ticketColorsFromTheme(theme);
 
   // Headline mirrors RewardTicket's value-led copy: customers read
   // "RM 5 off" / "Free drink" off the card without scanning the
@@ -1630,14 +1618,14 @@ function describeVoucherTicket(v: Voucher, tone: TicketTone = "black"): TicketDe
 // name + Bean cost instead of an expiry line.
 function HomeCatalogTicket({
   reward,
-  tone = "black",
   onPress,
 }: {
   reward: Reward;
-  tone?: TicketTone;
   onPress?: () => void;
 }) {
-  const { topBg, topAccent, topMuted } = ticketToneColors(tone);
+  // Catalog rewards (Spend Beans) all land in the BEAN bucket — same
+  // mapping the Rewards tab's CatalogCard uses.
+  const { topBg, topAccent, topMuted } = ticketColorsFromTheme(THEME_BEAN);
   // Pick a friendly headline based on what the reward actually does.
   let headline = reward.name;
   const dv = Number(reward.discount_value ?? 0);
@@ -1747,14 +1735,12 @@ function HomeCatalogTicket({
 
 function HomeVoucherTicket({
   voucher,
-  tone = "black",
   onPress,
 }: {
   voucher: Voucher;
-  tone?: TicketTone;
   onPress?: () => void;
 }) {
-  const { eyebrow, headline, topBg, topAccent, topMuted, BrandIcon } = describeVoucherTicket(voucher, tone);
+  const { eyebrow, headline, topBg, topAccent, topMuted, BrandIcon } = describeVoucherTicket(voucher);
   const urgency = voucherUrgencyLabel(voucher);
 
   return (

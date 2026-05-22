@@ -122,12 +122,12 @@ export const THEME_CHALLENGE: VoucherTheme = {
 };
 
 export const THEME_MYSTERY: VoucherTheme = {
-  // Metallic gold surface + espresso ink. Reads as a "treasure /
-  // unwrap me" affordance — distinct from Challenge (espresso +
-  // gold accent) and from the danger/alert reds elsewhere in the
-  // app. Espresso ink (instead of pure #000) keeps the type on
-  // brand without losing the high-contrast pop on gold.
-  bg:         "#D4AF37",  // classic metallic gold
+  // Saffron-yellow surface + espresso ink. Matches the bright gold
+  // used on the home rewards rail's yellow tickets, so a wallet
+  // mystery voucher and its home-rail counterpart read as the same
+  // family. Espresso ink (instead of pure #000) keeps the type on
+  // brand while staying high-contrast on the yellow base.
+  bg:         "#FBBF24",  // saffron yellow (Tailwind amber-400)
   border:     "rgba(26,2,0,0.25)",
   accent:     "#1A0200",  // espresso ink
   fg:         "#1A0200",

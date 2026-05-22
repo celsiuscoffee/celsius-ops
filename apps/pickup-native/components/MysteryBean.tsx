@@ -120,13 +120,13 @@ export function MysteryBean({ dropId, baseBeansEarned, prerevealed, onRevealed, 
           className="rounded-2xl px-5 py-6 items-center overflow-hidden"
           style={[
             {
-              // Metallic gold surface + espresso ink. Reads as a
+              // Saffron-yellow surface + espresso ink. Reads as a
               // "treasure / unwrap me" affordance and matches the
               // Mystery voucher tile in the wallet, so pre-reveal,
               // wallet, and reveal stay on the same visual lane.
               // Espresso shadow keeps the card lifted without
               // bleeding the brand-primary lane into Mystery.
-              backgroundColor: "#D4AF37",
+              backgroundColor: "#FBBF24",
               shadowColor: "#1A0200",
               shadowOpacity: 0.28,
               shadowRadius: 14,
@@ -182,10 +182,10 @@ export function MysteryBean({ dropId, baseBeansEarned, prerevealed, onRevealed, 
           >
             {loading ? (
               <>
-                <ActivityIndicator size="small" color="#D4AF37" />
+                <ActivityIndicator size="small" color="#FBBF24" />
                 <Text
                   className="text-[13px]"
-                  style={{ fontFamily: "Peachi-Bold", color: "#D4AF37" }}
+                  style={{ fontFamily: "Peachi-Bold", color: "#FBBF24" }}
                 >
                   Revealing…
                 </Text>
@@ -194,11 +194,11 @@ export function MysteryBean({ dropId, baseBeansEarned, prerevealed, onRevealed, 
               <>
                 <Text
                   className="text-[13px]"
-                  style={{ fontFamily: "Peachi-Bold", color: "#D4AF37" }}
+                  style={{ fontFamily: "Peachi-Bold", color: "#FBBF24" }}
                 >
                   Reveal
                 </Text>
-                <ChevronRight size={14} color="#D4AF37" strokeWidth={2.4} />
+                <ChevronRight size={14} color="#FBBF24" strokeWidth={2.4} />
               </>
             )}
           </View>
