@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, ScrollView, ActivityIndicator, Platform, Linking } from "react-native";
+import { View, Text, Pressable, ScrollView, ActivityIndicator, Platform, Linking, Animated, Easing } from "react-native";
 import { Alert } from "@/lib/alert";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -107,31 +107,91 @@ export default function OrderStatus() {
     enabled: !!id,
   });
 
-  // In-app celebration on payment-confirmed transition. When the order
-  // page is mounted while polling, watch for the status going
-  // pending/paid → preparing (or → ready, in case the brew is
-  // instant). Fires a success haptic + brief in-app banner. Decoupled
-  // from the push push because the customer might be in the
-  // foreground (push suppressed by iOS) or have notifications muted —
-  // they should always see SOMETHING when payment lands.
+  // Full-screen payment overlay — visually matches the checkout's
+  // routeAfterSuccess overlay. Two modes:
+  //   - "confirming": amber-tinted backdrop, terracotta circle with
+  //     spinner, "Confirming payment" + method label.
+  //   - "success":    same backdrop, green circle with checkmark,
+  //     "Payment successful" + "We're starting on your order now".
+  //
+  // The customer returning from RM lands on the order page with
+  // confirmingPayment === true → overlay shows in "confirming" mode.
+  // When the poll backstop flips status to "preparing", overlay
+  // morphs to "success" for 1.4s then fades out, revealing the
+  // normal Brewing-now state underneath. If the poll reconciles to
+  // "failed" instead, the overlay dismisses without celebrating.
   const prevStatusRef = useRef<string | null>(null);
-  const [celebration, setCelebration] = useState<null | "paid" | "ready">(null);
+  const [overlay, setOverlay] = useState<null | "confirming" | "success">(null);
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const overlayScale   = useRef(new Animated.Value(0.7)).current;
+
+  // Drive the overlay in / out based on confirmingPayment + status
+  // transitions. Computed inside the effect to keep the dependency
+  // list minimal.
   useEffect(() => {
     const cur = data?.status ?? null;
     const prev = prevStatusRef.current;
+    const isRmPendingNow =
+      cur === "pending" &&
+      !!data?.payment_method &&
+      new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card"]).has(data.payment_method);
+    const shouldShowConfirming = isRmPendingNow && justPaid === "1";
+
+    // First mount or pure confirming state → show confirming overlay.
+    if (shouldShowConfirming && overlay !== "confirming" && overlay !== "success") {
+      setOverlay("confirming");
+    }
+
+    // Transition into preparing/ready while the customer is here →
+    // morph to success.
     if (prev && cur && prev !== cur) {
-      if ((prev === "pending" || prev === "paid") && (cur === "preparing")) {
+      const becamePreparingOrReady =
+        (prev === "pending" || prev === "paid") && (cur === "preparing" || cur === "ready");
+      if (becamePreparingOrReady) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setCelebration("paid");
-        setTimeout(() => setCelebration(null), 3500);
-      } else if (cur === "ready" && prev !== "ready") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setCelebration("ready");
-        setTimeout(() => setCelebration(null), 3500);
+        setOverlay("success");
+      }
+      // Failed → dismiss overlay so the customer sees the retry UI
+      // underneath.
+      if (cur === "failed") {
+        setOverlay(null);
       }
     }
     prevStatusRef.current = cur;
-  }, [data?.status]);
+  }, [data?.status, data?.payment_method, justPaid, overlay]);
+
+  // Fade + scale the circle whenever the overlay mode changes. On
+  // "success" we also schedule the auto-dismiss after 1.4s.
+  useEffect(() => {
+    if (!overlay) {
+      Animated.timing(overlayOpacity, {
+        toValue: 0,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+      overlayScale.setValue(0.7);
+      return;
+    }
+    Animated.parallel([
+      Animated.timing(overlayOpacity, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(overlayScale, {
+        toValue: 1,
+        friction: 6,
+        tension: 90,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    if (overlay === "success") {
+      const t = setTimeout(() => setOverlay(null), 1400);
+      return () => clearTimeout(t);
+    }
+  }, [overlay, overlayOpacity, overlayScale]);
 
   // Backstop for RM Direct mode: webhooks are best-effort, and our sig
   // validation has been bouncing valid callbacks. Whenever we're sitting
@@ -965,69 +1025,72 @@ export default function OrderStatus() {
         </>
       )}
 
-      {/* Celebration banner — slides in from the top when the order
-          flips to "preparing" or "ready" while the customer is on
-          this page. Auto-dismisses after 3.5s. Reinforces the push,
-          and covers customers who have notifications muted or are
-          looking at the order page in the foreground (where push
-          would be suppressed). */}
-      {celebration && (
-        <View
+      {/* Full-screen payment overlay — mirrors the checkout's
+          routeAfterSuccess animation. Big circle, title, sub. Fades
+          in on confirmingPayment, morphs to a green-check "Payment
+          successful" when status transitions to preparing/ready,
+          then fades out after 1.4s revealing the order page
+          underneath. */}
+      {overlay && (
+        <Animated.View
           pointerEvents="none"
           style={{
             position: "absolute",
-            top: 88,
-            left: 16,
-            right: 16,
-            backgroundColor: celebration === "ready" ? "#E8F5E9" : "#FBEBE8",
-            borderWidth: 1,
-            borderColor: celebration === "ready" ? "#2E7D32" : "#C05040",
-            borderRadius: 16,
-            padding: 14,
-            flexDirection: "row",
+            inset: 0,
+            backgroundColor: "rgba(255,247,231,0.96)",
             alignItems: "center",
-            gap: 10,
-            shadowColor: "#000",
-            shadowOpacity: 0.15,
-            shadowRadius: 10,
-            shadowOffset: { width: 0, height: 4 },
+            justifyContent: "center",
+            opacity: overlayOpacity,
             zIndex: 100,
           }}
         >
-          <View
+          <Animated.View
             style={{
-              width: 36, height: 36, borderRadius: 18,
-              backgroundColor: celebration === "ready" ? "#2E7D32" : "#C05040",
-              alignItems: "center", justifyContent: "center",
+              width: 88,
+              height: 88,
+              borderRadius: 44,
+              backgroundColor: overlay === "success" ? "#2E7D32" : "#C05040",
+              alignItems: "center",
+              justifyContent: "center",
+              transform: [{ scale: overlayScale }],
+              shadowColor: overlay === "success" ? "#2E7D32" : "#C05040",
+              shadowOpacity: 0.35,
+              shadowRadius: 16,
+              shadowOffset: { width: 0, height: 6 },
+              elevation: 6,
             }}
           >
-            <Check size={20} color="#FFFFFF" strokeWidth={2.8} />
-          </View>
-          <View className="flex-1">
-            <Text
-              style={{
-                fontFamily: "Peachi-Bold",
-                color: celebration === "ready" ? "#1B5E20" : "#160800",
-                fontSize: 15,
-              }}
-            >
-              {celebration === "ready"
-                ? "Ready for pickup"
-                : "Payment confirmed"}
-            </Text>
-            <Text
-              style={{
-                color: celebration === "ready" ? "#1B5E20" : "#5C2B22",
-                fontSize: 12,
-                marginTop: 1,
-              }}
-            >
-              {celebration === "ready"
-                ? "Head to the counter and show your order number."
-                : "We're brewing your order now."}
-            </Text>
-          </View>
-        </View>
+            {overlay === "success" ? (
+              <Check size={48} color="#FFFFFF" strokeWidth={3} />
+            ) : (
+              <ActivityIndicator size="large" color="#FFFFFF" />
+            )}
+          </Animated.View>
+          <Animated.Text
+            style={{
+              marginTop: 18,
+              color: "#160800",
+              fontFamily: "Peachi-Bold",
+              fontSize: 22,
+              opacity: overlayOpacity,
+            }}
+          >
+            {overlay === "success" ? "Payment successful" : "Confirming payment"}
+          </Animated.Text>
+          <Animated.Text
+            style={{
+              marginTop: 4,
+              color: "rgba(26,2,0,0.6)",
+              fontFamily: "SpaceGrotesk_500Medium",
+              fontSize: 13,
+              opacity: overlayOpacity,
+            }}
+          >
+            {overlay === "success"
+              ? "We're starting on your order now"
+              : `Usually a few seconds via ${currentMethodLabel}`}
+          </Animated.Text>
+        </Animated.View>
       )}
 
       <RmCheckoutModal
