@@ -7,7 +7,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { Alert } from "@/lib/alert";
-import { Stack, router } from "expo-router";
+import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ClipboardList,
@@ -46,9 +46,13 @@ export default function OrdersTab() {
     staleTime: 5 * 60_000,
   });
   // Tab state — default to "active" so customers with a live order
-  // land on the tracking view first; they'll switch to "past" when
-  // they want history.
-  const [activeTab, setActiveTab] = useState<OrdersTabKey>("active");
+  // land on the tracking view first. Callers can pin the initial tab
+  // via ?tab=past (e.g. the order-detail X-close routes here with
+  // ?tab=past when the order is completed/cancelled/failed, so the
+  // customer lands back on the right list).
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
+  const initialTab: OrdersTabKey = tabParam === "past" ? "past" : "active";
+  const [activeTab, setActiveTab] = useState<OrdersTabKey>(initialTab);
 
   // staleTime 5min so the prefetched cache from _layout serves the
   // first-paint instantly. Background refetch still happens; the

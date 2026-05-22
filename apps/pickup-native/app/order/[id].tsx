@@ -570,7 +570,18 @@ export default function OrderStatus() {
         showCart={false}
         rightSlot={
           <Pressable
-            onPress={() => router.replace("/orders")}
+            onPress={() => {
+              // Route back to the tab that holds THIS order's status —
+              // terminal states (completed/cancelled/failed) live under
+              // "Past orders"; everything else stays under "In progress".
+              const tab =
+                data?.status === "completed" ||
+                data?.status === "cancelled" ||
+                data?.status === "failed"
+                  ? "past"
+                  : "active";
+              router.replace({ pathname: "/orders", params: { tab } });
+            }}
             className="p-1 active:opacity-60"
             hitSlop={12}
           >
