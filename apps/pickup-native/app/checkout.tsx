@@ -1167,13 +1167,35 @@ export default function Checkout() {
                 ) : (
                   <CalendarClock size={14} color="#160800" />
                 )}
-                <Text className="text-espresso font-bold text-[15px] flex-1" numberOfLines={1}>
+                <Text className="text-espresso font-bold text-[15px]" numberOfLines={1}>
                   {pickupOffsetMin == null
                     ? nowAvailable
                       ? "Now"
                       : "Pick a time"
                     : formatPickupLabel(pickupOffsetMin)}
                 </Text>
+                {pickupOffsetMin == null && nowAvailable && (
+                  <View
+                    style={{
+                      backgroundColor: "#FBEBE8",
+                      paddingHorizontal: 6,
+                      paddingVertical: 2,
+                      borderRadius: 4,
+                      marginLeft: 4,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "#C05040",
+                        fontSize: 9,
+                        fontFamily: "Peachi-Bold",
+                        letterSpacing: 1,
+                      }}
+                    >
+                      DEFAULT
+                    </Text>
+                  </View>
+                )}
               </View>
               <Text
                 className="text-muted-fg text-[12px] mt-2"
@@ -1715,9 +1737,30 @@ export default function Checkout() {
                 <Clock size={18} color="#C05040" />
               </View>
               <View className="flex-1">
-                <Text className="text-espresso text-[15px] font-bold">
-                  Now
-                </Text>
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-espresso text-[15px] font-bold">
+                    Now
+                  </Text>
+                  <View
+                    style={{
+                      backgroundColor: "#FBEBE8",
+                      paddingHorizontal: 6,
+                      paddingVertical: 2,
+                      borderRadius: 4,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "#C05040",
+                        fontSize: 9,
+                        fontFamily: "Peachi-Bold",
+                        letterSpacing: 1,
+                      }}
+                    >
+                      DEFAULT
+                    </Text>
+                  </View>
+                </View>
                 <Text className="text-muted-fg text-[12px]">
                   Ready in {nowRangeMins} min
                 </Text>
