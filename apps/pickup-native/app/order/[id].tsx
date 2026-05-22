@@ -107,6 +107,32 @@ export default function OrderStatus() {
     enabled: !!id,
   });
 
+  // In-app celebration on payment-confirmed transition. When the order
+  // page is mounted while polling, watch for the status going
+  // pending/paid → preparing (or → ready, in case the brew is
+  // instant). Fires a success haptic + brief in-app banner. Decoupled
+  // from the push push because the customer might be in the
+  // foreground (push suppressed by iOS) or have notifications muted —
+  // they should always see SOMETHING when payment lands.
+  const prevStatusRef = useRef<string | null>(null);
+  const [celebration, setCelebration] = useState<null | "paid" | "ready">(null);
+  useEffect(() => {
+    const cur = data?.status ?? null;
+    const prev = prevStatusRef.current;
+    if (prev && cur && prev !== cur) {
+      if ((prev === "pending" || prev === "paid") && (cur === "preparing")) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setCelebration("paid");
+        setTimeout(() => setCelebration(null), 3500);
+      } else if (cur === "ready" && prev !== "ready") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setCelebration("ready");
+        setTimeout(() => setCelebration(null), 3500);
+      }
+    }
+    prevStatusRef.current = cur;
+  }, [data?.status]);
+
   // Backstop for RM Direct mode: webhooks are best-effort, and our sig
   // validation has been bouncing valid callbacks. Whenever we're sitting
   // on a pending RM-routed order, hit /api/payments/poll so the server
@@ -502,7 +528,9 @@ export default function OrderStatus() {
           <OrderProgressStrip currentIndex={Math.max(0, statusIdx)} />
         )}
         <ScrollView contentContainerClassName="px-4 py-4 pb-12 gap-4">
-          {/* Status timeline */}
+          {/* Status timeline — hidden on Ready since the unified hero
+              card below carries the green check + counter ticket. */}
+          {data.status !== "ready" && (
           <View
             className="bg-surface rounded-2xl border border-border p-5"
             style={{
@@ -659,32 +687,12 @@ export default function OrderStatus() {
                 </Text>
               </View>
             ) : data.status === "ready" ? (
-              // State-specific banner + a counter-pickup ticket. The
-              // big order number gives the customer something to hold
-              // up to the barista without squinting at the page header.
-              <View className="items-center py-2">
-                <View
-                  style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 32,
-                    backgroundColor: "#E8F5E9",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Check size={32} color="#2E7D32" strokeWidth={2.5} />
-                </View>
-                <Text
-                  className="text-espresso text-xl mt-3"
-                  style={{ fontFamily: "Peachi-Bold" }}
-                >
-                  Ready for pickup ☕
-                </Text>
-                <Text className="text-muted-fg text-sm mt-1 text-center">
-                  Your order is at the counter. Swipe below to collect.
-                </Text>
-              </View>
+              // Ready state — leave the inner status card empty; the
+              // unified hero card below carries the green check, the
+              // big counter ticket, and the call to swipe. Avoids the
+              // previous "two stacked cards saying the same thing" feel
+              // and lets the page fit on one screen.
+              null
             ) : data.status === "completed" ? (
               <View className="items-center py-2">
                 <View
@@ -737,15 +745,15 @@ export default function OrderStatus() {
               </View>
             )}
           </View>
+          )}
 
-          {/* Counter ticket — only when ready. Big order number on a
-              terracotta-tinted card, perforated edges via dashed
-              border so it reads as something you hold up to the
-              barista. Replaces the small order number in the header
-              as the primary "show this to staff" surface. */}
+          {/* Unified Ready hero — green check, "Ready for pickup", big
+              counter number, "show to barista" hint — all in one card.
+              Replaces the previous two stacked cards (status banner +
+              counter ticket) so the page fits one screen. */}
           {data.status === "ready" && (
             <View
-              className="rounded-2xl px-5 py-6 items-center"
+              className="rounded-2xl px-5 py-5 items-center"
               style={{
                 backgroundColor: "#FBEBE8",
                 borderWidth: 2,
@@ -753,8 +761,23 @@ export default function OrderStatus() {
                 borderColor: "#C05040",
               }}
             >
+              <View
+                style={{
+                  width: 56, height: 56, borderRadius: 28,
+                  backgroundColor: "#E8F5E9",
+                  alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <Check size={28} color="#2E7D32" strokeWidth={2.5} />
+              </View>
               <Text
-                className="text-[10px] uppercase"
+                className="text-espresso text-xl mt-2"
+                style={{ fontFamily: "Peachi-Bold" }}
+              >
+                Ready for pickup ☕
+              </Text>
+              <Text
+                className="text-[9px] uppercase mt-4"
                 style={{
                   fontFamily: "Peachi-Bold",
                   letterSpacing: 2.5,
@@ -764,21 +787,15 @@ export default function OrderStatus() {
                 Show at counter
               </Text>
               <Text
-                className="mt-2 text-espresso"
+                className="mt-1 text-espresso"
                 style={{
                   fontFamily: "Peachi-Bold",
-                  fontSize: 44,
+                  fontSize: 40,
                   letterSpacing: -1,
-                  lineHeight: 50,
+                  lineHeight: 46,
                 }}
               >
                 #{data.order_number}
-              </Text>
-              <Text
-                className="text-muted-fg text-[12px] mt-1"
-                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
-              >
-                Hand this to the barista at the pickup counter.
               </Text>
             </View>
           )}
@@ -901,12 +918,11 @@ export default function OrderStatus() {
             />
           )}
 
-          {/* Order summary. Previously showed only line items + a bare
-              total — which read as a broken math bug when there were
-              applied discounts (e.g. RM 8.90 line item, RM 4.72 total,
-              no explanation). Now mirrors the checkout summary:
-              subtotal, each non-zero discount as its own line, SST,
-              then the grand total. */}
+          {/* Order summary — hidden on Ready to keep the page single-
+              screen (the counter ticket + swipe are what the customer
+              needs at pickup; items already shown earlier in the flow
+              and accessible via the Past Orders tab afterwards). */}
+          {data.status !== "ready" && (
           <View className="bg-surface rounded-2xl border border-border p-4">
             <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
               Items
@@ -1022,21 +1038,17 @@ export default function OrderStatus() {
               </View>
             </View>
           </View>
+          )}
 
           {data.status === "ready" && (
-            <View className="gap-3">
-              <View className="bg-primary/10 border border-primary/30 rounded-2xl p-4">
-                <Text className="text-primary text-sm font-bold">Show this to the barista</Text>
-                <Text className="text-primary/80 text-xs mt-1">
-                  Order #{data.order_number} — slide below once you've picked it up.
-                </Text>
-              </View>
-              <SwipeToCollect
-                label="Slide to confirm pickup"
-                doneLabel="Enjoy your drink ☕"
-                onComplete={markCollected}
-              />
-            </View>
+            // Drop the "Show this to the barista" reminder — the
+            // counter-ticket card above already says the same thing.
+            // Page is one-screen now.
+            <SwipeToCollect
+              label="Slide to confirm pickup"
+              doneLabel="Enjoy your drink ☕"
+              onComplete={markCollected}
+            />
           )}
 
           {data.status === "completed" && (
@@ -1071,6 +1083,71 @@ export default function OrderStatus() {
           )}
         </ScrollView>
         </>
+      )}
+
+      {/* Celebration banner — slides in from the top when the order
+          flips to "preparing" or "ready" while the customer is on
+          this page. Auto-dismisses after 3.5s. Reinforces the push,
+          and covers customers who have notifications muted or are
+          looking at the order page in the foreground (where push
+          would be suppressed). */}
+      {celebration && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 88,
+            left: 16,
+            right: 16,
+            backgroundColor: celebration === "ready" ? "#E8F5E9" : "#FBEBE8",
+            borderWidth: 1,
+            borderColor: celebration === "ready" ? "#2E7D32" : "#C05040",
+            borderRadius: 16,
+            padding: 14,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            shadowColor: "#000",
+            shadowOpacity: 0.15,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 4 },
+            zIndex: 100,
+          }}
+        >
+          <View
+            style={{
+              width: 36, height: 36, borderRadius: 18,
+              backgroundColor: celebration === "ready" ? "#2E7D32" : "#C05040",
+              alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <Check size={20} color="#FFFFFF" strokeWidth={2.8} />
+          </View>
+          <View className="flex-1">
+            <Text
+              style={{
+                fontFamily: "Peachi-Bold",
+                color: celebration === "ready" ? "#1B5E20" : "#160800",
+                fontSize: 15,
+              }}
+            >
+              {celebration === "ready"
+                ? "Ready for pickup ☕"
+                : "Payment confirmed"}
+            </Text>
+            <Text
+              style={{
+                color: celebration === "ready" ? "#1B5E20" : "#5C2B22",
+                fontSize: 12,
+                marginTop: 1,
+              }}
+            >
+              {celebration === "ready"
+                ? "Head to the counter and show your order number."
+                : "We're brewing your order now."}
+            </Text>
+          </View>
+        </View>
       )}
 
       <RmCheckoutModal
