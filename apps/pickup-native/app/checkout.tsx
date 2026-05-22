@@ -491,10 +491,12 @@ export default function Checkout() {
     return `Today · ${fmtRange(at, RANGE_WINDOW_MIN)}`;
   };
   const nowRangeMins = (() => {
+    // Low bound = outlet's prep time as the optimistic floor; high
+    // bound = +5 min for queue variance. So a 10-min outlet reads
+    // "10-15 min" — never promises faster than the kitchen can
+    // actually deliver, never reads as wildly off when busy.
     const base = currentOutlet?.pickup_time_mins ?? 10;
-    const low  = Math.max(1, base - 5);
-    const high = base + 5;
-    return `${low}-${high}`;
+    return `${base}-${base + 5}`;
   })();
 
   // RM checkout modal — full-screen WebView wrapper that replaces the
