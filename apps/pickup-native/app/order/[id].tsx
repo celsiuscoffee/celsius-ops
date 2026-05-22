@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, ScrollView, ActivityIndicator, Platform } from "react-native";
+import { View, Text, Pressable, ScrollView, ActivityIndicator, Platform, Linking } from "react-native";
 import { Alert } from "@/lib/alert";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,8 @@ import {
   CreditCard,
   XCircle,
   ChevronDown,
+  CalendarClock,
+  MapPin,
   Check,
 } from "lucide-react-native";
 import * as Haptics from "@/lib/haptics";
@@ -53,6 +55,40 @@ const STATUS_INDEX: Record<string, number> = {
   ready: 2,
   completed: 2,
 };
+
+// "9:55 AM" — single absolute clock time.
+function fmtClock(d: Date): string {
+  const h    = d.getHours();
+  const m    = d.getMinutes().toString().padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12  = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${m} ${ampm}`;
+}
+
+// "Today · 10:30 AM" or "Tomorrow · 8:00 AM" — used for scheduled pickup.
+function formatScheduledPickup(iso: string): string {
+  const at = new Date(iso);
+  const today = new Date();
+  const sameDay = at.toDateString() === today.toDateString();
+  const prefix = sameDay ? "Today" : "Tomorrow";
+  return `${prefix} · ${fmtClock(at)}`;
+}
+
+// "By ~9:55 AM (±5 min)" — estimated ready window for ASAP orders.
+// 10 min after created_at, with the same ±5 hedge the checkout uses.
+function formatReadyBy(createdAt: string): string {
+  const placed = new Date(createdAt);
+  const target = new Date(placed.getTime() + 10 * 60_000);
+  const low    = new Date(target.getTime() - 5 * 60_000);
+  const high   = new Date(target.getTime() + 5 * 60_000);
+  const lowStr  = fmtClock(low);
+  const highStr = fmtClock(high);
+  // Collapse AM/PM when both halves match.
+  if (lowStr.slice(-2) === highStr.slice(-2)) {
+    return `${lowStr.slice(0, -3)}-${highStr}`;
+  }
+  return `${lowStr}-${highStr}`;
+}
 
 export default function OrderStatus() {
   // `justPaid` is set by the checkout screen when the customer just
@@ -701,6 +737,95 @@ export default function OrderStatus() {
               </View>
             )}
           </View>
+
+          {/* Pickup details — outlet + ETA / scheduled time. Lives
+              outside the status card so it stays visible across every
+              lifecycle state. Tap the outlet row to open Maps for
+              directions. */}
+          {(data.status === "paid" ||
+            data.status === "preparing" ||
+            data.status === "ready") &&
+            (data.store_name || data.pickup_at) && (
+            <View className="bg-surface rounded-2xl border border-border overflow-hidden">
+              {data.store_name && (
+                <Pressable
+                  onPress={() => {
+                    const q = encodeURIComponent(
+                      data.store_address
+                        ? `${data.store_name}, ${data.store_address}`
+                        : data.store_name ?? "",
+                    );
+                    const url = Platform.OS === "ios"
+                      ? `http://maps.apple.com/?q=${q}`
+                      : `geo:0,0?q=${q}`;
+                    Linking.openURL(url).catch(() => {});
+                  }}
+                  className="flex-row items-start gap-3 p-4 active:opacity-70"
+                >
+                  <View
+                    style={{
+                      width: 36, height: 36, borderRadius: 18,
+                      backgroundColor: "#FBEBE8",
+                      alignItems: "center", justifyContent: "center",
+                    }}
+                  >
+                    <MapPin size={18} color="#C05040" />
+                  </View>
+                  <View className="flex-1">
+                    <Text
+                      className="text-muted-fg text-[10px] font-bold uppercase tracking-widest"
+                    >
+                      Pick up at
+                    </Text>
+                    <Text
+                      className="text-espresso text-[15px] font-bold mt-0.5"
+                      numberOfLines={1}
+                    >
+                      {data.store_name}
+                    </Text>
+                    {data.store_address && (
+                      <Text
+                        className="text-muted-fg text-[12px] mt-1"
+                        numberOfLines={2}
+                      >
+                        {data.store_address}
+                      </Text>
+                    )}
+                  </View>
+                  <Text className="text-primary text-[11px]" style={{ fontFamily: "Peachi-Bold" }}>
+                    Directions
+                  </Text>
+                </Pressable>
+              )}
+              <View className="flex-row items-start gap-3 p-4 border-t border-border">
+                <View
+                  style={{
+                    width: 36, height: 36, borderRadius: 18,
+                    backgroundColor: data.pickup_at ? "#FFF3E0" : "#FBEBE8",
+                    alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  {data.pickup_at
+                    ? <CalendarClock size={18} color="#C05040" />
+                    : <Clock         size={18} color="#C05040" />}
+                </View>
+                <View className="flex-1">
+                  <Text
+                    className="text-muted-fg text-[10px] font-bold uppercase tracking-widest"
+                  >
+                    {data.pickup_at ? "Scheduled" : "Ready by"}
+                  </Text>
+                  <Text
+                    className="text-espresso text-[15px] font-bold mt-0.5"
+                  >
+                    {data.pickup_at
+                      ? formatScheduledPickup(data.pickup_at)
+                      : formatReadyBy(data.created_at)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
 
           {/* Mystery Bean — appears once the server has generated a drop
               for this order (typically within seconds of payment). Tap
