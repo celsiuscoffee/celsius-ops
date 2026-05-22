@@ -437,9 +437,14 @@ export default function Checkout() {
   // both to decide what the customer can pick.
   const insideOpenWindow = !!(todayOpen && effectiveClose &&
     Date.now() >= todayOpen.getTime() && Date.now() <= effectiveClose.getTime());
-  // Treat the outlet as available for a "Now" order only when both
-  // staff's manual flag AND the schedule agree.
-  const nowAvailable = !!currentOutlet?.is_open && insideOpenWindow;
+  // Treat the outlet as available for a "Now" order when staff's
+  // manual flag says so AND (either we have no hours config, in which
+  // case we trust is_open, or the current time is inside the window).
+  // Without the outletHours fallback, the card defaulted to "Pick a
+  // time" any time the hours map hadn't loaded yet — even on a
+  // clearly-open outlet — which is what the screenshot showed.
+  const nowAvailable = currentOutlet?.is_open !== false &&
+    (outletHours == null || insideOpenWindow);
   // Filter the relative offsets to those that land inside opening
   // hours. We accept a pickup window that ENDS by close.
   const visibleOffsets = PICKUP_OFFSETS.filter((mins) => {
