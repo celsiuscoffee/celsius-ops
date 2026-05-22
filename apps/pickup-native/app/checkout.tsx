@@ -383,15 +383,45 @@ export default function Checkout() {
   const pickupAtIso = pickupOffsetMin == null
     ? null
     : new Date(Date.now() + pickupOffsetMin * 60_000).toISOString();
+  // Format a single absolute clock time, e.g. "9:56 AM".
+  const fmtClock = (d: Date): string => {
+    const h = d.getHours();
+    const m = d.getMinutes().toString().padStart(2, "0");
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12  = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${m} ${ampm}`;
+  };
+  // Format a +/- window range, e.g. "9:54-10:00 AM" (or "9:58 AM-12:02 PM"
+  // when the window crosses noon/midnight). Window is the half-width
+  // in minutes, so the full range is 2 * window.
+  const fmtRange = (center: Date, windowMins: number): string => {
+    const start = new Date(center.getTime() - windowMins * 60_000);
+    const end   = new Date(center.getTime() + windowMins * 60_000);
+    const startStr = fmtClock(start);
+    const endStr   = fmtClock(end);
+    // Same AM/PM → collapse the suffix on the start half.
+    const startAmpm = startStr.slice(-2);
+    const endAmpm   = endStr.slice(-2);
+    if (startAmpm === endAmpm) {
+      return `${startStr.slice(0, -3)}-${endStr}`;
+    }
+    return `${startStr}-${endStr}`;
+  };
+  // Honesty hedge: brew time varies. Use ±3 min around the requested
+  // pickup time for the picker rows, and the outlet's pickup_time_mins
+  // ±2 min for "Now" (so a 10-min outlet reads "8-12 min").
+  const RANGE_WINDOW_MIN = 3;
   const formatPickupLabel = (mins: number | null): string => {
     if (mins == null) return "Now";
     const at = new Date(Date.now() + mins * 60_000);
-    const h  = at.getHours();
-    const m  = at.getMinutes().toString().padStart(2, "0");
-    const ampm = h >= 12 ? "PM" : "AM";
-    const h12  = h % 12 === 0 ? 12 : h % 12;
-    return `Today · ${h12}:${m} ${ampm}`;
+    return `Today · ${fmtRange(at, RANGE_WINDOW_MIN)}`;
   };
+  const nowRangeMins = (() => {
+    const base = currentOutlet?.pickup_time_mins ?? 10;
+    const low  = Math.max(1, base - 2);
+    const high = base + 2;
+    return `${low}-${high}`;
+  })();
 
   // RM checkout modal — full-screen WebView wrapper that replaces the
   // expo-web-browser flow (which surfaced an iOS system URL bar like
@@ -1080,9 +1110,7 @@ export default function Checkout() {
                 style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
               >
                 {pickupOffsetMin == null
-                  ? currentOutlet?.pickup_time_mins
-                    ? `Brewed in ~${currentOutlet.pickup_time_mins} min`
-                    : "Brewed as soon as you place the order"
+                  ? `Ready in ${nowRangeMins} min`
                   : `Brew starts ~${Math.max(0, pickupOffsetMin - (currentOutlet?.pickup_time_mins ?? 10))} min before pickup`}
               </Text>
             </Pressable>
@@ -1573,9 +1601,7 @@ export default function Checkout() {
                 Now
               </Text>
               <Text className="text-muted-fg text-[12px]">
-                {currentOutlet?.pickup_time_mins
-                  ? `Brewed in ~${currentOutlet.pickup_time_mins} min`
-                  : "Brewed as soon as you place the order"}
+                Ready in {nowRangeMins} min
               </Text>
             </View>
             {pickupOffsetMin == null && <Check size={18} color="#C05040" />}
