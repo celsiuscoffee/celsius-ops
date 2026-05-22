@@ -289,8 +289,8 @@ export default function Cart() {
                       {item.name}
                     </Text>
                     <Text
-                      className="text-primary text-[14px]"
-                      style={{ fontFamily: "Peachi-Bold" }}
+                      className="text-[14px]"
+                      style={{ fontFamily: "Peachi-Bold", color: "#B91C1C" /* alert red — item price */ }}
                       numberOfLines={1}
                     >
                       {formatPrice(item.totalPrice)}
@@ -386,21 +386,27 @@ export default function Cart() {
             style={{ paddingBottom: insets.bottom + 12 }}
           >
             {appliedReward ? (
-              <View className="bg-primary/10 rounded-2xl px-3 py-2 mb-3 flex-row items-center gap-2">
-                <View className="w-8 h-8 rounded-full bg-primary items-center justify-center">
+              <View
+                style={{ backgroundColor: "rgba(185,28,28,0.10)" }}
+                className="rounded-2xl px-3 py-2 mb-3 flex-row items-center gap-2"
+              >
+                <View
+                  style={{ backgroundColor: "#B91C1C" }}
+                  className="w-8 h-8 rounded-full items-center justify-center"
+                >
                   <Gift size={14} color="#FFFFFF" strokeWidth={2} />
                 </View>
                 <View className="flex-1">
                   <Text
-                    className="text-primary text-[13px]"
-                    style={{ fontFamily: "Peachi-Bold" }}
+                    className="text-[13px]"
+                    style={{ fontFamily: "Peachi-Bold", color: "#B91C1C" }}
                     numberOfLines={1}
                   >
                     {appliedReward.name}
                   </Text>
                   <Text
-                    className="text-primary/80 text-[11px]"
-                    style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                    className="text-[11px]"
+                    style={{ fontFamily: "SpaceGrotesk_500Medium", color: "rgba(185,28,28,0.80)" }}
                   >
                     {discount > 0
                       ? `Reward applied · −${formatPrice(discount)}`
@@ -410,35 +416,28 @@ export default function Cart() {
                 <Pressable
                   onPress={() => {
                     Haptics.selectionAsync();
-                    // Clear both the applied reward AND the reserved voucher
-                    // so the X actually unsets everything. Otherwise the
-                    // chip clears but the next /menu visit re-applies it
-                    // via the reservedVoucher restore path.
                     setAppliedReward(null);
                     setReservedVoucher(null);
                   }}
                   hitSlop={12}
                   className="active:opacity-70"
                 >
-                  <X size={16} color="#A2492C" />
+                  <X size={16} color="#B91C1C" />
                 </Pressable>
               </View>
             ) : (
               <Pressable
                 onPress={() => {
                   Haptics.selectionAsync();
-                  // Land directly on the Rewards (wallet) tab — that's
-                  // where the customer's claimed vouchers live, and where
-                  // tapping "Use" sets the applied reward + sends them
-                  // back here.
                   router.push("/rewards?tab=vouchers" as never);
                 }}
-                className="bg-surface border border-dashed border-primary/40 rounded-2xl px-3 py-2 mb-3 flex-row items-center gap-2 active:opacity-70"
+                style={{ borderColor: "rgba(185,28,28,0.40)" }}
+                className="bg-surface border border-dashed rounded-2xl px-3 py-2 mb-3 flex-row items-center gap-2 active:opacity-70"
               >
-                <Gift size={16} color="#A2492C" strokeWidth={1.75} />
+                <Gift size={16} color="#B91C1C" strokeWidth={1.75} />
                 <Text
-                  className="text-primary text-[13px] flex-1"
-                  style={{ fontFamily: "Peachi-Bold" }}
+                  className="text-[13px] flex-1"
+                  style={{ fontFamily: "Peachi-Bold", color: "#B91C1C" }}
                 >
                   Apply a reward
                 </Text>
@@ -463,15 +462,15 @@ export default function Cart() {
                 className="mb-1 flex-row justify-between items-center"
               >
                 <Text
-                  className="text-primary text-[13px] flex-1"
+                  className="text-[13px] flex-1"
                   numberOfLines={1}
-                  style={{ paddingRight: 8 }}
+                  style={{ paddingRight: 8, color: "#B91C1C" /* alert red — discount */ }}
                 >
                   {d.promotion_name}
                 </Text>
                 <Text
-                  className="text-primary text-[14px]"
-                  style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                  className="text-[14px]"
+                  style={{ fontFamily: "SpaceGrotesk_500Medium", color: "#B91C1C" }}
                 >
                   −{formatPrice(d.discount_amount)}
                 </Text>
@@ -479,10 +478,12 @@ export default function Cart() {
             ))}
             {discount > 0 && (
               <View className="mb-1 flex-row justify-between items-center">
-                <Text className="text-primary text-[13px]">Reward discount</Text>
+                <Text className="text-[13px]" style={{ color: "#B91C1C" }}>
+                  Reward discount
+                </Text>
                 <Text
-                  className="text-primary text-[14px]"
-                  style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                  className="text-[14px]"
+                  style={{ fontFamily: "SpaceGrotesk_500Medium", color: "#B91C1C" }}
                 >
                   −{formatPrice(discount)}
                 </Text>
