@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
 import { useConfirm, toast } from "@celsius/ui";
-import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign, Landmark, Copy, Check, Ban } from "lucide-react";
+import { FileText, Search, Download, Eye, Image as ImageIcon, Loader2, CheckCircle2, Clock, AlertTriangle, Filter, X, CalendarDays, Building2, ZoomIn, Pencil, Upload, Trash2, FileDown, DollarSign, Landmark, Copy, Check, Ban, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 
 const isPdf = (url: string) => /\.pdf($|\?)/i.test(url);
 const fixImageUrl = (url: string) => url.replace("/raw/upload/", "/image/upload/");
@@ -321,13 +321,46 @@ export default function InvoicesPage() {
   // Bank filter is still applied client-side (it's a free-text contains check
   // on supplier/claimant bank names — not worth a server roundtrip). cardFilter
   // is handled by the API now, so it's dropped from the local filter.
-  const invoices = allInvoices.filter((inv) => {
+  const filteredInvoices = allInvoices.filter((inv) => {
     // Bank filter: use claimant bank for STAFF_CLAIM, supplier bank otherwise
     const bankName = (inv.paymentType === "STAFF_CLAIM" ? inv.claimantBank : inv.supplierBank)?.bankName?.toLowerCase() ?? "";
     if (bankFilter === "maybank" && !bankName.includes("maybank")) return false;
     if (bankFilter === "non-maybank" && bankName.includes("maybank")) return false;
     return true;
   });
+
+  type SortKey = "issueDate" | "deliveryDate" | "dueDate" | "paidAt";
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  const invoices = sortKey
+    ? [...filteredInvoices].sort((a, b) => {
+        const av = sortKey === "paidAt" ? (a.paidAt ? a.paidAt.slice(0, 10) : "") : (a[sortKey] ?? "");
+        const bv = sortKey === "paidAt" ? (b.paidAt ? b.paidAt.slice(0, 10) : "") : (b[sortKey] ?? "");
+        // Empty values always sort to the bottom regardless of direction
+        if (!av && !bv) return 0;
+        if (!av) return 1;
+        if (!bv) return -1;
+        const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+        return sortDir === "asc" ? cmp : -cmp;
+      })
+    : filteredInvoices;
+
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <ArrowUpDown className="h-3 w-3 text-gray-300" />;
+    return sortDir === "desc"
+      ? <ArrowDown className="h-3 w-3 text-gray-700" />
+      : <ArrowUp className="h-3 w-3 text-gray-700" />;
+  };
 
   const activeFilterCount = [outletFilter.length > 0, supplierFilter.length > 0, bankFilter !== "all", dueDateFrom, dueDateTo, paidDateFrom, paidDateTo].filter(Boolean).length;
 
@@ -1429,10 +1462,26 @@ export default function InvoicesPage() {
             <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>
             {typeFilter !== "supplier" && <th className="px-4 py-3 text-left font-medium text-gray-500">Claimed By</th>}
             <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">Issue Date</th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">Delivered</th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">Due Date</th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">Paid Date</th>
+            <th className="px-4 py-3 text-left font-medium text-gray-500">
+              <button onClick={() => toggleSort("issueDate")} className="inline-flex items-center gap-1 hover:text-gray-700">
+                Issue Date <SortIcon col="issueDate" />
+              </button>
+            </th>
+            <th className="px-4 py-3 text-left font-medium text-gray-500">
+              <button onClick={() => toggleSort("deliveryDate")} className="inline-flex items-center gap-1 hover:text-gray-700">
+                Delivered <SortIcon col="deliveryDate" />
+              </button>
+            </th>
+            <th className="px-4 py-3 text-left font-medium text-gray-500">
+              <button onClick={() => toggleSort("dueDate")} className="inline-flex items-center gap-1 hover:text-gray-700">
+                Due Date <SortIcon col="dueDate" />
+              </button>
+            </th>
+            <th className="px-4 py-3 text-left font-medium text-gray-500">
+              <button onClick={() => toggleSort("paidAt")} className="inline-flex items-center gap-1 hover:text-gray-700">
+                Paid Date <SortIcon col="paidAt" />
+              </button>
+            </th>
             <th className="px-4 py-3 text-right font-medium text-gray-500">Amount (RM)</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">Photo</th>
             <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
