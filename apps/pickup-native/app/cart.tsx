@@ -420,7 +420,7 @@ export default function Cart() {
                   hitSlop={12}
                   className="active:opacity-70"
                 >
-                  <X size={16} color="#C05040" />
+                  <X size={16} color="#A2492C" />
                 </Pressable>
               </View>
             ) : (
@@ -435,7 +435,7 @@ export default function Cart() {
                 }}
                 className="bg-surface border border-dashed border-primary/40 rounded-2xl px-3 py-2 mb-3 flex-row items-center gap-2 active:opacity-70"
               >
-                <Gift size={16} color="#C05040" strokeWidth={1.75} />
+                <Gift size={16} color="#A2492C" strokeWidth={1.75} />
                 <Text
                   className="text-primary text-[13px] flex-1"
                   style={{ fontFamily: "Peachi-Bold" }}
@@ -528,14 +528,14 @@ export default function Cart() {
             {outletClosed && (
               <View
                 className="rounded-2xl mb-3 px-3 py-3 flex-row items-start gap-2.5"
-                style={{ backgroundColor: "rgba(192, 80, 64, 0.10)", borderWidth: 1, borderColor: "rgba(192, 80, 64, 0.25)" }}
+                style={{ backgroundColor: "rgba(162, 73, 44, 0.10)", borderWidth: 1, borderColor: "rgba(162, 73, 44, 0.25)" }}
               >
                 <View
                   style={{
                     width: 6,
                     height: 6,
                     borderRadius: 3,
-                    backgroundColor: "#C05040",
+                    backgroundColor: "#A2492C",
                     marginTop: 6,
                   }}
                 />

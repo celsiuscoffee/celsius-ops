@@ -730,7 +730,7 @@ export default function OrderStatus() {
                         </Text>
                         <ChevronDown
                           size={14}
-                          color="#C05040"
+                          color="#A2492C"
                           style={{
                             transform: [
                               { rotate: methodPickerOpen ? "180deg" : "0deg" },
@@ -1073,12 +1073,12 @@ export default function OrderStatus() {
               style={{
                 backgroundColor: "#FBEBE8",
                 borderWidth: 1,
-                borderColor: "rgba(192, 80, 64, 0.25)",
+                borderColor: "rgba(162, 73, 44, 0.25)",
               }}
             >
               <Text
                 className="text-sm"
-                style={{ fontFamily: "Peachi-Bold", color: "#C05040" }}
+                style={{ fontFamily: "Peachi-Bold", color: "#A2492C" }}
               >
                 Order collected
               </Text>

@@ -106,7 +106,7 @@ function BenefitsSection({ tier, isLocked }: { tier: Tier; isLocked: boolean }) 
       {points.length > 0 && (
         <Section title="Member Rewards" muted={isLocked}>
           <BenefitCard
-            icon={<Star size={20} color="#C05040" />}
+            icon={<Star size={20} color="#A2492C" />}
             label={`${String(points[0].value).replace(/\.0$/, "")}× points on every purchase`}
             muted={isLocked}
           />
@@ -115,7 +115,7 @@ function BenefitsSection({ tier, isLocked }: { tier: Tier; isLocked: boolean }) 
 
       {birthday.length > 0 && (
         <Section title="Birthday Gifts" muted={isLocked}>
-          <BenefitCard icon={<Gift size={20} color="#C05040" />} label="Free birthday drink" muted={isLocked} />
+          <BenefitCard icon={<Gift size={20} color="#A2492C" />} label="Free birthday drink" muted={isLocked} />
         </Section>
       )}
 
@@ -124,7 +124,7 @@ function BenefitsSection({ tier, isLocked }: { tier: Tier; isLocked: boolean }) 
           {perks.map((p, i) => (
             <BenefitCard
               key={i}
-              icon={<Calendar size={20} color="#C05040" />}
+              icon={<Calendar size={20} color="#A2492C" />}
               label={p.label ?? p.type.replace(/_/g, " ")}
               muted={isLocked}
             />
@@ -137,7 +137,7 @@ function BenefitsSection({ tier, isLocked }: { tier: Tier; isLocked: boolean }) 
           {exclusive.map((p, i) => (
             <BenefitCard
               key={i}
-              icon={<Sparkles size={20} color="#C05040" />}
+              icon={<Sparkles size={20} color="#A2492C" />}
               label={p.label ?? "Exclusive event invites"}
               muted={isLocked}
             />
@@ -148,7 +148,7 @@ function BenefitsSection({ tier, isLocked }: { tier: Tier; isLocked: boolean }) 
       {rules.length === 0 && (tier.benefits?.length ?? 0) > 0 && (
         <Section title="What you get" muted={isLocked}>
           {tier.benefits!.map((b, i) => (
-            <BenefitCard key={i} icon={<Star size={20} color="#C05040" />} label={b} muted={isLocked} />
+            <BenefitCard key={i} icon={<Star size={20} color="#A2492C" />} label={b} muted={isLocked} />
           ))}
         </Section>
       )}
@@ -159,7 +159,7 @@ function BenefitsSection({ tier, isLocked }: { tier: Tier; isLocked: boolean }) 
         accessibilityRole="button"
         accessibilityLabel="View rewards catalogue"
       >
-        <Text style={{ color: "#C05040", fontFamily: "Peachi-Bold", fontSize: 15 }}>
+        <Text style={{ color: "#A2492C", fontFamily: "Peachi-Bold", fontSize: 15 }}>
           See rewards catalogue →
         </Text>
         <Text
@@ -220,7 +220,7 @@ function BenefitCard({
     >
       <View
         className="rounded-lg items-center justify-center"
-        style={{ width: 40, height: 40, backgroundColor: "rgba(192,80,64,0.08)" }}
+        style={{ width: 40, height: 40, backgroundColor: "rgba(162,73,44,0.08)" }}
       >
         {icon}
       </View>

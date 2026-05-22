@@ -213,7 +213,7 @@ const C = {
   surface:  "#FFFFFF",
   espresso: "#1A0200",
   border:   "#E5E5E5",
-  primary:  "#C05040",
+  primary:  "#A2492C",
   gold:     "#FBBF24",
   ready:    "#22C55E",
   locked:   "#8E8E93",

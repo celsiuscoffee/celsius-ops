@@ -120,10 +120,10 @@ function CategoryRow({
           height: 20,
           borderRadius: 10,
           borderWidth: 2,
-          borderColor: selected ? "#C05040" : "#D6CCC2",
+          borderColor: selected ? "#A2492C" : "#D6CCC2",
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: selected ? "#C05040" : "transparent",
+          backgroundColor: selected ? "#A2492C" : "transparent",
         }}
       >
         {selected && (
@@ -1201,7 +1201,7 @@ export default function Checkout() {
                   >
                     <Text
                       style={{
-                        color: "#C05040",
+                        color: "#A2492C",
                         fontSize: 9,
                         fontFamily: "Peachi-Bold",
                         letterSpacing: 1,
@@ -1654,7 +1654,7 @@ export default function Checkout() {
                 <Text className="flex-1 text-espresso text-[15px] font-bold">
                   {METHOD_LABELS[w.method_id] ?? w.method_id}
                 </Text>
-                {picked && <Check size={18} color="#C05040" />}
+                {picked && <Check size={18} color="#A2492C" />}
               </Pressable>
             );
           })}
@@ -1717,7 +1717,7 @@ export default function Checkout() {
                     alignItems: "center", justifyContent: "center",
                   }}
                 >
-                  <CalendarClock size={18} color="#C05040" />
+                  <CalendarClock size={18} color="#A2492C" />
                 </View>
                 <View className="flex-1">
                   <Text className="text-espresso text-[15px] font-bold">
@@ -1729,7 +1729,7 @@ export default function Checkout() {
                       : `Tomorrow · ${openLabel}`}
                   </Text>
                 </View>
-                {picked && <Check size={18} color="#C05040" />}
+                {picked && <Check size={18} color="#A2492C" />}
               </Pressable>
             );
           })()}
@@ -1749,7 +1749,7 @@ export default function Checkout() {
                   alignItems: "center", justifyContent: "center",
                 }}
               >
-                <Clock size={18} color="#C05040" />
+                <Clock size={18} color="#A2492C" />
               </View>
               <View className="flex-1">
                 <View className="flex-row items-center gap-2">
@@ -1766,7 +1766,7 @@ export default function Checkout() {
                   >
                     <Text
                       style={{
-                        color: "#C05040",
+                        color: "#A2492C",
                         fontSize: 9,
                         fontFamily: "Peachi-Bold",
                         letterSpacing: 1,
@@ -1780,7 +1780,7 @@ export default function Checkout() {
                   Ready in {nowRangeMins} min
                 </Text>
               </View>
-              {pickupOffsetMin == null && <Check size={18} color="#C05040" />}
+              {pickupOffsetMin == null && <Check size={18} color="#A2492C" />}
             </Pressable>
           )}
           {visibleOffsets.map((mins) => {
@@ -1802,7 +1802,7 @@ export default function Checkout() {
                     alignItems: "center", justifyContent: "center",
                   }}
                 >
-                  <CalendarClock size={18} color={picked ? "#C05040" : "#8E8E93"} />
+                  <CalendarClock size={18} color={picked ? "#A2492C" : "#8E8E93"} />
                 </View>
                 <View className="flex-1">
                   <Text className="text-espresso text-[15px] font-bold">
@@ -1812,7 +1812,7 @@ export default function Checkout() {
                     {formatPickupLabel(mins)}
                   </Text>
                 </View>
-                {picked && <Check size={18} color="#C05040" />}
+                {picked && <Check size={18} color="#A2492C" />}
               </Pressable>
             );
           })}

@@ -43,7 +43,7 @@ export default function ReferralScreen() {
 
       {!phone || isLoading || !data ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#C05040" />
+          <ActivityIndicator color="#A2492C" />
         </View>
       ) : (
         <ScrollView
@@ -262,7 +262,7 @@ function Step({ n, text, last }: { n: number; text: string; last?: boolean }) {
           justifyContent: "center",
         }}
       >
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 12, color: "#C05040" }}>{n}</Text>
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 12, color: "#A2492C" }}>{n}</Text>
       </View>
       <Text
         style={{

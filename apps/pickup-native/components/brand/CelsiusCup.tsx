@@ -30,7 +30,7 @@ type Props = {
  * same 8% body wash when the tab is selected, so the brand mark
  * doesn't look like an outlier in the row.
  */
-export function CelsiusCup({ size = 28, color = "#C05040", fill = "transparent", knockout, active = false }: Props) {
+export function CelsiusCup({ size = 28, color = "#A2492C", fill = "transparent", knockout, active = false }: Props) {
   const isFilled = fill !== "transparent";
   // Lucide outline icons in the bottom nav use strokeWidth 1.75 inactive
   // / 2.4 active. We map the SVG outline stroke to those exact values

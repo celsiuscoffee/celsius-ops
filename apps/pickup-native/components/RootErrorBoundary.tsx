@@ -134,12 +134,12 @@ export class RootErrorBoundary extends React.Component<Props, State> {
         </Text>
 
         {this.state.recovering ? (
-          <ActivityIndicator color="#C05040" />
+          <ActivityIndicator color="#A2492C" />
         ) : (
           <Pressable
             onPress={this.recover}
             style={({ pressed }) => ({
-              backgroundColor: "#C05040",
+              backgroundColor: "#A2492C",
               paddingHorizontal: 28,
               paddingVertical: 14,
               borderRadius: 999,

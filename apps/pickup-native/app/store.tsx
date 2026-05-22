@@ -92,7 +92,7 @@ export default function StorePicker() {
               }}
             >
               <View className={`rounded-2xl p-2.5 mt-0.5 ${selected ? "bg-primary/15" : "bg-primary/10"}`}>
-                <MapPin size={20} color="#C05040" />
+                <MapPin size={20} color="#A2492C" />
               </View>
               <View className="flex-1">
                 <View className="flex-row items-center gap-2 flex-wrap">

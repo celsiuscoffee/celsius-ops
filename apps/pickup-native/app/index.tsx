@@ -353,7 +353,7 @@ export default function Home() {
           {cartCount(cart) > 0 && (
             <View
               className="absolute rounded-full items-center justify-center"
-              style={{ top: -3, right: -3, width: 16, height: 16, backgroundColor: "#C05040" }}
+              style={{ top: -3, right: -3, width: 16, height: 16, backgroundColor: "#A2492C" }}
             >
               <Text
                 className="text-[9px]"
@@ -571,8 +571,8 @@ export default function Home() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#C05040"
-            colors={["#C05040"]}
+            tintColor="#A2492C"
+            colors={["#A2492C"]}
           />
         }
       >
@@ -649,20 +649,20 @@ export default function Home() {
               paddingVertical: 12,
               backgroundColor: "#FBEBE8",
               borderWidth: 1,
-              borderColor: "rgba(192, 80, 64, 0.20)",
+              borderColor: "rgba(162, 73, 44, 0.20)",
             }}
           >
             <View className="flex-row items-center gap-3">
               <View
                 className="w-9 h-9 rounded-full items-center justify-center"
-                style={{ backgroundColor: "rgba(192, 80, 64, 0.15)" }}
+                style={{ backgroundColor: "rgba(162, 73, 44, 0.15)" }}
               >
-                <Clock4 size={18} color="#C05040" strokeWidth={2} />
+                <Clock4 size={18} color="#A2492C" strokeWidth={2} />
               </View>
               <View className="flex-1">
                 <Text
                   className="text-[10px] uppercase tracking-widest"
-                  style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#C05040", letterSpacing: 1.5 }}
+                  style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#A2492C", letterSpacing: 1.5 }}
                 >
                   {statusLabel(activeOrder.status)}
                 </Text>
@@ -674,7 +674,7 @@ export default function Home() {
                   Order #{activeOrder.order_number}
                 </Text>
               </View>
-              <ChevronRight size={16} color="#C05040" />
+              <ChevronRight size={16} color="#A2492C" />
             </View>
           </Pressable>
         )}
@@ -701,7 +701,7 @@ export default function Home() {
               flexDirection: "row",
               alignItems: "center",
               borderWidth: 1,
-              borderColor: "rgba(192,80,64,0.25)",
+              borderColor: "rgba(162,73,44,0.25)",
               gap: 12,
             }}
             accessibilityRole="button"
@@ -712,7 +712,7 @@ export default function Home() {
                 width: 40,
                 height: 40,
                 borderRadius: 12,
-                backgroundColor: "#C05040",
+                backgroundColor: "#A2492C",
                 alignItems: "center",
                 justifyContent: "center",
               }}
@@ -837,7 +837,7 @@ export default function Home() {
                 className="flex-row items-center gap-0.5 active:opacity-70"
               >
                 <Text className="text-primary text-xs font-bold">All</Text>
-                <ChevronRight size={14} color="#C05040" />
+                <ChevronRight size={14} color="#A2492C" />
               </Pressable>
             </View>
             <ScrollView
@@ -897,7 +897,7 @@ export default function Home() {
               </Text>
               <View className="flex-row items-center gap-0.5">
                 <Text className="text-primary text-xs font-bold">See all</Text>
-                <ChevronRight size={14} color="#C05040" />
+                <ChevronRight size={14} color="#A2492C" />
               </View>
             </Pressable>
             <ScrollView
@@ -930,7 +930,7 @@ export default function Home() {
                       />
                     ) : (
                       <View className="flex-1 items-center justify-center">
-                        <Coffee size={32} color="#C05040" strokeWidth={1.5} />
+                        <Coffee size={32} color="#A2492C" strokeWidth={1.5} />
                       </View>
                     )}
                   </View>
@@ -1071,7 +1071,7 @@ export default function Home() {
                 className="flex-row items-center gap-0.5 active:opacity-70"
               >
                 <Text className="text-primary text-xs font-bold">More</Text>
-                <ChevronRight size={14} color="#C05040" />
+                <ChevronRight size={14} color="#A2492C" />
               </Pressable>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-3">
@@ -1183,7 +1183,7 @@ function ViewCartFloatingBar({
         onPress={onPress}
         className="bg-primary rounded-full py-3 px-5 flex-row items-center justify-between active:opacity-80"
         style={{
-          shadowColor: "#C05040",
+          shadowColor: "#A2492C",
           shadowOpacity: 0.3,
           shadowRadius: 12,
           shadowOffset: { width: 0, height: 4 },
@@ -1322,7 +1322,7 @@ function ForYouStrip({
             <Text className="text-primary text-[12px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
               See all
             </Text>
-            <ChevronRight size={13} color="#C05040" />
+            <ChevronRight size={13} color="#A2492C" />
           </Pressable>
         </View>
         <View className="flex-row gap-5">
@@ -1340,7 +1340,7 @@ function ForYouStrip({
                 hitSlop={12}
                 className="active:opacity-70"
               >
-                <View style={{ paddingBottom: 6, borderBottomWidth: 2, borderBottomColor: isActive ? "#C05040" : "transparent" }}>
+                <View style={{ paddingBottom: 6, borderBottomWidth: 2, borderBottomColor: isActive ? "#A2492C" : "transparent" }}>
                   <View className="flex-row items-center gap-1.5">
                     <Text
                       className="text-[11px] uppercase"
@@ -1357,7 +1357,7 @@ function ForYouStrip({
                         className="text-[10px]"
                         style={{
                           fontFamily: "SpaceGrotesk_700Bold",
-                          color: isActive ? "#C05040" : "#C5C5C8",
+                          color: isActive ? "#A2492C" : "#C5C5C8",
                         }}
                       >
                         {badge}
@@ -1398,7 +1398,7 @@ function ForYouStrip({
                   <Image source={{ uri: r.image_url }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
                 ) : (
                   <View className="flex-1 items-center justify-center">
-                    <Gift size={28} color="#C05040" strokeWidth={1.5} />
+                    <Gift size={28} color="#A2492C" strokeWidth={1.5} />
                   </View>
                 )}
                 {(() => {
@@ -1449,7 +1449,7 @@ function ForYouStrip({
                   <Image source={{ uri: item.image_url }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
                 ) : (
                   <View className="flex-1 items-center justify-center">
-                    <Coffee size={28} color="#C05040" strokeWidth={1.5} />
+                    <Coffee size={28} color="#A2492C" strokeWidth={1.5} />
                   </View>
                 )}
               </View>
@@ -1541,7 +1541,7 @@ function ticketToneColors(tone: TicketTone): {
   switch (tone) {
     case "terracotta":
       return {
-        topBg: "#C05040",
+        topBg: "#A2492C",
         topAccent: "#FFFFFF",
         topMuted: "rgba(255,255,255,0.75)",
       };
@@ -1872,7 +1872,7 @@ function HomeVoucherTicket({
         </Text>
         <Text
           style={{
-            color: urgency.warning ? "#C05040" : "rgba(26, 2, 0, 0.55)",
+            color: urgency.warning ? "#A2492C" : "rgba(26, 2, 0, 0.55)",
             fontFamily: "SpaceGrotesk_700Bold",
             fontSize: 10,
             letterSpacing: 1.2,

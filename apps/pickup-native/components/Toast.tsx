@@ -87,7 +87,7 @@ export function Toast() {
             width: 28,
             height: 28,
             borderRadius: 14,
-            backgroundColor: isSuccess ? "#C05040" : "rgba(255,255,255,0.10)",
+            backgroundColor: isSuccess ? "#A2492C" : "rgba(255,255,255,0.10)",
             alignItems: "center",
             justifyContent: "center",
           }}

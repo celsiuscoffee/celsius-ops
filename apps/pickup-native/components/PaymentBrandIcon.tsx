@@ -106,7 +106,7 @@ function EWalletGroupChip({ size }: { size: number }) {
         width: size,
         height: size,
         borderRadius: radius,
-        backgroundColor: "#C05040",
+        backgroundColor: "#A2492C",
         alignItems: "center",
         justifyContent: "center",
       }}
@@ -138,7 +138,7 @@ export function PaymentBrandIcon({ methodId, size = 36 }: Props) {
           justifyContent: "center",
         }}
       >
-        <Wallet size={Math.round(size * 0.5)} color="#C05040" strokeWidth={2} />
+        <Wallet size={Math.round(size * 0.5)} color="#A2492C" strokeWidth={2} />
       </View>
     );
   }

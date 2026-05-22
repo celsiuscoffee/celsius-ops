@@ -13,10 +13,13 @@ module.exports = {
         surface: "#FFFFFF",
         espresso: "#1A0200",     // BRAND BLACK — terracotta-tinged, earthy
         primary: {
-          DEFAULT: "#C05040",    // terracotta — brand primary
-          50: "#FBEBE8",
-          100: "#F5D2CC",
-          900: "#5A1F16",
+          // Deepened terracotta — A2492C (Vandyke Red family).
+          // Sits further from danger red in hue + lightness, so brand
+          // CTAs and red error states never read as the same colour.
+          DEFAULT: "#A2492C",
+          50: "#F6E8E2",
+          100: "#EBD0C2",
+          900: "#4E1F12",
         },
         muted: {
           DEFAULT: "#6B6B6B",    // neutral grey for secondary text

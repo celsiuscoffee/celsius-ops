@@ -403,10 +403,10 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
           }}
           className="active:opacity-70"
         >
-          <LogOut size={20} color="#C05040" />
+          <LogOut size={20} color="#A2492C" />
           <Text
             style={{
-              color: "#C05040",
+              color: "#A2492C",
               fontFamily: "SpaceGrotesk_700Bold",
               fontSize: 16,
               letterSpacing: 0.1,
@@ -1022,7 +1022,7 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
               className="bg-primary/10 items-center justify-center mb-4"
               style={{ width: 64, height: 64, borderRadius: 32 }}
             >
-              <Phone size={28} color="#C05040" strokeWidth={1.5} />
+              <Phone size={28} color="#A2492C" strokeWidth={1.5} />
             </View>
             <Text
               className="text-espresso text-2xl"

@@ -181,7 +181,7 @@ function WebPaymentOverlay({
             appearance: {
               theme: "night",
               variables: {
-                colorPrimary: "#C05040",
+                colorPrimary: "#A2492C",
                 colorBackground: "#1A0200",
                 colorText: "#ffffff",
                 fontFamily:
@@ -304,7 +304,7 @@ function PaymentForm({
         type="submit"
         disabled={!stripe || !elements || !ready || submitting}
         style={{
-          background: "#C05040",
+          background: "#A2492C",
           color: "#fff",
           fontWeight: 600,
           fontSize: 16,

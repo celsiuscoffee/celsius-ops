@@ -131,18 +131,18 @@ export const THEME_MYSTERY: VoucherTheme = {
 
 export const THEME_GIFT: VoucherTheme = {
   bg:         "#F4D3B0",  // warm peach
-  border:     "rgba(192,80,64,0.28)",
-  accent:     "#C05040",  // terracotta
+  border:     "rgba(162,73,44,0.28)",
+  accent:     "#A2492C",  // terracotta
   fg:         "#1A0200",
   fgDim:      "rgba(26,2,0,0.62)",
-  iconBg:     "rgba(192,80,64,0.14)",
-  iconColor:  "#C05040",
+  iconBg:     "rgba(162,73,44,0.14)",
+  iconColor:  "#A2492C",
   iconKind:   "glyph",
   glyphIcon:  Gift,
 };
 
 export const THEME_BEAN: VoucherTheme = {
-  bg:         "#C05040",  // terracotta
+  bg:         "#A2492C",  // terracotta
   border:     "rgba(251,191,36,0.36)",
   accent:     "#FBBF24",  // gold
   fg:         "#FFFFFF",

@@ -51,7 +51,7 @@ export function ClaimableSection({ claimables }: Props) {
           style={{
             fontFamily: "SpaceGrotesk_700Bold",
             letterSpacing: 1.8,
-            color: "#C05040",
+            color: "#A2492C",
           }}
         >
           Claim now · {claimables.length}
@@ -101,7 +101,7 @@ function ClaimableRow({ claimable }: { claimable: ClaimableVoucher }) {
       style={{
         gap: 12,
         borderWidth: 1,
-        borderColor: "rgba(192,80,64,0.25)",
+        borderColor: "rgba(162,73,44,0.25)",
         position: "relative",
         shadowColor: "#000",
         shadowOpacity: 0.04,
@@ -118,7 +118,7 @@ function ClaimableRow({ claimable }: { claimable: ClaimableVoucher }) {
           top: 14,
           bottom: 14,
           width: 3,
-          backgroundColor: "#C05040",
+          backgroundColor: "#A2492C",
           borderTopRightRadius: 2,
           borderBottomRightRadius: 2,
         }}
@@ -130,7 +130,7 @@ function ClaimableRow({ claimable }: { claimable: ClaimableVoucher }) {
           position: "absolute",
           top: -7,
           left: 14,
-          backgroundColor: "#C05040",
+          backgroundColor: "#A2492C",
           paddingHorizontal: 8,
           paddingVertical: 2,
           borderRadius: 6,
@@ -154,7 +154,7 @@ function ClaimableRow({ claimable }: { claimable: ClaimableVoucher }) {
         className="rounded-xl items-center justify-center"
         style={{ width: 44, height: 44, backgroundColor: "#FBEBE8" }}
       >
-        <Icon size={22} color="#C05040" strokeWidth={1.8} />
+        <Icon size={22} color="#A2492C" strokeWidth={1.8} />
       </View>
 
       <View className="flex-1 min-w-0">
@@ -169,7 +169,7 @@ function ClaimableRow({ claimable }: { claimable: ClaimableVoucher }) {
           className="text-[11px] mt-0.5"
           style={{
             fontFamily: "SpaceGrotesk_500Medium",
-            color: urgency.warning ? "#C05040" : "#6B6B6B",
+            color: urgency.warning ? "#A2492C" : "#6B6B6B",
             letterSpacing: 0.2,
           }}
           numberOfLines={1}
@@ -188,7 +188,7 @@ function ClaimableRow({ claimable }: { claimable: ClaimableVoucher }) {
         disabled={claimed || claimMutation.isPending}
         className="rounded-full flex-row items-center active:opacity-80"
         style={{
-          backgroundColor: claimed ? "#6ab04c" : "#C05040",
+          backgroundColor: claimed ? "#6ab04c" : "#A2492C",
           paddingHorizontal: 14,
           paddingVertical: 7,
           gap: 4,

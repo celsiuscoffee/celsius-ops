@@ -59,7 +59,7 @@ export function OrderStepper({ currentIndex }: Props) {
                     letterSpacing: 1.5,
                     color:
                       i === currentIndex
-                        ? "#C05040"
+                        ? "#A2492C"
                         : i < currentIndex
                         ? "#1A0200"
                         : "#8E8E93",
@@ -72,7 +72,7 @@ export function OrderStepper({ currentIndex }: Props) {
                   className="text-[11px] mt-0.5"
                   style={{
                     fontFamily: "SpaceGrotesk_500Medium",
-                    color: i === currentIndex ? "#C05040" : "#8E8E93",
+                    color: i === currentIndex ? "#A2492C" : "#8E8E93",
                   }}
                   numberOfLines={1}
                 >
@@ -128,9 +128,9 @@ function Node({
   const styles = (() => {
     switch (state) {
       case "done":
-        return { bg: "#FBEBE8", iconColor: "#C05040", border: "transparent" };
+        return { bg: "#FBEBE8", iconColor: "#A2492C", border: "transparent" };
       case "current":
-        return { bg: "#C05040", iconColor: "#FFFFFF", border: "transparent" };
+        return { bg: "#A2492C", iconColor: "#FFFFFF", border: "transparent" };
       case "pending":
       default:
         return { bg: "#FFFFFF", iconColor: "#8E8E93", border: "rgba(26,2,0,0.12)" };
@@ -165,7 +165,7 @@ function Rail({ filled }: { filled: boolean }) {
       style={{
         height: 2,
         marginHorizontal: 6,
-        backgroundColor: filled ? "#C05040" : "rgba(26,2,0,0.08)",
+        backgroundColor: filled ? "#A2492C" : "rgba(26,2,0,0.08)",
         borderRadius: 1,
       }}
     />

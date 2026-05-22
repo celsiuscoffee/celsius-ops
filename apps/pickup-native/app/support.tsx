@@ -39,7 +39,7 @@ export default function Support() {
             accessibilityLabel="Email us"
           >
             <View className="w-10 h-10 rounded-lg bg-primary/10 items-center justify-center">
-              <Mail size={18} color="#C05040" strokeWidth={1.75} />
+              <Mail size={18} color="#A2492C" strokeWidth={1.75} />
             </View>
             <View className="flex-1">
               <Text className="text-espresso text-[14px]" style={fontPeachi}>
@@ -59,7 +59,7 @@ export default function Support() {
             accessibilityLabel="Follow us on Instagram"
           >
             <View className="w-10 h-10 rounded-lg bg-primary/10 items-center justify-center">
-              <AtSign size={18} color="#C05040" strokeWidth={1.75} />
+              <AtSign size={18} color="#A2492C" strokeWidth={1.75} />
             </View>
             <View className="flex-1">
               <Text className="text-espresso text-[14px]" style={fontPeachi}>

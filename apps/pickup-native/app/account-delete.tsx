@@ -96,7 +96,7 @@ export default function AccountDelete() {
             accessibilityLabel="Delete my account"
           >
             <View className="w-10 h-10 rounded-lg bg-primary/15 items-center justify-center">
-              <Trash2 size={18} color="#C05040" strokeWidth={1.75} />
+              <Trash2 size={18} color="#A2492C" strokeWidth={1.75} />
             </View>
             <View className="flex-1">
               <Text className="text-primary text-[15px]" style={fontPeachi}>
@@ -129,7 +129,7 @@ export default function AccountDelete() {
         <View className="flex-1 bg-black/60 justify-center px-6">
           <View className="bg-background rounded-2xl p-5">
             <View className="flex-row items-center gap-2 mb-2">
-              <AlertTriangle size={18} color="#C05040" />
+              <AlertTriangle size={18} color="#A2492C" />
               <Text className="text-espresso text-[16px]" style={fontPeachi}>
                 Delete account?
               </Text>

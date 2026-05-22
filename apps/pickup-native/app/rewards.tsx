@@ -1318,7 +1318,7 @@ function SignInPrompt() {
         className="bg-primary/10 items-center justify-center mb-4"
         style={{ width: 72, height: 72, borderRadius: 36 }}
       >
-        <Gift size={32} color="#C05040" strokeWidth={1.5} />
+        <Gift size={32} color="#A2492C" strokeWidth={1.5} />
       </View>
       <Text
         className="text-espresso text-xl text-center"

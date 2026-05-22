@@ -34,7 +34,7 @@ export function RewardTicket({ reward, onPress, accent }: Props) {
   const isFree = reward.points_required === 0;
   const tone = accent ?? (isFree ? "gold" : "terracotta");
 
-  const topBg = tone === "gold" ? "#1A0200" : "#C05040";
+  const topBg = tone === "gold" ? "#1A0200" : "#A2492C";
   const topAccent = tone === "gold" ? "#FBBF24" : "#FFFFFF";
   const topMuted = tone === "gold" ? "rgba(251,191,36,0.65)" : "rgba(255,255,255,0.75)";
 
@@ -139,7 +139,7 @@ export function RewardTicket({ reward, onPress, accent }: Props) {
           >
             <Text
               style={{
-                color: tone === "gold" ? "#1A0200" : "#C05040",
+                color: tone === "gold" ? "#1A0200" : "#A2492C",
                 fontFamily: "Peachi-Bold",
                 fontSize: 9,
               }}
@@ -203,7 +203,7 @@ export function RewardTicket({ reward, onPress, accent }: Props) {
         </Text>
         <Text
           style={{
-            color: tone === "gold" ? "#C05040" : "rgba(26, 2, 0, 0.55)",
+            color: tone === "gold" ? "#A2492C" : "rgba(26, 2, 0, 0.55)",
             fontFamily: "SpaceGrotesk_700Bold",
             fontSize: 10,
             letterSpacing: 1.2,

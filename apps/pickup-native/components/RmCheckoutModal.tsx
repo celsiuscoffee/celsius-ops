@@ -207,7 +207,7 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, method
         )}
         {loading && !errorMsg && (
           <View className="absolute inset-0 items-center justify-center bg-white/90">
-            <ActivityIndicator size="large" color="#C05040" />
+            <ActivityIndicator size="large" color="#A2492C" />
             <Text className="text-muted-fg text-sm mt-3">
               Loading {methodLabel}…
             </Text>

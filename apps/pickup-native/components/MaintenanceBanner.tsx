@@ -55,7 +55,7 @@ export function MaintenanceBanner() {
         flexDirection: "row",
         alignItems: "center",
         gap: 8,
-        backgroundColor: "#C05040",
+        backgroundColor: "#A2492C",
       }}
     >
       <AlertCircle size={14} color="#FFFFFF" strokeWidth={2.5} />

@@ -359,7 +359,7 @@ export function PairWith({ current, allProducts, stagedIds, onToggle }: PairWith
                 width: 140,
                 backgroundColor: isStaged ? "#FFF6F1" : "#FFFFFF",
                 borderWidth: isStaged ? 2 : 1,
-                borderColor: isStaged ? "#C05040" : "rgba(26,8,0,0.10)",
+                borderColor: isStaged ? "#A2492C" : "rgba(26,8,0,0.10)",
                 shadowColor: "#000",
                 shadowOpacity: isStaged ? 0.08 : 0.04,
                 shadowRadius: 4,
@@ -435,7 +435,7 @@ export function PairWith({ current, allProducts, stagedIds, onToggle }: PairWith
                       left: 8,
                       flexDirection: "row",
                       alignItems: "center",
-                      backgroundColor: "#C05040",
+                      backgroundColor: "#A2492C",
                       paddingHorizontal: 8,
                       paddingVertical: 2,
                       borderRadius: 10,
@@ -463,7 +463,7 @@ export function PairWith({ current, allProducts, stagedIds, onToggle }: PairWith
                     justifyContent: "center",
                     backgroundColor: isStaged ? "#FFFFFF" : "#160800",
                     borderWidth: isStaged ? 1.5 : 0,
-                    borderColor: "#C05040",
+                    borderColor: "#A2492C",
                     // A small shadow lifts the button off the photo so
                     // it's tappable even on a busy product image.
                     shadowColor: "#000",
@@ -474,7 +474,7 @@ export function PairWith({ current, allProducts, stagedIds, onToggle }: PairWith
                   }}
                 >
                   {isStaged ? (
-                    <Check size={18} color="#C05040" strokeWidth={3} />
+                    <Check size={18} color="#A2492C" strokeWidth={3} />
                   ) : (
                     <Plus size={18} color="#FFFFFF" strokeWidth={2.5} />
                   )}

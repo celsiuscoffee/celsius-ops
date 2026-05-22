@@ -505,7 +505,7 @@ export default function ProductScreen() {
                 marginTop: 8,
                 backgroundColor: "#FAF7F2",
                 borderWidth: 1,
-                borderColor: noteFocused ? "#C05040" : "rgba(26,8,0,0.10)",
+                borderColor: noteFocused ? "#A2492C" : "rgba(26,8,0,0.10)",
                 borderRadius: 16,
                 paddingHorizontal: 14,
                 paddingTop: 12,

@@ -47,7 +47,7 @@ type Props = {
 const TONE: Record<NonNullable<Props["tone"]>, string> = {
   warning: "#B45309",
   success: "#2E7D32",
-  brand:   "#C05040",
+  brand:   "#A2492C",
 };
 
 export function OrderProgressStrip({ currentIndex, tone = "warning" }: Props) {

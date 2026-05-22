@@ -21,7 +21,7 @@ type Props = {
  * bow loops, "C" letter. No bow strings, no extra ornaments — matches
  * the rectangular brand-block intent of the CC system.
  */
-export function CelsiusGift({ size = 28, color = "#C05040", fill = "transparent", knockout }: Props) {
+export function CelsiusGift({ size = 28, color = "#A2492C", fill = "transparent", knockout }: Props) {
   const isFilled = fill !== "transparent";
   // Scaled to fill ~y=2..22 of the 24-unit canvas, matching the
   // visual presence of the lucide outline icons and the resized

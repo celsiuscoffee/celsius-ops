@@ -22,7 +22,7 @@ type Props = {
  * face. Same Peachi-Bold "C" as the other brand marks so the set
  * reads as one family.
  */
-export function CelsiusTag({ size = 28, color = "#C05040", fill = "transparent", knockout }: Props) {
+export function CelsiusTag({ size = 28, color = "#A2492C", fill = "transparent", knockout }: Props) {
   const isFilled = fill !== "transparent";
   // Scaled to fill ~y=2..22 of the 24-unit canvas, matching cup and
   // gift so the brand-icon family stays visually consistent at any

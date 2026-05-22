@@ -37,7 +37,7 @@ export function FpxBankPicker({ selectedCode, onSelect }: Props) {
               <Text className="flex-1 text-espresso text-[14px]" numberOfLines={1}>
                 {bank.name}
               </Text>
-              {isSelected && <Check size={18} color="#C05040" />}
+              {isSelected && <Check size={18} color="#A2492C" />}
             </Pressable>
           );
         })}

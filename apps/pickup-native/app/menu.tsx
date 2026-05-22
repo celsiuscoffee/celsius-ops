@@ -438,7 +438,7 @@ export default function Menu() {
           className="flex-row items-center gap-2 px-4 pb-3 active:opacity-70"
           accessibilityLabel={`Pickup outlet: ${outletName ?? "not selected"}. Tap to change.`}
         >
-          <MapPin size={14} color="#C05040" />
+          <MapPin size={14} color="#A2492C" />
           <Text className="text-espresso font-bold text-sm flex-1" numberOfLines={1}>
             {outletName ?? "Select outlet"}
           </Text>
@@ -674,7 +674,7 @@ function MenuCartFloatingBar({
         onPress={onPress}
         className="bg-primary rounded-full py-3 px-5 flex-row items-center justify-between active:opacity-80"
         style={{
-          shadowColor: "#C05040",
+          shadowColor: "#A2492C",
           shadowOpacity: 0.3,
           shadowRadius: 12,
           shadowOffset: { width: 0, height: 4 },

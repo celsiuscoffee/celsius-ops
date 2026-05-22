@@ -79,7 +79,7 @@ export default function Settings() {
                   backgroundColor: r.destructive ? "#FEE2E2" : "#FBEBE8",
                 }}
               >
-                <Icon size={16} color={r.destructive ? "#B91C1C" : "#C05040"} strokeWidth={2} />
+                <Icon size={16} color={r.destructive ? "#B91C1C" : "#A2492C"} strokeWidth={2} />
               </View>
               <View className="flex-1">
                 <Text

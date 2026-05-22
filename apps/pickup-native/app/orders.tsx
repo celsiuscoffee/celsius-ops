@@ -297,7 +297,7 @@ function OrdersTabView({
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={onRefresh}
-              tintColor="#C05040"
+              tintColor="#A2492C"
             />
           }
         >
@@ -347,7 +347,7 @@ function TabPill({
         paddingHorizontal: 4,
         marginRight: 18,
         borderBottomWidth: 2,
-        borderBottomColor: active ? "#C05040" : "transparent",
+        borderBottomColor: active ? "#A2492C" : "transparent",
       }}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
@@ -372,14 +372,14 @@ function TabPill({
             minWidth: 18,
             height: 18,
             paddingHorizontal: 5,
-            backgroundColor: active ? "#C05040" : "rgba(192, 80, 64, 0.15)",
+            backgroundColor: active ? "#A2492C" : "rgba(162, 73, 44, 0.15)",
           }}
         >
           <Text
             className="text-[10px] leading-none"
             style={{
               fontFamily: "SpaceGrotesk_700Bold",
-              color: active ? "#FFFFFF" : "#C05040",
+              color: active ? "#FFFFFF" : "#A2492C",
             }}
           >
             {count}
@@ -410,7 +410,7 @@ function OrderRow({
     status === "completed" || status === "ready"
       ? "#16A34A"
       : status === "cancelled" || status === "failed"
-      ? "#C05040"
+      ? "#A2492C"
       : "#8E8E93";
 
   const date = new Date(order.created_at);
