@@ -774,7 +774,7 @@ export default function OrderStatus() {
                 className="text-espresso text-xl mt-2"
                 style={{ fontFamily: "Peachi-Bold" }}
               >
-                Ready for pickup ☕
+                Ready for pickup
               </Text>
               <Text
                 className="text-[9px] uppercase mt-4"
@@ -1046,7 +1046,7 @@ export default function OrderStatus() {
             // Page is one-screen now.
             <SwipeToCollect
               label="Slide to confirm pickup"
-              doneLabel="Enjoy your drink ☕"
+              doneLabel="Enjoy your drink"
               onComplete={markCollected}
             />
           )}
@@ -1132,7 +1132,7 @@ export default function OrderStatus() {
               }}
             >
               {celebration === "ready"
-                ? "Ready for pickup ☕"
+                ? "Ready for pickup"
                 : "Payment confirmed"}
             </Text>
             <Text
