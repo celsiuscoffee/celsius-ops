@@ -518,12 +518,13 @@ export default function OrderStatus() {
                 <Text
                   className="text-espresso text-lg mt-2"
                   style={{ fontFamily: "Peachi-Bold" }}
+                  numberOfLines={1}
                 >
-                  Confirming payment with {currentMethodLabel}…
+                  Confirming payment…
                 </Text>
                 <Text className="text-muted-fg text-sm mt-1 text-center">
-                  This usually takes a few seconds. We'll start preparing
-                  your order as soon as it lands.
+                  Usually a few seconds via {currentMethodLabel}. We'll start
+                  preparing your order as soon as it lands.
                 </Text>
               </View>
             ) : data.status === "pending" || data.status === "failed" ? (
