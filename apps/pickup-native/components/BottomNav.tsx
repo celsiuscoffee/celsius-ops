@@ -19,12 +19,16 @@ type Tab = {
   matches: (path: string) => boolean;
 };
 
+// Menu sits dead-center as the primary CTA (Uber Eats / Starbucks
+// pattern). Other tabs flank it 2 on each side. The render below
+// styles the menu tab differently — elevated terracotta puck — so
+// it reads as the page the customer most often wants to land on.
 const TABS: Tab[] = [
-  { key: "home", label: "Home", href: "/", icon: Home, matches: (p) => p === "/" },
-  { key: "menu", label: "Menu", href: "/menu", icon: null, matches: (p) => p.startsWith("/menu") || p.startsWith("/product") },
-  { key: "orders", label: "Orders", href: "/orders", icon: ClipboardList, matches: (p) => p.startsWith("/orders") || p.startsWith("/order/") },
-  { key: "rewards", label: "Rewards", href: "/rewards", icon: Gift, matches: (p) => p === "/rewards" },
-  { key: "account", label: "Account", href: "/account", icon: User, matches: (p) => p === "/account" },
+  { key: "home",    label: "Home",    href: "/",         icon: Home,          matches: (p) => p === "/" },
+  { key: "orders",  label: "Orders",  href: "/orders",   icon: ClipboardList, matches: (p) => p.startsWith("/orders") || p.startsWith("/order/") },
+  { key: "menu",    label: "Menu",    href: "/menu",     icon: null,          matches: (p) => p.startsWith("/menu") || p.startsWith("/product") },
+  { key: "rewards", label: "Rewards", href: "/rewards",  icon: Gift,          matches: (p) => p === "/rewards" },
+  { key: "account", label: "Account", href: "/account",  icon: User,          matches: (p) => p === "/account" },
 ];
 
 export function BottomNav() {
@@ -122,6 +126,60 @@ export function BottomNav() {
       {TABS.map((tab) => {
         const active = tab.matches(pathname);
         const Icon = tab.icon;
+        const isMenu = tab.key === "menu";
+
+        // Menu — primary CTA. Lifted terracotta puck with the white
+        // Celsius cup. Wider than a normal tab cell so the puck has
+        // room to breathe.
+        if (isMenu) {
+          return (
+            <Pressable
+              key={tab.key}
+              onPress={() => {
+                Haptics.selectionAsync();
+                if (active) return;
+                router.replace(tab.href as any);
+              }}
+              className="flex-1 items-center active:opacity-80"
+              hitSlop={12}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel="Menu tab"
+            >
+              <View
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 26,
+                  backgroundColor: active ? "#160800" : "#C05040",
+                  marginTop: -18,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  shadowColor: "#C05040",
+                  shadowOpacity: 0.35,
+                  shadowRadius: 10,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 6,
+                  borderWidth: 3,
+                  borderColor: "#FFFFFF",
+                }}
+              >
+                <CelsiusCup size={28} color="#FFFFFF" active />
+              </View>
+              <Text
+                style={{
+                  marginTop: 2,
+                  fontFamily: active ? "SpaceGrotesk_700Bold" : "SpaceGrotesk_600SemiBold",
+                  fontSize: 12.5,
+                  letterSpacing: 0.2,
+                  color: active ? "#160800" : "#8E8E93",
+                }}
+              >
+                Menu
+              </Text>
+            </Pressable>
+          );
+        }
         return (
           <Pressable
             key={tab.key}

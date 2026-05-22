@@ -53,7 +53,7 @@ export default function Support() {
           </Pressable>
 
           <Pressable
-            onPress={() => Linking.openURL("https://instagram.com/celsius.coffee")}
+            onPress={() => Linking.openURL("https://instagram.com/celsiuscoffeemy")}
             className="mt-2 bg-surface rounded-2xl border border-border p-3 flex-row items-center gap-3 active:opacity-70"
             accessibilityRole="button"
             accessibilityLabel="Follow us on Instagram"
@@ -66,7 +66,7 @@ export default function Support() {
                 Instagram
               </Text>
               <Text className="text-muted-fg text-[12px]" style={fontBody}>
-                @celsius.coffee
+                @celsiuscoffeemy
               </Text>
             </View>
             <ChevronRight size={16} color="#8E8E93" />
@@ -115,7 +115,7 @@ export default function Support() {
             className="text-espresso text-[13px] leading-[20px]"
             style={fontBody}
           >
-            Celsius Coffee Sdn. Bhd. is a Malaysian specialty coffee brand. Find us at celsiuscoffee.com and on Instagram @celsius.coffee.
+            Celsius Coffee Sdn. Bhd. is a Malaysian specialty coffee brand. Find us at celsiuscoffee.com and on Instagram @celsiuscoffeemy.
           </Text>
         </View>
 
