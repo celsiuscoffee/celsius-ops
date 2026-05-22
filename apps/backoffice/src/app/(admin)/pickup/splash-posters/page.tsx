@@ -11,10 +11,12 @@ import {
   Power,
   Clock,
   Crop,
+  Sparkles,
 } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { useConfirm, toast } from "@celsius/ui";
 import { PosterCropDialog } from "@/components/pickup/PosterCropDialog";
+import { PosterComposer } from "@/components/pickup/PosterComposer";
 
 type Placement = "splash" | "home";
 
@@ -140,6 +142,10 @@ export default function SplashPostersPage() {
   // cropped output flows back through handleUpload so the rest of the
   // upload pipeline is unchanged.
   const [cropSource, setCropSource] = useState<File | string | null>(null);
+  // AI Composer source. Holds the bg URL (the already-cropped form image)
+  // while the composer is open. When it returns a flattened JPEG, we send
+  // it through the same handleUpload pipeline as a manual upload.
+  const [composeSource, setComposeSource] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -622,6 +628,20 @@ export default function SplashPostersPage() {
                         <Crop className="h-3 w-3" />
                         Re-crop
                       </button>
+                      {/* AI compose — opens the composer with the current
+                          (already-cropped) bg, lets the operator type an
+                          objective and have Claude propose headline +
+                          subhead + tint + positions. Output replaces
+                          form.imageUrl with the flattened JPEG. */}
+                      <button
+                        type="button"
+                        onClick={() => setComposeSource(form.imageUrl)}
+                        className="absolute -bottom-3 left-[88px] flex items-center gap-1 rounded-md bg-terracotta px-2 py-1 text-[10px] font-semibold text-white shadow"
+                        title="Compose with AI"
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        AI compose
+                      </button>
                       <button
                         onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))}
                         className="absolute -right-2 -top-2 rounded-full bg-white p-1 shadow"
@@ -828,6 +848,21 @@ export default function SplashPostersPage() {
           onCancel={() => setCropSource(null)}
           onSave={(file) => {
             setCropSource(null);
+            handleUpload(file);
+          }}
+        />
+      )}
+
+      {/* AI composer — bg + tint + draggable text + AI generation. Output
+          is a flattened JPEG that runs through the same upload pipeline
+          as a manual crop, so the rest of the form stays unchanged. */}
+      {composeSource && (
+        <PosterComposer
+          bgUrl={composeSource}
+          placement={form.placement}
+          onCancel={() => setComposeSource(null)}
+          onSave={(file) => {
+            setComposeSource(null);
             handleUpload(file);
           }}
         />
