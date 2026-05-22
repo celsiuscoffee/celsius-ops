@@ -122,15 +122,21 @@ export const THEME_CHALLENGE: VoucherTheme = {
 };
 
 export const THEME_MYSTERY: VoucherTheme = {
-  bg:         "#1A0200",  // espresso — matches Mystery Bean pre-reveal
-  border:     "rgba(251,191,36,0.32)",
-  accent:     "#FBBF24",  // gold
+  // Deep cocoa surface + warm cream accent. Sits on the same brand
+  // family as Challenge (which uses espresso + gold) but the cocoa
+  // hue and cream accent make the two read as distinct source
+  // buckets — Challenge feels like a gilt achievement, Mystery
+  // feels like an unopened gift box. Cream comes from the Gift
+  // theme's peach lineage so Mystery still feels gift-adjacent.
+  bg:         "#3A1F12",  // deep cocoa
+  border:     "rgba(244,211,176,0.40)",
+  accent:     "#F4D3B0",  // warm cream
   fg:         "#FFFFFF",
-  fgDim:      "rgba(255,255,255,0.70)",
-  iconBg:     "rgba(251,191,36,0.20)",
-  iconColor:  "#FBBF24",
+  fgDim:      "rgba(244,211,176,0.78)",
+  iconBg:     "rgba(244,211,176,0.18)",
+  iconColor:  "#F4D3B0",
   iconKind:   "glyph",
-  glyphIcon:  Gift, // differentiates from Challenge's Sparkles
+  glyphIcon:  Gift,
 };
 
 export const THEME_GIFT: VoucherTheme = {
