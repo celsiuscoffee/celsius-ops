@@ -665,6 +665,16 @@ export async function applyOrderToMission(args: {
 
 // ─── Mystery Bean drop ───────────────────────────────────────────────
 
+// Per-member cap on mystery voucher wins. Mystery still spawns on
+// every paid order — the pool's "Just your Beans" entry is what the
+// customer scratches to when they're at-or-over cap, so the drop
+// event still happens (no UX regression) but the wallet doesn't
+// snowball. Counts mystery_drops with outcome_type='voucher' in the
+// rolling window, regardless of reveal status — so hoarding
+// un-revealed drops can't bypass the cap.
+const MYSTERY_VOUCHER_WIN_CAP        = 3;  // max prize wins per member
+const MYSTERY_VOUCHER_WINDOW_DAYS    = 7;  // rolling window length
+
 type MysteryPoolEntry = {
   id: string;
   outcome_type: "beans_multiplier" | "flat_beans" | "voucher" | "no_bonus" | "surprise_in_store";
@@ -736,6 +746,29 @@ export async function generateMysteryDrop(args: {
   for (let i = 0; i < eligible.length; i++) {
     r -= weights[i];
     if (r <= 0) { pick = eligible[i]; break; }
+  }
+
+  // Per-member voucher cap. If this member has already banked
+  // MYSTERY_VOUCHER_WIN_CAP voucher drops in the last
+  // MYSTERY_VOUCHER_WINDOW_DAYS days, swap the pick to the
+  // no_bonus entry — the drop event still happens, the customer
+  // still gets a card to scratch, they just land on "Just your
+  // Beans" instead. Light users see full pool odds; heavy users
+  // (or testers) get throttled.
+  if (pick.outcome_type === "voucher") {
+    const windowStart = new Date(
+      Date.now() - MYSTERY_VOUCHER_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const { count: recentWins } = await supabase
+      .from("mystery_drops")
+      .select("id", { count: "exact", head: true })
+      .eq("member_id", args.memberId)
+      .eq("outcome_type", "voucher")
+      .gte("created_at", windowStart);
+    if ((recentWins ?? 0) >= MYSTERY_VOUCHER_WIN_CAP) {
+      const noBonus = eligible.find((e) => e.outcome_type === "no_bonus");
+      if (noBonus) pick = noBonus;
+    }
   }
 
   const { data, error } = await supabase
