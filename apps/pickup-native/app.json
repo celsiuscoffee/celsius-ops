@@ -16,7 +16,7 @@
     "ios": {
       "bundleIdentifier": "com.celsiuscoffee.pickup.next",
       "supportsTablet": false,
-      "buildNumber": "8",
+      "buildNumber": "9",
       "entitlements": {
         "aps-environment": "production"
       },
@@ -34,7 +34,7 @@
     },
     "android": {
       "package": "com.celsiuscoffee.pickup.next",
-      "versionCode": 6,
+      "versionCode": 7,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
