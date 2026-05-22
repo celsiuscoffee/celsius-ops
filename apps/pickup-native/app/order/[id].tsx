@@ -1097,12 +1097,16 @@ export default function OrderStatus() {
           pointerEvents="none"
           style={{
             position: "absolute",
-            inset: 0,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             backgroundColor: "rgba(255,247,231,0.96)",
             alignItems: "center",
             justifyContent: "center",
             opacity: overlayOpacity,
             zIndex: 100,
+            elevation: 20,
           }}
         >
           <Animated.View
