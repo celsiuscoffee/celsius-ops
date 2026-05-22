@@ -407,10 +407,12 @@ export default function Checkout() {
     }
     return `${startStr}-${endStr}`;
   };
-  // Honesty hedge: brew time varies. Use ±3 min around the requested
-  // pickup time for the picker rows, and the outlet's pickup_time_mins
-  // ±2 min for "Now" (so a 10-min outlet reads "8-12 min").
-  const RANGE_WINDOW_MIN = 3;
+  // Honesty hedge: brew time varies, queue is unpredictable. A 10-min
+  // total window (±5 around the chosen target) is wide enough to absorb
+  // a normal queue spike without reading as a precise promise. For
+  // "Now", the window is around the outlet's pickup_time_mins
+  // (so a 10-min outlet reads "5-15 min").
+  const RANGE_WINDOW_MIN = 5;
   const formatPickupLabel = (mins: number | null): string => {
     if (mins == null) return "Now";
     const at = new Date(Date.now() + mins * 60_000);
@@ -418,8 +420,8 @@ export default function Checkout() {
   };
   const nowRangeMins = (() => {
     const base = currentOutlet?.pickup_time_mins ?? 10;
-    const low  = Math.max(1, base - 2);
-    const high = base + 2;
+    const low  = Math.max(1, base - 5);
+    const high = base + 5;
     return `${low}-${high}`;
   })();
 
