@@ -37,9 +37,21 @@ const STEPS: Array<{ title: string; sub: string; Icon: LucideIcon }> = [
 type Props = {
   /** -1 = not yet paid, 0 = received, 1 = brewing, 2 = ready/completed. */
   currentIndex: number;
+  /** Accent tone — drives the rail fill + active node colour. Defaults
+   *  to "warning" (in-flight). Pass "success" once the order reaches
+   *  the final step (ready / completed) so the bar reads as a positive
+   *  resolution rather than another in-progress state. */
+  tone?: "warning" | "success" | "brand";
 };
 
-export function OrderProgressStrip({ currentIndex }: Props) {
+const TONE: Record<NonNullable<Props["tone"]>, string> = {
+  warning: "#B45309",
+  success: "#2E7D32",
+  brand:   "#C05040",
+};
+
+export function OrderProgressStrip({ currentIndex, tone = "warning" }: Props) {
+  const accent = TONE[tone];
   // Clamp into [0, 2] for the visible bar; -1 (pending payment) reads
   // as 0% with the Received node still hollow.
   const idx = Math.max(0, Math.min(2, currentIndex));
@@ -79,7 +91,7 @@ export function OrderProgressStrip({ currentIndex }: Props) {
               left: 0,
               top: 0,
               height: 4,
-              backgroundColor: "#C05040",
+              backgroundColor: accent,
               borderRadius: 2,
             },
             fillStyle,
@@ -102,6 +114,7 @@ export function OrderProgressStrip({ currentIndex }: Props) {
               Icon={step.Icon}
               state={state}
               leftPct={pct}
+              accent={accent}
             />
           );
         })}
@@ -129,7 +142,7 @@ export function OrderProgressStrip({ currentIndex }: Props) {
                   letterSpacing: 1.2,
                   color:
                     state === "current"
-                      ? "#C05040"
+                      ? accent
                       : state === "done"
                         ? "#1A0200"
                         : "#8E8E93",
@@ -151,10 +164,12 @@ function Node({
   Icon,
   state,
   leftPct,
+  accent,
 }: {
   Icon: LucideIcon;
   state: NodeState;
   leftPct: number;
+  accent: string;
 }) {
   const scale = useSharedValue(1);
   useEffect(() => {
@@ -181,9 +196,9 @@ function Node({
   const SIZE = 28;
   const colors =
     state === "done"
-      ? { bg: "#C05040", icon: "#FFFFFF", border: "transparent" }
+      ? { bg: accent, icon: "#FFFFFF", border: "transparent" }
       : state === "current"
-        ? { bg: "#C05040", icon: "#FFFFFF", border: "transparent" }
+        ? { bg: accent, icon: "#FFFFFF", border: "transparent" }
         : { bg: "#FFFFFF", icon: "#8E8E93", border: "rgba(26,2,0,0.18)" };
 
   return (
@@ -202,7 +217,7 @@ function Node({
           borderColor: colors.border,
           alignItems: "center",
           justifyContent: "center",
-          shadowColor: "#000",
+          shadowColor: accent,
           shadowOpacity: state === "current" ? 0.18 : 0,
           shadowRadius: 6,
           shadowOffset: { width: 0, height: 2 },

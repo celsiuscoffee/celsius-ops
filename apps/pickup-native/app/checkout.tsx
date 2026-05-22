@@ -1590,11 +1590,11 @@ export default function Checkout() {
               width: 88,
               height: 88,
               borderRadius: 44,
-              backgroundColor: "#C05040",
+              backgroundColor: "#2E7D32", // success — Payment successful
               alignItems: "center",
               justifyContent: "center",
               transform: [{ scale: successScale }],
-              shadowColor: "#C05040",
+              shadowColor: "#2E7D32",
               shadowOpacity: 0.35,
               shadowRadius: 16,
               shadowOffset: { width: 0, height: 6 },

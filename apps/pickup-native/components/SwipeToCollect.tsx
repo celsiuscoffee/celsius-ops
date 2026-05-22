@@ -94,9 +94,9 @@ export function SwipeToCollect({
       style={{
         height: THUMB + PADDING * 2,
         borderRadius: 999,
-        backgroundColor: "rgba(192, 80, 64, 0.12)",
+        backgroundColor: "rgba(46, 125, 50, 0.12)",
         borderWidth: 1,
-        borderColor: "rgba(192, 80, 64, 0.3)",
+        borderColor: "rgba(46, 125, 50, 0.3)",
         overflow: "hidden",
         justifyContent: "center",
       }}
@@ -109,7 +109,7 @@ export function SwipeToCollect({
             left: 0,
             top: 0,
             bottom: 0,
-            backgroundColor: "#C05040",
+            backgroundColor: "#2E7D32",
             borderRadius: 999,
           },
           fillStyle,
@@ -132,7 +132,7 @@ export function SwipeToCollect({
         >
           <Text
             style={{
-              color: "#C05040",
+              color: "#2E7D32",
               fontFamily: "Peachi-Bold",
               fontSize: 15,
               letterSpacing: 0.3,
@@ -189,9 +189,9 @@ export function SwipeToCollect({
             ]}
           >
             {busy ? (
-              <ActivityIndicator color="#C05040" size="small" />
+              <ActivityIndicator color="#2E7D32" size="small" />
             ) : (
-              <ChevronsRight size={26} color="#C05040" strokeWidth={2.5} />
+              <ChevronsRight size={26} color="#2E7D32" strokeWidth={2.5} />
             )}
           </Animated.View>
         </GestureDetector>
@@ -212,7 +212,7 @@ export function SwipeToCollect({
             justifyContent: "center",
           }}
         >
-          <Check size={26} color="#C05040" strokeWidth={2.5} />
+          <Check size={26} color="#2E7D32" strokeWidth={2.5} />
         </View>
       )}
     </View>

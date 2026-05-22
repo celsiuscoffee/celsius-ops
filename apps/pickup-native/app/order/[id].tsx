@@ -612,7 +612,14 @@ export default function OrderStatus() {
           data.status === "preparing" ||
           data.status === "ready" ||
           data.status === "completed") && (
-          <OrderProgressStrip currentIndex={Math.max(0, statusIdx)} />
+          <OrderProgressStrip
+            currentIndex={Math.max(0, statusIdx)}
+            tone={
+              data.status === "ready" || data.status === "completed"
+                ? "success"
+                : "warning"
+            }
+          />
         )}
         <ScrollView contentContainerClassName="px-4 py-4 pb-12 gap-4">
           {/* Status timeline — one card per lifecycle state. */}
@@ -636,12 +643,12 @@ export default function OrderStatus() {
                     width: 64,
                     height: 64,
                     borderRadius: 32,
-                    backgroundColor: "#FBEBE8",
+                    backgroundColor: "#FEF3C7", // warning tint
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <ActivityIndicator size="large" color="#C05040" />
+                  <ActivityIndicator size="large" color="#B45309" /* warning */ />
                 </View>
                 <Text
                   className="text-espresso text-xl mt-3"
@@ -656,8 +663,11 @@ export default function OrderStatus() {
                 </Text>
               </View>
             ) : data.status === "pending" || data.status === "failed" ? (
+              // Both are danger states — payment is the customer's
+              // outstanding action. Same red regardless of failed vs
+              // awaiting; the title differentiates.
               <View className="items-center py-2">
-                <Clock size={28} color={data.status === "failed" ? "#B0413E" : "#C05040"} />
+                <Clock size={28} color="#B91C1C" /* danger */ />
                 <Text
                   className="text-espresso text-lg mt-2"
                   style={{ fontFamily: "Peachi-Bold" }}
@@ -775,7 +785,7 @@ export default function OrderStatus() {
               // customer needs to start a new order if they still want the
               // drink. Mirrors the cancelled empty-state on the Orders tab.
               <View className="items-center py-2">
-                <XCircle size={28} color="#B0413E" />
+                <XCircle size={28} color="#B91C1C" /* danger */ />
                 <Text
                   className="text-espresso text-lg mt-2"
                   style={{ fontFamily: "Peachi-Bold" }}
@@ -819,12 +829,12 @@ export default function OrderStatus() {
                     width: 40,
                     height: 40,
                     borderRadius: 20,
-                    backgroundColor: "#FBEBE8",
+                    backgroundColor: "#E8F5E9", // success tint
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <Check size={20} color="#C05040" strokeWidth={2.5} />
+                  <Check size={20} color="#2E7D32" /* success */ strokeWidth={2.5} />
                 </View>
                 <View className="flex-1">
                   <Text
@@ -848,12 +858,12 @@ export default function OrderStatus() {
                     width: 40,
                     height: 40,
                     borderRadius: 20,
-                    backgroundColor: "#FFF3E0",
+                    backgroundColor: "#FEF3C7", // warning tint
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <Clock size={20} color="#C05040" strokeWidth={2.2} />
+                  <Clock size={20} color="#B45309" /* warning */ strokeWidth={2.2} />
                 </View>
                 <View className="flex-1">
                   <Text
@@ -869,18 +879,19 @@ export default function OrderStatus() {
               </View>
             ) : (
               // paid (no pickup_at) / preparing — Brewing now.
+              // Warning yellow — order is in-flight, not finished.
               <View className="flex-row items-center py-1 gap-3">
                 <View
                   style={{
                     width: 40,
                     height: 40,
                     borderRadius: 20,
-                    backgroundColor: "#FFF3E0",
+                    backgroundColor: "#FEF3C7", // warning tint
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <Coffee size={20} color="#C05040" strokeWidth={2.2} />
+                  <Coffee size={20} color="#B45309" /* warning */ strokeWidth={2.2} />
                 </View>
                 <View className="flex-1">
                   <Text
@@ -1114,11 +1125,11 @@ export default function OrderStatus() {
               width: 88,
               height: 88,
               borderRadius: 44,
-              backgroundColor: overlay === "success" ? "#2E7D32" : "#C05040",
+              backgroundColor: overlay === "success" ? "#2E7D32" : "#B45309", // success / warning
               alignItems: "center",
               justifyContent: "center",
               transform: [{ scale: overlayScale }],
-              shadowColor: overlay === "success" ? "#2E7D32" : "#C05040",
+              shadowColor: overlay === "success" ? "#2E7D32" : "#B45309",
               shadowOpacity: 0.35,
               shadowRadius: 16,
               shadowOffset: { width: 0, height: 6 },
