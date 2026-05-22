@@ -125,6 +125,11 @@ export const api = {
      *  row), not a points-shop reward. Server marks the voucher as
      *  redeemed and skips the points deduction path. */
     walletVoucherId?: string | null;
+    /** ISO timestamp the customer wants pickup. Null/omitted = ASAP.
+     *  Server stores on the order; future KDS work will only release
+     *  scheduled orders to the brew queue when they're inside the
+     *  prep window. */
+    pickupAt?: string | null;
   }) =>
     post<{ orderId: string; orderNumber: string }>("/api/orders", {
       ...payload,

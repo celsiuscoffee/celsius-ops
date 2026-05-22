@@ -19,6 +19,7 @@ import {
   Coffee,
   MapPin,
   Clock,
+  CalendarClock,
   ChevronDown,
 } from "lucide-react-native";
 
@@ -370,6 +371,28 @@ export default function Checkout() {
   // compact and the picker has its own focused surface.
   const [walletSheetOpen, setWalletSheetOpen] = useState(false);
 
+  // Scheduled pickup. Null = ASAP (default, brew immediately). When
+  // set, the customer wants pickup at that offset from now — server
+  // stores the timestamp on the order; the future KDS gating layer
+  // will hold scheduled orders until ~prep-time before pickup.
+  const [pickupOffsetMin, setPickupOffsetMin] = useState<number | null>(null);
+  const [pickupSheetOpen, setPickupSheetOpen] = useState(false);
+  // Offsets shown in the picker — covers most "I'll arrive in N min"
+  // intents without overwhelming. Closer to ZUS/Starbucks defaults.
+  const PICKUP_OFFSETS = [15, 30, 45, 60, 90, 120];
+  const pickupAtIso = pickupOffsetMin == null
+    ? null
+    : new Date(Date.now() + pickupOffsetMin * 60_000).toISOString();
+  const formatPickupLabel = (mins: number | null): string => {
+    if (mins == null) return "ASAP";
+    const at = new Date(Date.now() + mins * 60_000);
+    const h  = at.getHours();
+    const m  = at.getMinutes().toString().padStart(2, "0");
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12  = h % 12 === 0 ? 12 : h % 12;
+    return `Today · ${h12}:${m} ${ampm}`;
+  };
+
   // RM checkout modal — full-screen WebView wrapper that replaces the
   // expo-web-browser flow (which surfaced an iOS system URL bar like
   // card.revenuemonster.my / tngdigital.com.my). The modal hides chrome
@@ -617,6 +640,7 @@ export default function Checkout() {
         rewardPointsCost: appliedReward?.points_required ?? 0,
         rewardDiscountSen: Math.round(rewardDiscount * 100),
         walletVoucherId: appliedReward?.voucher_id ?? null,
+        pickupAt:         pickupAtIso,
       });
       // Pin the summary BEFORE clearCart so the customer keeps seeing
       // their RM 4.45 (or whatever) behind the Stripe / Apple Pay
@@ -1018,6 +1042,49 @@ export default function Checkout() {
                   </Text>
                 </View>
               )}
+            </Pressable>
+
+            {/* Pickup time — defaults to ASAP. Tap to open the
+                bottom-sheet picker and choose a delayed pickup so
+                the drink is freshest when the customer arrives. */}
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync();
+                setPickupSheetOpen(true);
+              }}
+              className="bg-surface rounded-2xl border border-border p-4 active:opacity-70"
+            >
+              <View className="flex-row items-center justify-between">
+                <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
+                  Pickup time
+                </Text>
+                <Text
+                  className="text-primary text-[11px]"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  Change
+                </Text>
+              </View>
+              <View className="flex-row items-center gap-2 mt-1">
+                {pickupOffsetMin == null ? (
+                  <Clock size={14} color="#160800" />
+                ) : (
+                  <CalendarClock size={14} color="#160800" />
+                )}
+                <Text className="text-espresso font-bold text-[15px] flex-1" numberOfLines={1}>
+                  {pickupOffsetMin == null ? "ASAP" : formatPickupLabel(pickupOffsetMin)}
+                </Text>
+              </View>
+              <Text
+                className="text-muted-fg text-[12px] mt-2"
+                style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
+              >
+                {pickupOffsetMin == null
+                  ? currentOutlet?.pickup_time_mins
+                    ? `Brewed in ~${currentOutlet.pickup_time_mins} min`
+                    : "Brewed as soon as you place the order"
+                  : `Brew starts ~${Math.max(0, pickupOffsetMin - (currentOutlet?.pickup_time_mins ?? 10))} min before pickup`}
+              </Text>
             </Pressable>
 
             {/* Payment Methods — grouped, ZUS-style. One row per category;
@@ -1471,6 +1538,83 @@ export default function Checkout() {
               setBankSheetOpen(false);
             }}
           />
+        </View>
+      </BottomSheet>
+
+      {/* Pickup time picker — ASAP row first (Starbucks default),
+          then a list of +15/+30/+45/+60/+90/+120 min offsets with the
+          absolute clock time alongside. Mirrors the wallet sheet's
+          single-tap-and-close pattern. */}
+      <BottomSheet
+        visible={pickupSheetOpen}
+        onClose={() => setPickupSheetOpen(false)}
+        title="When do you want it?"
+      >
+        <View style={{ paddingHorizontal: 16, gap: 4 }}>
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync();
+              setPickupOffsetMin(null);
+              setPickupSheetOpen(false);
+            }}
+            className="flex-row items-center gap-3 py-3 active:opacity-70"
+          >
+            <View
+              style={{
+                width: 40, height: 40, borderRadius: 20,
+                backgroundColor: "#FBEBE8",
+                alignItems: "center", justifyContent: "center",
+              }}
+            >
+              <Clock size={18} color="#C05040" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-espresso text-[15px] font-bold">
+                ASAP
+              </Text>
+              <Text className="text-muted-fg text-[12px]">
+                {currentOutlet?.pickup_time_mins
+                  ? `Brewed in ~${currentOutlet.pickup_time_mins} min`
+                  : "Brewed as soon as you place the order"}
+              </Text>
+            </View>
+            {pickupOffsetMin == null && <Check size={18} color="#C05040" />}
+          </Pressable>
+          {PICKUP_OFFSETS.map((mins, idx) => {
+            const picked = pickupOffsetMin === mins;
+            return (
+              <Pressable
+                key={mins}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setPickupOffsetMin(mins);
+                  setPickupSheetOpen(false);
+                }}
+                className={`flex-row items-center gap-3 py-3 ${
+                  idx > 0 || true ? "border-t border-border" : ""
+                } active:opacity-70`}
+              >
+                <View
+                  style={{
+                    width: 40, height: 40, borderRadius: 20,
+                    backgroundColor: picked ? "#FBEBE8" : "#F5F5F5",
+                    alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <CalendarClock size={18} color={picked ? "#C05040" : "#8E8E93"} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-espresso text-[15px] font-bold">
+                    In {mins} min
+                  </Text>
+                  <Text className="text-muted-fg text-[12px]">
+                    {formatPickupLabel(mins)}
+                  </Text>
+                </View>
+                {picked && <Check size={18} color="#C05040" />}
+              </Pressable>
+            );
+          })}
         </View>
       </BottomSheet>
 

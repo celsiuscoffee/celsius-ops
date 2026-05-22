@@ -186,7 +186,15 @@ export async function POST(request: NextRequest) {
       loyaltyPhone,
       loyaltyId,
       clientSupportsSkipPayment,
+      pickupAt: pickupAtInput,
     } = body;
+    // pickupAt — optional ISO timestamp for scheduled pickup. Null /
+    // omitted = brew immediately (ASAP, original behaviour). Stored on
+    // the order row so a future KDS scheduler can hold the order out
+    // of the brew queue until ~prep-time before pickup.
+    const pickupAt = typeof pickupAtInput === "string" && pickupAtInput.length > 0
+      ? pickupAtInput
+      : null;
     // walletVoucherId / rewardId / rewardName / voucherCode are mutable
     // because the non-stackable-tier exclusivity path below may decide
     // to drop the voucher in favour of the bigger tier discount. We
@@ -655,7 +663,8 @@ export async function POST(request: NextRequest) {
         loyalty_phone:          loyaltyPhone ?? null,
         loyalty_id:             loyaltyId ?? null,
         loyalty_points_earned:  pointsToEarn,
-      })
+        pickup_at:              pickupAt,
+      } as Record<string, unknown>)
       .select()
       .single();
 
