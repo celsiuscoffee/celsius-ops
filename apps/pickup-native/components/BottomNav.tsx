@@ -128,9 +128,10 @@ export function BottomNav() {
         const Icon = tab.icon;
         const isMenu = tab.key === "menu";
 
-        // Menu — primary CTA. Lifted terracotta puck with the white
-        // Celsius cup. Wider than a normal tab cell so the puck has
-        // room to breathe.
+        // Menu — centred primary CTA, lifted above the row. Colour
+        // matches the other tabs: muted grey when inactive, espresso
+        // when active. Shape (the white-bordered puck) is what
+        // distinguishes Menu, not the brand colour.
         if (isMenu) {
           return (
             <Pressable
@@ -151,14 +152,14 @@ export function BottomNav() {
                   width: 52,
                   height: 52,
                   borderRadius: 26,
-                  backgroundColor: active ? "#160800" : "#A2492C",
+                  backgroundColor: active ? "#160800" : "#8E8E93",
                   marginTop: -18,
                   alignItems: "center",
                   justifyContent: "center",
-                  shadowColor: "#A2492C",
-                  shadowOpacity: 0.35,
-                  shadowRadius: 10,
-                  shadowOffset: { width: 0, height: 4 },
+                  shadowColor: "#000",
+                  shadowOpacity: 0.2,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 3 },
                   elevation: 6,
                   borderWidth: 3,
                   borderColor: "#FFFFFF",
