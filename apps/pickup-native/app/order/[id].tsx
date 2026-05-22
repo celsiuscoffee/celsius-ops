@@ -760,78 +760,86 @@ export default function OrderStatus() {
                 </Text>
               </View>
             ) : data.status === "ready" ? (
-              <View className="items-center py-2">
+              <View className="flex-row items-center py-1 gap-3">
                 <View
                   style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 32,
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
                     backgroundColor: "#E8F5E9",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <Check size={32} color="#2E7D32" strokeWidth={2.5} />
+                  <Check size={22} color="#2E7D32" strokeWidth={2.5} />
                 </View>
-                <Text
-                  className="text-espresso text-xl mt-3"
-                  style={{ fontFamily: "Peachi-Bold" }}
-                >
-                  Ready for pickup
-                </Text>
-                <Text className="text-muted-fg text-sm mt-1 text-center">
-                  Your order is at the counter. Swipe below to collect.
-                </Text>
+                <View className="flex-1">
+                  <Text
+                    className="text-espresso text-base"
+                    style={{ fontFamily: "Peachi-Bold" }}
+                  >
+                    Ready for pickup
+                  </Text>
+                  <Text className="text-muted-fg text-xs mt-0.5">
+                    Your order is at the counter.
+                  </Text>
+                </View>
               </View>
             ) : data.status === "completed" ? (
-              <View className="items-center py-2">
+              <View className="flex-row items-center py-1 gap-3">
                 <View
                   style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: 28,
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
                     backgroundColor: "#FBEBE8",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <Check size={26} color="#C05040" strokeWidth={2.5} />
+                  <Check size={20} color="#C05040" strokeWidth={2.5} />
                 </View>
-                <Text
-                  className="text-espresso text-lg mt-3"
-                  style={{ fontFamily: "Peachi-Bold" }}
-                >
-                  Order collected
-                </Text>
-                <Text className="text-muted-fg text-sm mt-1 text-center">
-                  Thanks for stopping by — see you soon.
-                </Text>
+                <View className="flex-1">
+                  <Text
+                    className="text-espresso text-base"
+                    style={{ fontFamily: "Peachi-Bold" }}
+                  >
+                    Order collected
+                  </Text>
+                  <Text className="text-muted-fg text-xs mt-0.5">
+                    Thanks for stopping by — see you soon.
+                  </Text>
+                </View>
               </View>
             ) : (
-              // paid / preparing — show the "we're on it" banner with a
-              // pulsing coffee icon. Top strip carries the step progress.
-              <View className="items-center py-2">
+              // paid / preparing — compact row layout. The top strip
+              // already carries the visual state; this card just
+              // names it. Was a 64px chip + xl title + sub, easily
+              // 180pt tall; now ~64pt with the same information.
+              <View className="flex-row items-center py-1 gap-3">
                 <View
                   style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 32,
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
                     backgroundColor: "#FFF3E0",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <Coffee size={32} color="#C05040" strokeWidth={2.2} />
+                  <Coffee size={20} color="#C05040" strokeWidth={2.2} />
                 </View>
-                <Text
-                  className="text-espresso text-xl mt-3"
-                  style={{ fontFamily: "Peachi-Bold" }}
-                >
-                  Brewing now
-                </Text>
-                <Text className="text-muted-fg text-sm mt-1 text-center">
-                  We'll ping you the moment it's ready for pickup.
-                </Text>
+                <View className="flex-1">
+                  <Text
+                    className="text-espresso text-base"
+                    style={{ fontFamily: "Peachi-Bold" }}
+                  >
+                    Brewing now
+                  </Text>
+                  <Text className="text-muted-fg text-xs mt-0.5">
+                    We'll ping you the moment it's ready.
+                  </Text>
+                </View>
               </View>
             )}
           </View>
