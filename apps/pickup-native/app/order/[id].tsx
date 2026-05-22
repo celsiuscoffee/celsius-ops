@@ -658,10 +658,9 @@ export default function OrderStatus() {
                 </Text>
               </View>
             ) : data.status === "ready" ? (
-              // State-specific banner — the top strip already shows the
-              // progress, so this card now reinforces the current state
-              // with a bigger icon + on-brand message instead of
-              // repeating the stepper.
+              // State-specific banner + a counter-pickup ticket. The
+              // big order number gives the customer something to hold
+              // up to the barista without squinting at the page header.
               <View className="items-center py-2">
                 <View
                   style={{
@@ -737,6 +736,51 @@ export default function OrderStatus() {
               </View>
             )}
           </View>
+
+          {/* Counter ticket — only when ready. Big order number on a
+              terracotta-tinted card, perforated edges via dashed
+              border so it reads as something you hold up to the
+              barista. Replaces the small order number in the header
+              as the primary "show this to staff" surface. */}
+          {data.status === "ready" && (
+            <View
+              className="rounded-2xl px-5 py-6 items-center"
+              style={{
+                backgroundColor: "#FBEBE8",
+                borderWidth: 2,
+                borderStyle: "dashed",
+                borderColor: "#C05040",
+              }}
+            >
+              <Text
+                className="text-[10px] uppercase"
+                style={{
+                  fontFamily: "Peachi-Bold",
+                  letterSpacing: 2.5,
+                  color: "#C05040",
+                }}
+              >
+                Show at counter
+              </Text>
+              <Text
+                className="mt-2 text-espresso"
+                style={{
+                  fontFamily: "Peachi-Bold",
+                  fontSize: 44,
+                  letterSpacing: -1,
+                  lineHeight: 50,
+                }}
+              >
+                #{data.order_number}
+              </Text>
+              <Text
+                className="text-muted-fg text-[12px] mt-1"
+                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+              >
+                Hand this to the barista at the pickup counter.
+              </Text>
+            </View>
+          )}
 
           {/* Pickup details — outlet + ETA / scheduled time. Lives
               outside the status card so it stays visible across every
