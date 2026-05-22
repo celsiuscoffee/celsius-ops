@@ -94,8 +94,12 @@ export type VoucherTheme = {
 // at a glance, before the customer reads the title. Each bucket pairs a
 // distinct background + accent so a deck of mixed rewards reads as four
 // visually grouped families:
-//   • Challenge (missions)             → espresso + gold
-//   • Mystery   (mystery bag outcomes) → indigo + lavender
+//   • Challenge (missions)             → espresso + gold (Sparkles)
+//   • Mystery   (mystery bag outcomes) → espresso + gold (Gift) — same
+//                                        celebratory palette as the
+//                                        Mystery Bean pre-reveal card;
+//                                        icon differentiates from
+//                                        Challenge.
 //   • Gift      (birthday, welcome,    → peach + terracotta
 //                referral, promo)
 //   • Bean      (catalogue / points    → terracotta + gold
@@ -118,15 +122,15 @@ export const THEME_CHALLENGE: VoucherTheme = {
 };
 
 export const THEME_MYSTERY: VoucherTheme = {
-  bg:         "#2D1B69",  // deep indigo
-  border:     "rgba(199,181,255,0.32)",
-  accent:     "#C7B5FF",  // lavender
+  bg:         "#1A0200",  // espresso — matches Mystery Bean pre-reveal
+  border:     "rgba(251,191,36,0.32)",
+  accent:     "#FBBF24",  // gold
   fg:         "#FFFFFF",
   fgDim:      "rgba(255,255,255,0.70)",
-  iconBg:     "rgba(199,181,255,0.18)",
-  iconColor:  "#C7B5FF",
+  iconBg:     "rgba(251,191,36,0.20)",
+  iconColor:  "#FBBF24",
   iconKind:   "glyph",
-  glyphIcon:  Sparkles,
+  glyphIcon:  Gift, // differentiates from Challenge's Sparkles
 };
 
 export const THEME_GIFT: VoucherTheme = {
