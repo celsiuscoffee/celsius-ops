@@ -122,19 +122,18 @@ export const THEME_CHALLENGE: VoucherTheme = {
 };
 
 export const THEME_MYSTERY: VoucherTheme = {
-  // Deep cocoa surface + warm cream accent. Sits on the same brand
-  // family as Challenge (which uses espresso + gold) but the cocoa
-  // hue and cream accent make the two read as distinct source
-  // buckets — Challenge feels like a gilt achievement, Mystery
-  // feels like an unopened gift box. Cream comes from the Gift
-  // theme's peach lineage so Mystery still feels gift-adjacent.
-  bg:         "#3A1F12",  // deep cocoa
-  border:     "rgba(244,211,176,0.40)",
-  accent:     "#F4D3B0",  // warm cream
-  fg:         "#FFFFFF",
-  fgDim:      "rgba(244,211,176,0.78)",
-  iconBg:     "rgba(244,211,176,0.18)",
-  iconColor:  "#F4D3B0",
+  // Metallic gold surface + espresso ink. Reads as a "treasure /
+  // unwrap me" affordance — distinct from Challenge (espresso +
+  // gold accent) and from the danger/alert reds elsewhere in the
+  // app. Espresso ink (instead of pure #000) keeps the type on
+  // brand without losing the high-contrast pop on gold.
+  bg:         "#D4AF37",  // classic metallic gold
+  border:     "rgba(26,2,0,0.25)",
+  accent:     "#1A0200",  // espresso ink
+  fg:         "#1A0200",
+  fgDim:      "rgba(26,2,0,0.65)",
+  iconBg:     "rgba(26,2,0,0.12)",
+  iconColor:  "#1A0200",
   iconKind:   "glyph",
   glyphIcon:  Gift,
 };

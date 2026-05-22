@@ -120,70 +120,72 @@ export function MysteryBean({ dropId, baseBeansEarned, prerevealed, onRevealed, 
           className="rounded-2xl px-5 py-6 items-center overflow-hidden"
           style={[
             {
-              // Espresso brand-black surface with amber accents — same
-              // celebratory palette the post-reveal payload uses, so
-              // pre-reveal and reveal are visually one moment. Pulls
-              // the Mystery surface out of the brand-primary lane so
-              // it doesn't compete with Place Order CTAs.
-              backgroundColor: "#1A0200",
+              // Metallic gold surface + espresso ink. Reads as a
+              // "treasure / unwrap me" affordance and matches the
+              // Mystery voucher tile in the wallet, so pre-reveal,
+              // wallet, and reveal stay on the same visual lane.
+              // Espresso shadow keeps the card lifted without
+              // bleeding the brand-primary lane into Mystery.
+              backgroundColor: "#D4AF37",
               shadowColor: "#1A0200",
               shadowOpacity: 0.28,
               shadowRadius: 14,
               shadowOffset: { width: 0, height: 6 },
               elevation: 6,
               borderWidth: 1,
-              borderColor: "rgba(251,191,36,0.35)", // amber-tinted hairline
+              borderColor: "rgba(26,2,0,0.25)", // espresso hairline on gold
             },
             cardScaleStyle,
           ]}
         >
-          {/* Amber-tinted shimmer reads as gold sweeping across a dark
-              gift package, not a generic light bar on terracotta. */}
+          {/* White-tinted shimmer reads as light catching the gold
+              surface — gives the card a "treasure" gleam without
+              fighting the espresso ink. */}
           {!revealed && (
             <ShimmerSweep
               containerWidth={cardWidth}
-              highlightColor="rgba(251,191,36,1)"
-              maxOpacity={0.28}
+              highlightColor="rgba(255,255,255,0.95)"
+              maxOpacity={0.45}
               widthRatio={0.5}
               durationMs={2200}
             />
           )}
 
-          <Gift size={44} color="#FBBF24" /* amber */ strokeWidth={1.8} />
+          <Gift size={44} color="#1A0200" strokeWidth={1.8} />
 
           <Text
             className="text-[10px] uppercase mt-3.5"
             style={{
               fontFamily: "SpaceGrotesk_700Bold",
               letterSpacing: 2,
-              color: "rgba(251,191,36,0.85)",
+              color: "rgba(26,2,0,0.7)",
             }}
           >
             Tap to Reveal
           </Text>
           <Text
-            className="text-white text-[26px] mt-1"
-            style={{ fontFamily: "Peachi-Bold", letterSpacing: -0.3 }}
+            className="text-[26px] mt-1"
+            style={{ fontFamily: "Peachi-Bold", letterSpacing: -0.3, color: "#1A0200" }}
           >
             Mystery Bean
           </Text>
           <Text
-            className="text-white/85 text-[13px] mt-1.5 text-center"
-            style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+            className="text-[13px] mt-1.5 text-center"
+            style={{ fontFamily: "SpaceGrotesk_500Medium", color: "rgba(26,2,0,0.72)" }}
           >
             You&apos;ve got something. One tap.
           </Text>
 
           <View
             className="rounded-full mt-4 px-5 py-2.5 flex-row items-center"
-            style={{ gap: 6, backgroundColor: "#FBBF24" /* amber */ }}
+            style={{ gap: 6, backgroundColor: "#1A0200" /* espresso CTA */ }}
           >
             {loading ? (
               <>
-                <ActivityIndicator size="small" color="#1A0200" />
+                <ActivityIndicator size="small" color="#D4AF37" />
                 <Text
-                  className="text-espresso text-[13px]"
-                  style={{ fontFamily: "Peachi-Bold" }}
+                  className="text-[13px]"
+                  style={{ fontFamily: "Peachi-Bold", color: "#D4AF37" }}
                 >
                   Revealing…
                 </Text>
@@ -191,12 +193,12 @@ export function MysteryBean({ dropId, baseBeansEarned, prerevealed, onRevealed, 
             ) : (
               <>
                 <Text
-                  className="text-espresso text-[13px]"
-                  style={{ fontFamily: "Peachi-Bold" }}
+                  className="text-[13px]"
+                  style={{ fontFamily: "Peachi-Bold", color: "#D4AF37" }}
                 >
                   Reveal
                 </Text>
-                <ChevronRight size={14} color="#1A0200" strokeWidth={2.4} />
+                <ChevronRight size={14} color="#D4AF37" strokeWidth={2.4} />
               </>
             )}
           </View>
