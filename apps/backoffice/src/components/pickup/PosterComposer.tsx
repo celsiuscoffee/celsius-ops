@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Sparkles, X, RotateCcw } from "lucide-react";
+import { Loader2, Sparkles, X, RotateCcw, Plus, Trash2 } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
 
@@ -23,7 +23,9 @@ type State = {
   tintColor: string;
   tintOpacity: number;  // 0-1
   headline: TextLayer;
-  subhead: TextLayer;
+  // Multiple supporting lines — operator can add/remove. AI generation
+  // populates 1-3 depending on the objective.
+  subheads: TextLayer[];
 };
 
 const DEFAULT_STATE: State = {
@@ -40,14 +42,33 @@ const DEFAULT_STATE: State = {
     size: 0.1,
     align: "center",
   },
-  subhead: {
-    text: "A short supporting line goes here",
-    x: 0.5,
-    y: 0.52,
-    color: "#F5F3F0",
-    size: 0.035,
-    align: "center",
-  },
+  subheads: [
+    {
+      text: "A short supporting line goes here",
+      x: 0.5,
+      y: 0.52,
+      color: "#F5F3F0",
+      size: 0.035,
+      align: "center",
+    },
+  ],
+};
+
+// Reserved zones the customer app overlays on top of every poster.
+// Drawn as semi-transparent stripes in the preview so the operator
+// places text in the safe area. Coordinates are normalised 0-1.
+const RESERVED_ZONES: Record<Placement, Array<{
+  x: number; y: number; w: number; h: number; label: string;
+}>> = {
+  home: [
+    { x: 0.02, y: 0.01, w: 0.16, h: 0.10, label: "C logo" },
+    { x: 0.82, y: 0.01, w: 0.16, h: 0.10, label: "Cart" },
+    { x: 0.02, y: 0.74, w: 0.96, h: 0.24, label: "Info card" },
+  ],
+  splash: [
+    { x: 0.78, y: 0.02, w: 0.20, h: 0.07, label: "Close ✕" },
+    { x: 0.20, y: 0.93, w: 0.60, h: 0.05, label: "Tap to open" },
+  ],
 };
 
 // Output canvas dimensions per placement. Keeps file sizes reasonable
@@ -76,14 +97,20 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
+// Active layer selector. "bg" + "headline" are singletons; subheads
+// carry the array index so the controls and drag target know exactly
+// which one is being edited.
+type Selected =
+  | { kind: "bg" }
+  | { kind: "headline" }
+  | { kind: "subhead"; index: number };
+
 export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
   const [state, setState] = useState<State>(DEFAULT_STATE);
   const [objective, setObjective] = useState("");
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
-  // Which layer is active in the right-side editor. The bg is "bg" — its
-  // controls (zoom, pan reset) sit in the same panel for consistency.
-  const [selected, setSelected] = useState<"headline" | "subhead" | "bg">("headline");
+  const [selected, setSelected] = useState<Selected>({ kind: "headline" });
 
   const frameRef = useRef<HTMLDivElement>(null);
   const bgImgRef = useRef<HTMLImageElement | null>(null);
@@ -106,27 +133,24 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
   // --- Pointer-drag plumbing ----------------------------------------
   // One generic drag controller for bg and text layers. We capture
   // the pointer on the frame so drags can leave the layer's bbox
-  // without losing focus.
+  // without losing focus. Subhead drags carry the array index.
   const dragRef = useRef<{
-    kind: "bg" | "headline" | "subhead";
+    target: Selected;
     startClientX: number;
     startClientY: number;
     startState: State;
   } | null>(null);
 
-  const onPointerDown = (
-    kind: "bg" | "headline" | "subhead",
-    e: React.PointerEvent,
-  ) => {
+  const onPointerDown = (target: Selected, e: React.PointerEvent) => {
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     dragRef.current = {
-      kind,
+      target,
       startClientX: e.clientX,
       startClientY: e.clientY,
       startState: state,
     };
-    setSelected(kind);
+    setSelected(target);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -140,10 +164,10 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
 
     setState((s) => {
       const base = drag.startState;
-      if (drag.kind === "bg") {
+      if (drag.target.kind === "bg") {
         return { ...s, bgPanX: base.bgPanX + dxN, bgPanY: base.bgPanY + dyN };
       }
-      if (drag.kind === "headline") {
+      if (drag.target.kind === "headline") {
         return {
           ...s,
           headline: {
@@ -153,14 +177,16 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
           },
         };
       }
-      return {
-        ...s,
-        subhead: {
-          ...s.subhead,
-          x: Math.max(0, Math.min(1, base.subhead.x + dxN)),
-          y: Math.max(0, Math.min(1, base.subhead.y + dyN)),
-        },
+      const idx = drag.target.index;
+      const baseLayer = base.subheads[idx];
+      if (!baseLayer) return s;
+      const updated = s.subheads.slice();
+      updated[idx] = {
+        ...updated[idx],
+        x: Math.max(0, Math.min(1, baseLayer.x + dxN)),
+        y: Math.max(0, Math.min(1, baseLayer.y + dyN)),
       };
+      return { ...s, subheads: updated };
     });
   };
 
@@ -191,15 +217,23 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
         tintColor: string;
         tintOpacity: number;
         headline: TextLayer;
-        subhead: TextLayer;
+        subheads: TextLayer[];
       };
       setState((cur) => ({
         ...cur,
         tintColor:   s.tintColor,
         tintOpacity: s.tintOpacity,
         headline:    s.headline,
-        subhead:     s.subhead,
+        subheads:    s.subheads.length > 0 ? s.subheads : cur.subheads,
       }));
+      // If the active layer is a subhead index that no longer exists
+      // (AI returned fewer than we had), fall back to subhead 0.
+      setSelected((cur) => {
+        if (cur.kind === "subhead" && cur.index >= s.subheads.length) {
+          return { kind: "subhead", index: 0 };
+        }
+        return cur;
+      });
       toast.success("Generated");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Generate failed");
@@ -221,7 +255,9 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
       // fall back to serif on first render.
       await Promise.all([
         document.fonts.load(`700 ${Math.round(state.headline.size * OUT_H)}px "Peachi"`),
-        document.fonts.load(`500 ${Math.round(state.subhead.size * OUT_H)}px "Peachi"`),
+        ...state.subheads.map((sh) =>
+          document.fonts.load(`500 ${Math.round(sh.size * OUT_H)}px "Peachi"`),
+        ),
       ]).catch(() => {});
 
       const canvas = document.createElement("canvas");
@@ -260,7 +296,7 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
         ctx.fillText(layer.text, layer.x * OUT_W, layer.y * OUT_H);
       };
       drawText(state.headline, 700);
-      drawText(state.subhead, 500);
+      for (const sh of state.subheads) drawText(sh, 500);
 
       const blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", 0.9),
@@ -275,15 +311,52 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
   };
 
   // --- Render ------------------------------------------------------
-  const updateLayer = (
-    which: "headline" | "subhead",
-    patch: Partial<TextLayer>,
-  ) => {
-    setState((s) => ({ ...s, [which]: { ...s[which], ...patch } }));
+  const updateHeadline = (patch: Partial<TextLayer>) => {
+    setState((s) => ({ ...s, headline: { ...s.headline, ...patch } }));
+  };
+  const updateSubhead = (idx: number, patch: Partial<TextLayer>) => {
+    setState((s) => {
+      const updated = s.subheads.slice();
+      if (!updated[idx]) return s;
+      updated[idx] = { ...updated[idx], ...patch };
+      return { ...s, subheads: updated };
+    });
   };
 
-  const selectedLayer =
-    selected === "headline" ? state.headline : selected === "subhead" ? state.subhead : null;
+  // Append a new subhead — clones styling from the last subhead so it
+  // looks coherent with what's already on the poster. AI generation
+  // can refine it after.
+  const addSubhead = () => {
+    setState((s) => {
+      if (s.subheads.length >= 4) return s;
+      const last = s.subheads[s.subheads.length - 1];
+      const next: TextLayer = last
+        ? { ...last, text: "New supporting line", y: Math.min(0.95, last.y + 0.07) }
+        : { text: "New supporting line", x: 0.5, y: 0.6, color: "#F5F3F0", size: 0.035, align: "center" };
+      const idx = s.subheads.length;
+      // Defer the select update until after the state commits.
+      queueMicrotask(() => setSelected({ kind: "subhead", index: idx }));
+      return { ...s, subheads: [...s.subheads, next] };
+    });
+  };
+
+  const removeSubhead = (idx: number) => {
+    setState((s) => {
+      if (s.subheads.length <= 1) return s; // keep at least one
+      const updated = s.subheads.slice();
+      updated.splice(idx, 1);
+      const nextIdx = Math.min(idx, updated.length - 1);
+      queueMicrotask(() => setSelected({ kind: "subhead", index: nextIdx }));
+      return { ...s, subheads: updated };
+    });
+  };
+
+  const selectedLayer: TextLayer | null =
+    selected.kind === "headline" ? state.headline
+      : selected.kind === "subhead" ? (state.subheads[selected.index] ?? null)
+        : null;
+  const isHeadline = selected.kind === "headline";
+  const reservedZones = RESERVED_ZONES[placement];
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
@@ -320,7 +393,7 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
                 src={bgUrl}
                 alt=""
                 draggable={false}
-                onPointerDown={(e) => onPointerDown("bg", e)}
+                onPointerDown={(e) => onPointerDown({ kind: "bg" }, e)}
                 className="absolute inset-0 h-full w-full cursor-move"
                 style={{
                   objectFit: "cover",
@@ -338,50 +411,81 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
                 }}
               />
 
-              {/* Home placement overlay hint — semi-transparent mock of
-                  the info card so the operator avoids placing text in
-                  the reserved zone. */}
-              {placement === "home" && (
+              {/* Reserved zones — the customer app paints UI on top of
+                  the poster (C logo, cart button, info card on home;
+                  close ✕ + Tap-to-open on splash). Showing them in the
+                  preview keeps the operator from putting text where it
+                  will be hidden. */}
+              {reservedZones.map((z) => (
                 <div
-                  className="pointer-events-none absolute inset-x-3 bottom-2 rounded-xl border border-white/20 bg-white/10"
-                  style={{ height: previewH * 0.18 }}
-                >
-                  <div className="flex h-full items-center justify-center text-[8px] font-semibold uppercase tracking-wider text-white/60">
-                    Info card area
-                  </div>
-                </div>
-              )}
-
-              {/* Text layers — draggable. translate(-50%) on Y to centre
-                  on the y coord so it matches the canvas middle-baseline. */}
-              {([
-                { key: "headline" as const, layer: state.headline, weight: 700 },
-                { key: "subhead"  as const, layer: state.subhead,  weight: 500 },
-              ]).map(({ key, layer, weight }) => (
-                <div
-                  key={key}
-                  onPointerDown={(e) => onPointerDown(key, e)}
-                  className={`absolute cursor-move whitespace-nowrap ${
-                    selected === key ? "outline outline-1 outline-dashed outline-white/60" : ""
-                  }`}
+                  key={z.label}
+                  className="pointer-events-none absolute flex items-center justify-center rounded-md border border-dashed border-white/40 bg-black/20"
                   style={{
-                    left: `${layer.x * 100}%`,
-                    top:  `${layer.y * 100}%`,
-                    transform: `translate(${
-                      layer.align === "center" ? "-50%" : layer.align === "right" ? "-100%" : "0"
-                    }, -50%)`,
-                    color: layer.color,
-                    fontFamily: '"Peachi", Georgia, serif',
-                    fontWeight: weight,
-                    fontSize: `${layer.size * previewH}px`,
-                    lineHeight: 1.05,
-                    textShadow: "0 1px 2px rgba(0,0,0,0.15)",
-                    padding: "2px 4px",
+                    left:   `${z.x * 100}%`,
+                    top:    `${z.y * 100}%`,
+                    width:  `${z.w * 100}%`,
+                    height: `${z.h * 100}%`,
                   }}
                 >
-                  {layer.text || (key === "headline" ? "Headline" : "Subhead")}
+                  <span className="text-[8px] font-semibold uppercase tracking-wider text-white/70">
+                    {z.label}
+                  </span>
                 </div>
               ))}
+
+              {/* Headline — bold + larger weight */}
+              <div
+                onPointerDown={(e) => onPointerDown({ kind: "headline" }, e)}
+                className={`absolute cursor-move whitespace-nowrap ${
+                  selected.kind === "headline" ? "outline outline-1 outline-dashed outline-white/60" : ""
+                }`}
+                style={{
+                  left: `${state.headline.x * 100}%`,
+                  top:  `${state.headline.y * 100}%`,
+                  transform: `translate(${
+                    state.headline.align === "center" ? "-50%" : state.headline.align === "right" ? "-100%" : "0"
+                  }, -50%)`,
+                  color: state.headline.color,
+                  fontFamily: '"Peachi", Georgia, serif',
+                  fontWeight: 700,
+                  fontSize: `${state.headline.size * previewH}px`,
+                  lineHeight: 1.05,
+                  textShadow: "0 1px 2px rgba(0,0,0,0.15)",
+                  padding: "2px 4px",
+                }}
+              >
+                {state.headline.text || "Headline"}
+              </div>
+
+              {/* Subhead text layers — each draggable independently */}
+              {state.subheads.map((layer, idx) => {
+                const isSel = selected.kind === "subhead" && selected.index === idx;
+                return (
+                  <div
+                    key={idx}
+                    onPointerDown={(e) => onPointerDown({ kind: "subhead", index: idx }, e)}
+                    className={`absolute cursor-move whitespace-nowrap ${
+                      isSel ? "outline outline-1 outline-dashed outline-white/60" : ""
+                    }`}
+                    style={{
+                      left: `${layer.x * 100}%`,
+                      top:  `${layer.y * 100}%`,
+                      transform: `translate(${
+                        layer.align === "center" ? "-50%" : layer.align === "right" ? "-100%" : "0"
+                      }, -50%)`,
+                      color: layer.color,
+                      fontFamily: '"Peachi", Georgia, serif',
+                      fontWeight: 500,
+                      fontSize: `${layer.size * previewH}px`,
+                      lineHeight: 1.05,
+                      textShadow: "0 1px 2px rgba(0,0,0,0.15)",
+                      padding: "2px 4px",
+                    }}
+                  >
+                    {layer.text || `Subhead ${idx + 1}`}
+                  </div>
+                );
+              })}
             </div>
 
             {/* AI objective input — directly below the preview so it
@@ -411,34 +515,49 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
                 {generating ? "Generating…" : "Generate with AI"}
               </button>
               <p className="mt-1.5 text-[10px] text-gray-400">
-                AI looks at your image + objective, suggests headline, subhead, tint and text positions.
+                AI promotes the strongest part of your objective (an offer like "10% off") to the headline, picks supporting subhead lines, and chooses tint + text colours that contrast with the image — while dodging the C-logo, cart and info-card zones.
               </p>
             </div>
           </div>
 
           {/* CONTROLS pane ----------------------------------------- */}
           <div className="flex flex-col gap-4 overflow-y-auto border-l border-gray-100 p-5">
-            {/* Layer tabs */}
-            <div className="grid grid-cols-3 gap-1 rounded-lg bg-gray-100 p-1">
-              {([
-                { id: "bg" as const,       label: "Background" },
-                { id: "headline" as const, label: "Headline" },
-                { id: "subhead"  as const, label: "Subhead" },
-              ]).map((t) => (
+            {/* Layer tabs — dynamic. Background + Headline are fixed;
+                subheads wrap depending on how many the operator has
+                added. The "+ Add" tile spawns a new subhead. */}
+            <div className="flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
+              {[
+                { sel: { kind: "bg" } as Selected,       label: "Background", active: selected.kind === "bg" },
+                { sel: { kind: "headline" } as Selected, label: "Headline",   active: selected.kind === "headline" },
+                ...state.subheads.map((_, i) => ({
+                  sel:    { kind: "subhead", index: i } as Selected,
+                  label:  state.subheads.length > 1 ? `Subhead ${i + 1}` : "Subhead",
+                  active: selected.kind === "subhead" && selected.index === i,
+                })),
+              ].map((t) => (
                 <button
-                  key={t.id}
-                  onClick={() => setSelected(t.id)}
-                  className={`rounded-md px-2 py-1.5 text-[11px] font-semibold ${
-                    selected === t.id ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"
+                  key={t.label}
+                  onClick={() => setSelected(t.sel)}
+                  className={`flex-1 min-w-[60px] rounded-md px-2 py-1.5 text-[11px] font-semibold ${
+                    t.active ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"
                   }`}
                 >
                   {t.label}
                 </button>
               ))}
+              {state.subheads.length < 4 && (
+                <button
+                  onClick={addSubhead}
+                  title="Add another subhead"
+                  className="flex items-center justify-center rounded-md px-2 py-1.5 text-[11px] font-semibold text-terracotta hover:bg-white"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              )}
             </div>
 
             {/* BG controls */}
-            {selected === "bg" && (
+            {selected.kind === "bg" && (
               <div className="space-y-3">
                 <div>
                   <label className="text-[11px] font-medium text-gray-700">
@@ -502,82 +621,107 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
               </div>
             )}
 
-            {/* Text layer controls */}
-            {selectedLayer && (selected === "headline" || selected === "subhead") && (
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[11px] font-medium text-gray-700">
-                    {selected === "headline" ? "Headline text" : "Subhead text"}
-                  </label>
-                  <textarea
-                    value={selectedLayer.text}
-                    onChange={(e) => updateLayer(selected, { text: e.target.value })}
-                    rows={selected === "subhead" ? 2 : 1}
-                    className="mt-1 w-full resize-none rounded-md border border-gray-200 px-2 py-1.5 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-medium text-gray-700">
-                    Size · {(selectedLayer.size * 100).toFixed(1)}%
-                  </label>
-                  <input
-                    type="range"
-                    min={selected === "headline" ? 0.04 : 0.02}
-                    max={selected === "headline" ? 0.2 : 0.08}
-                    step={0.001}
-                    value={selectedLayer.size}
-                    onChange={(e) => updateLayer(selected, { size: Number(e.target.value) })}
-                    className="mt-1 w-full"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-medium text-gray-700">
-                    Colour
-                  </label>
-                  <div className="mt-1 flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={selectedLayer.color}
-                      onChange={(e) => updateLayer(selected, { color: e.target.value })}
-                      className="h-8 w-12 cursor-pointer rounded border border-gray-200"
-                    />
-                    <input
-                      type="text"
-                      value={selectedLayer.color}
-                      onChange={(e) => updateLayer(selected, { color: e.target.value })}
-                      className="flex-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-mono"
+            {/* Text layer controls — same UI for headline + subheads;
+                the dispatcher below routes the patch to the right
+                slot in state. */}
+            {selectedLayer && (selected.kind === "headline" || selected.kind === "subhead") && (() => {
+              const patch = (p: Partial<TextLayer>) => {
+                if (isHeadline) updateHeadline(p);
+                else if (selected.kind === "subhead") updateSubhead(selected.index, p);
+              };
+              return (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[11px] font-medium text-gray-700">
+                      {isHeadline
+                        ? "Headline text"
+                        : state.subheads.length > 1
+                          ? `Subhead ${selected.kind === "subhead" ? selected.index + 1 : ""} text`
+                          : "Subhead text"}
+                    </label>
+                    <textarea
+                      value={selectedLayer.text}
+                      onChange={(e) => patch({ text: e.target.value })}
+                      rows={isHeadline ? 1 : 2}
+                      className="mt-1 w-full resize-none rounded-md border border-gray-200 px-2 py-1.5 text-xs"
                     />
                   </div>
-                </div>
 
-                <div>
-                  <label className="text-[11px] font-medium text-gray-700">Align</label>
-                  <div className="mt-1 grid grid-cols-3 gap-1">
-                    {(["left", "center", "right"] as const).map((a) => (
-                      <button
-                        key={a}
-                        onClick={() => updateLayer(selected, { align: a })}
-                        className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${
-                          selectedLayer.align === a
-                            ? "border-terracotta bg-terracotta/10 text-terracotta"
-                            : "border-gray-200 text-gray-600"
-                        }`}
-                      >
-                        {a[0].toUpperCase() + a.slice(1)}
-                      </button>
-                    ))}
+                  <div>
+                    <label className="text-[11px] font-medium text-gray-700">
+                      Size · {(selectedLayer.size * 100).toFixed(1)}%
+                    </label>
+                    <input
+                      type="range"
+                      min={isHeadline ? 0.04 : 0.02}
+                      max={isHeadline ? 0.2 : 0.08}
+                      step={0.001}
+                      value={selectedLayer.size}
+                      onChange={(e) => patch({ size: Number(e.target.value) })}
+                      className="mt-1 w-full"
+                    />
                   </div>
-                </div>
 
-                <p className="text-[10px] text-gray-400">
-                  Drag the text in the preview to move it. Position is
-                  saved as a fraction of the poster size, so it stays
-                  put across resolutions.
-                </p>
-              </div>
-            )}
+                  <div>
+                    <label className="text-[11px] font-medium text-gray-700">
+                      Colour
+                    </label>
+                    <div className="mt-1 flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={selectedLayer.color}
+                        onChange={(e) => patch({ color: e.target.value })}
+                        className="h-8 w-12 cursor-pointer rounded border border-gray-200"
+                      />
+                      <input
+                        type="text"
+                        value={selectedLayer.color}
+                        onChange={(e) => patch({ color: e.target.value })}
+                        className="flex-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-gray-700">Align</label>
+                    <div className="mt-1 grid grid-cols-3 gap-1">
+                      {(["left", "center", "right"] as const).map((a) => (
+                        <button
+                          key={a}
+                          onClick={() => patch({ align: a })}
+                          className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${
+                            selectedLayer.align === a
+                              ? "border-terracotta bg-terracotta/10 text-terracotta"
+                              : "border-gray-200 text-gray-600"
+                          }`}
+                        >
+                          {a[0].toUpperCase() + a.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Remove subhead — only available for subhead layers
+                      and only when there's more than one (keeps the
+                      composer in a renderable state). */}
+                  {selected.kind === "subhead" && state.subheads.length > 1 && (
+                    <button
+                      onClick={() => removeSubhead(selected.index)}
+                      className="flex w-full items-center justify-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] font-semibold text-red-600 hover:bg-red-100"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Remove this subhead
+                    </button>
+                  )}
+
+                  <p className="text-[10px] text-gray-400">
+                    Drag the text in the preview to move it. Position is
+                    saved as a fraction of the poster size, so it stays
+                    put across resolutions.
+                  </p>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
