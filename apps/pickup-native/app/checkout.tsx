@@ -1068,9 +1068,6 @@ export default function Checkout() {
                       : currentOutlet.is_busy
                       ? "Busy"
                       : "Open"}
-                    {currentOutlet.is_open && currentOutlet.pickup_time_mins
-                      ? ` · ready in ~${currentOutlet.pickup_time_mins} min`
-                      : ""}
                   </Text>
                 </View>
               )}
