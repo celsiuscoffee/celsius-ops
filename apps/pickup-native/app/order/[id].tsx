@@ -539,14 +539,29 @@ export default function OrderStatus() {
             }}
           >
             {confirmingPayment ? (
+              // Visually a sibling of the Brewing / Ready state cards —
+              // same 64px chip, same title/sub layout — just a spinner
+              // instead of a static icon. Reads as part of the same
+              // "your order's progressing" family.
               <View className="items-center py-2">
-                <ActivityIndicator size="small" color="#C05040" />
+                <View
+                  style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 32,
+                    backgroundColor: "#FBEBE8",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <ActivityIndicator size="large" color="#C05040" />
+                </View>
                 <Text
-                  className="text-espresso text-lg mt-2"
+                  className="text-espresso text-xl mt-3"
                   style={{ fontFamily: "Peachi-Bold" }}
                   numberOfLines={1}
                 >
-                  Confirming payment…
+                  Confirming payment
                 </Text>
                 <Text className="text-muted-fg text-sm mt-1 text-center">
                   Usually a few seconds via {currentMethodLabel}. We'll start
