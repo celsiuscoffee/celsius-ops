@@ -294,7 +294,10 @@ export default function OrderStatus() {
           throw new Error(rmJson.error || "Couldn't start payment");
         }
         const label  = METHOD_LABELS[methodId] ?? methodId;
-        const amount = typeof data?.total === "number" ? formatPrice(data.total) : "";
+        // data.total is sen; the rest of this file divides by 100 before
+        // formatPrice (see the order-summary block below). Missed that
+        // here originally — produced RM445.00 for a RM4.45 order.
+        const amount = typeof data?.total === "number" ? formatPrice(data.total / 100) : "";
         await openRmCheckout(rmJson.paymentUrl, label, amount, methodId);
         // Webhook is authoritative for status — we don't mutate locally.
         // The 5s React Query poll will pick up the new status.
