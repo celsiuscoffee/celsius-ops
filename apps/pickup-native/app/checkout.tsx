@@ -397,7 +397,10 @@ export default function Checkout() {
   const [pickupSheetOpen, setPickupSheetOpen] = useState(false);
   // Offsets shown in the picker — covers most "I'll arrive in N min"
   // intents without overwhelming. Closer to ZUS/Starbucks defaults.
-  const PICKUP_OFFSETS = [15, 30, 45, 60, 90, 120];
+  // 15 min dropped — already covered by "Now" (5-15 min range on a
+  // 10-min outlet). Picker starts at 30 min for the genuinely-later
+  // option.
+  const PICKUP_OFFSETS = [30, 45, 60, 90, 120];
 
   // Compute the outlet's open/close timestamps for *today*, given the
   // "08:00"/"22:00" string format the auto-hours cron stores. JS Date
