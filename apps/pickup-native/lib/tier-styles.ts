@@ -97,17 +97,20 @@ const STYLES: Record<string, TierStyle> = {
     pointsPillBg: "rgba(251,191,36,0.18)",
     pointsTextColor: "#FBBF24",
   },
-  // Invitation-only — investor/owner Black Card. Pure black with gold
-  // accent — the most premium card surface in the deck.
+  // Invitation-only — investor/owner Black Card. Pure black with a
+  // brushed-champagne metallic accent (instead of the loud amber
+  // #FBBF24 used elsewhere in the app). Mirrors the carousel theme
+  // in TierCardCarousel so the home hero, tier-card, and rewards
+  // strip all read as the same premium surface.
   "black-card": {
     displayName: "BLACK CARD",
-    gradient: ["#1a0c02", "#000000", "#000000"],
-    eyebrowColor: "#FBBF24",
+    gradient: ["#1F1916", "#000000", "#000000"],
+    eyebrowColor: "#D4B978",
     textColor: "#FFFFFF",
     mutedColor: "rgba(255,255,255,0.72)",
-    accentColor: "#FBBF24",
-    pointsPillBg: "rgba(251,191,36,0.18)",
-    pointsTextColor: "#FBBF24",
+    accentColor: "#D4B978",
+    pointsPillBg: "rgba(212,185,120,0.18)",
+    pointsTextColor: "#D4B978",
   },
 };
 

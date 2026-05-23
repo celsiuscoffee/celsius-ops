@@ -174,20 +174,32 @@ const TIER_THEMES: Record<string, TierTheme> = {
     pattern:        "stars",
     patternOpacity: 0.14,
   },
-  // Invitation-only — investor / owner Black Card. Pure black + gold —
-  // the most premium card in the deck.
+  // Invitation-only — investor / owner Black Card. Pure black +
+  // brushed champagne metallic. Previously used bright #FBBF24
+  // (Tailwind amber-400) which read as Halloween-loud against pure
+  // black — fine on the Mystery scratch card or as an icon tint,
+  // wrong for the most premium card in the deck. Centurion-class
+  // cards never use saturated yellow gold; the convention is a
+  // muted warm metallic that lets the BLACK do the heavy lifting.
+  //
+  // The new palette is a 3-tone champagne brushed-gold lift:
+  //   accent     — primary text / numerals / pill chips
+  //   accentDeep — highlight + small accent ornaments
+  //   subtle     — body text + dividers
+  // Watermark drops to 0.07 alpha so the giant "C" is felt, not
+  // seen. The cup mascot palette swaps to the same family.
   "black-card": {
-    gradTop:        "#1A1A1A",
+    gradTop:        "#1F1916",
     gradBottom:     "#000000",
-    accent:         "#FBBF24",
-    accentDeep:     "#FFE08C",
-    subtle:         "rgba(251,191,36,0.72)",
-    cupCream:       "#FBBF24",
-    cupCoffee:      "#5C3A0A",
-    cupGlass:       "#FBBF24",
-    watermark:      "rgba(251,191,36,0.10)",
+    accent:         "#D4B978",  // brushed champagne gold
+    accentDeep:     "#F4E5BC",  // pale champagne highlight
+    subtle:         "rgba(212,185,120,0.70)",
+    cupCream:       "#D4B978",
+    cupCoffee:      "#3A2C12",
+    cupGlass:       "#E8D2A0",
+    watermark:      "rgba(212,185,120,0.08)",
     pattern:        "stars",
-    patternOpacity: 0.20,
+    patternOpacity: 0.14,
   },
 };
 
