@@ -26,7 +26,14 @@ export type LeaveRequest = {
   end_date: string;
   total_days: number;
   reason: string | null;
-  status: "pending" | "approved" | "rejected" | "cancelled";
+  status:
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "cancelled"
+    | "ai_approved"
+    | "ai_escalated"
+    | (string & {});
   rejection_reason: string | null;
   created_at: string;
 };
@@ -123,4 +130,108 @@ export function acknowledgeMemo(memoId: string, notes?: string) {
 
 export function fetchAttendance(days = 30) {
   return api<AttendanceResponse>(`/api/hr/attendance?days=${days}`);
+}
+
+// ── My Skills (audit history for the logged-in staff) ───
+export type SkillsAuditItem = {
+  itemTitle: string;
+  sectionName: string;
+  ratingType: string;
+  rating: number | null;
+  ratingDelta: number | null;
+  notes: string | null;
+};
+
+export type SkillsAuditEntry = {
+  id: string;
+  date: string;
+  overallScore: number | null;
+  scoreDelta: number | null;
+  completedAt: string | null;
+  auditor: { id: string; name: string };
+  outlet: { id: string; name: string; code: string };
+  items: SkillsAuditItem[];
+};
+
+export type SkillsResponse = {
+  auditee: { id: string; name: string } | null;
+  templates: {
+    template: { id: string; name: string; jobRoleFilter: string[] };
+    audits: SkillsAuditEntry[];
+  }[];
+};
+
+export type SkillsCoachInsights = {
+  summary: string;
+  strengths: string[];
+  focus_areas: string[];
+  coaching_actions: string[];
+  needs_more_data: boolean;
+};
+
+export type SkillsCoachResponse = {
+  insights: SkillsCoachInsights | null;
+  generated_at: string | null;
+  model: string | null;
+  cached: boolean;
+  audit_count: number;
+  reason?: "no_audits" | "insufficient_data";
+};
+
+export function fetchMySkills(userId: string) {
+  return api<SkillsResponse>(`/api/audits/staff/${userId}`);
+}
+
+export function fetchMySkillsCoach(userId: string) {
+  return api<SkillsCoachResponse>(`/api/audits/staff/${userId}/coach`);
+}
+
+// ── Reviews attributed during my shifts ───
+export type MyReview = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  review_date: string;
+  reviewer_name: string | null;
+  source: string | null;
+};
+
+export function fetchMyReviews() {
+  return api<{ reviews: MyReview[]; count: number }>("/api/hr/my-reviews");
+}
+
+// ── Allowances breakdown ───
+export type AllowanceBreakdown = {
+  isFullTime: boolean;
+  period: {
+    year: number;
+    month: number;
+    daysElapsed: number;
+    daysRemaining: number;
+  };
+  attendance: {
+    base: number;
+    earned: number;
+    tip: string;
+    metrics: { lateCount: number; absentCount: number };
+  };
+  performance: {
+    base: number;
+    earned: number;
+    score: number;
+    mode: string;
+    eligible: boolean;
+    breakdown: { checklists: number; reviews: number; audit: number };
+    tip: string;
+  };
+  reviewPenalty: {
+    total: number;
+    entries: { id: string; reviewDate: string; rating: number; amount: number }[];
+  };
+  totalEarned: number;
+  totalMax: number;
+};
+
+export function fetchAllowances() {
+  return api<{ breakdown: AllowanceBreakdown }>("/api/hr/allowances");
 }

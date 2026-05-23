@@ -55,6 +55,13 @@ export default function StaffLayout() {
           tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
         }}
       />
+      {/* Hidden stacks reached from Home / Quick actions */}
+      <Tabs.Screen name="checklists" options={{ href: null }} />
+      <Tabs.Screen name="stock-count" options={{ href: null }} />
+      <Tabs.Screen name="wastage" options={{ href: null }} />
+      <Tabs.Screen name="receiving" options={{ href: null }} />
+      <Tabs.Screen name="transfers" options={{ href: null }} />
+      <Tabs.Screen name="audit" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -22,8 +22,8 @@ export async function POST(req: NextRequest) {
   }
 
   const { pin, outletId } = body;
-  if (!pin || pin.length < 4) {
-    return NextResponse.json({ error: "PIN required (minimum 4 digits)" }, { status: 400 });
+  if (!pin || pin.length !== 6) {
+    return NextResponse.json({ error: "PIN must be 6 digits" }, { status: 400 });
   }
 
   const users = await prisma.user.findMany({

@@ -1,8 +1,16 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Check, ChevronDown } from "lucide-react-native";
 import { Screen } from "../../components/Screen";
 import { Logo } from "../../components/Logo";
 import { fetchOutlets, type Outlet } from "../../lib/outlets";
@@ -38,8 +46,8 @@ export default function Login() {
 
   async function handleSubmit() {
     if (busy) return;
-    if (pin.length < 4) {
-      setError("PIN must be at least 4 digits");
+    if (pin.length < 6) {
+      setError("PIN must be 6 digits");
       return;
     }
     setBusy(true);
@@ -69,7 +77,7 @@ export default function Login() {
       setPin((p) => p.slice(0, -1));
       return;
     }
-    setPin((p) => (p.length >= 8 ? p : p + d));
+    setPin((p) => (p.length >= 6 ? p : p + d));
   }
 
   return (
@@ -88,7 +96,7 @@ export default function Login() {
 
         <View className="mt-8 mb-3 items-center">
           <View className="flex-row gap-3">
-            {Array.from({ length: Math.max(4, pin.length) }).map((_, i) => (
+            {Array.from({ length: 6 }).map((_, i) => (
               <View
                 key={i}
                 className={`h-4 w-4 rounded-full border-2 border-espresso ${
@@ -110,9 +118,9 @@ export default function Login() {
 
         <Pressable
           onPress={handleSubmit}
-          disabled={busy || pin.length < 4}
+          disabled={busy || pin.length < 6}
           className={`mt-6 h-14 items-center justify-center rounded-2xl ${
-            busy || pin.length < 4 ? "bg-primary/40" : "bg-primary"
+            busy || pin.length < 6 ? "bg-primary/40" : "bg-primary"
           }`}
         >
           {busy ? (
@@ -137,38 +145,76 @@ function OutletPicker({
   onSelect: (id: string) => void;
   error: string | null;
 }) {
+  const [open, setOpen] = useState(false);
+
   if (error) {
-    return (
-      <Text className="text-center text-sm text-danger">{error}</Text>
-    );
+    return <Text className="text-center text-sm text-danger">{error}</Text>;
   }
   if (!outlets) {
     return <ActivityIndicator />;
   }
+
+  const selected = outlets.find((o) => o.id === selectedId) ?? null;
+
   return (
-    <View className="flex-row flex-wrap justify-center gap-2">
-      {outlets.map((o) => {
-        const active = o.id === selectedId;
-        return (
-          <Pressable
-            key={o.id}
-            onPress={() => onSelect(o.id)}
-            className={`rounded-full border px-4 py-2 ${
-              active
-                ? "border-espresso bg-espresso"
-                : "border-border bg-surface"
-            }`}
-          >
-            <Text
-              className={`text-sm font-body-semi ${
-                active ? "text-white" : "text-espresso"
-              }`}
-            >
-              {o.name}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <View>
+      <Pressable
+        onPress={() => setOpen(true)}
+        className="h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 active:bg-primary-50"
+      >
+        <Text
+          className={`flex-1 text-base font-body-semi ${
+            selected ? "text-espresso" : "text-muted"
+          }`}
+          numberOfLines={1}
+        >
+          {selected ? selected.name : "Select outlet"}
+        </Text>
+        <ChevronDown color="#6B6B6B" size={20} />
+      </Pressable>
+
+      <Modal
+        visible={open}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setOpen(false)}
+      >
+        <View className="flex-1 bg-background">
+          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
+            <Text className="text-xl font-display text-espresso">Outlet</Text>
+            <Pressable onPress={() => setOpen(false)} className="px-2 py-1">
+              <Text className="text-sm font-body-bold text-primary">Close</Text>
+            </Pressable>
+          </View>
+          <ScrollView className="flex-1" contentContainerClassName="px-5 py-4">
+            {outlets.map((o) => {
+              const active = o.id === selectedId;
+              return (
+                <Pressable
+                  key={o.id}
+                  onPress={() => {
+                    onSelect(o.id);
+                    setOpen(false);
+                  }}
+                  className={`mb-2 h-14 flex-row items-center justify-between rounded-2xl border px-4 active:bg-primary-50 ${
+                    active
+                      ? "border-primary bg-primary-50"
+                      : "border-border bg-surface"
+                  }`}
+                >
+                  <Text
+                    className="flex-1 text-base font-body-semi text-espresso"
+                    numberOfLines={1}
+                  >
+                    {o.name}
+                  </Text>
+                  {active ? <Check color="#A2492C" size={20} /> : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }

@@ -1,0 +1,153 @@
+import { api } from "../api";
+
+export type AuditStatus = "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+
+export type AuditListItem = {
+  id: string;
+  date: string;
+  status: AuditStatus | string;
+  overallScore: number | null;
+  completedAt: string | null;
+  template: { id: string; name: string; roleType: string | null };
+  outlet: { id: string; name: string; code: string };
+  auditor: { id: string; name: string };
+  isMine: boolean;
+  totalItems: number;
+  completedItems: number;
+  progress: number;
+};
+
+export type AuditItem = {
+  id: string;
+  sectionName: string;
+  itemTitle: string;
+  sortOrder: number;
+  photoRequired: boolean;
+  ratingType: "pass_fail" | "rating_3" | "rating_5" | string;
+  rating: number | null;
+  notes: string | null;
+  photos: string[];
+};
+
+export type AuditDetail = {
+  id: string;
+  date: string;
+  status: AuditStatus | string;
+  overallScore: number | null;
+  overallNotes: string | null;
+  completedAt: string | null;
+  template: { id: string; name: string; description: string | null; roleType: string | null };
+  outlet: { id: string; name: string; code: string };
+  auditor: { id: string; name: string };
+  items: AuditItem[];
+};
+
+export type AuditTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  roleType: string | null;
+  auditTarget: "OUTLET" | "STAFF" | string;
+  jobRoleFilter: string[];
+  sections: { id: string; name: string; _count: { items: number } }[];
+  _count: { reports: number };
+};
+
+export type AuditOutlet = { id: string; name: string; code: string };
+
+export type AuditAuditee = { id: string; name: string; position: string | null };
+
+export type AuditInsight = {
+  severity: "high" | "medium" | "low";
+  finding: string;
+  action: string;
+  category: string;
+};
+
+export type AuditInsightsResponse = {
+  focus: string;
+  summary: string;
+  insights: AuditInsight[];
+  basedOnAudits: number;
+  lastAuditDate: string | null;
+};
+
+export function listAudits(status?: string) {
+  const q = status && status !== "all" ? `?status=${status}` : "";
+  return api<AuditListItem[]>(`/api/audits${q}`);
+}
+
+export function getAudit(id: string) {
+  return api<AuditDetail>(`/api/audits/${id}`);
+}
+
+export function updateAuditItem(
+  reportId: string,
+  itemId: string,
+  body: {
+    rating?: number | null;
+    notes?: string | null;
+    photos?: string[];
+    addPhoto?: string;
+    removePhoto?: string;
+  },
+) {
+  return api<{
+    item: { id: string; rating: number | null; notes: string | null; photos: string[] };
+    progress: { total: number; rated: number; percent: number };
+  }>(`/api/audits/${reportId}/items/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function completeAudit(id: string, overallNotes?: string) {
+  return api<{ id: string; status: string; overallScore: number | null }>(
+    `/api/audits/${id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ complete: true, overallNotes }),
+    },
+  );
+}
+
+export function updateAuditNotes(id: string, overallNotes: string) {
+  return api<{ id: string; status: string; overallScore: number | null }>(
+    `/api/audits/${id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ overallNotes }),
+    },
+  );
+}
+
+export function listAuditTemplates(roleType?: string) {
+  const q = roleType ? `?roleType=${roleType}` : "";
+  return api<AuditTemplate[]>(`/api/audits/templates${q}`);
+}
+
+export function listAuditOutlets() {
+  return api<AuditOutlet[]>("/api/audits/outlets");
+}
+
+export function listAuditees(templateId: string, outletId: string) {
+  return api<AuditAuditee[]>(
+    `/api/audits/auditees?templateId=${templateId}&outletId=${outletId}`,
+  );
+}
+
+export function createAudit(input: {
+  templateId: string;
+  outletId: string;
+  auditeeId?: string;
+}) {
+  return api<{ id: string }>("/api/audits", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getAuditInsights(outletId?: string) {
+  const q = outletId ? `?outletId=${outletId}` : "";
+  return api<AuditInsightsResponse>(`/api/audits/insights${q}`);
+}
