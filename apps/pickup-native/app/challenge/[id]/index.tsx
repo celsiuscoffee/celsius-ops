@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { View, Text, ScrollView, Pressable } from "react-native";
+import { View, Text, ScrollView, Pressable, Alert } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
+import * as Haptics from "@/lib/haptics";
+import type { AppliedReward } from "../../../lib/store";
 import {
   Gift,
   Clock,
-  CheckCircle2,
   Lock,
   Sparkles,
   Target,
@@ -99,6 +100,8 @@ function expiryCopy(iso: string): { label: string; urgent: boolean } {
 export default function ChallengeDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const phone = useApp((s) => s.phone);
+  const setReservedVoucher = useApp((s) => s.setReservedVoucher);
+  const setAppliedReward = useApp((s) => s.setAppliedReward);
 
   // Reuses the same React Query key as the rewards tab so the screen
   // reads from the prewarmed cache on navigation — no spinner flash on
@@ -185,12 +188,51 @@ export default function ChallengeDetail() {
   const isExpired = mission.status === "expired";
   const rules = howToWin(mission);
 
-  const handleClaim = () => {
-    // Mirrors the rewards-tab flow: the USE pill reserves the linked
-    // voucher and pops the customer over to checkout. The detail page
-    // just bounces back to /rewards so the existing wallet UI takes
-    // over the rest of the flow.
-    router.replace("/rewards");
+  const handleUse = () => {
+    // Mirror of useCompletedChallenge → useWalletVoucher on the
+    // Rewards tab: reserve the linked voucher in app state and pop
+    // the customer onto /menu so they can build a cart and spend it.
+    // Earlier this just routed to /rewards which made the customer
+    // tap a second USE button there to do the same thing.
+    if (!linkedVoucher) {
+      Alert.alert(
+        "Reward not ready",
+        "Your reward will land in your wallet shortly. Try again in a moment.",
+        [{ text: "OK", style: "default" }],
+      );
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setReservedVoucher({
+      id: linkedVoucher.id,
+      title: linkedVoucher.title,
+      category: linkedVoucher.category,
+      icon: linkedVoucher.icon,
+      expires_at: linkedVoucher.expires_at,
+    });
+    const dtMap = (t: NonNullable<Voucher["discount_type"]>): AppliedReward["discount_type"] => {
+      switch (t) {
+        case "free_item":        return "free_item";
+        case "free_upgrade":     return "free_item";
+        case "flat":             return "flat";
+        case "percent":          return "percent";
+        case "beans_multiplier": return "none";
+        default:                  return "none";
+      }
+    };
+    setAppliedReward({
+      id: linkedVoucher.id,
+      name: linkedVoucher.title,
+      points_required: 0,
+      discount_type: linkedVoucher.discount_type ? dtMap(linkedVoucher.discount_type) : null,
+      discount_value: linkedVoucher.discount_value ?? null,
+      applicable_categories: linkedVoucher.applicable_categories ?? null,
+      applicable_products: linkedVoucher.applicable_products ?? null,
+      free_product_name: linkedVoucher.free_product_name ?? null,
+      min_order_value: linkedVoucher.min_order_value ?? null,
+      voucher_id: linkedVoucher.id,
+    });
+    router.push("/menu" as never);
   };
 
   return (
@@ -523,10 +565,10 @@ export default function ChallengeDetail() {
           </View>
         </View>
 
-        {/* ── CTA: claim (completed) / locked (active) ─── */}
+        {/* ── CTA: use the earned reward (completed) / locked (active) ─── */}
         {isCompleted ? (
           <Pressable
-            onPress={handleClaim}
+            onPress={handleUse}
             className="active:opacity-85"
             style={{
               marginTop: 18,
@@ -539,7 +581,7 @@ export default function ChallengeDetail() {
               gap: 8,
             }}
           >
-            <CheckCircle2 size={18} color="#FFFFFF" strokeWidth={2.4} />
+            <Gift size={18} color="#FFFFFF" strokeWidth={2.4} />
             <Text
               style={{
                 color: "#FFFFFF",
@@ -549,7 +591,7 @@ export default function ChallengeDetail() {
                 textTransform: "uppercase",
               }}
             >
-              Claim from rewards
+              Use this reward
             </Text>
             <ChevronRight size={16} color="#FFFFFF" strokeWidth={2.4} />
           </Pressable>
