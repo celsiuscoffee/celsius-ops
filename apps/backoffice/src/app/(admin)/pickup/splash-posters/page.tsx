@@ -261,12 +261,21 @@ export default function SplashPostersPage() {
     try {
       const res = await adminFetch("/api/pickup/products");
       const json = await res.json();
+      // /api/pickup/products returns { products, categories }. Products
+      // carry `category_id` (not `category`), so we resolve human-readable
+      // category names via the categories array — operators see "Coffee"
+      // not "coffee-hot-uuid".
+      const cats: Array<{ id: string; name: string }> = Array.isArray(json.categories)
+        ? json.categories
+        : [];
+      const catById = new Map(cats.map((c) => [String(c.id), String(c.name)] as const));
       if (Array.isArray(json.products)) {
+        type ApiProduct = { id: string; name: string; category_id?: string };
         setProducts(
-          (json.products as PickerProduct[]).map((p) => ({
-            id: String(p.id),
-            name: String(p.name),
-            category: p.category ?? null,
+          (json.products as ApiProduct[]).map((p) => ({
+            id:       String(p.id),
+            name:     String(p.name),
+            category: p.category_id ? (catById.get(String(p.category_id)) ?? p.category_id) : null,
           })),
         );
       } else {
@@ -278,6 +287,15 @@ export default function SplashPostersPage() {
       setProductsLoading(false);
     }
   };
+
+  // UI-only override for the deeplink picker's current mode. When null,
+  // the select derives its value from classifyDeeplink(form.deeplink).
+  // When the operator picks "Specific product…" or "Custom path…", we
+  // pin the mode here so the picker stays open even while form.deeplink
+  // is briefly empty (between choosing the mode and the product). Reset
+  // on openNew / openEdit so editing an existing poster classifies
+  // correctly from its saved deeplink.
+  const [deeplinkMode, setDeeplinkMode] = useState<"product" | "custom" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -300,6 +318,7 @@ export default function SplashPostersPage() {
 
   const openNew = () => {
     setForm(empty);
+    setDeeplinkMode(null);
     setShowForm(true);
   };
 
@@ -317,6 +336,7 @@ export default function SplashPostersPage() {
       composerState: p.composer_state ?? null,
       originalBgUrl: p.original_bg_url ?? null,
     });
+    setDeeplinkMode(null);
     setShowForm(true);
     // If this poster already deeplinks to a specific product, pre-warm
     // the catalog so the picker is ready when the modal opens.
@@ -1066,13 +1086,21 @@ export default function SplashPostersPage() {
                   Where tap navigates (optional)
                 </label>
                 {(() => {
-                  // Classify the currently-stored deeplink so the
-                  // <select> reflects what's actually saved. Editing
-                  // an existing poster lands on the correct option
-                  // without a JS round-trip.
+                  // The select's value comes from one of two sources:
+                  //   1. UI override (deeplinkMode) — set when the
+                  //      operator just picked "Specific product…" or
+                  //      "Custom path…" but hasn't typed/picked a value
+                  //      yet. form.deeplink is still empty here; without
+                  //      this override the select would snap back to
+                  //      "No deeplink" and the picker would disappear.
+                  //   2. Classification of the stored deeplink — used
+                  //      when editing an existing poster and as the
+                  //      stable resting state once a real value is set.
                   const classification = classifyDeeplink(form.deeplink);
                   const selectedSentinel =
-                    classification.kind === "none"    ? DEEPLINK_SENTINEL.NONE
+                      deeplinkMode === "product" ? DEEPLINK_SENTINEL.PRODUCT
+                    : deeplinkMode === "custom"  ? DEEPLINK_SENTINEL.CUSTOM
+                    : classification.kind === "none"    ? DEEPLINK_SENTINEL.NONE
                     : classification.kind === "static"  ? classification.value
                     : classification.kind === "product" ? DEEPLINK_SENTINEL.PRODUCT
                     : DEEPLINK_SENTINEL.CUSTOM;
@@ -1086,18 +1114,21 @@ export default function SplashPostersPage() {
                         onChange={(e) => {
                           const v = e.target.value;
                           if (v === DEEPLINK_SENTINEL.NONE) {
+                            setDeeplinkMode(null);
                             setForm((f) => ({ ...f, deeplink: "" }));
                             return;
                           }
                           if (v === DEEPLINK_SENTINEL.PRODUCT) {
-                            // Kick off the product fetch and clear the
-                            // path until the operator picks one — saves
-                            // a half-formed "/product/" from leaking.
+                            // Pin the picker open via the UI override,
+                            // kick off the product fetch, and clear the
+                            // path until the operator picks a product.
+                            setDeeplinkMode("product");
                             void ensureProducts();
                             setForm((f) => ({ ...f, deeplink: "" }));
                             return;
                           }
                           if (v === DEEPLINK_SENTINEL.CUSTOM) {
+                            setDeeplinkMode("custom");
                             // Keep existing value if it's already custom;
                             // otherwise blank so the input shows clearly.
                             setForm((f) => ({
@@ -1109,7 +1140,8 @@ export default function SplashPostersPage() {
                             }));
                             return;
                           }
-                          // Static page path.
+                          // Static page path — drop the UI override.
+                          setDeeplinkMode(null);
                           setForm((f) => ({ ...f, deeplink: v }));
                         }}
                         className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
