@@ -1037,25 +1037,33 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
               We'll text you a 6-digit code to verify it's you.
             </Text>
 
-            {/* Phone input row. The row is given an explicit height so
-                Text ("+60") and TextInput (the typed digits) share one
-                vertical lane and `items-center` actually centers both
-                against the same axis. Earlier we tried matching their
-                lineHeights, but iOS TextInput ignores lineHeight while
-                Text honors it — that's what made the digits look taller
-                and slightly higher than the +60 prefix. Fixing the row
-                height + zeroing the TextInput's vertical padding +
-                `includeFontPadding: false` for Android is the cross-
-                platform-stable answer. */}
+            {/* Phone input row. Both attempts at matching heights /
+                lineHeights failed on iOS because TextInput reports its
+                vertical metrics differently than Text. Instead of
+                fighting the platform, we now treat the "+60" as just
+                another span of typed text by rendering it inside an
+                absolutely-positioned overlay aligned to the start of
+                the input, then padding the TextInput's leading edge so
+                the typed digits start exactly where the +60 ends.
+                This way both characters use the SAME TextInput-style
+                rendering and metrics on both platforms. */}
             <View
-              className="bg-surface rounded-2xl border border-border px-4 flex-row items-center gap-2"
-              style={{ height: 56 }}
+              className="bg-surface rounded-2xl border border-border px-4 flex-row items-center"
+              style={{ height: 56, position: "relative" }}
             >
               <Text
-                className="text-muted-fg text-base"
+                pointerEvents="none"
                 style={{
-                  fontFamily: "SpaceGrotesk_500Medium",
+                  position: "absolute",
+                  left: 16,
+                  top: 0,
+                  bottom: 0,
+                  textAlignVertical: "center",
                   includeFontPadding: false,
+                  fontFamily: "SpaceGrotesk_500Medium",
+                  fontSize: 16,
+                  lineHeight: 56,
+                  color: "#8E8E93",
                 }}
               >
                 +60
@@ -1070,12 +1078,18 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                 placeholderTextColor="#8E8E93"
                 keyboardType="phone-pad"
                 autoFocus
-                className="flex-1 text-espresso text-base"
                 style={{
-                  fontFamily: "SpaceGrotesk_500Medium",
-                  includeFontPadding: false,
+                  flex: 1,
+                  // Push the cursor + typed digits past the +60 overlay
+                  // (~36px = "+60" glyph + 8px gap).
+                  paddingLeft: 36,
                   paddingTop: 0,
                   paddingBottom: 0,
+                  height: 56,
+                  fontFamily: "SpaceGrotesk_500Medium",
+                  fontSize: 16,
+                  color: "#160800",
+                  includeFontPadding: false,
                   textAlignVertical: "center",
                 }}
                 maxLength={11}
