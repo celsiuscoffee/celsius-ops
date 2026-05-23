@@ -645,16 +645,37 @@ export default function SplashPostersPage() {
                         <Crop className="h-3 w-3" />
                         Re-crop
                       </button>
-                      {/* AI compose / Edit composition — when the poster
-                          has saved composerState we reopen the composer
-                          with its original (pre-rasterise) bg and the
-                          stored layers so the operator can tweak text /
-                          colours / positions without re-running AI. When
-                          there's no prior state, this kicks off a fresh
-                          AI compose from the current (cropped) image. */}
+                      {/* AI compose / Edit composition — split paths:
+                          - With saved composerState: reopens the composer
+                            using composerState.bgUrl (clean, pre-rasterise)
+                            + the saved layers. No stacking risk.
+                          - Without composerState: hard-confirm before
+                            opening because the bg is whatever's in
+                            form.imageUrl, which may already have text
+                            baked in (legacy posters, previous AI compose
+                            before composer_state existed, designer
+                            uploads). Stacking would silently happen
+                            otherwise. The confirm forces the operator
+                            to either acknowledge "this image is clean"
+                            or back out to Re-crop a fresh photo first. */}
                       <button
                         type="button"
-                        onClick={() => setComposeSource(form.composerState?.bgUrl ?? form.imageUrl)}
+                        onClick={() => {
+                          if (form.composerState) {
+                            // Safe path — clean bg + stored layers.
+                            setComposeSource(form.composerState.bgUrl);
+                            return;
+                          }
+                          const ok = window.confirm(
+                            "AI compose adds NEW text on top of the background image.\n\n" +
+                            "If the current image already has text in it (e.g. you previously saved this poster, or it's a designed image with words), the new text will STACK on top — every save will keep doubling.\n\n" +
+                            "Continue ONLY if this image is a clean background photo with NO text.\n\n" +
+                            "OK = it's clean, open the composer.\n" +
+                            "Cancel = let me Re-crop with a fresh photo first."
+                          );
+                          if (!ok) return;
+                          setComposeSource(form.imageUrl);
+                        }}
                         className="absolute -bottom-3 left-[88px] flex items-center gap-1 rounded-md bg-terracotta px-2 py-1 text-[10px] font-semibold text-white shadow"
                         title={form.composerState ? "Edit composition (text, colours, positions)" : "Compose with AI"}
                       >
