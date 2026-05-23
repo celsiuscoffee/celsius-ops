@@ -2,21 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyOTP } from '@/lib/otp';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { signCustomerSession } from '@/lib/customer-jwt';
-import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { findOrCreateMember } from '@/lib/loyalty/member-direct';
+import { ensureNewMemberRewards } from '@/lib/loyalty/welcome';
 
-// Look up the member_id (if any) so the issued session token carries it.
-// Pre-first-order phones won't have a row yet — sub stays empty and is
-// filled in on a follow-up verify after the first order.
-async function lookupMemberId(phone: string): Promise<string | null> {
+/** Ensure the customer has a Supabase members row by the time the
+ *  session JWT is issued. Previously this route only did a lookup
+ *  (`lookupMemberId`) — for first-time signups that returned null,
+ *  the JWT was signed with `sub: null`, and downstream /me/* calls
+ *  fell back to a loyalty-service phone lookup. That fallback path
+ *  was brittle (broke any /me endpoint that didn't have the
+ *  fallback) and prevented immediate referral attribution on
+ *  brand-new signups. Now we always create the row up front; same
+ *  pattern the /api/loyalty/otp/verify proxy used. Falls safe to
+ *  null if creation fails — caller can retry later. */
+async function ensureMemberRow(phone: string): Promise<string | null> {
   try {
-    const sb = getSupabaseAdmin();
-    const { data } = await sb
-      .from('members')
-      .select('id')
-      .eq('phone', phone)
-      .maybeSingle();
-    return (data as { id?: string } | null)?.id ?? null;
-  } catch {
+    const member = await findOrCreateMember(phone);
+    if (!member?.id) return null;
+    // Welcome BOGO + any other new_member auto_issue rewards.
+    // Idempotent — checks issued_rewards first, so signing in
+    // repeatedly doesn't re-grant. Best-effort; failure here
+    // shouldn't block sign-in.
+    ensureNewMemberRewards(member.id).catch((e) => {
+      console.warn('[otp/verify] ensureNewMemberRewards failed:', e);
+    });
+    return member.id;
+  } catch (e) {
+    console.error('[otp/verify] ensureMemberRow failed:', e);
     return null;
   }
 }
@@ -47,7 +59,7 @@ export async function POST(request: NextRequest) {
         diff |= code.charCodeAt(i) ^ reviewerCode.charCodeAt(i);
       }
       if (diff === 0) {
-        const memberId = await lookupMemberId(phone);
+        const memberId = await ensureMemberRow(phone);
         const sessionToken = signCustomerSession({ memberId, phone });
         return NextResponse.json({ success: true, sessionToken });
       }
@@ -68,8 +80,11 @@ export async function POST(request: NextRequest) {
     }
     // Issue a customer session JWT alongside the OK response. Old
     // clients ignore the extra field; new clients send it back as a
-    // Bearer header on member-scoped calls.
-    const memberId = await lookupMemberId(phone);
+    // Bearer header on member-scoped calls. The session always
+    // carries a non-null memberId now (provided findOrCreateMember
+    // succeeded), so downstream /me/* calls don't need the loyalty-
+    // service fallback to resolve the member.
+    const memberId = await ensureMemberRow(phone);
     const sessionToken = signCustomerSession({ memberId, phone });
     return NextResponse.json({ success: true, sessionToken });
   } catch {
