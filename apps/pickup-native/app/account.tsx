@@ -1037,37 +1037,36 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
               We'll text you a 6-digit code to verify it's you.
             </Text>
 
-            {/* Phone input row. Both attempts at matching heights /
-                lineHeights failed on iOS because TextInput reports its
-                vertical metrics differently than Text. Instead of
-                fighting the platform, we now treat the "+60" as just
-                another span of typed text by rendering it inside an
-                absolutely-positioned overlay aligned to the start of
-                the input, then padding the TextInput's leading edge so
-                the typed digits start exactly where the +60 ends.
-                This way both characters use the SAME TextInput-style
-                rendering and metrics on both platforms. */}
+            {/* Phone input row. Final approach: render the "+60" as a
+                FAKE TextInput (editable=false) instead of a Text node
+                so iOS gives both pieces of typed text identical
+                rendering metrics — same baseline, same effective
+                glyph height, same kerning. fontVariant tabular-nums
+                locks the numeral widths so a "0" in the prefix and a
+                "0" in the typed digits render at exactly the same
+                width and height. */}
             <View
-              className="bg-surface rounded-2xl border border-border px-4 flex-row items-center"
-              style={{ height: 56, position: "relative" }}
+              className="bg-surface rounded-2xl border border-border px-4 flex-row items-baseline"
+              style={{ height: 56 }}
             >
-              <Text
-                pointerEvents="none"
+              <TextInput
+                value="+60"
+                editable={false}
                 style={{
-                  position: "absolute",
-                  left: 16,
-                  top: 0,
-                  bottom: 0,
-                  textAlignVertical: "center",
-                  includeFontPadding: false,
                   fontFamily: "SpaceGrotesk_500Medium",
                   fontSize: 16,
-                  lineHeight: 56,
                   color: "#8E8E93",
+                  paddingTop: 0,
+                  paddingBottom: 0,
+                  marginRight: 8,
+                  height: 56,
+                  textAlignVertical: "center",
+                  includeFontPadding: false,
+                  fontVariant: ["tabular-nums"],
                 }}
-              >
-                +60
-              </Text>
+                accessible={false}
+                pointerEvents="none"
+              />
               <TextInput
                 value={phoneInput.replace(/^(\+?60|0)/, "")}
                 onChangeText={(t) => {
@@ -1080,17 +1079,15 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                 autoFocus
                 style={{
                   flex: 1,
-                  // Push the cursor + typed digits past the +60 overlay
-                  // (~36px = "+60" glyph + 8px gap).
-                  paddingLeft: 36,
-                  paddingTop: 0,
-                  paddingBottom: 0,
-                  height: 56,
                   fontFamily: "SpaceGrotesk_500Medium",
                   fontSize: 16,
                   color: "#160800",
-                  includeFontPadding: false,
+                  paddingTop: 0,
+                  paddingBottom: 0,
+                  height: 56,
                   textAlignVertical: "center",
+                  includeFontPadding: false,
+                  fontVariant: ["tabular-nums"],
                 }}
                 maxLength={11}
                 accessibilityLabel="Phone number"
