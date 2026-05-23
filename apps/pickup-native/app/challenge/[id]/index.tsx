@@ -20,6 +20,7 @@ import { useApp } from "../../../lib/store";
 import {
   fetchActiveMissions,
   fetchMyVouchers,
+  voucherUrgencyLabel,
   type ActiveMission,
   type Voucher,
 } from "../../../lib/rewards-v2";
@@ -305,7 +306,7 @@ export default function ChallengeDetail() {
                 textTransform: "uppercase",
               }}
             >
-              You'll earn
+              {isCompleted ? "You earned" : "You'll earn"}
             </Text>
             <Text
               style={{
@@ -318,6 +319,30 @@ export default function ChallengeDetail() {
             >
               {linkedVoucher?.title ?? mission.reward_summary}
             </Text>
+            {/* Expiry hint — only shows after completion, once the
+                voucher is in the wallet with a real expires_at. Tells
+                the customer how long they have to spend the prize so
+                they don't let it lapse silently. Reuses
+                voucherUrgencyLabel so the copy matches the wallet
+                tile ("Expires in 13 days" / "Expires today"). */}
+            {isCompleted && linkedVoucher ? (() => {
+              const u = voucherUrgencyLabel(linkedVoucher);
+              if (!u.label) return null;
+              return (
+                <Text
+                  style={{
+                    marginTop: 6,
+                    fontFamily: "SpaceGrotesk_700Bold",
+                    fontSize: 11.5,
+                    letterSpacing: 0.4,
+                    color: u.warning ? "#B91C1C" : "#A37200",
+                  }}
+                  numberOfLines={1}
+                >
+                  {u.label}
+                </Text>
+              );
+            })() : null}
           </View>
         </View>
 
