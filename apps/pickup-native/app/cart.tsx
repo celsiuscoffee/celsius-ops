@@ -283,8 +283,8 @@ export default function Cart() {
                   <View className="flex-row justify-between items-start gap-2">
                     <Text
                       className="text-espresso text-[15px] flex-1"
-                      style={{ fontFamily: "Peachi-Bold" }}
-                      numberOfLines={1}
+                      style={{ fontFamily: "Peachi-Bold", lineHeight: 19 }}
+                      numberOfLines={2}
                     >
                       {item.name}
                     </Text>
