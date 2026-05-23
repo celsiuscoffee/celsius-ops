@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
     .from("splash_posters")
     .select("*")
     .eq("brand_id", "brand-celsius")
+    // Match the order the customer carousel uses, so the backoffice
+    // list reads top-to-bottom in the same sequence customers see.
+    .order("sort_order", { ascending: true, nullsFirst: false })
     .order("updated_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

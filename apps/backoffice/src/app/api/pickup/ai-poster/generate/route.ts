@@ -21,6 +21,7 @@ type TextLayerSuggestion = {
   size: number;        // headline 0.06-0.16, subhead 0.025-0.06
   align: "left" | "center" | "right";
   shadow?: number;     // 0 (none) - 1 (heavy). Boost when text contrast is weak.
+  font?: "peachi" | "space-grotesk"; // Peachi = serif heading, Space Grotesk = sans-serif.
 };
 
 type PosterSuggestion = {
@@ -51,6 +52,7 @@ INSTRUCTIONS:
   4. Do NOT invent new text. Only return what you can read. If the image has no readable text, return a single empty headline.
 
   5. SHADOW — if the visible text already has a drop shadow / outline / glow behind it (lifting it off the bg), set "shadow" to the strength you observe (light shadow ≈ 0.2-0.4, heavy ≈ 0.5-0.8). If the text sits flat on the photo with no shadow, return 0.
+  6. FONT — pick "peachi" if the visible letters have serifs / hand-drawn editorial character (the brand serif). Pick "space-grotesk" if the letters are geometric sans-serif (clean modern strokes, no serifs). When unsure, default to "peachi".
 
 Return STRICT JSON only — no prose, no markdown fences:
 
@@ -64,7 +66,8 @@ Return STRICT JSON only — no prose, no markdown fences:
     "color": "#RRGGBB",
     "size": 0.04-0.24,
     "align": "left" | "center" | "right",
-    "shadow": 0.0-1.0
+    "shadow": 0.0-1.0,
+    "font": "peachi" | "space-grotesk"
   },
   "subheads": [
     {
@@ -74,7 +77,8 @@ Return STRICT JSON only — no prose, no markdown fences:
       "color": "#RRGGBB",
       "size": 0.02-0.10,
       "align": "left" | "center" | "right",
-      "shadow": 0.0-1.0
+      "shadow": 0.0-1.0,
+      "font": "peachi" | "space-grotesk"
     }
   ]
 }`;
@@ -136,6 +140,8 @@ CHOOSING COLOURS — look at the calm area you'll place text on. For EACH text l
 
 SHADOW — each text layer can carry a drop-shadow strength (0-1) that lifts it off the bg. Default to 0 when contrast is already strong (white text on espresso photo, espresso text on cream surface). Set 0.3-0.5 when the bg is pale or busy enough that the text would otherwise feel muddy. Set 0.6-0.8 only when the layer sits directly on a high-detail area you couldn't reposition. Never use shadow as a substitute for picking the right colour — fix the colour first; shadow is the fallback.
 
+FONT — each text layer chooses between "peachi" (default serif, the brand heading font — warm, editorial, hand-feel) and "space-grotesk" (geometric sans-serif, modern + technical). Use "peachi" for the headline by default, especially for editorial / brand-story / specialty-coffee campaigns. Use "space-grotesk" when the campaign feels technical, app-launch, system-status, or pricing/numbers-focused (e.g. "Now serving 4 outlets", "v2 update is live") — or when the bg image is geometric/minimal and a sans reads cleaner than a serif. Subheads can mix: a Peachi headline often pairs well with a Space Grotesk subhead 2 (CTA / detail line) for visual rhythm.
+
 DECIDE HOW MANY SUBHEADS — for short offers, ALWAYS use the 3-layer stack (headline + 2 subheads) shown above. For longer headlines, 1 subhead is enough. Don't pad.
 
 BRAND VOICE — warm, casual, Malaysian English. Headline 1-4 words, punchy. Each subhead 1-8 words. No emojis.
@@ -152,7 +158,8 @@ Return STRICT JSON only — no prose, no markdown fences:
     "color": "#RRGGBB",
     "size": 0.06-0.22,
     "align": "left" | "center" | "right",
-    "shadow": 0.0-1.0
+    "shadow": 0.0-1.0,
+    "font": "peachi" | "space-grotesk"
   },
   "subheads": [
     {
@@ -162,7 +169,8 @@ Return STRICT JSON only — no prose, no markdown fences:
       "color": "#RRGGBB",
       "size": 0.025-0.08,
       "align": "left" | "center" | "right",
-      "shadow": 0.0-1.0
+      "shadow": 0.0-1.0,
+      "font": "peachi" | "space-grotesk"
     }
     // ... 1-3 items total
   ]
@@ -264,6 +272,9 @@ export async function POST(request: NextRequest) {
     const align = (s: unknown, fb: "left" | "center" | "right") => {
       return s === "left" || s === "center" || s === "right" ? s : fb;
     };
+    const fontChoice = (s: unknown, fb: "peachi" | "space-grotesk") => {
+      return s === "peachi" || s === "space-grotesk" ? s : fb;
+    };
 
     // Normalise subheads. Falls back to a single subhead if the model
     // returned the old "subhead" key. Capped at 3 — the layer tab UI
@@ -288,6 +299,7 @@ export async function POST(request: NextRequest) {
         size:   clamp(r.size, 0.02, 0.10, 0.04),
         align:  align(r.align, "center"),
         shadow: clamp(r.shadow, 0, 1, 0),
+        font:   fontChoice(r.font, "peachi"),
       };
     };
 
@@ -307,6 +319,7 @@ export async function POST(request: NextRequest) {
         size:   clamp(parsed.headline?.size, 0.04, 0.24, 0.1),
         align:  align(parsed.headline?.align, "center"),
         shadow: clamp(parsed.headline?.shadow, 0, 1, 0),
+        font:   fontChoice(parsed.headline?.font, "peachi"),
       },
       // Guarantee at least one subhead so the composer always has
       // something to drag / re-style.

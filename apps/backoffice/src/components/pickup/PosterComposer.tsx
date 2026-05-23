@@ -21,6 +21,18 @@ type TextLayer = {
   // composer_state JSON that doesn't carry the field; defaults to 0
   // when missing (i.e. no shadow).
   shadow?: number;
+  // Typeface — "peachi" (default serif, brand heading font) or
+  // "space-grotesk" (sans-serif secondary font). Pick whichever reads
+  // better against the bg. Optional for back-compat; defaults to
+  // "peachi" when missing.
+  font?: "peachi" | "space-grotesk";
+};
+
+// Concrete CSS font-family stack per choice. Single source of truth
+// shared by the preview and canvas raster.
+const FONT_STACK: Record<NonNullable<TextLayer["font"]>, string> = {
+  "peachi":        '"Peachi", Georgia, serif',
+  "space-grotesk": '"Space Grotesk", system-ui, sans-serif',
 };
 
 // Persisted composition state. Saved to splash_posters.composer_state so
@@ -53,6 +65,7 @@ const DEFAULT_STATE: State = {
     size: 0.1,
     align: "center",
     shadow: 0,
+    font: "peachi",
   },
   subheads: [
     {
@@ -63,6 +76,7 @@ const DEFAULT_STATE: State = {
       size: 0.035,
       align: "center",
       shadow: 0,
+      font: "peachi",
     },
   ],
 };
@@ -375,12 +389,17 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
     }
     setSaving(true);
     try {
-      // Make sure Peachi is loaded before drawing — text would otherwise
-      // fall back to serif on first render.
+      // Make sure each layer's font is actually loaded before drawing —
+      // text would otherwise fall back to a generic serif/sans on first
+      // render. We pre-load BOTH Peachi and Space Grotesk at the actual
+      // size+weight each layer uses, since the operator can mix fonts
+      // across the headline + subheads.
+      const fontFamily = (f: TextLayer["font"]) =>
+        f === "space-grotesk" ? '"Space Grotesk"' : '"Peachi"';
       await Promise.all([
-        document.fonts.load(`700 ${Math.round(state.headline.size * OUT_H)}px "Peachi"`),
+        document.fonts.load(`700 ${Math.round(state.headline.size * OUT_H)}px ${fontFamily(state.headline.font)}`),
         ...state.subheads.map((sh) =>
-          document.fonts.load(`500 ${Math.round(sh.size * OUT_H)}px "Peachi"`),
+          document.fonts.load(`500 ${Math.round(sh.size * OUT_H)}px ${fontFamily(sh.font)}`),
         ),
       ]).catch(() => {});
 
@@ -416,7 +435,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
         if (!layer.text) return;
         const fontSize = Math.round(layer.size * OUT_H);
         ctx.save();
-        ctx.font = `${weight} ${fontSize}px "Peachi", Georgia, serif`;
+        ctx.font = `${weight} ${fontSize}px ${FONT_STACK[layer.font ?? "peachi"]}`;
         ctx.fillStyle = layer.color;
         ctx.textAlign = layer.align;
         ctx.textBaseline = "middle";
@@ -708,7 +727,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                         state.headline.align === "center" ? "-50%" : state.headline.align === "right" ? "-100%" : "0"
                       }, -50%)`,
                       color: state.headline.color,
-                      fontFamily: '"Peachi", Georgia, serif',
+                      fontFamily: FONT_STACK[state.headline.font ?? "peachi"],
                       fontWeight: 700,
                       fontSize: `${headlineFontPx}px`,
                       lineHeight: 1.05,
@@ -742,7 +761,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                         layer.align === "center" ? "-50%" : layer.align === "right" ? "-100%" : "0"
                       }, -50%)`,
                       color: layer.color,
-                      fontFamily: '"Peachi", Georgia, serif',
+                      fontFamily: FONT_STACK[layer.font ?? "peachi"],
                       fontWeight: 500,
                       fontSize: `${fontPx}px`,
                       lineHeight: 1.05,
@@ -975,6 +994,36 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                         onChange={(e) => patch({ color: e.target.value })}
                         className="flex-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-mono"
                       />
+                    </div>
+                  </div>
+
+                  {/* Typeface — Peachi (serif, brand heading) or Space
+                      Grotesk (sans, modern + technical). Pick whichever
+                      reads better against the bg + matches the campaign
+                      mood. Per-layer so headline and subheads can mix. */}
+                  <div>
+                    <label className="text-[11px] font-medium text-gray-700">Font</label>
+                    <div className="mt-1 grid grid-cols-2 gap-1">
+                      {([
+                        { id: "peachi" as const,        label: "Peachi",        stack: FONT_STACK["peachi"] },
+                        { id: "space-grotesk" as const, label: "Space Grotesk", stack: FONT_STACK["space-grotesk"] },
+                      ]).map((f) => {
+                        const active = (selectedLayer.font ?? "peachi") === f.id;
+                        return (
+                          <button
+                            key={f.id}
+                            onClick={() => patch({ font: f.id })}
+                            className={`rounded-md border px-2 py-1.5 text-[11px] font-semibold ${
+                              active
+                                ? "border-terracotta bg-terracotta/10 text-terracotta"
+                                : "border-gray-200 text-gray-600"
+                            }`}
+                            style={{ fontFamily: f.stack }}
+                          >
+                            {f.label}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 

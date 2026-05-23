@@ -1,5 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Space Grotesk — the secondary brand font, used in the poster composer
+   alongside Peachi. Loaded from Google Fonts so the browser caches the
+   binary across the org's other Next.js apps. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
 
 @source "../../../../packages/ui/src";
 

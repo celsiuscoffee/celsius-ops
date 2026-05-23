@@ -12,6 +12,8 @@ import {
   Clock,
   Crop,
   Sparkles,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { useConfirm, toast } from "@celsius/ui";
@@ -296,6 +298,45 @@ export default function SplashPostersPage() {
     }
   };
 
+  // Move a poster up or down within its placement bucket. The carousel
+  // on the customer home page renders in sort_order ascending, so "up"
+  // here = appears earlier in the rotation. Reorder POST sends the full
+  // sequence (within the same placement) so the server can rewrite
+  // sort_order in one pass with stable 10-step increments.
+  const reorder = async (p: Poster, direction: "up" | "down") => {
+    const placement = p.placement ?? "home";
+    const peers = posters.filter((q) => (q.placement ?? "home") === placement);
+    const idx = peers.findIndex((q) => q.id === p.id);
+    if (idx < 0) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= peers.length) return;
+
+    const next = peers.slice();
+    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+    const orderedIds = next.map((q) => q.id);
+
+    // Optimistic local update so the UI moves instantly; load() reconciles.
+    setPosters((prev) => {
+      const byId = new Map(prev.map((q) => [q.id, q] as const));
+      const reorderedInBucket = next;
+      const others = prev.filter((q) => (q.placement ?? "home") !== placement);
+      return [...reorderedInBucket, ...others].map((q) => byId.get(q.id) ?? q);
+    });
+
+    try {
+      const res = await adminFetch("/api/pickup/splash-posters/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedIds }),
+      });
+      if (!res.ok) throw new Error("Reorder failed");
+      load();
+    } catch {
+      toast.error("Couldn't reorder — refreshing.");
+      load();
+    }
+  };
+
   const del = async (p: Poster) => {
     const ok = await confirm({
       title: "Delete poster?",
@@ -450,6 +491,38 @@ export default function SplashPostersPage() {
                     </span>
                   )}
                 </div>
+                {/* Reorder controls — operator clicks ↑ / ↓ to nudge
+                    a poster earlier or later in the home carousel
+                    rotation. Up = appears sooner, Down = appears later.
+                    Disabled at the bucket boundaries. Placement label
+                    bucket (splash vs home) is preserved; reorder only
+                    moves within the same placement. */}
+                {(() => {
+                  const peers = posters.filter((q) => (q.placement ?? "home") === placement);
+                  const peerIdx = peers.findIndex((q) => q.id === p.id);
+                  const canUp = peerIdx > 0;
+                  const canDown = peerIdx >= 0 && peerIdx < peers.length - 1;
+                  return (
+                    <div className="absolute right-2 top-2 flex flex-col gap-1">
+                      <button
+                        onClick={() => reorder(p, "up")}
+                        disabled={!canUp}
+                        title="Move up in the carousel"
+                        className="flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm hover:bg-black/75 disabled:opacity-30"
+                      >
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => reorder(p, "down")}
+                        disabled={!canDown}
+                        title="Move down in the carousel"
+                        className="flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm hover:bg-black/75 disabled:opacity-30"
+                      >
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
               <div className="p-3">
                 <p className="truncate text-sm font-semibold text-gray-900">

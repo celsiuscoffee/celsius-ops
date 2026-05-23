@@ -20,11 +20,15 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from("splash_posters")
-      .select("id, image_url, title, deeplink, duration_ms, starts_at, ends_at")
+      .select("id, image_url, title, deeplink, duration_ms, starts_at, ends_at, sort_order")
       .eq("brand_id", brandId)
       .eq("active", true)
       // Home carousel only — splash posters stay on the launch screen.
       .eq("placement", "home")
+      // Operator-controlled sequence first (lower number = appears earlier
+      // in the carousel rotation). NULL sort_order is treated as "unordered"
+      // and falls to the back of the rotation, ordered by recency.
+      .order("sort_order", { ascending: true, nullsFirst: false })
       .order("updated_at", { ascending: false });
 
     if (error) {
