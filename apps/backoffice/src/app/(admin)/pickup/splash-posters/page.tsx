@@ -183,6 +183,48 @@ function shortDate(iso: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+// ---- Deeplink picker helpers -------------------------------------------
+// The poster's deeplink is whatever string the customer app passes to
+// router.push(). We surface a curated dropdown of the common targets so
+// operators don't have to remember path syntax or hunt for product IDs.
+// The selected value still serialises to a plain string path on the wire.
+const STATIC_DEEPLINK_PAGES: { value: string; label: string }[] = [
+  { value: "/",              label: "Home" },
+  { value: "/menu",          label: "Menu" },
+  { value: "/rewards",       label: "Rewards" },
+  { value: "/tier-benefits", label: "Tier benefits" },
+  { value: "/store",         label: "Outlets / Store info" },
+  { value: "/referral",      label: "Referral · Invite friends" },
+  { value: "/orders",        label: "My orders" },
+  { value: "/account",       label: "Account" },
+  { value: "/cart",          label: "Cart" },
+  { value: "/support",       label: "Support" },
+  { value: "/wrapped",       label: "Annual rewind (Wrapped)" },
+];
+
+// Sentinels for the <select> — kept separate from real paths so we can
+// distinguish "the operator picked Product…" from "the operator wrote
+// the literal path /product".
+const DEEPLINK_SENTINEL = {
+  NONE:    "__none__",
+  PRODUCT: "__product__",
+  CUSTOM:  "__custom__",
+} as const;
+
+// Map a stored deeplink string back to the right select option so the
+// form rehydrates correctly when editing an existing poster.
+function classifyDeeplink(d: string): { kind: "none" } | { kind: "static"; value: string } | { kind: "product"; id: string } | { kind: "custom" } {
+  if (!d) return { kind: "none" };
+  const m = d.match(/^\/product\/([^/?#]+)/);
+  if (m) return { kind: "product", id: m[1] };
+  if (STATIC_DEEPLINK_PAGES.some((p) => p.value === d)) {
+    return { kind: "static", value: d };
+  }
+  return { kind: "custom" };
+}
+
+type PickerProduct = { id: string; name: string; category: string | null };
+
 export default function SplashPostersPage() {
   const [posters, setPosters] = useState<Poster[]>([]);
   const [loading, setLoading] = useState(true);
@@ -208,6 +250,34 @@ export default function SplashPostersPage() {
   // while the composer is open. When it returns a flattened JPEG, we send
   // it through the same handleUpload pipeline as a manual upload.
   const [composeSource, setComposeSource] = useState<string | null>(null);
+  // Product cache for the deeplink picker. Lazily fetched the first
+  // time the operator chooses "Specific product…" from the deeplink
+  // dropdown — keeps the splash-posters page fast on initial load.
+  const [products, setProducts] = useState<PickerProduct[] | null>(null);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const ensureProducts = async () => {
+    if (products || productsLoading) return;
+    setProductsLoading(true);
+    try {
+      const res = await adminFetch("/api/pickup/products");
+      const json = await res.json();
+      if (Array.isArray(json.products)) {
+        setProducts(
+          (json.products as PickerProduct[]).map((p) => ({
+            id: String(p.id),
+            name: String(p.name),
+            category: p.category ?? null,
+          })),
+        );
+      } else {
+        setProducts([]);
+      }
+    } catch {
+      setProducts([]);
+    } finally {
+      setProductsLoading(false);
+    }
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -248,6 +318,11 @@ export default function SplashPostersPage() {
       originalBgUrl: p.original_bg_url ?? null,
     });
     setShowForm(true);
+    // If this poster already deeplinks to a specific product, pre-warm
+    // the catalog so the picker is ready when the modal opens.
+    if (classifyDeeplink(p.deeplink ?? "").kind === "product") {
+      void ensureProducts();
+    }
   };
 
   // Clone an existing poster into a new draft. Copies image, composition,
@@ -988,17 +1063,158 @@ export default function SplashPostersPage() {
 
               <div>
                 <label className="text-xs font-medium text-gray-700">
-                  Deeplink (optional, where tap navigates)
+                  Where tap navigates (optional)
                 </label>
-                <input
-                  type="text"
-                  value={form.deeplink}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, deeplink: e.target.value }))
-                  }
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                  placeholder="/menu  or  /product/[id]  or  /rewards"
-                />
+                {(() => {
+                  // Classify the currently-stored deeplink so the
+                  // <select> reflects what's actually saved. Editing
+                  // an existing poster lands on the correct option
+                  // without a JS round-trip.
+                  const classification = classifyDeeplink(form.deeplink);
+                  const selectedSentinel =
+                    classification.kind === "none"    ? DEEPLINK_SENTINEL.NONE
+                    : classification.kind === "static"  ? classification.value
+                    : classification.kind === "product" ? DEEPLINK_SENTINEL.PRODUCT
+                    : DEEPLINK_SENTINEL.CUSTOM;
+                  const selectedProductId =
+                    classification.kind === "product" ? classification.id : "";
+
+                  return (
+                    <>
+                      <select
+                        value={selectedSentinel}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === DEEPLINK_SENTINEL.NONE) {
+                            setForm((f) => ({ ...f, deeplink: "" }));
+                            return;
+                          }
+                          if (v === DEEPLINK_SENTINEL.PRODUCT) {
+                            // Kick off the product fetch and clear the
+                            // path until the operator picks one — saves
+                            // a half-formed "/product/" from leaking.
+                            void ensureProducts();
+                            setForm((f) => ({ ...f, deeplink: "" }));
+                            return;
+                          }
+                          if (v === DEEPLINK_SENTINEL.CUSTOM) {
+                            // Keep existing value if it's already custom;
+                            // otherwise blank so the input shows clearly.
+                            setForm((f) => ({
+                              ...f,
+                              deeplink:
+                                classifyDeeplink(f.deeplink).kind === "custom"
+                                  ? f.deeplink
+                                  : "",
+                            }));
+                            return;
+                          }
+                          // Static page path.
+                          setForm((f) => ({ ...f, deeplink: v }));
+                        }}
+                        className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value={DEEPLINK_SENTINEL.NONE}>
+                          — No deeplink (tap does nothing) —
+                        </option>
+                        <optgroup label="Pages">
+                          {STATIC_DEEPLINK_PAGES.map((p) => (
+                            <option key={p.value} value={p.value}>
+                              {p.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Dynamic">
+                          <option value={DEEPLINK_SENTINEL.PRODUCT}>
+                            Specific product…
+                          </option>
+                          <option value={DEEPLINK_SENTINEL.CUSTOM}>
+                            Custom path…
+                          </option>
+                        </optgroup>
+                      </select>
+
+                      {/* Product picker — shown only when "Specific
+                          product…" is selected. Loads the catalog
+                          lazily so the form stays fast otherwise. */}
+                      {selectedSentinel === DEEPLINK_SENTINEL.PRODUCT && (
+                        <div className="mt-2">
+                          {productsLoading ? (
+                            <div className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-500">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              Loading product catalog…
+                            </div>
+                          ) : products && products.length > 0 ? (
+                            <select
+                              value={selectedProductId}
+                              onChange={(e) => {
+                                const id = e.target.value;
+                                setForm((f) => ({
+                                  ...f,
+                                  deeplink: id ? `/product/${id}` : "",
+                                }));
+                              }}
+                              onFocus={() => void ensureProducts()}
+                              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                            >
+                              <option value="">— Pick a product —</option>
+                              {(() => {
+                                // Group by category so a long list scans
+                                // easily ("Coffee", "Tea", "Bites", …).
+                                const byCat = new Map<string, PickerProduct[]>();
+                                for (const p of products) {
+                                  const cat = p.category || "Other";
+                                  const arr = byCat.get(cat) ?? [];
+                                  arr.push(p);
+                                  byCat.set(cat, arr);
+                                }
+                                return [...byCat.entries()]
+                                  .sort(([a], [b]) => a.localeCompare(b))
+                                  .map(([cat, items]) => (
+                                    <optgroup key={cat} label={cat}>
+                                      {items
+                                        .slice()
+                                        .sort((a, b) => a.name.localeCompare(b.name))
+                                        .map((p) => (
+                                          <option key={p.id} value={p.id}>
+                                            {p.name}
+                                          </option>
+                                        ))}
+                                    </optgroup>
+                                  ));
+                              })()}
+                            </select>
+                          ) : (
+                            <p className="rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-500">
+                              No products available.
+                            </p>
+                          )}
+                          {form.deeplink && (
+                            <p className="mt-1 text-[10px] text-gray-400">
+                              Resolved path: <code className="font-mono">{form.deeplink}</code>
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Custom-path escape hatch — for power users
+                          targeting routes the dropdown doesn't cover
+                          (challenge swap, debug routes, etc). */}
+                      {selectedSentinel === DEEPLINK_SENTINEL.CUSTOM && (
+                        <input
+                          type="text"
+                          value={form.deeplink}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, deeplink: e.target.value }))
+                          }
+                          className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono"
+                          placeholder="/challenge/abc/swap"
+                          autoFocus
+                        />
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               <div>
