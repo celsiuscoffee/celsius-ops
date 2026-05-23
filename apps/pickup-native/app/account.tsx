@@ -1037,17 +1037,24 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
               We'll text you a 6-digit code to verify it's you.
             </Text>
 
-            <View className="bg-surface rounded-2xl border border-border px-4 py-3 flex-row items-center gap-2">
+            {/* Phone input row. The row is given an explicit height so
+                Text ("+60") and TextInput (the typed digits) share one
+                vertical lane and `items-center` actually centers both
+                against the same axis. Earlier we tried matching their
+                lineHeights, but iOS TextInput ignores lineHeight while
+                Text honors it — that's what made the digits look taller
+                and slightly higher than the +60 prefix. Fixing the row
+                height + zeroing the TextInput's vertical padding +
+                `includeFontPadding: false` for Android is the cross-
+                platform-stable answer. */}
+            <View
+              className="bg-surface rounded-2xl border border-border px-4 flex-row items-center gap-2"
+              style={{ height: 56 }}
+            >
               <Text
                 className="text-muted-fg text-base"
                 style={{
                   fontFamily: "SpaceGrotesk_500Medium",
-                  // Match the TextInput's effective baseline so "+60"
-                  // and the typed digits sit on the same line. Android
-                  // TextInput ships with a few px of `includeFontPadding`
-                  // at the top, which used to bump the digits ~3px
-                  // lower than the "+60" prefix.
-                  lineHeight: 20,
                   includeFontPadding: false,
                 }}
               >
@@ -1066,10 +1073,6 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                 className="flex-1 text-espresso text-base"
                 style={{
                   fontFamily: "SpaceGrotesk_500Medium",
-                  // Strip Android's font padding + TextInput's default
-                  // vertical padding so the typed digits share a
-                  // baseline with the "+60" prefix.
-                  lineHeight: 20,
                   includeFontPadding: false,
                   paddingTop: 0,
                   paddingBottom: 0,
