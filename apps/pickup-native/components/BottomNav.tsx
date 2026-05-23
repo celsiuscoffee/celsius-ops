@@ -25,9 +25,9 @@ type Tab = {
 // it reads as the page the customer most often wants to land on.
 const TABS: Tab[] = [
   { key: "home",    label: "Home",    href: "/",         icon: Home,          matches: (p) => p === "/" },
-  { key: "orders",  label: "Orders",  href: "/orders",   icon: ClipboardList, matches: (p) => p.startsWith("/orders") || p.startsWith("/order/") },
-  { key: "menu",    label: "Menu",    href: "/menu",     icon: null,          matches: (p) => p.startsWith("/menu") || p.startsWith("/product") },
   { key: "rewards", label: "Rewards", href: "/rewards",  icon: Gift,          matches: (p) => p === "/rewards" },
+  { key: "menu",    label: "Menu",    href: "/menu",     icon: null,          matches: (p) => p.startsWith("/menu") || p.startsWith("/product") },
+  { key: "orders",  label: "Orders",  href: "/orders",   icon: ClipboardList, matches: (p) => p.startsWith("/orders") || p.startsWith("/order/") },
   { key: "account", label: "Account", href: "/account",  icon: User,          matches: (p) => p === "/account" },
 ];
 
