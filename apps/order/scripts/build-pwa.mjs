@@ -47,16 +47,23 @@ if (!(await exists(PICKUP_NATIVE))) {
 // apps/pickup-native is NOT in the root package.json workspaces list
 // (Expo + Metro have their own dep-resolution expectations). The root
 // `npm install` Vercel runs therefore won't populate its node_modules.
-// Install once when absent. Local dev keeps deps warm so this no-ops.
-if (!(await exists(resolve(PICKUP_NATIVE, "node_modules")))) {
-  console.log("[build-pwa] Installing pickup-native deps (first run)…");
-  // --include=dev forces devDependencies even when NODE_ENV=production
-  // (Vercel build context). patch-package itself is in regular deps as
-  // a belt-and-braces guard against that flag being ignored.
-  await exec("npm", ["install", "--no-audit", "--no-fund", "--include=dev"], {
-    cwd: PICKUP_NATIVE,
-  });
-}
+//
+// We run `npm install` UNCONDITIONALLY here, not just when node_modules
+// is absent. Vercel restores node_modules from cache between builds,
+// and the cached folder can be stale relative to package.json — e.g.
+// after a new dep is added in a commit (react-native-webview 13.15.0
+// for the RM in-app checkout modal), cache still has the older snapshot
+// without that package, and Metro then fails to resolve it during
+// `expo export -p web`, taking the whole celsius-pickup-app deploy
+// down. `npm install` is a fast no-op when everything is already in
+// sync (~2-5s), so this safety net is cheap.
+console.log("[build-pwa] Syncing pickup-native deps (npm install)…");
+// --include=dev forces devDependencies even when NODE_ENV=production
+// (Vercel build context). patch-package itself is in regular deps as
+// a belt-and-braces guard against that flag being ignored.
+await exec("npm", ["install", "--no-audit", "--no-fund", "--include=dev"], {
+  cwd: PICKUP_NATIVE,
+});
 
 // Mirror NEXT_PUBLIC_* env vars to EXPO_PUBLIC_* so the Expo bundle can
 // read the same secrets (VAPID public key, Stripe publishable, Supabase
