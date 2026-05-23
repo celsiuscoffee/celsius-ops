@@ -912,6 +912,11 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
   const [phoneInput, setPhoneInput] = useState("");
   const [code, setCode] = useState("");
   const [referralCode, setReferralCode] = useState(""); // optional — only sent post-verify
+  // Populated by /api/otp/send. true → this phone has zero paid orders
+  // and is eligible to attribute a referral code. false → returning
+  // customer (hide the referral field; the server would reject anyway).
+  // null → we don't know yet (before the OTP is requested).
+  const [isNewMember, setIsNewMember] = useState<boolean | null>(null);
   const [normalised, setNormalised] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -949,8 +954,13 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
     setLoading(true);
     const norm = normalisePhone(phoneInput);
     try {
-      await api.sendOtp(norm);
+      const res = await api.sendOtp(norm);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // is_new_member comes from the send-OTP route. Defaults to
+      // true if absent so legacy server builds (which don't return
+      // the flag) still surface the referral field rather than
+      // hiding it for everyone.
+      setIsNewMember(res?.is_new_member ?? true);
       setNormalised(norm);
       setStep("code");
     } catch (e: any) {
@@ -986,8 +996,14 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
       // Optional referral attribution — best-effort, doesn't block sign-in.
       // The session JWT is set by verifyOtp so the attribute endpoint can
       // resolve the new member's id from the Bearer header.
+      //
+      // Only attempt for genuinely new members (no paid orders). The
+      // server enforces the same rule (attributeReferralOnSignup will
+      // reject with reason='not_new'), but skipping the call client-side
+      // avoids a misleading 400 in the network log for returning
+      // customers who happened to type something in the field.
       const ref = referralCode.trim().toUpperCase();
-      if (ref) {
+      if (ref && isNewMember !== false) {
         try {
           const { submitReferralCode } = await import("../lib/rewards-v2");
           await submitReferralCode(ref);
@@ -1235,35 +1251,40 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
               </Text>
             )}
 
-            {/* Optional referral code — only attributes on first sign-in.
-                Customers who used a code see both sides land a free drink
-                voucher after their first paid order. */}
-            <View className="mt-4">
-              <Text
-                className="text-muted-fg text-[10px] uppercase tracking-widest mb-1.5"
-                style={{ fontFamily: "SpaceGrotesk_700Bold" }}
-              >
-                Have a referral code? (optional)
-              </Text>
-              <TextInput
-                value={referralCode}
-                onChangeText={(t) => setReferralCode(t.toUpperCase().replace(/\s/g, "").slice(0, 12))}
-                placeholder="e.g. CCABCD"
-                placeholderTextColor="#C5C5C8"
-                autoCapitalize="characters"
-                className="text-espresso text-base"
-                style={{
-                  fontFamily: "Peachi-Bold",
-                  letterSpacing: 3,
-                  textAlign: "center",
-                  borderWidth: 1,
-                  borderColor: "rgba(26,2,0,0.10)",
-                  borderRadius: 12,
-                  paddingVertical: 12,
-                  backgroundColor: "#FFFFFF",
-                }}
-              />
-            </View>
+            {/* Optional referral code — only attributes on first
+                sign-in. Customers who used a code see both sides land
+                a free-drink voucher after their first paid order.
+                Hidden for returning members (isNewMember === false)
+                so they don't try to use a code and get rejected; the
+                server enforces the same rule as the source of truth. */}
+            {isNewMember !== false && (
+              <View className="mt-4">
+                <Text
+                  className="text-muted-fg text-[10px] uppercase tracking-widest mb-1.5"
+                  style={{ fontFamily: "SpaceGrotesk_700Bold" }}
+                >
+                  Have a referral code? (optional)
+                </Text>
+                <TextInput
+                  value={referralCode}
+                  onChangeText={(t) => setReferralCode(t.toUpperCase().replace(/\s/g, "").slice(0, 12))}
+                  placeholder="e.g. CCABCD"
+                  placeholderTextColor="#C5C5C8"
+                  autoCapitalize="characters"
+                  className="text-espresso text-base"
+                  style={{
+                    fontFamily: "Peachi-Bold",
+                    letterSpacing: 3,
+                    textAlign: "center",
+                    borderWidth: 1,
+                    borderColor: "rgba(26,2,0,0.10)",
+                    borderRadius: 12,
+                    paddingVertical: 12,
+                    backgroundColor: "#FFFFFF",
+                  }}
+                />
+              </View>
+            )}
 
             <Pressable
               disabled={loading || code.length < 4}

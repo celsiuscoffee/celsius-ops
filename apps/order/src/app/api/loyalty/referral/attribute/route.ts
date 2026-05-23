@@ -23,7 +23,28 @@ export async function POST(req: NextRequest) {
     code,
   });
   if (!result.ok) {
-    return NextResponse.json({ error: "Invalid or already-used referral code" }, { status: 400 });
+    // Map structured reason → customer-facing message. Reason is also
+    // returned in the body so the client can decide whether to show
+    // the error inline, silently swallow it, or hide the field on
+    // future renders.
+    const messageFor = (reason: typeof result.reason) => {
+      switch (reason) {
+        case "self":
+          return "You can't use your own referral code.";
+        case "not_new":
+          return "Referral codes can only be used on a brand-new account.";
+        case "duplicate":
+          return "You've already used a referral code on this account.";
+        case "not_found":
+          return "That referral code doesn't exist.";
+        default:
+          return "Couldn't apply the referral code. Try again in a moment.";
+      }
+    };
+    return NextResponse.json(
+      { error: messageFor(result.reason), reason: result.reason ?? "error" },
+      { status: 400 },
+    );
   }
   return NextResponse.json({ ok: true });
 }

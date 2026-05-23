@@ -289,20 +289,51 @@ export async function getOrCreateReferralCode(memberId: string): Promise<string 
 }
 
 /** Record a pending attribution when a new member signs up using a code.
- *  Idempotent on referee_id (a member can only be referred once). */
+ *  Idempotent on referee_id (a member can only be referred once).
+ *
+ *  Returns a structured failure reason so the API route can return a
+ *  clearer error message and the client can decide what to show:
+ *   - not_found   → code doesn't match any active referrer
+ *   - self        → referee tried to use their own code
+ *   - not_new     → referee already has paid orders (the referral
+ *                   bonus is only meant for genuinely new customers)
+ *   - duplicate   → referee already has an attribution row from a
+ *                   prior code (DB UNIQUE on referee_id)
+ *   - error       → generic insert failure
+ */
 export async function attributeReferralOnSignup(args: {
   refereeId: string;
   code: string;
-}): Promise<{ ok: boolean; referrerId?: string }> {
+}): Promise<{
+  ok: boolean;
+  referrerId?: string;
+  reason?: "not_found" | "self" | "not_new" | "duplicate" | "error";
+}> {
   const supabase = getSupabaseAdmin();
   const { data: refRow } = await supabase
     .from("referral_codes")
     .select("member_id")
     .eq("code", args.code)
     .single();
-  if (!refRow || refRow.member_id === args.refereeId) {
-    return { ok: false };
+  if (!refRow) return { ok: false, reason: "not_found" };
+  if (refRow.member_id === args.refereeId) return { ok: false, reason: "self" };
+
+  // Eligibility guard: the referee must be a genuinely new customer.
+  // Without this, an existing customer with N prior orders could sign
+  // out, sign back in, type a friend's code, and farm a referee bonus
+  // on their (N+1)th order — and the referrer would also get credit
+  // for "bringing in" someone who was already a paying customer.
+  // Counts orders in any post-payment state (preparing / ready /
+  // completed). pending / failed / cancelled don't count.
+  const { count: priorPaidOrders } = await supabase
+    .from("orders")
+    .select("id", { count: "exact", head: true })
+    .eq("loyalty_id", args.refereeId)
+    .in("status", ["preparing", "ready", "completed"]);
+  if ((priorPaidOrders ?? 0) > 0) {
+    return { ok: false, reason: "not_new" };
   }
+
   const { error } = await supabase
     .from("referral_attributions")
     .insert({
@@ -312,7 +343,14 @@ export async function attributeReferralOnSignup(args: {
       referral_code: args.code,
       status: "pending",
     });
-  if (error) return { ok: false };
+  if (error) {
+    // 23505 = unique_violation on referee_id (the member has been
+    // attributed before, whether or not the prior attribution paid out).
+    if ((error as { code?: string }).code === "23505") {
+      return { ok: false, reason: "duplicate" };
+    }
+    return { ok: false, reason: "error" };
+  }
   return { ok: true, referrerId: refRow.member_id as string };
 }
 

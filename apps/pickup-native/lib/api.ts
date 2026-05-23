@@ -53,7 +53,15 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function postOtp(path: string, body: unknown) {
-  const res = await post<{ success: boolean; error?: string; sessionToken?: string }>(path, body);
+  const res = await post<{
+    success: boolean;
+    error?: string;
+    sessionToken?: string;
+    /** Set on /api/otp/send only — `true` when the supplied phone has
+     *  no paid orders yet (eligible for the referral signup bonus).
+     *  The send-OTP route's `isReturningCustomer` lookup populates it. */
+    is_new_member?: boolean;
+  }>(path, body);
   if (!res.success) throw new Error(res.error || "Request failed");
   // OTP verify returns a sessionToken on success — persist it so
   // every subsequent member-scoped call sends it as a Bearer header.
