@@ -193,9 +193,12 @@ export default function SplashPostersPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   // Surface filter — defaults to "all". 'splash' shows splash + both,
-  // 'home' shows home + both — i.e. each tab matches what the customer
-  // would actually see on that surface.
-  const [tab, setTab] = useState<"all" | Placement>("all");
+  // Defaults to "home" since that's where most posters live (the
+  // home carousel rotates all active posters; splash only shows the
+  // most-recent active). Two-tab filter — the "All" combined view
+  // wasn't useful in practice once each placement got its own
+  // bucket-scoped sort_order.
+  const [tab, setTab] = useState<Placement>("home");
   // Crop-flow source. When the user picks a file (or hits "Re-crop"
   // on an existing image), we put it here and open the cropper. The
   // cropped output flows back through handleUpload so the rest of the
@@ -473,17 +476,15 @@ export default function SplashPostersPage() {
         </button>
       </div>
 
-      {/* Surface filter — counts shown per tab so an operator scanning
-          'home' sees how many are scheduled there at a glance. Posters
-          tagged 'both' count toward both splash and home tabs since
-          they actually appear on both surfaces. */}
+      {/* Surface filter — Home / Splash only. Counts shown per tab so
+          an operator scanning the list knows how many are scheduled on
+          each surface at a glance. */}
       {!loading && posters.length > 0 && (() => {
         const splashCount = posters.filter((p) => (p.placement ?? "home") === "splash").length;
         const homeCount   = posters.filter((p) => (p.placement ?? "home") === "home").length;
-        const tabs: { id: "all" | Placement; label: string; count: number }[] = [
-          { id: "all",    label: "All",    count: posters.length },
-          { id: "splash", label: "Splash", count: splashCount },
+        const tabs: { id: Placement; label: string; count: number }[] = [
           { id: "home",   label: "Home",   count: homeCount   },
+          { id: "splash", label: "Splash", count: splashCount },
         ];
         return (
           <div className="mb-4 flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
@@ -509,11 +510,10 @@ export default function SplashPostersPage() {
 
       {(() => {
         // Filtering rule: 'splash' tab shows posters whose placement is
-        // 'splash' or 'both' (i.e. anything that actually shows on the
-        // splash surface). Same logic for 'home'. 'all' is unfiltered.
-        const filtered = tab === "all"
-          ? posters
-          : posters.filter((p) => (p.placement ?? "home") === tab);
+        // Filter by selected placement bucket. Splash and home are
+        // exclusive — splash shows the most-recent active poster on
+        // launch, home rotates active home posters in the carousel.
+        const filtered = posters.filter((p) => (p.placement ?? "home") === tab);
 
         if (loading) {
           return (
