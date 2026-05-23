@@ -1040,7 +1040,16 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
             <View className="bg-surface rounded-2xl border border-border px-4 py-3 flex-row items-center gap-2">
               <Text
                 className="text-muted-fg text-base"
-                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                style={{
+                  fontFamily: "SpaceGrotesk_500Medium",
+                  // Match the TextInput's effective baseline so "+60"
+                  // and the typed digits sit on the same line. Android
+                  // TextInput ships with a few px of `includeFontPadding`
+                  // at the top, which used to bump the digits ~3px
+                  // lower than the "+60" prefix.
+                  lineHeight: 20,
+                  includeFontPadding: false,
+                }}
               >
                 +60
               </Text>
@@ -1055,7 +1064,17 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
                 keyboardType="phone-pad"
                 autoFocus
                 className="flex-1 text-espresso text-base"
-                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                style={{
+                  fontFamily: "SpaceGrotesk_500Medium",
+                  // Strip Android's font padding + TextInput's default
+                  // vertical padding so the typed digits share a
+                  // baseline with the "+60" prefix.
+                  lineHeight: 20,
+                  includeFontPadding: false,
+                  paddingTop: 0,
+                  paddingBottom: 0,
+                  textAlignVertical: "center",
+                }}
                 maxLength={11}
                 accessibilityLabel="Phone number"
               />
