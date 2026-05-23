@@ -14,6 +14,7 @@ import {
   Sparkles,
   ChevronUp,
   ChevronDown,
+  Copy,
 } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { useConfirm, toast } from "@celsius/ui";
@@ -37,6 +38,11 @@ type Poster = {
   // Editable composition state — present when the poster was created
   // via AI compose. Null for plain manual uploads.
   composer_state: ComposerState | null;
+  // The clean pre-flatten bg URL from the operator's last Re-crop. Set
+  // by manual upload, never touched by AI compose save. Acts as a
+  // canonical anchor so AI compose can reopen on a clean image even
+  // when composer_state is missing (legacy posters, designer uploads).
+  original_bg_url: string | null;
 };
 
 type Form = {
@@ -53,6 +59,9 @@ type Form = {
   // the form persists both. Reset when the operator manually uploads
   // a new image (which discards the prior composition).
   composerState: ComposerState | null;
+  // Mirrors poster.original_bg_url — overwritten by Re-crop uploads,
+  // preserved across AI compose saves.
+  originalBgUrl: string | null;
 };
 
 // Cache-bust IMG URLs against the poster's updated_at. Browsers
@@ -132,7 +141,47 @@ const empty: Form = {
   endsAt: "",
   placement: "home",
   composerState: null,
+  originalBgUrl: null,
 };
+
+// ---- Schedule helpers ---------------------------------------------------
+// All date inputs in the form are <input type="datetime-local"> which
+// stores values as "YYYY-MM-DDTHH:mm" in the operator's local timezone.
+// These helpers keep preset / status logic consistent with that format.
+function toDtLocal(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Status pill semantics, derived from active flag + scheduling window:
+//   - !active                       → "draft"     (grey)
+//   - active, starts_at in future   → "scheduled" (blue, shows date)
+//   - active, ends_at in past       → "expired"   (grey, shows date)
+//   - active, in-window or no dates → "live"      (green)
+type ScheduleStatus =
+  | { kind: "draft" }
+  | { kind: "live" }
+  | { kind: "scheduled"; startsAt: string }
+  | { kind: "expired";   endsAt:   string };
+
+function scheduleStatusOf(p: Poster, now = new Date()): ScheduleStatus {
+  if (!p.active) return { kind: "draft" };
+  const nowIso = now.toISOString();
+  if (p.starts_at && p.starts_at > nowIso) {
+    return { kind: "scheduled", startsAt: p.starts_at };
+  }
+  if (p.ends_at && p.ends_at < nowIso) {
+    return { kind: "expired", endsAt: p.ends_at };
+  }
+  return { kind: "live" };
+}
+
+// Compact "Apr 12" / "Apr 12 · 14:30" formatter for the status pill.
+function shortDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 export default function SplashPostersPage() {
   const [posters, setPosters] = useState<Poster[]>([]);
@@ -193,8 +242,40 @@ export default function SplashPostersPage() {
       endsAt: p.ends_at ?? "",
       placement: p.placement ?? "home",
       composerState: p.composer_state ?? null,
+      originalBgUrl: p.original_bg_url ?? null,
     });
     setShowForm(true);
+  };
+
+  // Clone an existing poster into a new draft. Copies image, composition,
+  // schedule fields, and placement; resets title to "Copy of ...",
+  // forces active=false, and clears sort_order (server picks fresh).
+  // Customer-app safe — the clone is OFF on creation.
+  const duplicate = async (p: Poster) => {
+    try {
+      const payload = {
+        imageUrl:       p.image_url,
+        title:          p.title ? `Copy of ${p.title}` : "Copy",
+        deeplink:       p.deeplink ?? null,
+        durationMs:     p.duration_ms,
+        active:         false,
+        startsAt:       p.starts_at ?? null,
+        endsAt:         p.ends_at ?? null,
+        placement:      p.placement ?? "home",
+        composerState:  p.composer_state ?? null,
+        originalBgUrl:  p.original_bg_url ?? null,
+      };
+      const res = await adminFetch("/api/pickup/splash-posters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Duplicate failed");
+      toast.success("Duplicated — saved as draft");
+      load();
+    } catch {
+      toast.error("Couldn't duplicate");
+    }
   };
 
   // Two upload entry points share this — the manual cropper (which
@@ -217,9 +298,20 @@ export default function SplashPostersPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Upload failed");
-      // Manual upload clears composerState (the new image is a fresh
-      // bg with no layers). AI composer save passes its full state.
-      setForm((f) => ({ ...f, imageUrl: json.url, composerState }));
+      // Two distinct upload origins call this:
+      //   - Manual Re-crop (composerState arg is null): the new file IS
+      //     a clean background, so we lock it into originalBgUrl as
+      //     the canonical anchor for future AI compose. composerState
+      //     is cleared since the new bg has no layers yet.
+      //   - AI composer save (composerState arg present): the new file
+      //     is a flattened JPEG with text baked in, so we DO NOT touch
+      //     originalBgUrl. composerState replaces the prior state.
+      setForm((f) => ({
+        ...f,
+        imageUrl:      json.url,
+        composerState,
+        originalBgUrl: composerState ? f.originalBgUrl : json.url,
+      }));
       toast.success("Image uploaded");
     } catch (e: any) {
       toast.error(e?.message ?? "Upload failed");
@@ -251,15 +343,16 @@ export default function SplashPostersPage() {
     setSaving(true);
     try {
       const payload = {
-        imageUrl: form.imageUrl,
-        title: form.title || null,
-        deeplink: form.deeplink || null,
-        durationMs: form.durationMs,
-        active: form.active,
-        startsAt: form.startsAt || null,
-        endsAt: form.endsAt || null,
-        placement: form.placement,
+        imageUrl:      form.imageUrl,
+        title:         form.title || null,
+        deeplink:      form.deeplink || null,
+        durationMs:    form.durationMs,
+        active:        form.active,
+        startsAt:      form.startsAt || null,
+        endsAt:        form.endsAt || null,
+        placement:     form.placement,
         composerState: form.composerState,
+        originalBgUrl: form.originalBgUrl,
       };
       const url = form.id
         ? `/api/pickup/splash-posters?id=${encodeURIComponent(form.id)}`
@@ -481,15 +574,46 @@ export default function SplashPostersPage() {
                     className="h-full w-full object-cover"
                   />
                 )}
-                <div className="absolute left-2 top-2 flex gap-1">
+                <div className="absolute left-2 top-2 flex flex-wrap gap-1">
                   <span className={`rounded-full ${placementColor} px-2 py-0.5 text-[10px] font-semibold text-white`}>
                     {placementLabel}
                   </span>
-                  {p.active && (
-                    <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white">
-                      ACTIVE
-                    </span>
-                  )}
+                  {/* Schedule status pill — replaces the bare ACTIVE
+                      pill with one that conveys the real live state:
+                      LIVE NOW, SCHEDULED · Apr 12, EXPIRED · Mar 30,
+                      or DRAFT when the active toggle is off. Lets the
+                      operator scan a long poster list and know what's
+                      actually showing to customers right now. */}
+                  {(() => {
+                    const status = scheduleStatusOf(p);
+                    switch (status.kind) {
+                      case "live":
+                        return (
+                          <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white">
+                            LIVE NOW
+                          </span>
+                        );
+                      case "scheduled":
+                        return (
+                          <span className="rounded-full bg-sky-500 px-2 py-0.5 text-[10px] font-semibold text-white">
+                            SCHEDULED · {shortDate(status.startsAt)}
+                          </span>
+                        );
+                      case "expired":
+                        return (
+                          <span className="rounded-full bg-gray-500 px-2 py-0.5 text-[10px] font-semibold text-white">
+                            EXPIRED · {shortDate(status.endsAt)}
+                          </span>
+                        );
+                      case "draft":
+                      default:
+                        return (
+                          <span className="rounded-full bg-gray-400/90 px-2 py-0.5 text-[10px] font-semibold text-white">
+                            DRAFT
+                          </span>
+                        );
+                    }
+                  })()}
                 </div>
                 {/* Reorder controls — operator clicks ↑ / ↓ to nudge
                     a poster earlier or later in the home carousel
@@ -552,13 +676,27 @@ export default function SplashPostersPage() {
                   </button>
                   <button
                     onClick={() => openEdit(p)}
+                    title="Edit poster"
                     className="flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1.5 text-gray-700"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
+                  {/* Duplicate — clones the poster as an inactive draft.
+                      Carries over image, composition state, schedule, and
+                      placement so creating a variant (different copy
+                      week, different language, A/B test) is one click +
+                      a tweak instead of a fresh upload + re-compose. */}
+                  <button
+                    onClick={() => duplicate(p)}
+                    title="Duplicate as draft"
+                    className="flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1.5 text-gray-700"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
                   <button
                     onClick={() => del(p)}
                     disabled={deleting === p.id}
+                    title="Delete poster"
                     className="flex items-center justify-center rounded-lg border border-red-200 bg-white p-1.5 text-red-600 disabled:opacity-50"
                   >
                     {deleting === p.id ? (
@@ -734,9 +872,22 @@ export default function SplashPostersPage() {
                       <button
                         type="button"
                         onClick={() => {
+                          // Bg-precedence chain:
+                          //   1. composer_state.bgUrl (clean bg + layers)
+                          //      — most specific, safest, includes pan/zoom.
+                          //   2. originalBgUrl (clean bg from last Re-crop)
+                          //      — clean image but no saved layers; AI runs
+                          //      extract mode to populate.
+                          //   3. imageUrl (current display, may be flat)
+                          //      — TRULY legacy; warn + confirm before use
+                          //      since stacking is possible.
                           if (form.composerState) {
-                            // Safe path — clean bg + stored layers.
                             setComposeSource(form.composerState.bgUrl);
+                            return;
+                          }
+                          if (form.originalBgUrl) {
+                            // We have a verified-clean bg, no need to warn.
+                            setComposeSource(form.originalBgUrl);
                             return;
                           }
                           const ok = window.confirm(
@@ -867,33 +1018,101 @@ export default function SplashPostersPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-700">
-                    Starts at (optional)
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={form.startsAt}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, startsAt: e.target.value }))
-                    }
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                  />
+              <div>
+                {/* Schedule presets — quick buttons for the common
+                    F&B scheduling windows. Click sets both startsAt
+                    and endsAt to sensible bounds in the operator's
+                    local timezone. "Clear" wipes both to leave the
+                    poster on indefinitely while active. */}
+                <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                    Schedule:
+                  </span>
+                  {([
+                    {
+                      label: "Today only",
+                      apply: () => {
+                        const start = new Date();
+                        start.setHours(0, 0, 0, 0);
+                        const end = new Date();
+                        end.setHours(23, 59, 0, 0);
+                        return { startsAt: toDtLocal(start), endsAt: toDtLocal(end) };
+                      },
+                    },
+                    {
+                      label: "Next 7 days",
+                      apply: () => {
+                        const start = new Date();
+                        const end = new Date();
+                        end.setDate(end.getDate() + 7);
+                        return { startsAt: toDtLocal(start), endsAt: toDtLocal(end) };
+                      },
+                    },
+                    {
+                      label: "Next 30 days",
+                      apply: () => {
+                        const start = new Date();
+                        const end = new Date();
+                        end.setDate(end.getDate() + 30);
+                        return { startsAt: toDtLocal(start), endsAt: toDtLocal(end) };
+                      },
+                    },
+                    {
+                      label: "Clear",
+                      apply: () => ({ startsAt: "", endsAt: "" }),
+                    },
+                  ] as const).map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        const { startsAt, endsAt } = preset.apply();
+                        setForm((f) => ({ ...f, startsAt, endsAt }));
+                      }}
+                      className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:border-terracotta hover:text-terracotta"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-700">
-                    Ends at (optional)
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={form.endsAt}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, endsAt: e.target.value }))
-                    }
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                  />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-700">
+                      Starts at (optional)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={form.startsAt}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, startsAt: e.target.value }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-700">
+                      Ends at (optional)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={form.endsAt}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, endsAt: e.target.value }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    />
+                  </div>
                 </div>
+
+                {/* Inverted-range warning — silent until it actually
+                    happens, so we don't yell at operators while they're
+                    typing. */}
+                {form.startsAt && form.endsAt && form.endsAt < form.startsAt && (
+                  <p className="mt-1.5 text-[11px] text-red-600">
+                    End date is before start date — the poster won&apos;t be visible at any time.
+                  </p>
+                )}
               </div>
 
               <div
@@ -976,7 +1195,7 @@ export default function SplashPostersPage() {
           rasterised output of the previous save). */}
       {composeSource && (
         <PosterComposer
-          bgUrl={form.composerState?.bgUrl ?? composeSource}
+          bgUrl={form.composerState?.bgUrl ?? form.originalBgUrl ?? composeSource}
           placement={form.placement}
           initialState={form.composerState ?? undefined}
           onCancel={() => setComposeSource(null)}
