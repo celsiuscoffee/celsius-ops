@@ -16,7 +16,7 @@ import {
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { useConfirm, toast } from "@celsius/ui";
 import { PosterCropDialog } from "@/components/pickup/PosterCropDialog";
-import { PosterComposer } from "@/components/pickup/PosterComposer";
+import { PosterComposer, type ComposerState } from "@/components/pickup/PosterComposer";
 
 type Placement = "splash" | "home";
 
@@ -32,6 +32,9 @@ type Poster = {
   ends_at: string | null;
   updated_at: string;
   placement: Placement;
+  // Editable composition state — present when the poster was created
+  // via AI compose. Null for plain manual uploads.
+  composer_state: ComposerState | null;
 };
 
 type Form = {
@@ -44,6 +47,10 @@ type Form = {
   startsAt: string;
   endsAt: string;
   placement: Placement;
+  // Tracks the layer state alongside the rasterised image so saving
+  // the form persists both. Reset when the operator manually uploads
+  // a new image (which discards the prior composition).
+  composerState: ComposerState | null;
 };
 
 // Cache-bust IMG URLs against the poster's updated_at. Browsers
@@ -122,6 +129,7 @@ const empty: Form = {
   startsAt: "",
   endsAt: "",
   placement: "home",
+  composerState: null,
 };
 
 export default function SplashPostersPage() {
@@ -182,11 +190,17 @@ export default function SplashPostersPage() {
       startsAt: p.starts_at ?? "",
       endsAt: p.ends_at ?? "",
       placement: p.placement ?? "home",
+      composerState: p.composer_state ?? null,
     });
     setShowForm(true);
   };
 
-  const handleUpload = async (file: File) => {
+  // Two upload entry points share this — the manual cropper (which
+  // returns a flat bg image with no layers) and the AI composer (which
+  // returns a flattened poster plus the editable ComposerState). The
+  // optional composerState arg captures the latter so we can persist
+  // both the image and the editable state in one save.
+  const handleUpload = async (file: File, composerState: ComposerState | null = null) => {
     setUploading(true);
     try {
       // Auto-resize big images on the client before upload — keeps Cloudinary
@@ -201,7 +215,9 @@ export default function SplashPostersPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Upload failed");
-      setForm((f) => ({ ...f, imageUrl: json.url }));
+      // Manual upload clears composerState (the new image is a fresh
+      // bg with no layers). AI composer save passes its full state.
+      setForm((f) => ({ ...f, imageUrl: json.url, composerState }));
       toast.success("Image uploaded");
     } catch (e: any) {
       toast.error(e?.message ?? "Upload failed");
@@ -241,6 +257,7 @@ export default function SplashPostersPage() {
         startsAt: form.startsAt || null,
         endsAt: form.endsAt || null,
         placement: form.placement,
+        composerState: form.composerState,
       };
       const url = form.id
         ? `/api/pickup/splash-posters?id=${encodeURIComponent(form.id)}`
@@ -628,19 +645,21 @@ export default function SplashPostersPage() {
                         <Crop className="h-3 w-3" />
                         Re-crop
                       </button>
-                      {/* AI compose — opens the composer with the current
-                          (already-cropped) bg, lets the operator type an
-                          objective and have Claude propose headline +
-                          subhead + tint + positions. Output replaces
-                          form.imageUrl with the flattened JPEG. */}
+                      {/* AI compose / Edit composition — when the poster
+                          has saved composerState we reopen the composer
+                          with its original (pre-rasterise) bg and the
+                          stored layers so the operator can tweak text /
+                          colours / positions without re-running AI. When
+                          there's no prior state, this kicks off a fresh
+                          AI compose from the current (cropped) image. */}
                       <button
                         type="button"
-                        onClick={() => setComposeSource(form.imageUrl)}
+                        onClick={() => setComposeSource(form.composerState?.bgUrl ?? form.imageUrl)}
                         className="absolute -bottom-3 left-[88px] flex items-center gap-1 rounded-md bg-terracotta px-2 py-1 text-[10px] font-semibold text-white shadow"
-                        title="Compose with AI"
+                        title={form.composerState ? "Edit composition (text, colours, positions)" : "Compose with AI"}
                       >
                         <Sparkles className="h-3 w-3" />
-                        AI compose
+                        {form.composerState ? "Edit composition" : "AI compose"}
                       </button>
                       <button
                         onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))}
@@ -855,15 +874,21 @@ export default function SplashPostersPage() {
 
       {/* AI composer — bg + tint + draggable text + AI generation. Output
           is a flattened JPEG that runs through the same upload pipeline
-          as a manual crop, so the rest of the form stays unchanged. */}
+          as a manual crop, plus a ComposerState we persist so the next
+          edit reopens the composer with these layers intact (no need to
+          re-run AI compose). initialState hydrates the composer when
+          editing an existing AI-composed poster — the bg comes from the
+          saved state, not the current form.imageUrl (which is the flat
+          rasterised output of the previous save). */}
       {composeSource && (
         <PosterComposer
-          bgUrl={composeSource}
+          bgUrl={form.composerState?.bgUrl ?? composeSource}
           placement={form.placement}
+          initialState={form.composerState ?? undefined}
           onCancel={() => setComposeSource(null)}
-          onSave={(file) => {
+          onSave={(file, composerState) => {
             setComposeSource(null);
-            handleUpload(file);
+            handleUpload(file, composerState);
           }}
         />
       )}

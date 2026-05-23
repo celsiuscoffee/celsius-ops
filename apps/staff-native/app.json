@@ -1,0 +1,150 @@
+{
+  "expo": {
+    "name": "Celsius Staff",
+    "slug": "celsius-staff-native",
+    "scheme": "celsiuscoffeestaff",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1A0200"
+    },
+    "ios": {
+      "bundleIdentifier": "com.celsiuscoffee.staff",
+      "supportsTablet": false,
+      "buildNumber": "1",
+      "entitlements": {
+        "aps-environment": "production"
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIViewControllerBasedStatusBarAppearance": false,
+        "UIBackgroundModes": [
+          "remote-notification",
+          "location",
+          "fetch"
+        ],
+        "NSCameraUsageDescription": "Celsius Staff uses the camera to scan outlet QR codes when GPS is unavailable, and to capture receipts for expense claims.",
+        "NSPhotoLibraryUsageDescription": "Celsius Staff uses your photo library so you can attach existing receipt photos to expense claims.",
+        "NSFaceIDUsageDescription": "Celsius Staff uses Face ID to confirm it's you when clocking in or out — Apple handles the biometric check; we never see your face data.",
+        "NSLocationWhenInUseUsageDescription": "Celsius Staff uses your location to detect which outlet you've arrived at, so clock-in can happen automatically. You can decline and clock in manually.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Celsius Staff uses your location in the background only to auto clock-in when you arrive at your outlet and auto clock-out when you leave. Location is checked at outlet boundaries only — never continuously tracked — and is never used outside of attendance. You can disable this anytime and clock in manually.",
+        "NSLocationAlwaysUsageDescription": "Celsius Staff uses your location in the background only to auto clock-in when you arrive at your outlet and auto clock-out when you leave."
+      }
+    },
+    "android": {
+      "package": "com.celsiuscoffee.staff",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1A0200"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": true,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "CAMERA",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
+    },
+    "web": {
+      "output": "single",
+      "bundler": "metro",
+      "favicon": "./assets/icon.png",
+      "name": "Celsius Staff",
+      "shortName": "Staff",
+      "themeColor": "#1A0200",
+      "backgroundColor": "#FFFFFF",
+      "description": "Celsius Coffee staff app — clock in/out, shifts, payslips, leave, claims, checklists."
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#1A0200",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Peachi-Regular.otf",
+            "./assets/fonts/Peachi-Medium.otf",
+            "./assets/fonts/Peachi-Bold.otf"
+          ]
+        }
+      ],
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1A0200",
+          "defaultChannel": "default"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Celsius Staff uses your location in the background only at outlet boundaries to auto-clock you in and out. You can disable this anytime."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Celsius Staff uses the camera to scan outlet QR codes and capture expense receipts."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Celsius Staff uses Face ID to confirm clock-in/out is you."
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "celsius-coffee-sdn-bhd",
+          "project": "celsius-staff-native"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d57490c8-eb64-4f0e-8b5f-15190c8c4a57"
+      }
+    },
+    "owner": "celsiuscoffee",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d57490c8-eb64-4f0e-8b5f-15190c8c4a57"
+    }
+  }
+}

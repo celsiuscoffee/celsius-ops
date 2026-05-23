@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
       starts_at:   body.startsAt ?? null,
       ends_at:     body.endsAt ?? null,
       placement,
+      composer_state: body.composerState ?? null,
     } as Record<string, unknown>)
     .select()
     .single();
@@ -63,14 +64,15 @@ export async function PATCH(request: NextRequest) {
   const supabase = getSupabaseAdmin();
 
   const updates: Record<string, unknown> = {};
-  if ("imageUrl"   in body) updates.image_url   = body.imageUrl;
-  if ("title"      in body) updates.title       = body.title;
-  if ("deeplink"   in body) updates.deeplink    = body.deeplink;
-  if ("durationMs" in body) updates.duration_ms = body.durationMs;
-  if ("active"     in body) updates.active      = Boolean(body.active);
-  if ("startsAt"   in body) updates.starts_at   = body.startsAt;
-  if ("endsAt"     in body) updates.ends_at     = body.endsAt;
-  if ("placement"  in body && (body.placement === "splash" || body.placement === "home")) {
+  if ("imageUrl"      in body) updates.image_url      = body.imageUrl;
+  if ("title"         in body) updates.title          = body.title;
+  if ("deeplink"      in body) updates.deeplink       = body.deeplink;
+  if ("durationMs"    in body) updates.duration_ms    = body.durationMs;
+  if ("active"        in body) updates.active         = Boolean(body.active);
+  if ("startsAt"      in body) updates.starts_at      = body.startsAt;
+  if ("endsAt"        in body) updates.ends_at        = body.endsAt;
+  if ("composerState" in body) updates.composer_state = body.composerState;
+  if ("placement"     in body && (body.placement === "splash" || body.placement === "home")) {
     updates.placement = body.placement;
   }
 

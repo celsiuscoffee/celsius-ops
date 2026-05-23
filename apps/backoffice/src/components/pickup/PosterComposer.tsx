@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Sparkles, X, RotateCcw, Plus, Trash2 } from "lucide-react";
+import { Loader2, Sparkles, X, RotateCcw, Plus, Trash2, ShoppingCart } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
 
@@ -14,19 +14,30 @@ type TextLayer = {
   color: string;   // #RRGGBB
   size: number;    // 0-1 normalised in frame height (e.g. 0.1 = 10% of frame H)
   align: "left" | "center" | "right";
+  // Drop-shadow strength, 0 (no shadow) - 1 (heavy). Applied both in
+  // the live preview (CSS text-shadow) and the canvas raster (ctx
+  // shadow*). Useful for white text on light photos — boost shadow
+  // until the text reads cleanly. Optional for back-compat with prior
+  // composer_state JSON that doesn't carry the field; defaults to 0
+  // when missing (i.e. no shadow).
+  shadow?: number;
 };
 
-type State = {
+// Persisted composition state. Saved to splash_posters.composer_state so
+// the operator can re-open and tweak instead of starting from scratch.
+export type ComposerState = {
+  bgUrl: string;       // original (already-cropped) background — pre-rasterise
   bgZoom: number;
-  bgPanX: number;  // normalised, 0 = centred
+  bgPanX: number;      // normalised, 0 = centred
   bgPanY: number;
   tintColor: string;
-  tintOpacity: number;  // 0-1
+  tintOpacity: number; // 0-1
   headline: TextLayer;
-  // Multiple supporting lines — operator can add/remove. AI generation
-  // populates 1-3 depending on the objective.
   subheads: TextLayer[];
 };
+
+// Local component state — same shape, minus the bgUrl (which lives in props).
+type State = Omit<ComposerState, "bgUrl">;
 
 const DEFAULT_STATE: State = {
   bgZoom: 1,
@@ -41,6 +52,7 @@ const DEFAULT_STATE: State = {
     color: "#FFFFFF",
     size: 0.1,
     align: "center",
+    shadow: 0,
   },
   subheads: [
     {
@@ -50,26 +62,23 @@ const DEFAULT_STATE: State = {
       color: "#F5F3F0",
       size: 0.035,
       align: "center",
+      shadow: 0,
     },
   ],
 };
 
-// Reserved zones the customer app overlays on top of every poster.
-// Drawn as semi-transparent stripes in the preview so the operator
-// places text in the safe area. Coordinates are normalised 0-1.
-const RESERVED_ZONES: Record<Placement, Array<{
-  x: number; y: number; w: number; h: number; label: string;
-}>> = {
-  home: [
-    { x: 0.02, y: 0.01, w: 0.16, h: 0.10, label: "C logo" },
-    { x: 0.82, y: 0.01, w: 0.16, h: 0.10, label: "Cart" },
-    { x: 0.02, y: 0.74, w: 0.96, h: 0.24, label: "Info card" },
-  ],
-  splash: [
-    { x: 0.78, y: 0.02, w: 0.20, h: 0.07, label: "Close ✕" },
-    { x: 0.20, y: 0.93, w: 0.60, h: 0.05, label: "Tap to open" },
-  ],
-};
+// Maps a 0-1 shadow strength to concrete CSS/canvas params. Single
+// source of truth so preview and rasterise stay in sync. Offsets and
+// blur scale with the text height so big headlines get proportionally
+// bigger shadows; alpha grows linearly with strength.
+function shadowParams(strength: number, fontPx: number) {
+  const s = Math.max(0, Math.min(1, strength || 0));
+  return {
+    offsetY: Math.round(fontPx * 0.04 * s),     // ~4% of font size at max
+    blur:    Math.round(fontPx * 0.18 * (0.4 + 0.6 * s)), // 7-18% range
+    alpha:   0.55 * s,                          // 0 .. 0.55
+  };
+}
 
 // Output canvas dimensions per placement. Keeps file sizes reasonable
 // while matching the aspect that the customer app actually renders.
@@ -84,10 +93,16 @@ type Props = {
   // canvas to overlay tint + text on; it does not re-crop the aspect.
   bgUrl: string;
   placement: Placement;
+  // Optional saved state — when present, hydrates the composer with
+  // the prior layers instead of DEFAULT_STATE. Used by the Edit-poster
+  // flow so the operator continues editing rather than starting over.
+  initialState?: ComposerState;
   onCancel: () => void;
   // Returns a fresh JPEG File ready for upload via the existing
-  // /api/pickup/upload-image route. Parent decides what to do with it.
-  onSave: (file: File) => void;
+  // /api/pickup/upload-image route, plus the ComposerState so the
+  // parent can persist it for future edits. Parent decides what to
+  // do with both.
+  onSave: (file: File, state: ComposerState) => void;
 };
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -105,23 +120,117 @@ type Selected =
   | { kind: "headline" }
   | { kind: "subhead"; index: number };
 
-export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
-  const [state, setState] = useState<State>(DEFAULT_STATE);
+export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSave }: Props) {
+  // Strip bgUrl out of initialState — we keep it in props so the bg can
+  // be swapped (re-crop) without churning composition state.
+  const [state, setState] = useState<State>(() => {
+    if (!initialState) return DEFAULT_STATE;
+    const { bgUrl: _ignore, ...rest } = initialState;
+    return rest;
+  });
   const [objective, setObjective] = useState("");
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Selected>({ kind: "headline" });
+  // Tracks whether the current layers came from an "extract" call (OCR
+  // of an existing baked poster). When true, we show a banner warning
+  // the operator that the original text is still in the bg pixels —
+  // moving layers won't erase it; they'd need to re-crop. Cleared once
+  // they re-generate via the AI compose prompt or save.
+  const [extractedFromImage, setExtractedFromImage] = useState(false);
+  const [extracting, setExtracting] = useState(false);
 
   const frameRef = useRef<HTMLDivElement>(null);
   const bgImgRef = useRef<HTMLImageElement | null>(null);
-  // Hydrate the bg image into an Image element once so the canvas
-  // raster can draw it without re-fetching.
+  const [bgReady, setBgReady] = useState(false);
+  // Hydrate the bg image into an Image element so the canvas raster can
+  // draw it without re-fetching. Two subtleties:
+  //   1. crossOrigin="anonymous" MUST be paired with a CORS-enabled
+  //      response, or the canvas gets tainted and toBlob() returns null
+  //      ("Could not encode poster"). Cloudinary serves ACAO:* on image
+  //      fetches by default, so this works — but only if the browser
+  //      actually sends a CORS request.
+  //   2. If the preview <img> already cached a non-CORS response for the
+  //      same URL, the browser may serve the cached bytes to this CORS
+  //      request and the response will lack ACAO. We append a tiny
+  //      cache-bust param so this Image gets its own fresh CORS-enabled
+  //      response, never sharing the cache with the preview <img>.
   useEffect(() => {
+    setBgReady(false);
+    bgImgRef.current = null;
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.src = bgUrl;
-    img.onload = () => { bgImgRef.current = img; };
+    img.onload = () => {
+      bgImgRef.current = img;
+      setBgReady(true);
+    };
+    img.onerror = () => {
+      // CORS failure or 404 — Save will toast and stay open so the
+      // operator can re-crop or retry.
+      toast.error("Background image couldn't load for export. Try re-cropping.");
+    };
+    const sep = bgUrl.includes("?") ? "&" : "?";
+    img.src = `${bgUrl}${sep}cors=1`;
   }, [bgUrl]);
+
+  // Auto-extract layers from the bg image when there's no prior
+  // composer_state to hydrate from. This makes legacy posters (created
+  // before composer_state was persisted) editable too — Claude OCRs the
+  // visible text and returns matching layers so the operator can tweak
+  // text/colours instead of starting from the default placeholders.
+  // Only runs once per mount; subsequent re-renders don't re-trigger.
+  useEffect(() => {
+    if (initialState) return;
+    let cancelled = false;
+    const run = async () => {
+      setExtracting(true);
+      try {
+        const res = await adminFetch("/api/pickup/ai-poster/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl: bgUrl, mode: "extract", placement }),
+        });
+        const json = await res.json();
+        if (cancelled) return;
+        if (!res.ok) {
+          // Extract is best-effort — if it fails, fall back to the
+          // default placeholders silently. Operator can still type
+          // an objective and run compose mode.
+          return;
+        }
+        const s = json.suggestion as {
+          tintColor: string;
+          tintOpacity: number;
+          headline: TextLayer;
+          subheads: TextLayer[];
+        };
+        // Only apply if Claude actually read text — empty headline +
+        // empty subheads means the image has no readable text and we
+        // should leave DEFAULT_STATE alone.
+        const anyText =
+          (s.headline?.text ?? "").trim().length > 0 ||
+          (s.subheads ?? []).some((sh) => (sh.text ?? "").trim().length > 0);
+        if (!anyText) return;
+        setState((cur) => ({
+          ...cur,
+          tintColor:   s.tintColor,
+          tintOpacity: s.tintOpacity,
+          headline:    s.headline,
+          subheads:    s.subheads.length > 0 ? s.subheads : cur.subheads,
+        }));
+        setExtractedFromImage(true);
+      } catch {
+        // Network error — silently fall back. Manual compose still works.
+      } finally {
+        if (!cancelled) setExtracting(false);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { w: OUT_W, h: OUT_H, previewMax } = OUTPUT[placement];
 
@@ -234,6 +343,10 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
         }
         return cur;
       });
+      // Running an objective-driven compose supersedes the extracted
+      // layers — the operator has chosen to write new text, so the
+      // "loaded from baked image" warning is no longer relevant.
+      setExtractedFromImage(false);
       toast.success("Generated");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Generate failed");
@@ -246,8 +359,19 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
   const handleSave = async () => {
     const img = bgImgRef.current;
     if (!img) {
-      toast.error("Background still loading");
+      toast.error("Background still loading — try again in a moment.");
       return;
+    }
+    // Hard guard against stacking on an already-text-baked bg. When
+    // extract mode lifted text out of the image, the original pixels
+    // still carry that text — saving would draw the editable layers on
+    // top, producing double text. Require explicit confirm before
+    // proceeding so the operator doesn't silently corrupt the poster.
+    if (extractedFromImage) {
+      const ok = window.confirm(
+        "Background already has text baked into it. Saving now will draw the new text ON TOP of the old, producing double text.\n\nTo edit cleanly, click Cancel, then close this composer and Re-crop with a fresh image.\n\nContinue and stack anyway?",
+      );
+      if (!ok) return;
     }
     setSaving(true);
     try {
@@ -285,24 +409,59 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
 
       // 3. Text layers — middle baseline so the y coord is the vertical
       //    centre of the glyph bbox; matches the preview where the text
-      //    span is translateY(-50%) about its y position.
+      //    span is translateY(-50%) about its y position. Shadow params
+      //    come from the same shadowParams() helper as the preview, so
+      //    the rasterised JPEG matches what the operator sees on screen.
       const drawText = (layer: TextLayer, weight: number) => {
         if (!layer.text) return;
         const fontSize = Math.round(layer.size * OUT_H);
+        ctx.save();
         ctx.font = `${weight} ${fontSize}px "Peachi", Georgia, serif`;
         ctx.fillStyle = layer.color;
         ctx.textAlign = layer.align;
         ctx.textBaseline = "middle";
+        const sh = shadowParams(layer.shadow ?? 0, fontSize);
+        if (sh.alpha > 0) {
+          ctx.shadowColor   = `rgba(0,0,0,${sh.alpha})`;
+          ctx.shadowBlur    = sh.blur;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = sh.offsetY;
+        }
         ctx.fillText(layer.text, layer.x * OUT_W, layer.y * OUT_H);
+        ctx.restore();
       };
       drawText(state.headline, 700);
       for (const sh of state.subheads) drawText(sh, 500);
 
-      const blob = await new Promise<Blob | null>((resolve) =>
+      // canvas.toBlob() returns null (not throws) when the canvas is
+      // tainted — e.g. the bg image was loaded without CORS. We retry
+      // via toDataURL → fetch → blob, which surfaces a clearer error.
+      // If even THAT fails, the image is unrecoverable for export and
+      // the operator needs to re-crop (which re-uploads via our own
+      // backend and produces a clean Cloudinary URL).
+      let blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", 0.9),
       );
-      if (!blob) throw new Error("Could not encode poster");
-      onSave(new File([blob], `poster-${Date.now()}.jpg`, { type: "image/jpeg" }));
+      if (!blob) {
+        try {
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+          const r = await fetch(dataUrl);
+          blob = await r.blob();
+        } catch {
+          throw new Error(
+            "Couldn't export — the background image is blocked by CORS. Try re-cropping the image to refresh it.",
+          );
+        }
+      }
+      if (!blob) {
+        throw new Error("Couldn't encode the poster — try re-cropping the background.");
+      }
+      const file = new File([blob], `poster-${Date.now()}.jpg`, { type: "image/jpeg" });
+      // Hand back the editable state alongside the rasterised file so
+      // the parent can persist composer_state. Editing the poster later
+      // reopens the composer with this state instead of regenerating.
+      const fullState: ComposerState = { bgUrl, ...state };
+      onSave(file, fullState);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -356,7 +515,6 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
       : selected.kind === "subhead" ? (state.subheads[selected.index] ?? null)
         : null;
   const isHeadline = selected.kind === "headline";
-  const reservedZones = RESERVED_ZONES[placement];
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
@@ -411,55 +569,165 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
                 }}
               />
 
-              {/* Reserved zones — the customer app paints UI on top of
-                  the poster (C logo, cart button, info card on home;
-                  close ✕ + Tap-to-open on splash). Showing them in the
-                  preview keeps the operator from putting text where it
-                  will be hidden. */}
-              {reservedZones.map((z) => (
-                <div
-                  key={z.label}
-                  className="pointer-events-none absolute flex items-center justify-center rounded-md border border-dashed border-white/40 bg-black/20"
-                  style={{
-                    left:   `${z.x * 100}%`,
-                    top:    `${z.y * 100}%`,
-                    width:  `${z.w * 100}%`,
-                    height: `${z.h * 100}%`,
-                  }}
-                >
-                  <span className="text-[8px] font-semibold uppercase tracking-wider text-white/70">
-                    {z.label}
-                  </span>
-                </div>
-              ))}
+              {/* Mock chrome — the customer app paints UI on top of the
+                  poster. We render an approximation of the actual chrome
+                  (C logo, cart button, member info card on home; close
+                  ✕ + tap-to-open on splash) so the operator sees exactly
+                  what the customer will see and places text accordingly.
+                  These are visual-only and don't block pointer events. */}
+              {placement === "home" && (
+                <>
+                  {/* C logo — dark rounded square top-left */}
+                  <div
+                    className="pointer-events-none absolute flex items-center justify-center rounded-lg bg-[#160800] shadow-md"
+                    style={{
+                      left:   `${0.03 * previewW}px`,
+                      top:    `${0.03 * previewH}px`,
+                      width:  `${Math.max(28, previewH * 0.085)}px`,
+                      height: `${Math.max(28, previewH * 0.085)}px`,
+                      fontFamily: '"Peachi", Georgia, serif',
+                      fontWeight: 700,
+                      fontSize: `${Math.max(14, previewH * 0.055)}px`,
+                      color: "#F5F3F0",
+                    }}
+                  >
+                    c
+                  </div>
+
+                  {/* Cart — white circle top-right */}
+                  <div
+                    className="pointer-events-none absolute flex items-center justify-center rounded-full bg-white shadow-md"
+                    style={{
+                      right:  `${0.03 * previewW}px`,
+                      top:    `${0.03 * previewH}px`,
+                      width:  `${Math.max(30, previewH * 0.09)}px`,
+                      height: `${Math.max(30, previewH * 0.09)}px`,
+                    }}
+                  >
+                    <ShoppingCart
+                      className="text-[#160800]"
+                      style={{ width: `${Math.max(14, previewH * 0.045)}px`, height: `${Math.max(14, previewH * 0.045)}px` }}
+                    />
+                  </div>
+
+                  {/* Member info card — espresso surface bottom 25% */}
+                  <div
+                    className="pointer-events-none absolute rounded-xl shadow-2xl"
+                    style={{
+                      left:   `${0.04 * previewW}px`,
+                      right:  `${0.04 * previewW}px`,
+                      bottom: `${0.025 * previewH}px`,
+                      backgroundColor: "#160800",
+                      padding: `${previewH * 0.022}px ${previewW * 0.035}px`,
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span
+                        className="truncate text-white"
+                        style={{ fontFamily: '"Peachi", Georgia, serif', fontSize: `${Math.max(11, previewH * 0.034)}px` }}
+                      >
+                        Hi, Friend.
+                      </span>
+                      <span
+                        className="font-bold tracking-wider"
+                        style={{ fontSize: `${Math.max(8, previewH * 0.022)}px`, color: "#FBBF24" }}
+                      >
+                        ✦ MEMBER
+                      </span>
+                    </div>
+                    <div className="mt-1.5 flex items-stretch border-t border-white/10 pt-1.5">
+                      <div className="flex-1">
+                        <div className="font-bold text-white" style={{ fontSize: `${Math.max(10, previewH * 0.032)}px` }}>
+                          3,214
+                        </div>
+                        <div className="uppercase tracking-wider text-white/55" style={{ fontSize: `${Math.max(7, previewH * 0.020)}px` }}>
+                          BEANS
+                        </div>
+                      </div>
+                      <div className="flex-1 border-l border-white/10 pl-2">
+                        <div className="font-bold" style={{ fontSize: `${Math.max(10, previewH * 0.032)}px`, color: "#FBBF24" }}>
+                          2
+                        </div>
+                        <div className="uppercase tracking-wider text-white/55" style={{ fontSize: `${Math.max(7, previewH * 0.020)}px` }}>
+                          REWARDS
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {placement === "splash" && (
+                <>
+                  {/* Close ✕ — circular dismiss top-right */}
+                  <div
+                    className="pointer-events-none absolute flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm"
+                    style={{
+                      right:  `${0.04 * previewW}px`,
+                      top:    `${0.025 * previewH}px`,
+                      width:  `${Math.max(26, previewH * 0.05)}px`,
+                      height: `${Math.max(26, previewH * 0.05)}px`,
+                      color: "#FFFFFF",
+                      fontSize: `${Math.max(14, previewH * 0.028)}px`,
+                    }}
+                  >
+                    ✕
+                  </div>
+
+                  {/* Tap to open hint — bottom caption */}
+                  <div
+                    className="pointer-events-none absolute left-0 right-0 text-center uppercase tracking-[0.18em] text-white/80"
+                    style={{
+                      bottom: `${0.03 * previewH}px`,
+                      fontSize: `${Math.max(8, previewH * 0.018)}px`,
+                      letterSpacing: "0.2em",
+                    }}
+                  >
+                    TAP TO OPEN
+                  </div>
+                </>
+              )}
 
               {/* Headline — bold + larger weight */}
-              <div
-                onPointerDown={(e) => onPointerDown({ kind: "headline" }, e)}
-                className={`absolute cursor-move whitespace-nowrap ${
-                  selected.kind === "headline" ? "outline outline-1 outline-dashed outline-white/60" : ""
-                }`}
-                style={{
-                  left: `${state.headline.x * 100}%`,
-                  top:  `${state.headline.y * 100}%`,
-                  transform: `translate(${
-                    state.headline.align === "center" ? "-50%" : state.headline.align === "right" ? "-100%" : "0"
-                  }, -50%)`,
-                  color: state.headline.color,
-                  fontFamily: '"Peachi", Georgia, serif',
-                  fontWeight: 700,
-                  fontSize: `${state.headline.size * previewH}px`,
-                  lineHeight: 1.05,
-                  textShadow: "0 1px 2px rgba(0,0,0,0.15)",
-                  padding: "2px 4px",
-                }}
-              >
-                {state.headline.text || "Headline"}
-              </div>
+              {(() => {
+                // Preview shadow — derived from per-layer strength so the
+                // operator sees the same drop as the rasterised JPEG. Uses
+                // the same shadowParams() helper as canvas.
+                const headlineFontPx = state.headline.size * previewH;
+                const hs = shadowParams(state.headline.shadow ?? 0, headlineFontPx);
+                return (
+                  <div
+                    onPointerDown={(e) => onPointerDown({ kind: "headline" }, e)}
+                    className={`absolute cursor-move whitespace-nowrap ${
+                      selected.kind === "headline" ? "outline outline-1 outline-dashed outline-white/60" : ""
+                    }`}
+                    style={{
+                      left: `${state.headline.x * 100}%`,
+                      top:  `${state.headline.y * 100}%`,
+                      transform: `translate(${
+                        state.headline.align === "center" ? "-50%" : state.headline.align === "right" ? "-100%" : "0"
+                      }, -50%)`,
+                      color: state.headline.color,
+                      fontFamily: '"Peachi", Georgia, serif',
+                      fontWeight: 700,
+                      fontSize: `${headlineFontPx}px`,
+                      lineHeight: 1.05,
+                      textShadow: hs.alpha > 0
+                        ? `0 ${hs.offsetY}px ${hs.blur}px rgba(0,0,0,${hs.alpha.toFixed(3)})`
+                        : "none",
+                      padding: "2px 4px",
+                    }}
+                  >
+                    {state.headline.text || "Headline"}
+                  </div>
+                );
+              })()}
 
               {/* Subhead text layers — each draggable independently */}
               {state.subheads.map((layer, idx) => {
                 const isSel = selected.kind === "subhead" && selected.index === idx;
+                const fontPx = layer.size * previewH;
+                const sh = shadowParams(layer.shadow ?? 0, fontPx);
                 return (
                   <div
                     key={idx}
@@ -476,9 +744,11 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
                       color: layer.color,
                       fontFamily: '"Peachi", Georgia, serif',
                       fontWeight: 500,
-                      fontSize: `${layer.size * previewH}px`,
+                      fontSize: `${fontPx}px`,
                       lineHeight: 1.05,
-                      textShadow: "0 1px 2px rgba(0,0,0,0.15)",
+                      textShadow: sh.alpha > 0
+                        ? `0 ${sh.offsetY}px ${sh.blur}px rgba(0,0,0,${sh.alpha.toFixed(3)})`
+                        : "none",
                       padding: "2px 4px",
                     }}
                   >
@@ -487,6 +757,32 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
                 );
               })}
             </div>
+
+            {/* Extract-mode notice — appears when the composer auto-OCR'd
+                text from a legacy bg image (no saved composer_state). Lets
+                the operator know the text was lifted from the image so
+                they understand WHY layers are pre-populated, and warns
+                that the original baked-in text is still in the bg pixels
+                — moving the layer doesn't erase what's underneath. */}
+            {extracting && (
+              <div className="flex w-full max-w-md items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Reading existing text from the poster…
+              </div>
+            )}
+            {extractedFromImage && !extracting && (
+              <div className="w-full max-w-md rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2.5 text-[11px] text-red-900">
+                <p className="font-semibold text-red-900">⚠️ Background has baked-in text — saving will STACK</p>
+                <p className="mt-1 text-red-800/85">
+                  This image already has &quot;{state.headline.text}&quot;
+                  {state.subheads[0]?.text ? ` / "${state.subheads[0].text}"` : ""} painted into the pixels.
+                  Saving the composer here would lay new text on top of the old, doubling it.
+                </p>
+                <p className="mt-1 text-red-800/85">
+                  <strong>To fix:</strong> close this composer, click <strong>Re-crop</strong> in the form, and upload a clean background photo (no text on it). Then re-open AI compose.
+                </p>
+              </div>
+            )}
 
             {/* AI objective input — directly below the preview so it
                 reads top-down: image, what you want, generate. */}
@@ -654,7 +950,7 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
                     <input
                       type="range"
                       min={isHeadline ? 0.04 : 0.02}
-                      max={isHeadline ? 0.2 : 0.08}
+                      max={isHeadline ? 0.24 : 0.10}
                       step={0.001}
                       value={selectedLayer.size}
                       onChange={(e) => patch({ size: Number(e.target.value) })}
@@ -701,6 +997,40 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
                     </div>
                   </div>
 
+                  {/* Shadow slider — drop-shadow strength behind the
+                      glyphs. 0 = no shadow (default). At max the text
+                      gets a soft dark drop that improves legibility on
+                      busy / pale backgrounds. Applies in both the live
+                      preview and the rasterised JPEG. */}
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-medium text-gray-700">
+                        Shadow · {Math.round(((selectedLayer.shadow ?? 0) * 100))}%
+                      </label>
+                      {(selectedLayer.shadow ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => patch({ shadow: 0 })}
+                          className="text-[10px] text-gray-500 hover:text-gray-900"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={selectedLayer.shadow ?? 0}
+                      onChange={(e) => patch({ shadow: Number(e.target.value) })}
+                      className="mt-1 w-full"
+                    />
+                    <p className="mt-1 text-[10px] text-gray-400">
+                      Lifts text off pale or busy backgrounds. Leave at 0 when the text already has enough contrast.
+                    </p>
+                  </div>
+
                   {/* Remove subhead — only available for subhead layers
                       and only when there's more than one (keeps the
                       composer in a renderable state). */}
@@ -734,11 +1064,12 @@ export function PosterComposer({ bgUrl, placement, onCancel, onSave }: Props) {
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || !bgReady}
             className="flex items-center gap-2 rounded-lg bg-terracotta px-3 py-1.5 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-60"
+            title={!bgReady ? "Waiting for the background to load…" : undefined}
           >
-            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Save as image
+            {(saving || !bgReady) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {bgReady ? "Save as image" : "Loading bg…"}
           </button>
         </div>
       </div>

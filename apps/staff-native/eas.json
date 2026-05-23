@@ -1,0 +1,59 @@
+{
+  "cli": {
+    "version": ">= 17.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": { "simulator": false },
+      "env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": { "simulator": false },
+      "channel": "preview",
+      "env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }
+    },
+    "simulator": {
+      "distribution": "internal",
+      "ios": { "simulator": true },
+      "channel": "preview",
+      "env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }
+    },
+    "internal": {
+      "distribution": "internal",
+      "ios": { "simulator": false },
+      "channel": "production",
+      "env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }
+    },
+    "production": {
+      "channel": "production",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": { "SENTRY_DISABLE_AUTO_UPLOAD": "true" }
+    }
+  },
+  "submit": {
+    "internal": {
+      "android": {
+        "serviceAccountKeyPath": "/Users/ammarshahrin/.google-keys/celsius-play-submit.json",
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
+    },
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "/Users/ammarshahrin/.google-keys/celsius-play-submit.json",
+        "track": "production",
+        "releaseStatus": "draft"
+      },
+      "ios": {
+        "appleTeamId": "9U2R774T9W",
+        "ascAppId": "PLACEHOLDER_REGISTER_IN_APP_STORE_CONNECT"
+      }
+    }
+  }
+}

@@ -20,6 +20,7 @@ type TextLayerSuggestion = {
   color: string;
   size: number;        // headline 0.06-0.16, subhead 0.025-0.06
   align: "left" | "center" | "right";
+  shadow?: number;     // 0 (none) - 1 (heavy). Boost when text contrast is weak.
 };
 
 type PosterSuggestion = {
@@ -28,6 +29,56 @@ type PosterSuggestion = {
   headline: TextLayerSuggestion;
   subheads: TextLayerSuggestion[]; // 1-3 items
 };
+
+// Extract prompt — used when opening the composer on a legacy poster
+// that has text baked into the bg image but no saved composer_state.
+// Asks Claude to OCR the visible text and return matching layers so the
+// operator can edit them instead of re-doing AI compose from scratch.
+function buildExtractPrompt(placement: Placement): string {
+  const surfaceNote =
+    placement === "home"
+      ? `Surface: Home carousel banner, ~15:14 aspect.`
+      : `Surface: App splash screen, 9:16 portrait.`;
+
+  return `You are reading an existing promotional poster for Celsius Coffee. The image contains text already baked into the pixels (headline + supporting lines). Your job is to OCR that text and return it as editable layers, MATCHING the existing visual composition as closely as possible.
+
+${surfaceNote}
+
+INSTRUCTIONS:
+  1. Read every word of visible text in the image. Group them into ONE headline (the largest/most prominent line) and 1-3 subheads (smaller supporting lines). If a line wraps (e.g. "10%" then "OFF" on the next visual line), treat each visual line as a SEPARATE layer.
+  2. For EACH text layer, estimate its position (x, y as 0-1 anchor — where the layer's centre would sit), its display size as a fraction of the image height (e.g. very large text ≈ 0.16-0.22, medium ≈ 0.05-0.08, small ≈ 0.025-0.045), its colour (sample the actual ink colour from the image), and alignment (left / center / right based on how the text is laid out).
+  3. For the tint, estimate the overall colour bias of any photo-darkening overlay (if any). If the bg image looks untreated, return tintColor "#160800" and tintOpacity 0.
+  4. Do NOT invent new text. Only return what you can read. If the image has no readable text, return a single empty headline.
+
+  5. SHADOW — if the visible text already has a drop shadow / outline / glow behind it (lifting it off the bg), set "shadow" to the strength you observe (light shadow ≈ 0.2-0.4, heavy ≈ 0.5-0.8). If the text sits flat on the photo with no shadow, return 0.
+
+Return STRICT JSON only — no prose, no markdown fences:
+
+{
+  "tintColor": "#RRGGBB",
+  "tintOpacity": 0.0-0.6,
+  "headline": {
+    "text": "string",
+    "x": 0.0-1.0,
+    "y": 0.0-1.0,
+    "color": "#RRGGBB",
+    "size": 0.04-0.24,
+    "align": "left" | "center" | "right",
+    "shadow": 0.0-1.0
+  },
+  "subheads": [
+    {
+      "text": "string",
+      "x": 0.0-1.0,
+      "y": 0.0-1.0,
+      "color": "#RRGGBB",
+      "size": 0.02-0.10,
+      "align": "left" | "center" | "right",
+      "shadow": 0.0-1.0
+    }
+  ]
+}`;
+}
 
 function buildPrompt(objective: string, placement: Placement): string {
   // Reserved zones the customer app overlays on top of the poster. Text
@@ -52,28 +103,42 @@ Objective from operator:
 
 ${surfaceNote}
 
-PICKING THE HEADLINE — this is the single most important call. The headline is the BIGGEST, MOST PROMINENT line on the poster. It must be the one thing a customer would understand in a 1-second glance.
+STEP 1 — READ THE IMAGE FIRST. Before deciding anything else, identify in this specific photo:
+  (a) WHERE THE SUBJECT IS — the photographic focal point (a coffee cup, a face, a hand, a product). Note which side of the frame it occupies. Examples: "coffee cups on the RIGHT half", "espresso machine LEFT-CENTRE", "subject CENTRED, full frame".
+  (b) WHERE THE CALM AREAS ARE — flat surfaces, blurred bg, sky, plain walls, shadow. These are where text reads cleanly.
+  (c) ANY EXISTING TEXT or labels already baked into the bg image (e.g. cup logos, packaging). Treat these as part of the subject — text should NOT overlap them.
 
-  • If the objective mentions a promo, discount, freebie or specific offer (e.g. "10% off espresso", "Buy 1 Get 1 free", "Free pastry weekend"), THAT is the headline. Don't bury it in a subhead and use a vague tagline ("Iftar Special") as the headline.
-  • Examples — what to put where:
-      Objective: "Promote Ramadan iftar with 20% off espresso"
-      → headline: "20% off espresso"   (the offer — the punchy ask)
-      → subhead 1: "Iftar special, this Ramadan"   (the context)
-      → subhead 2 (optional): "Today only · Tap to claim"   (CTA / urgency)
-  • If there is no specific offer, the headline is the campaign theme in 2-4 punchy words ("Slow down.", "Holiday brews", "New menu").
-  • Headlines under 5 words. Punctuation OK (a period or hyphen can land harder than nothing). Reserve "!" for genuine hype that the objective explicitly calls for.
+STEP 2 — COMPOSE TEXT ON THE CALM SIDE, OPPOSITE THE SUBJECT. This is the most important rule for getting a brand-coherent poster:
+  • If the subject is on the RIGHT → place the text stack on the LEFT (anchor x ≈ 0.05-0.12, align: "left").
+  • If the subject is on the LEFT → place the text on the RIGHT (anchor x ≈ 0.88-0.95, align: "right").
+  • If the subject is CENTRED and fills the frame → use a tint overlay (opacity 0.35-0.55) and place text in the upper or lower third.
+  • Text never overlaps the subject. The brand look is "photo on one side, type on the other."
+
+PICKING THE HEADLINE — the headline is the BIGGEST, MOST PROMINENT line. It must be the one thing a customer parses in a 1-second glance.
+  • If the objective mentions a promo, discount, or specific offer, THAT is the headline. Don't bury the offer in a subhead.
+  • PREFER A 3-LAYER OFFER STACK when the offer is short (1-3 words). Example pattern used by Celsius:
+      Objective: "Promote 10% off on first app order"
+      → headline:  "10%"           (HUGE — size 0.16-0.20, Peachi-Bold)
+      → subhead 1: "OFF"           (medium — size 0.06-0.07, Peachi-Bold, just under the headline)
+      → subhead 2: "on your first app order"  (small — size 0.030-0.038, Peachi-Medium)
+    All three left-aligned, anchored at the same x, stepped y values close together so they read as ONE composition.
+  • If the offer is longer ("Buy 1 Get 1"), use a 2-layer pattern: headline = offer, subhead = context.
+  • If there's no offer, headline = campaign theme in 2-4 words ("Slow down.", "Holiday brews"), with a contextual subhead.
+  • Headlines under 5 words. No "!" unless the objective explicitly calls for hype.
 
 BRAND POSTER LOOK — Celsius posters use this typography pattern:
-  • Headline: Peachi (serif), heavy weight, often broken into two short lines for a "rhythm" feel ("Slow down. / Coffee is here."). Light cream/white on dark photos, espresso brown on light photos.
-  • Subheads: Peachi medium, shorter and softer. Often muted opacity ('#F5F3F0' or 'rgba(255,255,255,0.7)' style colours).
-  • Left-aligned poster copy is the default for the brand. Centre-aligned is fine for splash but feels more generic — prefer left-aligned for home banners unless the bg specifically demands centre composition.
-  • Group the text — headline and subheads sit in a stack (close x values, stepped y values), not scattered.
+  • Headline: Peachi serif, heavy. Light cream/white on dark photos, espresso brown on light photos. Often dramatically large for short offers (size 0.16-0.20).
+  • Subheads: Peachi medium, shorter and softer. Tightly stacked under the headline.
+  • Left-aligned is the brand default. Centre-aligned reads as generic — only use it when the subject is dead-centre.
+  • Group the text — headline and subheads sit in a stack with the SAME x value, stepped y values 0.06-0.10 apart. Never scatter them across the frame.
 
-CHOOSING COLOURS — look at the image carefully. Identify low-detail areas (sky, flat surfaces, blurred backgrounds) where text will read clearly. For EACH text layer, choose a colour with strong contrast against the bg AT THAT TEXT'S POSITION (light text on dark areas, dark text on light areas). Brand-coherent picks are #FFFFFF, #F5F3F0 (cream), #160800 (espresso), #C2452D (terracotta), #FBBF24 (amber) — only stray from these if the bg demands it. The tint sits over the entire image and helps unify the look — keep it subtle (opacity 0.15-0.45) unless the image is very busy.
+CHOOSING COLOURS — look at the calm area you'll place text on. For EACH text layer, choose a colour with strong contrast against THAT region of the bg (light text on dark areas, dark text on light areas). Brand-coherent picks: #FFFFFF, #F5F3F0 (cream), #160800 (espresso), #C2452D (terracotta), #FBBF24 (amber). The full-frame tint is subtle (opacity 0.15-0.45) unless the bg is so busy that text needs a darker scrim under it.
 
-DECIDE HOW MANY SUBHEADS — usually 1 (just a tagline), sometimes 2 (context + CTA), occasionally 3 if the objective is dense. Don't pad. Each subhead should earn its place.
+SHADOW — each text layer can carry a drop-shadow strength (0-1) that lifts it off the bg. Default to 0 when contrast is already strong (white text on espresso photo, espresso text on cream surface). Set 0.3-0.5 when the bg is pale or busy enough that the text would otherwise feel muddy. Set 0.6-0.8 only when the layer sits directly on a high-detail area you couldn't reposition. Never use shadow as a substitute for picking the right colour — fix the colour first; shadow is the fallback.
 
-BRAND VOICE — warm, casual, Malaysian English. Headline 2-4 words, punchy. Each subhead 3-10 words. No emojis.
+DECIDE HOW MANY SUBHEADS — for short offers, ALWAYS use the 3-layer stack (headline + 2 subheads) shown above. For longer headlines, 1 subhead is enough. Don't pad.
+
+BRAND VOICE — warm, casual, Malaysian English. Headline 1-4 words, punchy. Each subhead 1-8 words. No emojis.
 
 Return STRICT JSON only — no prose, no markdown fences:
 
@@ -85,8 +150,9 @@ Return STRICT JSON only — no prose, no markdown fences:
     "x": 0.0-1.0,
     "y": 0.0-1.0,
     "color": "#RRGGBB",
-    "size": 0.06-0.16,
-    "align": "left" | "center" | "right"
+    "size": 0.06-0.22,
+    "align": "left" | "center" | "right",
+    "shadow": 0.0-1.0
   },
   "subheads": [
     {
@@ -94,8 +160,9 @@ Return STRICT JSON only — no prose, no markdown fences:
       "x": 0.0-1.0,
       "y": 0.0-1.0,
       "color": "#RRGGBB",
-      "size": 0.025-0.06,
-      "align": "left" | "center" | "right"
+      "size": 0.025-0.08,
+      "align": "left" | "center" | "right",
+      "shadow": 0.0-1.0
     }
     // ... 1-3 items total
   ]
@@ -130,15 +197,23 @@ export async function POST(request: NextRequest) {
   const imageUrl: string | undefined = body?.imageUrl;
   const objective: string = (body?.objective ?? "").toString().trim();
   const placement: Placement = body?.placement === "splash" ? "splash" : "home";
+  // "compose" (default) generates a brand-new poster from the objective.
+  // "extract" OCRs the existing text in the image and returns it as
+  // editable layers — used when the operator opens AI compose on a
+  // legacy poster (no composer_state saved) so they can edit the prior
+  // text instead of starting from scratch.
+  const mode: "compose" | "extract" = body?.mode === "extract" ? "extract" : "compose";
 
   if (!imageUrl) {
     return NextResponse.json({ error: "imageUrl required" }, { status: 400 });
   }
-  if (!objective) {
-    return NextResponse.json({ error: "objective required" }, { status: 400 });
-  }
-  if (objective.length > 600) {
-    return NextResponse.json({ error: "objective too long (max 600 chars)" }, { status: 400 });
+  if (mode === "compose") {
+    if (!objective) {
+      return NextResponse.json({ error: "objective required" }, { status: 400 });
+    }
+    if (objective.length > 600) {
+      return NextResponse.json({ error: "objective too long (max 600 chars)" }, { status: 400 });
+    }
   }
 
   let img: { data: string; mediaType: "image/jpeg" | "image/png" | "image/webp" };
@@ -161,7 +236,7 @@ export async function POST(request: NextRequest) {
               type: "image",
               source: { type: "base64", media_type: img.mediaType, data: img.data },
             },
-            { type: "text", text: buildPrompt(objective, placement) },
+            { type: "text", text: mode === "extract" ? buildExtractPrompt(placement) : buildPrompt(objective, placement) },
           ],
         },
       ],
@@ -206,12 +281,13 @@ export async function POST(request: NextRequest) {
     const normaliseSub = (raw: unknown, idx: number): TextLayerSuggestion => {
       const r = (raw ?? {}) as Partial<TextLayerSuggestion>;
       return {
-        text:  String(r.text ?? "").slice(0, 140),
-        x:     clamp(r.x, 0, 1, 0.5),
-        y:     clamp(r.y, 0, 1, 0.55 + idx * 0.07),
-        color: hex(r.color, "#F5F3F0"),
-        size:  clamp(r.size, 0.02, 0.08, 0.04),
-        align: align(r.align, "center"),
+        text:   String(r.text ?? "").slice(0, 140),
+        x:      clamp(r.x, 0, 1, 0.5),
+        y:      clamp(r.y, 0, 1, 0.55 + idx * 0.07),
+        color:  hex(r.color, "#F5F3F0"),
+        size:   clamp(r.size, 0.02, 0.10, 0.04),
+        align:  align(r.align, "center"),
+        shadow: clamp(r.shadow, 0, 1, 0),
       };
     };
 
@@ -224,12 +300,13 @@ export async function POST(request: NextRequest) {
       tintColor:   hex(parsed.tintColor, "#160800"),
       tintOpacity: clamp(parsed.tintOpacity, 0, 0.7, 0.25),
       headline: {
-        text:  String(parsed.headline?.text ?? "").slice(0, 60),
-        x:     clamp(parsed.headline?.x, 0, 1, 0.5),
-        y:     clamp(parsed.headline?.y, 0, 1, 0.4),
-        color: hex(parsed.headline?.color, "#FFFFFF"),
-        size:  clamp(parsed.headline?.size, 0.04, 0.2, 0.1),
-        align: align(parsed.headline?.align, "center"),
+        text:   String(parsed.headline?.text ?? "").slice(0, 60),
+        x:      clamp(parsed.headline?.x, 0, 1, 0.5),
+        y:      clamp(parsed.headline?.y, 0, 1, 0.4),
+        color:  hex(parsed.headline?.color, "#FFFFFF"),
+        size:   clamp(parsed.headline?.size, 0.04, 0.24, 0.1),
+        align:  align(parsed.headline?.align, "center"),
+        shadow: clamp(parsed.headline?.shadow, 0, 1, 0),
       },
       // Guarantee at least one subhead so the composer always has
       // something to drag / re-style.
