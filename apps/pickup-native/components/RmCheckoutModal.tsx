@@ -53,6 +53,53 @@ const RETURN_SCHEME = "celsiuscoffee://rm-return";
 // the "Cards" button text and click it on the customer's behalf. Safe
 // to no-op — if RM renames or restructures, the customer just sees the
 // picker as today.
+// Constrain horizontal overflow on RM's hosted payment pages. Some
+// banks (bank2u.com FPX, certain GrabPay flows) render at a fixed
+// desktop width and the WebView lets the customer pan horizontally —
+// content shifts left, "bank2u.com" reads as "ank2u.com", etc.
+// Forces a mobile viewport + clamps html/body to 100vw so horizontal
+// pan is impossible. Safe to no-op: if the page is already mobile-sized,
+// the rules just confirm what's already true.
+const VIEWPORT_CLAMP_JS = `
+(function () {
+  if (window.__celsiusViewportClamp) return true;
+  window.__celsiusViewportClamp = true;
+  var ensureMeta = function () {
+    var head = document.head || document.getElementsByTagName('head')[0];
+    if (!head) return;
+    var meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'viewport');
+      head.appendChild(meta);
+    }
+    meta.setAttribute(
+      'content',
+      'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no'
+    );
+  };
+  var ensureStyle = function () {
+    var head = document.head || document.getElementsByTagName('head')[0];
+    if (!head) return;
+    var existing = document.getElementById('celsius-viewport-clamp');
+    if (existing) return;
+    var style = document.createElement('style');
+    style.id = 'celsius-viewport-clamp';
+    style.appendChild(document.createTextNode(
+      'html, body { max-width: 100vw !important; overflow-x: hidden !important; }'
+    ));
+    head.appendChild(style);
+  };
+  ensureMeta();
+  ensureStyle();
+  document.addEventListener('DOMContentLoaded', function () {
+    ensureMeta();
+    ensureStyle();
+  });
+})();
+true;
+`;
+
 const CARD_AUTOTAP_JS = `
 (function () {
   if (window.__celsiusCardAutoTap) return true;
@@ -197,7 +244,10 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, method
             onHttpError={({ nativeEvent }) =>
               setErrorMsg(`Payment page returned HTTP ${nativeEvent.statusCode}`)
             }
-            injectedJavaScript={methodId === "card" ? CARD_AUTOTAP_JS : undefined}
+            injectedJavaScript={
+              VIEWPORT_CLAMP_JS + (methodId === "card" ? CARD_AUTOTAP_JS : "")
+            }
+            injectedJavaScriptBeforeContentLoaded={VIEWPORT_CLAMP_JS}
             javaScriptEnabled
             domStorageEnabled
             startInLoadingState={false}
