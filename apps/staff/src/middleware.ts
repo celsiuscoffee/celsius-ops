@@ -11,8 +11,14 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
 
-  // CSRF protection — runs FIRST.
-  const csrfFail = checkCsrf(request, { allowedOrigins: ALLOWED_ORIGINS });
+  // CSRF protection — runs FIRST. /api/auth/pin-native is the bootstrap
+  // login call from apps/staff-native; it can't carry a bearer token yet
+  // (the response IS the token), and the route has its own rate limit
+  // + PIN check, so cross-origin abuse is bounded.
+  const csrfFail = checkCsrf(request, {
+    allowedOrigins: ALLOWED_ORIGINS,
+    exemptPrefixes: ["/api/auth/pin-native"],
+  });
   if (csrfFail) {
     return NextResponse.json(
       { error: `CSRF check failed: ${csrfFail.reason}` },

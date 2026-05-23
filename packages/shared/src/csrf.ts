@@ -70,6 +70,15 @@ export function checkCsrf(
   const method = request.method.toUpperCase();
   if (SAFE_METHODS.has(method)) return null;
 
+  // Bearer-token authenticated requests are CSRF-immune by construction:
+  // browsers don't auto-attach `Authorization` headers cross-origin, so
+  // a malicious site can't forge an authenticated request without the
+  // attacker already having the token (a different threat model). This
+  // unblocks the native staff app (apps/staff-native) which uses fetch
+  // without browser-provided Origin/Referer.
+  const authHeader = request.headers.get("authorization") ?? "";
+  if (/^Bearer\s+\S+/i.test(authHeader)) return null;
+
   const url = new URL(request.url);
   const exemptPrefixes = [...DEFAULT_EXEMPT_PREFIXES, ...(opts.exemptPrefixes ?? [])];
   if (exemptPrefixes.some((p) => url.pathname.startsWith(p))) return null;
