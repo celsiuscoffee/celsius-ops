@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+// Use service-role: the staff app uses bearer-token auth, so there's no
+// Supabase auth session and `auth.uid()` is null inside RLS policies —
+// writes against the anon client get rejected with "permission denied".
+// Permissions are still enforced here in code via `session.id` (every
+// query filters on `user_id = session.id`).
+import { supabaseAdmin as supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
