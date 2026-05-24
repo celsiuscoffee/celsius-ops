@@ -7,7 +7,6 @@ import { useQuery } from "@tanstack/react-query";
 import { CelsiusCup } from "./brand/CelsiusCup";
 import { useApp } from "../lib/store";
 import { fetchMyVouchers, fetchClaimableVouchers } from "../lib/rewards-v2";
-import { fetchRewards, type Reward } from "../lib/rewards";
 
 type Tab = {
   key: string;
@@ -35,14 +34,18 @@ export function BottomNav() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
 
-  // Live count of redeemable rewards — drives the badge over the Gift
-  // icon. Same definition as the home-hero "Rewards" KPI so the two
-  // numbers always match. Reads through React Query so each fetch
-  // is cached across the app (no duplicate network).
+  // Live count of REWARDS THE CUSTOMER OWNS — drives the badge
+  // over the Gift icon. Same definition as the home-hero "Rewards"
+  // KPI so the two numbers always match. Reads through React
+  // Query so each fetch is cached across the app (no duplicate
+  // network).
   //   1. Active wallet vouchers (already owned)
-  //   2. Claimables (welcome / promo / mystery_pending)
-  //   3. Affordable points-shop catalog entries (under current Beans
-  //                 balance, valid window, in stock, pickup-capable)
+  //   2. Claimables (welcome / promo / mystery_pending — one-tap
+  //                  to mint into the wallet)
+  // Affordable catalog redemptions are deliberately NOT counted —
+  // those are "rewards you could buy with beans", not "rewards
+  // you have". Including them caused a confusing mismatch between
+  // the badge number and the visible wallet list.
   const phone = useApp((s) => s.phone);
   const walletQ = useQuery({
     queryKey: ["my-vouchers", phone ?? "anon"],
@@ -56,34 +59,9 @@ export function BottomNav() {
     enabled: !!phone,
     staleTime: 60_000,
   });
-  const rewardsCatalogQ = useQuery({
-    queryKey: ["rewards", phone ?? "anonymous"],
-    queryFn: () => fetchRewards(phone),
-    enabled: !!phone,
-    staleTime: 5 * 60_000,
-  });
-
-  const balance = rewardsCatalogQ.data?.pointsBalance ?? 0;
   const activeWalletCount = (walletQ.data ?? []).filter((v) => v.status === "active").length;
   const claimableCount = (claimableQ.data ?? []).length;
-  const affordableCatalogCount = (rewardsCatalogQ.data?.rewards ?? []).filter((r: Reward) => {
-    if (!r.is_active) return false;
-    if (r.points_required <= 0 || r.points_required > balance) return false;
-    const now = Date.now();
-    if (r.valid_from && new Date(r.valid_from).getTime() > now) return false;
-    if (r.valid_until && new Date(r.valid_until).getTime() < now) return false;
-    if (r.stock != null && r.stock <= 0) return false;
-    if (
-      r.max_redemptions_per_member != null &&
-      (r.redemption_count ?? 0) >= r.max_redemptions_per_member
-    ) {
-      return false;
-    }
-    const ft = r.fulfillment_type;
-    if (Array.isArray(ft) && ft.length > 0 && !ft.includes("pickup")) return false;
-    return true;
-  }).length;
-  const rewardsCount = activeWalletCount + claimableCount + affordableCatalogCount;
+  const rewardsCount = activeWalletCount + claimableCount;
 
   // Web: nav pins to viewport bottom via position:fixed so it
   // follows the user as they scroll. Body owns the scroll (so iOS

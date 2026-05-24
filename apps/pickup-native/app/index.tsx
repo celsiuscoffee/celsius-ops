@@ -281,37 +281,20 @@ export default function Home() {
   const posters: HomePoster[] = postersQ.data ?? [];
 
   const heroBalance = rewardsQ.data?.pointsBalance ?? 0;
-  // Rewards KPI on the home hero — sums everything the customer can
-  // act on right now. Same definition as the bottom-nav badge so the
-  // two counts always match.
+  // Rewards KPI on the home hero — counts what the customer OWNS
+  // right now. Same definition as the bottom-nav badge so the two
+  // counts always match.
   //   1. Active wallet vouchers (already owned)
   //   2. Claimables (welcome / promo / mystery_pending — one-tap to
   //                 mint into the wallet)
-  //   3. Affordable points-shop catalog entries (can be redeemed
-  //                 against the current Beans balance, valid window,
-  //                 in stock, pickup-capable, under per-member cap)
-  // affordableRewards below is `.slice(0, 6)` for the rail; we reuse
-  // the un-sliced source so the count covers the FULL inventory.
+  // Affordable points-shop catalog entries are NOT counted —
+  // they're "things you could buy with beans", not "things you have".
+  // Lumping them in inflated the number vs what the customer can
+  // visibly count in the wallet list and caused real confusion
+  // ("home says 13 rewards but I only see 10").
   const activeVoucherCount = walletVouchers.filter((v) => v.status === "active").length;
   const claimableCount = claimables.length;
-  const redeemableCatalogCount = (rewardsQ.data?.rewards ?? []).filter((r: Reward) => {
-    if (!r.is_active) return false;
-    if (r.points_required <= 0 || r.points_required > points) return false;
-    const now = Date.now();
-    if (r.valid_from && new Date(r.valid_from).getTime() > now) return false;
-    if (r.valid_until && new Date(r.valid_until).getTime() < now) return false;
-    if (r.stock != null && r.stock <= 0) return false;
-    if (
-      r.max_redemptions_per_member != null &&
-      (r.redemption_count ?? 0) >= r.max_redemptions_per_member
-    ) {
-      return false;
-    }
-    const ft = r.fulfillment_type;
-    if (Array.isArray(ft) && ft.length > 0 && !ft.includes("pickup")) return false;
-    return true;
-  }).length;
-  const voucherCount = activeVoucherCount + claimableCount + redeemableCatalogCount;
+  const voucherCount = activeVoucherCount + claimableCount;
 
   return (
     <View className="flex-1 bg-background">
