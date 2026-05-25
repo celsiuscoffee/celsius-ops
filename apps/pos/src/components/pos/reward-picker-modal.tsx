@@ -23,39 +23,36 @@ import {
   Sandwich, Sparkles, Ticket,
   type LucideIcon,
 } from "lucide-react";
-import type { ActiveVoucher, AffordableCatalogReward } from "@celsius/shared";
+import type { ActiveVoucher } from "@celsius/shared";
 
 type SourceType = ActiveVoucher["source_type"];
 
-/** Local row shape rendered by VoucherCard. Normalised from either
- *  an ActiveVoucher (wallet) or a catalog Reward so the card itself
- *  doesn't have to branch on the source. Discriminated by
- *  `voucher_id`: present → wallet voucher (free to use); absent →
- *  catalog item (costs `points_required` beans). */
+/** Local row shape rendered by VoucherCard. Normalised from an
+ *  ActiveVoucher so the card doesn't have to know about Supabase
+ *  shape. Catalog rows were previously concatenated into the same
+ *  list but were dropped from this modal — the customer's
+ *  bean-shop redemptions happen in the Pickup app, and showing
+ *  catalog items alongside owned vouchers made the cashier think
+ *  the customer already had them. POS now mirrors the Pickup wallet
+ *  exactly: owned vouchers only. */
 type DisplayReward = {
   id: string;
   name: string;
   description: string | null;
-  points_required: number | null;  // null for wallet vouchers
   discount_type: string | null;
   discount_value: number | null;
   max_discount_value: number | null;
   free_product_name: string | null;
   icon: string | null;
   source_type: SourceType;
-  /** issued_rewards.id — only on wallet rewards (mark-used target) */
-  voucher_id: string | null;
+  /** issued_rewards.id — the mark-used target. */
+  voucher_id: string;
   /** Catalog back-reference for the /redeem endpoint's rewards-table
-   *  lookup. ActiveVoucher.reward_id for wallet rows; the catalog
-   *  row's own id for catalog rows. */
+   *  lookup. ActiveVoucher.reward_id when present, else fall back to
+   *  the voucher's own id (template-backed rows have no back-ref). */
   reward_back_ref_id: string;
   expires_at: string | null;
 };
-
-/** Catalog row shape returned by /api/loyalty/rewards. Imported
- *  directly from the shared package so POS + Pickup never drift on
- *  catalog field shape. */
-type CatalogReward = AffordableCatalogReward;
 
 type RewardDiscount = {
   type: string;
@@ -180,14 +177,12 @@ function urgencyLabel(expiresAt: string | null | undefined): { label: string; wa
 // ─── Modal ────────────────────────────────────────────────────────
 
 /** Normalise an ActiveVoucher (wallet) into the modal's DisplayReward
- *  shape. Wallet vouchers have no points cost; `voucher_id` carries
- *  the issued_rewards.id (mark-used target). */
+ *  shape. `voucher_id` carries the issued_rewards.id (mark-used target). */
 function fromActiveVoucher(v: ActiveVoucher): DisplayReward {
   return {
     id: v.id,
     name: v.title,
     description: v.description || null,
-    points_required: null,
     discount_type: v.discount_type,
     discount_value: v.discount_value,
     max_discount_value: v.max_discount_value,
@@ -206,33 +201,10 @@ function fromActiveVoucher(v: ActiveVoucher): DisplayReward {
   };
 }
 
-/** Normalise a catalog row into the same DisplayReward shape. */
-function fromCatalog(r: CatalogReward): DisplayReward {
-  return {
-    id: r.id,
-    name: r.name,
-    description: r.description,
-    points_required: r.points_required,
-    discount_type: r.discount_type,
-    discount_value: r.discount_value,
-    max_discount_value: r.max_discount_value,
-    free_product_name: r.free_product_name,
-    // Catalog rows on the rewards table don't carry a Lucide icon
-    // key — pickRewardIcon falls back to a title-based heuristic
-    // when null.
-    icon: null,
-    source_type: "points_redemption",
-    voucher_id: null,
-    reward_back_ref_id: r.id,
-    expires_at: null,
-  };
-}
-
 export function RewardPickerModal({ memberId, memberName, outletId, onRedeem, onClose }: Props) {
   const [loading, setLoading] = useState(true);
   const [redeeming, setRedeeming] = useState<string | null>(null);
   const [balance, setBalance] = useState(0);
-  const [catalog, setCatalog] = useState<DisplayReward[]>([]);
   const [issued, setIssued] = useState<DisplayReward[]>([]);
   const [error, setError] = useState("");
 
@@ -242,8 +214,11 @@ export function RewardPickerModal({ memberId, memberName, outletId, onRedeem, on
         const res = await fetch(`/api/loyalty/rewards?member_id=${memberId}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
+        // Catalog (data.catalog) is intentionally ignored — POS only
+        // surfaces owned vouchers so the cashier sees the same list
+        // the customer sees in their Pickup wallet. Beans balance is
+        // still pulled for the header readout.
         setBalance(data.balance);
-        setCatalog((data.catalog ?? []).map(fromCatalog));
         setIssued((data.issued ?? []).map(fromActiveVoucher));
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to load rewards");
@@ -282,8 +257,7 @@ export function RewardPickerModal({ memberId, memberName, outletId, onRedeem, on
     }
   }
 
-  const allRewards = [...issued, ...catalog];
-  const hasRewards = allRewards.length > 0;
+  const hasRewards = issued.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
@@ -348,34 +322,19 @@ export function RewardPickerModal({ memberId, memberName, outletId, onRedeem, on
             </div>
           ) : (
             <div className="space-y-2.5">
-              {/* Issued (wallet vouchers) — source-themed, free to use */}
+              {/* Owned wallet vouchers only — source-themed, free to use.
+               *  Catalog (Spend Beans) intentionally lives in the
+               *  Pickup app, not here, so cashier + customer see the
+               *  same list. */}
               {issued.map((r) => (
                 <VoucherCard
-                  key={`issued-${r.voucher_id ?? r.id}`}
+                  key={`issued-${r.voucher_id}`}
                   reward={r}
-                  cost={null}
                   redeeming={redeeming === r.id}
                   disabled={!!redeeming}
                   onUse={() => handleRedeem(r)}
                 />
               ))}
-              {/* Catalog (Spend Beans) — always Bean theme */}
-              {catalog.map((r) => {
-                // fromCatalog guarantees points_required is non-null
-                // for catalog rows; widen safely for the comparison.
-                const cost = r.points_required ?? 0;
-                const tooLow = cost > balance;
-                return (
-                  <VoucherCard
-                    key={`cat-${r.id}`}
-                    reward={r}
-                    cost={cost}
-                    redeeming={redeeming === r.id}
-                    disabled={tooLow || !!redeeming}
-                    onUse={() => handleRedeem(r)}
-                  />
-                );
-              })}
             </div>
           )}
 
@@ -392,13 +351,11 @@ export function RewardPickerModal({ memberId, memberName, outletId, onRedeem, on
 
 function VoucherCard({
   reward,
-  cost,
   redeeming,
   disabled,
   onUse,
 }: {
   reward: DisplayReward;
-  cost: number | null;     // points cost for catalog; null for issued
   redeeming: boolean;
   disabled: boolean;
   onUse: () => void;
@@ -406,10 +363,7 @@ function VoucherCard({
   const theme = themeForSource(reward.source_type ?? null);
   const eyebrow = sourceLabel(reward.source_type ?? null);
   const RewardIcon = pickRewardIcon(reward.name, reward.icon);
-  // Urgency line only renders for wallet vouchers — catalog items
-  // have no expiry to show. Discriminate by voucher_id presence
-  // (set only on wallet rows).
-  const urgency = reward.voucher_id !== null ? urgencyLabel(reward.expires_at) : null;
+  const urgency = urgencyLabel(reward.expires_at);
 
   return (
     <button
@@ -439,25 +393,16 @@ function VoucherCard({
         >
           {reward.name}
         </p>
-        {urgency ? (
-          <p
-            className="mt-0.5 truncate text-[11px]"
-            style={{
-              fontFamily: "Space Grotesk",
-              color: urgency.warn ? "#FFB070" : theme.fgDim,
-              fontWeight: 500,
-            }}
-          >
-            {urgency.label}
-          </p>
-        ) : reward.description ? (
-          <p
-            className="mt-0.5 truncate text-[11px]"
-            style={{ fontFamily: "Space Grotesk", color: theme.fgDim }}
-          >
-            {reward.description}
-          </p>
-        ) : null}
+        <p
+          className="mt-0.5 truncate text-[11px]"
+          style={{
+            fontFamily: "Space Grotesk",
+            color: urgency.warn ? "#FFB070" : theme.fgDim,
+            fontWeight: 500,
+          }}
+        >
+          {urgency.label}
+        </p>
       </div>
 
       <span
@@ -468,7 +413,7 @@ function VoucherCard({
           color: theme.pillFg,
         }}
       >
-        {redeeming ? "…" : cost !== null ? `${cost.toLocaleString()} ›` : "Use ›"}
+        {redeeming ? "…" : "Use ›"}
       </span>
     </button>
   );
