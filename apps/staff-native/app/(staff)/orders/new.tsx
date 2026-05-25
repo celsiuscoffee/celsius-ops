@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Minus,
   Plus,
+  Package as PackageIcon,
   Search,
   Send,
   Sparkles,
@@ -38,13 +39,21 @@ import {
 } from "../../../lib/ops/ai-decisions";
 
 type Supplier = { id: string; name: string; phone?: string | null };
+// Mirrors the shape served by /api/products/options — flatten just the
+// fields we actually need for the picker + cart line. `category` is the
+// product group name (e.g. "Coffee Beans"), shown as a Pill.
 type Product = {
   id: string;
   name: string;
   sku: string;
   baseUom: string;
-  categoryName?: string | null;
-  packages?: Array<{ id: string; label?: string; name: string }>;
+  category?: string | null;
+  packages?: Array<{
+    id: string;
+    name: string;
+    label: string;
+    isDefault: boolean;
+  }>;
 };
 
 type CartLine = {
@@ -93,13 +102,18 @@ export default function NewPO() {
     let cancelled = false;
     (async () => {
       try {
+        // Both endpoints return raw arrays (staff app convention); the
+        // `{items}` fallback is kept defensively in case backoffice ever
+        // serves these via a paged response. `/api/products/options` is
+        // the canonical product catalog endpoint — `/api/products` does
+        // not exist on staff, so the picker was always empty.
         const [s, p] = await Promise.all([
           api<{ items?: Supplier[] } | Supplier[]>("/api/suppliers").catch(
             () => ({ items: [] }),
           ),
-          api<{ items?: Product[] } | Product[]>("/api/products").catch(
-            () => ({ items: [] }),
-          ),
+          api<{ items?: Product[] } | Product[]>(
+            "/api/products/options",
+          ).catch(() => ({ items: [] })),
         ]);
         if (cancelled) return;
         setSuppliers(Array.isArray(s) ? s : (s.items ?? []));
@@ -166,7 +180,9 @@ export default function NewPO() {
   }
 
   function addProduct(p: Product) {
-    const pkg = p.packages?.[0];
+    // Prefer the package marked default in the catalog (e.g. "1 kg bag")
+    // so suppliers receive the order in the unit they sell.
+    const pkg = p.packages?.find((x) => x.isDefault) ?? p.packages?.[0];
     setCart((prev) => [
       ...prev,
       {
@@ -399,7 +415,9 @@ export default function NewPO() {
         ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerClassName="pb-40"
+          // pb-32 ≈ pinned bar height (h-14 + py-3 = 80px) + breathing room.
+          // Anything larger leaves a visible dead zone above the bar.
+          contentContainerClassName="pb-32"
           keyboardShouldPersistTaps="handled"
         >
           {/* Supplier */}
@@ -447,11 +465,37 @@ export default function NewPO() {
           </View>
 
           {cart.length === 0 ? (
-            <View className="mt-3 rounded-3xl border border-dashed border-border bg-surface px-4 py-8 items-center">
-              <Text className="text-sm font-body text-muted-fg">
-                No items yet — tap Add item above.
+            // Big tappable empty state — the whole card opens the picker
+            // so the user doesn't have to find the tiny "Add item" pill
+            // above. Also fills the vertical space so the pinned action
+            // bar doesn't float over a blank screen.
+            <Pressable
+              onPress={() => setProductPicker(true)}
+              disabled={!supplierId}
+              className={`mt-3 rounded-3xl border border-dashed border-border bg-surface px-4 py-10 items-center ${
+                supplierId ? "active:bg-primary-50" : "opacity-60"
+              }`}
+            >
+              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-primary-50">
+                <PackageIcon color="#C2452D" size={26} />
+              </View>
+              <Text className="mt-3 text-base font-body-bold text-espresso">
+                {supplierId ? "Add your first item" : "Pick a supplier first"}
               </Text>
-            </View>
+              <Text className="mt-1 px-6 text-center text-xs font-body text-muted-fg">
+                {supplierId
+                  ? "Tap here to browse the catalog and build the order."
+                  : "Select a supplier above to start adding items."}
+              </Text>
+              {supplierId ? (
+                <View className="mt-3 flex-row items-center gap-1 rounded-full bg-primary px-3.5 py-1.5">
+                  <Plus color="#FFFFFF" size={14} />
+                  <Text className="text-xs font-body-bold text-white">
+                    Add item
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
           ) : (
             <View className="mt-3 gap-2">
               {cart.map((line, idx) => (
@@ -556,17 +600,21 @@ export default function NewPO() {
             </View>
           )}
 
-          {/* Notes */}
-          <Field label="Notes (optional)">
-            <TextInput
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="e.g. urgent — needed by morning shift"
-              placeholderTextColor="#9CA3AF"
-              multiline
-              className="min-h-14 rounded-2xl border border-border bg-surface px-4 py-3 text-base font-body text-espresso"
-            />
-          </Field>
+          {/* Notes — only relevant once there's something to note about.
+              Hiding while empty also tightens the visual gap above the
+              pinned action bar. */}
+          {cart.length > 0 ? (
+            <Field label="Notes (optional)">
+              <TextInput
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="e.g. urgent — needed by morning shift"
+                placeholderTextColor="#9CA3AF"
+                multiline
+                className="min-h-14 rounded-2xl border border-border bg-surface px-4 py-3 text-base font-body text-espresso"
+              />
+            </Field>
+          ) : null}
         </ScrollView>
         )}
 
@@ -734,8 +782,8 @@ export default function NewPO() {
                         {p.sku} · {p.baseUom}
                       </Text>
                     </View>
-                    {p.categoryName ? (
-                      <Pill label={p.categoryName} tone="muted" />
+                    {p.category ? (
+                      <Pill label={p.category} tone="muted" />
                     ) : null}
                   </View>
                 </Pressable>

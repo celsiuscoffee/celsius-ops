@@ -11,6 +11,8 @@ export async function GET() {
     select: {
       id: true,
       name: true,
+      // Native New-PO flow uses phone for the "Send via WhatsApp" deeplink.
+      phone: true,
       supplierProducts: {
         where: { isActive: true },
         select: {
@@ -26,6 +28,7 @@ export async function GET() {
   const result = suppliers.map((s) => ({
     id: s.id,
     name: s.name,
+    phone: s.phone ?? null,
     products: s.supplierProducts.map((sp) => ({
       id: sp.product.id,
       name: sp.product.name,
