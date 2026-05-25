@@ -35,6 +35,17 @@ export async function GET(req: NextRequest) {
   const tab = url.searchParams.get("tab") || "unpaid";
   const cardFilter = url.searchParams.get("cardFilter") || "";
   const search = url.searchParams.get("search")?.trim() ?? "";
+  // Phase 10 filters — all optional, layered on top of tab/cardFilter.
+  // - popStatus: "sent" | "not_sent" — paid invoices only; for finance
+  //   to find what's been collected but not yet acknowledged to supplier.
+  // - supplierId: drill into one supplier's invoices.
+  // - outletId: manager-only override of the default outlet scope below.
+  // - dateFrom / dateTo: filter by issueDate (ISO yyyy-mm-dd). Inclusive.
+  const popStatus = url.searchParams.get("popStatus") || "";
+  const filterSupplierId = url.searchParams.get("supplierId") || "";
+  const filterOutletId = url.searchParams.get("outletId") || "";
+  const dateFrom = url.searchParams.get("dateFrom") || "";
+  const dateTo = url.searchParams.get("dateTo") || "";
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -84,13 +95,48 @@ export async function GET(req: NextRequest) {
   // outlet. An invoice's outlet is on the linked order; for PR/staff-
   // claim invoices (no order) we currently show them to everyone since
   // there's no outlet to scope by. Mirrors the staff-side claims API.
+  //
+  // Managers can override via ?outletId=... in the filter sheet. We
+  // enforce server-side that non-managers can NOT pass outletId — they
+  // stay locked to their assigned outlet (silent no-op rather than 403
+  // so a stale UI doesn't break the list).
   const isManager = ["OWNER", "ADMIN", "MANAGER"].includes(session.role);
-  if (!isManager && session.outletId) {
+  if (isManager && filterOutletId) {
+    where.order = { outletId: filterOutletId };
+  } else if (!isManager && session.outletId) {
     where.OR = [
       ...((where.OR as Prisma.InvoiceWhereInput[] | undefined) ?? []),
       { order: { outletId: session.outletId } },
       { orderId: null }, // ad-hoc / staff-claim invoices have no order
     ];
+  }
+
+  // Supplier filter — applies to any role.
+  if (filterSupplierId) {
+    where.supplierId = filterSupplierId;
+  }
+
+  // POP-sent filter — only meaningful for paid statuses (a DRAFT POP
+  // makes no sense). The list still respects whatever tab/cardFilter is
+  // applied; this just narrows further.
+  if (popStatus === "sent") {
+    where.popSentAt = { not: null };
+  } else if (popStatus === "not_sent") {
+    where.popSentAt = null;
+  }
+
+  // Date range — filter by issueDate (the supplier-set date on the
+  // invoice). End-of-day rollover on dateTo so the user gets a full
+  // inclusive day when they pick a single date.
+  if (dateFrom || dateTo) {
+    const range: { gte?: Date; lte?: Date } = {};
+    if (dateFrom) range.gte = new Date(dateFrom);
+    if (dateTo) {
+      const end = new Date(dateTo);
+      end.setHours(23, 59, 59, 999);
+      range.lte = end;
+    }
+    where.issueDate = range;
   }
 
   if (search) {
@@ -129,6 +175,8 @@ export async function GET(req: NextRequest) {
       depositRef: true,
       paymentRef: true,
       popShortLink: true,
+      // Phase 10 — when the supplier was last sent the POP via WhatsApp.
+      popSentAt: true,
       status: true,
       paymentType: true,
       dueDate: true,
@@ -159,6 +207,7 @@ export async function GET(req: NextRequest) {
       depositRef: i.depositRef ?? null,
       paymentRef: i.paymentRef ?? null,
       popShortLink: i.popShortLink ?? null,
+      popSentAt: i.popSentAt?.toISOString() ?? null,
       status: i.status,
       paymentType: i.paymentType,
       dueDate: i.dueDate?.toISOString() ?? null,

@@ -487,6 +487,11 @@ model Invoice {
   paidVia       String?
   paymentRef    String?
   popShortLink  String?
+  // Timestamp the staff/native app stamps when "Send POP" is tapped and
+  // the WhatsApp deeplink opens. Used to surface a "POP sent" pill on
+  // the invoice list and to filter unsent-only. Null = never sent.
+  // (Resending overwrites — we don't keep a ledger of individual sends.)
+  popSentAt     DateTime?
   // Running total of all payments applied to this invoice. Single field
   // intentionally — covers deposit-then-balance flows AND ad-hoc partial
   // payments. If audit-grade payment history becomes a need (multiple
