@@ -189,12 +189,16 @@ export async function earnLoyaltyPoints(
       return;
     }
 
-    // Burn the post-purchase coupon if it was applied.
+    // Burn the post-purchase coupon if it was applied. Uses the
+    // shared mark-used helper so the row also gets a redeemed_at
+    // stamp (the previous inline update lost the timestamp, which
+    // broke audit trails for coupons burned via the points path).
     if (activeCoupon && couponMultiplier > 1) {
-      await supabase
-        .from("issued_rewards")
-        .update({ status: "used" })
-        .eq("id", activeCoupon.id);
+      const { markVoucherUsed } = await import("@celsius/shared");
+      await markVoucherUsed({
+        supabase,
+        voucherId: activeCoupon.id,
+      });
     }
 
     // Fire-and-forget tier re-evaluation so a member who just crossed

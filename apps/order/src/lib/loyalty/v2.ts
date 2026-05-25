@@ -987,12 +987,17 @@ export async function applyOrderV2Hooks(args: {
         .eq("member_id", memberId)
         .single();
 
-      const { error } = await supabase
-        .from("issued_rewards")
-        .update({ status: "used", redeemed_at: new Date().toISOString() })
-        .eq("id", walletVoucherId)
-        .eq("member_id", memberId);
-      if (error) console.warn("[v2] markVoucherUsed failed", error.message);
+      // Shared mark-used helper — idempotent (only flips active
+      // rows) and stamps redeemed_at. Matches POS's mark-used path
+      // so a voucher burned on either surface looks identical
+      // post-redemption.
+      const { markVoucherUsed } = await import("@celsius/shared");
+      const result = await markVoucherUsed({
+        supabase,
+        voucherId: walletVoucherId,
+        memberId,
+      });
+      if (!result.ok) console.warn("[v2] markVoucherUsed failed", result.error);
 
       // Multiplier credit. Reads the order's loyalty_points_earned to
       // know what 100% of the base award was, then awards (mul - 1) ×
