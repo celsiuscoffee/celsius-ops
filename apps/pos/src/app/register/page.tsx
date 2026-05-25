@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import Image from "next/image";
 import { ProductGrid } from "@/components/register/product-grid";
 import { CategoryTabs } from "@/components/register/category-tabs";
@@ -18,14 +18,62 @@ import { PromoIndicator } from "@/components/pos/promo-indicator";
 import { RewardPickerModal } from "@/components/pos/reward-picker-modal";
 import { usePOS } from "@/lib/pos-context";
 import { adaptProducts } from "@/lib/product-adapter";
-import { printReceipt58mm, printKitchenDocket58mm } from "@/lib/sunmi-printer";
+import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/sunmi-printer";
 import { lookupMemberByPhone, type LoyaltyMember } from "@/lib/customer-lookup";
+import { evaluatePromotions } from "@/lib/loyalty/promotions";
 import type { Product, CartItem, ModifierOption, AppliedPromotion, ProductCategory } from "@/types/database";
 import { displayRM } from "@/types/database";
-import { broadcastToCustomerDisplay } from "@/lib/customer-display-channel";
+import {
+  broadcastToCustomerDisplay,
+  listenToRegisterInbox,
+} from "@/lib/customer-display-channel";
 import { toast } from "sonner";
+import { ClipboardList } from "lucide-react";
+import {
+  computeVoucherDiscount,
+  legacyDescriptorToSpec,
+  type DiscountResult,
+} from "@celsius/shared";
 
 type ActivePage = "register" | "orders" | "transactions" | "shift" | "settings";
+
+/** Compute the discount in sen for a POS legacy descriptor against the
+ *  current cart. Single source of truth shared with Pickup's order
+ *  creation — both paths now flow through @celsius/shared's
+ *  computeVoucherDiscount(), so the same voucher on the same cart
+ *  gives the same discount on POS as on Pickup.
+ *
+ *  POS register prices live in sen on cart items (product.price,
+ *  unitPrice, modifierTotal). The engine takes sen throughout. */
+function applyDescriptorToCart(
+  legacy: {
+    type: string;
+    value: number;
+    max_discount: number | null;
+    min_order: number | null;
+    applicable_categories: string[] | null;
+    applicable_products: string[] | null;
+    free_product_ids: string[] | null;
+    free_product_name: string | null;
+  },
+  cart: CartItem[],
+): DiscountResult {
+  return computeVoucherDiscount({
+    spec: legacyDescriptorToSpec(legacy),
+    cart: cart.map((ci) => ({
+      product_id: ci.product.id,
+      quantity: ci.quantity,
+      // Customer's effective unit price — base + modifier upcharges.
+      // Matches how the free-item cheapest-line calc historically
+      // ranked POS cart lines (e.g. "Iced Latte Large + Oat" beats
+      // a "Black Coffee" base).
+      unit_price_sen: ci.unitPrice + ci.modifierTotal,
+      category: ci.product.category ?? null,
+      category_id: (ci.product as { category_id?: string }).category_id ?? null,
+      name: ci.product.name,
+    })),
+  });
+}
 
 export default function RegisterPage() {
   const pos = usePOS();
@@ -41,47 +89,27 @@ export default function RegisterPage() {
 
   // Adapt products from Supabase format to POS format (memoized)
   const allProducts = useMemo(() => adaptProducts(pos.products), [pos.products]);
-  // Build tabs based on layout mode (category / tags / custom)
-  const categoryList: ProductCategory[] = useMemo(() => {
-    const makeTab = (slug: string, name: string, order: number): ProductCategory => ({
-      id: slug, brand_id: "", name, slug, sort_order: order,
-      storehub_category_id: null, is_active: true, created_at: "",
-    });
-
-    const tabs: ProductCategory[] = [makeTab("all", "All", 0)];
-
-    // Always add Popular if we have data
-    if (pos.popularProductIds.length > 0) {
-      tabs.push(makeTab("popular", "⭐ Popular", 0.5));
-    }
-
-    if (pos.layoutMode === "tags") {
-      // Tags mode: tabs from unique product tags
-      const tagSet = new Set<string>();
-      for (const p of allProducts) { for (const t of (p.tags ?? [])) tagSet.add(t); }
-      [...tagSet].sort().forEach((tag, i) => {
-        tabs.push(makeTab(`tag:${tag}`, tag.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), i + 1));
-      });
-    } else if (pos.layoutMode === "custom" && pos.customLayouts.length > 0) {
-      // Custom mode: tabs from pos_register_layouts
-      pos.customLayouts.forEach((layout, i) => {
-        tabs.push(makeTab(`custom:${layout.id}`, layout.name, i + 1));
-      });
-    } else {
-      // Default: category mode
-      pos.categories.forEach((cat, i) => {
-        tabs.push(makeTab(cat, cat.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), i + 1));
-      });
-    }
-
-    return tabs;
-  }, [pos.categories, pos.popularProductIds.length, pos.layoutMode, pos.customLayouts, allProducts]);
 
   // Register state
   const [activeCategory, setActiveCategory] = useState("all");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [checkoutQueueNumber, setCheckoutQueueNumber] = useState("");
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("takeaway");
+
+  // Honor the outlet's configured default order type from
+  // pos_branch_settings.default_order_type. Applied once on first load
+  // (when branchSettings transitions null → set) so the cashier's
+  // manual toggle isn't overridden every re-render.
+  const didApplyOrderTypeDefaultRef = useRef(false);
+  useEffect(() => {
+    if (didApplyOrderTypeDefaultRef.current) return;
+    if (!pos.branchSettings) return;
+    const cfg = (pos.branchSettings as Record<string, unknown>).default_order_type;
+    if (cfg === "dine_in" || cfg === "takeaway") {
+      setOrderType(cfg);
+    }
+    didApplyOrderTypeDefaultRef.current = true;
+  }, [pos.branchSettings]);
   const [search, setSearch] = useState("");
   const [discount, setDiscount] = useState(0);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
@@ -104,28 +132,227 @@ export default function RegisterPage() {
   const [rewardDiscount, setRewardDiscount] = useState(0); // in sen
   const [rewardName, setRewardName] = useState<string | null>(null);
   const [rewardRedemptionId, setRewardRedemptionId] = useState<string | null>(null);
+  // Deferred-burn voucher coming from the customer-display second screen.
+  // `appliedVoucherId` is an issued_rewards.id that's marked status='used'
+  // only after handleCheckoutComplete fires — so a cashier-side void
+  // doesn't burn the customer's voucher.
+  const [appliedVoucherId, setAppliedVoucherId] = useState<string | null>(null);
 
-  // Auto-evaluate promotions on cart change
-  const autoPromotions = useMemo(
-    () => [] as AppliedPromotion[],
-    [cart, pos.outlet?.id ?? ""]
-  );
+  // Pending Spend Beans redemption — customer/cashier tapped a shop
+  // reward on the second screen. We display the discount immediately
+  // but the actual Beans burn happens at checkout commit (call to
+  // /api/loyalty/redeem in handleCheckoutComplete). If the cart is
+  // cleared/voided before checkout, no burn — the customer keeps
+  // their Beans.
+  const [pendingShopRedemption, setPendingShopRedemption] = useState<{
+    rewardId: string;
+    rewardName: string;
+    pointsCost: number;
+  } | null>(null);
+
+  // Identified member's top-ordered product IDs (the same data the
+  // customer-display "Your usual" strip uses, but consumed here as a
+  // category tab). Auto-fetched whenever loyaltyMember changes so the
+  // cashier can ring in a regular's usual order in one tap.
+  const [memberUsual, setMemberUsual] = useState<string[]>([]);
+  useEffect(() => {
+    if (!loyaltyMember?.id) {
+      setMemberUsual((prev) => (prev.length === 0 ? prev : []));
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/loyalty/snapshot?member_id=${encodeURIComponent(loyaltyMember.id)}`,
+        );
+        if (!res.ok) return;
+        const snap = (await res.json()) as { usual?: Array<{ id: string }> };
+        if (cancelled) return;
+        setMemberUsual((snap.usual ?? []).map((u) => u.id).filter(Boolean));
+      } catch {
+        /* silent — Usual tab just won't appear */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [loyaltyMember?.id]);
+
+  // Build tabs based on layout mode (category / tags / custom). Lives
+  // here (after loyaltyMember + memberUsual state) so it can include
+  // the personalised "Usual" tab when a member is identified.
+  const categoryList: ProductCategory[] = useMemo(() => {
+    const makeTab = (slug: string, name: string, order: number): ProductCategory => ({
+      id: slug, brand_id: "", name, slug, sort_order: order,
+      storehub_category_id: null, is_active: true, created_at: "",
+    });
+
+    const tabs: ProductCategory[] = [makeTab("all", "All", 0)];
+
+    // Member's usual order — only shows when a loyalty member is
+    // identified AND has order history. Sits left of Popular so a
+    // regular's go-tos are the cashier's first stop after lookup.
+    if (loyaltyMember?.id && memberUsual.length > 0) {
+      const first = loyaltyMember.name?.split(" ")[0] ?? "Usual";
+      tabs.push(makeTab("usual", `★ ${first}'s Usual`, 0.25));
+    }
+
+    if (pos.popularProductIds.length > 0) {
+      tabs.push(makeTab("popular", "⭐ Popular", 0.5));
+    }
+
+    if (pos.layoutMode === "tags") {
+      const tagSet = new Set<string>();
+      for (const p of allProducts) { for (const t of (p.tags ?? [])) tagSet.add(t); }
+      [...tagSet].sort().forEach((tag, i) => {
+        tabs.push(makeTab(`tag:${tag}`, tag.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), i + 1));
+      });
+    } else if (pos.layoutMode === "custom" && pos.customLayouts.length > 0) {
+      pos.customLayouts.forEach((layout, i) => {
+        tabs.push(makeTab(`custom:${layout.id}`, layout.name, i + 1));
+      });
+    } else {
+      pos.categories.forEach((cat, i) => {
+        tabs.push(makeTab(cat, cat.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), i + 1));
+      });
+    }
+
+    return tabs;
+  }, [pos.categories, pos.popularProductIds.length, pos.layoutMode, pos.customLayouts, allProducts, loyaltyMember?.id, loyaltyMember?.name, memberUsual.length]);
+
+  // Auto-switch the active category based on the identified member:
+  //   • Member identified + has usual items → switch TO "usual" so the
+  //     cashier sees their regulars immediately. Saves a tap on every
+  //     return-customer order.
+  //   • Member cleared (logout / next customer) OR they have no order
+  //     history → drop back to "all" so the cashier doesn't stare at
+  //     an empty grid.
+  // Only fires when memberId actually changes (not on every render),
+  // so the cashier's manual tab choices after identification are
+  // preserved.
+  const lastAutoSwitchMemberIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const memberId = loyaltyMember?.id ?? null;
+    if (memberId !== lastAutoSwitchMemberIdRef.current) {
+      lastAutoSwitchMemberIdRef.current = memberId;
+      if (memberId && memberUsual.length > 0) {
+        setActiveCategory("usual");
+        return;
+      }
+      if (!memberId) {
+        // Member cleared — leave manual tab choice alone unless we
+        // were on the now-invalid Usual tab.
+        if (activeCategory === "usual") setActiveCategory("all");
+        return;
+      }
+    }
+    // Member unchanged but usual just loaded (e.g. snapshot landed
+    // after the member was set) — still flip to Usual if we haven't
+    // already shown any cart activity. We approximate "no activity"
+    // by checking we're on the default "all" tab.
+    if (memberId && memberUsual.length > 0 && activeCategory === "all") {
+      setActiveCategory("usual");
+    }
+    // Defensive fallback: if we're stuck on Usual but the data went
+    // away, drop to All.
+    if (activeCategory === "usual" && (!memberId || memberUsual.length === 0)) {
+      setActiveCategory("all");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loyaltyMember?.id, memberUsual.length]);
+
+  // Auto-evaluate promotions + tier discount on every cart / member /
+  // tier / outlet change. Goes through the central loyalty engine via
+  // /api/loyalty/evaluate-promotions, which layers the member's tier %
+  // discount on top. Debounced 200ms so rapid item-add doesn't hammer
+  // the endpoint.
+  //
+  // Promo codes are NOT supported on the register — they're not a
+  // member-rewards concept and were removed at the cashier's request.
+  // All member-driven discounts now flow through the Redeem Reward
+  // button → RewardPickerModal.
+  // Non-stackable tier auto-drop: when a Staff / Black Card member is
+  // identified (or the tier flips non-stackable mid-cart somehow), any
+  // voucher already on the cart is invalid under native rules. Drop
+  // it so the cart total reflects the correct tier-only discount.
+  useEffect(() => {
+    const t = loyaltyMember?.tier;
+    if (t && t.stackable === false && t.discount_percent > 0 && (rewardDiscount > 0 || rewardName)) {
+      setRewardDiscount(0);
+      setRewardName(null);
+      setRewardRedemptionId(null);
+      setAppliedVoucherId(null);
+      setPendingShopRedemption(null);
+      toast.info(`Voucher removed — ${t.name} tier already discounts ${t.discount_percent}%`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loyaltyMember?.tier?.id, loyaltyMember?.tier?.stackable]);
+
+  const [autoPromotions, setAutoPromotions] = useState<AppliedPromotion[]>([]);
+  useEffect(() => {
+    if (cart.length === 0) {
+      setAutoPromotions((prev) => (prev.length === 0 ? prev : []));
+      return;
+    }
+    const ac = new AbortController();
+    const t = setTimeout(async () => {
+      const next = await evaluatePromotions({
+        cart,
+        memberId:     loyaltyMember?.id ?? null,
+        memberTierId: loyaltyMember?.tier?.id ?? null,
+        outletId:     pos.outlet?.id ?? null,
+        // Tier post-step on the server needs the voucher discount to
+        // correctly compute the post-voucher remainder for stackable
+        // tiers (Bronze/Silver/Gold/Platinum). Without this, a
+        // Platinum member with a Free Drink voucher gets the tier
+        // 10% computed on (subtotal - first_order) instead of on
+        // (subtotal - first_order - voucher).
+        rewardDiscountSen: rewardDiscount,
+        signal:       ac.signal,
+      });
+      setAutoPromotions(next);
+    }, 200);
+    return () => {
+      clearTimeout(t);
+      ac.abort();
+    };
+  }, [cart, loyaltyMember?.id, loyaltyMember?.tier?.id, pos.outlet?.id, rewardDiscount]);
+
   const autoPromoDiscount = autoPromotions.reduce((sum, p) => sum + p.discountAmount, 0);
   const manualPromoDiscount = appliedManualPromo?.discountAmount ?? 0;
-  const manualPromotions = useMemo(
-    () => [],
-    []
-  );
 
   // Auto-show shift modal
   useEffect(() => {
     if (!pos.isShiftOpen) setShowShiftModal("open");
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Track viewport width so the product grid can pick a sensible default
+  // column count for the hardware in use. Default 5 on the legacy 1280×800
+  // SUNMI panels, 6 on the D3's 15.6" 1920×1080 main display (otherwise
+  // 5 columns × ~312px tiles wastes most of the extra real estate).
+  // Outlets that have set pos_branch_settings.grid_columns keep their
+  // explicit value.
+  const [viewportWidth, setViewportWidth] = useState(
+    typeof window === "undefined" ? 1280 : window.innerWidth,
+  );
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const defaultGridColumns = viewportWidth >= 1600 ? 6 : 5;
+
   const filteredProducts = useMemo(() => {
     let products = [...allProducts];
 
-    if (activeCategory === "popular") {
+    if (activeCategory === "usual") {
+      // Preserve memberUsual ordering (snapshot returns by frequency,
+      // most-ordered first) — Map lookup + filter drops products that
+      // aren't on the current menu (e.g. discontinued items).
+      const byId = new Map(allProducts.map((p) => [p.id, p]));
+      products = memberUsual
+        .map((id) => byId.get(id))
+        .filter((p): p is Product => !!p);
+    } else if (activeCategory === "popular") {
       products = pos.popularProductIds
         .map((id) => allProducts.find((p) => p.id === id))
         .filter(Boolean) as Product[];
@@ -158,7 +385,7 @@ export default function RegisterPage() {
       products = products.filter((p) => p.name.toLowerCase().includes(q) || (p.sku && p.sku.toLowerCase().includes(q)));
     }
     return products;
-  }, [allProducts, activeCategory, search, pos.popularProductIds, pos.customLayouts]);
+  }, [allProducts, activeCategory, search, pos.popularProductIds, pos.customLayouts, memberUsual]);
 
   // Cart count per product for badges
   const cartCounts = useMemo(() => {
@@ -205,6 +432,8 @@ export default function RegisterPage() {
     setTableNumber(""); setCustomerPhone(""); setOrderNotes("");
     setAppliedManualPromo(null); setLoyaltyMember(null);
     setRewardDiscount(0); setRewardName(null); setRewardRedemptionId(null);
+    setAppliedVoucherId(null);
+    setPendingShopRedemption(null);  // discard any unburned Spend Beans
   }
 
   const subtotal = cart.reduce((sum, i) => sum + i.lineTotal, 0);
@@ -230,8 +459,185 @@ export default function RegisterPage() {
       outletId: pos.outlet?.id ?? "",
       outletName: pos.outlet?.name ?? "Celsius Coffee",
       status: cart.length === 0 ? "idle" : "ordering",
+      member: loyaltyMember
+        ? {
+            id: loyaltyMember.id,
+            name: loyaltyMember.name,
+            phone: loyaltyMember.phone,
+            points_balance: loyaltyMember.points_balance,
+          }
+        : null,
+      appliedVoucher:
+        rewardName && rewardDiscount > 0
+          ? {
+              id: appliedVoucherId ?? rewardRedemptionId ?? "",
+              name: rewardName,
+              discount_sen: rewardDiscount,
+            }
+          : null,
+      autoPromotions: autoPromotions.map((p) => ({
+        id: p.promotion.id,
+        name: p.description,
+        discount_sen: p.discountAmount,
+      })),
     });
-  }, [cart, subtotal, serviceCharge, totalDiscount, total, pos.outlet?.id, pos.outlet?.name]);
+  }, [
+    cart,
+    subtotal,
+    serviceCharge,
+    totalDiscount,
+    total,
+    pos.outlet?.id,
+    pos.outlet?.name,
+    loyaltyMember,
+    rewardName,
+    rewardDiscount,
+    appliedVoucherId,
+    rewardRedemptionId,
+    autoPromotions,
+  ]);
+
+  // ─── Inbound messages from customer-display ───────────────
+  // Register the listener exactly ONCE on mount. BroadcastChannel
+  // doesn't queue messages across listener teardowns, so re-registering
+  // on every cart change (the previous behavior, when deps included
+  // subtotal / allProducts / pos.isShiftOpen) silently dropped any
+  // memberSelected / applyVoucher / applyShopReward / addToCart
+  // message that arrived in the cleanup-recreate gap — which is most
+  // of them, because the gap fires every time a cart line ticks.
+  //
+  // Latest values are read via refs so the handler stays current
+  // without forcing a re-subscribe.
+  const subtotalRef = useRef(0);
+  const allProductsRef = useRef<typeof allProducts>([]);
+  const isShiftOpenRef = useRef(false);
+  const cartRef = useRef<CartItem[]>([]);
+  const loyaltyMemberRef = useRef<LoyaltyMember | null>(null);
+  useEffect(() => { subtotalRef.current = subtotal; }, [subtotal]);
+  useEffect(() => { allProductsRef.current = allProducts; }, [allProducts]);
+  useEffect(() => { isShiftOpenRef.current = pos.isShiftOpen; }, [pos.isShiftOpen]);
+  useEffect(() => { cartRef.current = cart; }, [cart]);
+  useEffect(() => { loyaltyMemberRef.current = loyaltyMember; }, [loyaltyMember]);
+  useEffect(() => {
+    return listenToRegisterInbox((msg) => {
+      const currentSubtotal = subtotalRef.current;
+      const currentProducts = allProductsRef.current;
+      const currentShiftOpen = isShiftOpenRef.current;
+      const currentMember = loyaltyMemberRef.current;
+      // Native tier rule: when a member is on a non-stackable tier
+      // (Staff / Black Card), their tier % off REPLACES voucher
+      // discounts entirely. Block any voucher-apply attempt here and
+      // tell the cashier why — silently swallowing the request would
+      // leave them confused as to why the cart didn't change.
+      const blockVoucherForNonStackable = (label: string) => {
+        const tier = currentMember?.tier;
+        if (tier && tier.stackable === false && tier.discount_percent > 0) {
+          toast.error(
+            `${tier.name} tier already gives ${tier.discount_percent}% off — vouchers can't stack`,
+          );
+          return true;
+        }
+        return false;
+      };
+      if (msg.type === "memberSelected") {
+        // Adopt the member the customer just identified via the second screen.
+        // Shape matches LoyaltyMember exactly so existing UI keeps working.
+        setLoyaltyMember({
+          id: msg.member.id,
+          phone: msg.member.phone,
+          name: msg.member.name,
+          tags: msg.member.tags,
+          points_balance: msg.member.points_balance,
+          total_spent: msg.member.total_spent,
+          total_visits: msg.member.total_visits,
+          last_visit_at: msg.member.last_visit_at,
+          tier: msg.member.tier ?? null,
+        });
+        setCustomerPhone(msg.member.phone);
+      } else if (msg.type === "memberCleared") {
+        // Only clear the member identity, not the cart.
+        setLoyaltyMember(null);
+        setCustomerPhone("");
+      } else if (msg.type === "applyVoucher") {
+        if (blockVoucherForNonStackable(msg.voucherName)) return;
+        const result = applyDescriptorToCart(msg.discount, cartRef.current);
+        const discountSen = Math.min(result.discount_sen, Math.max(0, currentSubtotal));
+        if (msg.discount.type === "free_item" && discountSen === 0) {
+          // Free-item voucher applied without a qualifying line in the
+          // cart. Tell the cashier so they can swap items or skip the
+          // voucher. Previously this path silently zero'd or — worse —
+          // pulled the price from the catalog (ignoring whether the
+          // qualifying item was actually in the customer's basket).
+          // The shared engine + cart-walk makes voucher application
+          // honest: no qualifying line, no discount.
+          toast.error(
+            `${msg.voucherName} needs ${
+              msg.discount.applicable_categories?.length ? "a qualifying drink" : "a qualifying item"
+            } in the cart`,
+          );
+          return;
+        }
+        setRewardDiscount(discountSen);
+        setRewardName(msg.voucherName);
+        setRewardRedemptionId(null); // not a /redeem flow
+        setAppliedVoucherId(msg.voucherId);
+        toast.success(`Voucher applied: ${msg.voucherName}`);
+      } else if (msg.type === "applyShopReward") {
+        if (blockVoucherForNonStackable(msg.rewardName)) return;
+        // Customer tapped a Spend Beans tile on the second screen.
+        // Apply the discount to the cart immediately; record the
+        // redemption as pending so handleCheckoutComplete burns the
+        // Beans only when the order actually commits.
+        const result = applyDescriptorToCart(msg.discount, cartRef.current);
+        const discountSen = Math.min(result.discount_sen, Math.max(0, currentSubtotal));
+        if (msg.discount.type === "free_item" && discountSen === 0) {
+          // Customer tapped Free Drink but nothing in cart qualifies.
+          // Don't silently set a 0 discount — surface a clear toast so
+          // the cashier can swap items or skip the reward.
+          toast.error(
+            `${msg.rewardName} needs ${
+              msg.discount.applicable_categories?.length ? "a qualifying drink" : "a qualifying item"
+            } in the cart`,
+          );
+          return;
+        }
+        setRewardDiscount(discountSen);
+        setRewardName(msg.rewardName);
+        setAppliedVoucherId(null);   // not a wallet voucher
+        setRewardRedemptionId(null); // burn happens at checkout
+        setPendingShopRedemption({
+          rewardId:   msg.rewardId,
+          rewardName: msg.rewardName,
+          pointsCost: msg.pointsCost,
+        });
+        toast.success(`${msg.rewardName} reserved — ${msg.pointsCost} Beans on checkout`);
+      } else if (msg.type === "addToCart") {
+        // Customer tapped a tile in the "Your usual" strip on the
+        // second display. Resolve the product against our live catalog
+        // and route through the same handler the product grid uses, so
+        // mandatory-modifier products still trigger the modal.
+        const product = currentProducts.find((p) => p.id === msg.productId);
+        if (!product) {
+          toast.error(`"${msg.productName}" not on this menu`);
+          return;
+        }
+        if (!currentShiftOpen) {
+          toast.error("Open a shift before ringing in items");
+          return;
+        }
+        if (product.modifiers.length > 0) {
+          // Surface the modal so cashier confirms cup size / milk / etc.
+          setModifierProduct(product);
+          toast.info(`${product.name} — confirm options`);
+        } else {
+          addToCart(product, []);
+          toast.success(`Added: ${product.name}`);
+        }
+      }
+    });
+    // Empty deps — listener registered once, latest values via refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ─── Send to Kitchen ─────────────────────────────────────
 
@@ -249,7 +655,13 @@ export default function RegisterPage() {
         serviceCharge,
         discount,
         promoDiscount: promoDiscount,
-        promoName: null,
+        // Pipe each applied promo's name to the order record so the
+        // receipt + reports can show what saved the customer money
+        // ("Black Card — 50% off, Happy Hour — 10% off"). Comma-joined
+        // when multiple promos stack.
+        promoName: autoPromotions.length
+          ? autoPromotions.map((p) => p.description).join(", ")
+          : (appliedManualPromo?.description ?? null),
         total,
         customerPhone: customerPhone || null,
         customerName: null,
@@ -273,14 +685,21 @@ export default function RegisterPage() {
         promoText: (pos.branchSettings as any)?.receipt_promo_text || "",
         receiptFooter: (pos.branchSettings as any)?.receipt_footer || "",
       };
+      // If any cart line carries print_additional_docket, we need to
+      // print the kitchen docket twice — used for items that the line
+      // staff splits (e.g. beer packages, set meals).
+      const needsExtraDocket = cart.some((i) => (i.product as { print_additional_docket?: boolean }).print_additional_docket === true);
       setTimeout(async () => {
         try {
-          await printKitchenDocket58mm(order, outletInfo);
+          await printKitchenDocket80mm(order, outletInfo);
+          if (needsExtraDocket) {
+            await printKitchenDocket80mm(order, outletInfo);
+          }
         } catch (e) {
           console.error("[PRINT] Kitchen docket failed:", e);
         }
         try {
-          await printReceipt58mm(order, outletInfo, receiptConfig);
+          await printReceipt80mm(order, outletInfo, receiptConfig);
         } catch (e) {
           console.error("[PRINT] Receipt failed:", e);
         }
@@ -363,7 +782,13 @@ export default function RegisterPage() {
         serviceCharge,
         discount,
         promoDiscount: promoDiscount,
-        promoName: null,
+        // Pipe each applied promo's name to the order record so the
+        // receipt + reports can show what saved the customer money
+        // ("Black Card — 50% off, Happy Hour — 10% off"). Comma-joined
+        // when multiple promos stack.
+        promoName: autoPromotions.length
+          ? autoPromotions.map((p) => p.description).join(", ")
+          : (appliedManualPromo?.description ?? null),
         total,
         customerPhone: customerPhone || null,
         customerName: null,
@@ -395,6 +820,78 @@ export default function RegisterPage() {
         }
       }
 
+      // Customer-display deferred-burn voucher: flip status='used' now
+      // that the order is actually paid. The /redeem path burns at apply
+      // time; the apply-voucher path doesn't, so we owe the burn here.
+      if (appliedVoucherId && loyaltyMember) {
+        try {
+          await fetch("/api/loyalty/mark-used", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              member_id: loyaltyMember.id,
+              voucher_id: appliedVoucherId,
+            }),
+          });
+        } catch (e) {
+          console.error("[LOYALTY] mark-used failed:", e);
+        }
+      }
+
+      // Deferred Spend Beans burn — the customer tapped a "Spend X
+      // Beans" tile on the second screen which only applied the
+      // discount; the actual point deduction (and redemption record)
+      // happens here so a voided cart doesn't burn the customer's
+      // Beans. Fire-and-forget: order is already committed, we don't
+      // want a network blip on /redeem to roll the order back.
+      if (pendingShopRedemption && loyaltyMember) {
+        try {
+          await fetch("/api/loyalty/redeem", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              member_id: loyaltyMember.id,
+              reward_id: pendingShopRedemption.rewardId,
+              outlet_id: pos.outlet?.id ?? "",
+            }),
+          });
+        } catch (e) {
+          console.error("[LOYALTY] pending Spend Beans burn failed:", e);
+        }
+      }
+
+      // Mission / challenge progress — POS orders advance challenges
+      // the same way pickup orders do, via the same goal evaluator
+      // (ported into apps/pos/src/app/api/loyalty/apply-order-to-mission).
+      // Without this call, RM50 Bill / Weekend Run / Make it a Meal
+      // stay at 0/X forever for in-store members. Fire-and-forget so a
+      // network blip on the mission service doesn't gate the order.
+      if (loyaltyMember && pos.outlet?.id) {
+        try {
+          await fetch("/api/loyalty/apply-order-to-mission", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              member_id: loyaltyMember.id,
+              order: {
+                id: order.id,
+                outlet_id: pos.outlet.id,
+                items: cart.map((i) => ({
+                  product_id: i.product.id,
+                  category: i.product.category ?? null,
+                  quantity: i.quantity,
+                })),
+                item_count: cart.reduce((s, i) => s + i.quantity, 0),
+                total_sen: total,
+                created_at: new Date().toISOString(),
+              },
+            }),
+          });
+        } catch (e) {
+          console.error("[LOYALTY] mission tick failed:", e);
+        }
+      }
+
       // Show "Thank You" on customer display
       broadcastToCustomerDisplay({
         items: [], subtotal: 0, serviceCharge: 0, discount: 0, total,
@@ -421,14 +918,18 @@ export default function RegisterPage() {
         promoText: (pos.branchSettings as any)?.receipt_promo_text || "",
         receiptFooter: (pos.branchSettings as any)?.receipt_footer || "",
       };
+      const needsExtraDocket2 = cart.some((i) => (i.product as { print_additional_docket?: boolean }).print_additional_docket === true);
       setTimeout(async () => {
         try {
-          await printKitchenDocket58mm(order, outletInfo);
+          await printKitchenDocket80mm(order, outletInfo);
+          if (needsExtraDocket2) {
+            await printKitchenDocket80mm(order, outletInfo);
+          }
         } catch (e) {
           console.error("[PRINT] Kitchen docket failed:", e);
         }
         try {
-          await printReceipt58mm(order, outletInfo, receiptConfig);
+          await printReceipt80mm(order, outletInfo, receiptConfig);
         } catch (e) {
           console.error("[PRINT] Receipt failed:", e);
         }
@@ -516,7 +1017,7 @@ export default function RegisterPage() {
                 activePage === "orders" ? "bg-blue-500/20 text-blue-400" : "border border-border text-text-muted hover:bg-surface-hover"
               }`}
             >
-              <span>📋</span>
+              <ClipboardList className="h-4 w-4" />
               <span>{pos.openOrders.length} Open</span>
             </button>
           )}
@@ -560,7 +1061,7 @@ export default function RegisterPage() {
                   }
                 }}
                 cartCounts={cartCounts}
-                columns={(pos.branchSettings as any)?.grid_columns ?? 5}
+                columns={(pos.branchSettings as any)?.grid_columns ?? defaultGridColumns}
               />
             </div>
           </>
@@ -586,11 +1087,20 @@ export default function RegisterPage() {
       {/* RIGHT: Order panel */}
       {activePage === "register" && (
         <div className="flex w-[360px] min-w-[360px] flex-col border-l border-border bg-surface">
-          {/* Order header */}
+          {/* Order header — brand-aligned with customer-display (Peachi
+              title + Space Grotesk eyebrow). */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div>
-              <h2 className="text-base font-semibold">{editingOrderId ? "Edit Order" : "Current Order"}</h2>
-              <span className="text-sm text-text-muted">
+              <h2
+                className="text-lg"
+                style={{ fontFamily: "Peachi", fontWeight: 700, color: "#F5F3F0" }}
+              >
+                {editingOrderId ? "Edit Order" : "Current Order"}
+              </h2>
+              <span
+                className="text-[10px] font-bold uppercase tracking-[0.16em]"
+                style={{ fontFamily: "Space Grotesk", color: "rgba(245,243,240,0.55)" }}
+              >
                 {orderType === "dine_in" ? "Dine-in" : "Takeaway"}
                 {tableNumber && ` · Table ${tableNumber}`}
                 {customerPhone && ` · ${customerPhone}`}
@@ -598,7 +1108,13 @@ export default function RegisterPage() {
               </span>
             </div>
             {cart.length > 0 && (
-              <button onClick={clearCart} className="text-xs font-medium text-danger hover:underline">Clear All</button>
+              <button
+                onClick={clearCart}
+                className="text-[10px] font-bold uppercase tracking-[0.14em] text-danger hover:underline"
+                style={{ fontFamily: "Space Grotesk" }}
+              >
+                Clear All
+              </button>
             )}
           </div>
 
@@ -662,50 +1178,93 @@ export default function RegisterPage() {
                   {memberLoading ? "..." : "Lookup"}
                 </button>
               </div>
-              {/* Member info display */}
-              {loyaltyMember && (
-                <div className="mt-2 rounded-lg bg-brand/10 p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-brand">{loyaltyMember.name ?? "Member"}</p>
-                      <p className="text-xs text-text-muted">{loyaltyMember.phone}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-brand">{loyaltyMember.points_balance} pts</p>
-                      <p className="text-xs text-text-muted">{loyaltyMember.total_visits} visits</p>
-                    </div>
-                  </div>
-                  {loyaltyMember.tags.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {loyaltyMember.tags.map((tag) => (
-                        <span key={tag} className="rounded-full bg-brand/20 px-2.5 py-0.5 text-[11px] font-medium text-brand">{tag}</span>
-                      ))}
-                    </div>
-                  )}
-                  <p className="mt-1.5 text-xs text-text-dim">
-                    Total spent: RM {loyaltyMember.total_spent.toFixed(2)}
-                  </p>
-                  {loyaltyMember.points_balance > 0 && !rewardName && (
-                    <button
-                      onClick={() => setShowRewardPicker(true)}
-                      className="mt-2 w-full rounded-lg bg-brand py-2.5 text-xs font-semibold text-white hover:bg-brand-dark"
-                    >
-                      Redeem Reward ({loyaltyMember.points_balance} pts)
-                    </button>
-                  )}
-                  {rewardName && (
-                    <div className="mt-2 flex items-center justify-between rounded-lg bg-success/10 px-3 py-2">
-                      <span className="text-xs font-medium text-success">{rewardName}</span>
-                      <button onClick={() => { setRewardDiscount(0); setRewardName(null); setRewardRedemptionId(null); }} className="text-xs text-danger hover:underline">Remove</button>
-                    </div>
-                  )}
-                </div>
-              )}
               {loyaltyMember === null && customerPhone.length >= 10 && !memberLoading && (
                 <p className="mt-1.5 text-xs text-text-dim">Press Enter or Lookup to find member</p>
               )}
             </div>
           )}
+
+          {/* Member identity card — lives OUTSIDE the lookup form so
+              the cashier sees the customer's name + tier + Beans even
+              after closing the lookup panel. Previously this card was
+              nested inside {showCustomerLookup && …} which made the
+              entire member identity vanish the moment the lookup form
+              collapsed, even though `loyaltyMember` was still set in
+              state (and the broadcast still going out to the second
+              screen). */}
+          {loyaltyMember && (() => {
+            const tierColor = loyaltyMember.tier?.color ?? "#FBBF24";
+            const tierName = loyaltyMember.tier?.name ?? "Member";
+            const tierMul = loyaltyMember.tier?.multiplier ?? 1;
+            return (
+              <div
+                className="mx-4 mt-2 overflow-hidden rounded-lg border"
+                style={{
+                  borderColor: `${tierColor}40`,
+                  backgroundColor: "rgba(251,191,36,0.06)",
+                }}
+              >
+                <div className="h-0.5" style={{ backgroundColor: tierColor }} />
+                <div className="px-2.5 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <p
+                          className="truncate text-sm"
+                          style={{ fontFamily: "Peachi", fontWeight: 700, color: "#FBBF24" }}
+                        >
+                          {loyaltyMember.name ?? "Member"}
+                        </p>
+                        <span
+                          className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-white"
+                          style={{ backgroundColor: tierColor, fontFamily: "Space Grotesk" }}
+                        >
+                          {tierName}{tierMul > 1 ? ` · ${tierMul}×` : ""}
+                        </span>
+                      </div>
+                      <p
+                        className="mt-0.5 truncate text-[10px]"
+                        style={{ fontFamily: "Space Grotesk", color: "rgba(251,191,36,0.55)" }}
+                      >
+                        {loyaltyMember.phone}
+                        {loyaltyMember.total_visits > 0 && ` · ${loyaltyMember.total_visits} visits`}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p
+                        className="text-base leading-none"
+                        style={{ fontFamily: "Peachi", fontWeight: 700, color: "#FBBF24" }}
+                      >
+                        {loyaltyMember.points_balance.toLocaleString()}
+                      </p>
+                      <p
+                        className="mt-0.5 text-[8.5px] font-bold uppercase tracking-[0.12em]"
+                        style={{ fontFamily: "Space Grotesk", color: "rgba(251,191,36,0.6)" }}
+                      >
+                        Beans
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Active reward chip — small inline status when
+                      something's been redeemed. Tap × to drop. */}
+                  {rewardName && (
+                    <div className="mt-1.5 flex items-center justify-between rounded bg-success/10 px-2 py-1">
+                      <span className="truncate text-[10px] font-medium text-success">
+                        ✓ {rewardName}
+                      </span>
+                      <button
+                        onClick={() => { setRewardDiscount(0); setRewardName(null); setRewardRedemptionId(null); setAppliedVoucherId(null); setPendingShopRedemption(null); }}
+                        className="ml-1.5 text-[10px] text-danger hover:underline"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Table picker inline */}
           {showTablePicker && (
@@ -769,12 +1328,27 @@ export default function RegisterPage() {
                         }}
                       >
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{item.product.name}</p>
+                          <p
+                            className="truncate text-sm"
+                            style={{ fontFamily: "Peachi", fontWeight: 500, color: "#F5F3F0" }}
+                          >
+                            {item.product.name}
+                          </p>
                           {item.selectedModifiers.length > 0 && (
-                            <p className="text-xs text-text-muted truncate">{item.selectedModifiers.map((m) => m.option.name).join(", ")}</p>
+                            <p
+                              className="truncate text-xs"
+                              style={{ fontFamily: "Space Grotesk", color: "rgba(245,243,240,0.45)" }}
+                            >
+                              {item.selectedModifiers.map((m) => m.option.name).join(", ")}
+                            </p>
                           )}
                         </div>
-                        <span className="text-sm font-semibold whitespace-nowrap">{displayRM(item.lineTotal)}</span>
+                        <span
+                          className="whitespace-nowrap text-sm"
+                          style={{ fontFamily: "Space Grotesk", fontWeight: 600, color: "rgba(245,243,240,0.85)" }}
+                        >
+                          {displayRM(item.lineTotal)}
+                        </span>
                       </button>
 
                       {/* Quantity + remove */}
@@ -837,33 +1411,55 @@ export default function RegisterPage() {
 
           {/* Promotions + Totals + Charge */}
           <div className="border-t border-border px-4 py-3">
-            {/* Promotion indicators */}
+            {/* Promotion indicators — also surfaces the identified
+                member's available rewards as tappable rows so the
+                cashier doesn't need to open a separate Redeem modal. */}
             <PromoIndicator
               autoPromotions={autoPromotions}
-              manualPromotions={manualPromotions}
               cart={cart}
               appliedManualPromo={appliedManualPromo}
-              onApplyManual={(p) => setAppliedManualPromo(p)}
               onRemoveManual={() => setAppliedManualPromo(null)}
+              memberId={loyaltyMember?.id ?? null}
+              onOpenRewards={() => setShowRewardPicker(true)}
             />
 
-            <div className="mb-3 space-y-1 text-sm">
+            <div className="mb-3 space-y-1.5 text-sm" style={{ fontFamily: "Space Grotesk" }}>
               {/* Tap subtotal to add order discount */}
-              <button className="flex w-full justify-between hover:text-brand" onClick={() => { setShowOrderDiscount(!showOrderDiscount); setInlineDiscountValue(""); setInlineDiscountType("percent"); }}>
-                <span className="text-text-muted">Subtotal {cart.length > 0 && !discount ? "(tap to discount)" : ""}</span><span>{displayRM(subtotal)}</span>
+              <button
+                className="flex w-full justify-between hover:text-brand"
+                onClick={() => { setShowOrderDiscount(!showOrderDiscount); setInlineDiscountValue(""); setInlineDiscountType("percent"); }}
+              >
+                <span className="text-text-muted">Subtotal {cart.length > 0 && !discount ? "(tap to discount)" : ""}</span>
+                <span className="text-text">{displayRM(subtotal)}</span>
               </button>
-              {serviceCharge > 0 && <div className="flex justify-between"><span className="text-text-muted">Service Charge</span><span>{displayRM(serviceCharge)}</span></div>}
+              {serviceCharge > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Service Charge</span>
+                  <span className="text-text">{displayRM(serviceCharge)}</span>
+                </div>
+              )}
               {discount > 0 && (
                 <div className="flex justify-between">
                   <span className="text-success">Discount</span>
                   <button className="text-success hover:underline" onClick={() => setDiscount(0)}>-{displayRM(discount)} ✕</button>
                 </div>
               )}
-              {promoDiscount > 0 && <div className="flex justify-between"><span className="text-text-muted">Promo</span><span className="text-success">-{displayRM(promoDiscount)}</span></div>}
+              {promoDiscount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Promo</span>
+                  <span className="text-success">-{displayRM(promoDiscount)}</span>
+                </div>
+              )}
               {rewardDiscount > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-brand">Reward: {rewardName}</span>
-                  <button className="text-brand hover:underline" onClick={() => { setRewardDiscount(0); setRewardName(null); setRewardRedemptionId(null); }}>-{displayRM(rewardDiscount)} ✕</button>
+                  <span style={{ color: "#FBBF24" }}>Reward: {rewardName}</span>
+                  <button
+                    style={{ color: "#FBBF24" }}
+                    className="hover:underline"
+                    onClick={() => { setRewardDiscount(0); setRewardName(null); setRewardRedemptionId(null); setAppliedVoucherId(null); setPendingShopRedemption(null); }}
+                  >
+                    -{displayRM(rewardDiscount)} ✕
+                  </button>
                 </div>
               )}
 
@@ -900,7 +1496,13 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              <div className="flex justify-between text-lg font-bold pt-2 border-t border-border"><span>Total</span><span>{displayRM(total)}</span></div>
+              <div
+                className="flex justify-between pt-2 border-t border-border text-2xl"
+                style={{ fontFamily: "Peachi", fontWeight: 700 }}
+              >
+                <span style={{ color: "#F5F3F0" }}>Total</span>
+                <span style={{ color: "#FBBF24" }}>{displayRM(total)}</span>
+              </div>
             </div>
 
             {/* Pay first → then kitchen prints (for all order types) */}
@@ -930,7 +1532,7 @@ export default function RegisterPage() {
         onClose={() => setShowDiscount(false)}
       />}
       {showReceipt && <ReceiptView order={showReceipt as any} branchName={pos.outlet?.name ?? "Celsius Coffee"} branchAddress="" onClose={() => setShowReceipt(null)} onPrint={() => {
-            printReceipt58mm(showReceipt, {
+            printReceipt80mm(showReceipt, {
               name: pos.outlet?.name ?? "Celsius Coffee",
               address: pos.outlet?.address,
               city: pos.outlet?.city,
@@ -947,25 +1549,32 @@ export default function RegisterPage() {
           outletId={pos.outlet?.id ?? ""}
           subtotal={subtotal}
           onRedeem={(result) => {
-            const d = result.discount;
-            let discountSen = 0;
-            if (d.type === "fixed_amount") {
-              discountSen = Math.round(d.value * 100); // RM to sen
-            } else if (d.type === "percentage") {
-              discountSen = Math.round(subtotal * d.value / 100);
-              if (d.max_discount !== null) {
-                discountSen = Math.min(discountSen, Math.round(d.max_discount * 100));
-              }
-            } else if (d.type === "free_item") {
-              // Try to find matching product price
-              const freeMatch = allProducts.find((p) =>
-                d.free_product_ids?.includes(p.id) ||
-                p.name.toLowerCase() === (d.free_product_name ?? "").toLowerCase()
+            // Native rule: non-stackable tiers (Staff / Black Card)
+            // replace voucher discounts entirely. Block the redemption
+            // up front instead of silently swallowing it.
+            const t = loyaltyMember?.tier;
+            if (t && t.stackable === false && t.discount_percent > 0) {
+              toast.error(
+                `${t.name} tier already gives ${t.discount_percent}% off — vouchers can't stack`,
               );
-              discountSen = freeMatch ? freeMatch.price : 0;
+              setShowRewardPicker(false);
+              return;
             }
-            // Cap at subtotal
-            discountSen = Math.min(discountSen, subtotal);
+            // Discount math goes through @celsius/shared so this
+            // modal path (cashier-side picker) lands the same
+            // discount as the customer-display flow (applyVoucher /
+            // applyShopReward) AND as Pickup's server-side checkout.
+            const engineResult = applyDescriptorToCart(result.discount, cart);
+            const discountSen = Math.min(engineResult.discount_sen, subtotal);
+            if (result.discount.type === "free_item" && discountSen === 0) {
+              toast.error(
+                `${result.reward_name} needs ${
+                  result.discount.applicable_categories?.length ? "a qualifying drink" : "a qualifying item"
+                } in the cart`,
+              );
+              setShowRewardPicker(false);
+              return;
+            }
             setRewardDiscount(discountSen);
             setRewardName(result.reward_name);
             setRewardRedemptionId(result.redemption_id);
