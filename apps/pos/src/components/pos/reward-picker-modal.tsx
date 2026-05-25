@@ -23,18 +23,22 @@ import {
   Sandwich, Sparkles, Ticket,
   type LucideIcon,
 } from "lucide-react";
-import type { ActiveVoucher } from "@celsius/shared";
+import type { ActiveVoucher, AffordableCatalogReward } from "@celsius/shared";
 
 type SourceType = ActiveVoucher["source_type"];
 
-/** Local row shape rendered by VoucherCard. Normalised from an
- *  ActiveVoucher so the card doesn't have to know about Supabase
- *  shape. Catalog rows were previously concatenated into the same
- *  list but were dropped from this modal — the customer's
- *  bean-shop redemptions happen in the Pickup app, and showing
- *  catalog items alongside owned vouchers made the cashier think
- *  the customer already had them. POS now mirrors the Pickup wallet
- *  exactly: owned vouchers only. */
+/** Local row shape rendered by VoucherCard. Normalised from either:
+ *    • an ActiveVoucher  → earned/surprise wallet voucher (free to USE)
+ *    • a CatalogReward   → redeemable Bean-Points item (Spend X Beans
+ *                          to mint then use immediately)
+ *  Both show up in the cashier's picker as "rewards" — the customer's
+ *  earned deck plus what they could afford to mint right now. The
+ *  card type is discriminated by `points_cost`:
+ *    null → wallet voucher  (pill: "Use")
+ *    >0   → catalog item    (pill: "{cost} ›")
+ *  Already-minted points_redemption rows are dropped at load time
+ *  (see filter in useEffect) — those are the wallet's noisy
+ *  duplicates of catalog purchases the customer just made. */
 type DisplayReward = {
   id: string;
   name: string;
@@ -45,13 +49,16 @@ type DisplayReward = {
   free_product_name: string | null;
   icon: string | null;
   source_type: SourceType;
-  /** issued_rewards.id — the mark-used target. */
-  voucher_id: string;
+  /** issued_rewards.id when this is a wallet voucher; null for catalog. */
+  voucher_id: string | null;
   /** Catalog back-reference for the /redeem endpoint's rewards-table
    *  lookup. ActiveVoucher.reward_id when present, else fall back to
-   *  the voucher's own id (template-backed rows have no back-ref). */
+   *  the voucher's own id (template-backed rows have no back-ref).
+   *  Catalog rows use their own id. */
   reward_back_ref_id: string;
   expires_at: string | null;
+  /** Beans cost for catalog rows; null for wallet vouchers. */
+  points_cost: number | null;
 };
 
 type RewardDiscount = {
@@ -198,6 +205,34 @@ function fromActiveVoucher(v: ActiveVoucher): DisplayReward {
     // backed vouchers directly).
     reward_back_ref_id: v.reward_id ?? v.id,
     expires_at: v.expires_at,
+    points_cost: null,
+  };
+}
+
+/** Normalise a catalog reward into the modal's DisplayReward shape.
+ *  Catalog items render as "redeemable rewards" — same card chrome as
+ *  wallet vouchers, the difference is the pill (shows beans cost
+ *  instead of "Use") and the action (mints a voucher then applies). */
+function fromCatalog(c: AffordableCatalogReward): DisplayReward {
+  return {
+    id: c.id,
+    name: c.name,
+    description: c.description ?? null,
+    discount_type: c.discount_type,
+    discount_value: c.discount_value,
+    max_discount_value: c.max_discount_value,
+    free_product_name: c.free_product_name,
+    // Catalog rows on the rewards table don't carry a Lucide icon
+    // key — pickRewardIcon falls back to a title-based heuristic
+    // when null.
+    icon: null,
+    source_type: "points_redemption",
+    voucher_id: null,
+    reward_back_ref_id: c.id,
+    // Catalog items don't expire — they exist as long as the rewards
+    // row is active. The card's urgency line uses points_cost instead.
+    expires_at: null,
+    points_cost: c.points_required,
   };
 }
 
@@ -206,6 +241,7 @@ export function RewardPickerModal({ memberId, memberName, outletId, onRedeem, on
   const [redeeming, setRedeeming] = useState<string | null>(null);
   const [balance, setBalance] = useState(0);
   const [issued, setIssued] = useState<DisplayReward[]>([]);
+  const [catalog, setCatalog] = useState<DisplayReward[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -214,20 +250,20 @@ export function RewardPickerModal({ memberId, memberName, outletId, onRedeem, on
         const res = await fetch(`/api/loyalty/rewards?member_id=${memberId}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
-        // Two filters applied here so the cashier sees the same list
-        // the customer sees in their Pickup wallet:
-        //   1. Catalog (data.catalog) is intentionally ignored — POS
-        //      doesn't surface points-shop items. The customer
-        //      redeems those in the Pickup app.
-        //   2. Issued rows with source_type=points_redemption are
-        //      dropped. Mirrors VoucherWallet.tsx + loyalty-snapshot
-        //      — wallet surfaces passively-earned rewards only.
-        // Beans balance is still pulled for the header readout.
+        // Two transformations on the response:
+        //   1. issued: drop source_type=points_redemption (already-minted
+        //      catalog purchases — those are noise next to the catalog
+        //      row the customer would re-redeem from). Mirrors the
+        //      filter in VoucherWallet.tsx + loyalty-snapshot.
+        //   2. catalog: keep as-is — these are the redeemable Bean-Points
+        //      rewards the customer can mint with their balance. Server
+        //      already filters for affordability + stock + date window.
         setBalance(data.balance);
-        const walletOnly = (data.issued ?? []).filter(
+        const earnedOnly = (data.issued ?? []).filter(
           (v: ActiveVoucher) => v.source_type !== "points_redemption",
         );
-        setIssued(walletOnly.map(fromActiveVoucher));
+        setIssued(earnedOnly.map(fromActiveVoucher));
+        setCatalog((data.catalog ?? []).map(fromCatalog));
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to load rewards");
       } finally {
@@ -265,7 +301,7 @@ export function RewardPickerModal({ memberId, memberName, outletId, onRedeem, on
     }
   }
 
-  const hasRewards = issued.length > 0;
+  const hasRewards = issued.length > 0 || catalog.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
@@ -330,13 +366,24 @@ export function RewardPickerModal({ memberId, memberName, outletId, onRedeem, on
             </div>
           ) : (
             <div className="space-y-2.5">
-              {/* Owned wallet vouchers only — source-themed, free to use.
-               *  Catalog (Spend Beans) intentionally lives in the
-               *  Pickup app, not here, so cashier + customer see the
-               *  same list. */}
+              {/* Earned/surprise vouchers — Mystery, Challenge, Birthday,
+               *  Referral, Promo. Free to USE (no beans cost). */}
               {issued.map((r) => (
                 <VoucherCard
-                  key={`issued-${r.voucher_id}`}
+                  key={`issued-${r.voucher_id ?? r.id}`}
+                  reward={r}
+                  redeeming={redeeming === r.id}
+                  disabled={!!redeeming}
+                  onUse={() => handleRedeem(r)}
+                />
+              ))}
+              {/* Redeemable catalog (Bean Points) — items the customer
+               *  can afford to mint with their current balance. Pill
+               *  shows the beans cost instead of "Use" so the cashier
+               *  knows it'll deduct from the wallet. */}
+              {catalog.map((r) => (
+                <VoucherCard
+                  key={`cat-${r.id}`}
                   reward={r}
                   redeeming={redeeming === r.id}
                   disabled={!!redeeming}
@@ -371,7 +418,19 @@ function VoucherCard({
   const theme = themeForSource(reward.source_type ?? null);
   const eyebrow = sourceLabel(reward.source_type ?? null);
   const RewardIcon = pickRewardIcon(reward.name, reward.icon);
-  const urgency = urgencyLabel(reward.expires_at);
+  // Catalog rows: subline shows the description (e.g. "RM5 off!") since
+  //   there's no expiry. Wallet rows: subline shows expiry urgency.
+  // Pill content: "Use ›" for free wallet vouchers, "{cost} Beans ›"
+  //   for catalog items the cashier can mint with the customer's beans.
+  const isCatalog = reward.points_cost !== null;
+  const urgency = isCatalog ? null : urgencyLabel(reward.expires_at);
+  const subline = isCatalog
+    ? (reward.description ?? `${reward.points_cost!.toLocaleString()} Beans`)
+    : urgency!.label;
+  const sublineWarn = !isCatalog && urgency!.warn;
+  const pillLabel = isCatalog
+    ? `${reward.points_cost!.toLocaleString()} ›`
+    : "Use ›";
 
   return (
     <button
@@ -405,11 +464,11 @@ function VoucherCard({
           className="mt-0.5 truncate text-[11px]"
           style={{
             fontFamily: "Space Grotesk",
-            color: urgency.warn ? "#FFB070" : theme.fgDim,
+            color: sublineWarn ? "#FFB070" : theme.fgDim,
             fontWeight: 500,
           }}
         >
-          {urgency.label}
+          {subline}
         </p>
       </div>
 
@@ -421,7 +480,7 @@ function VoucherCard({
           color: theme.pillFg,
         }}
       >
-        {redeeming ? "…" : "Use ›"}
+        {redeeming ? "…" : pillLabel}
       </span>
     </button>
   );
