@@ -400,12 +400,10 @@ export async function POST(request: NextRequest) {
     // or claim a value larger than the cart subtotal.
     let rewardDiscountSenAmt = 0;
     if (walletVoucherId) {
-      // Wallet voucher path — pull the full applicability rule so we
-      // can verify the discount server-side. Earlier the route just
-      // capped the client's rewardDiscountSen at subtotal, which let a
-      // crafted client claim a "Free Drink" voucher on a cake-only
-      // cart. Now we recompute the eligible discount from the cart +
-      // voucher rule and cap the client's claim at that.
+      // Wallet voucher path — load + validate the voucher, then defer
+      // the actual discount math to @celsius/shared's
+      // computeVoucherDiscount so POS and Pickup never drift on the
+      // arithmetic.
       const { data: voucher } = await supabase
         .from("issued_rewards")
         .select(`
@@ -424,18 +422,17 @@ export async function POST(request: NextRequest) {
       if (voucher.expires_at && new Date(voucher.expires_at as string) < new Date()) {
         return NextResponse.json({ error: "Voucher expired" }, { status: 400 });
       }
-      if (voucher.min_order_value && subtotalSen < ((voucher.min_order_value as number) * 100)) {
-        return NextResponse.json({ error: "Minimum order not met for voucher" }, { status: 400 });
-      }
 
-      const cats  = (voucher.applicable_categories as string[] | null) ?? null;
-      const prods = (voucher.applicable_products as string[] | null) ?? null;
-      const hasFilter = (cats && cats.length > 0) || (prods && prods.length > 0);
-
-      // Build a lite cart-line shape locally. The full cartLines used
-      // by evaluatePromotions is constructed further down (after the
-      // tier lookup) so we can't reuse it here.
-      type CartLineLite = { product_id: string; quantity: number; unit_price: number };
+      // Build a lite cart-line shape in SEN — the shared engine
+      // works in sen throughout. unit_price_sen here folds in any
+      // modifier upcharges (we infer unit price from totalPrice /
+      // quantity rather than basePrice, matching what the customer
+      // would have paid for the line).
+      type CartLineLite = {
+        product_id: string;
+        quantity: number;
+        unit_price_sen: number;
+      };
       const localLines: CartLineLite[] = (items as Array<{
         product?: { id?: string };
         productId?: string;
@@ -445,72 +442,81 @@ export async function POST(request: NextRequest) {
         totalPrice?: number;
       }>).map((i) => {
         const pid = i.product?.id ?? i.productId ?? i.product_id ?? "";
-        const unit = i.basePrice != null
+        const unitRm = i.basePrice != null
           ? i.basePrice
           : (i.totalPrice ?? 0) / Math.max(1, i.quantity);
-        return { product_id: pid, quantity: i.quantity, unit_price: unit };
+        return {
+          product_id: pid,
+          quantity: i.quantity,
+          unit_price_sen: Math.round(unitRm * 100),
+        };
       });
 
-      // When the voucher has no category/product filter every cart
-      // line is eligible. Otherwise look up product → category from
-      // the products table to enforce server-authoritatively.
-      let eligibleLines: CartLineLite[] = localLines;
+      // When the voucher has a category/product filter, hydrate each
+      // line's category from the products table so the engine can
+      // evaluate applicable_categories server-authoritatively.
+      const cats  = (voucher.applicable_categories as string[] | null) ?? null;
+      const prods = (voucher.applicable_products as string[] | null) ?? null;
+      const hasFilter = (cats && cats.length > 0) || (prods && prods.length > 0);
+      const categoryByProductId = new Map<string, string | null>();
       if (hasFilter) {
         const productIds = Array.from(new Set(
           localLines.map((l) => l.product_id).filter((id): id is string => !!id),
         ));
-        const categoryByProductId = new Map<string, string | null>();
         if (productIds.length > 0) {
           const { data: prodRows } = await supabase
             .from("products")
-            .select("id, category")
+            .select("id, category, name")
             .in("id", productIds);
-          for (const p of ((prodRows ?? []) as Array<{ id: string; category: string | null }>)) {
+          for (const p of ((prodRows ?? []) as Array<{
+            id: string; category: string | null; name: string | null;
+          }>)) {
             categoryByProductId.set(p.id, p.category);
           }
         }
-        eligibleLines = localLines.filter((l) => {
-          if (prods && prods.length > 0 && prods.includes(l.product_id)) return true;
-          if (cats && cats.length > 0) {
-            const cat = categoryByProductId.get(l.product_id);
-            if (cat && cats.includes(cat)) return true;
-          }
-          return false;
-        });
       }
 
-      // Server-recompute the discount based on the voucher's
-      // discount_type + the eligible cart slice. If the customer
-      // claimed more than this, we silently cap them — the order
-      // proceeds, the wallet voucher still gets consumed, but they
-      // only get what they were entitled to. Catches both honest
-      // client bugs and dishonest client tampering.
-      const dt = voucher.discount_type as string | null;
-      const dv = (voucher.discount_value as number | null) ?? 0;
-      let serverDiscountSen = 0;
-      if (eligibleLines.length > 0) {
-        const eligibleSubSen = Math.round(
-          eligibleLines.reduce((s, l) => s + l.unit_price * l.quantity, 0) * 100,
-        );
-        if (dt === "free_item" || dt === "free_upgrade") {
-          // Free item covers the cheapest eligible line's unit price.
-          // Modifier upgrades on top still cost — we only zero out the
-          // base price which lives on the cart line as unit_price.
-          serverDiscountSen = Math.round(
-            Math.min(...eligibleLines.map((l) => l.unit_price)) * 100,
-          );
-        } else if (dt === "percent") {
-          serverDiscountSen = Math.round(eligibleSubSen * (dv / 100));
-        } else if (dt === "flat") {
-          // discount_value stored in sen for flat type.
-          serverDiscountSen = Math.min(Math.round(dv), eligibleSubSen);
-        } else if (dt === "fixed_amount") {
-          // discount_value stored in RM for fixed_amount type.
-          serverDiscountSen = Math.min(Math.round(dv * 100), eligibleSubSen);
-        }
+      const { computeVoucherDiscount } = await import("@celsius/shared");
+      const result = computeVoucherDiscount({
+        spec: {
+          // issued_rewards stores `flat` discounts in sen and `percent`
+          // discounts as a raw percentage — same vocab the engine
+          // expects, no translation needed here.
+          discount_type: (voucher.discount_type as never) ?? null,
+          discount_value: (voucher.discount_value as number | null) ?? null,
+          // issued_rewards doesn't carry max_discount_value or
+          // free_product_ids (those live on voucher_templates). Phase
+          // 4 can join the template when needed; for now null is the
+          // safe default — engine treats null as "no cap".
+          max_discount_value_sen: null,
+          min_order_value_sen: voucher.min_order_value != null
+            ? Math.round((voucher.min_order_value as number) * 100)
+            : null,
+          applicable_categories: cats,
+          applicable_products: prods,
+          free_product_ids: null,
+          free_product_name: (voucher.free_product_name as string | null) ?? null,
+        },
+        cart: localLines.map((l) => ({
+          product_id: l.product_id,
+          quantity: l.quantity,
+          unit_price_sen: l.unit_price_sen,
+          category: categoryByProductId.get(l.product_id) ?? null,
+          category_id: null,
+          name: "",
+        })),
+      });
+
+      // Translate engine reasons → user-facing 400 messages where
+      // they're customer-actionable (preserves the previous
+      // behaviour). Other reasons silently cap to 0 so the order
+      // still proceeds — the wallet voucher gets consumed but the
+      // customer only gets what they were entitled to.
+      if (result.reason === "below_min_order") {
+        return NextResponse.json({ error: "Minimum order not met for voucher" }, { status: 400 });
       }
 
-      rewardDiscountSenAmt = Math.max(0, Math.min(rewardDiscountSen ?? 0, serverDiscountSen));
+      rewardDiscountSenAmt = Math.max(0, Math.min(rewardDiscountSen ?? 0, result.discount_sen));
     } else if (rewardId) {
       const validated = await validateAppliedReward(supabase, {
         rewardId,
