@@ -25,6 +25,17 @@ export { sendSMS, getSMSProvider } from "./sms";
 export type { SMSProvider } from "./sms";
 export { generateOTP, sendOTP, verifyOTP } from "./otp";
 
+// ─── Loyalty ─────────────────────────────────────────────
+// Canonical reward-fetch helpers used by BOTH apps/order (Pickup) and
+// apps/pos. Single source of truth so the two surfaces never drift on
+// filter logic or response shape.
+export { fetchActiveVouchersForMember } from "./loyalty/active-vouchers";
+export type {
+  ActiveVoucher,
+  VoucherSource,
+  VoucherDiscountType,
+} from "./loyalty/active-vouchers";
+
 // Order number format: CC-{OUTLET_CODE}-{SEQUENCE}
 export function generateOrderNumber(outletCode: string, sequence: number): string {
   return `CC-${outletCode}-${String(sequence).padStart(4, "0")}`;
