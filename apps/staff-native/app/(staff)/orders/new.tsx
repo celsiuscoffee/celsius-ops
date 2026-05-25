@@ -38,7 +38,14 @@ import {
   type PORecommendation,
 } from "../../../lib/ops/ai-decisions";
 
-type Supplier = { id: string; name: string; phone?: string | null };
+type Supplier = {
+  id: string;
+  name: string;
+  phone?: string | null;
+  // /api/suppliers returns the catalog rows wired to each supplier so we
+  // can filter the picker down to "what this supplier actually sells".
+  products?: Array<{ id: string; name: string; sku: string; uom: string }>;
+};
 // Mirrors the shape served by /api/products/options — flatten just the
 // fields we actually need for the picker + cart line. `category` is the
 // product group name (e.g. "Coffee Beans"), shown as a Pill.
@@ -296,13 +303,27 @@ export default function NewPO() {
     );
   }
 
+  // Restrict the picker to products the chosen supplier actually carries.
+  // If a supplier has no linked products in the catalog (legacy data),
+  // fall back to the full list so the user isn't stuck. Search runs on
+  // top of the supplier-restricted set.
+  const supplierProductIds = useMemo(() => {
+    const supp = suppliers.find((s) => s.id === supplierId);
+    if (!supp?.products?.length) return null;
+    return new Set(supp.products.map((p) => p.id));
+  }, [suppliers, supplierId]);
+
+  const pickerSource = supplierProductIds
+    ? products.filter((p) => supplierProductIds.has(p.id))
+    : products;
+
   const filtered = search
-    ? products.filter(
+    ? pickerSource.filter(
         (p) =>
           p.name.toLowerCase().includes(search.toLowerCase()) ||
           p.sku.toLowerCase().includes(search.toLowerCase()),
       )
-    : products;
+    : pickerSource;
 
   return (
     <Screen edges={["top", "left", "right"]}>
@@ -418,6 +439,11 @@ export default function NewPO() {
           // pb-32 ≈ pinned bar height (h-14 + py-3 = 80px) + breathing room.
           // Anything larger leaves a visible dead zone above the bar.
           contentContainerClassName="pb-32"
+          // flexGrow:1 lets the empty-state card stretch to fill the
+          // viewport. Without it, ScrollView only grows to the size of
+          // its content, leaving the bottom action bar floating over
+          // whitespace when the cart has zero items.
+          contentContainerStyle={{ flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
         >
           {/* Supplier */}
@@ -467,28 +493,35 @@ export default function NewPO() {
           {cart.length === 0 ? (
             // Big tappable empty state — the whole card opens the picker
             // so the user doesn't have to find the tiny "Add item" pill
-            // above. Also fills the vertical space so the pinned action
-            // bar doesn't float over a blank screen.
+            // above. `flex-1` + ScrollView flexGrow:1 above stretches
+            // this card to fill the viewport so the pinned action bar
+            // doesn't float over a blank screen.
             <Pressable
               onPress={() => setProductPicker(true)}
               disabled={!supplierId}
-              className={`mt-3 rounded-3xl border border-dashed border-border bg-surface px-4 py-10 items-center ${
+              className={`mt-3 mb-4 flex-1 rounded-3xl border border-dashed border-border bg-surface items-center justify-center px-6 py-10 ${
                 supplierId ? "active:bg-primary-50" : "opacity-60"
               }`}
             >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-primary-50">
-                <PackageIcon color="#C2452D" size={26} />
+              <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary-50">
+                <PackageIcon color="#C2452D" size={28} />
               </View>
               <Text className="mt-3 text-base font-body-bold text-espresso">
                 {supplierId ? "Add your first item" : "Pick a supplier first"}
               </Text>
-              <Text className="mt-1 px-6 text-center text-xs font-body text-muted-fg">
+              <Text className="mt-1 px-4 text-center text-xs font-body text-muted-fg">
                 {supplierId
-                  ? "Tap here to browse the catalog and build the order."
+                  ? supplierProductIds && supplierProductIds.size === 0
+                    ? "This supplier has no products linked. Add some in backoffice first."
+                    : `Tap to browse${
+                        supplierProductIds
+                          ? ` ${supplierProductIds.size} item${supplierProductIds.size === 1 ? "" : "s"} from this supplier`
+                          : " the catalog"
+                      }.`
                   : "Select a supplier above to start adding items."}
               </Text>
               {supplierId ? (
-                <View className="mt-3 flex-row items-center gap-1 rounded-full bg-primary px-3.5 py-1.5">
+                <View className="mt-4 flex-row items-center gap-1.5 rounded-full bg-primary px-4 py-2">
                   <Plus color="#FFFFFF" size={14} />
                   <Text className="text-xs font-body-bold text-white">
                     Add item
@@ -760,9 +793,22 @@ export default function NewPO() {
           </View>
           <ScrollView contentContainerClassName="px-4 py-3 gap-2">
             {filtered.length === 0 ? (
-              <Text className="mt-6 text-center text-sm font-body text-muted-fg">
-                No products match.
-              </Text>
+              <View className="mt-10 items-center px-6">
+                <Text className="text-center text-sm font-body-bold text-espresso">
+                  {search
+                    ? "No products match your search"
+                    : supplierProductIds && supplierProductIds.size === 0
+                      ? "This supplier has no products yet"
+                      : "No products available"}
+                </Text>
+                <Text className="mt-1 text-center text-xs font-body text-muted-fg">
+                  {search
+                    ? "Try a different keyword or SKU."
+                    : supplierProductIds && supplierProductIds.size === 0
+                      ? "Add supplier-product mappings in backoffice → suppliers."
+                      : "Ask a manager to set up the product catalog."}
+                </Text>
+              </View>
             ) : (
               filtered.map((p) => (
                 <Pressable
