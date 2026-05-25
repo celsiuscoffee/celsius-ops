@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -19,16 +20,22 @@ import {
   Minus,
   Plus,
   Search,
+  Send,
+  Sparkles,
   Trash2,
   X as XIcon,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
-import { Field, Pill } from "../../../components/ui";
+import { Field, Pill, SkeletonList } from "../../../components/ui";
 import { api } from "../../../lib/api";
 import { useStaff } from "../../../lib/store";
-import { createOrder } from "../../../lib/ops/orders";
+import { createOrder, sendOrder } from "../../../lib/ops/orders";
+import {
+  fetchAIDecisions,
+  type PORecommendation,
+} from "../../../lib/ops/ai-decisions";
 
 type Supplier = { id: string; name: string; phone?: string | null };
 type Product = {
@@ -60,11 +67,23 @@ export default function NewPO() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [tab, setTab] = useState<"smart" | "all">("smart");
+
+  // Smart-tab AI recommendations — proxied through staff /api/ai-decisions
+  // to backoffice. Scoped to the user's outlet on load.
+  const [aiRecs, setAiRecs] = useState<PORecommendation[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+
   const [supplierId, setSupplierId] = useState("");
+  const [supplierPhone, setSupplierPhone] = useState<string | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [notes, setNotes] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  // `mode` distinguishes between Save-as-draft (saves PO, leaves status
+  // DRAFT) and Send-via-WhatsApp (creates PO, transitions to
+  // AWAITING_DELIVERY, opens supplier WhatsApp deeplink with the
+  // pre-filled itemized order message).
+  const [submitting, setSubmitting] = useState<null | "draft" | "send">(null);
 
   const [supplierPicker, setSupplierPicker] = useState(false);
   const [productPicker, setProductPicker] = useState(false);
@@ -94,15 +113,57 @@ export default function NewPO() {
     };
   }, []);
 
+  // Load AI recommendations on mount (and re-load on outlet change).
+  // Filtered server-side to the current outlet so we don't surface
+  // restock suggestions for an outlet the user can't write to.
+  useEffect(() => {
+    if (!session?.outletId) return;
+    let cancelled = false;
+    setAiLoading(true);
+    fetchAIDecisions(session.outletId)
+      .then((data) => {
+        if (cancelled) return;
+        setAiRecs(data.purchaseOrders ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setAiRecs([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAiLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.outletId]);
+
   const supplier = useMemo(
     () => suppliers.find((s) => s.id === supplierId) ?? null,
     [suppliers, supplierId],
   );
 
-  const total = useMemo(
-    () => cart.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0),
-    [cart],
-  );
+  // Apply a Smart recommendation: jump to the All tab with the
+  // supplier pre-selected and the cart pre-filled. User can still
+  // tweak quantities / prices before sending.
+  function applyRecommendation(rec: PORecommendation) {
+    setSupplierId(rec.supplierId);
+    const supp = suppliers.find((s) => s.id === rec.supplierId);
+    setSupplierPhone(supp?.phone ?? null);
+    setCart(
+      rec.items.map((it) => ({
+        productId: it.productId,
+        productName: it.productName,
+        sku: "",
+        unitLabel: it.packageLabel ?? it.packageName ?? it.baseUom,
+        packageId: it.packageId,
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+      })),
+    );
+    setTab("all");
+    Haptics.notificationAsync(
+      Haptics.NotificationFeedbackType.Success,
+    ).catch(() => {});
+  }
 
   function addProduct(p: Product) {
     const pkg = p.packages?.[0];
@@ -139,9 +200,35 @@ export default function NewPO() {
     cart.length > 0 &&
     cart.every((l) => l.quantity > 0 && l.unitPrice >= 0);
 
-  async function submit() {
+  const total = useMemo(
+    () => cart.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0),
+    [cart],
+  );
+
+  // Pre-formatted WhatsApp message — mirrors the backoffice template.
+  function buildWhatsAppMessage() {
+    const supp = suppliers.find((s) => s.id === supplierId);
+    const today = new Date().toLocaleDateString("en-MY", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    let msg = `📋 *Order from Celsius Coffee*\n`;
+    msg += `Outlet: ${session?.outletName ?? "—"}\nDate: ${today}\n\n`;
+    cart.forEach((line, i) => {
+      msg += `${i + 1}. ${line.productName} — ${line.quantity} ${line.unitLabel}\n`;
+    });
+    if (deliveryDate)
+      msg += `\nDelivery: ${new Date(deliveryDate).toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" })}`;
+    if (notes) msg += `\nNotes: ${notes}`;
+    msg += `\n\nTotal: RM ${total.toFixed(2)}`;
+    msg += `\n\nThank you! 🙏`;
+    return { msg, phone: supp?.phone ?? null };
+  }
+
+  async function submit(mode: "draft" | "send") {
     if (!canSubmit || !session?.outletId) return;
-    setSubmitting(true);
+    setSubmitting(mode);
     try {
       const res = await createOrder({
         outletId: session.outletId,
@@ -158,6 +245,20 @@ export default function NewPO() {
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       ).catch(() => {});
+
+      if (mode === "send") {
+        // Transition to AWAITING_DELIVERY (stamps sentAt) and open the
+        // supplier's WhatsApp chat with the pre-filled itemized message.
+        await sendOrder(res.id).catch(() => {});
+        const { msg, phone } = buildWhatsAppMessage();
+        const text = encodeURIComponent(msg);
+        const cleaned = phone?.replace(/\D/g, "");
+        const url = cleaned
+          ? `https://wa.me/${cleaned}?text=${text}`
+          : `https://wa.me/?text=${text}`;
+        Linking.openURL(url).catch(() => {});
+      }
+
       router.replace(`/(staff)/orders/${res.id}` as never);
     } catch (e) {
       Alert.alert(
@@ -165,7 +266,7 @@ export default function NewPO() {
         e instanceof Error ? e.message : "Try again.",
       );
     } finally {
-      setSubmitting(false);
+      setSubmitting(null);
     }
   }
 
@@ -201,6 +302,101 @@ export default function NewPO() {
           />
         </View>
 
+        {/* Smart / All tabs */}
+        <View className="mb-3 flex-row gap-2">
+          {(["smart", "all"] as const).map((t) => (
+            <Pressable
+              key={t}
+              onPress={() => setTab(t)}
+              className={`rounded-full px-3 py-1.5 ${
+                tab === t ? "bg-primary" : "bg-primary-50"
+              }`}
+            >
+              <Text
+                className={`text-xs font-body-bold capitalize ${
+                  tab === t ? "text-white" : "text-primary"
+                }`}
+              >
+                {t === "smart" ? "Smart" : "Manual"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {tab === "smart" ? (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerClassName="pb-24"
+          >
+            <Text className="mb-2 text-xs font-body text-muted-fg">
+              AI-ranked restock recommendations based on current stock levels
+              and recent usage. Tap to pre-fill the cart.
+            </Text>
+            {aiLoading ? (
+              <SkeletonList count={3} />
+            ) : aiRecs.length === 0 ? (
+              <View className="rounded-3xl border border-dashed border-border bg-surface px-4 py-8 items-center">
+                <Sparkles color="#C2452D" size={28} />
+                <Text className="mt-2 text-sm font-body-bold text-espresso">
+                  Nothing to restock right now
+                </Text>
+                <Text className="mt-1 text-xs font-body text-muted-fg text-center">
+                  Stock is healthy at your outlet — switch to Manual to
+                  create a one-off PO.
+                </Text>
+              </View>
+            ) : (
+              <View className="gap-2">
+                {aiRecs.map((rec) => {
+                  const urgencyTone =
+                    rec.urgency === "critical"
+                      ? "danger"
+                      : rec.urgency === "low"
+                        ? "warning"
+                        : "brand";
+                  const urgencyLabel =
+                    rec.urgency === "critical"
+                      ? "Critical"
+                      : rec.urgency === "low"
+                        ? "Low"
+                        : "Restock";
+                  return (
+                    <Pressable
+                      key={`${rec.supplierId}-${rec.outletId}`}
+                      onPress={() => applyRecommendation(rec)}
+                      className="rounded-3xl border border-border bg-surface px-4 py-3.5 active:bg-primary-50"
+                    >
+                      <View className="flex-row items-start justify-between gap-2">
+                        <Text
+                          className="flex-1 text-base font-body-bold text-espresso"
+                          numberOfLines={1}
+                        >
+                          {rec.supplierName}
+                        </Text>
+                        <Pill label={urgencyLabel} tone={urgencyTone} />
+                      </View>
+                      <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                        {rec.items.length} item
+                        {rec.items.length === 1 ? "" : "s"} ·{" "}
+                        {rec.leadTimeDays > 0
+                          ? `${rec.leadTimeDays}-day lead`
+                          : "lead unknown"}
+                      </Text>
+                      <View className="mt-2 flex-row items-center justify-between">
+                        <Text className="text-sm font-body-bold text-espresso tabular-nums">
+                          RM {rec.totalAmount.toFixed(2)}
+                        </Text>
+                        <Text className="text-xs font-body-bold text-primary">
+                          Tap to apply →
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </ScrollView>
+        ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerClassName="pb-40"
@@ -372,35 +568,60 @@ export default function NewPO() {
             />
           </Field>
         </ScrollView>
+        )}
 
-        {/* Pinned submit */}
-        <View
-          style={{
-            shadowColor: "#160800",
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.06,
-            shadowRadius: 12,
-          }}
-          className="absolute inset-x-0 bottom-0 bg-background px-4 pt-3 pb-3"
-        >
-          <Pressable
-            onPress={submit}
-            disabled={!canSubmit || submitting}
-            className={`h-14 flex-row items-center justify-center gap-2 rounded-2xl ${
-              canSubmit && !submitting
-                ? "bg-primary active:opacity-90"
-                : "bg-primary/40"
-            }`}
+        {/* Pinned action bar — only on Manual tab (Smart has no cart yet) */}
+        {tab === "all" ? (
+          <View
+            style={{
+              shadowColor: "#160800",
+              shadowOffset: { width: 0, height: -4 },
+              shadowOpacity: 0.06,
+              shadowRadius: 12,
+            }}
+            className="absolute inset-x-0 bottom-0 bg-background px-4 pt-3 pb-3"
           >
-            {submitting ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text className="text-base font-body-bold text-white">
-                Save as draft
-              </Text>
-            )}
-          </Pressable>
-        </View>
+            <View className="flex-row gap-2">
+              <Pressable
+                onPress={() => submit("draft")}
+                disabled={!canSubmit || !!submitting}
+                className={`h-14 flex-1 items-center justify-center rounded-2xl border ${
+                  canSubmit && !submitting
+                    ? "border-primary active:bg-primary-50"
+                    : "border-border opacity-50"
+                }`}
+              >
+                {submitting === "draft" ? (
+                  <ActivityIndicator color="#C2452D" />
+                ) : (
+                  <Text className="text-sm font-body-bold text-primary">
+                    Save as draft
+                  </Text>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={() => submit("send")}
+                disabled={!canSubmit || !!submitting}
+                className={`h-14 flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl ${
+                  canSubmit && !submitting
+                    ? "bg-primary active:opacity-90"
+                    : "bg-primary/40"
+                }`}
+              >
+                {submitting === "send" ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Send color="#FFFFFF" size={16} />
+                    <Text className="text-sm font-body-bold text-white">
+                      Send via WhatsApp
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
 
       {/* Supplier picker sheet */}

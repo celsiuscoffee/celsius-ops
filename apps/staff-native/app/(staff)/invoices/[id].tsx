@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -17,6 +18,7 @@ import * as Haptics from "expo-haptics";
 import {
   Camera,
   FileText,
+  MessageCircle,
   Paperclip,
   X as XIcon,
 } from "lucide-react-native";
@@ -27,13 +29,24 @@ import {
   ReceiptCapture,
   type CapturedPhoto,
 } from "../../../components/ReceiptCapture";
-import { attachInvoice, getInvoice } from "../../../lib/ops/invoices";
+import {
+  attachInvoice,
+  buildPopMessage,
+  fetchPopShortlink,
+  getInvoice,
+} from "../../../lib/ops/invoices";
 import { uploadPhoto } from "../../../lib/upload";
 
 type Invoice = {
   id: string;
   invoiceNumber: string;
   amount: number | string;
+  amountPaid?: number | string | null;
+  depositAmount?: number | string | null;
+  depositPercent?: number | null;
+  depositRef?: string | null;
+  paymentRef?: string | null;
+  popShortLink?: string | null;
   status: string;
   paymentType?: string | null;
   dueDate: string | null;
@@ -72,6 +85,70 @@ export default function InvoiceDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [attachOpen, setAttachOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [sendingPop, setSendingPop] = useState(false);
+
+  // Open WhatsApp with a status-aware Proof of Payment message.
+  // - If the invoice already has a stored popShortLink, reuse it.
+  // - Otherwise mint a fresh shortlink via the backoffice proxy.
+  // - Fall back to the latest photo URL if shortlink minting fails
+  //   (supplier still sees a working receipt link).
+  async function sendPop() {
+    if (!invoice) return;
+    setSendingPop(true);
+    try {
+      let receiptUrl = invoice.popShortLink ?? null;
+      if (!receiptUrl) {
+        try {
+          const r = await fetchPopShortlink(invoice.id);
+          receiptUrl = r.shortLink;
+          setInvoice((prev) =>
+            prev ? { ...prev, popShortLink: r.shortLink } : prev,
+          );
+        } catch {
+          // ignore — falls through to the photo fallback
+        }
+      }
+      if (!receiptUrl && invoice.photos.length > 0) {
+        receiptUrl = invoice.photos[invoice.photos.length - 1];
+      }
+      if (!receiptUrl) {
+        Alert.alert(
+          "No receipt available",
+          "Snap a payment receipt photo first.",
+        );
+        return;
+      }
+      const msg = buildPopMessage(
+        {
+          invoiceNumber: invoice.invoiceNumber,
+          amount: Number(invoice.amount ?? 0),
+          amountPaid:
+            invoice.amountPaid != null ? Number(invoice.amountPaid) : 0,
+          depositAmount:
+            invoice.depositAmount != null
+              ? Number(invoice.depositAmount)
+              : null,
+          depositPercent: invoice.depositPercent ?? null,
+          depositRef: invoice.depositRef ?? null,
+          paymentRef: invoice.paymentRef ?? null,
+          dueDate: invoice.dueDate,
+          status: invoice.status,
+        },
+        receiptUrl,
+      );
+      const text = encodeURIComponent(msg);
+      const phone = invoice.supplier?.phone?.replace(/\D/g, "") ?? "";
+      const url = phone
+        ? `https://wa.me/${phone}?text=${text}`
+        : `https://wa.me/?text=${text}`;
+      Linking.openURL(url).catch(() => {});
+      Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      ).catch(() => {});
+    } finally {
+      setSendingPop(false);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -123,7 +200,16 @@ export default function InvoiceDetailScreen() {
     invoice.status === "PENDING";
 
   return (
-    <Screen edges={isPlaceholder ? ["top", "left", "right"] : undefined}>
+    <Screen
+      edges={
+        isPlaceholder ||
+        invoice.status === "PAID" ||
+        invoice.status === "DEPOSIT_PAID" ||
+        invoice.status === "PARTIALLY_PAID"
+          ? ["top", "left", "right"]
+          : undefined
+      }
+    >
       <View className="pt-3">
         <PageHeader
           title={isPlaceholder ? "Attach invoice" : invoice.invoiceNumber}
@@ -249,7 +335,43 @@ export default function InvoiceDetailScreen() {
         ) : null}
       </ScrollView>
 
-      {/* Pinned attach CTA for placeholders */}
+      {/* Pinned action — placeholder gets Attach, paid invoices get
+          Send POP via WhatsApp. PARTIALLY_PAID / DEPOSIT_PAID / PAID
+          all trigger the POP flow with a status-aware message. */}
+      {!isPlaceholder &&
+      (invoice.status === "PAID" ||
+        invoice.status === "DEPOSIT_PAID" ||
+        invoice.status === "PARTIALLY_PAID") ? (
+        <View
+          style={{
+            shadowColor: "#160800",
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.06,
+            shadowRadius: 12,
+          }}
+          className="absolute inset-x-0 bottom-0 bg-background px-4 pt-3 pb-3"
+        >
+          <Pressable
+            onPress={sendPop}
+            disabled={sendingPop}
+            className={`h-14 flex-row items-center justify-center gap-2 rounded-2xl ${
+              sendingPop ? "bg-primary/50" : "bg-primary active:opacity-90"
+            }`}
+          >
+            {sendingPop ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <MessageCircle color="#FFFFFF" size={18} />
+                <Text className="text-base font-body-bold text-white">
+                  Send POP via WhatsApp
+                </Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+      ) : null}
+
       {isPlaceholder ? (
         <View
           style={{

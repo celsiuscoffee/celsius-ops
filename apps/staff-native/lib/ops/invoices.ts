@@ -76,3 +76,77 @@ export function attachInvoice(
     },
   );
 }
+
+// Mint (or fetch existing) a short link to the latest invoice photo —
+// used as the "Receipt: <url>" line in POP WhatsApp messages so the
+// supplier opens one canonical URL instead of a 200-char Supabase
+// signed link. Proxies to backoffice (single generator).
+export function fetchPopShortlink(id: string) {
+  return api<{ shortLink: string }>(
+    `/api/invoices/${id}/shortlink`,
+    { method: "POST" },
+  );
+}
+
+// Status-aware POP message used for the WhatsApp deeplink.
+// PAID            → full payment confirmation
+// DEPOSIT_PAID    → deposit paid + balance line
+// PARTIALLY_PAID  → partial paid + outstanding line
+// Mirrors backoffice `buildPopMessage` in apps/backoffice/.../invoices/page.tsx.
+export function buildPopMessage(
+  inv: {
+    invoiceNumber: string;
+    amount: number;
+    amountPaid?: number | null;
+    depositAmount?: number | null;
+    depositPercent?: number | null;
+    depositRef?: string | null;
+    paymentRef?: string | null;
+    dueDate?: string | null;
+    status: string;
+  },
+  receiptUrl: string,
+): string {
+  const fmt = (n: number) => `RM ${n.toFixed(2)}`;
+  const paid = inv.amountPaid ?? 0;
+  const balance = Math.max(0, inv.amount - paid);
+  const dueLine = inv.dueDate
+    ? ` due ${new Date(inv.dueDate).toLocaleDateString([], {
+        day: "numeric",
+        month: "short",
+      })}`
+    : "";
+
+  if (inv.status === "DEPOSIT_PAID") {
+    const depAmt = paid || (inv.depositAmount ?? 0);
+    const pctTag = inv.depositPercent ? ` (${inv.depositPercent}%)` : "";
+    return [
+      `Hi, deposit of ${fmt(depAmt)}${pctTag} has been paid for invoice ${inv.invoiceNumber}.`,
+      `Ref: ${inv.depositRef ?? "N/A"}`,
+      balance > 0 ? `Balance ${fmt(balance)}${dueLine} will follow.` : "",
+      ``,
+      `Receipt: ${receiptUrl}`,
+      ``,
+      `Thank you.`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (inv.status === "PARTIALLY_PAID") {
+    return [
+      `Hi, partial payment of ${fmt(paid)} has been made for invoice ${inv.invoiceNumber} (total ${fmt(inv.amount)}).`,
+      `Ref: ${inv.paymentRef ?? inv.depositRef ?? "N/A"}`,
+      balance > 0 ? `Outstanding ${fmt(balance)}${dueLine}.` : "",
+      ``,
+      `Receipt: ${receiptUrl}`,
+      ``,
+      `Thank you.`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  // PAID (default) — full payment
+  return `Hi, payment has been made for invoice ${inv.invoiceNumber} — ${fmt(inv.amount)}.\nRef: ${inv.paymentRef ?? "N/A"}\n\nReceipt: ${receiptUrl}\n\nThank you.`;
+}
