@@ -611,7 +611,7 @@ export default function PerishablesPage() {
             {/* Basic Info */}
             <div className="rounded-lg border border-gray-200 bg-gray-50/30 p-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Basic Info</p>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="text-sm font-medium text-gray-700">Perishable Name</label>
                   <Input
@@ -675,7 +675,7 @@ export default function PerishablesPage() {
             {/* Storage & Tracking */}
             <div className="rounded-lg border border-gray-200 bg-gray-50/30 p-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Storage &amp; Tracking</p>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
                   <label className="text-sm font-medium text-gray-700">Storage Area</label>
                   <select

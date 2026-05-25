@@ -779,9 +779,9 @@ export default function CreateOrderPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* ── Left: Product selection ── */}
-        <div className="col-span-8">
+        <div className="lg:col-span-8">
           {/* Outlet + controls */}
           <Card className="mb-4 p-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -1191,8 +1191,8 @@ export default function CreateOrderPage() {
         </div>
 
         {/* ── Right: Cart sidebar ── */}
-        <div className="col-span-4">
-          <div className="sticky top-6">
+        <div className="lg:col-span-4">
+          <div className="lg:sticky lg:top-6">
             <Card className="p-4">
               <div className="mb-3 flex items-center justify-between">
                 <span className="flex items-center gap-2 text-sm font-semibold text-gray-900">

@@ -1144,7 +1144,7 @@ export default function PayAndClaimPage() {
         <DialogContent className="!max-w-6xl max-h-[95vh] overflow-hidden p-0">
           <div className="flex h-[90vh] flex-col lg:h-[85vh] lg:flex-row">
             {/* Left: Photo viewer (40% desktop, top 40vh on mobile) */}
-            <div className="h-[40vh] w-full bg-gray-900 flex flex-col lg:h-auto lg:w-[40%]">
+            <div className="h-[22vh] w-full bg-gray-900 flex flex-col lg:h-auto lg:w-[40%]">
               <div className="p-4 border-b border-gray-700">
                 <p className="text-xs text-gray-400 font-medium">Receipt / Invoice</p>
                 {reviewPhotos.length > 0 && (
@@ -1225,7 +1225,7 @@ export default function PayAndClaimPage() {
             </div>
 
             {/* Right: Editable form (60%) */}
-            <div className="flex flex-1 flex-col lg:w-[60%] lg:flex-none">
+            <div className="flex min-h-0 flex-1 flex-col lg:w-[60%] lg:flex-none">
               <div className="p-4 sm:p-5 border-b">
                 <h2 className="text-base font-semibold flex items-center gap-2">
                   <Receipt className="h-4 w-4" />
@@ -1237,7 +1237,7 @@ export default function PayAndClaimPage() {
                 </p>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="min-h-0 flex-1 overflow-y-auto p-5 space-y-4">
                 {loadingOptions ? (
                   <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
                 ) : (
@@ -1469,7 +1469,7 @@ export default function PayAndClaimPage() {
         <DialogContent className="!max-w-6xl max-h-[95vh] overflow-hidden p-0">
           <div className="flex h-[90vh] flex-col lg:h-[85vh] lg:flex-row">
             {/* Left: Photo upload & viewer (40% desktop, top 40vh mobile) */}
-            <div className="h-[40vh] w-full bg-gray-900 flex flex-col lg:h-auto lg:w-[40%]"
+            <div className="h-[22vh] w-full bg-gray-900 flex flex-col lg:h-auto lg:w-[40%]"
               onDragOver={(e) => { e.preventDefault(); setQuDragging(true); }}
               onDragEnter={(e) => { e.preventDefault(); setQuDragging(true); }}
               onDragLeave={(e) => { e.preventDefault(); if (!e.currentTarget.contains(e.relatedTarget as Node)) setQuDragging(false); }}
@@ -1542,7 +1542,7 @@ export default function PayAndClaimPage() {
             </div>
 
             {/* Right: Form (60%) */}
-            <div className="flex flex-1 flex-col lg:w-[60%] lg:flex-none">
+            <div className="flex min-h-0 flex-1 flex-col lg:w-[60%] lg:flex-none">
               <div className="p-4 sm:p-5 border-b">
                 <h2 className="text-base font-semibold flex items-center gap-2">
                   <Receipt className="h-4 w-4" /> New Expense Request
@@ -1556,7 +1556,7 @@ export default function PayAndClaimPage() {
                 </p>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="min-h-0 flex-1 overflow-y-auto p-5 space-y-4">
                 {/* Category + Flow toggles — drive form shape */}
                 <div className="space-y-3 rounded-lg border bg-gray-50 p-3">
                   <div>
