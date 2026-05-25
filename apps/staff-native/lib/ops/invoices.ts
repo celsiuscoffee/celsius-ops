@@ -22,6 +22,9 @@ export type InvoiceListItem = {
   depositRef: string | null;
   paymentRef: string | null;
   popShortLink: string | null;
+  // Phase 10 — null means the supplier hasn't been sent the POP yet.
+  // Used to render the "POP sent" pill and the unsent-only filter.
+  popSentAt: string | null;
   status: InvoiceStatus;
   paymentType: "SUPPLIER" | "STAFF_CLAIM" | "PAYMENT_REQUEST" | "TRANSFER" | null;
   dueDate: string | null;
@@ -38,7 +41,14 @@ export type InvoiceListItem = {
 // `tab` and `cardFilter` are independent — the latter wins server-side
 // when both are set (the user clicked a summary card). Native list
 // screen drives this via tab pills + the GRNI card.
-export function listInvoices(opts: {
+//
+// Phase 10 adds optional filters layered on top:
+//   - popStatus:  "sent" | "not_sent"  — narrow by POP-sent state
+//   - supplierId: drill into one supplier
+//   - outletId:   manager-only outlet override (non-managers stay
+//                 scoped to their assigned outlet server-side)
+//   - dateFrom / dateTo: ISO yyyy-mm-dd, filters on issueDate
+export type InvoiceListFilters = {
   tab?: "unpaid" | "paid" | "all" | "pending_invoice";
   cardFilter?:
     | "paid"
@@ -47,14 +57,37 @@ export function listInvoices(opts: {
     | "due_today"
     | "pending_invoice";
   search?: string;
-} = {}) {
+  popStatus?: "sent" | "not_sent";
+  supplierId?: string;
+  outletId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
+export function listInvoices(opts: InvoiceListFilters = {}) {
   const params = new URLSearchParams();
   if (opts.tab) params.set("tab", opts.tab);
   if (opts.cardFilter) params.set("cardFilter", opts.cardFilter);
   if (opts.search) params.set("search", opts.search);
+  if (opts.popStatus) params.set("popStatus", opts.popStatus);
+  if (opts.supplierId) params.set("supplierId", opts.supplierId);
+  if (opts.outletId) params.set("outletId", opts.outletId);
+  if (opts.dateFrom) params.set("dateFrom", opts.dateFrom);
+  if (opts.dateTo) params.set("dateTo", opts.dateTo);
   const q = params.toString();
   return api<{ items: InvoiceListItem[] }>(
     `/api/invoices${q ? `?${q}` : ""}`,
+  );
+}
+
+// Stamp popSentAt on the server right after the user fires the Send
+// POP WhatsApp deeplink. Fire-and-forget on the client — failure here
+// just leaves the row without a "POP sent" pill until next sync; the
+// supplier still got the message.
+export function markPopSent(id: string) {
+  return api<{ popSentAt: string | null }>(
+    `/api/invoices/${id}/pop-sent`,
+    { method: "POST" },
   );
 }
 

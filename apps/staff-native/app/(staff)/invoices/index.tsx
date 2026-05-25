@@ -3,25 +3,70 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { ChevronRight, FileText, MessageCircle } from "lucide-react-native";
+import {
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  FileText,
+  Filter as FilterIcon,
+  MessageCircle,
+  X as XIcon,
+} from "lucide-react-native";
+import { useColorScheme } from "nativewind";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
-import { Card, EmptyState, Pill, SkeletonList } from "../../../components/ui";
+import { EmptyState, Pill, SkeletonList } from "../../../components/ui";
+import { api } from "../../../lib/api";
+import { useStaff } from "../../../lib/store";
 import {
   buildPopMessage,
   fetchPopShortlink,
   listInvoices,
+  markPopSent,
   type InvoiceListItem,
   type InvoiceStatus,
 } from "../../../lib/ops/invoices";
+
+type Supplier = { id: string; name: string };
+type Outlet = { id: string; name: string };
+
+// Phase 10 filter set — kept independent of the tab pills so a manager
+// can e.g. tab "Paid" + filter "POP not sent" to find the actionable
+// backlog. Empty/null on every field = no filter.
+type FilterState = {
+  popStatus: "sent" | "not_sent" | "";
+  supplierId: string;
+  outletId: string;
+  dateFrom: string;
+  dateTo: string;
+};
+
+const EMPTY_FILTERS: FilterState = {
+  popStatus: "",
+  supplierId: "",
+  outletId: "",
+  dateFrom: "",
+  dateTo: "",
+};
+
+function activeFilterCount(f: FilterState) {
+  let n = 0;
+  if (f.popStatus) n++;
+  if (f.supplierId) n++;
+  if (f.outletId) n++;
+  if (f.dateFrom || f.dateTo) n++;
+  return n;
+}
 
 type TabKey = "unpaid" | "paid" | "all" | "pending_invoice";
 
@@ -48,6 +93,14 @@ const STATUS_TONE: Record<
 
 export default function InvoicesList() {
   const router = useRouter();
+  const session = useStaff((s) => s.session);
+  const { colorScheme } = useColorScheme();
+  const iconColor = colorScheme === "dark" ? "#FAFAFA" : "#160800";
+  const isManager =
+    session?.role === "OWNER" ||
+    session?.role === "ADMIN" ||
+    session?.role === "MANAGER";
+
   const [items, setItems] = useState<InvoiceListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,6 +109,20 @@ export default function InvoicesList() {
   // tapped row shows a spinner instead of the icon. Single value (only
   // one POP fires at a time).
   const [sendingPopId, setSendingPopId] = useState<string | null>(null);
+
+  // Phase 10 filter state — kept separate from `tab` so a tab change
+  // doesn't clobber filters. `pendingFilters` is the draft inside the
+  // sheet; we only commit to `filters` (which triggers a re-fetch) on
+  // Apply, so dragging the date sheet around doesn't spam the API.
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [filterSheet, setFilterSheet] = useState(false);
+  const [pendingFilters, setPendingFilters] = useState<FilterState>(filters);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
+  // Picker subsheets live inside the filter sheet so the user can swap
+  // a supplier/outlet without losing other in-flight filter edits.
+  const [supplierPicker, setSupplierPicker] = useState(false);
+  const [outletPicker, setOutletPicker] = useState(false);
 
   async function sendPop(inv: InvoiceListItem) {
     if (sendingPopId) return;
@@ -112,6 +179,19 @@ export default function InvoicesList() {
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       ).catch(() => {});
+      // Fire-and-forget: stamp popSentAt on the server so the "POP sent"
+      // pill shows up after refresh. Optimistically patch local state
+      // first so the row updates immediately even before the round-trip.
+      const optimisticTs = new Date().toISOString();
+      setItems((prev) =>
+        prev.map((x) =>
+          x.id === inv.id ? { ...x, popSentAt: optimisticTs } : x,
+        ),
+      );
+      markPopSent(inv.id).catch(() => {
+        // Network failure — leave the optimistic pill in place. Next
+        // pull-to-refresh will reconcile against the server.
+      });
     } finally {
       setSendingPopId(null);
     }
@@ -121,16 +201,21 @@ export default function InvoicesList() {
     async (silent = false) => {
       if (!silent) setLoading(true);
       try {
-        const data = await listInvoices({ tab }).catch(() => ({
-          items: [] as InvoiceListItem[],
-        }));
+        const data = await listInvoices({
+          tab,
+          popStatus: filters.popStatus || undefined,
+          supplierId: filters.supplierId || undefined,
+          outletId: filters.outletId || undefined,
+          dateFrom: filters.dateFrom || undefined,
+          dateTo: filters.dateTo || undefined,
+        }).catch(() => ({ items: [] as InvoiceListItem[] }));
         setItems(data.items);
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [tab],
+    [tab, filters],
   );
 
   useEffect(() => {
@@ -141,6 +226,22 @@ export default function InvoicesList() {
       load(true);
     }, [load]),
   );
+
+  // Lazy-load the filter-sheet lookups (suppliers, outlets) on first
+  // open — keeps the list-screen mount lean. Outlets only for managers.
+  useEffect(() => {
+    if (!filterSheet) return;
+    if (suppliers.length === 0) {
+      api<Array<{ id: string; name: string }>>("/api/suppliers")
+        .then((d) => setSuppliers(Array.isArray(d) ? d : []))
+        .catch(() => {});
+    }
+    if (isManager && outlets.length === 0) {
+      api<Array<{ id: string; name: string }>>("/api/outlets")
+        .then((d) => setOutlets(Array.isArray(d) ? d : []))
+        .catch(() => {});
+    }
+  }, [filterSheet, isManager, suppliers.length, outlets.length]);
 
   // Quick GRNI count for the summary card — sourced from the
   // pending_invoice tab regardless of the active tab.
@@ -203,28 +304,121 @@ export default function InvoicesList() {
           </Pressable>
         ) : null}
 
-        {/* Tabs */}
-        <View className="mb-3 flex-row gap-2">
-          {(["unpaid", "paid", "all", "pending_invoice"] as TabKey[]).map(
-            (t) => (
-              <Pressable
-                key={t}
-                onPress={() => setTab(t)}
-                className={`rounded-full px-3 py-1.5 ${
-                  tab === t ? "bg-primary" : "bg-primary-50"
-                }`}
-              >
-                <Text
-                  className={`text-xs font-body-bold ${
-                    tab === t ? "text-white" : "text-primary"
+        {/* Tabs + filter trigger. Filter button sits at the far right so
+            tab pills always start from the left edge; the badge dot on
+            top of the funnel icon makes "filters active" obvious from
+            across the screen. */}
+        <View className="mb-3 flex-row items-center gap-2">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8 }}
+          >
+            {(["unpaid", "paid", "all", "pending_invoice"] as TabKey[]).map(
+              (t) => (
+                <Pressable
+                  key={t}
+                  onPress={() => setTab(t)}
+                  className={`rounded-full px-3 py-1.5 ${
+                    tab === t ? "bg-primary" : "bg-primary-50"
                   }`}
                 >
-                  {TAB_LABEL[t]}
+                  <Text
+                    className={`text-xs font-body-bold ${
+                      tab === t ? "text-white" : "text-primary"
+                    }`}
+                  >
+                    {TAB_LABEL[t]}
+                  </Text>
+                </Pressable>
+              ),
+            )}
+          </ScrollView>
+          <Pressable
+            onPress={() => {
+              setPendingFilters(filters);
+              setFilterSheet(true);
+            }}
+            className={`h-9 w-9 items-center justify-center rounded-full ${
+              activeFilterCount(filters) > 0
+                ? "bg-primary"
+                : "border border-border bg-surface"
+            }`}
+          >
+            <FilterIcon
+              color={activeFilterCount(filters) > 0 ? "#FFFFFF" : iconColor}
+              size={16}
+            />
+            {activeFilterCount(filters) > 0 ? (
+              <View className="absolute -right-0.5 -top-0.5 h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1">
+                <Text className="text-[9px] font-body-bold text-white">
+                  {activeFilterCount(filters)}
                 </Text>
-              </Pressable>
-            ),
-          )}
+              </View>
+            ) : null}
+          </Pressable>
         </View>
+
+        {/* Active filter chips — tap to clear a single filter without
+            opening the sheet. Keeps the user oriented when results look
+            unexpectedly thin. */}
+        {activeFilterCount(filters) > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 6 }}
+            className="mb-3"
+          >
+            {filters.popStatus ? (
+              <FilterChip
+                label={
+                  filters.popStatus === "sent" ? "POP sent" : "POP not sent"
+                }
+                onClear={() =>
+                  setFilters((p) => ({ ...p, popStatus: "" }))
+                }
+              />
+            ) : null}
+            {filters.supplierId ? (
+              <FilterChip
+                label={
+                  suppliers.find((s) => s.id === filters.supplierId)?.name ??
+                  "Supplier"
+                }
+                onClear={() =>
+                  setFilters((p) => ({ ...p, supplierId: "" }))
+                }
+              />
+            ) : null}
+            {filters.outletId ? (
+              <FilterChip
+                label={
+                  outlets.find((o) => o.id === filters.outletId)?.name ??
+                  "Outlet"
+                }
+                onClear={() =>
+                  setFilters((p) => ({ ...p, outletId: "" }))
+                }
+              />
+            ) : null}
+            {filters.dateFrom || filters.dateTo ? (
+              <FilterChip
+                label={`${filters.dateFrom || "…"} → ${filters.dateTo || "…"}`}
+                onClear={() =>
+                  setFilters((p) => ({ ...p, dateFrom: "", dateTo: "" }))
+                }
+              />
+            ) : null}
+            <Pressable
+              onPress={() => setFilters(EMPTY_FILTERS)}
+              className="rounded-full bg-primary-50 px-3 py-1.5 active:opacity-80"
+            >
+              <Text className="text-xs font-body-bold text-primary">
+                Clear all
+              </Text>
+            </Pressable>
+          </ScrollView>
+        ) : null}
 
         {loading && items.length === 0 ? (
           <SkeletonList count={4} />
@@ -262,7 +456,323 @@ export default function InvoicesList() {
           </View>
         )}
       </ScrollView>
+
+      {/* Filter sheet — committed only on Apply so date typing doesn't
+          spam the API. Pickers (supplier/outlet) open as page-sheets on
+          top so we don't lose other in-flight filter edits. */}
+      <Modal
+        visible={filterSheet}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setFilterSheet(false)}
+      >
+        <View className="flex-1 bg-background">
+          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
+            <Text className="text-base font-peachi text-espresso">
+              Filter invoices
+            </Text>
+            <Pressable
+              onPress={() => setFilterSheet(false)}
+              className="px-2 py-1"
+            >
+              <XIcon color={iconColor} size={20} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerClassName="px-4 py-4 gap-5">
+            {/* POP status — paid-only meaning. Three-state segmented. */}
+            <View>
+              <Text className="mb-2 text-[11px] font-body-semi uppercase tracking-wide text-muted">
+                POP status
+              </Text>
+              <View className="flex-row gap-2">
+                {(
+                  [
+                    { v: "", l: "Any" },
+                    { v: "sent", l: "POP sent" },
+                    { v: "not_sent", l: "Not sent" },
+                  ] as const
+                ).map((opt) => {
+                  const selected = pendingFilters.popStatus === opt.v;
+                  return (
+                    <Pressable
+                      key={opt.v || "any"}
+                      onPress={() =>
+                        setPendingFilters((p) => ({
+                          ...p,
+                          popStatus: opt.v as FilterState["popStatus"],
+                        }))
+                      }
+                      className={`flex-1 items-center rounded-2xl border px-3 py-2.5 ${
+                        selected
+                          ? "border-primary bg-primary-50"
+                          : "border-border bg-surface"
+                      }`}
+                    >
+                      <Text
+                        className={`text-xs font-body-bold ${
+                          selected ? "text-primary" : "text-espresso"
+                        }`}
+                      >
+                        {opt.l}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Supplier */}
+            <View>
+              <Text className="mb-2 text-[11px] font-body-semi uppercase tracking-wide text-muted">
+                Supplier
+              </Text>
+              <Pressable
+                onPress={() => setSupplierPicker(true)}
+                className="h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 active:bg-primary-50"
+              >
+                <Text
+                  className={`flex-1 text-base font-body ${
+                    pendingFilters.supplierId ? "text-espresso" : "text-muted"
+                  }`}
+                  numberOfLines={1}
+                >
+                  {suppliers.find((s) => s.id === pendingFilters.supplierId)
+                    ?.name ?? "Any supplier"}
+                </Text>
+                {pendingFilters.supplierId ? (
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      setPendingFilters((p) => ({ ...p, supplierId: "" }));
+                    }}
+                    hitSlop={10}
+                  >
+                    <XIcon color={iconColor} size={16} />
+                  </Pressable>
+                ) : (
+                  <Text className="text-xs font-body-bold text-primary">
+                    Pick
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+
+            {/* Outlet — manager only */}
+            {isManager ? (
+              <View>
+                <Text className="mb-2 text-[11px] font-body-semi uppercase tracking-wide text-muted">
+                  Outlet
+                </Text>
+                <Pressable
+                  onPress={() => setOutletPicker(true)}
+                  className="h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 active:bg-primary-50"
+                >
+                  <Text
+                    className={`flex-1 text-base font-body ${
+                      pendingFilters.outletId ? "text-espresso" : "text-muted"
+                    }`}
+                    numberOfLines={1}
+                  >
+                    {outlets.find((o) => o.id === pendingFilters.outletId)
+                      ?.name ?? "All outlets"}
+                  </Text>
+                  {pendingFilters.outletId ? (
+                    <Pressable
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setPendingFilters((p) => ({ ...p, outletId: "" }));
+                      }}
+                      hitSlop={10}
+                    >
+                      <XIcon color={iconColor} size={16} />
+                    </Pressable>
+                  ) : (
+                    <Text className="text-xs font-body-bold text-primary">
+                      Pick
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+            ) : null}
+
+            {/* Date range — issueDate. Plain text inputs to keep this
+                screen lean; we can swap in a date picker later. */}
+            <View>
+              <Text className="mb-2 text-[11px] font-body-semi uppercase tracking-wide text-muted">
+                Date range (issue date)
+              </Text>
+              <View className="flex-row gap-2">
+                <TextInput
+                  value={pendingFilters.dateFrom}
+                  onChangeText={(t) =>
+                    setPendingFilters((p) => ({ ...p, dateFrom: t }))
+                  }
+                  placeholder="From YYYY-MM-DD"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="none"
+                  className="h-14 flex-1 rounded-2xl border border-border bg-surface px-3 text-sm font-body text-espresso"
+                />
+                <TextInput
+                  value={pendingFilters.dateTo}
+                  onChangeText={(t) =>
+                    setPendingFilters((p) => ({ ...p, dateTo: t }))
+                  }
+                  placeholder="To YYYY-MM-DD"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="none"
+                  className="h-14 flex-1 rounded-2xl border border-border bg-surface px-3 text-sm font-body text-espresso"
+                />
+              </View>
+            </View>
+
+            {/* Reset all */}
+            <Pressable
+              onPress={() => setPendingFilters(EMPTY_FILTERS)}
+              className="mt-2 items-center rounded-2xl border border-border bg-surface py-3 active:bg-primary-50"
+            >
+              <Text className="text-sm font-body-bold text-primary">
+                Reset filters
+              </Text>
+            </Pressable>
+          </ScrollView>
+
+          {/* Apply / Cancel pinned at the bottom */}
+          <View className="border-t border-border bg-background px-4 py-3">
+            <View className="flex-row gap-2">
+              <Pressable
+                onPress={() => setFilterSheet(false)}
+                className="h-14 flex-1 items-center justify-center rounded-2xl border border-border active:bg-primary-50"
+              >
+                <Text className="text-sm font-body-bold text-espresso">
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setFilters(pendingFilters);
+                  setFilterSheet(false);
+                }}
+                className="h-14 flex-1 items-center justify-center rounded-2xl bg-primary active:opacity-90"
+              >
+                <Text className="text-sm font-body-bold text-white">
+                  Apply
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Supplier picker (inside the filter sheet) */}
+      <Modal
+        visible={supplierPicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSupplierPicker(false)}
+      >
+        <View className="flex-1 bg-background">
+          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
+            <Text className="text-base font-peachi text-espresso">
+              Pick supplier
+            </Text>
+            <Pressable
+              onPress={() => setSupplierPicker(false)}
+              className="px-2 py-1"
+            >
+              <Text className="text-sm font-body-bold text-muted">Close</Text>
+            </Pressable>
+          </View>
+          <ScrollView contentContainerClassName="px-4 py-4 gap-2">
+            {suppliers.map((s) => {
+              const selected = s.id === pendingFilters.supplierId;
+              return (
+                <Pressable
+                  key={s.id}
+                  onPress={() => {
+                    setPendingFilters((p) => ({ ...p, supplierId: s.id }));
+                    setSupplierPicker(false);
+                  }}
+                  className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 active:bg-primary-50 ${
+                    selected
+                      ? "border-primary bg-primary-50"
+                      : "border-border bg-surface"
+                  }`}
+                >
+                  <Text className="text-base font-body-bold text-espresso">
+                    {s.name}
+                  </Text>
+                  {selected ? <Check color="#C2452D" size={20} /> : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Outlet picker (manager only, inside the filter sheet) */}
+      <Modal
+        visible={outletPicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setOutletPicker(false)}
+      >
+        <View className="flex-1 bg-background">
+          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
+            <Text className="text-base font-peachi text-espresso">
+              Pick outlet
+            </Text>
+            <Pressable
+              onPress={() => setOutletPicker(false)}
+              className="px-2 py-1"
+            >
+              <Text className="text-sm font-body-bold text-muted">Close</Text>
+            </Pressable>
+          </View>
+          <ScrollView contentContainerClassName="px-4 py-4 gap-2">
+            {outlets.map((o) => {
+              const selected = o.id === pendingFilters.outletId;
+              return (
+                <Pressable
+                  key={o.id}
+                  onPress={() => {
+                    setPendingFilters((p) => ({ ...p, outletId: o.id }));
+                    setOutletPicker(false);
+                  }}
+                  className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 active:bg-primary-50 ${
+                    selected
+                      ? "border-primary bg-primary-50"
+                      : "border-border bg-surface"
+                  }`}
+                >
+                  <Text className="text-base font-body-bold text-espresso">
+                    {o.name}
+                  </Text>
+                  {selected ? <Check color="#C2452D" size={20} /> : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Modal>
     </Screen>
+  );
+}
+
+function FilterChip({
+  label,
+  onClear,
+}: {
+  label: string;
+  onClear: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onClear}
+      className="flex-row items-center gap-1.5 rounded-full border border-primary/30 bg-primary-50 px-3 py-1.5 active:opacity-80"
+    >
+      <Text className="text-xs font-body-bold text-primary">{label}</Text>
+      <XIcon color="#C2452D" size={12} />
+    </Pressable>
   );
 }
 
@@ -319,10 +829,24 @@ function InvoiceCard({
             {invoice.outletName ? ` · ${invoice.outletName}` : ""}
           </Text>
         </View>
-        <Pill
-          label={isOverdue ? "Overdue" : tone.label}
-          tone={isOverdue ? "danger" : tone.tone}
-        />
+        {/* Two stacked pills: status (mandatory) + POP-sent (only when
+            we've stamped popSentAt). Stacking keeps the row compact
+            instead of competing for horizontal space with long supplier
+            names. */}
+        <View className="items-end gap-1">
+          <Pill
+            label={isOverdue ? "Overdue" : tone.label}
+            tone={isOverdue ? "danger" : tone.tone}
+          />
+          {canSendPop && invoice.popSentAt ? (
+            <View className="flex-row items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5">
+              <CheckCircle2 color="#10B981" size={10} />
+              <Text className="text-[10px] font-body-bold text-emerald-700">
+                POP sent
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
       <View className="mt-2 flex-row items-center justify-between">
         <Text className="text-xs font-body text-muted-fg">
@@ -362,7 +886,7 @@ function InvoiceCard({
             <>
               <MessageCircle color="#C2452D" size={14} />
               <Text className="text-xs font-body-bold text-primary">
-                Send POP
+                {invoice.popSentAt ? "Resend POP" : "Send POP"}
               </Text>
             </>
           )}

@@ -33,6 +33,7 @@ import {
   attachInvoice,
   buildPopMessage,
   fetchPopShortlink,
+  markPopSent,
   getInvoice,
 } from "../../../lib/ops/invoices";
 import { uploadPhoto } from "../../../lib/upload";
@@ -47,6 +48,7 @@ type Invoice = {
   depositRef?: string | null;
   paymentRef?: string | null;
   popShortLink?: string | null;
+  popSentAt?: string | null;
   status: string;
   paymentType?: string | null;
   dueDate: string | null;
@@ -145,6 +147,14 @@ export default function InvoiceDetailScreen() {
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       ).catch(() => {});
+      // Stamp popSentAt on the server so the list shows a "POP sent"
+      // pill on this row after returning. Fire-and-forget; the WhatsApp
+      // open already succeeded so a failed stamp is cosmetic only.
+      const optimisticTs = new Date().toISOString();
+      setInvoice((prev) =>
+        prev ? { ...prev, popSentAt: optimisticTs } : prev,
+      );
+      markPopSent(invoice.id).catch(() => {});
     } finally {
       setSendingPop(false);
     }
