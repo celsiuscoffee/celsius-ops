@@ -16,6 +16,12 @@ export type InvoiceListItem = {
   amount: number;
   amountPaid: number;
   depositAmount: number;
+  // Phase 9b — extra fields so the list can fire Send POP inline
+  // without a detail fetch.
+  depositPercent: number | null;
+  depositRef: string | null;
+  paymentRef: string | null;
+  popShortLink: string | null;
   status: InvoiceStatus;
   paymentType: "SUPPLIER" | "STAFF_CLAIM" | "PAYMENT_REQUEST" | "TRANSFER" | null;
   dueDate: string | null;
@@ -23,6 +29,7 @@ export type InvoiceListItem = {
   createdAt: string;
   photos: string[];
   supplierName: string | null;
+  supplierPhone: string | null;
   orderId: string | null;
   orderNumber: string | null;
   outletName: string | null;

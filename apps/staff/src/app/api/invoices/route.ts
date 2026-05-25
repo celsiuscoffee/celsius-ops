@@ -123,13 +123,20 @@ export async function GET(req: NextRequest) {
       amount: true,
       amountPaid: true,
       depositAmount: true,
+      // Need the deposit context fields so the native list can build
+      // a status-aware POP message inline (no detail fetch needed).
+      depositPercent: true,
+      depositRef: true,
+      paymentRef: true,
+      popShortLink: true,
       status: true,
       paymentType: true,
       dueDate: true,
       paidAt: true,
       createdAt: true,
       photos: true,
-      supplier: { select: { id: true, name: true } },
+      // supplierPhone needed for the wa.me deeplink target on the list.
+      supplier: { select: { id: true, name: true, phone: true } },
       order: {
         select: {
           id: true,
@@ -148,6 +155,10 @@ export async function GET(req: NextRequest) {
       amount: Number(i.amount),
       amountPaid: i.amountPaid != null ? Number(i.amountPaid) : 0,
       depositAmount: i.depositAmount != null ? Number(i.depositAmount) : 0,
+      depositPercent: i.depositPercent ?? null,
+      depositRef: i.depositRef ?? null,
+      paymentRef: i.paymentRef ?? null,
+      popShortLink: i.popShortLink ?? null,
       status: i.status,
       paymentType: i.paymentType,
       dueDate: i.dueDate?.toISOString() ?? null,
@@ -155,6 +166,7 @@ export async function GET(req: NextRequest) {
       createdAt: i.createdAt.toISOString(),
       photos: i.photos ?? [],
       supplierName: i.supplier?.name ?? null,
+      supplierPhone: i.supplier?.phone ?? null,
       orderId: i.order?.id ?? null,
       orderNumber: i.order?.orderNumber ?? null,
       outletName: i.order?.outlet?.name ?? null,

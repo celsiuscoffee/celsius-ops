@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -7,11 +10,14 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { ChevronRight, FileText } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
+import { ChevronRight, FileText, MessageCircle } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { Card, EmptyState, Pill, SkeletonList } from "../../../components/ui";
 import {
+  buildPopMessage,
+  fetchPopShortlink,
   listInvoices,
   type InvoiceListItem,
   type InvoiceStatus,
@@ -46,6 +52,70 @@ export default function InvoicesList() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<TabKey>("unpaid");
+  // Inline Send-POP per row — track which invoice is mid-flight so the
+  // tapped row shows a spinner instead of the icon. Single value (only
+  // one POP fires at a time).
+  const [sendingPopId, setSendingPopId] = useState<string | null>(null);
+
+  async function sendPop(inv: InvoiceListItem) {
+    if (sendingPopId) return;
+    setSendingPopId(inv.id);
+    try {
+      // Reuse the stored shortlink when present; otherwise mint a fresh
+      // one. Fall back to the last photo URL if shortlink minting
+      // fails so the supplier always gets a working receipt link.
+      let receiptUrl = inv.popShortLink ?? null;
+      if (!receiptUrl) {
+        try {
+          const r = await fetchPopShortlink(inv.id);
+          receiptUrl = r.shortLink;
+          // Patch local state so subsequent taps skip the mint round-trip.
+          setItems((prev) =>
+            prev.map((x) =>
+              x.id === inv.id ? { ...x, popShortLink: r.shortLink } : x,
+            ),
+          );
+        } catch {
+          // ignore
+        }
+      }
+      if (!receiptUrl && inv.photos.length > 0) {
+        receiptUrl = inv.photos[inv.photos.length - 1];
+      }
+      if (!receiptUrl) {
+        Alert.alert(
+          "No receipt available",
+          `Open ${inv.invoiceNumber} and snap a payment receipt first.`,
+        );
+        return;
+      }
+      const msg = buildPopMessage(
+        {
+          invoiceNumber: inv.invoiceNumber,
+          amount: inv.amount,
+          amountPaid: inv.amountPaid,
+          depositAmount: inv.depositAmount,
+          depositPercent: inv.depositPercent,
+          depositRef: inv.depositRef,
+          paymentRef: inv.paymentRef,
+          dueDate: inv.dueDate,
+          status: inv.status,
+        },
+        receiptUrl,
+      );
+      const text = encodeURIComponent(msg);
+      const phone = inv.supplierPhone?.replace(/\D/g, "") ?? "";
+      const url = phone
+        ? `https://wa.me/${phone}?text=${text}`
+        : `https://wa.me/?text=${text}`;
+      Linking.openURL(url).catch(() => {});
+      Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      ).catch(() => {});
+    } finally {
+      setSendingPopId(null);
+    }
+  }
 
   const load = useCallback(
     async (silent = false) => {
@@ -185,6 +255,8 @@ export default function InvoicesList() {
                 onPress={() =>
                   router.push(`/(staff)/invoices/${inv.id}` as never)
                 }
+                onSendPop={() => sendPop(inv)}
+                sendingPop={sendingPopId === inv.id}
               />
             ))}
           </View>
@@ -198,10 +270,14 @@ function InvoiceCard({
   invoice,
   isOverdue,
   onPress,
+  onSendPop,
+  sendingPop,
 }: {
   invoice: InvoiceListItem;
   isOverdue: boolean;
   onPress: () => void;
+  onSendPop: () => void;
+  sendingPop: boolean;
 }) {
   const tone = STATUS_TONE[invoice.status] ?? {
     label: invoice.status,
@@ -211,6 +287,12 @@ function InvoiceCard({
     invoice.invoiceNumber.startsWith("INV-") &&
     invoice.dueDate == null &&
     invoice.status === "PENDING";
+  // Show inline Send POP button on any paid status, including
+  // partial/deposit-paid where suppliers expect a confirmation.
+  const canSendPop =
+    invoice.status === "PAID" ||
+    invoice.status === "DEPOSIT_PAID" ||
+    invoice.status === "PARTIALLY_PAID";
   const display = isPlaceholder
     ? "To attach"
     : invoice.invoiceNumber;
@@ -260,6 +342,32 @@ function InvoiceCard({
           RM {invoice.amount.toFixed(2)}
         </Text>
       </View>
+
+      {/* Inline Send POP — paid statuses only. onPress stop is implicit:
+          this Pressable is rendered as a sibling so it doesn't fire the
+          outer card onPress (tap propagation only goes up through the
+          tree, and React Native treats sibling Pressables independently). */}
+      {canSendPop ? (
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            onSendPop();
+          }}
+          disabled={sendingPop}
+          className="mt-2.5 h-9 flex-row items-center justify-center gap-1.5 rounded-xl bg-primary-50 active:bg-primary-100"
+        >
+          {sendingPop ? (
+            <ActivityIndicator color="#C2452D" size="small" />
+          ) : (
+            <>
+              <MessageCircle color="#C2452D" size={14} />
+              <Text className="text-xs font-body-bold text-primary">
+                Send POP
+              </Text>
+            </>
+          )}
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }
