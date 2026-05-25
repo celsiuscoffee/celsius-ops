@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserFromHeaders } from "@/lib/auth";
+// `getUser` resolves auth from middleware headers → Bearer → cookie in
+// that order. Native staff app sends Bearer, web staff sends cookie,
+// proxy setups inject headers — this covers all three. Using
+// `getUserFromHeaders` only (which is x-user-* header-only) would 401
+// every native request.
+import { getUser } from "@celsius/auth";
 import { hasAccess } from "@/lib/access";
 import type { SessionUser } from "@celsius/auth";
 
@@ -22,7 +27,7 @@ export async function checkModuleAccess(
   req: Request,
   moduleKey: string,
 ): Promise<GuardOk | GuardErr> {
-  const session = await getUserFromHeaders(req.headers);
+  const session = await getUser(req.headers);
   if (!session) {
     return {
       ok: false,
