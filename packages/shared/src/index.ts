@@ -35,6 +35,8 @@ export type {
   VoucherSource,
   VoucherDiscountType,
 } from "./loyalty/active-vouchers";
+export { fetchAffordableCatalogForMember } from "./loyalty/affordable-catalog";
+export type { AffordableCatalogReward } from "./loyalty/affordable-catalog";
 
 // Order number format: CC-{OUTLET_CODE}-{SEQUENCE}
 export function generateOrderNumber(outletCode: string, sequence: number): string {

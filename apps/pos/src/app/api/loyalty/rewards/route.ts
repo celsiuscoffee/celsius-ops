@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { fetchActiveVouchersForMember } from "@celsius/shared";
+import {
+  fetchActiveVouchersForMember,
+  fetchAffordableCatalogForMember,
+} from "@celsius/shared";
 
 // Service-role required: member_brands + issued_rewards are RLS-locked.
 // Anon reads return empty rowsets → balance=0 → every catalog reward
@@ -48,28 +51,19 @@ export async function GET(req: NextRequest) {
 
     const balance = mb?.points_balance ?? 0;
 
-    // Fetch catalog rewards (active, in_store or null fulfillment)
-    const { data: catalogRewards } = await supabase
-      .from("rewards")
-      .select("id, name, description, points_required, discount_type, discount_value, max_discount_value, free_product_name, free_product_ids, image_url, stock, reward_type, applicable_categories, applicable_products, category")
-      .eq("brand_id", BRAND_ID)
-      .eq("is_active", true)
-      .order("points_required", { ascending: true });
-
-    // Filter catalog: affordable + in stock
-    const catalog = (catalogRewards ?? []).filter((r) => {
-      if (r.stock !== null && r.stock <= 0) return false;
-      return r.points_required <= balance;
-    });
-
-    // Fetch issued wallet vouchers via the shared helper. Single source
-    // of truth — same filters, same joins, same shape that Pickup's
-    // /me/vouchers returns.
-    const issued = await fetchActiveVouchersForMember({
-      supabase,
-      memberId,
-      brandId: BRAND_ID,
-    });
+    // Fetch BOTH buckets via shared helpers — single source of truth
+    // shared with Pickup's /api/loyalty/me/vouchers and
+    // /api/loyalty/rewards. POS passes no fulfillmentChannel so all
+    // rewards (in-store + pickup) surface for the cashier.
+    const [issued, catalog] = await Promise.all([
+      fetchActiveVouchersForMember({ supabase, memberId, brandId: BRAND_ID }),
+      fetchAffordableCatalogForMember({
+        supabase,
+        memberId,
+        brandId: BRAND_ID,
+        balance,
+      }),
+    ]);
 
     return NextResponse.json({
       balance,

@@ -23,7 +23,7 @@ import {
   Sandwich, Sparkles, Ticket,
   type LucideIcon,
 } from "lucide-react";
-import type { ActiveVoucher } from "@celsius/shared";
+import type { ActiveVoucher, AffordableCatalogReward } from "@celsius/shared";
 
 type SourceType = ActiveVoucher["source_type"];
 
@@ -52,22 +52,10 @@ type DisplayReward = {
   expires_at: string | null;
 };
 
-/** Catalog row shape returned by /api/loyalty/rewards. Distinct from
- *  ActiveVoucher because catalog items have points_required and are
- *  not yet owned by anyone. */
-type CatalogReward = {
-  id: string;
-  name: string;
-  description: string | null;
-  points_required: number;
-  discount_type: string | null;
-  discount_value: number | null;
-  max_discount_value: number | null;
-  free_product_name: string | null;
-  image_url: string | null;
-  icon: string | null;
-  category: string | null;
-};
+/** Catalog row shape returned by /api/loyalty/rewards. Imported
+ *  directly from the shared package so POS + Pickup never drift on
+ *  catalog field shape. */
+type CatalogReward = AffordableCatalogReward;
 
 type RewardDiscount = {
   type: string;
@@ -229,7 +217,10 @@ function fromCatalog(r: CatalogReward): DisplayReward {
     discount_value: r.discount_value,
     max_discount_value: r.max_discount_value,
     free_product_name: r.free_product_name,
-    icon: r.icon,
+    // Catalog rows on the rewards table don't carry a Lucide icon
+    // key — pickRewardIcon falls back to a title-based heuristic
+    // when null.
+    icon: null,
     source_type: "points_redemption",
     voucher_id: null,
     reward_back_ref_id: r.id,
