@@ -214,12 +214,20 @@ export function RewardPickerModal({ memberId, memberName, outletId, onRedeem, on
         const res = await fetch(`/api/loyalty/rewards?member_id=${memberId}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
-        // Catalog (data.catalog) is intentionally ignored — POS only
-        // surfaces owned vouchers so the cashier sees the same list
-        // the customer sees in their Pickup wallet. Beans balance is
-        // still pulled for the header readout.
+        // Two filters applied here so the cashier sees the same list
+        // the customer sees in their Pickup wallet:
+        //   1. Catalog (data.catalog) is intentionally ignored — POS
+        //      doesn't surface points-shop items. The customer
+        //      redeems those in the Pickup app.
+        //   2. Issued rows with source_type=points_redemption are
+        //      dropped. Mirrors VoucherWallet.tsx + loyalty-snapshot
+        //      — wallet surfaces passively-earned rewards only.
+        // Beans balance is still pulled for the header readout.
         setBalance(data.balance);
-        setIssued((data.issued ?? []).map(fromActiveVoucher));
+        const walletOnly = (data.issued ?? []).filter(
+          (v: ActiveVoucher) => v.source_type !== "points_redemption",
+        );
+        setIssued(walletOnly.map(fromActiveVoucher));
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to load rewards");
       } finally {

@@ -236,7 +236,20 @@ const FILTER_CATS: Array<{ id: "all" | Voucher["category"]; label: string }> = [
 export function VoucherWallet({ vouchers, maxVisible = 3, hideViewAll = false }: Props) {
   const [filter, setFilter] = useState<"all" | Voucher["category"]>("all");
 
-  const active = useMemo(() => vouchers.filter((v) => v.status === "active"), [vouchers]);
+  // Wallet shows passively-earned / surprise vouchers only — Mystery,
+  // Challenge, Birthday, Referral, Promo. Bean-Points redemptions
+  // (catalog purchases the customer just made with their beans) are
+  // intentionally excluded so the wallet reads as "rewards I got",
+  // not "things I bought a moment ago + things I got". The
+  // points-shop redemption flow auto-stages the voucher onto the
+  // next order, so the customer doesn't need the wallet row to find it.
+  const active = useMemo(
+    () =>
+      vouchers.filter(
+        (v) => v.status === "active" && v.source_type !== "points_redemption",
+      ),
+    [vouchers],
+  );
   const filtered = useMemo(
     () => (filter === "all" ? active : active.filter((v) => v.category === filter)),
     [active, filter],

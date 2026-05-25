@@ -59,7 +59,13 @@ export function BottomNav() {
     enabled: !!phone,
     staleTime: 60_000,
   });
-  const activeWalletCount = (walletQ.data ?? []).filter((v) => v.status === "active").length;
+  // Bean-points redemptions are excluded here too — the badge has to
+  // match the wallet list it points to, and VoucherWallet filters
+  // them out. See lib/loyalty-snapshot (POS) + VoucherWallet for the
+  // same rule applied to the customer-display and the on-screen wallet.
+  const activeWalletCount = (walletQ.data ?? []).filter(
+    (v) => v.status === "active" && v.source_type !== "points_redemption",
+  ).length;
   const claimableCount = (claimableQ.data ?? []).length;
   const rewardsCount = activeWalletCount + claimableCount;
 
