@@ -71,7 +71,15 @@ export async function GET(req: NextRequest) {
       issued,
     });
   } catch (err) {
-    console.error("[LOYALTY] Fetch rewards error:", err);
-    return NextResponse.json({ error: "Failed to fetch rewards" }, { status: 500 });
+    // Surface the underlying error so we can debug the consolidation
+    // rollout. Will trim back to a generic message once stable.
+    const detail = err instanceof Error
+      ? `${err.name}: ${err.message}${err.stack ? `\n${err.stack.split("\n").slice(0, 5).join("\n")}` : ""}`
+      : String(err);
+    console.error("[LOYALTY] Fetch rewards error:", detail);
+    return NextResponse.json(
+      { error: "Failed to fetch rewards", detail },
+      { status: 500 },
+    );
   }
 }
