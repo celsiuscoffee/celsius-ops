@@ -39,6 +39,13 @@ export { fetchAffordableCatalogForMember } from "./loyalty/affordable-catalog";
 export type { AffordableCatalogReward } from "./loyalty/affordable-catalog";
 export { markVoucherUsed } from "./loyalty/mark-voucher-used";
 export type { MarkVoucherUsedResult } from "./loyalty/mark-voucher-used";
+export { computeVoucherDiscount, legacyDescriptorToSpec } from "./loyalty/discount-engine";
+export type {
+  DiscountCartLine,
+  VoucherDiscountSpec,
+  DiscountResult,
+  DiscountReason,
+} from "./loyalty/discount-engine";
 
 // Order number format: CC-{OUTLET_CODE}-{SEQUENCE}
 export function generateOrderNumber(outletCode: string, sequence: number): string {
