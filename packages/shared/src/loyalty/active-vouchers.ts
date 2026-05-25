@@ -80,7 +80,14 @@ export type ActiveVoucher = {
   illustration_url: string | null;
 };
 
-/** Raw issued_rewards row shape — internal, do not export. */
+/** Raw issued_rewards row shape — internal, do not export.
+ *  NOTE: issued_rewards denormalises a subset of the template's
+ *  discount metadata at grant-time — title, discount_type,
+ *  discount_value, min_order_value, applicable_*, free_product_name.
+ *  It does NOT carry max_discount_value or free_product_ids — those
+ *  stay on voucher_templates / rewards. The ActiveVoucher type below
+ *  still exposes them as fields for shape stability with the catalog
+ *  side; we just always return null here. */
 type IssuedRow = {
   id: string;
   voucher_template_id: string | null;
@@ -98,12 +105,10 @@ type IssuedRow = {
   stacks_with_beans: boolean | null;
   discount_type: string | null;
   discount_value: number | null;
-  max_discount_value: number | null;
   min_order_value: number | null;
   applicable_categories: string[] | null;
   applicable_products: string[] | null;
   free_product_name: string | null;
-  free_product_ids: string[] | null;
 };
 
 /** Fetch all active wallet vouchers for a member. Single source of
@@ -137,9 +142,9 @@ export async function fetchActiveVouchersForMember(args: {
       title, description, icon, category,
       status, issued_at, expires_at, redeemed_at,
       stacks_with_beans,
-      discount_type, discount_value, max_discount_value, min_order_value,
+      discount_type, discount_value, min_order_value,
       applicable_categories, applicable_products,
-      free_product_name, free_product_ids
+      free_product_name
     `)
     .eq("member_id", args.memberId)
     .eq("brand_id", brandId)
@@ -209,12 +214,15 @@ export async function fetchActiveVouchersForMember(args: {
       redeemed_at: v.redeemed_at,
       discount_type: (v.discount_type as VoucherDiscountType | null) ?? null,
       discount_value: v.discount_value ?? null,
-      max_discount_value: v.max_discount_value ?? null,
+      // Not denormalised onto issued_rewards — lives only on
+      // voucher_templates / rewards. Always null here.
+      max_discount_value: null,
       min_order_value: v.min_order_value ?? null,
       applicable_categories: v.applicable_categories ?? null,
       applicable_products: v.applicable_products ?? null,
       free_product_name: v.free_product_name ?? null,
-      free_product_ids: v.free_product_ids ?? null,
+      // Same as max_discount_value — only on the template.
+      free_product_ids: null,
       stacks_with_beans: v.stacks_with_beans ?? true,
       kind_color: kind?.color ?? null,
       illustration_url: kind?.illustration_url ?? null,
