@@ -42,6 +42,13 @@ export default function NewClaim() {
   const router = useRouter();
   const qc = useQueryClient();
   const session = useStaff((s) => s.session);
+  // Payment Request flow is manager-only — matches the server-side
+  // 403 guard on /api/claims POST. Hiding the toggle for non-managers
+  // keeps the UI honest.
+  const canRequestVendorPayment =
+    session?.role === "OWNER" ||
+    session?.role === "ADMIN" ||
+    session?.role === "MANAGER";
 
   const [step, setStep] = useState<Step>("capture");
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -228,42 +235,47 @@ export default function NewClaim() {
             onRetake={() => setCameraOpen(true)}
           />
 
-        {/* Flow toggle — reimburse me vs pay vendor */}
-        <View className="mt-4 flex-row gap-2 rounded-2xl border border-border bg-surface p-1.5">
-          <Pressable
-            onPress={() => setFlow("CLAIM")}
-            className={`flex-1 items-center rounded-xl py-2.5 active:opacity-80 ${
-              flow === "CLAIM" ? "bg-primary" : ""
-            }`}
-          >
-            <Text
-              className={`text-sm font-body-bold ${
-                flow === "CLAIM" ? "text-white" : "text-muted-fg"
-              }`}
-            >
-              Reimburse me
+        {/* Flow toggle — only shown to managers. Regular staff can
+            only submit reimbursement claims (the legacy default). */}
+        {canRequestVendorPayment ? (
+          <>
+            <View className="mt-4 flex-row gap-2 rounded-2xl border border-border bg-surface p-1.5">
+              <Pressable
+                onPress={() => setFlow("CLAIM")}
+                className={`flex-1 items-center rounded-xl py-2.5 active:opacity-80 ${
+                  flow === "CLAIM" ? "bg-primary" : ""
+                }`}
+              >
+                <Text
+                  className={`text-sm font-body-bold ${
+                    flow === "CLAIM" ? "text-white" : "text-muted-fg"
+                  }`}
+                >
+                  Reimburse me
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setFlow("REQUEST")}
+                className={`flex-1 items-center rounded-xl py-2.5 active:opacity-80 ${
+                  flow === "REQUEST" ? "bg-primary" : ""
+                }`}
+              >
+                <Text
+                  className={`text-sm font-body-bold ${
+                    flow === "REQUEST" ? "text-white" : "text-muted-fg"
+                  }`}
+                >
+                  Pay vendor
+                </Text>
+              </Pressable>
+            </View>
+            <Text className="mt-1.5 text-xs font-body text-muted-fg">
+              {flow === "CLAIM"
+                ? "You paid out-of-pocket — finance reimburses you."
+                : "Finance pays the vendor directly — no out-of-pocket."}
             </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setFlow("REQUEST")}
-            className={`flex-1 items-center rounded-xl py-2.5 active:opacity-80 ${
-              flow === "REQUEST" ? "bg-primary" : ""
-            }`}
-          >
-            <Text
-              className={`text-sm font-body-bold ${
-                flow === "REQUEST" ? "text-white" : "text-muted-fg"
-              }`}
-            >
-              Pay vendor
-            </Text>
-          </Pressable>
-        </View>
-        <Text className="mt-1.5 text-xs font-body text-muted-fg">
-          {flow === "CLAIM"
-            ? "You paid out-of-pocket — finance reimburses you."
-            : "Finance pays the vendor directly — no out-of-pocket."}
-        </Text>
+          </>
+        ) : null}
 
         <Field label="Outlet">
           <View className="h-14 justify-center rounded-2xl bg-primary-50 px-4">

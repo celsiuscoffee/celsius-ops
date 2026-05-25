@@ -1,8 +1,9 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserFromHeaders } from "@/lib/auth";
+import { checkModuleAccess } from "@/lib/check-module-access";
 
 // Single invoice detail + attach-invoice action from native staff.
+// Both reads and the attach flow require `inventory:invoices`.
 //
 // Attach flow (PATCH with `invoiceNumber` + `dueDate` + optional `photos`):
 // turns a GRNI placeholder (auto-created on receiving, with INV-NNNN
@@ -10,9 +11,11 @@ import { getUserFromHeaders } from "@/lib/auth";
 // Once attached the invoice drops out of the "Pending Invoice" card
 // and into the regular Payable list.
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await checkModuleAccess(req, "inventory:invoices");
+  if (!guard.ok) return guard.response;
   const { id } = await params;
   const invoice = await prisma.invoice.findUnique({
     where: { id },
@@ -39,10 +42,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const caller = await getUserFromHeaders(req.headers);
-  if (!caller) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const guard = await checkModuleAccess(req, "inventory:invoices");
+  if (!guard.ok) return guard.response;
   const { id } = await params;
   const body = await req.json();
   const { invoiceNumber, dueDate, photos, amount, notes } = body;

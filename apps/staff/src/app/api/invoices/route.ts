@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import type { Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
-import { getUserFromHeaders } from "@/lib/auth";
+import { checkModuleAccess } from "@/lib/check-module-access";
 
 // Native staff app — invoice list. Scoped to the caller's outlet for
 // non-managers (managers/owners/admins see all). Mirrors backoffice
@@ -27,10 +27,9 @@ const UNPAID_STATUSES = [
 ] as const;
 
 export async function GET(req: NextRequest) {
-  const session = await getUserFromHeaders(req.headers);
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const guard = await checkModuleAccess(req, "inventory:invoices");
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const url = new URL(req.url);
   const tab = url.searchParams.get("tab") || "unpaid";

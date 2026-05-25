@@ -1,10 +1,16 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
+import { checkModuleAccess } from "@/lib/check-module-access";
 import { logActivity } from "@/lib/activity-log";
 
 export async function GET(req: NextRequest) {
-  const session = getUserFromHeaders(req.headers) ?? await (await import("@/lib/auth")).getSession();
+  // Phase 8 — gate behind `inventory:orders`. Existing web staff app
+  // never hit this endpoint (no PO UI on web), so adding the gate is
+  // safe.
+  const guard = await checkModuleAccess(req, "inventory:orders");
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
   const url = new URL(req.url);
   const search = url.searchParams.get("search")?.trim() ?? "";
   const status = url.searchParams.get("status") ?? "";
@@ -104,15 +110,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Module gate before parsing body — fails fast for unauthorized callers.
+  const guard = await checkModuleAccess(req, "inventory:orders");
+  if (!guard.ok) return guard.response;
+  const caller = guard.session;
+
   const body = await req.json();
   const { outletId, supplierId, items, notes, deliveryDate } = body;
 
   const outlet = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId } });
   const count = await prisma.order.count({ where: { outletId } });
   const orderNumber = `CC-${outlet.code}-${String(count + 1).padStart(4, "0")}`;
-
-  const caller = await getUserFromHeaders(req.headers);
-  if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const totalAmount = items.reduce(
     (sum: number, i: { quantity: number; unitPrice: number }) => sum + i.quantity * i.unitPrice,

@@ -1,8 +1,12 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserFromHeaders } from "@/lib/auth";
+import { checkModuleAccess, isManagerRole } from "@/lib/check-module-access";
 
 // Single PO detail + status updates from the native staff app.
+//
+// Module gate: `inventory:orders`. Status mutations (approve/send/
+// cancel) additionally require manager role — regular staff with read
+// access can view but not transition.
 //
 // Read access: any authenticated staff. The native app already filters
 // the list by outlet on the client; detail reads are by ID so we just
@@ -13,9 +17,11 @@ import { getUserFromHeaders } from "@/lib/auth";
 // sentAt. CANCELLED is allowed only if no invoice has had money move
 // against it (mirrors the backoffice guard).
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = await checkModuleAccess(req, "inventory:orders");
+  if (!guard.ok) return guard.response;
   const { id } = await params;
   const order = await prisma.order.findUnique({
     where: { id },
@@ -69,9 +75,16 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const caller = await getUserFromHeaders(req.headers);
-  if (!caller) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const guard = await checkModuleAccess(req, "inventory:orders");
+  if (!guard.ok) return guard.response;
+  const caller = guard.session;
+  // Mutations (approve/send/cancel) — managers only. Read access is
+  // open to anyone with the module key.
+  if (!isManagerRole(caller.role)) {
+    return NextResponse.json(
+      { error: "Manager role required to update PO status" },
+      { status: 403 },
+    );
   }
   const { id } = await params;
   const body = await req.json();

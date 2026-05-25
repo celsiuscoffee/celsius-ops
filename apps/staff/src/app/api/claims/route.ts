@@ -112,6 +112,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Payment Request gate — managers only. Reimbursement claims stay
+    // open to all staff with `inventory:pay-and-claim`; vendor payment
+    // requests commit finance to pay a third-party, so trust bar is
+    // higher. Owner/admin/manager can submit REQUEST flow.
+    if (
+      requestFlow === "REQUEST" &&
+      session.role !== "OWNER" &&
+      session.role !== "ADMIN" &&
+      session.role !== "MANAGER"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Payment requests require manager role. Ask your outlet manager to submit it.",
+        },
+        { status: 403 },
+      );
+    }
+
     // Get outlet for code
     const outlet = await prisma.outlet.findUnique({
       where: { id: outletId },
