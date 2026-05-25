@@ -52,11 +52,16 @@ export type CreateClaimInput = {
   outletId: string;
   supplierId?: string;
   supplierName?: string | null;
-  claimedById: string;
+  // Optional in REQUEST flow (no claimant — finance pays the vendor).
+  claimedById?: string;
   amount: number;
   purchaseDate: string;
   photos: string[];
   notes?: string | null;
+  // CLAIM = reimburse me (legacy default). REQUEST = pay this vendor
+  // directly (vendorName required).
+  flow?: "CLAIM" | "REQUEST";
+  vendorName?: string;
 };
 
 export type CreateClaimResult = {

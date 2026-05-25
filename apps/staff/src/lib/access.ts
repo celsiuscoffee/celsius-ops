@@ -54,6 +54,12 @@ const ROUTE_ACCESS: Array<{ prefix: string; moduleKey: string }> = [
   { prefix: "/wastage", moduleKey: "inventory:wastage" },
   { prefix: "/transfers", moduleKey: "inventory:transfers" },
   { prefix: "/claims", moduleKey: "inventory:pay-and-claim" },
+  // Native-only procurement modules (added in Phase 8). The web staff
+  // app doesn't render these pages, but the prefix is registered so the
+  // access map stays the single source of truth and any future web port
+  // automatically picks up the gate.
+  { prefix: "/orders", moduleKey: "inventory:orders" },
+  { prefix: "/invoices", moduleKey: "inventory:invoices" },
   { prefix: "/inventory", moduleKey: "inventory" },
 ];
 

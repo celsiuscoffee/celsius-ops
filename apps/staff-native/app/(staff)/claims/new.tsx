@@ -25,6 +25,8 @@ import {
   ReceiptCapture,
   type CapturedPhoto,
 } from "../../../components/ReceiptCapture";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import {
   createClaim,
   extractFromUrls,
@@ -51,6 +53,9 @@ export default function NewClaim() {
     null,
   );
 
+  // CLAIM = "I paid, reimburse me" | REQUEST = "Pay this vendor for me"
+  const [flow, setFlow] = useState<"CLAIM" | "REQUEST">("CLAIM");
+  const [vendorName, setVendorName] = useState("");
   const [supplierId, setSupplierId] = useState<string>("");
   const [supplierName, setSupplierName] = useState<string>("");
   const [supplierPickerOpen, setSupplierPickerOpen] = useState(false);
@@ -74,6 +79,9 @@ export default function NewClaim() {
       if (!amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
         throw new Error("Enter a valid amount.");
       }
+      if (flow === "REQUEST" && !vendorName.trim()) {
+        throw new Error("Enter the vendor's name.");
+      }
       const photos = photoUrl ? [photoUrl] : [];
       if (photos.length === 0) throw new Error("Add at least one receipt photo.");
 
@@ -81,17 +89,19 @@ export default function NewClaim() {
         outletId: session.outletId,
         supplierId: supplierId || undefined,
         supplierName: supplierName || null,
-        claimedById: session.userId,
+        claimedById: flow === "CLAIM" ? session.userId : undefined,
         amount: Number(amount),
         purchaseDate,
         photos,
         notes: notes || null,
+        flow,
+        vendorName: flow === "REQUEST" ? vendorName.trim() : undefined,
       });
     },
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["claims"] });
       Alert.alert(
-        "Claim submitted",
+        flow === "CLAIM" ? "Claim submitted" : "Payment request submitted",
         `Order ${res.order.orderNumber}\nInvoice ${res.invoice.invoiceNumber}`,
         [{ text: "Done", onPress: () => router.back() }],
       );
@@ -156,18 +166,19 @@ export default function NewClaim() {
 
   if (step === "capture") {
     return (
-      <View className="flex-1 bg-background px-5 pt-10">
-        <Text className="text-3xl font-display text-espresso">New claim</Text>
-        <Text className="mt-2 text-sm font-body text-muted-fg">
-          Snap the receipt and we'll fill in the details.
-        </Text>
+      <Screen>
+        <PageHeader
+          title="New claim"
+          subtitle="Snap the receipt and we'll fill in the details."
+          back
+        />
 
         <Pressable
           onPress={() => setCameraOpen(true)}
-          className="mt-8 items-center justify-center rounded-3xl border-2 border-dashed border-primary/40 bg-primary-50 py-12 active:opacity-80"
+          className="mt-6 items-center justify-center rounded-3xl border-2 border-dashed border-primary/40 bg-primary-50 py-12 active:opacity-80"
         >
           <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-            <Camera color="#A2492C" size={32} />
+            <Camera color="#C2452D" size={32} />
           </View>
           <Text className="mt-4 text-base font-body-bold text-primary">
             Take photo of receipt
@@ -185,7 +196,7 @@ export default function NewClaim() {
             Enter manually without photo
           </Text>
         </Pressable>
-      </View>
+      </Screen>
     );
   }
 
@@ -194,18 +205,65 @@ export default function NewClaim() {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView
-        className="flex-1 bg-background"
-        contentContainerClassName="px-5 pt-6 pb-12"
-        keyboardShouldPersistTaps="handled"
-      >
-        <PhotoStatus
-          hasPhoto={!!photoUri}
-          uploadError={uploadError}
-          extracting={extracting}
-          confidence={extractConfidence}
-          onRetake={() => setCameraOpen(true)}
-        />
+      <Screen>
+        {/* Sticky header */}
+        <View className="pt-3">
+          <PageHeader
+            title="New claim"
+            subtitle="Review and submit for reimbursement."
+            back
+          />
+        </View>
+
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerClassName="pb-24"
+          keyboardShouldPersistTaps="handled"
+        >
+          <PhotoStatus
+            hasPhoto={!!photoUri}
+            uploadError={uploadError}
+            extracting={extracting}
+            confidence={extractConfidence}
+            onRetake={() => setCameraOpen(true)}
+          />
+
+        {/* Flow toggle — reimburse me vs pay vendor */}
+        <View className="mt-4 flex-row gap-2 rounded-2xl border border-border bg-surface p-1.5">
+          <Pressable
+            onPress={() => setFlow("CLAIM")}
+            className={`flex-1 items-center rounded-xl py-2.5 active:opacity-80 ${
+              flow === "CLAIM" ? "bg-primary" : ""
+            }`}
+          >
+            <Text
+              className={`text-sm font-body-bold ${
+                flow === "CLAIM" ? "text-white" : "text-muted-fg"
+              }`}
+            >
+              Reimburse me
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setFlow("REQUEST")}
+            className={`flex-1 items-center rounded-xl py-2.5 active:opacity-80 ${
+              flow === "REQUEST" ? "bg-primary" : ""
+            }`}
+          >
+            <Text
+              className={`text-sm font-body-bold ${
+                flow === "REQUEST" ? "text-white" : "text-muted-fg"
+              }`}
+            >
+              Pay vendor
+            </Text>
+          </Pressable>
+        </View>
+        <Text className="mt-1.5 text-xs font-body text-muted-fg">
+          {flow === "CLAIM"
+            ? "You paid out-of-pocket — finance reimburses you."
+            : "Finance pays the vendor directly — no out-of-pocket."}
+        </Text>
 
         <Field label="Outlet">
           <View className="h-14 justify-center rounded-2xl bg-primary-50 px-4">
@@ -215,7 +273,23 @@ export default function NewClaim() {
           </View>
         </Field>
 
-        <Field label="Supplier">
+        {flow === "REQUEST" ? (
+          <Field label="Vendor name">
+            <TextInput
+              value={vendorName}
+              onChangeText={setVendorName}
+              placeholder="e.g. ABC Plumbing Services"
+              placeholderTextColor="#9CA3AF"
+              className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body text-espresso"
+            />
+          </Field>
+        ) : null}
+
+        <Field
+          label={
+            flow === "REQUEST" ? "Linked supplier (optional)" : "Supplier"
+          }
+        >
           <Pressable
             onPress={() => setSupplierPickerOpen(true)}
             className="h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 active:bg-primary-50"
@@ -224,9 +298,10 @@ export default function NewClaim() {
               className={`flex-1 text-base font-body ${supplierName ? "text-espresso" : "text-muted"}`}
               numberOfLines={1}
             >
-              {supplierName || "Select supplier"}
+              {supplierName ||
+                (flow === "REQUEST" ? "None (one-off vendor)" : "Select supplier")}
             </Text>
-            <ChevronDown color="#6B6B6B" size={20} />
+            <ChevronDown color="#9CA3AF" size={20} />
           </Pressable>
         </Field>
 
@@ -279,23 +354,24 @@ export default function NewClaim() {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text className="text-base font-body-bold text-white">
-              Submit claim
+              {flow === "CLAIM" ? "Submit claim" : "Submit payment request"}
             </Text>
           )}
         </Pressable>
-      </ScrollView>
+        </ScrollView>
 
-      <SupplierPicker
-        open={supplierPickerOpen}
-        suppliers={suppliers}
-        selectedId={supplierId}
-        onClose={() => setSupplierPickerOpen(false)}
-        onSelect={(s) => {
-          setSupplierId(s.id);
-          setSupplierName(s.name);
-          setSupplierPickerOpen(false);
-        }}
-      />
+        <SupplierPicker
+          open={supplierPickerOpen}
+          suppliers={suppliers}
+          selectedId={supplierId}
+          onClose={() => setSupplierPickerOpen(false)}
+          onSelect={(s) => {
+            setSupplierId(s.id);
+            setSupplierName(s.name);
+            setSupplierPickerOpen(false);
+          }}
+        />
+      </Screen>
     </KeyboardAvoidingView>
   );
 }
@@ -334,7 +410,7 @@ function PhotoStatus({
     return (
       <View className="flex-row items-center rounded-2xl border border-border bg-surface p-4">
         <View className="h-12 w-12 items-center justify-center rounded-2xl bg-muted/10">
-          <ImageIcon color="#6B6B6B" size={20} />
+          <ImageIcon color="#9CA3AF" size={20} />
         </View>
         <View className="ml-3 flex-1">
           <Text className="text-sm font-body-semi text-espresso">
@@ -359,11 +435,11 @@ function PhotoStatus({
       <View className="flex-row items-center">
         <View className="h-12 w-12 items-center justify-center rounded-2xl bg-primary-50">
           {extracting ? (
-            <Loader color="#A2492C" size={20} />
+            <Loader color="#C2452D" size={20} />
           ) : uploadError ? (
             <ImageIcon color="#B91C1C" size={20} />
           ) : (
-            <Check color="#A2492C" size={20} />
+            <Check color="#C2452D" size={20} />
           )}
         </View>
         <View className="ml-3 flex-1">
@@ -380,7 +456,7 @@ function PhotoStatus({
             </Text>
           ) : extracting ? (
             <View className="mt-0.5 flex-row items-center gap-1">
-              <Sparkles color="#A2492C" size={12} />
+              <Sparkles color="#C2452D" size={12} />
               <Text className="text-xs font-body text-muted-fg">
                 Filling in details automatically
               </Text>
@@ -472,7 +548,7 @@ function SupplierPicker({
                   {s.name}
                 </Text>
                 {s.id === selectedId ? (
-                  <Check color="#A2492C" size={20} />
+                  <Check color="#C2452D" size={20} />
                 ) : null}
               </Pressable>
             ))

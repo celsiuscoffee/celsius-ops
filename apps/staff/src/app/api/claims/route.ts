@@ -72,6 +72,8 @@ export async function POST(req: NextRequest) {
       photos,
       notes,
       items,
+      flow = "CLAIM",
+      vendorName,
     } = body as {
       outletId: string;
       supplierId?: string;
@@ -82,12 +84,31 @@ export async function POST(req: NextRequest) {
       photos: string[];
       notes?: string;
       items?: { productId: string; quantity: number; unitPrice: number }[];
+      // Flow split — REQUEST = finance pays a one-off vendor directly
+      // (staff submits the request, doesn't front the money). CLAIM is
+      // the original "I paid, reimburse me" flow.
+      flow?: "CLAIM" | "REQUEST";
+      vendorName?: string;
     };
 
-    if (!outletId || !claimedById || !amount || !photos?.length) {
+    const requestFlow: "CLAIM" | "REQUEST" = flow === "REQUEST" ? "REQUEST" : "CLAIM";
+
+    if (!outletId || !amount || !photos?.length) {
       return NextResponse.json(
-        { error: "Missing required fields: outletId, claimedById, amount, photos" },
-        { status: 400 }
+        { error: "Missing required fields: outletId, amount, photos" },
+        { status: 400 },
+      );
+    }
+    if (requestFlow === "CLAIM" && !claimedById) {
+      return NextResponse.json(
+        { error: "claimedById required for claim flow" },
+        { status: 400 },
+      );
+    }
+    if (requestFlow === "REQUEST" && !vendorName?.trim()) {
+      return NextResponse.json(
+        { error: "vendorName required for payment request flow" },
+        { status: 400 },
       );
     }
 
@@ -132,9 +153,14 @@ export async function POST(req: NextRequest) {
       .filter(Boolean)
       .join(" | ") || null;
 
-    // Generate order number: PC-{outletCode}-{count+1}
+    // Generate order number: PC-{outletCode}-{count+1}. PAY_AND_CLAIM
+    // and PAYMENT_REQUEST share the PC- namespace; count across both
+    // to avoid collisions when the user creates one of each.
     const orderCount = await prisma.order.count({
-      where: { orderType: "PAY_AND_CLAIM", outletId },
+      where: {
+        orderType: { in: ["PAY_AND_CLAIM", "PAYMENT_REQUEST"] },
+        outletId,
+      },
     });
     const orderNumber = `PC-${outlet.code}-${String(orderCount + 1).padStart(4, "0")}`;
 
@@ -144,29 +170,38 @@ export async function POST(req: NextRequest) {
     });
     const invoiceNumber = `INV-${String(invoiceCount + 1).padStart(4, "0")}`;
 
+    const orderType =
+      requestFlow === "REQUEST" ? "PAYMENT_REQUEST" : "PAY_AND_CLAIM";
+    const invoicePaymentType =
+      requestFlow === "REQUEST" ? "SUPPLIER" : "STAFF_CLAIM";
+
     // Create Order + Invoice in a transaction
     const result = await prisma.$transaction(async (tx) => {
       const order = await tx.order.create({
         data: {
           orderNumber,
-          orderType: "PAY_AND_CLAIM",
+          orderType,
           outletId,
           supplierId: resolvedSupplierId!,
           status: "DRAFT",
           totalAmount: amount,
           notes: fullNotes,
-          claimedById,
+          // REQUEST flow doesn't have a claimant (no one to reimburse) —
+          // null is fine here.
+          claimedById: requestFlow === "CLAIM" ? claimedById : null,
           createdById: session.id,
-          ...(items?.length ? {
-            items: {
-              create: items.map((i) => ({
-                productId: i.productId,
-                quantity: i.quantity,
-                unitPrice: i.unitPrice,
-                totalPrice: i.quantity * i.unitPrice,
-              })),
-            },
-          } : {}),
+          ...(items?.length
+            ? {
+                items: {
+                  create: items.map((i) => ({
+                    productId: i.productId,
+                    quantity: i.quantity,
+                    unitPrice: i.unitPrice,
+                    totalPrice: i.quantity * i.unitPrice,
+                  })),
+                },
+              }
+            : {}),
         },
         select: { id: true, orderNumber: true },
       });
@@ -179,11 +214,14 @@ export async function POST(req: NextRequest) {
           supplierId: resolvedSupplierId!,
           amount,
           status: "DRAFT",
-          paymentType: "STAFF_CLAIM",
-          claimedById,
+          paymentType: invoicePaymentType,
+          claimedById: requestFlow === "CLAIM" ? claimedById : null,
           issueDate: new Date(purchaseDate),
           photos,
           notes: fullNotes,
+          ...(requestFlow === "REQUEST" && vendorName
+            ? { vendorName: vendorName.trim() }
+            : {}),
         },
         select: { id: true, invoiceNumber: true },
       });
