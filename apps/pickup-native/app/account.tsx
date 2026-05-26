@@ -289,6 +289,13 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
 
       <ScrollView
         contentContainerStyle={{ paddingTop: 16, paddingBottom: 160 }}
+        // Web: body owns scroll so iOS Safari can collapse its URL bar.
+        // See index.tsx for the full rationale.
+        style={
+          Platform.OS === "web"
+            ? ({ overflow: "visible", flex: undefined } as any)
+            : undefined
+        }
       >
         {/* Membership tier carousel — same TierCardCarousel that powers
             the legacy /tier-benefits screen. The customer's current
