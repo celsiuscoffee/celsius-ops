@@ -186,23 +186,40 @@ export default function NewPO() {
   }
 
   function addProduct(p: SupplierProduct) {
-    // SupplierProduct already carries the supplier's package + price,
-    // so a single line maps 1:1 — no defaults to pick, no zero-price
-    // line items. Mirrors backoffice exactly.
-    setCart((prev) => [
-      ...prev,
-      {
-        productId: p.id,
-        productName: p.name,
-        sku: p.sku,
-        unitLabel: p.packageLabel,
-        packageId: p.packageId,
-        quantity: 1,
-        unitPrice: p.price,
-      },
-    ]);
-    setProductPicker(false);
-    setSearch("");
+    // Multi-add picker — stays open after each tap so the user can
+    // load up the cart without re-opening for every line. The picker
+    // shows an "✓ Added" indicator on rows already in the cart, and
+    // the header shows the running cart count. A "Done" button
+    // commits and closes. Mirrors backoffice procurement which also
+    // lets you cart-up without sheet round-trips.
+    //
+    // Identity for "already added" is (productId, packageId) so the
+    // same product in different packages stays distinct (ADHOC case).
+    setCart((prev) => {
+      const exists = prev.some(
+        (l) => l.productId === p.id && l.packageId === p.packageId,
+      );
+      if (exists) {
+        // Tap-again increments quantity instead of duplicating the row.
+        return prev.map((l) =>
+          l.productId === p.id && l.packageId === p.packageId
+            ? { ...l, quantity: l.quantity + 1 }
+            : l,
+        );
+      }
+      return [
+        ...prev,
+        {
+          productId: p.id,
+          productName: p.name,
+          sku: p.sku,
+          unitLabel: p.packageLabel,
+          packageId: p.packageId,
+          quantity: 1,
+          unitPrice: p.price,
+        },
+      ];
+    });
     Haptics.selectionAsync().catch(() => {});
   }
 
@@ -806,18 +823,31 @@ export default function NewPO() {
         </View>
       </Modal>
 
-      {/* Product picker sheet */}
+      {/* Product picker sheet — multi-add: stays open so the user can
+          tap several items in a row. Header shows the running cart
+          count; tap an item again to bump its quantity (instead of
+          duplicating). Bottom "Done" bar commits and closes. */}
       <Modal
         visible={productPicker}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setProductPicker(false)}
+        onRequestClose={() => {
+          setProductPicker(false);
+          setSearch("");
+        }}
       >
         <View className="flex-1 bg-background">
           <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Text className="text-base font-peachi text-espresso">
-              Add item
-            </Text>
+            <View className="flex-1">
+              <Text className="text-base font-peachi text-espresso">
+                Add items
+              </Text>
+              <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                {cart.length === 0
+                  ? "Tap items to add — they'll appear in the cart"
+                  : `${cart.length} in cart · tap again to add more`}
+              </Text>
+            </View>
             <Pressable
               onPress={() => {
                 setProductPicker(false);
@@ -840,7 +870,10 @@ export default function NewPO() {
               />
             </View>
           </View>
-          <ScrollView contentContainerClassName="px-4 py-3 gap-2">
+          <ScrollView
+            contentContainerClassName="px-4 py-3 gap-2"
+            keyboardShouldPersistTaps="handled"
+          >
             {filtered.length === 0 ? (
               <View className="mt-10 items-center px-6">
                 <Text className="text-center text-sm font-body-bold text-espresso">
@@ -855,38 +888,75 @@ export default function NewPO() {
                 </Text>
               </View>
             ) : (
-              // De-dupe by productId+packageId — an ADHOC supplier
-              // expansion can produce multiple entries for the same
-              // (product, package) tuple, and we don't want dupes in
-              // the picker row list.
-              filtered.map((p, idx) => (
-                <Pressable
-                  key={`${p.id}-${p.packageId ?? "base"}-${idx}`}
-                  onPress={() => addProduct(p)}
-                  className="rounded-2xl border border-border bg-surface px-4 py-3 active:bg-primary-50"
-                >
-                  <View className="flex-row items-center justify-between gap-2">
-                    <View className="flex-1">
-                      <Text
-                        className="text-sm font-body-bold text-espresso"
-                        numberOfLines={1}
-                      >
-                        {p.name}
-                      </Text>
-                      <Text className="text-xs font-body text-muted-fg">
-                        {p.sku} · {p.packageLabel}
-                      </Text>
+              filtered.map((p, idx) => {
+                // Show qty-in-cart on rows already added so the user
+                // gets immediate feedback that the tap registered.
+                const inCart = cart.find(
+                  (l) =>
+                    l.productId === p.id && l.packageId === p.packageId,
+                );
+                return (
+                  <Pressable
+                    key={`${p.id}-${p.packageId ?? "base"}-${idx}`}
+                    onPress={() => addProduct(p)}
+                    className={`rounded-2xl border px-4 py-3 active:bg-primary-50 ${
+                      inCart
+                        ? "border-primary/50 bg-primary-50/60"
+                        : "border-border bg-surface"
+                    }`}
+                  >
+                    <View className="flex-row items-center justify-between gap-2">
+                      <View className="flex-1">
+                        <Text
+                          className="text-sm font-body-bold text-espresso"
+                          numberOfLines={1}
+                        >
+                          {p.name}
+                        </Text>
+                        <Text className="text-xs font-body text-muted-fg">
+                          {p.sku} · {p.packageLabel}
+                        </Text>
+                      </View>
+                      <View className="items-end gap-1">
+                        {p.price > 0 ? (
+                          <Text className="text-sm font-body-bold text-primary tabular-nums">
+                            RM {p.price.toFixed(2)}
+                          </Text>
+                        ) : null}
+                        {inCart ? (
+                          <View className="flex-row items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5">
+                            <Check color="#10B981" size={10} />
+                            <Text className="text-[10px] font-body-bold text-emerald-700">
+                              {inCart.quantity} in cart
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
                     </View>
-                    {p.price > 0 ? (
-                      <Text className="text-sm font-body-bold text-primary tabular-nums">
-                        RM {p.price.toFixed(2)}
-                      </Text>
-                    ) : null}
-                  </View>
-                </Pressable>
-              ))
+                  </Pressable>
+                );
+              })
             )}
           </ScrollView>
+
+          {/* Pinned Done bar — commits and closes. Always visible so
+              the user knows how to exit when adding multiple items. */}
+          <View className="border-t border-border bg-background px-4 py-3">
+            <Pressable
+              onPress={() => {
+                setProductPicker(false);
+                setSearch("");
+                Haptics.selectionAsync().catch(() => {});
+              }}
+              className="h-14 items-center justify-center rounded-2xl bg-primary active:opacity-90"
+            >
+              <Text className="text-sm font-body-bold text-white">
+                {cart.length === 0
+                  ? "Cancel"
+                  : `Done · ${cart.length} item${cart.length === 1 ? "" : "s"} in cart`}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </Modal>
     </Screen>
