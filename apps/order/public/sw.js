@@ -1,4 +1,8 @@
-const CACHE = "celsius-v1";
+// Mirror of apps/pickup-native/public/sw.js — overwritten on each
+// build-pwa run. Bumped from v1 to v2 so the new SW deletes the old
+// celsius-v1 cache and pushes existing PWA sessions off the broken
+// bundle that #148/#149 shipped before the #150 revert.
+const CACHE = "celsius-v2";
 const SHELL = ["/", "/index.html", "/manifest.json"];
 
 self.addEventListener("install", (e) => {

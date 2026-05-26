@@ -1,4 +1,13 @@
-const CACHE = "celsius-v1";
+// Bumped from celsius-v1 to invalidate the cache after PR #148/#149
+// shipped a broken bundle (body-scroll experiment) — clients with the
+// old SW were stuck serving the cached broken JS even after the #150
+// revert deployed. Bumping the name forces the activate handler below
+// to delete the old cache; clients.claim() + skipWaiting() then push
+// existing PWA sessions onto the new bundle on next fetch.
+//
+// Future rule of thumb: bump this on ANY production-affecting bundle
+// regression so customers don't get stuck on a bad build.
+const CACHE = "celsius-v2";
 const SHELL = ["/", "/index.html", "/manifest.json"];
 
 self.addEventListener("install", (e) => {
