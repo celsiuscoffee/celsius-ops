@@ -315,6 +315,28 @@ export default function Home() {
           to the ScrollView's content). */}
       <ScrollView
         contentContainerClassName={Platform.OS === "web" ? "pb-32" : "pb-40"}
+        // On web we deliberately defeat ScrollView's own scroll so the
+        // document itself scrolls — that's what iOS Safari watches to
+        // collapse its URL bar. Just `overflow: visible` isn't enough
+        // because RN-Web ships `flex: 1` as the default and content
+        // would paint outside a viewport-sized box without growing it.
+        // We explicitly set flexGrow:0 + flexBasis:auto + height:auto so
+        // the ScrollView's box sizes to its content, the content
+        // extends the document, body grows, URL bar collapses.
+        // Paired with the postbuild-web.mjs change that makes body +
+        // #root `min-height: 100dvh` instead of pinned height. Native
+        // keeps the normal ScrollView behaviour.
+        style={
+          Platform.OS === "web"
+            ? ({
+                overflow: "visible",
+                flexGrow: 0,
+                flexShrink: 0,
+                flexBasis: "auto",
+                height: "auto",
+              } as any)
+            : undefined
+        }
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

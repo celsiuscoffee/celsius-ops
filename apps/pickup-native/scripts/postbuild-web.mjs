@@ -55,29 +55,29 @@ if (html.includes("/manifest.json")) {
 const NEW_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />';
 
-// Use the JS-measured viewport height (--vph) so iOS Safari PWA
-// standalone gets the real pixel viewport — vh/dvh/lvh/svh all
-// under-report by ~150px in standalone mode. We keep `100vh` as
-// the static fallback for browsers that haven't run the JS yet.
+// Body uses min-height so the document can grow with content — that's
+// what iOS Safari needs to see for its URL bar to collapse on scroll.
+// Background still fills the visible viewport at minimum (100dvh, with
+// var(--vph)/100vh fallbacks).
 //
-// NOTE: a previous iteration tried switching this to min-height so
-// the body could scroll and iOS Safari would collapse its URL bar,
-// but releasing scroll from the RN ScrollViews didn't actually
-// extend the document — the ScrollView's `flex: 1` default kept its
-// box at viewport height and content just overflowed visually
-// without growing the body. Net effect: no scroll at all. URL-bar
-// collapse needs a different approach (likely sticky-positioned
-// chrome + content rendered as a regular div on web, not via
-// react-native-web's ScrollView). Reverted to the working pinned
-// layout for now.
+// The previous "min-height" attempt (#148/#149) was reverted because
+// the per-screen RN ScrollViews still owned scroll — their `flex: 1`
+// default kept their boxes at viewport height and content didn't extend
+// the document. The matching screen-level fix lives in each screen file
+// (overflow: visible + flexGrow: 0 + flexBasis: auto + height: auto on
+// the outer ScrollView) so this min-height change is paired with code
+// that actually lets the document grow. Currently only the home screen
+// is converted — other screens keep the old behaviour (their content is
+// shorter than viewport anyway, so they don't need to scroll).
 const EXPO_RESET_OLD = `      html,
       body {
         height: 100%;
       }`;
 const EXPO_RESET_NEW = `      html,
       body {
-        height: 100vh; /* fallback */
-        height: var(--vph, 100vh);
+        min-height: 100vh; /* fallback */
+        min-height: var(--vph, 100vh);
+        min-height: 100dvh;
       }`;
 const ROOT_OLD = `      #root {
         display: flex;
@@ -86,9 +86,10 @@ const ROOT_OLD = `      #root {
       }`;
 const ROOT_NEW = `      #root {
         display: flex;
-        height: 100vh;
-        height: var(--vph, 100vh);
-        flex: 1;
+        flex-direction: column;
+        min-height: 100vh;
+        min-height: var(--vph, 100vh);
+        min-height: 100dvh;
       }`;
 
 const patched = html
