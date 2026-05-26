@@ -117,7 +117,6 @@ export default function Cart() {
   return (
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ headerShown: false }} />
-      <EspressoHeader title="Your cart" subtitle={outletName ? `Pickup from ${outletName}` : undefined} showBack showCart={false} />
 
       {cart.length === 0 ? (
         // Empty cart should sell, not just say "empty". Espresso hero
@@ -127,6 +126,7 @@ export default function Cart() {
         // them concrete tap targets — most empty-cart customers are
         // first-timers or returning after a flush.
         <ScrollView contentContainerClassName="pb-12">
+          <EspressoHeader title="Your cart" subtitle={outletName ? `Pickup from ${outletName}` : undefined} showBack showCart={false} />
           <View
             className="mx-4 mt-4 bg-espresso rounded-2xl overflow-hidden"
             style={{
@@ -245,7 +245,9 @@ export default function Cart() {
         </ScrollView>
       ) : (
         <>
-          <ScrollView contentContainerClassName="px-4 py-4 pb-40 gap-3">
+          <ScrollView contentContainerClassName="pb-40">
+            <EspressoHeader title="Your cart" subtitle={outletName ? `Pickup from ${outletName}` : undefined} showBack showCart={false} />
+            <View className="px-4 py-4" style={{ gap: 12 }}>
             {cart.map((item) => (
               // Whole row tappable → opens the product page in edit
               // mode so customers can change modifiers / notes / qty
@@ -379,6 +381,7 @@ export default function Cart() {
                 </View>
               </Pressable>
             ))}
+            </View>
           </ScrollView>
 
           <View
