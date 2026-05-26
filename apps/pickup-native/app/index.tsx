@@ -305,6 +305,25 @@ export default function Home() {
 
   return (
     <View className="flex-1 bg-background">
+      {/* One scrollable container for the whole home screen — hero,
+          outlet row, and the rest below all scroll together. Previously
+          only the bottom half (the section list inside an inner
+          ScrollView) scrolled; the hero stayed frozen, which made the
+          page feel uncscrollable in a mobile browser. The top-bar logo
+          + cart icon is `position: absolute` and now scrolls with the
+          page content (its containing block moved from this outer View
+          to the ScrollView's content). */}
+      <ScrollView
+        contentContainerClassName={Platform.OS === "web" ? "pb-32" : "pb-40"}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#A2492C"
+            colors={["#A2492C"]}
+          />
+        }
+      >
       {/* Top bar — small wordmark + cart, sits over the poster top edge.
           Espresso ink against the cream backdrop on the carousel
           (posters generally have darker bottoms; the top is fine).
@@ -556,17 +575,6 @@ export default function Home() {
         <ChevronRight size={13} color="#8E8E93" />
       </Pressable>
 
-      <ScrollView
-        contentContainerClassName={Platform.OS === "web" ? "pb-32" : "pb-40"}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#A2492C"
-            colors={["#A2492C"]}
-          />
-        }
-      >
         {/* Guest sign-in CTA — surfaces FIRST for logged-out users so the
             membership ask lands the moment the app opens. Espresso panel
             with terracotta gift icon mirrors brand promo styling, so it
