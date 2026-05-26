@@ -1,4 +1,5 @@
 import { createClient } from "./supabase-browser";
+import { filterModifiersForChannel } from "@celsius/shared";
 
 const supabase = createClient();
 
@@ -29,7 +30,15 @@ export async function fetchProducts() {
     .select("*")
     .order("name");
   if (error) throw error;
-  return data ?? [];
+  // Drop modifier groups/options the merchant scoped to other channels
+  // (Pickup, Grab, Foodpanda) so the cashier only sees POS-applicable ones.
+  return (data ?? []).map((p: Record<string, unknown>) => ({
+    ...p,
+    modifiers: filterModifiersForChannel(
+      (p.modifiers as Parameters<typeof filterModifiersForChannel>[0]) ?? [],
+      "pos",
+    ),
+  }));
 }
 
 export async function fetchCategories() {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { filterModifiersForChannel } from "@celsius/shared";
 
 /**
  * Menu Sync API for Delivery Platforms
@@ -36,8 +37,10 @@ export async function GET(req: NextRequest) {
     const cat = p.category ?? "uncategorized";
     if (!categories[cat]) categories[cat] = [];
 
-    // Parse modifiers from StoreHub JSONB format
-    const modifierGroups = (p.modifiers ?? []).map((m: any) => ({
+    // Parse modifiers from StoreHub JSONB format. Filter by "foodpanda"
+    // channel first so groups/options opted out of delivery are dropped.
+    const visibleMods = filterModifiersForChannel(p.modifiers ?? [], "foodpanda");
+    const modifierGroups = visibleMods.map((m: any) => ({
       name: m.name,
       multiSelect: m.multiSelect ?? false,
       options: (m.options ?? []).map((o: any) => ({
