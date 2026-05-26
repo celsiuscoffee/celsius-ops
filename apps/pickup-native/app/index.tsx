@@ -558,6 +558,17 @@ export default function Home() {
 
       <ScrollView
         contentContainerClassName={Platform.OS === "web" ? "pb-32" : "pb-40"}
+        // On web, disable the ScrollView's own scroll so the document
+        // (body) scrolls instead. Body scroll is what iOS Safari watches
+        // to collapse its URL bar — otherwise the bar sits permanently
+        // expanded and eats ~120px of the customer's viewport. Native
+        // keeps the normal ScrollView behaviour (RefreshControl + native
+        // momentum) which is irrelevant on the web bundle.
+        style={
+          Platform.OS === "web"
+            ? ({ overflow: "visible", flex: undefined } as any)
+            : undefined
+        }
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
