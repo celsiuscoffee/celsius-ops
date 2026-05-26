@@ -19,9 +19,20 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { orderId, orderTitle, amount, type } = body;
 
-    if (!orderId || !amount || !type) {
+    // Explicit null/undefined check — amount can legitimately be 0
+    // (fully-comped order via voucher + tier discount stack). The
+    // previous `!amount` check treated 0 as missing and rejected
+    // the request with "Missing required fields", breaking checkout
+    // for any free order.
+    if (!orderId || amount === null || amount === undefined || !type) {
       return NextResponse.json(
         { error: "Missing required fields: orderId, amount, type" },
+        { status: 400 }
+      );
+    }
+    if (typeof amount !== "number" || amount < 0) {
+      return NextResponse.json(
+        { error: "amount must be a non-negative number (sen)" },
         { status: 400 }
       );
     }

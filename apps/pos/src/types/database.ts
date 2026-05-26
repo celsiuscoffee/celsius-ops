@@ -39,6 +39,11 @@ export type Product = {
   kitchen_station: string | null;
   is_available: boolean;
   is_featured: boolean;
+  /** When true the register prints a second copy of the kitchen
+   *  docket for this product. Used for items that the kitchen splits
+   *  across stations or that the runner separates (e.g. beer packages,
+   *  set meals). */
+  print_additional_docket?: boolean;
   synced_at: string | null;
   created_at: string;
   updated_at: string;

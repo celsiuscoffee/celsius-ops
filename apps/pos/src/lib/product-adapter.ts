@@ -58,6 +58,9 @@ export function adaptProduct(raw: Record<string, unknown>): Product {
     kitchen_station: (raw.kitchen_station as string) ?? null,
     is_available: (raw.is_available as boolean) ?? true,
     is_featured: (raw.is_featured as boolean) ?? false,
+    // StoreHub-parity flag — the register checks this when printing the
+    // kitchen docket and triggers a second copy when set.
+    print_additional_docket: (raw.print_additional_docket as boolean) ?? false,
     synced_at: (raw.synced_at as string) ?? null,
     created_at: (raw.created_at as string) ?? "",
     updated_at: (raw.updated_at as string) ?? "",

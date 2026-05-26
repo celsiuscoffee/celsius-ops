@@ -23,7 +23,11 @@ export {
 } from "./format";
 export { sendSMS, getSMSProvider } from "./sms";
 export type { SMSProvider } from "./sms";
-export { generateOTP, sendOTP, verifyOTP } from "./otp";
+// OTP is intentionally NOT re-exported here — it imports node:crypto,
+// which Turbopack pulls into every consumer of this barrel (including
+// Edge Middleware + client bundles) and crashes the build. API routes
+// that need OTP should `import { ... } from "@celsius/shared/src/otp"`
+// directly, or alias via their own local wrapper.
 
 // ─── Loyalty ─────────────────────────────────────────────
 // Canonical reward-fetch helpers used by BOTH apps/order (Pickup) and

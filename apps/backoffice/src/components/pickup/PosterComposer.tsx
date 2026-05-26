@@ -5,7 +5,7 @@ import { Loader2, Sparkles, X, RotateCcw, Plus, Trash2, ShoppingCart } from "luc
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
 
-type Placement = "splash" | "home";
+type Placement = "splash" | "home" | "pos-display";
 
 type TextLayer = {
   text: string;
@@ -97,8 +97,9 @@ function shadowParams(strength: number, fontPx: number) {
 // Output canvas dimensions per placement. Keeps file sizes reasonable
 // while matching the aspect that the customer app actually renders.
 const OUTPUT: Record<Placement, { w: number; h: number; previewMax: { w: number; h: number } }> = {
-  splash: { w: 1080, h: 1920, previewMax: { w: 270, h: 480 } },
-  home:   { w: 1200, h: 1120, previewMax: { w: 380, h: 355 } },
+  splash:        { w: 1080, h: 1920, previewMax: { w: 270, h: 480 } },
+  home:          { w: 1200, h: 1120, previewMax: { w: 380, h: 355 } },
+  "pos-display": { w: 1600, h:  700, previewMax: { w: 540, h: 236 } },
 };
 
 type Props = {
@@ -541,7 +542,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
           <div>
             <h3 className="text-sm font-semibold text-gray-900">
-              Compose poster · {placement === "home" ? "Home banner" : "Splash"}
+              Compose poster · {placement === "home" ? "Home banner" : placement === "pos-display" ? "POS screen" : "Splash"}
             </h3>
             <p className="text-[11px] text-gray-500 mt-0.5">
               Type an objective, hit Generate, then drag to adjust.

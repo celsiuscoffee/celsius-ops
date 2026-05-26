@@ -29,10 +29,15 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const supabase = getSupabaseAdmin();
 
-  // Placement is exclusive: 'splash' (launch only) or 'home' (carousel
-  // only). Default to home since that's where most posters live.
-  const placement: "splash" | "home" =
-    body.placement === "splash" ? "splash" : "home";
+  // Placement is exclusive: 'splash' (launch only), 'home' (carousel),
+  // or 'pos-display' (in-store second screen). Default to home since
+  // that's where most posters live.
+  const placement: "splash" | "home" | "pos-display" =
+    body.placement === "splash"
+      ? "splash"
+      : body.placement === "pos-display"
+        ? "pos-display"
+        : "home";
 
   const { data, error } = await supabase
     .from("splash_posters")
@@ -77,7 +82,10 @@ export async function PATCH(request: NextRequest) {
   if ("endsAt"         in body) updates.ends_at         = body.endsAt;
   if ("composerState"  in body) updates.composer_state  = body.composerState;
   if ("originalBgUrl"  in body) updates.original_bg_url = body.originalBgUrl;
-  if ("placement"      in body && (body.placement === "splash" || body.placement === "home")) {
+  if (
+    "placement" in body &&
+    (body.placement === "splash" || body.placement === "home" || body.placement === "pos-display")
+  ) {
     updates.placement = body.placement;
   }
 

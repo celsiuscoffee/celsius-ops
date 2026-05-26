@@ -75,6 +75,9 @@ import {
   Cake,
   Ticket,
   Briefcase,
+  CreditCard,
+  QrCode,
+  Printer,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PullToRefresh } from "@/components/pull-to-refresh";
@@ -130,20 +133,48 @@ const ICON_SIZE = "h-4 w-4";
 const RAIL_ICON_SIZE = "h-5 w-5";
 
 const NAV_SECTIONS: NavSection[] = [
+  // Menu (= product catalog) is shared across POS, Pickup app, and
+  // Grab integration — promoted to a top-level "Catalog" section so it
+  // doesn't read as Pickup-only. URLs stay at /pickup/* to avoid
+  // breaking bookmarks; the routes can be re-homed later if needed.
+  {
+    label: "Catalog",
+    icon: <UtensilsCrossed className={ICON_SIZE} />,
+    railIcon: <UtensilsCrossed className={RAIL_ICON_SIZE} />,
+    dividerBefore: true,
+    items: [
+      { label: "Menu", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
+      { label: "Splash Posters", href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />, moduleKey: "pickup:menu" },
+    ],
+  },
   {
     label: "Pickup App",
     icon: <ShoppingBag className={ICON_SIZE} />,
     railIcon: <ShoppingBag className={RAIL_ICON_SIZE} />,
-    dividerBefore: true,
     items: [
+      // Dashboard hosts an in-page tab strip linking to /pickup/analytics
+      // for deeper retention/cohort views, so Analytics no longer needs its
+      // own sidebar entry.
       { label: "Dashboard", href: "/pickup", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "pickup:orders" },
       { label: "Orders", href: "/pickup/orders", icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
-      { label: "Menu", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
-      { label: "Availability", href: "/pickup/menu/availability", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
-      { label: "Splash Posters", href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />, moduleKey: "pickup:menu" },
-      { label: "Analytics", href: "/pickup/analytics", icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "pickup:analytics" },
       { label: "Customers", href: "/pickup/customers", icon: <Users className={ICON_SIZE} />, moduleKey: "pickup:customers" },
       { label: "Settings", href: "/pickup/settings", icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+    ],
+  },
+  // POS — the in-store register. Main BO is the canonical owner of all
+  // POS admin surfaces (settings, reports, table QR). The POS app itself
+  // is register / KDS / customer-display only; it reads pos_branch_settings
+  // at runtime from the same Supabase row Settings here writes to.
+  {
+    label: "POS",
+    icon: <CreditCard className={ICON_SIZE} />,
+    railIcon: <CreditCard className={RAIL_ICON_SIZE} />,
+    items: [
+      { label: "Overview",       href: "/pos",            icon: <LayoutDashboard className={ICON_SIZE} />,    moduleKey: "pickup:settings" },
+      { label: "Settings",       href: "/pos/settings",   icon: <SlidersHorizontal className={ICON_SIZE} />,  moduleKey: "pickup:settings" },
+      { label: "Printers",       href: "/pos/printers",   icon: <Printer className={ICON_SIZE} />,            moduleKey: "pickup:settings" },
+      { label: "Reports",        href: "/pos/reports",    icon: <BarChart3 className={ICON_SIZE} />,          moduleKey: "pickup:settings" },
+      { label: "Table QR Codes", href: "/pos/table-qr",   icon: <QrCode className={ICON_SIZE} />,             moduleKey: "pickup:settings" },
     ],
   },
   {
@@ -623,7 +654,7 @@ function SubNavPanel({
   onNavigate?: () => void;
 }) {
   return (
-    <div className="flex h-full w-56 flex-col border-r border-neutral-200 bg-white">
+    <div className="flex h-full w-56 flex-col border-r border-neutral-200 bg-white dark:border-border dark:bg-card">
       {/* Module header */}
       <div className="flex items-center gap-2.5 px-4 py-4 border-b border-neutral-100">
         <span className="text-terracotta">{section.icon}</span>
@@ -1121,7 +1152,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Main content area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Mobile header */}
-        <header className="flex items-center gap-3 border-b border-border bg-white px-4 py-3 lg:hidden">
+        <header className="flex items-center gap-3 border-b border-border bg-white dark:bg-card px-4 py-3 lg:hidden">
           <button onClick={() => setMobileOpen(true)} className="rounded-md p-1.5 hover:bg-muted">
             <Menu className="h-5 w-5" />
           </button>

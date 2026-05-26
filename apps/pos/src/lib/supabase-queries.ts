@@ -59,13 +59,22 @@ export async function fetchStaffByPin(_pinHash: string) {
   return [];
 }
 
+/** Fetch active staff via the POS /api/staff proxy (Prisma User table).
+ *  Returns [] on any failure — staff list is not essential for the
+ *  register's product display, so a missing staff list shouldn't crash
+ *  the whole pos-context init. The legacy `staff_users` Supabase table
+ *  this used to query never existed in production — that 404 was the
+ *  silent killer of the product grid until now. */
 export async function fetchAllStaff() {
-  const { data, error } = await supabase
-    .from("staff_users")
-    .select("id, name, email, role, brand_id, outlet_id, is_active")
-    .order("name");
-  if (error) throw error;
-  return data ?? [];
+  try {
+    const res = await fetch("/api/staff", { credentials: "same-origin" });
+    if (!res.ok) return [];
+    const { staff } = (await res.json()) as { staff?: unknown[] };
+    return staff ?? [];
+  } catch (err) {
+    console.warn("[fetchAllStaff] failed, returning empty list:", err);
+    return [];
+  }
 }
 
 // ─── Outlets ───────────────────────────────────────────────

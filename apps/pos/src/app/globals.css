@@ -1,25 +1,102 @@
 @import "tailwindcss";
+/* Space Grotesk — secondary brand sans (eyebrows, pills, small caps).
+   Peachi is loaded locally below since it's not on Google Fonts. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
+
+/* Celsius Coffee brand fonts — Peachi serif, locally hosted to match
+   the pickup-native + backoffice apps. */
+@font-face {
+  font-family: 'Peachi';
+  src: url('/fonts/Peachi-Regular.otf') format('opentype');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Peachi';
+  src: url('/fonts/Peachi-Medium.otf') format('opentype');
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Peachi';
+  src: url('/fonts/Peachi-Bold.otf') format('opentype');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
 
 @theme {
   --color-brand: #C2452D;
   --color-brand-dark: #A33822;
   --color-brand-light: #D4654F;
-  --color-surface: #1A1A1A;
-  --color-surface-alt: #222222;
-  --color-surface-raised: #2A2A2A;
-  --color-surface-hover: #333333;
-  --color-border: #333333;
-  --color-border-light: #444444;
-  --color-text: #F5F5F5;
-  --color-text-muted: #9CA3AF;
-  --color-text-dim: #6B7280;
+  /* Surface ramp built on espresso so the POS register and the
+     customer-display read as one canvas. Each step is +6 luminance
+     for clear hierarchy (page → raised card → hover). */
+  --color-surface: #160800;        /* espresso — matches customer-display */
+  --color-surface-alt: #1F1004;
+  --color-surface-raised: #281708;
+  --color-surface-hover: #3A2510;
+  --color-border: #3A2510;
+  --color-border-light: #4A3520;
+  --color-text: #F5F3F0;           /* cream */
+  --color-text-muted: rgba(245,243,240,0.55);
+  --color-text-dim: rgba(245,243,240,0.35);
   --color-success: #22C55E;
   --color-warning: #F59E0B;
   --color-danger: #EF4444;
   --color-kds-green: #22C55E;
   --color-kds-yellow: #F59E0B;
   --color-kds-red: #EF4444;
+  /* Celsius brand palette — espresso + cream + terracotta */
+  --color-espresso: #160800;
+  --color-espresso-2: #1A0200;
+  --color-terracotta: #A2492C;
+  --color-cream: #F5F3F0;
+  --color-cream-warm: #FBEBE8;
+  --color-gold: #FBBF24;
+  --font-heading: 'Peachi', Georgia, serif;
+  --font-eyebrow: 'Space Grotesk', system-ui, sans-serif;
 }
+
+.font-heading { font-family: 'Peachi', Georgia, serif; }
+.font-eyebrow { font-family: 'Space Grotesk', system-ui, sans-serif; }
+
+/* Customer-display NFC "tap to identify" pulse — concentric expanding
+   circles that fade out, repeated every 1.4s. Two staggered instances
+   (the second offsets its animationDelay) give the classic radar pulse. */
+@keyframes nfc-pulse {
+  0%   { transform: scale(0.85); opacity: 0.55; }
+  60%  { transform: scale(1.35); opacity: 0;   }
+  100% { transform: scale(1.35); opacity: 0;   }
+}
+.nfc-pulse {
+  animation: nfc-pulse 1.4s ease-out infinite;
+}
+
+/* Customer-display view transitions — fade + slight upward drift on
+   every top-level state change (idle → ordering → thank-you, and
+   when the rewards/pay tab switches). Applied via the `cd-fade-in`
+   class on each view's root wrapper. */
+@keyframes cd-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);  }
+}
+.cd-fade-in {
+  animation: cd-fade-in 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* Customer-display 1280×800 frame (see app/customer-display/layout.tsx).
+   The page tree uses `h-screen` (100vh) extensively for full-height
+   panels. Inside the fixed-size frame we want those to resolve to
+   the frame's height (100% = 800px) instead of viewport height, so
+   the desktop preview matches the device exactly. Targets only
+   direct/indirect descendants of `.cd-frame` so we don't disturb
+   any other route that uses `h-screen`. */
+.cd-frame .h-screen { height: 100% !important; }
+.cd-frame .min-h-screen { min-height: 100% !important; }
+
+/* Register 1920×1080 frame (see app/register/layout.tsx). Same
+   trick as .cd-frame — remaps viewport-relative heights to the
+   fixed frame so desktop preview matches the SUNMI D3 main
+   display exactly. */
+.pos-frame .h-screen { height: 100% !important; }
+.pos-frame .min-h-screen { min-height: 100% !important; }
 
 /* POS kiosk mode */
 .pos-screen {

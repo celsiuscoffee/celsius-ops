@@ -1,5 +1,9 @@
 /**
- * SUNMI D3 MINI Printer Integration (80mm thermal printer)
+ * SUNMI D3 Printer Integration (80mm built-in thermal printer)
+ *
+ * Target hardware: SUNMI D3 / D3 Mini (80mm variant) with built-in
+ * auto-cutter, 250 mm/s. Formatting is calibrated for 80mm @ 24pt bold
+ * (CHARS_PER_LINE = 38).
  *
  * Printing architecture (priority order):
  * 1. Capacitor native plugin → SUNMI PrinterX SDK (when running as Android app)
@@ -456,9 +460,18 @@ async function printViaJSBridge(text: string): Promise<boolean> {
 }
 
 /**
- * Print receipt — tries native formatted (with logo) → plain native → JS bridge → browser
+ * Print receipt on the SUNMI D3 built-in 80mm thermal printer.
+ *
+ * Falls through these channels in order:
+ *   1. Capacitor native SUNMI plugin (formatted, with logo + QR + promo)
+ *   2. Capacitor native SUNMI plugin (plain text)
+ *   3. SUNMI JS WebView bridge
+ *   4. Browser print dialog (dev fallback)
+ *
+ * CHARS_PER_LINE (38) is calibrated for the D3's 80mm head at 24pt bold;
+ * adjust there if hardware / font changes.
  */
-export async function printReceipt58mm(
+export async function printReceipt80mm(
   order: any,
   outlet: OutletInfo | string,
   config?: ReceiptConfig
@@ -495,9 +508,15 @@ export async function printReceipt58mm(
 }
 
 /**
- * Print kitchen docket — tries native docket (LineApi) → external → plain native → JS bridge → browser
+ * Print kitchen docket on the D3 built-in 80mm thermal printer (or any
+ * configured external kitchen printer). Tries:
+ *   1. Capacitor native docket (LineApi, bold station header)
+ *   2. External printer bridge (localhost:8080)
+ *   3. Plain native ESC/POS
+ *   4. SUNMI JS WebView bridge
+ *   5. Browser print dialog (dev fallback)
  */
-export async function printKitchenDocket58mm(
+export async function printKitchenDocket80mm(
   order: any,
   outlet: OutletInfo | string
 ) {
@@ -610,5 +629,12 @@ export async function printToExternalPrinter(
 
 // ─── Re-exports for backward compat ──────────────────────
 
-/** @deprecated Use printReceipt58mm instead */
+/** @deprecated The "58mm" suffix is a legacy misnomer — implementation
+ *  is calibrated for 80mm. Use printReceipt80mm. */
+export const printReceipt58mm = printReceipt80mm;
+
+/** @deprecated Use printKitchenDocket80mm. */
+export const printKitchenDocket58mm = printKitchenDocket80mm;
+
+/** @deprecated Use printReceipt80mm. */
 export const printToSunmi = printViaJSBridge;

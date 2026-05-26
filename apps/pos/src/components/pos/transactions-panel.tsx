@@ -4,7 +4,7 @@ import { useState } from "react";
 import { usePOS } from "@/lib/pos-context";
 import { displayRM } from "@/types/database";
 import { format } from "date-fns";
-import { printReceipt58mm } from "@/lib/sunmi-printer";
+import { printReceipt80mm } from "@/lib/sunmi-printer";
 
 type Props = {
   onBack: () => void;
@@ -112,7 +112,7 @@ export function TransactionsPanel({ onBack }: Props) {
             {selectedOrder.status === "completed" && (
               <div className="mt-4 flex gap-2">
                 <button
-                  onClick={() => printReceipt58mm(selectedOrder, {
+                  onClick={() => printReceipt80mm(selectedOrder, {
                     name: pos.outlet?.name ?? "Celsius Coffee",
                     address: pos.outlet?.address,
                     city: pos.outlet?.city,

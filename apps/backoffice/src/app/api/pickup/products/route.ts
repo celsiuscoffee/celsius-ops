@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, category, price, image_url, is_available, is_featured, modifiers, hidden_modifier_ids, track_stock, synced_at, position, featured_position")
+    .select("id, name, category, price, image_url, is_available, is_featured, modifiers, hidden_modifier_ids, track_stock, synced_at, position, featured_position, print_additional_docket, e_invoice_classification_code, schedule_start_date, schedule_end_date, schedule_days_of_week, schedule_time_from, schedule_time_to")
     .eq("brand_id", "brand-celsius")
     .order("category")
     .order("position")
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const mapped = (data ?? []).map((p) => ({
+  const mapped = (data ?? []).map((p: any) => ({
     id:           p.id,
     category_id:  p.category ?? "",
     name:         p.name,
@@ -34,6 +34,14 @@ export async function GET(request: NextRequest) {
     hidden_modifier_ids: Array.isArray(p.hidden_modifier_ids) ? p.hidden_modifier_ids : [],
     position:     (p.position as number) ?? 9999,
     featured_position: (p.featured_position as number) ?? 9999,
+    // StoreHub-parity fields.
+    print_additional_docket:        p.print_additional_docket ?? false,
+    e_invoice_classification_code:  p.e_invoice_classification_code ?? "",
+    schedule_start_date:            p.schedule_start_date ?? null,
+    schedule_end_date:              p.schedule_end_date ?? null,
+    schedule_days_of_week:          Array.isArray(p.schedule_days_of_week) ? p.schedule_days_of_week : [],
+    schedule_time_from:             p.schedule_time_from ?? null,
+    schedule_time_to:               p.schedule_time_to ?? null,
   }));
 
   // Also fetch categories so the menu page can group/filter by category

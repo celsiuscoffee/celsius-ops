@@ -37,6 +37,25 @@ export async function PATCH(
     update.hidden_modifier_ids = body.hidden_modifier_ids.filter((x): x is string => typeof x === "string");
   }
 
+  // StoreHub-parity fields — added 2026-05-24 per consolidation.
+  if (typeof body.print_additional_docket === "boolean") {
+    update.print_additional_docket = body.print_additional_docket;
+  }
+  if (typeof body.e_invoice_classification_code === "string" || body.e_invoice_classification_code === null) {
+    update.e_invoice_classification_code = body.e_invoice_classification_code || null;
+  }
+  if ("schedule_start_date" in body) update.schedule_start_date = body.schedule_start_date || null;
+  if ("schedule_end_date"   in body) update.schedule_end_date   = body.schedule_end_date   || null;
+  if (Array.isArray(body.schedule_days_of_week)) {
+    // 0=Sun..6=Sat; clamp to valid range.
+    update.schedule_days_of_week = body.schedule_days_of_week
+      .filter((d): d is number => typeof d === "number" && d >= 0 && d <= 6);
+  } else if (body.schedule_days_of_week === null) {
+    update.schedule_days_of_week = null;
+  }
+  if ("schedule_time_from" in body) update.schedule_time_from = body.schedule_time_from || null;
+  if ("schedule_time_to"   in body) update.schedule_time_to   = body.schedule_time_to   || null;
+
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ ok: true });
   }

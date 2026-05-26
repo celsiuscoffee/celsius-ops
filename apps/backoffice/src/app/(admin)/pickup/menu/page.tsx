@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Plus, Search, RefreshCw, Pencil, Trash2, Loader2, X, Check, CloudDownload, ImagePlus, ZoomIn, Star, GripVertical } from "lucide-react";
+import { Plus, Search, RefreshCw, Pencil, Trash2, Loader2, X, Check, ImagePlus, ZoomIn, Star, GripVertical } from "lucide-react";
 import { useConfirm, toast } from "@celsius/ui";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
+import { AvailabilityMatrix } from "./_AvailabilityMatrix";
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor,
   useSensor, useSensors,
@@ -45,6 +46,14 @@ interface DbProduct {
   hidden_modifier_ids: string[];
   position: number;
   featured_position: number;
+  // StoreHub-parity fields (added 2026-05-24)
+  print_additional_docket: boolean;
+  e_invoice_classification_code: string;
+  schedule_start_date: string | null;     // YYYY-MM-DD
+  schedule_end_date:   string | null;
+  schedule_days_of_week: number[];        // 0=Sun..6=Sat, empty = every day
+  schedule_time_from:  string | null;     // HH:mm or HH:mm:ss
+  schedule_time_to:    string | null;
 }
 
 interface Category { id: string; name: string; slug: string; position?: number }
@@ -124,10 +133,21 @@ function emptyForm(categories: Category[]) {
     is_available:  true,
     is_popular:    false,
     is_new:        false,
+    // StoreHub-parity defaults
+    print_additional_docket:        false,
+    e_invoice_classification_code:  "",
+    schedule_start_date:            "" as string,
+    schedule_end_date:              "" as string,
+    schedule_days_of_week:          [] as number[],
+    schedule_time_from:             "" as string,
+    schedule_time_to:               "" as string,
   };
 }
 
 export default function PickupMenu() {
+  // Internal tab. Catalog = product CRUD (this page's original surface);
+  // Availability = per-outlet on/off matrix (was a sibling route).
+  const [view,       setView]       = useState<"catalog" | "availability">("catalog");
   const [products,   setProducts]   = useState<DbProduct[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading,    setLoading]    = useState(true);
@@ -141,8 +161,9 @@ export default function PickupMenu() {
   const [saved,      setSaved]      = useState(false);
   const [deleting,   setDeleting]   = useState<string | null>(null);
   const [toggling,   setToggling]   = useState<string | null>(null);
-  const [syncing,    setSyncing]    = useState(false);
-  const [syncResult, setSyncResult] = useState<{ products: number; categories: number } | null>(null);
+  // StoreHub sync state intentionally removed — menu is managed
+  // manually now. /api/pickup/sync-storehub route is still wired for
+  // emergency reuse but no longer surfaced in the UI.
   const [uploading,  setUploading]  = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
@@ -190,6 +211,14 @@ export default function PickupMenu() {
       is_available:  p.is_available,
       is_popular:    p.is_popular,
       is_new:        p.is_new,
+      print_additional_docket:        p.print_additional_docket ?? false,
+      e_invoice_classification_code:  p.e_invoice_classification_code ?? "",
+      schedule_start_date:            p.schedule_start_date ?? "",
+      schedule_end_date:              p.schedule_end_date ?? "",
+      schedule_days_of_week:          p.schedule_days_of_week ?? [],
+      // DB stores HH:mm:ss; the <input type="time"> wants HH:mm — trim if needed.
+      schedule_time_from:             (p.schedule_time_from ?? "").slice(0, 5),
+      schedule_time_to:               (p.schedule_time_to ?? "").slice(0, 5),
     });
     setPreviewZoom(zoom);
     setShowForm(true);
@@ -213,7 +242,20 @@ export default function PickupMenu() {
       });
       setProducts((prev) => prev.map((p) =>
         p.id === editing.id
-          ? { ...p, name: form.name, description: form.description, base_price: Math.round(form.base_price_rm * 100), image: form.image, image_zoom: form.image_zoom, is_available: form.is_available, is_popular: form.is_popular, is_new: form.is_new, category_id: form.category_id }
+          ? { ...p,
+              name: form.name, description: form.description,
+              base_price: Math.round(form.base_price_rm * 100),
+              image: form.image, image_zoom: form.image_zoom,
+              is_available: form.is_available, is_popular: form.is_popular,
+              is_new: form.is_new, category_id: form.category_id,
+              print_additional_docket: form.print_additional_docket,
+              e_invoice_classification_code: form.e_invoice_classification_code,
+              schedule_start_date: form.schedule_start_date || null,
+              schedule_end_date: form.schedule_end_date || null,
+              schedule_days_of_week: form.schedule_days_of_week,
+              schedule_time_from: form.schedule_time_from || null,
+              schedule_time_to: form.schedule_time_to || null,
+            }
           : p
       ));
     } else {
@@ -347,21 +389,6 @@ export default function PickupMenu() {
     }
   }
 
-  async function syncFromStoreHub() {
-    setSyncing(true);
-    setSyncResult(null);
-    const res = await adminFetch("/api/pickup/sync-storehub", { method: "POST" });
-    const json = await res.json() as { ok?: boolean; error?: string; synced?: { products: number; categories: number } };
-    if (!res.ok || json.error) {
-      toast.error(json.error ?? "Sync failed");
-    } else {
-      setSyncResult(json.synced ?? null);
-      await load();
-      setTimeout(() => setSyncResult(null), 4000);
-    }
-    setSyncing(false);
-  }
-
   async function handleImageUpload(file: File) {
     setUploading(true);
     try {
@@ -409,7 +436,38 @@ export default function PickupMenu() {
   return (
     <div className="p-3 sm:p-6 space-y-5 max-w-4xl">
       <ConfirmDialog />
-      {/* Header */}
+      {/* Tabs — single-page consolidation. Catalog = product CRUD,
+          Availability = per-outlet on/off matrix. Was a separate
+          /pickup/menu/availability route; now internal state. */}
+      <div className="flex gap-1 bg-white rounded-xl p-1 w-fit border border-border/40">
+        <button
+          type="button"
+          onClick={() => setView("catalog")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            view === "catalog"
+              ? "bg-[#160800] text-white shadow-sm"
+              : "text-muted-foreground hover:text-[#160800]"
+          }`}
+        >
+          Catalog
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("availability")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            view === "availability"
+              ? "bg-[#160800] text-white shadow-sm"
+              : "text-muted-foreground hover:text-[#160800]"
+          }`}
+        >
+          Availability
+        </button>
+      </div>
+
+      {view === "availability" && <AvailabilityMatrix />}
+      {view === "catalog" && (
+        <>
+          {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[#160800]">Pickup Menu</h1>
@@ -424,18 +482,11 @@ export default function PickupMenu() {
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </button>
-          <button
-            onClick={syncFromStoreHub}
-            disabled={syncing}
-            className="flex items-center gap-2 border border-[#160800] text-[#160800] px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#160800]/5 transition-colors disabled:opacity-50"
-          >
-            {syncing
-              ? <Loader2 className="h-4 w-4 animate-spin" />
-              : syncResult
-              ? <Check className="h-4 w-4 text-green-600" />
-              : <CloudDownload className="h-4 w-4" />}
-            {syncing ? "Syncing..." : syncResult ? `Synced ${syncResult.products} ${syncResult.products === 1 ? 'product' : 'products'}` : "Sync StoreHub"}
-          </button>
+          {/* StoreHub sync removed from the UI — the menu is managed
+              directly in this backoffice now. The sync function +
+              /api/pickup/sync-storehub route are intentionally kept in
+              the codebase as reversible escape hatches if we ever need
+              to re-pull from POS legacy. */}
           <button
             onClick={openNew}
             className="flex items-center gap-2 bg-[#160800] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
@@ -605,6 +656,8 @@ export default function PickupMenu() {
             <div className="py-12 text-center text-sm text-muted-foreground">No products found</div>
           )}
         </div>
+      )}
+        </>
       )}
 
       {/* Image Zoom Lightbox */}
@@ -802,6 +855,114 @@ export default function PickupMenu() {
                     <span className="text-sm">{label}</span>
                   </label>
                 ))}
+              </div>
+
+              {/* ── Print + e-Invoice (StoreHub-parity, added 2026-05-24) ── */}
+              <Field label="Print additional kitchen docket">
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.print_additional_docket}
+                    onChange={(e) => setForm((f) => ({ ...f, print_additional_docket: e.target.checked }))}
+                    className="h-4 w-4 accent-[#160800]"
+                  />
+                  <span className="text-muted-foreground">Print a second copy of the kitchen docket for this item (e.g. set meals, beer packages).</span>
+                </label>
+              </Field>
+
+              <Field label="e-Invoice classification code (LHDN)">
+                <input
+                  type="text"
+                  value={form.e_invoice_classification_code}
+                  onChange={(e) => setForm((f) => ({ ...f, e_invoice_classification_code: e.target.value }))}
+                  placeholder="e.g. 022"
+                  className="w-full px-3 py-2 border rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  MSIC classification code for LHDN e-Invoice compliance. Look up at{" "}
+                  <a href="https://sdk.myinvois.hasil.gov.my/codes/classification-codes/" target="_blank" rel="noopener" className="text-indigo-600 hover:underline">myinvois.hasil.gov.my</a>.
+                </p>
+              </Field>
+
+              {/* ── Schedule — when this product is visible online ── */}
+              <div className="border rounded-2xl p-4 bg-muted/10 space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Online schedule</p>
+                <p className="text-[11px] text-muted-foreground -mt-2">
+                  Limits when this product appears on the customer-facing menu (pickup, web, Grab). POS register ignores schedule — cashiers can always sell anything.
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Start date">
+                    <input
+                      type="date"
+                      value={form.schedule_start_date ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, schedule_start_date: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </Field>
+                  <Field label="End date">
+                    <input
+                      type="date"
+                      value={form.schedule_end_date ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, schedule_end_date: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Days of week (empty = every day)">
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { d: 1, label: "Mon" },
+                      { d: 2, label: "Tue" },
+                      { d: 3, label: "Wed" },
+                      { d: 4, label: "Thu" },
+                      { d: 5, label: "Fri" },
+                      { d: 6, label: "Sat" },
+                      { d: 0, label: "Sun" },
+                    ].map(({ d, label }) => {
+                      const on = form.schedule_days_of_week.includes(d);
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setForm((f) => ({
+                            ...f,
+                            schedule_days_of_week: on
+                              ? f.schedule_days_of_week.filter((x) => x !== d)
+                              : [...f.schedule_days_of_week, d].sort(),
+                          }))}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                            on
+                              ? "bg-[#160800] text-white border-[#160800]"
+                              : "bg-white text-muted-foreground border-gray-200 hover:border-[#160800]"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="From time">
+                    <input
+                      type="time"
+                      value={form.schedule_time_from ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, schedule_time_from: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </Field>
+                  <Field label="To time">
+                    <input
+                      type="time"
+                      value={form.schedule_time_to ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, schedule_time_to: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </Field>
+                </div>
               </div>
 
               {/* Modifier groups — synced from StoreHub. Each group + option

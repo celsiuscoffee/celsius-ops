@@ -21,7 +21,7 @@ import { useConfirm, toast } from "@celsius/ui";
 import { PosterCropDialog } from "@/components/pickup/PosterCropDialog";
 import { PosterComposer, type ComposerState } from "@/components/pickup/PosterComposer";
 
-type Placement = "splash" | "home";
+type Placement = "splash" | "home" | "pos-display";
 
 type Poster = {
   id: string;
@@ -93,6 +93,12 @@ const PLACEMENT_META: Record<
     aspect:      (3 / 4) / 0.7,
     aspectLabel: "~15:14 (slightly wider than tall) · ~1200×1120",
     help:        "Auto-rotating banner on the home page. All active posters appear.",
+  },
+  "pos-display": {
+    label:       "POS customer screen",
+    aspect:      16 / 7,
+    aspectLabel: "16:7 ultra-wide · ~1600×700",
+    help:        "Auto-rotating banner shown on the second screen at the counter while idle. Drives sign-up + AOV upsells.",
   },
 };
 
@@ -577,9 +583,11 @@ export default function SplashPostersPage() {
       {!loading && posters.length > 0 && (() => {
         const splashCount = posters.filter((p) => (p.placement ?? "home") === "splash").length;
         const homeCount   = posters.filter((p) => (p.placement ?? "home") === "home").length;
+        const posCount    = posters.filter((p) => (p.placement ?? "home") === "pos-display").length;
         const tabs: { id: Placement; label: string; count: number }[] = [
-          { id: "home",   label: "Home",   count: homeCount   },
-          { id: "splash", label: "Splash", count: splashCount },
+          { id: "home",        label: "Home",        count: homeCount   },
+          { id: "splash",      label: "Splash",      count: splashCount },
+          { id: "pos-display", label: "POS screen",  count: posCount    },
         ];
         return (
           <div className="mb-4 flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
@@ -634,7 +642,7 @@ export default function SplashPostersPage() {
           return (
             <div className="rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center">
               <p className="text-sm text-gray-500">
-                No posters scheduled on {tab === "splash" ? "Splash" : "Home"}.
+                No posters scheduled on {tab === "splash" ? "Splash" : tab === "pos-display" ? "POS screen" : "Home"}.
               </p>
               <button
                 onClick={() => { setForm({ ...empty, placement: tab as Placement }); setShowForm(true); }}
@@ -652,10 +660,19 @@ export default function SplashPostersPage() {
             // Preview at the placement's natural aspect so the operator
             // sees what the customer will see on each surface.
             const aspectClass =
-              placement === "home" ? "aspect-[15/14]" : "aspect-[9/16]";
-            const placementLabel = placement === "splash" ? "SPLASH" : "HOME";
+              placement === "home"
+                ? "aspect-[15/14]"
+                : placement === "pos-display"
+                  ? "aspect-[16/7]"
+                  : "aspect-[9/16]";
+            const placementLabel =
+              placement === "splash" ? "SPLASH" : placement === "pos-display" ? "POS" : "HOME";
             const placementColor =
-              placement === "splash" ? "bg-indigo-500" : "bg-amber-500";
+              placement === "splash"
+                ? "bg-indigo-500"
+                : placement === "pos-display"
+                  ? "bg-emerald-600"
+                  : "bg-amber-500";
             return (
             <div
               key={p.id}

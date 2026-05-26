@@ -10,7 +10,9 @@ async function findActiveUsersWithPin(outletId?: string) {
   }
   let url = `${INV_SUPABASE_URL}/rest/v1/User?status=eq.ACTIVE&pin=not.is.null&select=id,name,role,pin,outletId`;
   if (outletId) {
-    url += `&outletId=eq.${outletId}`;
+    // Match this outlet OR users with no outlet binding (owners/managers).
+    // PostgREST OR syntax: or=(outletId.is.null,outletId.eq.<id>)
+    url += `&or=(outletId.is.null,outletId.eq.${outletId})`;
   }
   const res = await fetch(url, {
     headers: {
@@ -37,8 +39,12 @@ export async function POST(req: NextRequest) {
     let candidates: any[] = [];
     try {
       const { prisma } = await import("@/lib/prisma");
+      // Scope: outlet-bound staff (outletId = selected) PLUS cross-outlet
+      // roles (outletId IS NULL — owners, managers, head office) who must
+      // be able to log in at any terminal. The duplicate-PIN guard below
+      // still catches collisions across the merged set.
       const where: any = { pin: { not: null }, status: "ACTIVE" };
-      if (outletId) where.outletId = outletId;
+      if (outletId) where.OR = [{ outletId: null }, { outletId }];
       candidates = await prisma.user.findMany({
         where,
         include: { outlet: { select: { id: true, name: true } } },

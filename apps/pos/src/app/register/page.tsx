@@ -17,6 +17,7 @@ import { POSSettings } from "@/components/pos/pos-settings";
 import { PromoIndicator } from "@/components/pos/promo-indicator";
 import { RewardPickerModal } from "@/components/pos/reward-picker-modal";
 import { usePOS } from "@/lib/pos-context";
+import { usePickupPrinter } from "@/lib/use-pickup-printer";
 import { adaptProducts } from "@/lib/product-adapter";
 import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/sunmi-printer";
 import { lookupMemberByPhone, type LoyaltyMember } from "@/lib/customer-lookup";
@@ -89,6 +90,18 @@ export default function RegisterPage() {
 
   // Adapt products from Supabase format to POS format (memoized)
   const allProducts = useMemo(() => adaptProducts(pos.products), [pos.products]);
+
+  // Pickup orders → kitchen dockets. When a customer places an order
+  // via apps/pickup-native for this outlet, the register auto-prints
+  // station-routed kitchen dockets (Bar / Kitchen / Pastry) using the
+  // same printer pipeline as in-store orders. Idempotent via the
+  // orders.kitchen_docket_printed_at flag so two POS terminals in the
+  // same outlet don't double-print. See lib/use-pickup-printer.ts.
+  const productsByIdForPrinter = useMemo(
+    () => new Map(allProducts.map((p) => [p.id, { id: p.id, kitchen_station: (p as { kitchen_station?: string | null }).kitchen_station ?? null }])),
+    [allProducts],
+  );
+  usePickupPrinter(pos.outlet?.id ?? null, productsByIdForPrinter);
 
   // Register state
   const [activeCategory, setActiveCategory] = useState("all");
@@ -317,8 +330,57 @@ export default function RegisterPage() {
     };
   }, [cart, loyaltyMember?.id, loyaltyMember?.tier?.id, pos.outlet?.id, rewardDiscount]);
 
-  const autoPromoDiscount = autoPromotions.reduce((sum, p) => sum + p.discountAmount, 0);
+  const apiAutoPromoDiscount = autoPromotions.reduce((sum, p) => sum + p.discountAmount, 0);
   const manualPromoDiscount = appliedManualPromo?.discountAmount ?? 0;
+
+  // Local subtotal for the tier-discount safety net below. The
+  // canonical `subtotal` is defined further down (depends on cart
+  // and is reused for cart totals); we recompute here in sen so
+  // the safety-net math doesn't depend on declaration order.
+  const subtotalForTier = cart.reduce((sum, i) => sum + i.lineTotal, 0);
+
+  // ── Client-side tier discount safety net ─────────────────
+  // The server's /api/loyalty/evaluate-promotions runs the same
+  // tier-perk math and folds the % off into autoPromotions for us,
+  // but a slow/failed/aborted roundtrip (e.g. between rapid cart
+  // edits, network blip, cold start) leaves the cart with no tier
+  // discount visible to the cashier — Ammar reported a Black Card
+  // member showing full subtotal because the 50% off never landed.
+  // To prevent that, we compute the tier discount client-side too.
+  // The result is used WHENEVER the server's autoPromotions doesn't
+  // already contain a `tier:` line — so there's no double-counting,
+  // and when the server responds first the server wins. Stable
+  // across reloads since loyaltyMember.tier carries discount_percent
+  // + stackable from the lookup.
+  //
+  // Math mirrors apps/pos/src/app/api/loyalty/evaluate-promotions/
+  // route.ts applyTierDiscount() exactly:
+  //   • Non-stackable (Staff / Black Card): tier % × raw subtotal
+  //   • Stackable (Silver / Gold / Platinum): tier % × (subtotal
+  //     - other auto-promos - voucher), floored at 0
+  const localTierDiscount = (() => {
+    const t = loyaltyMember?.tier;
+    if (!t || !t.discount_percent || t.discount_percent <= 0) return 0;
+    if (subtotalForTier <= 0) return 0;
+    // Skip if the server already returned a tier line — its math
+    // includes server-only data (engine-evaluated promos, voucher
+    // remainder) and is canonical when present.
+    const serverHasTier = autoPromotions.some(
+      (p) => p.promotion?.id?.startsWith?.("tier:") ?? false,
+    );
+    if (serverHasTier) return 0;
+
+    if (t.stackable === false) {
+      return Math.round(subtotalForTier * (t.discount_percent / 100));
+    }
+    const remaining = Math.max(
+      0,
+      subtotalForTier - apiAutoPromoDiscount - rewardDiscount,
+    );
+    return Math.round(remaining * (t.discount_percent / 100));
+  })();
+
+  const autoPromoDiscount = apiAutoPromoDiscount + localTierDiscount;
 
   // Auto-show shift modal
   useEffect(() => {
@@ -331,11 +393,24 @@ export default function RegisterPage() {
   // 5 columns × ~312px tiles wastes most of the extra real estate).
   // Outlets that have set pos_branch_settings.grid_columns keep their
   // explicit value.
+  //
+  // The register layout pins the page inside a fixed 1920×1080 frame
+  // (see app/register/layout.tsx) so desktop preview matches the
+  // SUNMI exactly. Resolve viewport width against `.pos-frame` when
+  // present so the grid column heuristic uses the frame width (1920)
+  // instead of whatever the actual browser window is. Falls back to
+  // window.innerWidth on the device, where there is no frame because
+  // the frame fills the entire screen.
+  const readFrameWidth = () => {
+    if (typeof window === "undefined") return 1920;
+    const frame = document.querySelector(".pos-frame") as HTMLElement | null;
+    return frame?.clientWidth ?? window.innerWidth;
+  };
   const [viewportWidth, setViewportWidth] = useState(
-    typeof window === "undefined" ? 1280 : window.innerWidth,
+    typeof window === "undefined" ? 1920 : readFrameWidth(),
   );
   useEffect(() => {
-    const onResize = () => setViewportWidth(window.innerWidth);
+    const onResize = () => setViewportWidth(readFrameWidth());
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
@@ -447,6 +522,7 @@ export default function RegisterPage() {
   useEffect(() => {
     broadcastToCustomerDisplay({
       items: cart.map((i) => ({
+        productId: i.product.id,
         name: i.product.name,
         qty: i.quantity,
         amount: i.lineTotal,
@@ -458,7 +534,15 @@ export default function RegisterPage() {
       total,
       outletId: pos.outlet?.id ?? "",
       outletName: pos.outlet?.name ?? "Celsius Coffee",
-      status: cart.length === 0 ? "idle" : "ordering",
+      // showCheckout flips us into "payment" mode — customer-display
+      // takes over with a full-screen Scan-to-Pay view. Empty cart =
+      // "idle" no matter what (no checkout possible). After the
+      // modal closes we revert to "ordering" naturally.
+      status: cart.length === 0
+        ? "idle"
+        : showCheckout
+          ? "payment"
+          : "ordering",
       member: loyaltyMember
         ? {
             id: loyaltyMember.id,
@@ -475,11 +559,23 @@ export default function RegisterPage() {
               discount_sen: rewardDiscount,
             }
           : null,
-      autoPromotions: autoPromotions.map((p) => ({
-        id: p.promotion.id,
-        name: p.description,
-        discount_sen: p.discountAmount,
-      })),
+      // Server-returned promos + the client-side tier safety net
+      // (when the server didn't include one). The customer-display
+      // shows each as a labelled discount line.
+      autoPromotions: [
+        ...autoPromotions.map((p) => ({
+          id: p.promotion.id,
+          name: p.description,
+          discount_sen: p.discountAmount,
+        })),
+        ...(localTierDiscount > 0 && loyaltyMember?.tier
+          ? [{
+              id: `tier:${loyaltyMember.tier.id}`,
+              name: `${loyaltyMember.tier.name} — ${loyaltyMember.tier.discount_percent}% off`,
+              discount_sen: localTierDiscount,
+            }]
+          : []),
+      ],
     });
   }, [
     cart,
@@ -494,7 +590,18 @@ export default function RegisterPage() {
     rewardDiscount,
     appliedVoucherId,
     rewardRedemptionId,
+    showCheckout,
     autoPromotions,
+    localTierDiscount,
+    // appliedManualPromo affects totalDiscount (via manualPromoDiscount
+    // → autoPromoDiscount-adjacent math) but its reference was missing
+    // from this dep array, so when the cashier applied a manual
+    // discount via DiscountModal the register's `total` updated but
+    // no re-broadcast fired. The customer-display kept showing the
+    // pre-discount total, and the Maybank QR encoded the wrong amount
+    // — customer scanned and paid full price on a discounted order.
+    appliedManualPromo,
+    discount,
   ]);
 
   // ─── Inbound messages from customer-display ───────────────
@@ -801,95 +908,91 @@ export default function RegisterPage() {
         rewardDiscount,
       });
 
-      // Award loyalty points if member is identified
+      // ── Loyalty post-processing — TRULY fire-and-forget ────
+      // All four calls below were previously `await fetch(...)`,
+      // which made the "Payment Successful" modal sit for however
+      // long the slowest endpoint took to respond. If any one
+      // hung (cold start, mission service blip, rate-limit retry)
+      // the cashier saw a frozen UI on a paid order. The order is
+      // already committed at this point — none of these calls
+      // affect the receipt, the cart, or the customer's payment
+      // confirmation, so they MUST not gate the UI.
+      //
+      // Pattern: build the request body, fire `void fetch(...)`
+      // with a .catch() to swallow errors. No awaits. The browser
+      // happily holds the in-flight request even after the modal
+      // closes and the cart clears — typically completing in
+      // ~200ms in the background.
       if (loyaltyMember && total > 0 && pos.outlet) {
-        try {
-          await fetch("/api/loyalty/earn", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              member_id: loyaltyMember.id,
-              outlet_id: pos.outlet.id,
-              amount_rm: total / 100, // sen → RM
-              order_id: order.id,
-              order_number: order.order_number,
-            }),
-          });
-        } catch (e) {
-          console.error("[LOYALTY] Points earning failed:", e);
-        }
+        void fetch("/api/loyalty/earn", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            member_id: loyaltyMember.id,
+            outlet_id: pos.outlet.id,
+            amount_rm: total / 100, // sen → RM
+            order_id: order.id,
+            order_number: order.order_number,
+          }),
+        }).catch((e) => console.error("[LOYALTY] Points earning failed:", e));
       }
 
       // Customer-display deferred-burn voucher: flip status='used' now
       // that the order is actually paid. The /redeem path burns at apply
       // time; the apply-voucher path doesn't, so we owe the burn here.
       if (appliedVoucherId && loyaltyMember) {
-        try {
-          await fetch("/api/loyalty/mark-used", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              member_id: loyaltyMember.id,
-              voucher_id: appliedVoucherId,
-            }),
-          });
-        } catch (e) {
-          console.error("[LOYALTY] mark-used failed:", e);
-        }
+        void fetch("/api/loyalty/mark-used", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            member_id: loyaltyMember.id,
+            voucher_id: appliedVoucherId,
+          }),
+        }).catch((e) => console.error("[LOYALTY] mark-used failed:", e));
       }
 
       // Deferred Spend Beans burn — the customer tapped a "Spend X
       // Beans" tile on the second screen which only applied the
       // discount; the actual point deduction (and redemption record)
       // happens here so a voided cart doesn't burn the customer's
-      // Beans. Fire-and-forget: order is already committed, we don't
-      // want a network blip on /redeem to roll the order back.
+      // Beans.
       if (pendingShopRedemption && loyaltyMember) {
-        try {
-          await fetch("/api/loyalty/redeem", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              member_id: loyaltyMember.id,
-              reward_id: pendingShopRedemption.rewardId,
-              outlet_id: pos.outlet?.id ?? "",
-            }),
-          });
-        } catch (e) {
-          console.error("[LOYALTY] pending Spend Beans burn failed:", e);
-        }
+        void fetch("/api/loyalty/redeem", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            member_id: loyaltyMember.id,
+            reward_id: pendingShopRedemption.rewardId,
+            outlet_id: pos.outlet?.id ?? "",
+          }),
+        }).catch((e) => console.error("[LOYALTY] pending Spend Beans burn failed:", e));
       }
 
       // Mission / challenge progress — POS orders advance challenges
       // the same way pickup orders do, via the same goal evaluator
       // (ported into apps/pos/src/app/api/loyalty/apply-order-to-mission).
       // Without this call, RM50 Bill / Weekend Run / Make it a Meal
-      // stay at 0/X forever for in-store members. Fire-and-forget so a
-      // network blip on the mission service doesn't gate the order.
+      // stay at 0/X forever for in-store members.
       if (loyaltyMember && pos.outlet?.id) {
-        try {
-          await fetch("/api/loyalty/apply-order-to-mission", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              member_id: loyaltyMember.id,
-              order: {
-                id: order.id,
-                outlet_id: pos.outlet.id,
-                items: cart.map((i) => ({
-                  product_id: i.product.id,
-                  category: i.product.category ?? null,
-                  quantity: i.quantity,
-                })),
-                item_count: cart.reduce((s, i) => s + i.quantity, 0),
-                total_sen: total,
-                created_at: new Date().toISOString(),
-              },
-            }),
-          });
-        } catch (e) {
-          console.error("[LOYALTY] mission tick failed:", e);
-        }
+        void fetch("/api/loyalty/apply-order-to-mission", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            member_id: loyaltyMember.id,
+            order: {
+              id: order.id,
+              outlet_id: pos.outlet.id,
+              items: cart.map((i) => ({
+                product_id: i.product.id,
+                category: i.product.category ?? null,
+                quantity: i.quantity,
+              })),
+              item_count: cart.reduce((s, i) => s + i.quantity, 0),
+              total_sen: total,
+              created_at: new Date().toISOString(),
+            },
+          }),
+        }).catch((e) => console.error("[LOYALTY] mission tick failed:", e));
       }
 
       // Show "Thank You" on customer display
@@ -938,6 +1041,19 @@ export default function RegisterPage() {
     } catch (err) {
       console.error("Order creation failed:", err);
       toast.error("Failed to create order. Please try again.");
+      // CRITICAL: clear any pending Spend Beans / voucher state so it
+      // doesn't leak into the NEXT order. Previously these stayed set
+      // when order creation threw — the cashier would retry or move on
+      // to the next customer, and on that customer's successful order
+      // the prior customer's Beans got burned. Voucher applied state
+      // had the same risk. Closing the checkout modal too so the
+      // cashier can adjust + retry without a stuck overlay.
+      setPendingShopRedemption(null);
+      setRewardDiscount(0);
+      setRewardName(null);
+      setRewardRedemptionId(null);
+      setAppliedVoucherId(null);
+      setShowCheckout(false);
     }
   }
 

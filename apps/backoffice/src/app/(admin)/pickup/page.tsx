@@ -301,6 +301,16 @@ export default function PickupDashboard() {
   return (
     <div className="p-3 sm:p-6 space-y-6 max-w-6xl">
 
+      {/* Sub-page tabs: Overview (this page) ↔ Analytics */}
+      <div className="flex gap-1 bg-white rounded-xl p-1 w-fit border border-border/40">
+        <Link href="/pickup" className="px-4 py-2 rounded-lg text-sm font-medium bg-[#160800] text-white shadow-sm">
+          Overview
+        </Link>
+        <Link href="/pickup/analytics" className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-[#160800] transition-colors">
+          Analytics
+        </Link>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>

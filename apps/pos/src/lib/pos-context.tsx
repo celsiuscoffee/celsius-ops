@@ -211,9 +211,47 @@ export function POSProvider({ children }: { children: ReactNode }) {
         setOutlets(outletData as Outlet[]);
         setAllStaff(staffData as Staff[]);
 
-        // Default to first outlet
+        // Resolve which outlet this terminal operates as.
+        //
+        // The login page stores a Prisma `Outlet` UUID in
+        // localStorage.pos_outlet_id, but the POS register operates
+        // against the lowercase Supabase `outlets` table which uses
+        // legacy string IDs ("outlet-sa", "outlet-con", …). We bridge
+        // the two by name-matching on the common substring after
+        // "Celsius Coffee " — Prisma "Celsius Coffee Shah Alam"
+        // matches Supabase "Celsius Coffee Shah Alam" → outlet-sa.
+        //
+        // Falls back to the first outlet only when nothing matches —
+        // previously this fallback was the always-chosen default,
+        // which silently funnelled every terminal's orders to whichever
+        // outlet sorted alphabetically first (Conezion).
         if (outletData.length > 0) {
-          const defaultOutlet = outletData[0] as Outlet;
+          const savedLoginOutletId = typeof window !== "undefined"
+            ? window.localStorage.getItem("pos_outlet_id")
+            : null;
+          let resolved: Outlet | null = null;
+          if (savedLoginOutletId) {
+            // Match the saved login UUID by name against the Supabase
+            // outlets list. We fetch the Prisma outlets via /api/outlets
+            // (returns UUIDs + names) to look up the name first.
+            try {
+              const res = await fetch("/api/outlets");
+              const json = (await res.json()) as { outlets?: { id: string; name: string }[] };
+              const loginOutlet = (json.outlets ?? []).find((o) => o.id === savedLoginOutletId);
+              if (loginOutlet) {
+                const tokens = loginOutlet.name
+                  .replace(/celsius\s*coffee/gi, "")
+                  .toLowerCase()
+                  .trim();
+                resolved = (outletData as Outlet[]).find((o) =>
+                  o.name.toLowerCase().includes(tokens),
+                ) ?? null;
+              }
+            } catch {
+              /* offline / API error — fall through to first outlet */
+            }
+          }
+          const defaultOutlet = resolved ?? (outletData[0] as Outlet);
           setOutlet(defaultOutlet);
 
           const [regs, settings, prods, cats, popular, layouts] = await Promise.all([

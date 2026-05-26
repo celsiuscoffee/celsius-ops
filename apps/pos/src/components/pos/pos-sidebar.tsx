@@ -3,6 +3,17 @@
 import { usePOS } from "@/lib/pos-context";
 import { displayRM } from "@/types/database";
 import { format } from "date-fns";
+import {
+  CreditCard,
+  ClipboardList,
+  Receipt,
+  BarChart3,
+  Settings,
+  Briefcase,
+  LogOut,
+  ArrowUpRight,
+  type LucideIcon,
+} from "lucide-react";
 
 type Props = {
   isOpen: boolean;
@@ -21,12 +32,12 @@ export function POSSidebar({ isOpen, onClose, onNavigate, activePage }: Props) {
     .filter((o) => o.status === "completed")
     .reduce((sum, o) => sum + o.total, 0);
 
-  const navItems = [
-    { id: "register", label: "Register", icon: "💳", badge: null },
-    { id: "orders", label: "Open Orders", icon: "📋", badge: openOrders.length > 0 ? openOrders.length : null },
-    { id: "transactions", label: "Transactions", icon: "📝", badge: completedCount > 0 ? completedCount : null },
-    { id: "shift", label: "Shift Report", icon: "📊", badge: null },
-    { id: "settings", label: "Settings", icon: "⚙️", badge: null },
+  const navItems: { id: string; label: string; Icon: LucideIcon; badge: number | null }[] = [
+    { id: "register",     label: "Register",      Icon: CreditCard,    badge: null },
+    { id: "orders",       label: "Open Orders",   Icon: ClipboardList, badge: openOrders.length > 0 ? openOrders.length : null },
+    { id: "transactions", label: "Transactions",  Icon: Receipt,       badge: completedCount > 0 ? completedCount : null },
+    { id: "shift",        label: "Shift Report",  Icon: BarChart3,     badge: null },
+    { id: "settings",     label: "Settings",      Icon: Settings,      badge: null },
   ];
 
   return (
@@ -111,7 +122,7 @@ export function POSSidebar({ isOpen, onClose, onNavigate, activePage }: Props) {
               }`}
             >
               <div className="flex items-center gap-3">
-                <span>{item.icon}</span>
+                <item.Icon className="h-4 w-4" />
                 <span>{item.label}</span>
               </div>
               {item.badge && (
@@ -125,12 +136,18 @@ export function POSSidebar({ isOpen, onClose, onNavigate, activePage }: Props) {
 
         {/* Bottom actions */}
         <div className="border-t border-border px-3 py-3">
+          {/* BackOffice opens the unified backoffice (products, staff,
+              rewards live there now). External target so a kiosk POS doesn't
+              navigate away from the register. */}
           <a
-            href="/backoffice"
+            href="https://backoffice.celsiuscoffee.com"
+            target="_blank"
+            rel="noopener noreferrer"
             className="mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-text-muted hover:bg-surface-hover hover:text-text"
           >
-            <span>⚙️</span>
-            <span>BackOffice</span>
+            <Briefcase className="h-4 w-4" />
+            <span className="flex-1 text-left">BackOffice</span>
+            <ArrowUpRight className="h-3 w-3 text-text-dim" />
           </a>
           <button
             onClick={() => {
@@ -139,7 +156,7 @@ export function POSSidebar({ isOpen, onClose, onNavigate, activePage }: Props) {
             }}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-danger hover:bg-danger/10"
           >
-            <span>🚪</span>
+            <LogOut className="h-4 w-4" />
             <span>Sign Out</span>
           </button>
         </div>

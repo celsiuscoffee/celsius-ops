@@ -1,4 +1,7 @@
-import { generateOTP, sendOTP as _sendOTP, verifyOTP as _verifyOTP } from "@celsius/shared";
+// Deep import (not the barrel) — barrel doesn't re-export OTP anymore
+// because it would drag node:crypto into Edge Middleware bundles. See
+// packages/shared/src/index.ts comment for context.
+import { generateOTP, sendOTP as _sendOTP, verifyOTP as _verifyOTP } from "@celsius/shared/src/otp";
 import { supabaseAdmin } from "./supabase";
 
 export { generateOTP };

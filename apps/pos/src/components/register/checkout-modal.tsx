@@ -6,16 +6,18 @@ import { displayRM } from "@/types/database";
 // QRPaymentModal kept for future standalone QR flow
 // import { QRPaymentModal } from "@/components/pos/qr-payment-modal";
 
+import { QrCode, CreditCard, type LucideIcon } from "lucide-react";
+
 type PaymentMethod = {
   id: string;
   label: string;
-  icon: string;
+  Icon: LucideIcon;
   provider: string;
 };
 
 const PAYMENT_METHODS: PaymentMethod[] = [
-  { id: "qr_pay", label: "DuitNow QR", icon: "📲", provider: "revenue_monster" },
-  { id: "card_terminal", label: "Card (Terminal)", icon: "💳", provider: "revenue_monster" },
+  { id: "qr_pay",        label: "DuitNow QR",      Icon: QrCode,     provider: "revenue_monster" },
+  { id: "card_terminal", label: "Card (Terminal)", Icon: CreditCard, provider: "revenue_monster" },
 ];
 
 // Map checkout method IDs to Revenue Monster terminal payment types
@@ -69,6 +71,18 @@ export function CheckoutModal({
     setSelectedMethod(methodId);
     setStep("processing");
     setError("");
+
+    // Free order shortcut — when the cart is fully comped by voucher +
+    // tier discount, total is RM 0 and there's nothing to charge.
+    // Skip the terminal entirely and complete as Complimentary so the
+    // cashier doesn't sit through a pointless "Payment Failed" loop.
+    if (total <= 0) {
+      setStep("success");
+      setTimeout(() => {
+        onComplete(orderNumber, queueNumber, "Complimentary");
+      }, 800);
+      return;
+    }
 
     try {
       const rmType = RM_TYPE_MAP[methodId] || "E-WALLET";
@@ -174,19 +188,38 @@ export function CheckoutModal({
             </div>
 
             <div className="px-5 py-5">
-              <p className="mb-3 text-base font-medium text-text-muted">Select payment method</p>
-              <div className="grid grid-cols-2 gap-4">
-                {PAYMENT_METHODS.map((method) => (
+              {total <= 0 ? (
+                // Free order — discounts already cover the bill. No
+                // need to ask for a payment method; one big button to
+                // confirm and complete.
+                <>
+                  <p className="mb-3 text-base font-medium text-success">
+                    Nothing to charge — discounts cover the order
+                  </p>
                   <button
-                    key={method.id}
-                    onClick={() => handleSelectMethod(method.id)}
-                    className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border p-6 transition-all hover:border-brand hover:shadow-sm active:scale-[0.98]"
+                    onClick={() => handleSelectMethod("free")}
+                    className="w-full rounded-xl bg-brand py-4 text-base font-semibold text-white transition hover:bg-brand-dark active:scale-[0.98]"
                   >
-                    <span className="text-4xl">{method.icon}</span>
-                    <span className="text-base font-semibold">{method.label}</span>
+                    Complete (Complimentary)
                   </button>
-                ))}
-              </div>
+                </>
+              ) : (
+                <>
+                  <p className="mb-3 text-base font-medium text-text-muted">Select payment method</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    {PAYMENT_METHODS.map((method) => (
+                      <button
+                        key={method.id}
+                        onClick={() => handleSelectMethod(method.id)}
+                        className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border p-6 transition-all hover:border-brand hover:shadow-sm active:scale-[0.98]"
+                      >
+                        <method.Icon className="h-10 w-10 text-brand" strokeWidth={1.8} />
+                        <span className="text-base font-semibold">{method.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </>
         )}

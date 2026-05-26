@@ -1,0 +1,18 @@
+{
+  "name": "@celsius-tools/print-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local HTTP → ESC/POS bridge for Celsius POS station printers",
+  "main": "server.js",
+  "bin": {
+    "celsius-print-bridge": "server.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test:health": "curl -s http://localhost:8080/health | jq .",
+    "test:bar": "curl -s -X POST http://localhost:8080/print -H 'Content-Type: application/json' -d '{\"printer\":\"bar\",\"data\":\"** BAR TEST **\\nLatte\\n** END **\"}'"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

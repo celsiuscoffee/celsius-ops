@@ -19,6 +19,7 @@ import { Wifi, Printer, Receipt, X, CheckCircle, Package, Loader2, Pause, Play, 
 import { printKitchenSlip, printReceipt } from "@/lib/thermal-print";
 import { hasSunmiPrinter } from "@/lib/sunmi-printer";
 import { isCapacitorNative, nativePrintKitchenSlip, nativePrintReceipt } from "@/lib/sunmi-native";
+import { printOrderToStationPrinters } from "@/lib/station-printer";
 import { getSession } from "@/lib/staff-auth";
 import { StaffNav } from "@/components/staff-nav";
 import type { OrderRow, OrderItemRow } from "@/lib/supabase/types";
@@ -202,16 +203,49 @@ function buildReceiptHtml(order: OrderWithItems): string {
 }
 
 function doPrint(_orderId: string, type: "kitchen" | "receipt", order: OrderWithItems) {
+  // Multi-station routing FIRST (kitchen slips only). When the
+  // outlet has `pos_printer_config` rows wired in the BO, this
+  // POSTs one docket per station (Bar / Counter / Kitchen) to the
+  // local print bridge at localhost:8080 — same path the POS uses
+  // so pickup orders land on the same physical printers as in-store
+  // orders. Receipts stay on the single per-outlet receipt path
+  // below (no per-station fan-out needed).
+  //
+  // Falls through to the existing native/SUNMI/browser chain when:
+  //   - No printer configs exist for the outlet (most outlets
+  //     today have empty pos_printer_config), OR
+  //   - The local bridge at localhost:8080 isn't running.
+  // In both cases the kitchen still gets a slip, just on the
+  // built-in printer as before.
+  if (type === "kitchen") {
+    void printOrderToStationPrinters(order).then((sent) => {
+      if (sent) return;
+      // Fallback chain (only fires if station routing returned false)
+      if (isCapacitorNative()) {
+        nativePrintKitchenSlip(order).catch(console.error);
+        return;
+      }
+      if (hasSunmiPrinter()) {
+        printKitchenSlip(order);
+        return;
+      }
+      printViaBrowser(order, "kitchen");
+    });
+    return;
+  }
+
   if (isCapacitorNative()) {
-    if (type === "kitchen") nativePrintKitchenSlip(order).catch(console.error);
-    else nativePrintReceipt(order).catch(console.error);
+    nativePrintReceipt(order).catch(console.error);
     return;
   }
   if (hasSunmiPrinter()) {
-    if (type === "kitchen") printKitchenSlip(order);
-    else printReceipt(order);
+    printReceipt(order);
     return;
   }
+  printViaBrowser(order, "receipt");
+}
+
+function printViaBrowser(order: OrderWithItems, type: "kitchen" | "receipt") {
   const html = type === "kitchen" ? buildKitchenHtml(order) : buildReceiptHtml(order);
   let zone = document.getElementById("kds-print-zone");
   if (!zone) {

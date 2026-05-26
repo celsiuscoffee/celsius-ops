@@ -4,7 +4,13 @@
 // Uses Supabase for persistent storage (required for Vercel serverless)
 // ==========================================
 
-import { timingSafeEqual, randomInt } from 'crypto';
+// Node-only `crypto` imports — required for OTP generation +
+// constant-time comparison. The `node:` protocol prefix tells
+// Next.js / Turbopack to treat these as native Node built-ins
+// and not bundle them for the Edge/browser runtimes (which is what
+// triggers "Ecmascript file had an error" when the chain reaches
+// middleware via packages/shared/src/index.ts).
+import { timingSafeEqual, randomInt } from 'node:crypto';
 import { sendSMS } from './sms';
 import type { SupabaseClient } from '@supabase/supabase-js';
 

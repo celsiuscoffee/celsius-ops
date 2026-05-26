@@ -115,7 +115,7 @@ export function POSSettings() {
       items: [
         { label: "Receipt Printer", value: printer.receipt },
         { label: "Print Method", value: printer.method },
-        { label: "Paper Size", value: "58mm" },
+        { label: "Paper Size", value: "80mm" },
       ],
     },
     {

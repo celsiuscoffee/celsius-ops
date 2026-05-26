@@ -1,16 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { CreditCard, Smartphone, ShoppingBag, Landmark, type LucideIcon } from "lucide-react";
 import type { CartItem } from "@/types/database";
 import { displayRM } from "@/types/database";
 
-type PaymentMethod = { id: string; label: string; icon: string };
+type PaymentMethod = { id: string; label: string; Icon: LucideIcon };
 
 const METHODS: PaymentMethod[] = [
-  { id: "ghl_terminal", label: "Card (Terminal)", icon: "💳" },
-  { id: "tng", label: "Touch 'n Go", icon: "📱" },
-  { id: "grabpay", label: "GrabPay", icon: "🟢" },
-  { id: "fpx", label: "FPX", icon: "🏦" },
+  { id: "ghl_terminal", label: "Card (Terminal)", Icon: CreditCard },
+  { id: "tng",          label: "Touch 'n Go",     Icon: Smartphone },
+  { id: "grabpay",      label: "GrabPay",         Icon: ShoppingBag },
+  { id: "fpx",          label: "FPX",             Icon: Landmark },
 ];
 
 type Split = { method: string; amount: number; status: "pending" | "paid" };
@@ -135,7 +136,7 @@ export function SplitBillModal({ total, onComplete, onClose }: Props) {
                 {METHODS.map((m) => (
                   <button key={m.id} onClick={() => handleSelectMethod(m.id)}
                     className="flex items-center gap-2 rounded-xl border border-border p-3 text-left transition-all hover:border-brand active:scale-[0.98]">
-                    <span className="text-xl">{m.icon}</span>
+                    <m.Icon className="h-5 w-5 text-brand" strokeWidth={1.8} />
                     <span className="text-xs font-medium">{m.label}</span>
                   </button>
                 ))}

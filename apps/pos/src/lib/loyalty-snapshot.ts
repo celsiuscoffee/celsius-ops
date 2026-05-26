@@ -538,11 +538,12 @@ export async function fetchLoyaltySnapshot(
   })();
 
   // Brand-wide popular bites — fallback for the "Pair with a bite"
-  // suggestion strip on the cart panel. We surface up to 5 bite-
-  // category items that are currently in stock + available; the
-  // customer-display picks any that aren't already in the cart so
-  // it can always show at least one suggestion even when the
-  // member's own usuals overlap with their cart.
+  // suggestion strip on the cart panel. Bigger pool (24) so the
+  // customer-display has room to sample across categories and
+  // present a varied mix (cookie + croissant + cake + sandwich)
+  // instead of three cakes in a row when recent items happen to
+  // cluster on one category. The display owns the diversification
+  // + shuffle logic; this just returns the pool.
   const popularBitesPromise = (async (): Promise<BiteItem[]> => {
     const BITE_CATEGORIES = [
       "croissant", "cookies", "cakes", "sandwiches",
@@ -554,7 +555,7 @@ export async function fetchLoyaltySnapshot(
       .in("category", BITE_CATEGORIES)
       .eq("is_available", true)
       .order("created_at", { ascending: false })
-      .limit(10);
+      .limit(24);
     if (!data) return [];
     return (data as Array<{ id: string; name: string; category: string; price: number | string; image_url: string | null }>)
       .map((p) => ({

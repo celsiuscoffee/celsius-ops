@@ -1,9 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-/* Space Grotesk — the secondary brand font, used in the poster composer
-   alongside Peachi. Loaded from Google Fonts so the browser caches the
-   binary across the org's other Next.js apps. */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
+/* Space Grotesk is loaded via next/font in app/layout.tsx — exposed as
+   --font-space-grotesk and wired into @theme below. Loading via @import
+   url(...) here conflicts with Tailwind 4's @import expansion order. */
 
 @source "../../../../packages/ui/src";
 
@@ -35,7 +34,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: 'Space Grotesk', system-ui, sans-serif;
+  --font-sans: var(--font-space-grotesk), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
   --font-heading: 'Peachi', Georgia, serif;
 
@@ -119,36 +118,51 @@
 }
 
 .dark {
-  --background: #0c0c0c;
-  --foreground: #e5e5e5;
-  --card: #161616;
-  --card-foreground: #e5e5e5;
-  --popover: #1a1a1a;
-  --popover-foreground: #e5e5e5;
+  /* Base — near-black for OLED comfort, but not pure #000 (avoids "void" feel) */
+  --background: #0a0a0b;
+  --foreground: #f1f1f3;
+
+  /* Surface hierarchy — each step is ~6 luminance units brighter for clear elevation */
+  --card: #141416;
+  --card-foreground: #f1f1f3;
+  --popover: #1c1c1f;
+  --popover-foreground: #f1f1f3;
+
+  /* Secondary surfaces */
+  --secondary: #1c1c1f;
+  --secondary-foreground: #f1f1f3;
+  --muted: #18181b;
+  --muted-foreground: #a1a1aa;
+
+  /* Brand — terracotta lifted for AA contrast on dark surfaces */
   --primary: #D4654F;
-  --primary-foreground: #ffffff;
-  --secondary: #1e1e1e;
-  --secondary-foreground: #e5e5e5;
-  --muted: #1e1e1e;
-  --muted-foreground: #a8a8a8;
+  --primary-foreground: #1a0a06;
   --accent: #D4654F;
-  --accent-foreground: #ffffff;
-  --destructive: #ef4444;
-  --border: #2a2a2a;
-  --input: #2a2a2a;
+  --accent-foreground: #1a0a06;
+
+  /* Status */
+  --destructive: #f87171;
+
+  /* Structure — borders are subtle but visible against card surfaces */
+  --border: #2e2e33;
+  --input: #2e2e33;
   --ring: #D4654F;
+
+  /* Charts — brand sequence, lifted */
   --chart-1: #D4654F;
   --chart-2: #C2452D;
   --chart-3: #e8836e;
   --chart-4: #f5f3f0;
-  --chart-5: #1e1e1e;
-  --sidebar: #0a0a0a;
-  --sidebar-foreground: #e5e5e5;
+  --chart-5: #1c1c1f;
+
+  /* Sidebar — deepest surface for clear separation from content */
+  --sidebar: #050506;
+  --sidebar-foreground: #e5e5e8;
   --sidebar-primary: #D4654F;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1e1e1e;
-  --sidebar-accent-foreground: #e5e5e5;
-  --sidebar-border: #2a2a2a;
+  --sidebar-primary-foreground: #1a0a06;
+  --sidebar-accent: #1c1c1f;
+  --sidebar-accent-foreground: #f1f1f3;
+  --sidebar-border: #1c1c1f;
   --sidebar-ring: #D4654F;
   color-scheme: dark;
 }
@@ -178,12 +192,25 @@
 /* These remap common light-mode classes so all pages get dark mode      */
 /* automatically without adding dark: variants to every file.            */
 
-/* ── Backgrounds ── */
-.dark .bg-white { background-color: var(--card) !important; }
+/* ── Backgrounds ──
+   Map both unprefixed (bg-white) and dark: prefixed (dark:bg-neutral-800)
+   so all surfaces collapse onto the same elevation hierarchy:
+   bg (#0a0a0b) → card (#141416) → elevated (#1c1c1f) → hover (#252528). */
+.dark .bg-white, .dark .dark\:bg-white { background-color: var(--card) !important; }
 .dark .bg-brand-offwhite { background-color: var(--background) !important; }
-.dark .bg-gray-50, .dark .bg-neutral-50 { background-color: #1a1a1a !important; }
+.dark .bg-gray-50, .dark .bg-neutral-50 { background-color: #18181b !important; }
 .dark .bg-gray-100, .dark .bg-neutral-100 { background-color: var(--muted) !important; }
-.dark .bg-gray-200, .dark .bg-neutral-200 { background-color: #282828 !important; }
+.dark .bg-gray-200, .dark .bg-neutral-200 { background-color: #252528 !important; }
+
+/* dark: prefixed surfaces — normalize the neutral-700/800/900 chaos */
+.dark .dark\:bg-neutral-900, .dark .dark\:bg-gray-900 { background-color: var(--card) !important; }
+.dark .dark\:bg-neutral-800, .dark .dark\:bg-gray-800 { background-color: var(--popover) !important; }
+.dark .dark\:bg-neutral-700, .dark .dark\:bg-gray-700 { background-color: #252528 !important; }
+.dark .dark\:bg-neutral-600, .dark .dark\:bg-gray-600 { background-color: #2e2e33 !important; }
+.dark .dark\:bg-neutral-950, .dark .dark\:bg-gray-950 { background-color: var(--background) !important; }
+.dark .dark\:hover\:bg-neutral-800:hover, .dark .dark\:hover\:bg-gray-800:hover { background-color: var(--popover) !important; }
+.dark .dark\:hover\:bg-neutral-700:hover, .dark .dark\:hover\:bg-gray-700:hover { background-color: #252528 !important; }
+.dark .dark\:hover\:bg-neutral-600:hover, .dark .dark\:hover\:bg-gray-600:hover { background-color: #34343a !important; }
 
 /* Colored backgrounds → dark tinted versions */
 .dark .bg-red-50 { background-color: rgba(220, 38, 38, 0.12) !important; }
@@ -200,15 +227,26 @@
 .dark .bg-red-100 { background-color: rgba(220, 38, 38, 0.15) !important; }
 .dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.15) !important; }
 
-/* ── Text colors ── */
+/* ── Text colors ──
+   Hierarchy mirrors light-mode intent:
+   higher number (900) = highest contrast, lower (300) = decorative/dim.
+   Tuned so even "muted" copy (500/400) clears AA contrast on --card. */
 .dark .text-black { color: var(--foreground) !important; }
-.dark .text-neutral-900, .dark .text-gray-900 { color: #f0f0f0 !important; }
-.dark .text-neutral-800, .dark .text-gray-800 { color: #e0e0e0 !important; }
-.dark .text-neutral-700, .dark .text-gray-700 { color: #c8c8c8 !important; }
-.dark .text-neutral-600, .dark .text-gray-600 { color: #b0b0b0 !important; }
-.dark .text-neutral-500, .dark .text-gray-500 { color: #9a9a9a !important; }
-.dark .text-neutral-400, .dark .text-gray-400 { color: #888888 !important; }
-.dark .text-neutral-300, .dark .text-gray-300 { color: #666666 !important; }
+.dark .text-neutral-900, .dark .text-gray-900,
+.dark .dark\:text-neutral-900, .dark .dark\:text-gray-900 { color: #fafafa !important; }
+.dark .text-neutral-800, .dark .text-gray-800,
+.dark .dark\:text-neutral-800, .dark .dark\:text-gray-800 { color: #ededed !important; }
+.dark .text-neutral-700, .dark .text-gray-700,
+.dark .dark\:text-neutral-700, .dark .dark\:text-gray-700 { color: #d4d4d8 !important; }
+.dark .text-neutral-600, .dark .text-gray-600,
+.dark .dark\:text-neutral-600, .dark .dark\:text-gray-600 { color: #b8b8be !important; }
+.dark .text-neutral-500, .dark .text-gray-500,
+.dark .dark\:text-neutral-500, .dark .dark\:text-gray-500 { color: #a1a1aa !important; }
+.dark .text-neutral-400, .dark .text-gray-400,
+.dark .dark\:text-neutral-400, .dark .dark\:text-gray-400 { color: #8a8a92 !important; }
+.dark .text-neutral-300, .dark .text-gray-300,
+.dark .dark\:text-neutral-300, .dark .dark\:text-gray-300 { color: #71717a !important; }
+.dark .dark\:text-white { color: #fafafa !important; }
 
 /* Colored text → brighter for dark bg */
 .dark .text-red-700 { color: #f87171 !important; }
@@ -225,45 +263,115 @@
 .dark .text-lime-700 { color: #a3e635 !important; }
 .dark .text-orange-700 { color: #fb923c !important; }
 
-/* ── Borders ── */
-.dark .border-neutral-200, .dark .border-gray-200 { border-color: #2e2e2e !important; }
-.dark .border-neutral-100, .dark .border-gray-100 { border-color: #2a2a2a !important; }
-.dark .border-neutral-300, .dark .border-gray-300 { border-color: #3a3a3a !important; }
+/* ── Borders ──
+   Tuned to be visible against --card (#141416) but not harsh.
+   ~16 luminance units brighter than card surface = perceptible edge. */
+.dark .border-neutral-200, .dark .border-gray-200 { border-color: #2e2e33 !important; }
+.dark .border-neutral-100, .dark .border-gray-100 { border-color: #26262a !important; }
+.dark .border-neutral-300, .dark .border-gray-300 { border-color: #3a3a40 !important; }
 .dark .border-white { border-color: var(--border) !important; }
-.dark .border-red-200 { border-color: rgba(220, 38, 38, 0.3) !important; }
-.dark .border-blue-200 { border-color: rgba(59, 130, 246, 0.3) !important; }
-.dark .border-emerald-200, .dark .border-green-200 { border-color: rgba(16, 185, 129, 0.3) !important; }
-.dark .border-amber-200, .dark .border-yellow-200 { border-color: rgba(245, 158, 11, 0.3) !important; }
-.dark .border-violet-200, .dark .border-purple-200 { border-color: rgba(139, 92, 246, 0.3) !important; }
-.dark .border-pink-200 { border-color: rgba(236, 72, 153, 0.3) !important; }
-.dark .border-cyan-200 { border-color: rgba(6, 182, 212, 0.3) !important; }
-.dark .border-lime-200 { border-color: rgba(132, 204, 22, 0.3) !important; }
+.dark .dark\:border-neutral-700, .dark .dark\:border-gray-700 { border-color: #2e2e33 !important; }
+.dark .dark\:border-neutral-800, .dark .dark\:border-gray-800 { border-color: #252528 !important; }
+.dark .dark\:border-neutral-600, .dark .dark\:border-gray-600 { border-color: #3a3a40 !important; }
+.dark .border-red-200 { border-color: rgba(248, 113, 113, 0.3) !important; }
+.dark .border-blue-200 { border-color: rgba(96, 165, 250, 0.3) !important; }
+.dark .border-emerald-200, .dark .border-green-200 { border-color: rgba(52, 211, 153, 0.3) !important; }
+.dark .border-amber-200, .dark .border-yellow-200 { border-color: rgba(251, 191, 36, 0.3) !important; }
+.dark .border-violet-200, .dark .border-purple-200 { border-color: rgba(167, 139, 250, 0.3) !important; }
+.dark .border-pink-200 { border-color: rgba(244, 114, 182, 0.3) !important; }
+.dark .border-cyan-200 { border-color: rgba(34, 211, 238, 0.3) !important; }
+.dark .border-lime-200 { border-color: rgba(163, 230, 53, 0.3) !important; }
 
 /* ── Dividers ── */
-.dark .divide-neutral-200 > :not(:last-child) { border-color: #2e2e2e !important; }
-.dark .divide-gray-200 > :not(:last-child) { border-color: #2e2e2e !important; }
+.dark .divide-neutral-200 > :not(:last-child) { border-color: #2e2e33 !important; }
+.dark .divide-gray-200 > :not(:last-child) { border-color: #2e2e33 !important; }
+.dark .dark\:divide-neutral-700 > :not(:last-child) { border-color: #2e2e33 !important; }
+.dark .dark\:divide-neutral-800 > :not(:last-child) { border-color: #252528 !important; }
 
-/* ── Rings & shadows ── */
+/* ── Rings & shadows ──
+   On near-black bg, dark shadows are invisible. Pair black drop-shadow
+   with a subtle 1px white-overlay border for inset elevation. */
 .dark .ring-neutral-200, .dark .ring-gray-200 { --tw-ring-color: var(--border) !important; }
-.dark .shadow-sm { box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4) !important; }
-.dark .shadow { box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5) !important; }
-.dark .shadow-md { box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5) !important; }
-.dark .shadow-lg { box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5) !important; }
+.dark .shadow-sm {
+  box-shadow:
+    0 1px 2px 0 rgb(0 0 0 / 0.5),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.02) !important;
+}
+.dark .shadow {
+  box-shadow:
+    0 1px 3px 0 rgb(0 0 0 / 0.6),
+    0 1px 2px -1px rgb(0 0 0 / 0.6),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.03) !important;
+}
+.dark .shadow-md {
+  box-shadow:
+    0 4px 6px -1px rgb(0 0 0 / 0.6),
+    0 2px 4px -2px rgb(0 0 0 / 0.6),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.04) !important;
+}
+.dark .shadow-lg {
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.7),
+    0 4px 6px -4px rgb(0 0 0 / 0.6),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.05) !important;
+}
+.dark .shadow-xl {
+  box-shadow:
+    0 20px 25px -5px rgb(0 0 0 / 0.7),
+    0 8px 10px -6px rgb(0 0 0 / 0.6),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.06) !important;
+}
 
 /* ── Hover states ── */
-.dark .hover\:bg-neutral-50:hover, .dark .hover\:bg-gray-50:hover { background-color: #1e1e1e !important; }
-.dark .hover\:bg-neutral-100:hover, .dark .hover\:bg-gray-100:hover { background-color: #252525 !important; }
-.dark .hover\:bg-white:hover { background-color: var(--card) !important; }
-.dark .hover\:text-gray-600:hover, .dark .hover\:text-neutral-600:hover { color: #c8c8c8 !important; }
-.dark .hover\:text-gray-700:hover, .dark .hover\:text-neutral-700:hover { color: #e0e0e0 !important; }
+.dark .hover\:bg-neutral-50:hover, .dark .hover\:bg-gray-50:hover { background-color: var(--muted) !important; }
+.dark .hover\:bg-neutral-100:hover, .dark .hover\:bg-gray-100:hover { background-color: #252528 !important; }
+.dark .hover\:bg-white:hover { background-color: var(--popover) !important; }
+.dark .hover\:text-gray-600:hover, .dark .hover\:text-neutral-600:hover { color: #d4d4d8 !important; }
+.dark .hover\:text-gray-700:hover, .dark .hover\:text-neutral-700:hover { color: #ededed !important; }
+.dark .hover\:text-gray-900:hover, .dark .hover\:text-neutral-900:hover { color: #fafafa !important; }
 
 /* ── Placeholder text ── */
-.dark .placeholder-gray-400::placeholder, .dark .placeholder-neutral-400::placeholder { color: #666 !important; }
-.dark input::placeholder, .dark textarea::placeholder, .dark select::placeholder { color: #666 !important; }
+.dark .placeholder-gray-400::placeholder, .dark .placeholder-neutral-400::placeholder { color: #71717a !important; }
+.dark input::placeholder, .dark textarea::placeholder, .dark select::placeholder { color: #71717a !important; }
 
 /* ── Form elements ── */
-.dark select, .dark input[type="date"], .dark input[type="text"], .dark input[type="number"], .dark input[type="search"], .dark textarea {
+.dark select, .dark input[type="date"], .dark input[type="text"], .dark input[type="number"], .dark input[type="search"], .dark input[type="email"], .dark input[type="tel"], .dark input[type="password"], .dark input[type="url"], .dark textarea {
   background-color: var(--card) !important;
   color: var(--foreground) !important;
   border-color: var(--border) !important;
+}
+.dark input:focus, .dark textarea:focus, .dark select:focus {
+  border-color: var(--ring) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgb(212 101 79 / 0.2) !important;
+}
+
+/* ── Scrollbar — subtle, themed ── */
+.dark ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.dark ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #2e2e33;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #3a3a40;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+.dark * {
+  scrollbar-color: #2e2e33 transparent;
+  scrollbar-width: thin;
+}
+
+/* ── Selection color — brand-tinted ── */
+.dark ::selection {
+  background-color: rgb(212 101 79 / 0.35);
+  color: #fafafa;
 }

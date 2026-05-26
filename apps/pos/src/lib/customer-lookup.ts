@@ -1,5 +1,20 @@
 import { createClient } from "./supabase-browser";
 
+export type MemberTier = {
+  id: string;
+  slug: string;
+  name: string;
+  color: string;
+  multiplier: number;
+  /** Flat % off applied at checkout (0-100). Drives the AUTO tier-perk
+   *  discount + the non-stackable rule below. */
+  discount_percent: number;
+  /** Stackable tiers (Bronze/Silver/Gold/Platinum): tier % applies on
+   *  remainder after voucher. Non-stackable (Staff/Black Card): voucher
+   *  is dropped, tier % applies on raw subtotal. */
+  stackable: boolean;
+};
+
 export type LoyaltyMember = {
   id: string;
   phone: string;
@@ -9,6 +24,7 @@ export type LoyaltyMember = {
   total_spent: number;
   total_visits: number;
   last_visit_at: string | null;
+  tier?: MemberTier | null;
 };
 
 /**
@@ -17,50 +33,21 @@ export type LoyaltyMember = {
  * Returns member info with tags, points, and spend history.
  */
 export async function lookupMemberByPhone(phone: string): Promise<LoyaltyMember | null> {
-  const supabase = createClient();
-
-  // Generate all possible phone formats to search
-  const stripped = phone.replace(/[\s\-\+\(\)]/g, "");
-  const variants = new Set<string>();
-  variants.add(stripped);
-  // 0123456789 → 60123456789
-  if (stripped.startsWith("0")) variants.add("60" + stripped.substring(1));
-  // 60123456789 → 0123456789
-  if (stripped.startsWith("60")) variants.add("0" + stripped.substring(2));
-  // 123456789 → 60123456789 and 0123456789
-  if (!stripped.startsWith("0") && !stripped.startsWith("6")) {
-    variants.add("60" + stripped);
-    variants.add("0" + stripped);
+  // The `members` table has zero RLS policies → anon Supabase queries
+  // hit "permission denied". Route via the service-role API endpoint
+  // instead. /api/loyalty/lookup owns the phone-variant matching so
+  // both this caller and any future callers stay consistent.
+  try {
+    const res = await fetch(`/api/loyalty/lookup?phone=${encodeURIComponent(phone)}`, {
+      credentials: "same-origin",
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { member?: LoyaltyMember | null };
+    return json.member ?? null;
+  } catch (err) {
+    console.error("[lookupMemberByPhone] failed:", err);
+    return null;
   }
-  // +60123456789 already stripped to 60123456789
-
-  // Search members table — try all variants
-  const { data: members } = await supabase
-    .from("members")
-    .select("id, phone, name, tags")
-    .in("phone", [...variants]);
-
-  const member = members?.[0] ?? null;
-  if (!member) return null;
-
-  // Get points + spend from member_brands
-  const { data: mb } = await supabase
-    .from("member_brands")
-    .select("points_balance, total_spent, total_visits, last_visit_at")
-    .eq("member_id", member.id)
-    .eq("brand_id", "brand-celsius")
-    .maybeSingle();
-
-  return {
-    id: member.id,
-    phone: member.phone,
-    name: member.name,
-    tags: member.tags ?? [],
-    points_balance: mb?.points_balance ?? 0,
-    total_spent: parseFloat(mb?.total_spent ?? "0"),
-    total_visits: mb?.total_visits ?? 0,
-    last_visit_at: mb?.last_visit_at ?? null,
-  };
 }
 
 /**

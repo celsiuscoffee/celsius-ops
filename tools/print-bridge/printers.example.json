@@ -1,0 +1,7 @@
+{
+  "_comment": "Per-outlet local fallback printer map. Copy to printers.json on each POS device and fill in the printers' static IPs on the LAN. Used when the POS doesn't send an explicit ip in the request body (e.g. dev testing on a single printer, or before the BO Printers UI is wired). When pos_printer_config rows exist in the database, those wins — this map is the fallback.",
+
+  "bar":     { "ip": "192.168.1.100", "port": 9100 },
+  "counter": { "ip": "192.168.1.101", "port": 9100 },
+  "kitchen": { "ip": "192.168.1.102", "port": 9100 }
+}

@@ -67,11 +67,19 @@ export function CategoryTabs({ categories, active, onChange, layoutColors = {} }
 
   return (
     <div className="flex flex-col gap-1.5 bg-surface px-3 py-2">
-      <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+      {/* overflow-hidden (was overflow-x-auto scrollbar-none) — the
+          tabs use `flex-1 min-w-0` so they always shrink to fit the
+          row exactly; there's never anything to scroll. `scrollbar-
+          none` is not a Tailwind utility, so the browser was
+          reserving track space (~15px) under each row, producing a
+          big visible dark band between row 1 and row 2 that looked
+          like a missing third row. Removing the overflow-auto kills
+          the reserved scrollbar space and the rows now sit flush. */}
+      <div className="flex gap-1.5 overflow-hidden">
         {row1.map((cat, i) => renderTab(cat, i))}
       </div>
       {row2.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+        <div className="flex gap-1.5 overflow-hidden">
           {row2.map((cat, i) => renderTab(cat, half + i))}
         </div>
       )}
