@@ -38,29 +38,28 @@ import {
   type PORecommendation,
 } from "../../../lib/ops/ai-decisions";
 
+// Mirrors backoffice /api/inventory/suppliers/products. Each supplier
+// carries its own product list (with negotiated price + the supplier's
+// packaging) so the picker iterates over `supplier.products` — there's
+// no separate global product catalog fetch. This matches the backoffice
+// PO-create flow exactly; suppliers and the products they sell are the
+// same atomic unit.
+type SupplierProduct = {
+  id: string;            // productId
+  name: string;
+  sku: string;
+  packageId: string | null;
+  packageLabel: string;  // e.g. "1 kg bag"
+  price: number;         // supplier's negotiated unit price (pre-fill)
+  conversionFactor: number;
+};
+
 type Supplier = {
   id: string;
   name: string;
-  phone?: string | null;
-  // /api/suppliers returns the catalog rows wired to each supplier so we
-  // can filter the picker down to "what this supplier actually sells".
-  products?: Array<{ id: string; name: string; sku: string; uom: string }>;
-};
-// Mirrors the shape served by /api/products/options — flatten just the
-// fields we actually need for the picker + cart line. `category` is the
-// product group name (e.g. "Coffee Beans"), shown as a Pill.
-type Product = {
-  id: string;
-  name: string;
-  sku: string;
-  baseUom: string;
-  category?: string | null;
-  packages?: Array<{
-    id: string;
-    name: string;
-    label: string;
-    isDefault: boolean;
-  }>;
+  phone: string;
+  leadTimeDays?: number | null;
+  products: SupplierProduct[];
 };
 
 type CartLine = {
@@ -80,7 +79,6 @@ export default function NewPO() {
   const iconColor = colorScheme === "dark" ? "#FAFAFA" : "#160800";
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [tab, setTab] = useState<"smart" | "all">("smart");
@@ -109,22 +107,20 @@ export default function NewPO() {
     let cancelled = false;
     (async () => {
       try {
-        // Both endpoints return raw arrays (staff app convention); the
-        // `{items}` fallback is kept defensively in case backoffice ever
-        // serves these via a paged response. `/api/products/options` is
-        // the canonical product catalog endpoint — `/api/products` does
-        // not exist on staff, so the picker was always empty.
-        const [s, p] = await Promise.all([
-          api<{ items?: Supplier[] } | Supplier[]>("/api/suppliers").catch(
-            () => ({ items: [] }),
-          ),
-          api<{ items?: Product[] } | Product[]>(
-            "/api/products/options",
-          ).catch(() => ({ items: [] })),
-        ]);
+        // Single fetch — `/api/suppliers/products` returns suppliers
+        // with their products + packages + negotiated price already
+        // joined. Mirrors the backoffice PO flow; no global product
+        // catalog call needed.
+        const s = await api<Supplier[]>("/api/suppliers/products").catch(
+          () => [] as Supplier[],
+        );
         if (cancelled) return;
-        setSuppliers(Array.isArray(s) ? s : (s.items ?? []));
-        setProducts(Array.isArray(p) ? p : (p.items ?? []));
+        // Hide the "Ad-hoc Purchase" pseudo-supplier from the native
+        // picker — that's a backoffice-only construct for one-off
+        // purchases that don't have a real supplier record.
+        setSuppliers(
+          Array.isArray(s) ? s.filter((x) => x.name !== "Ad-hoc Purchase") : [],
+        );
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -186,20 +182,20 @@ export default function NewPO() {
     ).catch(() => {});
   }
 
-  function addProduct(p: Product) {
-    // Prefer the package marked default in the catalog (e.g. "1 kg bag")
-    // so suppliers receive the order in the unit they sell.
-    const pkg = p.packages?.find((x) => x.isDefault) ?? p.packages?.[0];
+  function addProduct(p: SupplierProduct) {
+    // SupplierProduct already carries the supplier's package + price,
+    // so a single line maps 1:1 — no defaults to pick, no zero-price
+    // line items. Mirrors backoffice exactly.
     setCart((prev) => [
       ...prev,
       {
         productId: p.id,
         productName: p.name,
         sku: p.sku,
-        unitLabel: pkg ? (pkg.label ?? pkg.name) : p.baseUom,
-        packageId: pkg?.id ?? null,
+        unitLabel: p.packageLabel,
+        packageId: p.packageId,
         quantity: 1,
-        unitPrice: 0,
+        unitPrice: p.price,
       },
     ]);
     setProductPicker(false);
@@ -303,20 +299,10 @@ export default function NewPO() {
     );
   }
 
-  // Restrict the picker to products the chosen supplier actually carries.
-  // If a supplier has no linked products in the catalog (legacy data),
-  // fall back to the full list so the user isn't stuck. Search runs on
-  // top of the supplier-restricted set.
-  const supplierProductIds = useMemo(() => {
-    const supp = suppliers.find((s) => s.id === supplierId);
-    if (!supp?.products?.length) return null;
-    return new Set(supp.products.map((p) => p.id));
-  }, [suppliers, supplierId]);
-
-  const pickerSource = supplierProductIds
-    ? products.filter((p) => supplierProductIds.has(p.id))
-    : products;
-
+  // Picker is just the selected supplier's product list. Empty array
+  // when no supplier is chosen (the picker can't be opened in that
+  // state anyway — empty-state card disables the trigger).
+  const pickerSource: SupplierProduct[] = supplier?.products ?? [];
   const filtered = search
     ? pickerSource.filter(
         (p) =>
@@ -511,13 +497,9 @@ export default function NewPO() {
               </Text>
               <Text className="mt-1 px-4 text-center text-xs font-body text-muted-fg">
                 {supplierId
-                  ? supplierProductIds && supplierProductIds.size === 0
-                    ? "This supplier has no products linked. Add some in backoffice first."
-                    : `Tap to browse${
-                        supplierProductIds
-                          ? ` ${supplierProductIds.size} item${supplierProductIds.size === 1 ? "" : "s"} from this supplier`
-                          : " the catalog"
-                      }.`
+                  ? pickerSource.length === 0
+                    ? "This supplier has no products linked. Add some in backoffice → suppliers first."
+                    : `Tap to browse ${pickerSource.length} item${pickerSource.length === 1 ? "" : "s"} from this supplier.`
                   : "Select a supplier above to start adding items."}
               </Text>
               {supplierId ? (
@@ -797,22 +779,22 @@ export default function NewPO() {
                 <Text className="text-center text-sm font-body-bold text-espresso">
                   {search
                     ? "No products match your search"
-                    : supplierProductIds && supplierProductIds.size === 0
-                      ? "This supplier has no products yet"
-                      : "No products available"}
+                    : "This supplier has no products yet"}
                 </Text>
                 <Text className="mt-1 text-center text-xs font-body text-muted-fg">
                   {search
                     ? "Try a different keyword or SKU."
-                    : supplierProductIds && supplierProductIds.size === 0
-                      ? "Add supplier-product mappings in backoffice → suppliers."
-                      : "Ask a manager to set up the product catalog."}
+                    : "Add supplier-product mappings in backoffice → suppliers."}
                 </Text>
               </View>
             ) : (
-              filtered.map((p) => (
+              // De-dupe by productId+packageId — an ADHOC supplier
+              // expansion can produce multiple entries for the same
+              // (product, package) tuple, and we don't want dupes in
+              // the picker row list.
+              filtered.map((p, idx) => (
                 <Pressable
-                  key={p.id}
+                  key={`${p.id}-${p.packageId ?? "base"}-${idx}`}
                   onPress={() => addProduct(p)}
                   className="rounded-2xl border border-border bg-surface px-4 py-3 active:bg-primary-50"
                 >
@@ -825,11 +807,13 @@ export default function NewPO() {
                         {p.name}
                       </Text>
                       <Text className="text-xs font-body text-muted-fg">
-                        {p.sku} · {p.baseUom}
+                        {p.sku} · {p.packageLabel}
                       </Text>
                     </View>
-                    {p.category ? (
-                      <Pill label={p.category} tone="muted" />
+                    {p.price > 0 ? (
+                      <Text className="text-sm font-body-bold text-primary tabular-nums">
+                        RM {p.price.toFixed(2)}
+                      </Text>
                     ) : null}
                   </View>
                 </Pressable>
