@@ -5,7 +5,6 @@ import {
   ScrollView,
   Pressable,
   RefreshControl,
-  Platform,
 } from "react-native";
 import { Alert } from "@/lib/alert";
 import { Stack, router, useLocalSearchParams } from "expo-router";
@@ -294,13 +293,6 @@ function OrdersTabView({
       {list.length > 0 ? (
         <ScrollView
           contentContainerClassName="px-4 py-4 pb-32 gap-3"
-          // Web: body owns scroll so iOS Safari can collapse its URL bar.
-          // See index.tsx for the full rationale.
-          style={
-            Platform.OS === "web"
-              ? ({ overflow: "visible", flex: undefined } as any)
-              : undefined
-          }
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
