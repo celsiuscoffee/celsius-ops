@@ -186,6 +186,14 @@
   /* Hide scrollbar for tab bars */
   .scrollbar-none::-webkit-scrollbar { display: none; }
   .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+  /* Thin, subtle scrollbar — used in the sidebar rail and overflow lists.
+     The class was referenced before but never defined, so browsers
+     rendered the default ~16px chrome over the 56px-wide rail. */
+  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.15) transparent; }
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.15); border-radius: 3px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgb(255 255 255 / 0.3); }
 }
 
 /* ─── Dark mode overrides for hardcoded Tailwind utilities ───────────── */
