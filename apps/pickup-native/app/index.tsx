@@ -37,6 +37,7 @@ import { getHomePosters, type HomePoster } from "../lib/posters";
 import { tierStyle } from "../lib/tier-styles";
 import { getSetting } from "../lib/settings";
 import { BottomNav } from "../components/BottomNav";
+import { AddToHomeHint } from "../components/AddToHomeHint";
 import { formatPrice } from "../lib/api";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -520,6 +521,14 @@ export default function Home() {
         </View>
       </Pressable>
       </View>
+
+      {/* iOS Safari PWA install nudge. Renders only on iOS browsers
+          that haven't already saved this to the home screen, and only
+          once per browser profile (X dismisses it permanently). Sits
+          between the hero and the outlet picker so it doesn't compete
+          with the carousel but is high enough that customers actually
+          see it. See components/AddToHomeHint.tsx for the why. */}
+      <AddToHomeHint />
 
       {/* Outlet row — back below the hero, above Available rewards.
           Plain pressable so customers can swap pickup outlet without
