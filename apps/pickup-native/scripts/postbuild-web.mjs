@@ -12,6 +12,35 @@ const HEAD_EXTRA = `
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Celsius">
   <meta name="format-detection" content="telephone=no">
+  <style>
+    /* iOS Safari URL-bar collapse probe.
+       Forces body to scroll (not the inner ScrollView) so iOS Safari
+       sees document overflow and minimises its URL bar. Targets the
+       first few levels of div nesting under #root because RN-Web's
+       GestureHandlerRootView, SafeAreaProvider, expo-router Stack, and
+       page-level Views all ship min-height:0 + flex:1 defaults that
+       otherwise clamp content at viewport. Wide blast radius — if it
+       breaks any screen layout, the right answer is to revert this
+       block, not to add per-screen overrides.
+
+       Scoped to web only (this whole file is the web postbuild). */
+    html, body {
+      overflow-x: hidden;
+    }
+    #root > *,
+    #root > * > *,
+    #root > * > * > *,
+    #root > * > * > * > *,
+    #root > * > * > * > * > * {
+      flex: 0 0 auto !important;
+      min-height: 0 !important;
+      height: auto !important;
+      overflow: visible !important;
+    }
+    /* Keep portals (BottomNav, MenuCartFloatingBar) anchored to the
+       viewport — they're children of <body>, not descendants of #root,
+       so the rules above don't touch them. */
+  </style>
 `;
 
 const BODY_EXTRA = `
@@ -55,29 +84,21 @@ if (html.includes("/manifest.json")) {
 const NEW_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />';
 
-// Use the JS-measured viewport height (--vph) so iOS Safari PWA
-// standalone gets the real pixel viewport — vh/dvh/lvh/svh all
-// under-report by ~150px in standalone mode. We keep `100vh` as
-// the static fallback for browsers that haven't run the JS yet.
-//
-// NOTE: a previous iteration tried switching this to min-height so
-// the body could scroll and iOS Safari would collapse its URL bar,
-// but releasing scroll from the RN ScrollViews didn't actually
-// extend the document — the ScrollView's `flex: 1` default kept its
-// box at viewport height and content just overflowed visually
-// without growing the body. Net effect: no scroll at all. URL-bar
-// collapse needs a different approach (likely sticky-positioned
-// chrome + content rendered as a regular div on web, not via
-// react-native-web's ScrollView). Reverted to the working pinned
-// layout for now.
+// Body uses min-height so the document can grow with content. Paired
+// with the brute-force CSS in HEAD_EXTRA that forces every ancestor
+// under #root to be content-sized (flex:0 0 auto, overflow:visible,
+// min-height:0). Without that pairing this min-height does nothing —
+// see PR #150 for the lesson. With it, body actually overflows when
+// content exceeds the viewport, and iOS Safari collapses its URL bar.
 const EXPO_RESET_OLD = `      html,
       body {
         height: 100%;
       }`;
 const EXPO_RESET_NEW = `      html,
       body {
-        height: 100vh; /* fallback */
-        height: var(--vph, 100vh);
+        min-height: 100vh; /* fallback */
+        min-height: var(--vph, 100vh);
+        min-height: 100dvh;
       }`;
 const ROOT_OLD = `      #root {
         display: flex;
@@ -86,9 +107,10 @@ const ROOT_OLD = `      #root {
       }`;
 const ROOT_NEW = `      #root {
         display: flex;
-        height: 100vh;
-        height: var(--vph, 100vh);
-        flex: 1;
+        flex-direction: column;
+        min-height: 100vh;
+        min-height: var(--vph, 100vh);
+        min-height: 100dvh;
       }`;
 
 const patched = html
