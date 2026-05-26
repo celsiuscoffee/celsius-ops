@@ -33,13 +33,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // partial payment. We increment amountPaid and let the status auto-flip
     // below. Independent of (and pairs with) the existing status-based flow.
     const paymentAmountInput: number | null | undefined = body.paymentAmount;
-    // Adjustment — caller passes { adjustPayment: true, amountPaid: <abs> }
-    // to CORRECT a previously-recorded amount (e.g. procurement keyed the
-    // wrong amount, supplier reports a short transfer). Unlike paymentAmount
-    // this OVERWRITES amountPaid rather than incrementing it, then re-derives
-    // status from the new total. Negative or NaN values are rejected.
-    const adjustPaymentInput: boolean = body.adjustPayment === true;
-    const adjustedAmountPaidInput: unknown = body.amountPaid;
 
     const data: Record<string, unknown> = {};
     if (status !== undefined) data.status = status;
@@ -126,48 +119,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     //   2) caller flips status (PAID, DEPOSIT_PAID) → mirror amountPaid
     // This keeps a single source of truth (amountPaid) so cashflow + UI
     // never disagree, while preserving the legacy "Mark Paid" buttons.
-    if (adjustPaymentInput) {
-      // Correction path. The caller hands us the absolute true amountPaid and
-      // we re-derive status from it. 0 is a legal value (revert to unpaid).
-      const raw = typeof adjustedAmountPaidInput === "number"
-        ? adjustedAmountPaidInput
-        : Number(adjustedAmountPaidInput);
-      if (!Number.isFinite(raw) || raw < 0) {
-        return NextResponse.json(
-          { error: "adjustPayment requires a non-negative amountPaid" },
-          { status: 400 },
-        );
-      }
-      const current = await prisma.invoice.findUnique({
-        where: { id },
-        select: { amount: true, depositAmount: true, status: true, paidAt: true },
-      });
-      if (!current) {
-        return NextResponse.json({ error: "Not found" }, { status: 404 });
-      }
-      const total = Number(current.amount);
-      const newPaid = Math.min(raw, total);
-      data.amountPaid = newPaid;
-
-      const dep = current.depositAmount ? Number(current.depositAmount) : 0;
-      if (newPaid >= total) {
-        data.status = "PAID";
-        // Preserve the original paidAt if the invoice was already PAID — the
-        // adjustment doesn't change WHEN it was settled, only the amount.
-        if (!current.paidAt) data.paidAt = new Date();
-      } else if (newPaid <= 0) {
-        // Adjustment dropped recorded amount to zero — revert to PENDING so
-        // the invoice reappears in the payable list.
-        data.status = "PENDING";
-        data.paidAt = null;
-      } else if (dep > 0 && Math.abs(newPaid - dep) < 0.01) {
-        data.status = "DEPOSIT_PAID";
-        data.paidAt = null;
-      } else {
-        data.status = "PARTIALLY_PAID";
-        data.paidAt = null;
-      }
-    } else if (typeof paymentAmountInput === "number" && paymentAmountInput > 0) {
+    if (typeof paymentAmountInput === "number" && paymentAmountInput > 0) {
       const current = await prisma.invoice.findUnique({
         where: { id },
         select: { amount: true, amountPaid: true, depositAmount: true, status: true },
