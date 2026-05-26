@@ -557,7 +557,7 @@ export default function Home() {
       </Pressable>
 
       <ScrollView
-        contentContainerClassName="pb-40"
+        contentContainerClassName={Platform.OS === "web" ? "pb-32" : "pb-40"}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

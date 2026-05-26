@@ -453,13 +453,17 @@ export default function Menu() {
 
       {/* Outlet picker — surface row beneath the espresso header so it
           reads as the secondary chrome row, like the cart's "Slide to
-          confirm" surface or the order page's pickup-details row. */}
+          confirm" surface or the order page's pickup-details row.
+          Web compresses py-3 -> py-2: the customer's browser viewport
+          is shorter than a native phone (URL bar + browser UI) so every
+          row of chrome we save lets one more product peek above the
+          fold. */}
       <Pressable
         onPress={() => {
           Haptics.selectionAsync();
           router.push("/store");
         }}
-        className="bg-surface flex-row items-center gap-2 px-4 py-3 border-b border-border active:opacity-70"
+        className={`bg-surface flex-row items-center gap-2 px-4 ${isWeb ? "py-2" : "py-3"} border-b border-border active:opacity-70`}
         accessibilityLabel={`Pickup outlet: ${outletName ?? "not selected"}. Tap to change.`}
       >
         <MapPin size={14} color="#A2492C" />
