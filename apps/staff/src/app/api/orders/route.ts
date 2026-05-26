@@ -5,10 +5,15 @@ import { checkModuleAccess } from "@/lib/check-module-access";
 import { logActivity } from "@/lib/activity-log";
 
 export async function GET(req: NextRequest) {
-  // Phase 8 — gate behind `inventory:orders`. Existing web staff app
-  // never hit this endpoint (no PO UI on web), so adding the gate is
-  // safe.
-  const guard = await checkModuleAccess(req, "inventory:orders");
+  // Staff with `inventory:receivings` need to read the pending PO list to
+  // receive against — the Receive & Capture screen ("Expected Today")
+  // calls this endpoint. Gating GET on `inventory:orders` alone locked
+  // out every line-staff receiver (only managers/owners hold that key).
+  // Mutations below stay gated to `inventory:orders`.
+  const guard = await checkModuleAccess(req, [
+    "inventory:orders",
+    "inventory:receivings",
+  ]);
   if (!guard.ok) return guard.response;
   const session = guard.session;
   const url = new URL(req.url);

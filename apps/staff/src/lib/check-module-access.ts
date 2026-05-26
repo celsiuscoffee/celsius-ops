@@ -25,7 +25,7 @@ type GuardErr = { ok: false; response: NextResponse };
 // response } with a 401/403 to return directly.
 export async function checkModuleAccess(
   req: Request,
-  moduleKey: string,
+  moduleKey: string | string[],
 ): Promise<GuardOk | GuardErr> {
   const session = await getUser(req.headers);
   if (!session) {
@@ -53,12 +53,13 @@ export async function checkModuleAccess(
 
   // `moduleAccess` is JSON in Postgres — defensively coerce to object.
   const access = (user.moduleAccess ?? {}) as Record<string, unknown>;
-  const granted = hasAccess(session.role, access, moduleKey);
+  const keys = Array.isArray(moduleKey) ? moduleKey : [moduleKey];
+  const granted = keys.some((k) => hasAccess(session.role, access, k));
   if (!granted) {
     return {
       ok: false,
       response: NextResponse.json(
-        { error: `Access denied: ${moduleKey}` },
+        { error: `Access denied: ${keys.join(" or ")}` },
         { status: 403 },
       ),
     };
