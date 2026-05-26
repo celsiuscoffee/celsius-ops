@@ -9,10 +9,13 @@ import { createClient } from "@/lib/supabase-browser";
 // Staff at the KDS pick their outlet here, then flip individual
 // products on/off. We use the pickup store_id (text) directly because
 // it's the key on outlet_product_availability.
+// Labels match the shared registry — see packages/shared/src/outlets.ts.
+// No mall suffix on Putrajaya, no "Square" on Tamarind, so the same
+// outlet reads identically wherever it appears in any app.
 const OUTLETS: Array<{ store_id: string; label: string }> = [
-  { store_id: "conezion",  label: "Putrajaya (Conezion)" },
+  { store_id: "conezion",  label: "Putrajaya" },
   { store_id: "shah-alam", label: "Shah Alam" },
-  { store_id: "tamarind",  label: "Tamarind Square" },
+  { store_id: "tamarind",  label: "Tamarind" },
 ];
 
 type Product = {

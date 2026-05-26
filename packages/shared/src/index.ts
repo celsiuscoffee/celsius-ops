@@ -1,5 +1,15 @@
 // ─── Re-exports from submodules ─────────────────────────
 export { cn } from "./cn";
+export {
+  OUTLET_IDS,
+  OUTLET_LABELS,
+  OUTLET_FULL_NAMES,
+  OUTLET_CITIES,
+  OUTLET_OPTIONS,
+  outletLabel,
+  outletFullName,
+} from "./outlets";
+export type { OutletId } from "./outlets";
 export { checkRateLimit, RATE_LIMITS } from "./rate-limit";
 export type { RateLimitConfig } from "./rate-limit";
 export { checkCronAuth } from "./cron-auth";

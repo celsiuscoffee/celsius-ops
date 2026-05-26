@@ -31,16 +31,10 @@ type Settings = {
   layout_mode:             string | null;
 };
 
-const OUTLET_LABELS: Record<string, string> = {
-  "outlet-sa":  "Shah Alam",
-  "outlet-con": "Putrajaya (Conezion)",
-  "outlet-tam": "Tamarind",
-  "outlet-nilai": "Nilai",
-};
-
-function outletLabel(id: string) {
-  return OUTLET_LABELS[id] ?? id;
-}
+// Labels come from the shared registry so every app reads the same
+// strings (no "Putrajaya (Conezion)" vs "Putrajaya" drift) — see
+// packages/shared/src/outlets.ts.
+import { outletLabel } from "@celsius/shared";
 
 export default function POSSettingsPage() {
   const [all, setAll] = useState<Settings[]>([]);

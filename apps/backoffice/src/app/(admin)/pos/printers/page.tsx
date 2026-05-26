@@ -37,12 +37,10 @@ type Printer = {
   is_enabled: boolean;
 };
 
-const OUTLETS = [
-  { id: "outlet-sa",    label: "Shah Alam" },
-  { id: "outlet-con",   label: "Putrajaya (Conezion)" },
-  { id: "outlet-tam",   label: "Tamarind" },
-  { id: "outlet-nilai", label: "Nilai" },
-] as const;
+// Outlet labels come from the shared registry so every app shows the
+// same string — see packages/shared/src/outlets.ts. No mall suffix.
+import { OUTLET_OPTIONS } from "@celsius/shared";
+const OUTLETS = OUTLET_OPTIONS;
 
 const STATION_OPTIONS = ["Bar", "Counter", "Kitchen"] as const;
 const CONNECTION_OPTIONS = [

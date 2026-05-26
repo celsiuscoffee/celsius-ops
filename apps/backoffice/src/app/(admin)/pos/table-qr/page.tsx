@@ -15,10 +15,13 @@ import { Printer, Download, Sparkles } from "lucide-react";
  * tamarind) used by order.celsiuscoffee.com routing.
  */
 
+// Labels match the shared registry — see packages/shared/src/outlets.ts.
+// Brand prefix kept here because these names go on printed QR posters
+// where "Celsius {Outlet}" reads as a complete business name.
 const OUTLETS = [
   { id: "shah-alam", name: "Celsius Shah Alam" },
-  { id: "conezion",  name: "Celsius Conezion (Putrajaya)" },
-  { id: "tamarind",  name: "Celsius Tamarind Square" },
+  { id: "conezion",  name: "Celsius Putrajaya" },
+  { id: "tamarind",  name: "Celsius Tamarind" },
   { id: "nilai",     name: "Celsius Nilai" },
 ] as const;
 

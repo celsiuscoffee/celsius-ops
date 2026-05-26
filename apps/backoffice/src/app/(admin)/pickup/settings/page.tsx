@@ -35,10 +35,15 @@ type OutletHoursMap = Record<string, OutletHours>;
 
 // FirstOrderDiscount config moved to the promotions table (Discount Engine).
 
+// Legacy pickup-app store_id namespace ("conezion" vs the POS "outlet-con").
+// Labels match the shared registry — see packages/shared/src/outlets.ts.
+// No mall suffix on Putrajaya; "Tamarind Square" → "Tamarind" so the same
+// outlet reads identically whether you're looking at the POS or the pickup
+// admin.
 const OUTLET_LABELS: Record<string, string> = {
-  conezion:   "Putrajaya (Conezion)",
+  conezion:    "Putrajaya",
   "shah-alam": "Shah Alam",
-  tamarind:   "Tamarind Square",
+  tamarind:    "Tamarind",
 };
 const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 
