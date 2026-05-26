@@ -155,13 +155,6 @@ export default function InvoicesPage() {
   const [paySaving, setPaySaving] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [payReceipts, setPayReceipts] = useState<string[]>([]);
-  // Adjust-payment dialog — for correcting a wrongly-keyed amountPaid on an
-  // already-settled invoice (e.g. procurement marked PAID for the full total
-  // but the actual transfer was short). Overwrites amountPaid instead of
-  // incrementing it; status auto-derives on the server.
-  const [adjustingInvoice, setAdjustingInvoice] = useState<Invoice | null>(null);
-  const [adjustForm, setAdjustForm] = useState({ amountPaid: "" });
-  const [adjustSaving, setAdjustSaving] = useState(false);
   // Auto-submit timer fires when the AI-extracted POP amount matches the
   // deposit or balance leg within tolerance — saves the user the third click
   // (Mark → Upload → Submit becomes Mark → Upload, auto-Submit 5s later).
@@ -423,59 +416,6 @@ export default function InvoicesPage() {
     setCopiedField(null);
   };
 
-  const openAdjustDialog = (inv: Invoice) => {
-    setAdjustingInvoice(inv);
-    setAdjustForm({ amountPaid: (inv.amountPaid ?? 0).toFixed(2) });
-  };
-
-  const submitAdjust = async () => {
-    if (!adjustingInvoice) return;
-    const next = parseFloat(adjustForm.amountPaid);
-    if (!Number.isFinite(next) || next < 0) {
-      toast.error("Enter a valid amount (0 or more)");
-      return;
-    }
-    const prev = adjustingInvoice.amountPaid ?? 0;
-    if (Math.abs(next - prev) < 0.01) {
-      toast.error("New amount matches the existing one");
-      return;
-    }
-    const total = adjustingInvoice.amount;
-    const outstanding = Math.max(0, total - next);
-    const ok = await confirm({
-      title: `Change recorded payment from ${formatRM(prev)} to ${formatRM(next)}?`,
-      description: outstanding > 0.01
-        ? `Outstanding balance will become ${formatRM(outstanding)} and status will flip to ${next <= 0 ? "pending" : "partial"}.`
-        : "Invoice will be marked fully paid.",
-      confirmLabel: "Adjust",
-    });
-    if (!ok) return;
-
-    setAdjustSaving(true);
-    try {
-      const res = await fetch(`/api/inventory/invoices/${adjustingInvoice.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          adjustPayment: true,
-          amountPaid: next,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast.error(`Failed: ${err.error || res.statusText}`);
-        return;
-      }
-      toast.success(`Payment adjusted to ${formatRM(next)}`);
-      setAdjustingInvoice(null);
-      await loadInvoices(undefined, { revalidate: true });
-    } catch {
-      toast.error("Network error");
-    } finally {
-      setAdjustSaving(false);
-    }
-  };
-
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
     setCopiedField(field);
@@ -577,32 +517,14 @@ export default function InvoicesPage() {
 
   const submitPayment = async () => {
     if (!payingInvoice) return;
-    // If user entered a partial amount, route through paymentAmount so the
-    // API recomputes status (PARTIALLY_PAID / DEPOSIT_PAID / PAID) from
-    // the running total. Otherwise use the legacy status-flip behaviour.
-    const partial = parseFloat(payForm.partialAmount);
-    const usingPartial = Number.isFinite(partial) && partial > 0;
-
-    // Short-pay guard. If the user is finalising a "Mark Paid" with a partial
-    // amount that's less than the outstanding balance, make them acknowledge
-    // it — this is exactly the wrong-amount scenario we're trying to catch.
-    if (payingTargetStatus === "PAID" && usingPartial) {
-      const outstanding = Math.max(0, payingInvoice.amount - (payingInvoice.amountPaid || 0));
-      const shortBy = outstanding - partial;
-      if (shortBy > 0.01) {
-        // cancelAutoSubmit so the toast timer doesn't race the dialog.
-        cancelAutoSubmit();
-        const ok = await confirm({
-          title: `Record ${formatRM(partial)} against ${formatRM(payingInvoice.amount)}?`,
-          description: `That's short by ${formatRM(shortBy)} — invoice will stay as partial with that balance still owed. Continue?`,
-          confirmLabel: "Yes, record partial",
-        });
-        if (!ok) return;
-      }
-    }
-
     setPaySaving(true);
     try {
+      // If user entered a partial amount, route through paymentAmount so the
+      // API recomputes status (PARTIALLY_PAID / DEPOSIT_PAID / PAID) from
+      // the running total. Otherwise use the legacy status-flip behaviour.
+      const partial = parseFloat(payForm.partialAmount);
+      const usingPartial = Number.isFinite(partial) && partial > 0;
+
       const res = await fetch(`/api/inventory/invoices/${payingInvoice.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1551,18 +1473,6 @@ export default function InvoicesPage() {
                       {updatingId === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : a.label}
                     </button>
                   ))}
-                  {/* Adjust — for correcting a wrong amountPaid on an
-                      already-settled (or partly-settled) invoice. */}
-                  {["PAID", "DEPOSIT_PAID", "PARTIALLY_PAID"].includes(inv.status) && (
-                    <button
-                      onClick={() => openAdjustDialog(inv)}
-                      className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50"
-                      title="Correct the recorded paid amount"
-                    >
-                      <Pencil className="h-3 w-3" />
-                      Adjust
-                    </button>
-                  )}
                   {/* Send POP — show whenever any payment has been recorded
                       (full / deposit / partial) and there's a POP photo to
                       forward. Sits alongside any remaining action buttons
@@ -1765,16 +1675,6 @@ export default function InvoicesPage() {
                           )}
                         </button>
                       ))}
-                      {["PAID", "DEPOSIT_PAID", "PARTIALLY_PAID"].includes(inv.status) && (
-                        <button
-                          onClick={() => openAdjustDialog(inv)}
-                          className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50"
-                          title="Correct the recorded paid amount"
-                        >
-                          <Pencil className="h-3 w-3" />
-                          Adjust
-                        </button>
-                      )}
                       {(["PAID", "DEPOSIT_PAID", "PARTIALLY_PAID"].includes(inv.status)) && inv.photos.length > 0 && (
                         <div className="flex items-center gap-1.5">
                           {inv.status === "PAID" && actions.length === 0 && <CheckCircle2 className="h-4 w-4 text-green-500" />}
@@ -2576,89 +2476,6 @@ export default function InvoicesPage() {
           </div>
         </div>
       )}
-
-      {/* Adjust-payment dialog — correct a wrongly-keyed amountPaid on an
-          already-settled invoice. Overwrites amountPaid (not increments)
-          and lets the server re-derive status. */}
-      {adjustingInvoice && (() => {
-        const inv = adjustingInvoice;
-        const nextRaw = parseFloat(adjustForm.amountPaid);
-        const nextValid = Number.isFinite(nextRaw) && nextRaw >= 0;
-        const next = nextValid ? Math.min(nextRaw, inv.amount) : 0;
-        const prev = inv.amountPaid ?? 0;
-        const projectedOutstanding = Math.max(0, inv.amount - next);
-        const projectedStatus =
-          !nextValid ? null
-          : next >= inv.amount ? "PAID"
-          : next <= 0 ? "PENDING"
-          : inv.depositAmount && Math.abs(next - inv.depositAmount) < 0.01 ? "DEPOSIT_PAID"
-          : "PARTIALLY_PAID";
-        return (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={() => setAdjustingInvoice(null)}>
-            <div className="relative w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-base font-semibold text-gray-900">Adjust recorded payment</h3>
-                <button onClick={() => setAdjustingInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <p className="mb-3 text-xs text-gray-500">
-                Use this when the amount was keyed wrong — e.g. supplier reports
-                a shortfall. Overwrites the recorded paid amount; status updates
-                automatically.
-              </p>
-              <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Invoice</span>
-                  <span className="font-medium text-gray-900">{inv.invoiceNumber}</span>
-                </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <span className="text-gray-500">Invoice total</span>
-                  <span className="font-semibold text-gray-900">{formatRM(inv.amount)}</span>
-                </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <span className="text-gray-500">Currently recorded paid</span>
-                  <span className="font-medium text-gray-900">{formatRM(prev)}</span>
-                </div>
-              </div>
-              <div className="mt-3">
-                <label className="mb-1 block text-xs font-medium text-gray-600">Actual amount paid (RM)</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max={inv.amount}
-                  value={adjustForm.amountPaid}
-                  onChange={(e) => setAdjustForm({ amountPaid: e.target.value })}
-                />
-                {nextValid && nextRaw > inv.amount && (
-                  <p className="mt-1.5 text-[11px] text-red-700">
-                    Exceeds invoice total ({formatRM(inv.amount)}) — will cap at total.
-                  </p>
-                )}
-                {nextValid && projectedStatus && (
-                  <p className="mt-1.5 text-[11px] text-gray-600">
-                    After adjustment: <strong>{formatRM(next)}</strong> recorded
-                    {projectedOutstanding > 0.01
-                      ? <> · outstanding <strong>{formatRM(projectedOutstanding)}</strong> · status will become <strong>{projectedStatus === "PARTIALLY_PAID" ? "partial" : projectedStatus === "DEPOSIT_PAID" ? "deposit paid" : projectedStatus === "PENDING" ? "pending" : projectedStatus.toLowerCase()}</strong></>
-                      : <> · fully paid</>}
-                  </p>
-                )}
-              </div>
-              <div className="mt-4 flex gap-2">
-                <button onClick={() => setAdjustingInvoice(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-                <button
-                  onClick={submitAdjust}
-                  disabled={adjustSaving || !nextValid || Math.abs(next - prev) < 0.01}
-                  className="flex-1 rounded-md bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50"
-                >
-                  {adjustSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Save adjustment"}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Photo viewer modal — fullscreen */}
       {viewingPhotos && (
