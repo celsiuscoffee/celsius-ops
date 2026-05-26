@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -13,16 +14,25 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
+import * as Updates from "expo-updates";
 import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
+  Fingerprint,
   Key,
   LogOut,
+  Moon,
+  RefreshCw,
   Shield,
+  Smartphone,
+  Sun,
   UserCircle2,
 } from "lucide-react-native";
+import { useColorScheme } from "nativewind";
 import { Screen } from "../../components/Screen";
+import { PageHeader } from "../../components/PageHeader";
+import { Card, Section } from "../../components/ui";
 import { useStaff } from "../../lib/store";
 import { logout } from "../../lib/auth";
 import { api } from "../../lib/api";
@@ -33,6 +43,11 @@ import {
   isBiometricAvailable,
   setBiometricRequired,
 } from "../../lib/biometric";
+import {
+  loadColorSchemePref,
+  saveColorSchemePref,
+  type ColorSchemePref,
+} from "../../lib/theme";
 
 type ProfileResp = {
   completeness?: { percent: number; complete: boolean };
@@ -49,13 +64,23 @@ export default function Profile() {
   } | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
+  const { setColorScheme } = useColorScheme();
+  const [appearancePref, setAppearancePref] =
+    useState<ColorSchemePref>("system");
 
   useEffect(() => {
     (async () => {
       setBiometricSupported(await isBiometricAvailable());
       setBiometricOn(await getBiometricRequired());
+      setAppearancePref(await loadColorSchemePref());
     })();
   }, []);
+
+  async function pickAppearance(pref: ColorSchemePref) {
+    setAppearancePref(pref);
+    setColorScheme(pref);
+    await saveColorSchemePref(pref);
+  }
 
   const loadCompleteness = useCallback(async () => {
     try {
@@ -85,6 +110,50 @@ export default function Profile() {
     }
   }
 
+  // Manual OTA pull — the default expo-updates flow downloads in the
+  // background and only applies on the NEXT cold launch, which is
+  // confusing for testers who expect "tap refresh, see new UI". This
+  // forces the fetch + reload synchronously.
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  async function handleCheckForUpdates() {
+    if (checkingUpdate) return;
+    setCheckingUpdate(true);
+    try {
+      // Skip in dev — Updates APIs no-op (or throw) in Expo Go / dev
+      // client, and there's nothing to fetch anyway.
+      if (__DEV__ || !Updates.isEnabled) {
+        Alert.alert(
+          "Not available",
+          "Update check only works in production builds.",
+        );
+        return;
+      }
+      const check = await Updates.checkForUpdateAsync();
+      if (!check.isAvailable) {
+        Alert.alert(
+          "You're up to date",
+          `Running the latest build${
+            Updates.updateId ? ` (${Updates.updateId.slice(0, 8)})` : ""
+          }.`,
+        );
+        return;
+      }
+      await Updates.fetchUpdateAsync();
+      Alert.alert(
+        "Update ready",
+        "The app will now reload to apply the new version.",
+        [{ text: "Reload now", onPress: () => Updates.reloadAsync() }],
+      );
+    } catch (err) {
+      Alert.alert(
+        "Couldn't check for updates",
+        err instanceof Error ? err.message : "Try again on Wi-Fi.",
+      );
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }
+
   const initial = session?.name?.charAt(0)?.toUpperCase() ?? "?";
   const role = session?.role
     ? session.role[0] + session.role.slice(1).toLowerCase()
@@ -95,138 +164,287 @@ export default function Profile() {
     session?.role === "MANAGER";
 
   const openPersonal = () => {
-    const url = `${API_BASE_URL}/profile/personal`;
-    void WebBrowser.openBrowserAsync(url);
+    router.push("/(staff)/personal");
   };
+
+  const incomplete = completeness && !completeness.complete;
 
   return (
     <Screen>
-      <ScrollView contentContainerClassName="pt-8 pb-12">
-        <Text className="text-3xl font-display text-espresso">Profile</Text>
+      {/* Sticky header */}
+      <View className="pt-3">
+        <PageHeader title="Profile" subtitle="Personal info, PIN, biometric" />
+      </View>
 
-        {/* User card */}
-        <View className="mt-4 flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4">
-          <View className="h-12 w-12 items-center justify-center rounded-full bg-primary-50">
-            <Text className="text-lg font-display text-primary">{initial}</Text>
-          </View>
-          <View className="flex-1">
-            <Text className="text-base font-body-semi text-espresso">
-              {session?.name ?? "—"}
-            </Text>
-            <Text className="text-sm font-body text-muted-fg">{role}</Text>
-            {session?.outletName ? (
-              <Text className="text-xs font-body text-muted">
-                {session.outletName}
-              </Text>
-            ) : null}
-          </View>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerClassName="pb-24"
+      >
+
+        {/* Hero user card */}
+        <View className="mt-2">
+          <Card variant="accent" pad="lg">
+            <View className="flex-row items-center gap-4">
+              <View className="h-16 w-16 items-center justify-center rounded-full bg-primary">
+                <Text className="text-2xl font-display text-white">
+                  {initial}
+                </Text>
+              </View>
+              <View className="flex-1">
+                <Text
+                  className="text-xl font-display text-espresso"
+                  numberOfLines={1}
+                >
+                  {session?.name ?? "—"}
+                </Text>
+                <Text className="mt-0.5 text-sm font-body-semi text-primary">
+                  {role}
+                </Text>
+                {session?.outletName ? (
+                  <Text
+                    className="mt-0.5 text-xs font-body text-muted-fg"
+                    numberOfLines={1}
+                  >
+                    {session.outletName}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </Card>
         </View>
 
-        {/* Personal info — reminder when incomplete */}
-        <Pressable
-          onPress={openPersonal}
-          className={`mt-3 flex-row items-center gap-3 rounded-3xl border p-4 active:opacity-90 ${
-            completeness && !completeness.complete
-              ? "border-amber-500/30 bg-amber-50/50"
-              : "border-border bg-surface"
-          }`}
-        >
-          {completeness && !completeness.complete ? (
-            <AlertCircle color="#F59E0B" size={20} />
-          ) : (
-            <UserCircle2 color="#A2492C" size={20} />
-          )}
-          <View className="flex-1">
-            <Text className="text-sm font-body-semi text-espresso">
-              {completeness && !completeness.complete
-                ? "Complete your personal info"
-                : "Personal info"}
-            </Text>
-            <Text className="text-xs font-body text-muted">
-              Address, IC, emergency contact — needed for payslips and tax.
-            </Text>
-            {completeness && !completeness.complete ? (
-              <View className="mt-2 h-1.5 overflow-hidden rounded-full bg-amber-100">
-                <View
-                  className="h-full bg-amber-500"
-                  style={{ width: `${completeness.percent}%` }}
+        {/* Account */}
+        <Section title="Account">
+          <Pressable
+            onPress={openPersonal}
+            accessibilityLabel="Personal info"
+            className={`flex-row items-center gap-3 rounded-3xl border p-4 active:opacity-90 ${
+              incomplete
+                ? "border-amber-500/40 bg-amber-50/60"
+                : "border-border bg-surface"
+            }`}
+          >
+            <View
+              className={`h-11 w-11 items-center justify-center rounded-2xl ${
+                incomplete ? "bg-amber-500/15" : "bg-primary-50"
+              }`}
+            >
+              {incomplete ? (
+                <AlertCircle color="#D97706" size={20} />
+              ) : (
+                <UserCircle2 color="#C2452D" size={20} />
+              )}
+            </View>
+            <View className="flex-1">
+              <Text className="text-base font-display text-espresso">
+                {incomplete ? "Complete your personal info" : "Personal info"}
+              </Text>
+              <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                Address, IC, emergency contact — needed for payslips and tax.
+              </Text>
+              {incomplete ? (
+                <View className="mt-3 flex-row items-center gap-2">
+                  <View className="h-1.5 flex-1 overflow-hidden rounded-full bg-amber-100">
+                    <View
+                      className="h-full bg-amber-500"
+                      style={{ width: `${completeness?.percent ?? 0}%` }}
+                    />
+                  </View>
+                  <Text className="text-[10px] font-body-bold text-amber-700 tabular-nums">
+                    {completeness?.percent ?? 0}%
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <ChevronRight color="#9CA3AF" size={18} />
+          </Pressable>
+        </Section>
+
+        {/* Security */}
+        <Section title="Security">
+          <View className="gap-2.5">
+            {biometricSupported ? (
+              <View className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4">
+                <View className="h-11 w-11 items-center justify-center rounded-2xl bg-primary-50">
+                  <Fingerprint color="#C2452D" size={20} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-base font-display text-espresso">
+                    Face ID for clock-in
+                  </Text>
+                  <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                    Require biometric to confirm every clock action.
+                  </Text>
+                </View>
+                <Switch
+                  value={biometricOn}
+                  onValueChange={toggleBiometric}
+                  trackColor={{ true: "#C2452D", false: "#D1D5DB" }}
+                  thumbColor="#FFFFFF"
+                  ios_backgroundColor="#D1D5DB"
                 />
               </View>
             ) : null}
-          </View>
-          <ChevronRight color="#D1D5DB" size={16} />
-        </Pressable>
 
-        {/* Biometric */}
-        {biometricSupported ? (
-          <View className="mt-3 flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4">
-            <View className="flex-1">
-              <Text className="text-sm font-body-semi text-espresso">
-                Face ID for clock-in
-              </Text>
-              <Text className="text-xs font-body text-muted">
-                Require biometric to confirm every clock action.
-              </Text>
-            </View>
-            <Switch
-              value={biometricOn}
-              onValueChange={toggleBiometric}
-              trackColor={{ true: "#A2492C", false: "#D1D5DB" }}
+            <Pressable
+              onPress={() => setPinOpen(true)}
+              accessibilityLabel="Change PIN"
+              className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
+            >
+              <View className="h-11 w-11 items-center justify-center rounded-2xl bg-primary-50">
+                <Key color="#C2452D" size={20} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-base font-display text-espresso">
+                  Change PIN
+                </Text>
+                <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                  Update your 4–6 digit login PIN.
+                </Text>
+              </View>
+              <ChevronRight color="#9CA3AF" size={18} />
+            </Pressable>
+          </View>
+        </Section>
+
+        {/* Appearance — Light / Dark / System tri-toggle */}
+        <Section title="Appearance">
+          <View className="flex-row items-center gap-2 rounded-3xl border border-border bg-surface p-2">
+            <AppearanceChip
+              label="Light"
+              Icon={Sun}
+              active={appearancePref === "light"}
+              onPress={() => pickAppearance("light")}
+            />
+            <AppearanceChip
+              label="Dark"
+              Icon={Moon}
+              active={appearancePref === "dark"}
+              onPress={() => pickAppearance("dark")}
+            />
+            <AppearanceChip
+              label="System"
+              Icon={Smartphone}
+              active={appearancePref === "system"}
+              onPress={() => pickAppearance("system")}
             />
           </View>
-        ) : null}
+        </Section>
 
-        {/* Change PIN */}
-        <Pressable
-          onPress={() => setPinOpen(true)}
-          className="mt-3 flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
-        >
-          <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
-            <Key color="#A2492C" size={18} />
-          </View>
-          <Text className="flex-1 text-sm font-body-semi text-espresso">
-            Change PIN
-          </Text>
-          <ChevronRight color="#D1D5DB" size={16} />
-        </Pressable>
-
-        {/* Backoffice (managers) */}
+        {/* Manager-only */}
         {isManager ? (
-          <Pressable
-            onPress={() =>
-              WebBrowser.openBrowserAsync(
-                "https://backoffice.celsiuscoffee.com",
-              )
-            }
-            className="mt-3 flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
-          >
-            <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
-              <Shield color="#A2492C" size={18} />
-            </View>
-            <Text className="flex-1 text-sm font-body-semi text-espresso">
-              Backoffice
-            </Text>
-            <ChevronRight color="#D1D5DB" size={16} />
-          </Pressable>
+          <Section title="Manager">
+            <Pressable
+              onPress={() =>
+                WebBrowser.openBrowserAsync(
+                  "https://backoffice.celsiuscoffee.com",
+                )
+              }
+              accessibilityLabel="Open backoffice"
+              className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
+            >
+              <View className="h-11 w-11 items-center justify-center rounded-2xl bg-primary-50">
+                <Shield color="#C2452D" size={20} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-base font-display text-espresso">
+                  Backoffice
+                </Text>
+                <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                  Open the web dashboard in your browser.
+                </Text>
+              </View>
+              <ChevronRight color="#9CA3AF" size={18} />
+            </Pressable>
+          </Section>
         ) : null}
+
+        {/* App — manual OTA pull. Default expo-updates behavior is
+            background-download + apply-on-next-launch, which trips up
+            testers expecting a refresh button. This forces fetch +
+            reload synchronously. */}
+        <Section title="App">
+          <Pressable
+            onPress={handleCheckForUpdates}
+            disabled={checkingUpdate}
+            accessibilityLabel="Check for updates"
+            className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
+          >
+            <View className="h-11 w-11 items-center justify-center rounded-2xl bg-primary-50">
+              {checkingUpdate ? (
+                <ActivityIndicator color="#C2452D" size="small" />
+              ) : (
+                <RefreshCw color="#C2452D" size={20} />
+              )}
+            </View>
+            <View className="flex-1">
+              <Text className="text-base font-display text-espresso">
+                Check for updates
+              </Text>
+              <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                Pull the latest build now — no need to force-quit.
+              </Text>
+            </View>
+            <ChevronRight color="#9CA3AF" size={18} />
+          </Pressable>
+        </Section>
 
         {/* Sign out */}
         <Pressable
           onPress={handleSignOut}
           disabled={signingOut}
-          className="mt-6 h-14 flex-row items-center justify-center gap-2 rounded-2xl border border-danger/30 active:bg-danger/5"
+          accessibilityLabel="Sign out"
+          className="mt-8 h-14 flex-row items-center justify-center gap-2 rounded-2xl border border-danger/30 active:bg-danger/5"
         >
           {signingOut ? (
             <ActivityIndicator color="#B91C1C" size="small" />
           ) : (
             <LogOut color="#B91C1C" size={18} />
           )}
-          <Text className="text-base font-body-bold text-danger">Sign out</Text>
+          <Text className="text-base font-body-bold text-danger">
+            {signingOut ? "Signing out…" : "Sign out"}
+          </Text>
         </Pressable>
+
+        {/* Version footer */}
+        <Text className="mt-6 text-center text-[10px] font-body text-muted">
+          Celsius Coffee · Staff
+        </Text>
       </ScrollView>
 
       <ChangePinSheet open={pinOpen} onClose={() => setPinOpen(false)} />
     </Screen>
+  );
+}
+
+function AppearanceChip({
+  label,
+  Icon,
+  active,
+  onPress,
+}: {
+  label: string;
+  Icon: React.ComponentType<{ color: string; size: number }>;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityLabel={label}
+      className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl py-3 active:opacity-80 ${
+        active ? "bg-primary" : ""
+      }`}
+    >
+      <Icon color={active ? "#FFFFFF" : "#737373"} size={16} />
+      <Text
+        className={`text-sm font-body-bold ${
+          active ? "text-white" : "text-muted-fg"
+        }`}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -302,7 +520,9 @@ function ChangePinSheet({
       >
         <View className="flex-1 bg-background">
           <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Text className="text-xl font-display text-espresso">Change PIN</Text>
+            <Text className="text-xl font-display text-espresso">
+              Change PIN
+            </Text>
             <Pressable onPress={onClose} className="px-2 py-1">
               <Text className="text-sm font-body-bold text-muted">Close</Text>
             </Pressable>
@@ -313,6 +533,9 @@ function ChangePinSheet({
               <CheckCircle2 color="#15803D" size={56} />
               <Text className="mt-3 text-xl font-display text-espresso">
                 PIN updated
+              </Text>
+              <Text className="mt-1 text-sm font-body text-muted-fg">
+                Next sign-in will use the new PIN.
               </Text>
             </View>
           ) : (
@@ -338,9 +561,12 @@ function ChangePinSheet({
                   onChange={setConfirmPin}
                 />
                 {error ? (
-                  <Text className="mt-3 text-sm font-body text-danger">
-                    {error}
-                  </Text>
+                  <View className="mt-3 flex-row items-center gap-2 rounded-2xl border border-danger/30 bg-danger/5 px-3 py-2.5">
+                    <AlertCircle color="#B91C1C" size={16} />
+                    <Text className="flex-1 text-sm font-body text-danger">
+                      {error}
+                    </Text>
+                  </View>
                 ) : null}
               </ScrollView>
               <View className="border-t border-border p-5">
@@ -350,7 +576,7 @@ function ChangePinSheet({
                   className={`h-14 items-center justify-center rounded-2xl ${
                     saving || !currentPin || !newPin || !confirmPin
                       ? "bg-primary/40"
-                      : "bg-primary"
+                      : "bg-primary active:opacity-90"
                   }`}
                 >
                   {saving ? (
@@ -395,4 +621,3 @@ function PinField({
     </View>
   );
 }
-
