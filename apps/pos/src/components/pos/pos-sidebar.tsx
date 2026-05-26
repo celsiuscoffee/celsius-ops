@@ -12,6 +12,7 @@ import {
   Briefcase,
   LogOut,
   ArrowUpRight,
+  RotateCcw,
   type LucideIcon,
 } from "lucide-react";
 
@@ -32,10 +33,14 @@ export function POSSidebar({ isOpen, onClose, onNavigate, activePage }: Props) {
     .filter((o) => o.status === "completed")
     .reduce((sum, o) => sum + o.total, 0);
 
+  // "returns" is not a real page — onNavigate handler in the parent
+  // intercepts it and opens the Returns modal instead. Kept inside
+  // navItems so the visual treatment matches every other entry.
   const navItems: { id: string; label: string; Icon: LucideIcon; badge: number | null }[] = [
     { id: "register",     label: "Register",      Icon: CreditCard,    badge: null },
     { id: "orders",       label: "Open Orders",   Icon: ClipboardList, badge: openOrders.length > 0 ? openOrders.length : null },
     { id: "transactions", label: "Transactions",  Icon: Receipt,       badge: completedCount > 0 ? completedCount : null },
+    { id: "returns",      label: "Returns",       Icon: RotateCcw,     badge: null },
     { id: "shift",        label: "Shift Report",  Icon: BarChart3,     badge: null },
     { id: "settings",     label: "Settings",      Icon: Settings,      badge: null },
   ];

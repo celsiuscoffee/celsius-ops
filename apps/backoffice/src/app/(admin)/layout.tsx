@@ -174,6 +174,8 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Settings",       href: "/pos/settings",   icon: <SlidersHorizontal className={ICON_SIZE} />,  moduleKey: "pickup:settings" },
       { label: "Printers",       href: "/pos/printers",   icon: <Printer className={ICON_SIZE} />,            moduleKey: "pickup:settings" },
       { label: "Reports",        href: "/pos/reports",    icon: <BarChart3 className={ICON_SIZE} />,          moduleKey: "pickup:settings" },
+      { label: "Tax Report",     href: "/pos/tax-report", icon: <BarChart3 className={ICON_SIZE} />,          moduleKey: "pickup:settings" },
+      { label: "Z-Report",       href: "/pos/z-report",   icon: <ClipboardList className={ICON_SIZE} />,      moduleKey: "pickup:settings" },
       { label: "Table QR Codes", href: "/pos/table-qr",   icon: <QrCode className={ICON_SIZE} />,             moduleKey: "pickup:settings" },
     ],
   },
@@ -435,18 +437,23 @@ const NAV_SECTIONS: NavSection[] = [
       },
     ],
   },
+  // ── Settings (global). Per-module settings (POS, Pickup, Reviews,
+  // Ads, HR) stay under their own modules. The "Hub" at /settings is
+  // the consolidated landing — discoverable cross-link to every
+  // settings surface in the platform.
   {
     label: "Settings",
     icon: <SlidersHorizontal className={ICON_SIZE} />,
     railIcon: <SlidersHorizontal className={RAIL_ICON_SIZE} />,
     dividerBefore: true,
     items: [
-      { label: "Outlets", href: "/settings/outlets", icon: <Building2 className={ICON_SIZE} />, moduleKey: "settings:outlets" },
-      { label: "Staff & Access", href: "/settings/staff", icon: <UserCog className={ICON_SIZE} />, moduleKey: "settings:staff" },
-      { label: "Approval Rules", href: "/settings/rules", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "settings:rules" },
-      { label: "Integrations", href: "/settings/integrations", icon: <Plug className={ICON_SIZE} />, moduleKey: "settings:integrations" },
-      { label: "Stock Count", href: "/settings/stock-count", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "settings:stock-count" },
-      { label: "System", href: "/settings/system", icon: <Wrench className={ICON_SIZE} />, moduleKey: "settings:system" },
+      { label: "Hub",            href: "/settings",              icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "settings:outlets" },
+      { label: "Outlets",        href: "/settings/outlets",      icon: <Building2 className={ICON_SIZE} />,       moduleKey: "settings:outlets" },
+      { label: "Staff & Access", href: "/settings/staff",        icon: <UserCog className={ICON_SIZE} />,         moduleKey: "settings:staff" },
+      { label: "Approval Rules", href: "/settings/rules",        icon: <ShieldCheck className={ICON_SIZE} />,     moduleKey: "settings:rules" },
+      { label: "Integrations",   href: "/settings/integrations", icon: <Plug className={ICON_SIZE} />,            moduleKey: "settings:integrations" },
+      { label: "Stock Count",    href: "/settings/stock-count",  icon: <ClipboardCheck className={ICON_SIZE} />,  moduleKey: "settings:stock-count" },
+      { label: "System",         href: "/settings/system",       icon: <Wrench className={ICON_SIZE} />,          moduleKey: "settings:system" },
     ],
   },
 ];

@@ -16,6 +16,7 @@ import { ReceiptView } from "@/components/pos/receipt-view";
 import { POSSettings } from "@/components/pos/pos-settings";
 import { PromoIndicator } from "@/components/pos/promo-indicator";
 import { RewardPickerModal } from "@/components/pos/reward-picker-modal";
+import { ReturnsModal } from "@/components/pos/returns-modal";
 import { usePOS } from "@/lib/pos-context";
 import { usePickupPrinter } from "@/lib/use-pickup-printer";
 import { adaptProducts } from "@/lib/product-adapter";
@@ -83,6 +84,7 @@ export default function RegisterPage() {
   const [activePage, setActivePage] = useState<ActivePage>("register");
   const [showSidebar, setShowSidebar] = useState(false);
   const [showShiftModal, setShowShiftModal] = useState<"open" | "close" | "report" | null>(null);
+  const [showReturnsModal, setShowReturnsModal] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showDiscount, setShowDiscount] = useState(false);
   const [showReceipt, setShowReceipt] = useState<Record<string, unknown> | null>(null);
@@ -1630,7 +1632,13 @@ export default function RegisterPage() {
       )}
 
       {/* Modals */}
-      {showSidebar && <POSSidebar isOpen={showSidebar} onClose={() => setShowSidebar(false)} onNavigate={(p) => setActivePage(p as ActivePage)} activePage={activePage} />}
+      {showSidebar && <POSSidebar isOpen={showSidebar} onClose={() => setShowSidebar(false)} onNavigate={(p) => {
+        // "returns" is a modal, not a page — sidebar uses the same
+        // onNavigate API for everything, so we fork it here.
+        if (p === "returns") { setShowReturnsModal(true); return; }
+        setActivePage(p as ActivePage);
+      }} activePage={activePage} />}
+      {showReturnsModal && <ReturnsModal onClose={() => setShowReturnsModal(false)} />}
       {showShiftModal && <ShiftModal mode={showShiftModal} onClose={() => setShowShiftModal(null)} />}
       {showCheckout && <CheckoutModal items={cart} orderType={orderType} subtotal={subtotal} serviceCharge={serviceCharge} discount={discount} total={total} queueNumber={checkoutQueueNumber || undefined} orderNumber="" onComplete={handleCheckoutComplete} onClose={() => setShowCheckout(false)} />}
       {showDiscount && <DiscountModal

@@ -143,6 +143,11 @@ export function formatReceipt(
     total: number;
     created_at: string;
     employee_id?: string;
+    // Refund-only fields. When present (or when total < 0) the
+    // receipt switches to a refund layout.
+    refund_of_order_id?: string | null;
+    refund_reason?: string | null;
+    original_order_number?: string | null;
     pos_order_items?: {
       product_name: string;
       variant_name?: string | null;
@@ -164,16 +169,32 @@ export function formatReceipt(
   const items = order.pos_order_items ?? [];
   const payments = order.pos_order_payments ?? [];
   const date = new Date(order.created_at);
-  const rm = (sen: number) => `RM ${(sen / 100).toFixed(2)}`;
+  // Refund detection: either the FK is set, or the order has a
+  // negative total. We render qty/amounts as absolute values to keep
+  // the receipt human-readable — the "REFUND" banner makes the sign
+  // obvious without printing leading minus signs everywhere.
+  const isRefund =
+    !!order.refund_of_order_id || (typeof order.total === "number" && order.total < 0);
+  const abs = (n: number) => Math.abs(n);
+  const rm = (sen: number) => `RM ${(abs(sen) / 100).toFixed(2)}`;
 
   // ─── Header (centered, printed with special formatting) ───
   const headerLines = formatOutletHeader(outlet);
+  if (isRefund) {
+    headerLines.push("");
+    headerLines.push(centerText("** REFUND **"));
+  }
 
   // ─── Body (left-aligned monospace) ────────────────────────
   const bodyLines: string[] = [];
 
   bodyLines.push(divider("="));
-  bodyLines.push(twoColumn("Order:", order.order_number));
+  if (isRefund && order.original_order_number) {
+    // The original order is the customer's anchor — call it out
+    // BEFORE the refund row's own order number.
+    bodyLines.push(twoColumn("Original:", order.original_order_number));
+  }
+  bodyLines.push(twoColumn(isRefund ? "Refund:" : "Order:", order.order_number));
   bodyLines.push(
     twoColumn("Date:", date.toLocaleDateString("en-MY", { day: "2-digit", month: "2-digit", year: "numeric" }))
   );
@@ -198,9 +219,10 @@ export function formatReceipt(
 
   bodyLines.push(divider("="));
 
-  // Items
+  // Items — refund rows store negative quantities/totals; display the
+  // absolute value here and let the REFUND banner carry the sign.
   for (const item of items) {
-    const qty = `${item.quantity}x`;
+    const qty = `${abs(item.quantity)}x`;
     const name = item.product_name;
     const price = rm(item.item_total);
     // Format: "2x Latte                     RM24.00"
@@ -228,19 +250,21 @@ export function formatReceipt(
 
   bodyLines.push(divider());
 
-  // Totals
+  // Totals — rm() already takes absolute value, so refund rows print
+  // unsigned. The TOTAL line shifts label between TOTAL and REFUNDED
+  // to make the operation unmistakable on the slip.
   bodyLines.push(twoColumn("Subtotal", rm(order.subtotal)));
-  if (order.service_charge > 0) {
+  if (abs(order.service_charge) > 0) {
     bodyLines.push(twoColumn("Service Charge", rm(order.service_charge)));
   }
-  if (order.discount_amount > 0) {
+  if (abs(order.discount_amount) > 0) {
     bodyLines.push(twoColumn("Discount", `-${rm(order.discount_amount)}`));
   }
-  if ((order.promo_discount ?? 0) > 0) {
+  if (abs(order.promo_discount ?? 0) > 0) {
     bodyLines.push(twoColumn("Promo", `-${rm(order.promo_discount!)}`));
   }
   bodyLines.push(divider("="));
-  bodyLines.push(twoColumn("TOTAL", rm(order.total)));
+  bodyLines.push(twoColumn(isRefund ? "REFUNDED" : "TOTAL", rm(order.total)));
   bodyLines.push(divider("="));
 
   // Payment
@@ -252,14 +276,46 @@ export function formatReceipt(
           ? "Card"
           : p.payment_method === "ewallet"
             ? "E-Wallet"
-            : p.payment_method;
+            : p.payment_method === "store_credit"
+              ? "Store Credit"
+              : p.payment_method;
     bodyLines.push(twoColumn(method, rm(p.amount)));
+  }
+
+  // Reason — only on refund slips. Wraps long reasons across lines.
+  if (isRefund && order.refund_reason) {
+    bodyLines.push("");
+    bodyLines.push("Reason:");
+    const reason = order.refund_reason;
+    if (reason.length <= CHARS_PER_LINE) {
+      bodyLines.push(reason);
+    } else {
+      // Naive word-wrap — good enough for receipt text.
+      const words = reason.split(/\s+/);
+      let line = "";
+      for (const w of words) {
+        if ((line + " " + w).trim().length > CHARS_PER_LINE) {
+          bodyLines.push(line.trim());
+          line = w;
+        } else {
+          line = (line + " " + w).trim();
+        }
+      }
+      if (line) bodyLines.push(line.trim());
+    }
   }
 
   // ─── Footer (centered) ──────────────────────────────────
   const footerLines: string[] = [];
   footerLines.push("");
-  footerLines.push(centerText(config?.receiptFooter || "Thank you for visiting!"));
+  if (isRefund) {
+    // Customer copy proof — give them something they can show if the
+    // refund doesn't post to their card statement within a few days.
+    footerLines.push(centerText("Refund processed"));
+    footerLines.push(centerText("Keep this receipt for your records"));
+  } else {
+    footerLines.push(centerText(config?.receiptFooter || "Thank you for visiting!"));
+  }
   footerLines.push(centerText("www.celsiuscoffee.com"));
   footerLines.push("");
 

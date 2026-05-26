@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Settings, BarChart3, QrCode, ExternalLink, Printer } from "lucide-react";
+import { Settings, BarChart3, QrCode, ExternalLink, Printer, ClipboardList } from "lucide-react";
 
 /**
  * POS section landing — quick links into the POS admin surfaces.
@@ -29,6 +29,20 @@ const SECTIONS = [
     Icon: BarChart3,
     title: "Reports",
     blurb: "Daily sales, orders, payment breakdown, product mix, staff performance. Last 14 days.",
+    external: false,
+  },
+  {
+    href: "/pos/tax-report",
+    Icon: BarChart3,
+    title: "Tax Report",
+    blurb: "Monthly SST filing — taxable sales and tax collected grouped by outlet and tax rate.",
+    external: false,
+  },
+  {
+    href: "/pos/z-report",
+    Icon: ClipboardList,
+    title: "Z-Report (Shift Close)",
+    blurb: "Per-shift cash-up: sales, payments, refunds, drawer variance. Printable 80mm slip.",
     external: false,
   },
   {

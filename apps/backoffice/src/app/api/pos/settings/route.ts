@@ -65,6 +65,12 @@ export async function PUT(request: NextRequest) {
     "ghl_terminal_id",
     "grid_columns",
     "layout_mode",
+    // Outlet-level tax + LHDN e-Invoice defaults (per-product can override).
+    "default_tax_rate",
+    "default_tax_inclusive",
+    "einvoice_tin",
+    "einvoice_brn",
+    "einvoice_sst_no",
   ] as const;
   const updates: Record<string, unknown> = { outlet_id: body.outlet_id, updated_at: new Date().toISOString() };
   for (const k of allowed) if (k in body) updates[k] = body[k];

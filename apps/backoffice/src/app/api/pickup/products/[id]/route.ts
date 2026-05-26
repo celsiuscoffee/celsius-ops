@@ -56,6 +56,40 @@ export async function PATCH(
   if ("schedule_time_from" in body) update.schedule_time_from = body.schedule_time_from || null;
   if ("schedule_time_to"   in body) update.schedule_time_to   = body.schedule_time_to   || null;
 
+  // Channel-specific pricing (StoreHub-parity, 2026-05-26). Treat ""/null/undefined
+  // as "clear" so the merchant can revert a channel back to base price.
+  const channelPriceKeys = ["price_pickup", "price_grab", "price_foodpanda", "price_dinein"] as const;
+  for (const k of channelPriceKeys) {
+    if (k in body) {
+      const v = body[k];
+      if (v === null || v === "" || typeof v === "undefined") {
+        update[k] = null;
+      } else if (typeof v === "number" && Number.isFinite(v)) {
+        update[k] = v;
+      } else if (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v))) {
+        update[k] = Number(v);
+      }
+    }
+  }
+
+  // Per-product SST tax overrides. Null/empty clears the override so
+  // the outlet-level default applies again. The LHDN e-Invoice
+  // classification code is on the older e_invoice_classification_code
+  // column, handled elsewhere in this PATCH.
+  if ("tax_rate" in body) {
+    const v = body.tax_rate;
+    if (v === null || v === "" || typeof v === "undefined") {
+      update.tax_rate = null;
+    } else if (typeof v === "number" && Number.isFinite(v)) {
+      update.tax_rate = v;
+    } else if (typeof v === "string" && !isNaN(Number(v))) {
+      update.tax_rate = Number(v);
+    }
+  }
+  if (typeof body.tax_inclusive === "boolean") {
+    update.tax_inclusive = body.tax_inclusive;
+  }
+
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ ok: true });
   }

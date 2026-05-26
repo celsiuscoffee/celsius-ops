@@ -54,6 +54,14 @@ interface DbProduct {
   schedule_days_of_week: number[];        // 0=Sun..6=Sat, empty = every day
   schedule_time_from:  string | null;     // HH:mm or HH:mm:ss
   schedule_time_to:    string | null;
+  // Channel pricing + e-Invoice (StoreHub-parity P0, 2026-05-26). RM (not sen);
+  // null = fall back to base_price for that channel.
+  price_pickup:        number | null;
+  price_grab:          number | null;
+  price_foodpanda:     number | null;
+  price_dinein:        number | null;
+  tax_rate:            number;            // SST percent, default 0
+  tax_inclusive:       boolean;           // default true
 }
 
 interface Category { id: string; name: string; slug: string; position?: number }
@@ -141,6 +149,14 @@ function emptyForm(categories: Category[]) {
     schedule_days_of_week:          [] as number[],
     schedule_time_from:             "" as string,
     schedule_time_to:               "" as string,
+    // Channel pricing — "" in the input means "no override, use base price".
+    price_pickup:                   "" as string | number,
+    price_grab:                     "" as string | number,
+    price_foodpanda:                "" as string | number,
+    price_dinein:                   "" as string | number,
+    // Tax + LHDN e-Invoice (per-product override; outlet defaults handle the rest).
+    tax_rate:                       0,
+    tax_inclusive:                  true,
   };
 }
 
@@ -219,6 +235,13 @@ export default function PickupMenu() {
       // DB stores HH:mm:ss; the <input type="time"> wants HH:mm — trim if needed.
       schedule_time_from:             (p.schedule_time_from ?? "").slice(0, 5),
       schedule_time_to:               (p.schedule_time_to ?? "").slice(0, 5),
+      // null channel price → empty input so placeholder reads "Default".
+      price_pickup:                   p.price_pickup ?? "",
+      price_grab:                     p.price_grab ?? "",
+      price_foodpanda:                p.price_foodpanda ?? "",
+      price_dinein:                   p.price_dinein ?? "",
+      tax_rate:                       p.tax_rate ?? 0,
+      tax_inclusive:                  p.tax_inclusive ?? true,
     });
     setPreviewZoom(zoom);
     setShowForm(true);
@@ -229,9 +252,21 @@ export default function PickupMenu() {
     setSaving(true);
     setSaved(false);
 
+    // Channel prices are strings in the form ("" = no override). Coerce to
+    // number | null so the API can clear the column when the input is blank.
+    const channelPrice = (v: string | number) =>
+      v === "" || v === null || typeof v === "undefined"
+        ? null
+        : (typeof v === "number" ? v : Number(v));
+
     const body = {
       ...form,
       base_price_rm: form.base_price_rm,
+      price_pickup:    channelPrice(form.price_pickup),
+      price_grab:      channelPrice(form.price_grab),
+      price_foodpanda: channelPrice(form.price_foodpanda),
+      price_dinein:    channelPrice(form.price_dinein),
+      tax_rate:        Number(form.tax_rate) || 0,
     };
 
     if (editing) {
@@ -255,6 +290,12 @@ export default function PickupMenu() {
               schedule_days_of_week: form.schedule_days_of_week,
               schedule_time_from: form.schedule_time_from || null,
               schedule_time_to: form.schedule_time_to || null,
+              price_pickup:    body.price_pickup,
+              price_grab:      body.price_grab,
+              price_foodpanda: body.price_foodpanda,
+              price_dinein:    body.price_dinein,
+              tax_rate:        body.tax_rate,
+              tax_inclusive:   form.tax_inclusive,
             }
           : p
       ));
@@ -742,6 +783,35 @@ export default function PickupMenu() {
                 />
               </Field>
 
+              {/* ── Channel pricing — leave blank to use Base Price ── */}
+              <div className="border rounded-2xl p-4 bg-muted/10 space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Channel pricing</p>
+                <p className="text-[11px] text-muted-foreground -mt-2">
+                  Override the price per sales channel. Leave blank to charge the Base Price above. Used for marketplace markup (Grab/Foodpanda commissions) or dine-in surcharges.
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    ["price_pickup",    "Pickup (RM)"],
+                    ["price_grab",      "GrabFood (RM)"],
+                    ["price_foodpanda", "Foodpanda (RM)"],
+                    ["price_dinein",    "Dine-in (RM)"],
+                  ] as const).map(([key, label]) => (
+                    <Field key={key} label={label}>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={form[key] as number | string}
+                        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value === "" ? "" : Number(e.target.value) }))}
+                        placeholder="Use base price"
+                        className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </Field>
+                  ))}
+                </div>
+              </div>
+
               {/* Image */}
               <Field label="Product Image">
                 <div
@@ -883,6 +953,48 @@ export default function PickupMenu() {
                   <a href="https://sdk.myinvois.hasil.gov.my/codes/classification-codes/" target="_blank" rel="noopener" className="text-indigo-600 hover:underline">myinvois.hasil.gov.my</a>.
                 </p>
               </Field>
+
+              {/* ── Tax & e-Invoice (P0 StoreHub parity, 2026-05-26) ──
+                  Maps to new tax_rate / tax_inclusive columns; outlet-
+                  level defaults are set in POS Settings and used when
+                  these per-product fields are empty/zero. The
+                  e_invoice_classification_code field already exists
+                  above outside this section (legacy field). */}
+              <div className="border rounded-2xl p-4 bg-muted/10 space-y-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Tax &amp; e-Invoice</p>
+                <p className="text-[11px] text-muted-foreground -mt-2">
+                  Per-product SST + LHDN classification override. Leave at defaults to inherit the outlet-level settings.
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Tax Rate (%)">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.01}
+                      value={form.tax_rate}
+                      onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value === "" ? 0 : Number(e.target.value) }))}
+                      placeholder="0"
+                      className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </Field>
+                  <Field label="Tax Inclusive">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm h-10 px-3 border rounded-xl bg-white">
+                      <input
+                        type="checkbox"
+                        checked={form.tax_inclusive}
+                        onChange={(e) => setForm((f) => ({ ...f, tax_inclusive: e.target.checked }))}
+                        className="h-4 w-4 accent-[#160800]"
+                      />
+                      <span className="text-muted-foreground">
+                        {form.tax_inclusive ? "Tax is in the price" : "Tax added on top"}
+                      </span>
+                    </label>
+                  </Field>
+                </div>
+
+              </div>
 
               {/* ── Schedule — when this product is visible online ── */}
               <div className="border rounded-2xl p-4 bg-muted/10 space-y-3">

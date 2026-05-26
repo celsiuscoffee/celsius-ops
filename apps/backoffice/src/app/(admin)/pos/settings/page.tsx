@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Save, Store, Receipt, QrCode, Megaphone, CreditCard, LayoutGrid } from "lucide-react";
+import { Loader2, Save, Store, Receipt, QrCode, Megaphone, CreditCard, LayoutGrid, FileText } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
 
@@ -29,6 +29,12 @@ type Settings = {
   ghl_terminal_id:         string | null;
   grid_columns:            number | null;
   layout_mode:             string | null;
+  // Tax + LHDN e-Invoice defaults applied to all products that don't override.
+  default_tax_rate:        number | null;
+  default_tax_inclusive:   boolean | null;
+  einvoice_tin:            string | null;
+  einvoice_brn:            string | null;
+  einvoice_sst_no:         string | null;
 };
 
 // Labels come from the shared registry so every app reads the same
@@ -298,6 +304,55 @@ export default function POSSettingsPage() {
               onChange={(e) => update("ghl_terminal_id", e.target.value)}
               className="input font-mono"
               placeholder="TID"
+            />
+          </Field>
+        </Section>
+
+        {/* Tax + LHDN e-Invoice — outlet-level defaults. Products can override
+            via the menu editor; everything else inherits from here. */}
+        <Section title="Tax & e-Invoice" Icon={FileText}>
+          <Field label="Default Tax Rate (%)">
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.01}
+              value={editing.default_tax_rate ?? 0}
+              onChange={(e) => update("default_tax_rate", e.target.value === "" ? 0 : Number(e.target.value))}
+              className="input"
+              placeholder="0"
+            />
+          </Field>
+          <Toggle
+            checked={editing.default_tax_inclusive !== false}
+            onChange={(v) => update("default_tax_inclusive", v)}
+            label="Prices are tax-inclusive by default"
+          />
+          <Field label="TIN (Tax Identification Number)">
+            <input
+              type="text"
+              value={editing.einvoice_tin ?? ""}
+              onChange={(e) => update("einvoice_tin", e.target.value)}
+              className="input font-mono"
+              placeholder="C1234567890"
+            />
+          </Field>
+          <Field label="BRN (Business Registration Number)">
+            <input
+              type="text"
+              value={editing.einvoice_brn ?? ""}
+              onChange={(e) => update("einvoice_brn", e.target.value)}
+              className="input font-mono"
+              placeholder="202101012345"
+            />
+          </Field>
+          <Field label="SST Number">
+            <input
+              type="text"
+              value={editing.einvoice_sst_no ?? ""}
+              onChange={(e) => update("einvoice_sst_no", e.target.value)}
+              className="input font-mono"
+              placeholder="W10-1234-56789012"
             />
           </Field>
         </Section>
