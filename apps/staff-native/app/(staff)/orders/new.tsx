@@ -23,7 +23,6 @@ import {
   Search,
   Send,
   Sparkles,
-  Trash2,
   X as XIcon,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
@@ -100,10 +99,9 @@ export default function NewPO() {
   const [submitting, setSubmitting] = useState<null | "draft" | "send">(null);
 
   const [supplierPicker, setSupplierPicker] = useState(false);
-  const [productPicker, setProductPicker] = useState(false);
   const [search, setSearch] = useState("");
-  // Separate search state for the supplier picker so opening the
-  // product picker doesn't carry over a leftover supplier search.
+  // Separate search state for the supplier picker so opening it doesn't
+  // collide with the inline product search.
   const [supplierSearch, setSupplierSearch] = useState("");
 
   useEffect(() => {
@@ -185,53 +183,56 @@ export default function NewPO() {
     ).catch(() => {});
   }
 
-  function addProduct(p: SupplierProduct) {
-    // Multi-add picker — stays open after each tap so the user can
-    // load up the cart without re-opening for every line. The picker
-    // shows an "✓ Added" indicator on rows already in the cart, and
-    // the header shows the running cart count. A "Done" button
-    // commits and closes. Mirrors backoffice procurement which also
-    // lets you cart-up without sheet round-trips.
-    //
-    // Identity for "already added" is (productId, packageId) so the
-    // same product in different packages stays distinct (ADHOC case).
+  // Inline menu-style flow: each product row owns its own quantity.
+  // setProductQty(p, n) replaces addProduct(p) — qty=0 means "not in
+  // cart", any positive value means "in cart with that quantity".
+  // Identity is (productId, packageId) so the same product in
+  // different packages stays distinct (ADHOC case).
+  function setProductQty(p: SupplierProduct, qty: number) {
+    const next = Math.max(0, Math.floor(qty));
     setCart((prev) => {
-      const exists = prev.some(
+      const idx = prev.findIndex(
         (l) => l.productId === p.id && l.packageId === p.packageId,
       );
-      if (exists) {
-        // Tap-again increments quantity instead of duplicating the row.
-        return prev.map((l) =>
-          l.productId === p.id && l.packageId === p.packageId
-            ? { ...l, quantity: l.quantity + 1 }
-            : l,
-        );
+      // qty=0 → drop the line entirely (keeps the cart clean for the
+      // submit payload, and the row falls back to its "not in cart"
+      // visual state).
+      if (next === 0) {
+        return idx === -1 ? prev : prev.filter((_, i) => i !== idx);
       }
-      return [
-        ...prev,
-        {
-          productId: p.id,
-          productName: p.name,
-          sku: p.sku,
-          unitLabel: p.packageLabel,
-          packageId: p.packageId,
-          quantity: 1,
-          unitPrice: p.price,
-        },
-      ];
+      if (idx === -1) {
+        return [
+          ...prev,
+          {
+            productId: p.id,
+            productName: p.name,
+            sku: p.sku,
+            unitLabel: p.packageLabel,
+            packageId: p.packageId,
+            quantity: next,
+            unitPrice: p.price,
+          },
+        ];
+      }
+      return prev.map((l, i) =>
+        i === idx ? { ...l, quantity: next } : l,
+      );
     });
-    Haptics.selectionAsync().catch(() => {});
+    if (next > 0) Haptics.selectionAsync().catch(() => {});
   }
 
-  function updateLine(idx: number, patch: Partial<CartLine>) {
+  // Per-product price override — kept simple as a value-update on the
+  // cart line. The catalog price stays the supplier default.
+  function setProductPrice(p: SupplierProduct, price: number) {
     setCart((prev) =>
-      prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)),
+      prev.map((l) =>
+        l.productId === p.id && l.packageId === p.packageId
+          ? { ...l, unitPrice: Math.max(0, price) }
+          : l,
+      ),
     );
   }
 
-  function removeLine(idx: number) {
-    setCart((prev) => prev.filter((_, i) => i !== idx));
-  }
 
   const canSubmit =
     !!supplierId &&
@@ -482,174 +483,203 @@ export default function NewPO() {
             />
           </Field>
 
-          {/* Items */}
-          <View className="mt-5 flex-row items-center justify-between">
-            <Text className="text-xs font-body-semi uppercase tracking-wider text-muted">
-              Items ({cart.length})
-            </Text>
-            <Pressable
-              onPress={() => setProductPicker(true)}
-              className="h-8 flex-row items-center gap-1 rounded-lg bg-primary px-3 active:opacity-90"
-            >
-              <Plus color="#FFFFFF" size={14} />
-              <Text className="text-xs font-body-bold text-white">Add item</Text>
-            </Pressable>
-          </View>
-
-          {cart.length === 0 ? (
-            // Big tappable empty state — the whole card opens the picker
-            // so the user doesn't have to find the tiny "Add item" pill
-            // above. `flex-1` + ScrollView flexGrow:1 above stretches
-            // this card to fill the viewport so the pinned action bar
-            // doesn't float over a blank screen.
-            <Pressable
-              onPress={() => setProductPicker(true)}
-              disabled={!supplierId}
-              className={`mt-3 mb-4 flex-1 rounded-3xl border border-dashed border-border bg-surface items-center justify-center px-6 py-10 ${
-                supplierId ? "active:bg-primary-50" : "opacity-60"
-              }`}
+          {/* Inline product list — menu-style. No modal hop: pick the
+              supplier above and the catalog renders directly below.
+              Each row owns its qty via a stepper; qty=0 means "not in
+              cart". When qty>0 the row tints + the price input
+              expands so the user can override the supplier default if
+              the catalog is stale. */}
+          {!supplierId ? (
+            <View
+              className="mt-5 flex-1 items-center justify-center rounded-3xl border border-dashed border-border bg-surface px-6 py-10 opacity-60"
             >
               <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary-50">
                 <PackageIcon color="#C2452D" size={28} />
               </View>
               <Text className="mt-3 text-base font-body-bold text-espresso">
-                {supplierId ? "Add your first item" : "Pick a supplier first"}
+                Pick a supplier first
               </Text>
               <Text className="mt-1 px-4 text-center text-xs font-body text-muted-fg">
-                {supplierId
-                  ? pickerSource.length === 0
-                    ? "This supplier has no products linked. Add some in backoffice → suppliers first."
-                    : `Tap to browse ${pickerSource.length} item${pickerSource.length === 1 ? "" : "s"} from this supplier.`
-                  : "Select a supplier above to start adding items."}
+                Their product catalog will appear here for one-tap
+                ordering.
               </Text>
-              {supplierId ? (
-                <View className="mt-4 flex-row items-center gap-1.5 rounded-full bg-primary px-4 py-2">
-                  <Plus color="#FFFFFF" size={14} />
-                  <Text className="text-xs font-body-bold text-white">
-                    Add item
-                  </Text>
-                </View>
-              ) : null}
-            </Pressable>
-          ) : (
-            <View className="mt-3 gap-2">
-              {cart.map((line, idx) => (
-                <View
-                  key={idx}
-                  className="rounded-3xl border border-border bg-surface px-4 py-3"
-                >
-                  <View className="flex-row items-start justify-between gap-2">
-                    <View className="flex-1">
-                      <Text
-                        className="text-sm font-body-bold text-espresso"
-                        numberOfLines={2}
-                      >
-                        {line.productName}
-                      </Text>
-                      <Text className="mt-0.5 text-xs font-body text-muted-fg">
-                        {line.sku} · {line.unitLabel}
-                      </Text>
-                    </View>
-                    <Pressable
-                      onPress={() => removeLine(idx)}
-                      hitSlop={8}
-                      className="h-8 w-8 items-center justify-center rounded-full active:bg-danger/10"
-                    >
-                      <Trash2 color="#EF4444" size={16} />
-                    </Pressable>
-                  </View>
-                  <View className="mt-3 flex-row items-center gap-3">
-                    <View className="flex-1">
-                      <Text className="mb-1 text-[10px] font-body-semi uppercase tracking-wide text-muted">
-                        Qty
-                      </Text>
-                      <View className="h-11 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-2">
-                        <Pressable
-                          onPress={() =>
-                            updateLine(idx, {
-                              quantity: Math.max(0, line.quantity - 1),
-                            })
-                          }
-                          className="h-8 w-8 items-center justify-center rounded-lg active:bg-primary-50"
-                        >
-                          <Minus color={iconColor} size={16} />
-                        </Pressable>
-                        <TextInput
-                          value={String(line.quantity)}
-                          onChangeText={(t) =>
-                            updateLine(idx, {
-                              quantity: Math.max(0, Number(t) || 0),
-                            })
-                          }
-                          keyboardType="number-pad"
-                          className="flex-1 text-center text-base font-body-bold text-espresso tabular-nums"
-                        />
-                        <Pressable
-                          onPress={() =>
-                            updateLine(idx, { quantity: line.quantity + 1 })
-                          }
-                          className="h-8 w-8 items-center justify-center rounded-lg active:bg-primary-50"
-                        >
-                          <Plus color={iconColor} size={16} />
-                        </Pressable>
-                      </View>
-                    </View>
-                    <View className="flex-1">
-                      <Text className="mb-1 text-[10px] font-body-semi uppercase tracking-wide text-muted">
-                        Unit price (RM)
-                      </Text>
-                      <TextInput
-                        value={
-                          line.unitPrice === 0 ? "" : String(line.unitPrice)
-                        }
-                        onChangeText={(t) =>
-                          updateLine(idx, {
-                            unitPrice: Math.max(0, Number(t) || 0),
-                          })
-                        }
-                        keyboardType="decimal-pad"
-                        placeholder="0.00"
-                        placeholderTextColor="#9CA3AF"
-                        className="h-11 rounded-2xl border border-border bg-surface px-3 text-base font-body-bold text-espresso text-right tabular-nums"
-                      />
-                    </View>
-                  </View>
-                  <View className="mt-2 flex-row items-center justify-between">
-                    <Text className="text-xs font-body text-muted-fg">
-                      Line total
-                    </Text>
-                    <Text className="text-sm font-body-bold text-espresso tabular-nums">
-                      RM {(line.quantity * line.unitPrice).toFixed(2)}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-              <View className="mt-1 flex-row items-center justify-between rounded-3xl bg-primary-50 px-4 py-3">
-                <Text className="text-sm font-body-bold text-espresso">
-                  Total
-                </Text>
-                <Text className="text-lg font-body-bold text-primary tabular-nums">
-                  RM {total.toFixed(2)}
-                </Text>
-              </View>
             </View>
-          )}
+          ) : pickerSource.length === 0 ? (
+            <View className="mt-5 items-center rounded-3xl border border-dashed border-border bg-surface px-6 py-10">
+              <View className="h-16 w-16 items-center justify-center rounded-2xl bg-amber-50">
+                <PackageIcon color="#D97706" size={28} />
+              </View>
+              <Text className="mt-3 text-base font-body-bold text-espresso">
+                No products linked
+              </Text>
+              <Text className="mt-1 px-4 text-center text-xs font-body text-muted-fg">
+                Add supplier-product mappings in backoffice → suppliers
+                first.
+              </Text>
+            </View>
+          ) : (
+            <>
+              {/* Summary header — count + total. Sticks visually below
+                  the supplier/date fields so the user always sees
+                  what's in the cart while scrolling the catalog. */}
+              <View className="mt-5 flex-row items-center justify-between">
+                <Text className="text-xs font-body-semi uppercase tracking-wider text-muted">
+                  Items · {cart.length} of {pickerSource.length} selected
+                </Text>
+                {cart.length > 0 ? (
+                  <Text className="text-sm font-body-bold text-primary tabular-nums">
+                    RM {total.toFixed(2)}
+                  </Text>
+                ) : null}
+              </View>
 
-          {/* Notes — only relevant once there's something to note about.
-              Hiding while empty also tightens the visual gap above the
-              pinned action bar. */}
-          {cart.length > 0 ? (
-            <Field label="Notes (optional)">
-              <TextInput
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="e.g. urgent — needed by morning shift"
-                placeholderTextColor="#9CA3AF"
-                multiline
-                className="min-h-14 rounded-2xl border border-border bg-surface px-4 py-3 text-base font-body text-espresso"
-              />
-            </Field>
-          ) : null}
+              {/* Inline search */}
+              <View className="mt-2 flex-row items-center gap-2 rounded-2xl border border-border bg-surface px-3">
+                <Search color="#9CA3AF" size={18} />
+                <TextInput
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder={`Search ${pickerSource.length} products`}
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  className="h-12 flex-1 text-base font-body text-espresso"
+                />
+                {search ? (
+                  <Pressable onPress={() => setSearch("")} hitSlop={8}>
+                    <XIcon color="#9CA3AF" size={16} />
+                  </Pressable>
+                ) : null}
+              </View>
+
+              <View className="mt-3 gap-2">
+                {filtered.length === 0 ? (
+                  <View className="rounded-2xl border border-dashed border-border bg-surface px-4 py-6 items-center">
+                    <Text className="text-sm font-body text-muted-fg">
+                      No products match "{search}".
+                    </Text>
+                  </View>
+                ) : (
+                  filtered.map((p, idx) => {
+                    const line = cart.find(
+                      (l) =>
+                        l.productId === p.id && l.packageId === p.packageId,
+                    );
+                    const qty = line?.quantity ?? 0;
+                    const inCart = qty > 0;
+                    const unitPrice = line?.unitPrice ?? p.price;
+                    return (
+                      <View
+                        key={`${p.id}-${p.packageId ?? "base"}-${idx}`}
+                        className={`rounded-2xl border px-4 py-3 ${
+                          inCart
+                            ? "border-primary/40 bg-primary-50/50"
+                            : "border-border bg-surface"
+                        }`}
+                      >
+                        <View className="flex-row items-start justify-between gap-3">
+                          <View className="flex-1">
+                            <Text
+                              className="text-sm font-body-bold text-espresso"
+                              numberOfLines={2}
+                            >
+                              {p.name}
+                            </Text>
+                            <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                              {p.sku ? `${p.sku} · ` : ""}
+                              {p.packageLabel}
+                              {p.price > 0
+                                ? ` · RM ${p.price.toFixed(2)}`
+                                : ""}
+                            </Text>
+                          </View>
+                          {/* Qty control. When qty=0 we show a single
+                              [+] add button (large tap target); when
+                              qty>0 we show the full [- N +] stepper. */}
+                          {inCart ? (
+                            <View className="h-9 flex-row items-center rounded-full bg-surface border border-primary/30">
+                              <Pressable
+                                onPress={() => setProductQty(p, qty - 1)}
+                                hitSlop={6}
+                                className="h-9 w-9 items-center justify-center rounded-full active:bg-primary-50"
+                              >
+                                <Minus color="#C2452D" size={16} />
+                              </Pressable>
+                              <Text className="min-w-7 text-center text-sm font-body-bold text-primary tabular-nums">
+                                {qty}
+                              </Text>
+                              <Pressable
+                                onPress={() => setProductQty(p, qty + 1)}
+                                hitSlop={6}
+                                className="h-9 w-9 items-center justify-center rounded-full active:bg-primary-50"
+                              >
+                                <Plus color="#C2452D" size={16} />
+                              </Pressable>
+                            </View>
+                          ) : (
+                            <Pressable
+                              onPress={() => setProductQty(p, 1)}
+                              hitSlop={6}
+                              className="h-9 w-9 items-center justify-center rounded-full bg-primary active:opacity-90"
+                            >
+                              <Plus color="#FFFFFF" size={16} />
+                            </Pressable>
+                          )}
+                        </View>
+                        {/* Price + line total — only when in cart. Lets
+                            the user override the catalog price if it's
+                            stale, and confirms the line subtotal. */}
+                        {inCart ? (
+                          <View className="mt-3 flex-row items-center justify-between gap-3">
+                            <View className="flex-1 flex-row items-center gap-2">
+                              <Text className="text-[10px] font-body-semi uppercase tracking-wide text-muted">
+                                Price
+                              </Text>
+                              <View className="flex-1 flex-row items-center rounded-xl border border-border bg-surface px-2">
+                                <Text className="text-xs font-body text-muted-fg">
+                                  RM
+                                </Text>
+                                <TextInput
+                                  value={
+                                    unitPrice === 0 ? "" : String(unitPrice)
+                                  }
+                                  onChangeText={(t) =>
+                                    setProductPrice(p, Number(t) || 0)
+                                  }
+                                  keyboardType="decimal-pad"
+                                  placeholder="0.00"
+                                  placeholderTextColor="#9CA3AF"
+                                  className="h-9 flex-1 px-1 text-sm font-body-bold text-espresso text-right tabular-nums"
+                                />
+                              </View>
+                            </View>
+                            <Text className="text-sm font-body-bold text-espresso tabular-nums">
+                              RM {(qty * unitPrice).toFixed(2)}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+
+              {/* Notes — only relevant once there's something to note
+                  about. Sits below the catalog list. */}
+              {cart.length > 0 ? (
+                <Field label="Notes (optional)">
+                  <TextInput
+                    value={notes}
+                    onChangeText={setNotes}
+                    placeholder="e.g. urgent — needed by morning shift"
+                    placeholderTextColor="#9CA3AF"
+                    multiline
+                    className="min-h-14 rounded-2xl border border-border bg-surface px-4 py-3 text-base font-body text-espresso"
+                  />
+                </Field>
+              ) : null}
+            </>
+          )}
         </ScrollView>
         )}
 
@@ -823,142 +853,6 @@ export default function NewPO() {
         </View>
       </Modal>
 
-      {/* Product picker sheet — multi-add: stays open so the user can
-          tap several items in a row. Header shows the running cart
-          count; tap an item again to bump its quantity (instead of
-          duplicating). Bottom "Done" bar commits and closes. */}
-      <Modal
-        visible={productPicker}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => {
-          setProductPicker(false);
-          setSearch("");
-        }}
-      >
-        <View className="flex-1 bg-background">
-          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <View className="flex-1">
-              <Text className="text-base font-peachi text-espresso">
-                Add items
-              </Text>
-              <Text className="mt-0.5 text-xs font-body text-muted-fg">
-                {cart.length === 0
-                  ? "Tap items to add — they'll appear in the cart"
-                  : `${cart.length} in cart · tap again to add more`}
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => {
-                setProductPicker(false);
-                setSearch("");
-              }}
-              className="px-2 py-1"
-            >
-              <XIcon color={iconColor} size={20} />
-            </Pressable>
-          </View>
-          <View className="px-4 pt-3">
-            <View className="flex-row items-center gap-2 rounded-2xl border border-border bg-surface px-3">
-              <Search color="#9CA3AF" size={18} />
-              <TextInput
-                value={search}
-                onChangeText={setSearch}
-                placeholder="Search products"
-                placeholderTextColor="#9CA3AF"
-                className="h-12 flex-1 text-base font-body text-espresso"
-              />
-            </View>
-          </View>
-          <ScrollView
-            contentContainerClassName="px-4 py-3 gap-2"
-            keyboardShouldPersistTaps="handled"
-          >
-            {filtered.length === 0 ? (
-              <View className="mt-10 items-center px-6">
-                <Text className="text-center text-sm font-body-bold text-espresso">
-                  {search
-                    ? "No products match your search"
-                    : "This supplier has no products yet"}
-                </Text>
-                <Text className="mt-1 text-center text-xs font-body text-muted-fg">
-                  {search
-                    ? "Try a different keyword or SKU."
-                    : "Add supplier-product mappings in backoffice → suppliers."}
-                </Text>
-              </View>
-            ) : (
-              filtered.map((p, idx) => {
-                // Show qty-in-cart on rows already added so the user
-                // gets immediate feedback that the tap registered.
-                const inCart = cart.find(
-                  (l) =>
-                    l.productId === p.id && l.packageId === p.packageId,
-                );
-                return (
-                  <Pressable
-                    key={`${p.id}-${p.packageId ?? "base"}-${idx}`}
-                    onPress={() => addProduct(p)}
-                    className={`rounded-2xl border px-4 py-3 active:bg-primary-50 ${
-                      inCart
-                        ? "border-primary/50 bg-primary-50/60"
-                        : "border-border bg-surface"
-                    }`}
-                  >
-                    <View className="flex-row items-center justify-between gap-2">
-                      <View className="flex-1">
-                        <Text
-                          className="text-sm font-body-bold text-espresso"
-                          numberOfLines={1}
-                        >
-                          {p.name}
-                        </Text>
-                        <Text className="text-xs font-body text-muted-fg">
-                          {p.sku} · {p.packageLabel}
-                        </Text>
-                      </View>
-                      <View className="items-end gap-1">
-                        {p.price > 0 ? (
-                          <Text className="text-sm font-body-bold text-primary tabular-nums">
-                            RM {p.price.toFixed(2)}
-                          </Text>
-                        ) : null}
-                        {inCart ? (
-                          <View className="flex-row items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5">
-                            <Check color="#10B981" size={10} />
-                            <Text className="text-[10px] font-body-bold text-emerald-700">
-                              {inCart.quantity} in cart
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    </View>
-                  </Pressable>
-                );
-              })
-            )}
-          </ScrollView>
-
-          {/* Pinned Done bar — commits and closes. Always visible so
-              the user knows how to exit when adding multiple items. */}
-          <View className="border-t border-border bg-background px-4 py-3">
-            <Pressable
-              onPress={() => {
-                setProductPicker(false);
-                setSearch("");
-                Haptics.selectionAsync().catch(() => {});
-              }}
-              className="h-14 items-center justify-center rounded-2xl bg-primary active:opacity-90"
-            >
-              <Text className="text-sm font-body-bold text-white">
-                {cart.length === 0
-                  ? "Cancel"
-                  : `Done · ${cart.length} item${cart.length === 1 ? "" : "s"} in cart`}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </Screen>
   );
 }
