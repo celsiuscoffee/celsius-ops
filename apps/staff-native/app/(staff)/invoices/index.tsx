@@ -304,16 +304,15 @@ export default function InvoicesList() {
           </Pressable>
         ) : null}
 
-        {/* Tabs + filter trigger. Filter button sits at the far right so
-            tab pills always start from the left edge; the badge dot on
-            top of the funnel icon makes "filters active" obvious from
-            across the screen. */}
+        {/* Tabs row — filter trigger pinned at the right (fixed width)
+            with the tab pills taking the remaining space. The previous
+            implementation wrapped tabs in a horizontal ScrollView with
+            no flex constraint, which on some viewports expanded to fit
+            content and pushed the funnel off-screen entirely. With 4
+            short tabs ("Unpaid/Paid/All/Pending") horizontal scroll
+            isn't needed — they fit even on iPhone SE. */}
         <View className="mb-3 flex-row items-center gap-2">
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8 }}
-          >
+          <View className="flex-1 flex-row flex-wrap gap-2">
             {(["unpaid", "paid", "all", "pending_invoice"] as TabKey[]).map(
               (t) => (
                 <Pressable
@@ -333,13 +332,17 @@ export default function InvoicesList() {
                 </Pressable>
               ),
             )}
-          </ScrollView>
+          </View>
+          {/* Filter trigger — labelled (not just an icon) so it's
+              unmissable even on first run. Tappable target is wide
+              enough that users with thicker fingers can hit it
+              cleanly without zooming. */}
           <Pressable
             onPress={() => {
               setPendingFilters(filters);
               setFilterSheet(true);
             }}
-            className={`h-9 w-9 items-center justify-center rounded-full ${
+            className={`h-9 flex-row items-center gap-1.5 rounded-full px-3 ${
               activeFilterCount(filters) > 0
                 ? "bg-primary"
                 : "border border-border bg-surface"
@@ -347,15 +350,17 @@ export default function InvoicesList() {
           >
             <FilterIcon
               color={activeFilterCount(filters) > 0 ? "#FFFFFF" : iconColor}
-              size={16}
+              size={14}
             />
-            {activeFilterCount(filters) > 0 ? (
-              <View className="absolute -right-0.5 -top-0.5 h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1">
-                <Text className="text-[9px] font-body-bold text-white">
-                  {activeFilterCount(filters)}
-                </Text>
-              </View>
-            ) : null}
+            <Text
+              className={`text-xs font-body-bold ${
+                activeFilterCount(filters) > 0 ? "text-white" : "text-espresso"
+              }`}
+            >
+              {activeFilterCount(filters) > 0
+                ? `Filters · ${activeFilterCount(filters)}`
+                : "Filter"}
+            </Text>
           </Pressable>
         </View>
 
