@@ -7,6 +7,7 @@ import {
   ScrollView,
   Image,
   TextInput,
+  useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
   type LayoutChangeEvent,
@@ -91,6 +92,16 @@ const HIDDEN_CATEGORIES = new Set([
 export default function Menu() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ tab?: string }>();
+  // Web PWA viewport budget is tight (especially iOS Safari with its
+  // ~50px URL bar eating into vph). Narrow the sidebar and trim some
+  // generous bottom padding so the product list has more room to breathe.
+  // Native keeps the spacious defaults — phones have a full viewport.
+  const { width: viewportWidth } = useWindowDimensions();
+  const isWeb = Platform.OS === "web";
+  const isNarrowWeb = isWeb && viewportWidth < 420;
+  const sidebarWidth = isNarrowWeb ? 60 : 80;
+  const pillWidth = isNarrowWeb ? 52 : 72;
+  const productListBottomPadClass = isWeb ? "pb-32" : "pb-44";
   const cart = useApp((s) => s.cart);
   const outletName = useApp((s) => s.outletName);
   const outletId = useApp((s) => s.outletId);
@@ -501,12 +512,12 @@ export default function Menu() {
         {!query && (
           <View
             className="bg-surface border-r border-border"
-            style={{ width: 80, flexShrink: 0 }}
+            style={{ width: sidebarWidth, flexShrink: 0 }}
           >
           <ScrollView
             ref={sidebarRef}
-            style={{ flex: 1, width: 80 }}
-            contentContainerStyle={{ width: 80, paddingHorizontal: 4, paddingTop: 8, paddingBottom: 180, gap: 6 }}
+            style={{ flex: 1, width: sidebarWidth }}
+            contentContainerStyle={{ width: sidebarWidth, paddingHorizontal: 4, paddingTop: 8, paddingBottom: 180, gap: 6 }}
             showsVerticalScrollIndicator={false}
           >
             {/* "Usual" sits above Best Sellers because retention beats discovery
@@ -520,6 +531,7 @@ export default function Menu() {
                   icon={Heart}
                   label="Usual"
                   fill={active === USUAL_ID}
+                  width={pillWidth}
                 />
               </View>
             )}
@@ -531,6 +543,7 @@ export default function Menu() {
                   icon={Star}
                   label="Best Sellers"
                   fill={active === BEST_SELLERS_ID}
+                  width={pillWidth}
                 />
               </View>
             )}
@@ -543,6 +556,7 @@ export default function Menu() {
                     onPress={() => onPressPill(c.id)}
                     icon={Icon}
                     label={c.name}
+                    width={pillWidth}
                   />
                 </View>
               );
@@ -554,7 +568,7 @@ export default function Menu() {
         <ScrollView
           ref={productListRef}
           className="flex-1"
-          contentContainerClassName="pb-44"
+          contentContainerClassName={productListBottomPadClass}
           showsVerticalScrollIndicator={false}
           onScroll={onProductScroll}
           scrollEventThrottle={16}
@@ -717,12 +731,16 @@ function SideCategoryPill({
   icon: Icon,
   label,
   fill = false,
+  width = 72,
 }: {
   active: boolean;
   onPress: () => void;
   icon: any;
   label: string;
   fill?: boolean;
+  // Sidebar width override — narrow web viewports use 52 (saves
+  // horizontal space alongside the 60px sidebar set in <Menu/>).
+  width?: number;
 }) {
   return (
     <Pressable
@@ -730,7 +748,7 @@ function SideCategoryPill({
       className={`rounded-2xl items-center justify-center gap-1 active:opacity-70 ${
         active ? "bg-espresso" : "bg-background"
       }`}
-      style={{ width: 72, height: 64, paddingHorizontal: 4 }}
+      style={{ width, height: 64, paddingHorizontal: 4 }}
     >
       <Icon
         size={16}
@@ -742,7 +760,7 @@ function SideCategoryPill({
         className={`text-[9px] text-center leading-[11px] ${
           active ? "text-white" : "text-espresso"
         }`}
-        style={{ fontFamily: "SpaceGrotesk_600SemiBold", width: 64 }}
+        style={{ fontFamily: "SpaceGrotesk_600SemiBold", width: width - 8 }}
         numberOfLines={2}
         ellipsizeMode="tail"
       >
