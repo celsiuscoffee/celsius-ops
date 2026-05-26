@@ -143,7 +143,7 @@ const NAV_SECTIONS: NavSection[] = [
     railIcon: <UtensilsCrossed className={RAIL_ICON_SIZE} />,
     dividerBefore: true,
     items: [
-      { label: "Menu", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
+      { label: "Products", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
       { label: "Splash Posters", href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />, moduleKey: "pickup:menu" },
     ],
   },

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import { Plus, Search, RefreshCw, Pencil, Trash2, Loader2, X, Check, ImagePlus, ZoomIn, Star, GripVertical } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState, useCallback } from "react";
+import { Plus, Search, RefreshCw, Pencil, Trash2, Loader2, X, ZoomIn, Star, GripVertical } from "lucide-react";
 import { useConfirm, toast } from "@celsius/ui";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { AvailabilityMatrix } from "./_AvailabilityMatrix";
+import type { ModifierGroup } from "./_ModifierGroupsEditor";
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor,
   useSensor, useSensors,
@@ -15,20 +17,6 @@ import {
   verticalListSortingStrategy, useSortable, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-
-interface ModifierOption {
-  id: string;
-  label: string;
-  priceDelta: number;
-  isDefault: boolean;
-}
-
-interface ModifierGroup {
-  id: string;
-  name: string;
-  multiSelect: boolean;
-  options: ModifierOption[];
-}
 
 interface DbProduct {
   id: string;
@@ -46,34 +34,11 @@ interface DbProduct {
   hidden_modifier_ids: string[];
   position: number;
   featured_position: number;
-  // StoreHub-parity fields (added 2026-05-24)
-  print_additional_docket: boolean;
-  e_invoice_classification_code: string;
-  schedule_start_date: string | null;     // YYYY-MM-DD
-  schedule_end_date:   string | null;
-  schedule_days_of_week: number[];        // 0=Sun..6=Sat, empty = every day
-  schedule_time_from:  string | null;     // HH:mm or HH:mm:ss
-  schedule_time_to:    string | null;
-  // Channel pricing + e-Invoice (StoreHub-parity P0, 2026-05-26). RM (not sen);
-  // null = fall back to base_price for that channel.
-  price_pickup:        number | null;
-  price_grab:          number | null;
-  price_foodpanda:     number | null;
-  price_dinein:        number | null;
-  tax_rate:            number;            // SST percent, default 0
-  tax_inclusive:       boolean;           // default true
 }
 
 interface Category { id: string; name: string; slug: string; position?: number }
 
 const BEST_SELLERS_ID = "__best_sellers__";
-
-// ─── Sortable wrappers ──────────────────────────────────────────────
-// Drag-and-drop powered by @dnd-kit. Each wrapper wires the drag
-// handle + ref + transform, then renders the visible row content as
-// children. The handle is a small grip icon on the left edge — only
-// the handle starts a drag, so clicks on edit/toggle/etc. buttons
-// inside the row are unaffected.
 
 function SortableCategoryHeader({ id, name, children }: { id: string; name: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -118,9 +83,9 @@ function SortableProductRow({ id, children }: { id: string; children: React.Reac
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-[#160800] -ml-1 shrink-0 touch-none"
+        className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-[#160800] -ml-1 touch-none"
         title="Drag to reorder"
-        aria-label="Drag to reorder product"
+        aria-label="Drag to reorder"
       >
         <GripVertical className="h-4 w-4" />
       </button>
@@ -129,63 +94,19 @@ function SortableProductRow({ id, children }: { id: string; children: React.Reac
   );
 }
 
-function emptyForm(categories: Category[]) {
-  return {
-    id:            "",
-    category_id:   categories[0]?.id ?? "",
-    name:          "",
-    description:   "",
-    base_price_rm: 10,
-    image:         "",
-    image_zoom:    100,
-    is_available:  true,
-    is_popular:    false,
-    is_new:        false,
-    // StoreHub-parity defaults
-    print_additional_docket:        false,
-    e_invoice_classification_code:  "",
-    schedule_start_date:            "" as string,
-    schedule_end_date:              "" as string,
-    schedule_days_of_week:          [] as number[],
-    schedule_time_from:             "" as string,
-    schedule_time_to:               "" as string,
-    // Channel pricing — "" in the input means "no override, use base price".
-    price_pickup:                   "" as string | number,
-    price_grab:                     "" as string | number,
-    price_foodpanda:                "" as string | number,
-    price_dinein:                   "" as string | number,
-    // Tax + LHDN e-Invoice (per-product override; outlet defaults handle the rest).
-    tax_rate:                       0,
-    tax_inclusive:                  true,
-  };
-}
-
 export default function PickupMenu() {
-  // Internal tab. Catalog = product CRUD (this page's original surface);
-  // Availability = per-outlet on/off matrix (was a sibling route).
+  // Catalog = product CRUD; Availability = per-outlet on/off matrix.
   const [view,       setView]       = useState<"catalog" | "availability">("catalog");
   const [products,   setProducts]   = useState<DbProduct[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
   const [catFilter,  setCatFilter]  = useState("all");
-  const [showForm,   setShowForm]   = useState(false);
-  const [editing,    setEditing]    = useState<DbProduct | null>(null);
-  const [form,       setForm]       = useState(() => emptyForm([]));
-  const [saving,     setSaving]     = useState(false);
   const { confirm, ConfirmDialog } = useConfirm();
-  const [saved,      setSaved]      = useState(false);
   const [deleting,   setDeleting]   = useState<string | null>(null);
   const [toggling,   setToggling]   = useState<string | null>(null);
-  // StoreHub sync state intentionally removed — menu is managed
-  // manually now. /api/pickup/sync-storehub route is still wired for
-  // emergency reuse but no longer surfaced in the UI.
-  const [uploading,  setUploading]  = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
-  const [previewZoom, setPreviewZoom] = useState(100);
   const [togglingPopular, setTogglingPopular] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const closeZoom = useCallback(() => setZoomedImage(null), []);
 
@@ -205,114 +126,6 @@ export default function PickupMenu() {
   }
 
   useEffect(() => { load(); }, []);
-
-  function openNew() {
-    setEditing(null);
-    setForm(emptyForm(categories));
-    setPreviewZoom(100);
-    setShowForm(true);
-  }
-
-  function openEdit(p: DbProduct) {
-    setEditing(p);
-    const zoom = p.image_zoom ?? 100;
-    setForm({
-      id:            p.id,
-      category_id:   p.category_id,
-      name:          p.name,
-      description:   p.description,
-      base_price_rm: p.base_price / 100,
-      image:         p.image,
-      image_zoom:    zoom,
-      is_available:  p.is_available,
-      is_popular:    p.is_popular,
-      is_new:        p.is_new,
-      print_additional_docket:        p.print_additional_docket ?? false,
-      e_invoice_classification_code:  p.e_invoice_classification_code ?? "",
-      schedule_start_date:            p.schedule_start_date ?? "",
-      schedule_end_date:              p.schedule_end_date ?? "",
-      schedule_days_of_week:          p.schedule_days_of_week ?? [],
-      // DB stores HH:mm:ss; the <input type="time"> wants HH:mm — trim if needed.
-      schedule_time_from:             (p.schedule_time_from ?? "").slice(0, 5),
-      schedule_time_to:               (p.schedule_time_to ?? "").slice(0, 5),
-      // null channel price → empty input so placeholder reads "Default".
-      price_pickup:                   p.price_pickup ?? "",
-      price_grab:                     p.price_grab ?? "",
-      price_foodpanda:                p.price_foodpanda ?? "",
-      price_dinein:                   p.price_dinein ?? "",
-      tax_rate:                       p.tax_rate ?? 0,
-      tax_inclusive:                  p.tax_inclusive ?? true,
-    });
-    setPreviewZoom(zoom);
-    setShowForm(true);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setSaved(false);
-
-    // Channel prices are strings in the form ("" = no override). Coerce to
-    // number | null so the API can clear the column when the input is blank.
-    const channelPrice = (v: string | number) =>
-      v === "" || v === null || typeof v === "undefined"
-        ? null
-        : (typeof v === "number" ? v : Number(v));
-
-    const body = {
-      ...form,
-      base_price_rm: form.base_price_rm,
-      price_pickup:    channelPrice(form.price_pickup),
-      price_grab:      channelPrice(form.price_grab),
-      price_foodpanda: channelPrice(form.price_foodpanda),
-      price_dinein:    channelPrice(form.price_dinein),
-      tax_rate:        Number(form.tax_rate) || 0,
-    };
-
-    if (editing) {
-      await adminFetch(`/api/pickup/products/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      setProducts((prev) => prev.map((p) =>
-        p.id === editing.id
-          ? { ...p,
-              name: form.name, description: form.description,
-              base_price: Math.round(form.base_price_rm * 100),
-              image: form.image, image_zoom: form.image_zoom,
-              is_available: form.is_available, is_popular: form.is_popular,
-              is_new: form.is_new, category_id: form.category_id,
-              print_additional_docket: form.print_additional_docket,
-              e_invoice_classification_code: form.e_invoice_classification_code,
-              schedule_start_date: form.schedule_start_date || null,
-              schedule_end_date: form.schedule_end_date || null,
-              schedule_days_of_week: form.schedule_days_of_week,
-              schedule_time_from: form.schedule_time_from || null,
-              schedule_time_to: form.schedule_time_to || null,
-              price_pickup:    body.price_pickup,
-              price_grab:      body.price_grab,
-              price_foodpanda: body.price_foodpanda,
-              price_dinein:    body.price_dinein,
-              tax_rate:        body.tax_rate,
-              tax_inclusive:   form.tax_inclusive,
-            }
-          : p
-      ));
-    } else {
-      await adminFetch("/api/pickup/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      await load();
-      setShowForm(false);
-    }
-
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
 
   async function handleDelete(id: string) {
     if (!(await confirm({ title: "Delete this product?", confirmLabel: "Delete", destructive: true }))) return;
@@ -345,35 +158,6 @@ export default function PickupMenu() {
     setTogglingPopular(null);
   }
 
-  // Hide / restore a single modifier group or option ID. Updates the local
-  // product immediately, then PATCHes the full hidden list to the server so
-  // the change survives a re-sync from StoreHub.
-  async function toggleHideModifier(productId: string, modifierId: string) {
-    const prod = products.find((p) => p.id === productId);
-    if (!prod) return;
-    const current = prod.hidden_modifier_ids ?? [];
-    const next = current.includes(modifierId)
-      ? current.filter((x) => x !== modifierId)
-      : [...current, modifierId];
-    // Optimistic update on both the list and the open editor view.
-    setProducts((prev) => prev.map((x) => x.id === productId ? { ...x, hidden_modifier_ids: next } : x));
-    setEditing((cur) => (cur && cur.id === productId ? { ...cur, hidden_modifier_ids: next } : cur));
-    const res = await adminFetch(`/api/pickup/products/${productId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hidden_modifier_ids: next }),
-    });
-    if (!res.ok) {
-      toast.error("Failed to save");
-      // Rollback
-      setProducts((prev) => prev.map((x) => x.id === productId ? { ...x, hidden_modifier_ids: current } : x));
-      setEditing((cur) => (cur && cur.id === productId ? { ...cur, hidden_modifier_ids: current } : cur));
-    }
-  }
-
-  // Drag-and-drop sensors. PointerSensor requires 8px of movement
-  // before activating so clicking on the row (edit/toggle/etc.)
-  // doesn't accidentally start a drag.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -391,9 +175,6 @@ export default function PickupMenu() {
     if (oldIndex < 0 || newIndex < 0) return;
     const newOrder = arrayMove(items, oldIndex, newIndex);
     const newPosById = new Map(newOrder.map((p, i) => [p.id, i + 1]));
-    // Optimistic local update — don't await /load(), the server PATCH
-    // is fire-and-forget for UI snappiness. If it fails we'll surface
-    // a toast and let the next load reconcile.
     setProducts((prev) => prev.map((p) =>
       newPosById.has(p.id) ? { ...p, [field]: newPosById.get(p.id)! } : p
     ));
@@ -430,24 +211,6 @@ export default function PickupMenu() {
     }
   }
 
-  async function handleImageUpload(file: File) {
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("productId", form.name.replace(/\s+/g, "-").toLowerCase() || "product");
-
-      const res  = await fetch("/api/pickup/upload-image", { method: "POST", body: fd });
-      const json = await res.json() as { url?: string; error?: string };
-
-      if (json.url) setForm((f) => ({ ...f, image: json.url! }));
-      else toast.error(json.error ?? "Upload failed");
-    } catch (e) {
-      toast.error("Upload failed: " + String(e));
-    }
-    setUploading(false);
-  }
-
   const inBestSellers = catFilter === BEST_SELLERS_ID;
 
   const filtered = products.filter((p) => {
@@ -457,10 +220,6 @@ export default function PickupMenu() {
     return matchCat && matchSearch;
   });
 
-  // Best Sellers view: one flat list across all categories, ordered by
-  // featured_position. Reorder arrows update featured_position (the
-  // independent "rank in Best Sellers" — separate from per-category
-  // position which still drives the customer's category browsing).
   const grouped = inBestSellers
     ? [{
         cat: { id: BEST_SELLERS_ID, name: "Best Sellers", slug: "best-sellers" } as Category,
@@ -477,9 +236,7 @@ export default function PickupMenu() {
   return (
     <div className="p-3 sm:p-6 space-y-5 max-w-4xl">
       <ConfirmDialog />
-      {/* Tabs — single-page consolidation. Catalog = product CRUD,
-          Availability = per-outlet on/off matrix. Was a separate
-          /pickup/menu/availability route; now internal state. */}
+      {/* Tabs */}
       <div className="flex gap-1 bg-white rounded-xl p-1 w-fit border border-border/40">
         <button
           type="button"
@@ -508,196 +265,187 @@ export default function PickupMenu() {
       {view === "availability" && <AvailabilityMatrix />}
       {view === "catalog" && (
         <>
-          {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[#160800]">Pickup Menu</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {products.length} {products.length === 1 ? 'item' : 'items'} · {unavailableCount} unavailable
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={load}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-[#160800] transition-colors"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
-          {/* StoreHub sync removed from the UI — the menu is managed
-              directly in this backoffice now. The sync function +
-              /api/pickup/sync-storehub route are intentionally kept in
-              the codebase as reversible escape hatches if we ever need
-              to re-pull from POS legacy. */}
-          <button
-            onClick={openNew}
-            className="flex items-center gap-2 bg-[#160800] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
-          >
-            <Plus className="h-4 w-4" /> Add Product
-          </button>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-2xl p-4 flex flex-wrap gap-2">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search products..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-        </div>
-        <select
-          value={catFilter}
-          onChange={(e) => setCatFilter(e.target.value)}
-          className="border rounded-xl px-3 py-2 text-sm focus:outline-none"
-        >
-          <option value="all">All categories</option>
-          <option value={BEST_SELLERS_ID}>★ Best Sellers (order)</option>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </div>
-
-      {/* Product list */}
-      {loading ? (
-        <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>
-      ) : (
-        <div className="space-y-4">
-          {(() => {
-            // Categories are draggable only in the default "all + no
-            // search" view. In single-category filter or Best Sellers
-            // the drag would mean nothing; we just render the heading
-            // without a drag handle but still let products drag.
-            const canDragCategories = !inBestSellers && catFilter === "all" && !search;
-            const productField: "position" | "featured_position" = inBestSellers ? "featured_position" : "position";
-
-            const renderProductRowContent = (p: DbProduct) => (
-              <>
-                {p.image && (
-                  <button
-                    type="button"
-                    onClick={() => setZoomedImage(p.image)}
-                    className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 group focus:outline-none"
-                    title="Click to zoom"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.image} alt={p.name} className="w-full h-full object-cover" style={{ transform: `scale(${(p.image_zoom ?? 100) / 100})`, transformOrigin: "center" }} />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                      <ZoomIn className="h-3.5 w-3.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  </button>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className={`text-sm font-semibold ${!p.is_available ? "text-muted-foreground line-through" : "text-[#160800]"}`}>
-                      {p.name}
-                    </p>
-                    {p.is_new && <span className="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">NEW</span>}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">RM {(p.base_price / 100).toFixed(2)}</p>
-                  {p.modifiers.length > 0 && (
-                    <p className="text-xs text-muted-foreground/70 mt-0.5">
-                      {p.modifiers.map((g) => g.name).join(" · ")}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => togglePopular(p)}
-                    disabled={togglingPopular === p.id}
-                    title={p.is_popular ? "Remove from Best Sellers" : "Mark as Best Seller"}
-                    className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors disabled:opacity-50 ${
-                      p.is_popular
-                        ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                        : "bg-muted text-muted-foreground hover:bg-amber-50 hover:text-amber-600"
-                    }`}
-                  >
-                    <Star className={`h-2.5 w-2.5 ${p.is_popular ? "fill-amber-500 text-amber-500" : ""}`} />
-                    {p.is_popular ? "Best Seller" : ""}
-                  </button>
-                  {!p.is_available && (
-                    <span className="text-[11px] font-semibold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">86&apos;d</span>
-                  )}
-                  <button
-                    onClick={() => toggleAvailable(p)}
-                    disabled={toggling === p.id}
-                    className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 ${p.is_available ? "bg-green-500" : "bg-gray-300"}`}
-                  >
-                    <span className={`inline-block h-5 w-5 mt-0.5 rounded-full bg-white shadow transition-transform duration-200 ${p.is_available ? "translate-x-5.5" : "translate-x-0.5"}`} />
-                  </button>
-                  <button
-                    onClick={() => openEdit(p)}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 transition-colors"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(p.id)}
-                    disabled={deleting === p.id}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
-                  >
-                    {deleting === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-              </>
-            );
-
-            const productsList = (items: DbProduct[]) => (
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={(e) => handleProductDragEnd(e, items, productField)}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-[#160800]">Products</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {products.length} {products.length === 1 ? 'item' : 'items'} · {unavailableCount} unavailable
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={load}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-[#160800] transition-colors"
               >
-                <SortableContext items={items.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-                  <div className="divide-y">
-                    {items.map((p) => (
-                      <SortableProductRow key={p.id} id={p.id}>
-                        {renderProductRowContent(p)}
-                      </SortableProductRow>
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
-            );
+                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              </button>
+              <Link
+                href="/pickup/menu/new"
+                className="flex items-center gap-2 bg-[#160800] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
+              >
+                <Plus className="h-4 w-4" /> Add Product
+              </Link>
+            </div>
+          </div>
 
-            const categoryCards = grouped.map(({ cat, items }) =>
-              canDragCategories ? (
-                <SortableCategoryHeader key={cat.id} id={cat.id} name={cat.name}>
-                  {productsList(items)}
-                </SortableCategoryHeader>
-              ) : (
-                <div key={cat.id} className="bg-white rounded-2xl overflow-hidden">
-                  <div className="px-5 py-3 border-b bg-muted/20">
-                    <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wide">{cat.name}</h2>
-                  </div>
-                  {productsList(items)}
-                </div>
-              )
-            );
+          {/* Filters */}
+          <div className="bg-white rounded-2xl p-4 flex flex-wrap gap-2">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <select
+              value={catFilter}
+              onChange={(e) => setCatFilter(e.target.value)}
+              className="border rounded-xl px-3 py-2 text-sm focus:outline-none"
+            >
+              <option value="all">All categories</option>
+              <option value={BEST_SELLERS_ID}>★ Best Sellers (order)</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
 
-            if (canDragCategories) {
-              const visibleCats = grouped.map((g) => g.cat);
-              return (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={(e) => handleCategoryDragEnd(e, visibleCats)}
-                >
-                  <SortableContext items={visibleCats.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-4">{categoryCards}</div>
-                  </SortableContext>
-                </DndContext>
-              );
-            }
-            return <>{categoryCards}</>;
-          })()}
-          {grouped.length === 0 && (
-            <div className="py-12 text-center text-sm text-muted-foreground">No products found</div>
+          {/* Product list */}
+          {loading ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>
+          ) : (
+            <div className="space-y-4">
+              {(() => {
+                const canDragCategories = !inBestSellers && catFilter === "all" && !search;
+                const productField: "position" | "featured_position" = inBestSellers ? "featured_position" : "position";
+
+                const renderProductRowContent = (p: DbProduct) => (
+                  <>
+                    {p.image && (
+                      <button
+                        type="button"
+                        onClick={() => setZoomedImage(p.image)}
+                        className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 group focus:outline-none"
+                        title="Click to zoom"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={p.image} alt={p.name} className="w-full h-full object-cover" style={{ transform: `scale(${(p.image_zoom ?? 100) / 100})`, transformOrigin: "center" }} />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                          <ZoomIn className="h-3.5 w-3.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </button>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className={`text-sm font-semibold ${!p.is_available ? "text-muted-foreground line-through" : "text-[#160800]"}`}>
+                          {p.name}
+                        </p>
+                        {p.is_new && <span className="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">NEW</span>}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">RM {(p.base_price / 100).toFixed(2)}</p>
+                      {p.modifiers.length > 0 && (
+                        <p className="text-xs text-muted-foreground/70 mt-0.5">
+                          {p.modifiers.map((g) => g.name).filter(Boolean).join(" · ")}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => togglePopular(p)}
+                        disabled={togglingPopular === p.id}
+                        title={p.is_popular ? "Remove from Best Sellers" : "Mark as Best Seller"}
+                        className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors disabled:opacity-50 ${
+                          p.is_popular
+                            ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                            : "bg-muted text-muted-foreground hover:bg-amber-50 hover:text-amber-600"
+                        }`}
+                      >
+                        <Star className={`h-2.5 w-2.5 ${p.is_popular ? "fill-amber-500 text-amber-500" : ""}`} />
+                        {p.is_popular ? "Best Seller" : ""}
+                      </button>
+                      {!p.is_available && (
+                        <span className="text-[11px] font-semibold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">86&apos;d</span>
+                      )}
+                      <button
+                        onClick={() => toggleAvailable(p)}
+                        disabled={toggling === p.id}
+                        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 ${p.is_available ? "bg-green-500" : "bg-gray-300"}`}
+                      >
+                        <span className={`inline-block h-5 w-5 mt-0.5 rounded-full bg-white shadow transition-transform duration-200 ${p.is_available ? "translate-x-5.5" : "translate-x-0.5"}`} />
+                      </button>
+                      <Link
+                        href={`/pickup/menu/${p.id}`}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 transition-colors"
+                        title="Edit product"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(p.id)}
+                        disabled={deleting === p.id}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        {deleting === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  </>
+                );
+
+                const productsList = (items: DbProduct[]) => (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={(e) => handleProductDragEnd(e, items, productField)}
+                  >
+                    <SortableContext items={items.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+                      <div className="divide-y">
+                        {items.map((p) => (
+                          <SortableProductRow key={p.id} id={p.id}>
+                            {renderProductRowContent(p)}
+                          </SortableProductRow>
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                );
+
+                const categoryCards = grouped.map(({ cat, items }) =>
+                  canDragCategories ? (
+                    <SortableCategoryHeader key={cat.id} id={cat.id} name={cat.name}>
+                      {productsList(items)}
+                    </SortableCategoryHeader>
+                  ) : (
+                    <div key={cat.id} className="bg-white rounded-2xl overflow-hidden">
+                      <div className="px-5 py-3 border-b bg-muted/20">
+                        <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wide">{cat.name}</h2>
+                      </div>
+                      {productsList(items)}
+                    </div>
+                  )
+                );
+
+                if (canDragCategories) {
+                  const visibleCats = grouped.map((g) => g.cat);
+                  return (
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={(e) => handleCategoryDragEnd(e, visibleCats)}
+                    >
+                      <SortableContext items={visibleCats.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+                        <div className="space-y-4">{categoryCards}</div>
+                      </SortableContext>
+                    </DndContext>
+                  );
+                }
+                return <>{categoryCards}</>;
+              })()}
+              {grouped.length === 0 && (
+                <div className="py-12 text-center text-sm text-muted-foreground">No products found</div>
+              )}
+            </div>
           )}
-        </div>
-      )}
         </>
       )}
 
@@ -722,463 +470,6 @@ export default function PickupMenu() {
           />
         </div>
       )}
-
-      {/* Add / Edit slide-over */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="flex-1 bg-black/40" onClick={() => setShowForm(false)} />
-          <div className="w-full max-w-lg bg-white h-full overflow-y-auto shadow-2xl">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
-              <h2 className="font-bold text-lg">{editing ? "Edit Product" : "Add Product"}</h2>
-              <button onClick={() => setShowForm(false)} className="text-muted-foreground hover:text-[#160800]">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* Name */}
-              <Field label="Name" required>
-                <input
-                  required
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  placeholder="Celsius Latte"
-                />
-              </Field>
-
-              {/* Category */}
-              <Field label="Category">
-                <select
-                  value={form.category_id}
-                  onChange={(e) => setForm((f) => ({ ...f, category_id: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </Field>
-
-              {/* Description */}
-              <Field label="Description">
-                <textarea
-                  rows={2}
-                  value={form.description}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-                  placeholder="Short description..."
-                />
-              </Field>
-
-              {/* Base price */}
-              <Field label="Base Price (RM)">
-                <input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  required
-                  value={form.base_price_rm}
-                  onChange={(e) => setForm((f) => ({ ...f, base_price_rm: Number(e.target.value) }))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </Field>
-
-              {/* ── Channel pricing — leave blank to use Base Price ── */}
-              <div className="border rounded-2xl p-4 bg-muted/10 space-y-3">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Channel pricing</p>
-                <p className="text-[11px] text-muted-foreground -mt-2">
-                  Override the price per sales channel. Leave blank to charge the Base Price above. Used for marketplace markup (Grab/Foodpanda commissions) or dine-in surcharges.
-                </p>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {([
-                    ["price_pickup",    "Pickup (RM)"],
-                    ["price_grab",      "GrabFood (RM)"],
-                    ["price_foodpanda", "Foodpanda (RM)"],
-                    ["price_dinein",    "Dine-in (RM)"],
-                  ] as const).map(([key, label]) => (
-                    <Field key={key} label={label}>
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={form[key] as number | string}
-                        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value === "" ? "" : Number(e.target.value) }))}
-                        placeholder="Use base price"
-                        className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                      />
-                    </Field>
-                  ))}
-                </div>
-              </div>
-
-              {/* Image */}
-              <Field label="Product Image">
-                <div
-                  className={`flex gap-4 items-start rounded-xl transition-colors ${isDragging ? "bg-primary/10 ring-2 ring-primary/40 p-2" : ""}`}
-                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                  onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
-                  onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragging(false); }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDragging(false);
-                    const file = e.dataTransfer.files?.[0];
-                    if (file && file.type.startsWith("image/")) { handleImageUpload(file); setPreviewZoom(100); }
-                  }}
-                >
-                  {/* Preview box */}
-                  <div className="shrink-0">
-                    <div className="relative w-28 h-28 rounded-xl border border-border overflow-hidden bg-muted/30">
-                      {form.image ? (
-                        <>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={form.image}
-                            alt="preview"
-                            className="w-full h-full object-contain transition-transform duration-150"
-                            style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: "center" }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => { setForm((f) => ({ ...f, image: "" })); setPreviewZoom(100); }}
-                            className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full w-5 h-5 flex items-center justify-center transition-colors"
-                            title="Remove image"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setZoomedImage(form.image)}
-                            className="absolute bottom-1 right-1 bg-black/50 hover:bg-black/70 text-white rounded-full w-5 h-5 flex items-center justify-center transition-colors"
-                            title="View full size"
-                          >
-                            <ZoomIn className="h-2.5 w-2.5" />
-                          </button>
-                        </>
-                      ) : uploading ? (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                        </div>
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-muted-foreground">
-                          <ImagePlus className="h-7 w-7" />
-                          <span className="text-[10px]">No image</span>
-                        </div>
-                      )}
-                    </div>
-                    {form.image && (
-                      <input
-                        type="range"
-                        min={50}
-                        max={200}
-                        value={previewZoom}
-                        onChange={(e) => { const v = Number(e.target.value); setPreviewZoom(v); setForm((f) => ({ ...f, image_zoom: v })); }}
-                        className="w-28 mt-1.5 accent-[#160800]"
-                        title={`Zoom: ${previewZoom}%`}
-                      />
-                    )}
-                  </div>
-
-                  {/* Controls */}
-                  <div className="flex-1 space-y-2 pt-0.5">
-                    <button
-                      type="button"
-                      disabled={uploading}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full flex items-center justify-center gap-2 border border-border rounded-xl px-3 py-2 text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-50"
-                    >
-                      {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-                      {uploading ? "Uploading..." : isDragging ? "Drop to upload" : "Select or drag image"}
-                    </button>
-                    <input
-                      type="url"
-                      value={form.image}
-                      onChange={(e) => { setForm((f) => ({ ...f, image: e.target.value })); setPreviewZoom(100); }}
-                      className="w-full border rounded-xl px-3 py-2 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-                      placeholder="or paste image URL..."
-                    />
-                  </div>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImageUpload(f); setPreviewZoom(100); } e.target.value = ""; }}
-                />
-              </Field>
-
-              {/* Badges */}
-              <div className="grid grid-cols-3 gap-3">
-                {([
-                  ["is_available", "Available"],
-                  ["is_popular",   "Popular"],
-                  ["is_new",       "New"],
-                ] as const).map(([key, label]) => (
-                  <label key={key} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form[key]}
-                      onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.checked }))}
-                      className="h-4 w-4 accent-[#160800]"
-                    />
-                    <span className="text-sm">{label}</span>
-                  </label>
-                ))}
-              </div>
-
-              {/* ── Print + e-Invoice (StoreHub-parity, added 2026-05-24) ── */}
-              <Field label="Print additional kitchen docket">
-                <label className="flex items-center gap-2 cursor-pointer text-sm">
-                  <input
-                    type="checkbox"
-                    checked={form.print_additional_docket}
-                    onChange={(e) => setForm((f) => ({ ...f, print_additional_docket: e.target.checked }))}
-                    className="h-4 w-4 accent-[#160800]"
-                  />
-                  <span className="text-muted-foreground">Print a second copy of the kitchen docket for this item (e.g. set meals, beer packages).</span>
-                </label>
-              </Field>
-
-              <Field label="e-Invoice classification code (LHDN)">
-                <input
-                  type="text"
-                  value={form.e_invoice_classification_code}
-                  onChange={(e) => setForm((f) => ({ ...f, e_invoice_classification_code: e.target.value }))}
-                  placeholder="e.g. 022"
-                  className="w-full px-3 py-2 border rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  MSIC classification code for LHDN e-Invoice compliance. Look up at{" "}
-                  <a href="https://sdk.myinvois.hasil.gov.my/codes/classification-codes/" target="_blank" rel="noopener" className="text-indigo-600 hover:underline">myinvois.hasil.gov.my</a>.
-                </p>
-              </Field>
-
-              {/* ── Tax & e-Invoice (P0 StoreHub parity, 2026-05-26) ──
-                  Maps to new tax_rate / tax_inclusive columns; outlet-
-                  level defaults are set in POS Settings and used when
-                  these per-product fields are empty/zero. The
-                  e_invoice_classification_code field already exists
-                  above outside this section (legacy field). */}
-              <div className="border rounded-2xl p-4 bg-muted/10 space-y-3">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Tax &amp; e-Invoice</p>
-                <p className="text-[11px] text-muted-foreground -mt-2">
-                  Per-product SST + LHDN classification override. Leave at defaults to inherit the outlet-level settings.
-                </p>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Tax Rate (%)">
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={0.01}
-                      value={form.tax_rate}
-                      onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value === "" ? 0 : Number(e.target.value) }))}
-                      placeholder="0"
-                      className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                  </Field>
-                  <Field label="Tax Inclusive">
-                    <label className="flex items-center gap-2 cursor-pointer text-sm h-10 px-3 border rounded-xl bg-white">
-                      <input
-                        type="checkbox"
-                        checked={form.tax_inclusive}
-                        onChange={(e) => setForm((f) => ({ ...f, tax_inclusive: e.target.checked }))}
-                        className="h-4 w-4 accent-[#160800]"
-                      />
-                      <span className="text-muted-foreground">
-                        {form.tax_inclusive ? "Tax is in the price" : "Tax added on top"}
-                      </span>
-                    </label>
-                  </Field>
-                </div>
-
-              </div>
-
-              {/* ── Schedule — when this product is visible online ── */}
-              <div className="border rounded-2xl p-4 bg-muted/10 space-y-3">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Online schedule</p>
-                <p className="text-[11px] text-muted-foreground -mt-2">
-                  Limits when this product appears on the customer-facing menu (pickup, web, Grab). POS register ignores schedule — cashiers can always sell anything.
-                </p>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Start date">
-                    <input
-                      type="date"
-                      value={form.schedule_start_date ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, schedule_start_date: e.target.value }))}
-                      className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                  </Field>
-                  <Field label="End date">
-                    <input
-                      type="date"
-                      value={form.schedule_end_date ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, schedule_end_date: e.target.value }))}
-                      className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                  </Field>
-                </div>
-
-                <Field label="Days of week (empty = every day)">
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { d: 1, label: "Mon" },
-                      { d: 2, label: "Tue" },
-                      { d: 3, label: "Wed" },
-                      { d: 4, label: "Thu" },
-                      { d: 5, label: "Fri" },
-                      { d: 6, label: "Sat" },
-                      { d: 0, label: "Sun" },
-                    ].map(({ d, label }) => {
-                      const on = form.schedule_days_of_week.includes(d);
-                      return (
-                        <button
-                          key={d}
-                          type="button"
-                          onClick={() => setForm((f) => ({
-                            ...f,
-                            schedule_days_of_week: on
-                              ? f.schedule_days_of_week.filter((x) => x !== d)
-                              : [...f.schedule_days_of_week, d].sort(),
-                          }))}
-                          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                            on
-                              ? "bg-[#160800] text-white border-[#160800]"
-                              : "bg-white text-muted-foreground border-gray-200 hover:border-[#160800]"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Field>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="From time">
-                    <input
-                      type="time"
-                      value={form.schedule_time_from ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, schedule_time_from: e.target.value }))}
-                      className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                  </Field>
-                  <Field label="To time">
-                    <input
-                      type="time"
-                      value={form.schedule_time_to ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, schedule_time_to: e.target.value }))}
-                      className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                  </Field>
-                </div>
-              </div>
-
-              {/* Modifier groups — synced from StoreHub. Each group + option
-                  can be hidden from customers without losing the underlying
-                  StoreHub data; sync re-pulls all modifiers but the hidden
-                  list survives. Hidden items render with a strikethrough +
-                  "Restore" affordance instead of "Hide". */}
-              {editing && editing.modifiers.length > 0 && (
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">
-                    Modifiers (from StoreHub)
-                  </label>
-                  <div className="space-y-2">
-                    {editing.modifiers.map((group) => {
-                      const hidden = editing.hidden_modifier_ids ?? [];
-                      const groupHidden = hidden.includes(group.id);
-                      return (
-                        <div
-                          key={group.id}
-                          className={`border rounded-xl p-3 ${groupHidden ? "bg-red-50/40 border-red-200/60" : "bg-muted/20"}`}
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            <p className={`text-xs font-semibold ${groupHidden ? "text-red-600 line-through" : "text-[#160800]"}`}>
-                              {group.name} {group.multiSelect ? "(multi-select)" : "(single-select)"}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => toggleHideModifier(editing.id, group.id)}
-                              className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full transition-colors ${
-                                groupHidden
-                                  ? "bg-white border border-[#160800]/20 text-[#160800] hover:bg-[#160800]/5"
-                                  : "bg-white border border-red-200 text-red-600 hover:bg-red-50"
-                              }`}
-                            >
-                              {groupHidden ? <RefreshCw className="h-3 w-3" /> : <Trash2 className="h-3 w-3" />}
-                              {groupHidden ? "Restore" : "Hide group"}
-                            </button>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {group.options.map((opt) => {
-                              const optHidden = groupHidden || hidden.includes(opt.id);
-                              return (
-                                <button
-                                  key={opt.id}
-                                  type="button"
-                                  onClick={() => !groupHidden && toggleHideModifier(editing.id, opt.id)}
-                                  disabled={groupHidden}
-                                  className={`group flex items-center gap-1 text-xs border rounded-full px-2.5 py-1 transition-colors ${
-                                    optHidden
-                                      ? "bg-red-50/70 border-red-200 text-red-500 line-through"
-                                      : "bg-white border-border text-muted-foreground hover:border-red-300 hover:text-red-600"
-                                  } ${groupHidden ? "opacity-60 cursor-not-allowed" : ""}`}
-                                  title={groupHidden ? "Restore the group first" : optHidden ? "Click to restore" : "Click to hide this option"}
-                                >
-                                  <span>{opt.label}{opt.priceDelta > 0 ? ` +RM${opt.priceDelta.toFixed(2)}` : ""}</span>
-                                  {!groupHidden && (
-                                    optHidden
-                                      ? <RefreshCw className="h-3 w-3" />
-                                      : <X className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1.5">
-                    Hide noisy or off-menu modifiers. Sync StoreHub keeps the underlying data fresh; your hidden list is preserved.
-                  </p>
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                {saved && (
-                  <span className="flex items-center gap-1.5 text-sm text-green-600 font-medium">
-                    <Check className="h-4 w-4" /> Saved
-                  </span>
-                )}
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex items-center gap-2 bg-[#160800] text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors disabled:opacity-60"
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                  {editing ? "Save Changes" : "Create Product"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">
-        {label} {required && <span className="text-red-400">*</span>}
-      </label>
-      {children}
     </div>
   );
 }
