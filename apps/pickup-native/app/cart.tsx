@@ -245,7 +245,7 @@ export default function Cart() {
         </ScrollView>
       ) : (
         <>
-          <ScrollView contentContainerClassName="pb-40">
+          <ScrollView>
             <EspressoHeader title="Your cart" subtitle={outletName ? `Pickup from ${outletName}` : undefined} showBack showCart={false} />
             <View className="px-4 py-4" style={{ gap: 12 }}>
             {cart.map((item) => (
@@ -382,10 +382,17 @@ export default function Cart() {
               </Pressable>
             ))}
             </View>
-          </ScrollView>
 
+          {/* Summary + slide-to-confirm — flows at the end of the
+              ScrollView instead of pinning to the viewport. Pinning
+              made the panel sit on top of the scroll surface and
+              intercept touch gestures across the bottom half of the
+              screen, which made the cart feel un-scrollable on mobile
+              browsers. Letting it scroll with the rest of the content
+              matches the home flow (#152) and guarantees the user's
+              swipe lands on the scroll surface, not on dead buttons. */}
           <View
-            className="absolute bottom-0 left-0 right-0 px-4 pt-3 bg-background border-t border-border"
+            className="px-4 pt-3 border-t border-border"
             style={{ paddingBottom: insets.bottom + 12 }}
           >
             {appliedReward ? (
@@ -595,6 +602,7 @@ export default function Cart() {
               </Text>
             </Pressable>
           </View>
+          </ScrollView>
         </>
       )}
     </View>
