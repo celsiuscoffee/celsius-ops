@@ -102,6 +102,9 @@ export default function NewPO() {
   const [supplierPicker, setSupplierPicker] = useState(false);
   const [productPicker, setProductPicker] = useState(false);
   const [search, setSearch] = useState("");
+  // Separate search state for the supplier picker so opening the
+  // product picker doesn't carry over a leftover supplier search.
+  const [supplierSearch, setSupplierSearch] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -692,49 +695,113 @@ export default function NewPO() {
         visible={supplierPicker}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setSupplierPicker(false)}
+        onRequestClose={() => {
+          setSupplierPicker(false);
+          setSupplierSearch("");
+        }}
       >
         <View className="flex-1 bg-background">
           <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
             <Text className="text-base font-peachi text-espresso">
-              Supplier
+              Pick supplier
             </Text>
             <Pressable
-              onPress={() => setSupplierPicker(false)}
+              onPress={() => {
+                setSupplierPicker(false);
+                setSupplierSearch("");
+              }}
               className="px-2 py-1"
             >
-              <Text className="text-sm font-body-bold text-muted">Close</Text>
+              <XIcon color={iconColor} size={20} />
             </Pressable>
           </View>
-          <ScrollView contentContainerClassName="px-4 py-4 gap-2">
-            {suppliers.map((s) => (
-              <Pressable
-                key={s.id}
-                onPress={() => {
-                  setSupplierId(s.id);
-                  setSupplierPicker(false);
-                }}
-                className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 active:bg-primary-50 ${
-                  s.id === supplierId
-                    ? "border-primary bg-primary-50"
-                    : "border-border bg-surface"
-                }`}
-              >
-                <View className="flex-1">
-                  <Text className="text-base font-body-bold text-espresso">
-                    {s.name}
-                  </Text>
-                  {s.phone ? (
-                    <Text className="text-xs font-body text-muted-fg">
-                      {s.phone}
+          {/* Search bar — name OR phone match. 40+ active suppliers
+              makes scrolling painful without this. */}
+          <View className="px-4 pt-3">
+            <View className="flex-row items-center gap-2 rounded-2xl border border-border bg-surface px-3">
+              <Search color="#9CA3AF" size={18} />
+              <TextInput
+                value={supplierSearch}
+                onChangeText={setSupplierSearch}
+                placeholder="Search suppliers"
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+                autoCorrect={false}
+                className="h-12 flex-1 text-base font-body text-espresso"
+              />
+              {supplierSearch ? (
+                <Pressable onPress={() => setSupplierSearch("")} hitSlop={8}>
+                  <XIcon color="#9CA3AF" size={16} />
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+          <ScrollView
+            contentContainerClassName="px-4 py-3 gap-2"
+            keyboardShouldPersistTaps="handled"
+          >
+            {(() => {
+              const q = supplierSearch.trim().toLowerCase();
+              const filteredSuppliers = q
+                ? suppliers.filter(
+                    (s) =>
+                      s.name.toLowerCase().includes(q) ||
+                      (s.phone ?? "").toLowerCase().includes(q),
+                  )
+                : suppliers;
+              if (filteredSuppliers.length === 0) {
+                return (
+                  <View className="mt-10 items-center px-6">
+                    <Text className="text-center text-sm font-body-bold text-espresso">
+                      {q
+                        ? "No suppliers match"
+                        : "No active suppliers"}
                     </Text>
-                  ) : null}
-                </View>
-                {s.id === supplierId ? (
-                  <Check color="#C2452D" size={20} />
-                ) : null}
-              </Pressable>
-            ))}
+                    <Text className="mt-1 text-center text-xs font-body text-muted-fg">
+                      {q
+                        ? "Try a different name or phone fragment."
+                        : "Add suppliers in backoffice → suppliers first."}
+                    </Text>
+                  </View>
+                );
+              }
+              return filteredSuppliers.map((s) => {
+                const count = s.products?.length ?? 0;
+                const isSelected = s.id === supplierId;
+                const isEmpty = count === 0;
+                return (
+                  <Pressable
+                    key={s.id}
+                    onPress={() => {
+                      setSupplierId(s.id);
+                      setSupplierPicker(false);
+                      setSupplierSearch("");
+                    }}
+                    className={`flex-row items-center justify-between gap-3 rounded-2xl border px-4 py-3 active:bg-primary-50 ${
+                      isSelected
+                        ? "border-primary bg-primary-50"
+                        : "border-border bg-surface"
+                    } ${isEmpty ? "opacity-60" : ""}`}
+                  >
+                    <View className="flex-1">
+                      <Text
+                        className="text-base font-body-bold text-espresso"
+                        numberOfLines={1}
+                      >
+                        {s.name}
+                      </Text>
+                      <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                        {count} item{count === 1 ? "" : "s"}
+                        {s.phone ? ` · ${s.phone}` : ""}
+                      </Text>
+                    </View>
+                    {isSelected ? (
+                      <Check color="#C2452D" size={20} />
+                    ) : null}
+                  </Pressable>
+                );
+              });
+            })()}
           </ScrollView>
         </View>
       </Modal>
