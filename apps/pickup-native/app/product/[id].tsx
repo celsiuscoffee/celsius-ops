@@ -384,14 +384,6 @@ export default function ProductScreen() {
         // matching the bounded-scroll feel of Grab/Foodpanda's
         // product modal.
         contentContainerStyle={{ paddingBottom: keyboardOpen ? 16 : 120 }}
-        // Web: body owns scroll so iOS Safari can collapse its URL bar.
-        // See index.tsx for the full rationale. The Add-to-Cart bar below
-        // switches to position: fixed on web to compensate.
-        style={
-          Platform.OS === "web"
-            ? ({ overflow: "visible", flex: undefined } as any)
-            : undefined
-        }
         stickyHeaderIndices={[]}
         automaticallyAdjustKeyboardInsets
         automaticallyAdjustsScrollIndicatorInsets
@@ -606,15 +598,7 @@ export default function ProductScreen() {
       {!keyboardOpen && (
       <View
         className="absolute bottom-0 left-0 right-0 px-4 pt-3 bg-background border-t border-border"
-        // On web the body scrolls — see ScrollView comment above. Switch
-        // to fixed so the Add-to-Cart bar tracks the viewport instead of
-        // scrolling off with the page.
-        style={{
-          paddingBottom: insets.bottom + 12,
-          ...(Platform.OS === "web"
-            ? ({ position: "fixed", zIndex: 50 } as any)
-            : null),
-        }}
+        style={{ paddingBottom: insets.bottom + 12 }}
       >
         <Pressable
           onPress={onAdd}

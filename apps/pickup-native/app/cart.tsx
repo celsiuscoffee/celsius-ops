@@ -1,4 +1,4 @@
-import { View, Text, Pressable, ScrollView, Image, Platform } from "react-native";
+import { View, Text, Pressable, ScrollView, Image } from "react-native";
 import { Stack, router } from "expo-router";
 import { Trash2, Gift, X, Coffee, ChevronRight } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -245,17 +245,7 @@ export default function Cart() {
         </ScrollView>
       ) : (
         <>
-          <ScrollView
-            contentContainerClassName="px-4 py-4 pb-40 gap-3"
-            // Web: body owns scroll so iOS Safari can collapse its URL bar.
-            // See index.tsx for the full rationale. The sticky cart summary
-            // below switches to position: fixed on web to compensate.
-            style={
-              Platform.OS === "web"
-                ? ({ overflow: "visible", flex: undefined } as any)
-                : undefined
-            }
-          >
+          <ScrollView contentContainerClassName="px-4 py-4 pb-40 gap-3">
             {cart.map((item) => (
               // Whole row tappable → opens the product page in edit
               // mode so customers can change modifiers / notes / qty
@@ -393,17 +383,7 @@ export default function Cart() {
 
           <View
             className="absolute bottom-0 left-0 right-0 px-4 pt-3 bg-background border-t border-border"
-            // On web the body scrolls (so iOS Safari can collapse its URL
-            // bar), which means an `absolute` bar pinned to the page
-            // container would scroll OFF with the body. Switch to fixed so
-            // it tracks the viewport. The ScrollView above pads pb-40 to
-            // keep cart rows from being covered.
-            style={{
-              paddingBottom: insets.bottom + 12,
-              ...(Platform.OS === "web"
-                ? ({ position: "fixed", zIndex: 50 } as any)
-                : null),
-            }}
+            style={{ paddingBottom: insets.bottom + 12 }}
           >
             {appliedReward ? (
               <View

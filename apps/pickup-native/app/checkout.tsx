@@ -1055,17 +1055,7 @@ export default function Checkout() {
       <Stack.Screen options={{ headerShown: false }} />
       <EspressoHeader title="Checkout" showBack showCart={false} />
 
-      <ScrollView
-        contentContainerClassName="px-4 py-4 pb-32 gap-4"
-        // Web: body owns scroll so iOS Safari can collapse its URL bar.
-        // See index.tsx for the full rationale. The sticky Place Order
-        // panel below switches to position: fixed on web to compensate.
-        style={
-          Platform.OS === "web"
-            ? ({ overflow: "visible", flex: undefined } as any)
-            : undefined
-        }
-      >
+      <ScrollView contentContainerClassName="px-4 py-4 pb-32 gap-4">
         {step === "phone" && (
           <View className="bg-surface rounded-2xl border border-border p-5">
             <Text className="text-espresso text-xs font-bold uppercase tracking-wider">
@@ -1516,18 +1506,10 @@ export default function Checkout() {
       {step === "review" && (
         <View
           className="bg-surface border-t border-border"
-          // On web the ScrollView above releases its scroll to the body
-          // (iOS Safari URL-bar collapse), which means this sibling-flex
-          // bar would scroll off the bottom with the page. Pin it to the
-          // viewport on web; native keeps the flex layout. ScrollView pads
-          // pb-32 to keep content from being covered.
           style={{
             paddingHorizontal: 16,
             paddingTop: 12,
             paddingBottom: insets.bottom + 12,
-            ...(Platform.OS === "web"
-              ? ({ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 50 } as any)
-              : null),
           }}
         >
           {lastError && (

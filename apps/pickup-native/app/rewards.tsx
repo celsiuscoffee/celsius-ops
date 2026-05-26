@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { View, Text, ScrollView, Pressable, Image, Dimensions, Platform } from "react-native";
+import { View, Text, ScrollView, Pressable, Image, Dimensions } from "react-native";
 import { Alert } from "@/lib/alert";
 import { Stack, router } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -357,14 +357,6 @@ export default function RewardsTab() {
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ padding: 16, paddingBottom: 160 }}
-          // See index.tsx: on web we drop the ScrollView's own scroll so
-          // the body scrolls instead — that's what iOS Safari watches to
-          // collapse its URL bar. Native keeps native momentum scroll.
-          style={
-            Platform.OS === "web"
-              ? ({ overflow: "visible", flex: undefined } as any)
-              : undefined
-          }
         >
           <SignInPrompt />
         </ScrollView>
@@ -388,11 +380,6 @@ export default function RewardsTab() {
         className="flex-1"
         contentContainerStyle={{ padding: 16, paddingBottom: 160, gap: 22 }}
         showsVerticalScrollIndicator={false}
-        style={
-          Platform.OS === "web"
-            ? ({ overflow: "visible", flex: undefined } as any)
-            : undefined
-        }
       >
         <BeansHero
           balance={balance}
