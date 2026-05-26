@@ -364,50 +364,39 @@ export default function InvoicesPage() {
 
   const activeFilterCount = [outletFilter.length > 0, supplierFilter.length > 0, bankFilter !== "all", dueDateFrom, dueDateTo, paidDateFrom, paidDateTo].filter(Boolean).length;
 
-  async function exportXlsx() {
-    if (invoices.length === 0) return;
-    const XLSX = await import("xlsx");
-    const rows = invoices.map((inv) => {
-      const bank = inv.paymentType === "STAFF_CLAIM" ? inv.claimantBank : inv.supplierBank;
-      return {
-        "Invoice #":     inv.invoiceNumber,
-        "PO Number":     inv.poNumber,
-        Outlet:          inv.outlet,
-        Supplier:        inv.supplier,
-        Vendor:          inv.vendorName ?? "",
-        Type:            inv.paymentType,
-        "Order Type":    inv.orderType ?? "",
-        "Expense Category": inv.expenseCategory,
-        Status:          inv.status,
-        "Pending Invoice (GRNI)": inv.isPendingInvoice ? "Yes" : "",
-        "Amount (RM)":   inv.amount,
-        "Amount Paid (RM)": inv.amountPaid,
-        "Outstanding (RM)": Math.max(0, inv.amount - inv.amountPaid),
-        "Issue date":    inv.issueDate.slice(0, 10),
-        "Due date":      inv.dueDate ? inv.dueDate.slice(0, 10) : "",
-        "Delivery date": inv.deliveryDate ? inv.deliveryDate.slice(0, 10) : "",
-        "Paid at":       inv.paidAt ? inv.paidAt.slice(0, 10) : "",
-        "Paid via":      inv.paidVia ?? "",
-        "Payment ref":   inv.paymentRef ?? "",
-        "Claimed by":    inv.claimedBy ?? "",
-        "Deposit %":     inv.depositPercent ?? "",
-        "Deposit (RM)":  inv.depositAmount ?? "",
-        "Deposit paid at": inv.depositPaidAt ? inv.depositPaidAt.slice(0, 10) : "",
-        "Deposit ref":   inv.depositRef ?? "",
-        "Supplier phone": inv.supplierPhone ?? "",
-        "Supplier terms": inv.supplierPaymentTerms ?? "",
-        "Bank name":     bank?.bankName ?? "",
-        "Account number": bank?.accountNumber ?? "",
-        "Account name":  bank?.accountName ?? "",
-        "Photo count":   inv.photoCount,
-        "POP link":      inv.popShortLink ?? "",
-        Flags:           activeFlags(inv).map((f) => FLAG_TITLE[f.code]).join("; "),
-        Notes:           inv.notes ?? "",
-      };
-    });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Invoices");
-    XLSX.writeFile(wb, `invoices-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  // Whether any narrowing filter is active. tab/typeFilter are at their
+  // wide-open defaults ("all") on first paint, so leaving them out of this
+  // check lets a freshly-loaded page export everything. If the user has
+  // touched any of these, the export passes the same params and the server
+  // returns only the matching subset.
+  const hasActiveFilter =
+    tab !== "all"
+    || typeFilter !== "all"
+    || cardFilter !== null
+    || debouncedSearch.length > 0
+    || outletFilter.length > 0
+    || supplierFilter.length > 0
+    || bankFilter !== "all"
+    || !!dueDateFrom || !!dueDateTo
+    || !!paidDateFrom || !!paidDateTo;
+
+  function exportXlsx() {
+    const params = new URLSearchParams();
+    if (hasActiveFilter) {
+      params.set("tab", tab);
+      if (typeFilter !== "all") params.set("type", typeFilter);
+      if (cardFilter && cardFilter !== "all") params.set("cardFilter", cardFilter);
+      if (debouncedSearch) params.set("search", debouncedSearch);
+      outletFilter.forEach((id) => params.append("outlet", id));
+      supplierFilter.forEach((id) => params.append("supplier", id));
+      if (bankFilter !== "all") params.set("bank", bankFilter);
+      if (dueDateFrom) params.set("dueDateFrom", dueDateFrom);
+      if (dueDateTo) params.set("dueDateTo", dueDateTo);
+      if (paidDateFrom) params.set("paidDateFrom", paidDateFrom);
+      if (paidDateTo) params.set("paidDateTo", paidDateTo);
+    }
+    const qs = params.toString();
+    window.location.href = `/api/inventory/invoices/export${qs ? `?${qs}` : ""}`;
   }
 
   const openPayDialog = (inv: Invoice, targetStatus: string) => {
@@ -1052,12 +1041,12 @@ export default function InvoicesPage() {
         </div>
         <Button
           onClick={exportXlsx}
-          disabled={invoices.length === 0}
           variant="outline"
           className="gap-1.5 self-start sm:self-auto"
+          title={hasActiveFilter ? "Export the current filtered list" : "Export all invoices"}
         >
           <Download className="h-4 w-4" />
-          Export Excel
+          {hasActiveFilter ? "Export Filtered" : "Export All"}
         </Button>
       </div>
 
