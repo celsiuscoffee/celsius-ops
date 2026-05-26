@@ -18,6 +18,7 @@ import {
   type GrabMenuPayload,
 } from "@/lib/grab";
 import { createClient } from "@/lib/supabase-server";
+import { filterModifiersForChannel } from "@celsius/shared";
 
 interface RawProduct {
   id: string;
@@ -64,6 +65,12 @@ function convertToGrabModifiers(
 }
 
 function convertProductToGrabItem(product: RawProduct): GrabMenuItem {
+  // Drop modifier groups (or options) that opt out of the "grab" channel.
+  const visibleMods = filterModifiersForChannel(
+    product.modifiers as unknown as Parameters<typeof filterModifiersForChannel>[0],
+    "grab",
+  ) as unknown as RawProduct["modifiers"];
+
   return {
     id: product.id,
     name: product.name,
@@ -72,7 +79,7 @@ function convertProductToGrabItem(product: RawProduct): GrabMenuItem {
     description: product.description || undefined,
     price: Math.round(product.sell_price * 100), // RM → sen
     photos: product.image_url ? [product.image_url] : undefined,
-    modifierGroups: convertToGrabModifiers(product.id, product.modifiers),
+    modifierGroups: convertToGrabModifiers(product.id, visibleMods),
   };
 }
 

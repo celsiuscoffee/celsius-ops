@@ -8,6 +8,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { products as mockProducts, categories as mockCategories } from "@/data/mock";
 import type { Product, Category } from "@/lib/types";
+import { filterModifiersForChannel } from "@celsius/shared";
 
 export interface MenuData {
   products: Product[];
@@ -95,7 +96,10 @@ export async function getMenuData(): Promise<MenuData> {
         isPopular:      (p.is_featured as boolean) ?? false,
         isNew:          false,
         variants:       [],
-        modifierGroups: Array.isArray(p.modifiers) ? (p.modifiers as Product["modifierGroups"]) : [],
+        modifierGroups: filterModifiersForChannel(
+          Array.isArray(p.modifiers) ? (p.modifiers as Product["modifierGroups"]) : [],
+          "pickup",
+        ),
         featuredPosition: (p.featured_position as number) ?? 9999,
       }));
 

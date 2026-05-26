@@ -9,12 +9,25 @@ export interface ModifierOption {
   isDefault: boolean;
 }
 
+export type ModifierChannel = "pos" | "pickup" | "grab" | "foodpanda" | "dinein";
+
+// Channels the customer / cashier can see this modifier group on.
+// Empty / missing = show everywhere (backward compatible with pre-channel data).
 export interface ModifierGroup {
   id: string;
   name: string;
   multiSelect: boolean;
   options: ModifierOption[];
+  channels?: ModifierChannel[];
 }
+
+const CHANNELS: { value: ModifierChannel; label: string }[] = [
+  { value: "pos",       label: "POS" },
+  { value: "pickup",    label: "Pickup" },
+  { value: "grab",      label: "GrabFood" },
+  { value: "foodpanda", label: "Foodpanda" },
+  { value: "dinein",    label: "Dine-in" },
+];
 
 // Local id generator — modifier groups/options live as jsonb on the product
 // row, so they don't have DB-generated ids. A short random suffix is enough
@@ -132,6 +145,55 @@ export function ModifierGroupsEditor({ value, onChange }: Props) {
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
+          </div>
+
+          {/* Channels — leave all unchecked = show everywhere */}
+          <div className="pl-5 flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Show on:
+            </span>
+            {CHANNELS.map(({ value, label }) => {
+              const selected = group.channels ?? [];
+              const on = selected.length === 0 || selected.includes(value);
+              const allSelected = selected.length === 0;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    // Toggle channel. If toggling makes the set equal to "all
+                    // channels", normalise to undefined (show-everywhere).
+                    const allValues = CHANNELS.map((c) => c.value);
+                    const current = allSelected ? allValues : [...selected];
+                    const next = current.includes(value)
+                      ? current.filter((c) => c !== value)
+                      : [...current, value];
+                    const normalised = next.length === 0 || next.length === allValues.length
+                      ? undefined
+                      : (next as ModifierChannel[]);
+                    updateGroup(gIdx, { channels: normalised });
+                  }}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+                    on
+                      ? "bg-[#160800] text-white border-[#160800]"
+                      : "bg-white text-muted-foreground border-gray-200 hover:border-[#160800]"
+                  }`}
+                  title={allSelected ? "All channels (default)" : on ? `Visible on ${label}` : `Hidden on ${label}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            {(group.channels?.length ?? 0) > 0 && (
+              <button
+                type="button"
+                onClick={() => updateGroup(gIdx, { channels: undefined })}
+                className="text-[11px] text-muted-foreground hover:text-[#160800] underline"
+                title="Reset to all channels"
+              >
+                reset
+              </button>
+            )}
           </div>
 
           {/* Options */}
