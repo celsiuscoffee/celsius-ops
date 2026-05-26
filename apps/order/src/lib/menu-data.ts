@@ -99,7 +99,7 @@ export async function getMenuData(): Promise<MenuData> {
         modifierGroups: filterModifiersForChannel(
           Array.isArray(p.modifiers) ? (p.modifiers as Product["modifierGroups"]) : [],
           "pickup",
-        ),
+        ) as Product["modifierGroups"],
         featuredPosition: (p.featured_position as number) ?? 9999,
       }));
 

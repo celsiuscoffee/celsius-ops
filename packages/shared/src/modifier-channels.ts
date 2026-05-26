@@ -19,7 +19,6 @@ export interface ModifierOptionLike {
   priceDelta?: number;
   isDefault?: boolean;
   channels?: ModifierChannel[];
-  [key: string]: unknown;
 }
 
 export interface ModifierGroupLike {
@@ -28,7 +27,6 @@ export interface ModifierGroupLike {
   multiSelect?: boolean;
   options?: ModifierOptionLike[];
   channels?: ModifierChannel[];
-  [key: string]: unknown;
 }
 
 function visibleOnChannel(channels: ModifierChannel[] | undefined, channel: ModifierChannel): boolean {
