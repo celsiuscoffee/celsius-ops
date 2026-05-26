@@ -143,7 +143,7 @@ const NAV_SECTIONS: NavSection[] = [
     railIcon: <UtensilsCrossed className={RAIL_ICON_SIZE} />,
     dividerBefore: true,
     items: [
-      { label: "Menu", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
+      { label: "Products", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
       { label: "Splash Posters", href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />, moduleKey: "pickup:menu" },
     ],
   },
@@ -489,7 +489,26 @@ function getVisibleItems(section: NavSection, user: UserProfile | undefined): Na
 }
 
 function pathMatchesSection(pathname: string, section: NavSection): boolean {
-  return getSectionHrefs(section).some((href) => pathname === href || pathname.startsWith(href + "/"));
+  // Compute this section's best (longest) matching href against the current
+  // pathname, then ensure no other section has a *longer* matching href.
+  // Without this, broad sections like Pickup App (`/pickup`) light up
+  // simultaneously with more specific sections like Catalog (`/pickup/menu`).
+  const bestMatchLen = (s: NavSection): number => {
+    let best = -1;
+    for (const href of getSectionHrefs(s)) {
+      if (pathname === href || pathname.startsWith(href + "/")) {
+        if (href.length > best) best = href.length;
+      }
+    }
+    return best;
+  };
+  const myBest = bestMatchLen(section);
+  if (myBest < 0) return false;
+  for (const other of NAV_SECTIONS) {
+    if (other === section) continue;
+    if (bestMatchLen(other) > myBest) return false;
+  }
+  return true;
 }
 
 // ─── NavLink ────────────────────────────────────────────────────────────

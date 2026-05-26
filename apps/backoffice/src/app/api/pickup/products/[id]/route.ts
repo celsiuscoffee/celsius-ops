@@ -37,6 +37,14 @@ export async function PATCH(
     update.hidden_modifier_ids = body.hidden_modifier_ids.filter((x): x is string => typeof x === "string");
   }
 
+  // Modifier groups — backoffice-owned (we no longer pull these from StoreHub
+  // sync, so the merchant manages them directly here). Stored as jsonb on
+  // products.modifiers. Shape mirrors StoreHub: group { id, name, multiSelect,
+  // options: [{ id, label, priceDelta, isDefault }] }.
+  if (Array.isArray(body.modifiers)) {
+    update.modifiers = body.modifiers;
+  }
+
   // StoreHub-parity fields — added 2026-05-24 per consolidation.
   if (typeof body.print_additional_docket === "boolean") {
     update.print_additional_docket = body.print_additional_docket;
