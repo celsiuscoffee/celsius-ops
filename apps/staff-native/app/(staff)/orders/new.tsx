@@ -132,19 +132,35 @@ export default function NewPO() {
   }, []);
 
   // Load AI recommendations on mount (and re-load on outlet change).
-  // Filtered server-side to the current outlet so we don't surface
-  // restock suggestions for an outlet the user can't write to.
+  //
+  // Two paths:
+  // - Outlet-scoped users (BARISTA, BARISTA_LEAD): pass their outletId,
+  //   backoffice scopes recs to just their outlet.
+  // - Managers (OWNER / ADMIN / MANAGER) often have outletId=null in
+  //   the user record — they oversee multiple outlets. We omit outletId
+  //   so the backoffice returns recommendations across ALL outlets.
+  //   Previously the early-return guard `if (!outletId) return;` meant
+  //   the fetch never fired for these users and the Smart tab silently
+  //   showed "Nothing to restock right now" — looked like nothing was
+  //   broken, but the AI never ran.
+  // - Surface real errors in the empty state (instead of silently
+  //   collapsing to []) so we can tell "AI ran and found nothing" from
+  //   "request failed".
+  const [aiError, setAiError] = useState<string | null>(null);
   useEffect(() => {
-    if (!session?.outletId) return;
     let cancelled = false;
     setAiLoading(true);
-    fetchAIDecisions(session.outletId)
+    setAiError(null);
+    // session.outletId may be null for managers/owners — that's intentional.
+    fetchAIDecisions(session?.outletId ?? undefined)
       .then((data) => {
         if (cancelled) return;
         setAiRecs(data.purchaseOrders ?? []);
       })
-      .catch(() => {
-        if (!cancelled) setAiRecs([]);
+      .catch((err) => {
+        if (cancelled) return;
+        setAiRecs([]);
+        setAiError(err instanceof Error ? err.message : "Couldn't reach AI");
       })
       .finally(() => {
         if (!cancelled) setAiLoading(false);
@@ -374,10 +390,23 @@ export default function NewPO() {
           >
             <Text className="mb-2 text-xs font-body text-muted-fg">
               AI-ranked restock recommendations based on current stock levels
-              and recent usage. Tap to pre-fill the cart.
+              and recent usage. Tap to pre-fill the cart.{" "}
+              {session?.outletId
+                ? `Scoped to ${session?.outletName ?? "your outlet"}.`
+                : "Across all outlets (manager view)."}
             </Text>
             {aiLoading ? (
               <SkeletonList count={3} />
+            ) : aiError ? (
+              <View className="rounded-3xl border border-dashed border-danger/40 bg-danger/5 px-4 py-8 items-center">
+                <Sparkles color="#B91C1C" size={28} />
+                <Text className="mt-2 text-sm font-body-bold text-danger">
+                  Couldn't load recommendations
+                </Text>
+                <Text className="mt-1 text-xs font-body text-muted-fg text-center">
+                  {aiError}
+                </Text>
+              </View>
             ) : aiRecs.length === 0 ? (
               <View className="rounded-3xl border border-dashed border-border bg-surface px-4 py-8 items-center">
                 <Sparkles color="#C2452D" size={28} />
@@ -385,8 +414,12 @@ export default function NewPO() {
                   Nothing to restock right now
                 </Text>
                 <Text className="mt-1 text-xs font-body text-muted-fg text-center">
-                  Stock is healthy at your outlet — switch to Manual to
-                  create a one-off PO.
+                  Stock is healthy{" "}
+                  {session?.outletId
+                    ? "at your outlet"
+                    : "across all outlets"}{" "}
+                  per current par levels — switch to Manual to create a
+                  one-off PO.
                 </Text>
               </View>
             ) : (
