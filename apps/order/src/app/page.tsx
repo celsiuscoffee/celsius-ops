@@ -10,6 +10,8 @@ import { HeroInfoCard } from "./_HeroInfoCard";
 import { OutletRow } from "./_OutletRow";
 import { ActiveChallengeCard } from "./_ActiveChallengeCard";
 import { VoucherRail } from "./_VoucherRail";
+import { GuestSignInCTA } from "./_GuestSignInCTA";
+import { ActiveOrderTracker } from "./_ActiveOrderTracker";
 
 /**
  * Customer home — Next.js Server Component. Plain HTML so iOS Safari
@@ -110,6 +112,16 @@ export default async function HomePage() {
           reads chosen outlet from localStorage so customers see their
           outlet name instead of the placeholder. */}
       <OutletRow />
+
+      {/* Guest sign-in CTA — espresso panel with gift icon, surfaces
+          for logged-out customers as the first conversion ask. Hidden
+          once signed in. Mirrors apps/pickup-native/app/index.tsx
+          :586-644. */}
+      <GuestSignInCTA />
+
+      {/* In-progress order banner — colored panel that links to the
+          order detail page. Refreshes every 15s. */}
+      <ActiveOrderTracker />
 
       {/* Active challenge teaser (signed-in customers with an in-
           progress mission). Mirrors apps/pickup-native/app/index.tsx
