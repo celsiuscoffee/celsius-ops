@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Gift, Sparkles } from "lucide-react";
+import { Gift, Sparkles, Coffee, Tag, Cookie, Ticket } from "lucide-react";
 import { BeansHero } from "./_BeansHero";
 import { ActiveChallenges } from "./_ActiveChallenges";
 import { Claimables } from "./_Claimables";
@@ -110,31 +110,157 @@ export function RewardsView() {
           </p>
         </div>
       ) : (
-        <ul className="px-4 py-4 flex flex-col gap-3">
-          {rewards.map((r) => (
-            <li
-              key={r.id}
-              className="bg-white rounded-2xl border border-[#EBE5DE] p-4"
-              style={{ boxShadow: "0 2px 6px rgba(0,0,0,0.04)" }}
+        <ul className="px-4 py-4 flex flex-col gap-2">
+          <li>
+            <p
+              className="uppercase"
+              style={{
+                color: "#8E8E93",
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: 1.4,
+                marginBottom: 4,
+                paddingLeft: 4,
+              }}
             >
-              <p
-                className="text-base"
-                style={{ fontFamily: "Peachi-Bold, serif", fontWeight: 700 }}
-              >
-                {r.name}
-              </p>
-              {r.description ? (
-                <p className="text-[12px] text-[#6E6E73] mt-1">{r.description}</p>
-              ) : null}
-              {r.beans_cost ? (
-                <p className="mt-2 text-sm text-[#A2492C] font-bold">
-                  {r.beans_cost.toLocaleString()} beans
-                </p>
-              ) : null}
-            </li>
+              Spend your beans
+            </p>
+          </li>
+          {rewards.map((r) => (
+            <CatalogCard key={r.id} reward={r} balance={beans} />
           ))}
         </ul>
       )}
     </>
+  );
+}
+
+// Pick a glyph + colourway that matches the reward's flavour, mirroring
+// apps/pickup-native/app/rewards.tsx's themeForReward + pickRewardIcon
+// shorthand. Web doesn't have access to discount_type/flat-vs-percent
+// breakdown so we fall back to keyword matching on the name.
+function themeFor(reward: Reward): {
+  bg: string;
+  fg: string;
+  fgDim: string;
+  accent: string;
+  iconBg: string;
+  Icon: typeof Gift;
+} {
+  const name = (reward.name ?? "").toLowerCase();
+  if (/free|bogo|buy.*free/.test(name)) {
+    return {
+      bg: "#1A0200",
+      fg: "#FFFFFF",
+      fgDim: "rgba(255,255,255,0.65)",
+      accent: "#FBBF24",
+      iconBg: "rgba(251,191,36,0.20)",
+      Icon: Coffee,
+    };
+  }
+  if (/cookie|pastry|cake|croissant/.test(name)) {
+    return {
+      bg: "#FBEBE8",
+      fg: "#1A0200",
+      fgDim: "rgba(26,2,0,0.65)",
+      accent: "#A2492C",
+      iconBg: "rgba(162,73,44,0.18)",
+      Icon: Cookie,
+    };
+  }
+  if (/rm\s*\d|%\s*off|off$/i.test(reward.name ?? "")) {
+    return {
+      bg: "rgba(162,73,44,0.10)",
+      fg: "#1A0200",
+      fgDim: "rgba(26,2,0,0.65)",
+      accent: "#A2492C",
+      iconBg: "rgba(162,73,44,0.18)",
+      Icon: Tag,
+    };
+  }
+  return {
+    bg: "#FBEBE8",
+    fg: "#1A0200",
+    fgDim: "rgba(26,2,0,0.65)",
+    accent: "#A2492C",
+    iconBg: "rgba(162,73,44,0.18)",
+    Icon: Ticket,
+  };
+}
+
+function CatalogCard({ reward, balance }: { reward: Reward; balance: number }) {
+  const required = reward.beans_cost ?? 0;
+  const canUse = balance >= required;
+  const theme = themeFor(reward);
+  const Icon = theme.Icon;
+  return (
+    <li
+      style={{
+        backgroundColor: theme.bg,
+        border: `1px solid ${theme.bg}`,
+        borderRadius: 18,
+        padding: 14,
+        opacity: canUse ? 1 : 0.78,
+        boxShadow: "0 4px 10px rgba(0,0,0,0.06)",
+      }}
+    >
+      <div className="flex items-center" style={{ gap: 14 }}>
+        <span
+          className="flex items-center justify-center flex-shrink-0"
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: 12,
+            backgroundColor: theme.iconBg,
+          }}
+        >
+          <Icon size={24} color={theme.accent} strokeWidth={2} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p
+            className="uppercase truncate"
+            style={{
+              color: theme.accent,
+              fontSize: 9.5,
+              fontWeight: 700,
+              letterSpacing: 1.4,
+              marginBottom: 3,
+            }}
+          >
+            Reward
+          </p>
+          <p
+            className="font-peachi font-bold truncate"
+            style={{ color: theme.fg, fontSize: 17, lineHeight: "21px" }}
+          >
+            {reward.name}
+          </p>
+          <p
+            className="truncate"
+            style={{ color: theme.fgDim, fontSize: 11, marginTop: 2, fontWeight: 500 }}
+          >
+            {canUse
+              ? required > 0 ? `Spend ${required.toLocaleString()} beans` : "Free to claim"
+              : `${(required - balance).toLocaleString()} beans to go`}
+          </p>
+        </div>
+        <span
+          className="rounded-full flex items-center justify-center flex-shrink-0"
+          style={{
+            backgroundColor: canUse ? theme.accent : "rgba(0,0,0,0.10)",
+            color: canUse ? "#FFFFFF" : theme.fgDim,
+            paddingLeft: 14,
+            paddingRight: 14,
+            paddingTop: 7,
+            paddingBottom: 7,
+            fontFamily: "var(--font-display)",
+            fontWeight: 700,
+            fontSize: 12,
+          }}
+        >
+          {canUse ? "Use" : `${required}`}
+        </span>
+      </div>
+    </li>
   );
 }
