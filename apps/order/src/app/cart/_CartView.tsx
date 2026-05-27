@@ -145,27 +145,49 @@ export function CartView() {
         {items.map((item) => (
           <li
             key={item.cartId}
-            className="bg-white rounded-2xl border border-[#EBE5DE] p-3 flex gap-3"
-            style={{ boxShadow: "0 2px 6px rgba(0,0,0,0.04)" }}
+            className="bg-white flex gap-3"
+            style={{
+              border: "1px solid rgba(26, 2, 0, 0.10)",
+              borderRadius: 16,
+              padding: 12,
+              boxShadow: "0 2px 6px rgba(0,0,0,0.04)",
+            }}
           >
             <Link
               href={`/product/${item.productId}?cartId=${item.cartId}`}
-              className="relative w-[72px] h-[72px] flex-shrink-0 rounded-xl overflow-hidden bg-[#F2EDE5]"
+              className="relative flex-shrink-0 overflow-hidden bg-[#F2EDE5]"
+              style={{ width: 72, height: 72, borderRadius: 14 }}
             >
               {item.image ? (
                 <Image src={item.image} alt={item.name} fill sizes="72px" className="object-cover" />
               ) : null}
             </Link>
-            <div className="flex-1 min-w-0">
-              <Link href={`/product/${item.productId}?cartId=${item.cartId}`}>
-                <p className="text-sm font-bold truncate">{item.name}</p>
-              </Link>
+            <div className="flex-1 min-w-0 flex flex-col">
+              <div className="flex items-start gap-2">
+                <Link href={`/product/${item.productId}?cartId=${item.cartId}`} className="flex-1 min-w-0">
+                  <p
+                    className="font-peachi font-bold truncate"
+                    style={{ color: "#1A0200", fontSize: 15, lineHeight: "19px" }}
+                  >
+                    {item.name}
+                  </p>
+                </Link>
+                <span
+                  className="font-peachi font-bold flex-shrink-0"
+                  style={{ color: "#A2492C", fontSize: 14 }}
+                >
+                  RM{item.totalPrice.toFixed(2)}
+                </span>
+              </div>
               {item.modifiers && item.modifiers.length > 0 ? (
-                <p className="text-[11px] text-[#6E6E73] mt-0.5 line-clamp-1">
+                <p
+                  className="line-clamp-1"
+                  style={{ color: "#6B6B6B", fontSize: 12, marginTop: 2, fontWeight: 500 }}
+                >
                   {item.modifiers.map((m) => m.label).filter(Boolean).join(", ")}
                 </p>
               ) : null}
-              <div className="mt-2 flex items-center gap-3">
+              <div className="mt-auto pt-2 flex items-center gap-3">
                 <button
                   onClick={() => updateQty(item.cartId, -1)}
                   className="h-7 w-7 rounded-full border border-[#E0D8CE] flex items-center justify-center active:opacity-60"
@@ -181,12 +203,9 @@ export function CartView() {
                 >
                   <Plus size={14} color="#FFFFFF" />
                 </button>
-                <span className="ml-auto text-sm text-[#A2492C] font-bold">
-                  RM{item.totalPrice.toFixed(2)}
-                </span>
                 <button
                   onClick={() => remove(item.cartId)}
-                  className="ml-2 p-1 active:opacity-60"
+                  className="ml-auto p-1 active:opacity-60"
                   aria-label="Remove"
                 >
                   <Trash2 size={16} color="#8E8E93" />

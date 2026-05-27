@@ -26,6 +26,16 @@ type Mission = {
   progress_current?: number;
 };
 
+// THEME_CHALLENGE — mirrors apps/pickup-native/components/VoucherWallet.tsx
+const THEME = {
+  bg:        "#1A0200",
+  accent:    "#FBBF24",
+  fg:        "#FFFFFF",
+  fgDim:     "rgba(255,255,255,0.65)",
+  iconBg:    "rgba(251,191,36,0.20)",
+  iconColor: "#FBBF24",
+};
+
 type Persisted = { state?: { sessionToken?: string | null } };
 
 function progressLabel(m: Mission): string {
@@ -82,62 +92,81 @@ export function ActiveChallenges() {
 
 function ChallengeRow({ mission }: { mission: Mission }) {
   const isDone = mission.status === "completed";
-  const isLocked = mission.status === "locked";
-  const accent = isDone ? "#22C55E" : isLocked ? "#8E8E93" : "#FBBF24";
+  const isExpired = mission.status === "expired";
 
   return (
     <li>
       <Link
-        href="/rewards"
-        className="flex items-center gap-3 rounded-2xl active:opacity-90"
+        href={`/challenge/${mission.assignment_id ?? mission.id}`}
+        className="flex items-start active:opacity-90"
         style={{
-          backgroundColor: "#1A0200",
-          padding: 14,
-          opacity: isLocked ? 0.7 : 1,
-          boxShadow: "0 4px 10px rgba(22,8,0,0.18)",
+          backgroundColor: THEME.bg,
+          border: `1px solid ${isDone ? THEME.accent : THEME.bg}`,
+          borderRadius: 18,
+          paddingLeft: 14,
+          paddingRight: 14,
+          paddingTop: 14,
+          paddingBottom: 14,
+          gap: 14,
+          opacity: isExpired ? 0.45 : 1,
+          boxShadow: "0 4px 10px rgba(0,0,0,0.12)",
         }}
       >
         <span
           className="flex items-center justify-center flex-shrink-0"
           style={{
-            width: 40,
-            height: 40,
+            width: 48,
+            height: 48,
             borderRadius: 12,
-            backgroundColor: `${accent}2D`,
+            backgroundColor: THEME.iconBg,
           }}
         >
           {isDone ? (
-            <Check size={20} color={accent} strokeWidth={2} />
-          ) : isLocked ? (
-            <Lock size={20} color={accent} strokeWidth={1.8} />
+            <Check size={24} color={THEME.iconColor} strokeWidth={2} />
+          ) : isExpired ? (
+            <Lock size={24} color={THEME.iconColor} strokeWidth={2} />
           ) : (
-            <Sparkles size={20} color={accent} strokeWidth={1.8} />
+            <Sparkles size={24} color={THEME.iconColor} strokeWidth={2} />
           )}
         </span>
         <span className="flex-1 min-w-0">
           <span
             className="block uppercase truncate"
-            style={{ color: accent, fontWeight: 700, fontSize: 9.5, letterSpacing: 1.4 }}
+            style={{
+              color: THEME.accent,
+              fontWeight: 700,
+              fontSize: 9.5,
+              letterSpacing: 1.4,
+              marginBottom: 3,
+            }}
           >
-            {isDone ? "Ready to claim" : isLocked ? "Locked" : `Active · ${progressLabel(mission)}`}
+            Challenge
+            {isDone ? " · Done" : isExpired ? " · Missed" : ` · ${progressLabel(mission)}`}
           </span>
           <span
-            className="block text-white truncate mt-0.5"
+            className="block truncate"
             style={{
+              color: THEME.fg,
               fontFamily: "var(--font-display)",
               fontWeight: 700,
-              fontSize: 15,
-              letterSpacing: -0.3,
+              fontSize: 17,
+              lineHeight: "21px",
             }}
           >
             {mission.title}
           </span>
-          {mission.reward_summary ? (
+          {(mission.description ?? mission.reward_summary) ? (
             <span
-              className="block truncate"
-              style={{ color: "rgba(255,255,255,0.65)", fontSize: 11, marginTop: 1, fontWeight: 500 }}
+              className="block line-clamp-2"
+              style={{
+                color: THEME.fgDim,
+                fontSize: 12,
+                lineHeight: "16px",
+                marginTop: 2,
+                fontWeight: 500,
+              }}
             >
-              {mission.reward_summary}
+              {mission.description ?? mission.reward_summary}
             </span>
           ) : null}
         </span>
