@@ -9,6 +9,7 @@ import { PosterCarousel } from "./_PosterCarousel";
 import { HeroInfoCard } from "./_HeroInfoCard";
 import { OutletRow } from "./_OutletRow";
 import { ActiveChallengeCard } from "./_ActiveChallengeCard";
+import { VoucherRail } from "./_VoucherRail";
 
 /**
  * Customer home — Next.js Server Component. Plain HTML so iOS Safari
@@ -107,6 +108,11 @@ export default async function HomePage() {
           progress mission). Mirrors apps/pickup-native/app/index.tsx
           :764-845. Renders nothing when there's no active mission. */}
       <ActiveChallengeCard />
+
+      {/* Voucher wallet rail — signed-in customers with active vouchers
+          see them as a horizontally scrolling deck of themed cards.
+          Renders nothing for guests / empty wallets. */}
+      <VoucherRail />
 
       {/* Best Sellers — card-style horizontal scroll (matching the SPA) */}
       {bestSellers.length > 0 && (
