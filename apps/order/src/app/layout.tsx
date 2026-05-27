@@ -47,9 +47,15 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${spaceGrotesk.variable} h-full antialiased bg-[#160800]`}
+      // Deliberately NOT setting h-full on html — that pins the
+      // document to viewport height, which prevents iOS Safari from
+      // collapsing its URL bar on body scroll. Globals.css already
+      // sets body min-height:100dvh so the background still fills the
+      // visible area; without an html height clamp, the document can
+      // grow with content and Safari sees scroll on the body.
+      className={`${spaceGrotesk.variable} antialiased bg-[#160800]`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="flex flex-col">
         {children}
         <Toaster />
       </body>
