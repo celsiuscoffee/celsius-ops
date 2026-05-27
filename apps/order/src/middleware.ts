@@ -71,8 +71,16 @@ export async function middleware(request: NextRequest) {
     pathname === "/account" ||
     pathname === "/checkout" ||
     pathname === "/store" ||
+    pathname === "/referral" ||
+    pathname === "/support" ||
+    pathname === "/settings" ||
+    pathname === "/privacy" ||
+    pathname === "/tier-benefits" ||
+    pathname === "/wrapped" ||
+    pathname === "/account-delete" ||
     pathname.startsWith("/product/") ||
-    pathname.startsWith("/order/");
+    pathname.startsWith("/order/") ||
+    pathname.startsWith("/challenge/");
 
   // Customer-facing UI lives in the Expo Web PWA shipped from
   // apps/pickup-native and copied into /public during build. For any
