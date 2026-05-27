@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Gift, Sparkles } from "lucide-react";
 import { TierCard } from "./_TierCard";
+import { ActiveChallenges } from "./_ActiveChallenges";
+import { Claimables } from "./_Claimables";
 
 type Persisted = {
   state?: {
@@ -67,6 +69,12 @@ export function RewardsView() {
           and updates the member's current tier atomically on read.
           Matches the SPA's TierCardCarousel current-tier card. */}
       <TierCard />
+
+      {/* Claimable offers (one-tap welcome / promo / mystery). */}
+      <Claimables />
+
+      {/* This week's challenges (3 weekly missions). */}
+      <ActiveChallenges />
 
       {!hydrated ? null : !phone ? (
         <div className="flex flex-col items-center px-6 py-12">

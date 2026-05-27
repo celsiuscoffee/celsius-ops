@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Trash2, Plus, Minus } from "lucide-react";
+import { ArrowLeft, Trash2, Plus, Minus, Gift, X } from "lucide-react";
 
 type CartItem = {
   cartId: string;
@@ -16,14 +16,45 @@ type CartItem = {
   modifiers?: Array<{ groupName?: string; label?: string; priceDelta?: number }>;
 };
 
+type AppliedReward = {
+  voucher_id?: string;
+  name?: string;
+  discount_label?: string;
+  discount_sen?: number;
+};
+
 type Persisted = {
   state?: {
     cart?: CartItem[];
     outletName?: string | null;
+    appliedReward?: AppliedReward | null;
   };
 };
 
 const KEY = "celsius-pickup";
+
+function readReward(): AppliedReward | null {
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    if (!raw) return null;
+    return (JSON.parse(raw) as Persisted).state?.appliedReward ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function clearReward() {
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Persisted;
+    const state = parsed.state ?? {};
+    state.appliedReward = null;
+    window.localStorage.setItem(KEY, JSON.stringify({ ...parsed, state }));
+  } catch {
+    /* ignore */
+  }
+}
 
 function readCart(): { items: CartItem[]; outletName: string | null } {
   try {
@@ -54,10 +85,12 @@ function writeCart(items: CartItem[]) {
 export function CartView() {
   const [items, setItems] = useState<CartItem[]>([]);
   const [outletName, setOutletName] = useState<string | null>(null);
+  const [reward, setReward] = useState<AppliedReward | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     const { items, outletName } = readCart();
+    setReward(readReward());
     setItems(items);
     setOutletName(outletName);
     setHydrated(true);
@@ -163,6 +196,41 @@ export function CartView() {
           </li>
         ))}
       </ul>
+
+      {reward ? (
+        <div
+          className="mx-4 mt-1 mb-3 flex items-center gap-2 rounded-2xl px-3 py-2"
+          style={{ backgroundColor: "rgba(185,28,28,0.10)" }}
+        >
+          <span
+            className="flex items-center justify-center"
+            style={{ width: 32, height: 32, borderRadius: 999, backgroundColor: "#B91C1C" }}
+          >
+            <Gift size={14} color="#FFFFFF" strokeWidth={2} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="font-peachi font-bold text-[13px]" style={{ color: "#B91C1C" }}>
+              {reward.name ?? reward.discount_label ?? "Reward applied"}
+            </p>
+            {reward.discount_sen ? (
+              <p className="text-[11px]" style={{ color: "rgba(185,28,28,0.80)" }}>
+                {`−RM${(reward.discount_sen / 100).toFixed(2)} off`}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              clearReward();
+              setReward(null);
+            }}
+            className="p-1 active:opacity-60"
+            aria-label="Remove reward"
+          >
+            <X size={14} color="#B91C1C" />
+          </button>
+        </div>
+      ) : null}
 
       <div className="px-4 pt-4 pb-2 border-t border-[#EBE5DE]">
         <div className="flex items-center justify-between mb-3">
