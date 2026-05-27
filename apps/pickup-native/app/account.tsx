@@ -34,7 +34,6 @@ import * as Haptics from "@/lib/haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollView } from "react-native";
 import { EspressoHeader } from "../components/EspressoHeader";
-import { BottomNav } from "../components/BottomNav";
 import { TierCardCarousel, type TierLite } from "../components/TierCardCarousel";
 import { useApp } from "../lib/store";
 import { api } from "../lib/api";
@@ -442,7 +441,6 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
         </View>
       </ScrollView>
 
-      <BottomNav />
 
       <ProfileEditModal
         visible={editing}
@@ -1373,7 +1371,6 @@ function SignIn({ onVerified }: { onVerified: (phone: string) => void }) {
         )}
       </View>
 
-      <BottomNav />
     </KeyboardAvoidingView>
   );
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Platform, View, Text, Pressable, ScrollView, Image, RefreshControl } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { router, usePathname } from "expo-router";
+import { router } from "expo-router";
 import { MapPin, ChevronRight, Coffee, Sparkles, Gift, Clock4, ShoppingCart } from "lucide-react-native";
 import * as Haptics from "@/lib/haptics";
 import { supabase, type Outlet } from "../lib/supabase";
@@ -36,7 +36,6 @@ import { PosterCarousel } from "../components/PosterCarousel";
 import { getHomePosters, type HomePoster } from "../lib/posters";
 import { tierStyle } from "../lib/tier-styles";
 import { getSetting } from "../lib/settings";
-import { BottomNav } from "../components/BottomNav";
 import { AddToHomeHint } from "../components/AddToHomeHint";
 import { formatPrice } from "../lib/api";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -1164,87 +1163,16 @@ export default function Home() {
 
       </ScrollView>
 
-      {cartCount(cart) > 0 && (
-        <ViewCartFloatingBar
-          count={cartCount(cart)}
-          insetBottom={insets.bottom}
-          onPress={() => router.push("/cart")}
-        />
-      )}
+      {/* The "View cart" pill that used to render here moved to
+          _layout.tsx as <GlobalCartPill /> so it can react to path
+          changes correctly — background-mounted screens on web don't
+          refresh their usePathname() subscriptions, so leaving it here
+          made it leak onto /cart / /checkout. */}
 
-      <BottomNav />
     </View>
   );
 }
 
-// Floating "View cart" bar — anchored above the bottom nav. On web it
-// portals to <body> + position:fixed so it pins to the viewport
-// regardless of the body-scroll setup. Native keeps the in-tree
-// absolute positioning.
-function ViewCartFloatingBar({
-  count,
-  insetBottom,
-  onPress,
-}: {
-  count: number;
-  insetBottom: number;
-  onPress: () => void;
-}) {
-  const isWeb = Platform.OS === "web";
-  // Expo-router's Stack keeps prior screens mounted while a new one is
-  // pushed on top, so this bar's portal stays in the DOM while the
-  // customer is on /cart / /checkout / /product/[id]. Gate on pathname
-  // so it only renders when home is actually the active route.
-  const pathname = usePathname();
-  if (pathname !== "/") return null;
-  const webOverrides = isWeb
-    ? ({
-        position: "fixed" as unknown as "absolute",
-        bottom: "calc(env(safe-area-inset-bottom, 0px) + 80px)" as unknown as number,
-        left: 16,
-        right: 16,
-        zIndex: 99,
-      } as const)
-    : null;
-
-  const bar = (
-    <View
-      className="absolute left-4 right-4"
-      style={{
-        bottom: insetBottom + 70,
-        ...(webOverrides ?? {}),
-      }}
-    >
-      <Pressable
-        onPress={onPress}
-        className="bg-primary rounded-full py-3 px-5 flex-row items-center justify-between active:opacity-80"
-        style={{
-          shadowColor: "#A2492C",
-          shadowOpacity: 0.3,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 4 },
-        }}
-      >
-        <View className="flex-row items-center gap-2">
-          <View className="bg-white rounded-full w-6 h-6 items-center justify-center">
-            <Text className="text-primary text-xs font-bold">{count}</Text>
-          </View>
-          <Text className="text-white font-bold">View cart</Text>
-        </View>
-        <Text className="text-white font-bold">
-          {count} item{count === 1 ? "" : "s"}
-        </Text>
-      </Pressable>
-    </View>
-  );
-
-  if (isWeb && typeof document !== "undefined") {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createPortal } = require("react-dom") as typeof import("react-dom");
-    return createPortal(bar, document.body);
-  }
-  return bar;
-}
 
 function statusLabel(status: string | null | undefined): string {
   switch ((status ?? "").toLowerCase()) {

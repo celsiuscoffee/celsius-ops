@@ -5,7 +5,6 @@ import { Stack, router } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Gift, ChevronRight, Clock, Lock } from "lucide-react-native";
 import * as Haptics from "@/lib/haptics";
-import { BottomNav } from "../components/BottomNav";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { CelsiusLoader } from "../components/CelsiusLoader";
 import { RewardsListSkeleton } from "../components/RewardsListSkeleton";
@@ -360,7 +359,6 @@ export default function RewardsTab() {
         >
           <SignInPrompt />
         </ScrollView>
-        <BottomNav />
       </View>
     );
   }
@@ -440,7 +438,6 @@ export default function RewardsTab() {
         )}
       </ScrollView>
 
-      <BottomNav />
     </View>
   );
 }
