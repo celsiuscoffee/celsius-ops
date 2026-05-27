@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Plus, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getMenuData } from "@/lib/menu-data";
 import { GlobalCartPill } from "./_GlobalCartPill";
@@ -114,46 +114,57 @@ export default async function HomePage() {
           Renders nothing for guests / empty wallets. */}
       <VoucherRail />
 
-      {/* Best Sellers — card-style horizontal scroll (matching the SPA) */}
+      {/* Best Sellers — horizontal scroll matching apps/pickup-native/app
+          /index.tsx: w-44 cards, 4/5 image aspect, ChevronRight CTA. */}
       {bestSellers.length > 0 && (
         <section className="mt-5">
           <div className="flex items-center px-4 mb-3">
             <h2 className="font-peachi font-bold text-[20px] flex-1">Best Sellers</h2>
             <Link
               href="/menu"
-              className="text-[#A2492C] text-sm flex items-center gap-1 active:opacity-70"
+              className="text-[#A2492C] text-xs font-bold flex items-center gap-0.5 active:opacity-70"
             >
               More <ChevronRight size={14} />
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 px-4">
+          <div
+            className="flex gap-3 overflow-x-auto px-4 pb-1"
+            style={{ scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}
+          >
             {bestSellers.map((p) => (
               <Link
                 key={p.id}
                 href={`/product/${p.id}`}
-                className="rounded-2xl bg-white border border-[#EBE5DE] overflow-hidden active:opacity-80"
-                style={{ boxShadow: "0 2px 6px rgba(0,0,0,0.04)" }}
+                className="flex-shrink-0 w-44 rounded-2xl bg-white overflow-hidden active:opacity-70"
+                style={{
+                  border: "1px solid rgba(26, 2, 0, 0.10)",
+                  boxShadow: "0 3px 8px rgba(0,0,0,0.06)",
+                  scrollSnapAlign: "start",
+                }}
               >
-                <div className="relative w-full aspect-square bg-[#F2EDE5]">
+                <div className="relative w-full bg-white" style={{ aspectRatio: "4 / 5" }}>
                   {p.image ? (
                     <Image
                       src={p.image}
                       alt={p.name}
                       fill
-                      sizes="(max-width: 430px) 50vw, 215px"
+                      sizes="176px"
                       className="object-cover"
                     />
                   ) : null}
                 </div>
                 <div className="p-3">
-                  <p className="text-sm font-bold truncate">{p.name}</p>
-                  <div className="mt-1 flex items-center justify-between">
-                    <span className="text-sm text-[#A2492C] font-bold">
+                  <p className="font-peachi font-bold text-[14px] text-[#160800] truncate">{p.name}</p>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="font-peachi font-bold text-[16px] text-[#A2492C]">
                       RM{p.basePrice.toFixed(2)}
                     </span>
-                    <span className="h-7 w-7 rounded-full bg-[#160800] flex items-center justify-center">
-                      <Plus size={14} color="#FFFFFF" strokeWidth={2.5} />
+                    <span
+                      className="rounded-full bg-[#160800] flex items-center justify-center"
+                      style={{ width: 28, height: 28 }}
+                    >
+                      <ChevronRight size={16} color="#FFFFFF" />
                     </span>
                   </div>
                 </div>

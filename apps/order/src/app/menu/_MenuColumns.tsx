@@ -207,30 +207,30 @@ export function MenuColumns({
 
     <div className="flex" style={{ minHeight: "calc(100dvh - 200px)" }}>
       <aside
-        className="flex-shrink-0 bg-white sticky overflow-y-auto"
+        className="flex-shrink-0 bg-white overflow-y-auto w-[60px] min-[420px]:w-20"
         style={{
-          width: 60,
+          position: "sticky",
           top: "calc(env(safe-area-inset-top, 0px) + 100px)",
           alignSelf: "flex-start",
-          maxHeight: "calc(100dvh - 100px)",
+          height: "calc(100dvh - 140px)",
+          WebkitOverflowScrolling: "touch",
         }}
         aria-label="Categories"
       >
         <ul
           className="flex flex-col"
-          style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 8, paddingBottom: 12, gap: 6 }}
+          style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 8, paddingBottom: 180, gap: 6 }}
         >
           {sections.map((s) => {
             const Icon = ICONS[s.icon] ?? Coffee;
             const on = active === s.id;
             return (
-              <li key={s.id}>
+              <li key={s.id} className="flex justify-center">
                 <button
                   type="button"
                   onClick={() => onPickPill(s.id)}
-                  className="flex flex-col items-center justify-center gap-1 rounded-2xl active:opacity-70"
+                  className="flex flex-col items-center justify-center gap-1 rounded-2xl active:opacity-70 w-[52px] min-[420px]:w-[72px]"
                   style={{
-                    width: 52,
                     height: 64,
                     paddingLeft: 4,
                     paddingRight: 4,
@@ -246,7 +246,7 @@ export function MenuColumns({
                   />
                   <span
                     className="text-[9px] text-center leading-[11px]"
-                    style={{ color: on ? "#FFFFFF" : "#160800", fontWeight: 600, width: 44 }}
+                    style={{ color: on ? "#FFFFFF" : "#160800", fontWeight: 600 }}
                   >
                     {s.label}
                   </span>
