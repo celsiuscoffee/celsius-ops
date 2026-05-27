@@ -5,11 +5,15 @@ import Link from "next/link";
 import { Gift, ChevronRight, Sparkles } from "lucide-react";
 
 /**
- * Voucher wallet rail on the home page. Mirrors the SPA's home rail
- * (apps/pickup-native/app/index.tsx ~L847-1200) — horizontal scroll of
- * the customer's active vouchers, each as a themed card showing title,
- * description, and expiry. Renders only for signed-in customers who
- * have at least one active voucher.
+ * Home rewards rail — 144px ticket-stub cards mirroring apps/pickup-
+ * native/components/RewardTicket.tsx. Each card splits into a coloured
+ * top stub (eyebrow + Peachi-Bold headline + optional urgency pill) and
+ * a white bottom stub (reward name + "Free to claim" cost label), with
+ * a perforated separator (half-circle punches + dashed line) so the
+ * card reads as a tear-off coupon rather than a generic card.
+ *
+ * Renders only for signed-in customers who have at least one active
+ * voucher.
  */
 type Voucher = {
   id: string;
@@ -24,28 +28,36 @@ type Voucher = {
 
 type Persisted = { state?: { sessionToken?: string | null } };
 
-const THEME: Record<string, { bg: string; fg: string; chip: string }> = {
-  mystery:           { bg: "#160800", fg: "#FFFFFF", chip: "#FBBF24" },
-  mission:           { bg: "#1A0200", fg: "#FFFFFF", chip: "#FBBF24" },
-  birthday:          { bg: "#A2492C", fg: "#FFFFFF", chip: "#FFE4D2" },
-  promo:             { bg: "#A2492C", fg: "#FFFFFF", chip: "#FFE4D2" },
-  welcome:           { bg: "#A2492C", fg: "#FFFFFF", chip: "#FFE4D2" },
-  referral:          { bg: "#FBBF24", fg: "#160800", chip: "#160800" },
-  points_redemption: { bg: "#F2EDE5", fg: "#160800", chip: "#A2492C" },
-};
-
-function themeFor(v: Voucher) {
-  return THEME[v.source_type ?? ""] ?? THEME.promo;
-}
-
 function expiresLabel(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const days = Math.ceil((new Date(iso).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   if (days < 0) return null;
-  if (days === 0) return "Expires today";
-  if (days === 1) return "Expires tomorrow";
-  if (days <= 7) return `Expires in ${days}d`;
-  return `Expires ${new Date(iso).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}`;
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days <= 7) return `${days}d left`;
+  return new Date(iso).toLocaleDateString("en-MY", { day: "numeric", month: "short" });
+}
+
+// Native pattern: auto-issued rewards (welcome / birthday / mystery /
+// mission) get the gold accent on espresso; everything else gets the
+// terracotta colourway.
+function toneFor(v: Voucher): "gold" | "terracotta" {
+  if (v.source_type === "welcome" || v.source_type === "birthday") return "gold";
+  if (v.source_type === "mystery" || v.source_type === "mission") return "gold";
+  return "terracotta";
+}
+
+function eyebrowFor(v: Voucher): string {
+  switch (v.source_type) {
+    case "welcome":           return "Welcome gift";
+    case "birthday":          return "Birthday gift";
+    case "mission":           return "Challenge reward";
+    case "mystery":           return "Mystery reward";
+    case "referral":          return "Referral";
+    case "points_redemption": return "Bean reward";
+    case "promo":             return "Promo";
+    default:                  return "Reward";
+  }
 }
 
 export function VoucherRail() {
@@ -81,10 +93,10 @@ export function VoucherRail() {
   return (
     <section className="mt-6">
       <div className="flex items-center px-4 mb-3">
-        <h2 className="font-peachi font-bold text-[20px] flex-1">Your rewards</h2>
+        <h2 className="font-peachi font-bold text-[18px] flex-1">Available rewards</h2>
         <Link
           href="/rewards"
-          className="text-[#A2492C] text-sm flex items-center gap-1 active:opacity-70"
+          className="text-[#A2492C] text-xs font-bold flex items-center gap-0.5 active:opacity-70"
         >
           More <ChevronRight size={14} />
         </Link>
@@ -94,74 +106,183 @@ export function VoucherRail() {
         className="flex gap-3 px-4 overflow-x-auto pb-1"
         style={{ scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}
       >
-        {vouchers.map((v) => {
-          const t = themeFor(v);
-          const title = v.value_label ?? v.title ?? v.name ?? "Reward";
-          const desc = v.description ?? v.name ?? "";
-          const expiry = expiresLabel(v.expires_at);
-          return (
-            <li
-              key={v.id}
-              className="flex-shrink-0"
-              style={{ width: 260, scrollSnapAlign: "start" }}
-            >
-              <Link
-                href="/rewards"
-                className="block rounded-2xl p-4 active:opacity-90"
-                style={{
-                  backgroundColor: t.bg,
-                  color: t.fg,
-                  minHeight: 130,
-                  boxShadow: "0 4px 10px rgba(22,8,0,0.10)",
-                }}
-              >
-                <div className="flex items-start gap-2">
-                  <span
-                    className="flex items-center justify-center"
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 10,
-                      backgroundColor: "rgba(255,255,255,0.14)",
-                    }}
-                  >
-                    {v.source_type === "mystery" || v.source_type === "mission" ? (
-                      <Sparkles size={18} color={t.chip} strokeWidth={1.8} />
-                    ) : (
-                      <Gift size={18} color={t.chip} strokeWidth={1.8} />
-                    )}
-                  </span>
-                  {expiry ? (
-                    <span
-                      className="ml-auto text-[10px] uppercase tracking-widest font-bold rounded-full px-2 py-0.5"
-                      style={{
-                        backgroundColor: "rgba(255,255,255,0.15)",
-                        color: t.chip,
-                      }}
-                    >
-                      {expiry}
-                    </span>
-                  ) : null}
-                </div>
-                <p
-                  className="mt-3 font-peachi font-bold text-lg leading-tight"
-                  style={{ color: t.fg }}
-                >
-                  {title}
-                </p>
-                {desc && desc !== title ? (
-                  <p
-                    className="mt-1 text-[12px] leading-snug line-clamp-2"
-                    style={{ color: t.fg, opacity: 0.75 }}
-                  >
-                    {desc}
-                  </p>
-                ) : null}
-              </Link>
-            </li>
-          );
-        })}
+        {vouchers.map((v) => (
+          <RewardTicket key={v.id} voucher={v} />
+        ))}
       </ul>
     </section>
+  );
+}
+
+function RewardTicket({ voucher }: { voucher: Voucher }) {
+  const tone = toneFor(voucher);
+  const topBg = tone === "gold" ? "#1A0200" : "#A2492C";
+  const topAccent = tone === "gold" ? "#FBBF24" : "#FFFFFF";
+  const topMuted = tone === "gold" ? "rgba(251,191,36,0.65)" : "rgba(255,255,255,0.75)";
+  const headline = voucher.value_label ?? voucher.title ?? voucher.name ?? "Reward";
+  const urgency = expiresLabel(voucher.expires_at);
+  const eyebrow = eyebrowFor(voucher);
+  const isGift = tone === "gold" || voucher.source_type === "welcome";
+
+  return (
+    <li
+      className="flex-shrink-0"
+      style={{
+        width: 144,
+        scrollSnapAlign: "start",
+        borderRadius: 14,
+        overflow: "hidden",
+        boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
+      }}
+    >
+      <Link href="/rewards" className="block active:opacity-80">
+        {/* Top stub */}
+        <div
+          className="relative"
+          style={{
+            backgroundColor: topBg,
+            paddingLeft: 12,
+            paddingRight: 12,
+            paddingTop: 12,
+            paddingBottom: 14,
+            minHeight: 92,
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <span
+              className="uppercase"
+              style={{
+                color: topMuted,
+                fontWeight: 700,
+                fontSize: 9,
+                letterSpacing: 1.6,
+              }}
+            >
+              {eyebrow}
+            </span>
+            {tone === "gold" ? (
+              <Gift size={12} color={topAccent} strokeWidth={2} />
+            ) : null}
+          </div>
+          <p
+            className="font-peachi font-bold whitespace-pre-line"
+            style={{
+              color: topAccent,
+              fontSize: 19,
+              lineHeight: "21px",
+              marginTop: 5,
+              paddingRight: 36,
+            }}
+          >
+            {headline}
+          </p>
+          {urgency ? (
+            <span
+              className="absolute"
+              style={{
+                top: 10,
+                right: 10,
+                backgroundColor: tone === "gold" ? "#FBBF24" : "#FFFFFF",
+                color: tone === "gold" ? "#1A0200" : "#A2492C",
+                paddingLeft: 6,
+                paddingRight: 6,
+                paddingTop: 2,
+                paddingBottom: 2,
+                borderRadius: 999,
+                fontFamily: "Peachi-Bold, serif",
+                fontWeight: 700,
+                fontSize: 9,
+              }}
+            >
+              {urgency}
+            </span>
+          ) : null}
+          {/* Brand glyph anchored bottom-right of the top stub */}
+          <span
+            aria-hidden
+            className="absolute"
+            style={{ right: 6, bottom: 6, opacity: 0.85, pointerEvents: "none" }}
+          >
+            {isGift ? (
+              <Gift size={36} color={topAccent} strokeWidth={1.6} />
+            ) : (
+              <Sparkles size={36} color={topAccent} strokeWidth={1.6} />
+            )}
+          </span>
+        </div>
+
+        {/* Perforated separator — half-circle punches on each edge +
+            dashed line connecting them. */}
+        <div className="relative" style={{ height: 0 }}>
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              left: -7,
+              top: -7,
+              width: 14,
+              height: 14,
+              borderRadius: 7,
+              backgroundColor: "#FFFFFF",
+            }}
+          />
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              right: -7,
+              top: -7,
+              width: 14,
+              height: 14,
+              borderRadius: 7,
+              backgroundColor: "#FFFFFF",
+            }}
+          />
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              left: 12,
+              right: 12,
+              top: -1,
+              height: 2,
+              borderTop: "1px dashed rgba(26, 2, 0, 0.18)",
+            }}
+          />
+        </div>
+
+        {/* Bottom stub */}
+        <div
+          style={{
+            backgroundColor: "#FFFFFF",
+            paddingLeft: 12,
+            paddingRight: 12,
+            paddingTop: 13,
+            paddingBottom: 10,
+            border: "1px solid rgba(26, 2, 0, 0.10)",
+            borderTop: "none",
+          }}
+        >
+          <p
+            className="font-peachi font-bold truncate"
+            style={{ color: "#1A0200", fontSize: 12 }}
+          >
+            {voucher.name ?? voucher.title ?? "Reward"}
+          </p>
+          <p
+            className="uppercase truncate"
+            style={{
+              color: tone === "gold" ? "#A2492C" : "rgba(26, 2, 0, 0.55)",
+              fontWeight: 700,
+              fontSize: 10,
+              letterSpacing: 1.2,
+              marginTop: 4,
+            }}
+          >
+            Free to claim
+          </p>
+        </div>
+      </Link>
+    </li>
   );
 }

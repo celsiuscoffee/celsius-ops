@@ -136,7 +136,10 @@ export function ProductView({ product }: { product: Product }) {
 
   return (
     <>
-      <div className="relative w-full aspect-square bg-[#F2EDE5]">
+      <div
+        className="relative w-full bg-[#F2EDE5]"
+        style={{ height: "50vh" }}
+      >
         {product.image ? (
           <Image
             src={product.image}
@@ -149,31 +152,51 @@ export function ProductView({ product }: { product: Product }) {
         ) : null}
         <Link
           href="/menu"
-          className="absolute left-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 active:opacity-80"
-          style={{ top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+          className="absolute left-4 flex items-center justify-center rounded-full bg-white active:opacity-80"
+          style={{
+            top: "calc(env(safe-area-inset-top, 0px) + 12px)",
+            width: 40,
+            height: 40,
+            boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
+          }}
           aria-label="Back"
         >
-          <ArrowLeft size={18} color="#160800" />
+          <ArrowLeft size={20} color="#160800" />
         </Link>
       </div>
 
-      <div className="px-4 pt-4">
-        <h1 className="font-peachi font-bold text-2xl">{product.name}</h1>
+      <div
+        className="relative bg-white"
+        style={{ marginTop: -24, borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingTop: 6 }}
+      >
+      <div className="px-5 pt-4">
+        <h1 className="font-peachi font-bold text-2xl text-[#1A0200]">{product.name}</h1>
         {product.description ? (
-          <p className="text-sm text-[#6E6E73] mt-2 leading-snug">
+          <p className="text-sm text-[#6E6E73] mt-2 leading-relaxed">
             {product.description}
           </p>
         ) : null}
-        <p className="mt-3 text-base text-[#A2492C] font-bold">
+        <p className="mt-3 font-peachi font-bold text-[18px] text-[#A2492C]">
           RM{product.basePrice.toFixed(2)}
         </p>
       </div>
 
       {product.modifierGroups.map((g) => (
-        <section key={g.id} className="mt-5 px-4">
-          <h2 className="font-peachi font-bold text-[16px]">{g.name}</h2>
-          <p className="text-[11px] text-[#8E8E93] uppercase tracking-widest mt-0.5">
-            {g.multiSelect ? "Pick any" : "Pick one"}
+        <section key={g.id} className="mt-5 px-5">
+          <p
+            className="uppercase"
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: 1.4,
+              color: "#1A0200",
+            }}
+          >
+            {g.name}
+            <span style={{ color: "#A2492C", marginLeft: 6 }}>
+              · {g.multiSelect ? "Pick any" : "Pick one"}
+            </span>
           </p>
           <ul className="mt-3 flex flex-col gap-2">
             {g.options.map((opt) => {
@@ -215,17 +238,29 @@ export function ProductView({ product }: { product: Product }) {
         </section>
       ))}
 
-      <section className="mt-5 px-4">
-        <h2 className="font-peachi font-bold text-[16px]">Special instructions</h2>
+      <section className="mt-5 px-5">
+        <p
+          className="uppercase"
+          style={{
+            fontFamily: "var(--font-sans)",
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: 1.4,
+            color: "#1A0200",
+          }}
+        >
+          Special instructions
+        </p>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Less ice, no cream, etc."
-          className="mt-2 w-full rounded-2xl border border-[#EBE5DE] bg-white p-3 text-sm min-h-[88px]"
+          className="mt-2 w-full rounded-2xl bg-white p-3 text-sm min-h-[88px]"
+          style={{ border: "1px solid rgba(26,2,0,0.10)" }}
         />
       </section>
 
-      <section className="mt-5 px-4 flex items-center gap-3">
+      <section className="mt-5 px-5 flex items-center gap-3">
         <button
           type="button"
           onClick={() => setQty((q) => Math.max(1, q - 1))}
@@ -245,7 +280,7 @@ export function ProductView({ product }: { product: Product }) {
         </button>
       </section>
 
-      <div className="mt-6 px-4">
+      <div className="mt-6 px-5 pb-8">
         <button
           type="button"
           onClick={onAdd}
@@ -256,6 +291,7 @@ export function ProductView({ product }: { product: Product }) {
         >
           {requiredAllPicked ? `Add ${qty} · RM${totalPrice.toFixed(2)}` : "Pick required options"}
         </button>
+      </div>
       </div>
     </>
   );
