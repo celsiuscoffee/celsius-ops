@@ -1,12 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
-import { MapPin, Plus, ChevronRight } from "lucide-react";
+import { Plus, ChevronRight } from "lucide-react";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getMenuData } from "@/lib/menu-data";
 import { GlobalCartPill } from "./_GlobalCartPill";
 import { BottomNav } from "./_BottomNav";
 import { PosterCarousel } from "./_PosterCarousel";
 import { HeroInfoCard } from "./_HeroInfoCard";
+import { OutletRow } from "./_OutletRow";
 
 /**
  * Customer home — Next.js Server Component. Plain HTML so iOS Safari
@@ -96,18 +97,10 @@ export default async function HomePage() {
         <HeroInfoCard />
       </div>
 
-      {/* Outlet row — under the hero, brand voice */}
-      <Link
-        href="/store"
-        className="flex items-center self-start active:opacity-70"
-        style={{ marginLeft: 20, marginTop: 14, marginBottom: 4, gap: 6 }}
-      >
-        <MapPin size={14} color="#8E8E93" />
-        <span className="font-peachi font-bold text-sm">
-          Select pickup outlet
-        </span>
-        <ChevronRight size={14} color="#8E8E93" />
-      </Link>
+      {/* Outlet row — under the hero, brand voice. Client component
+          reads chosen outlet from localStorage so customers see their
+          outlet name instead of the placeholder. */}
+      <OutletRow />
 
       {/* Best Sellers — card-style horizontal scroll (matching the SPA) */}
       {bestSellers.length > 0 && (
