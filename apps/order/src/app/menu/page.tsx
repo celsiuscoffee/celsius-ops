@@ -1,12 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, ShoppingCart, MapPin, ChevronRight, Plus, Star, Coffee, Leaf, Cake, Cookie, Sandwich, Candy, CupSoda, Cherry, Sparkles, Croissant, Wheat, UtensilsCrossed, Utensils, FlaskConical } from "lucide-react";
+import { ArrowLeft, ShoppingCart, Plus, Star, Coffee, Leaf, Cake, Cookie, Sandwich, Candy, CupSoda, Cherry, Sparkles, Croissant, Wheat, UtensilsCrossed, Utensils, FlaskConical } from "lucide-react";
 import { getMenuData } from "@/lib/menu-data";
 import { GlobalCartPill } from "../_GlobalCartPill";
 import { BottomNav } from "../_BottomNav";
 import { MenuColumns } from "./_MenuColumns";
 import { ReservedVoucherBanner } from "./_ReservedVoucherBanner";
 import { OutletGate } from "./_OutletGate";
+import { OutletPickerRow } from "./_OutletPickerRow";
 
 /**
  * Customer menu — Next.js Server Component. Mirrors the SPA's
@@ -114,18 +115,9 @@ function Header() {
   );
 }
 
-function OutletPickerRow() {
-  return (
-    <Link
-      href="/store"
-      className="flex items-center gap-2 bg-[#F7F4F0] border-b border-[#E8E1D8] px-4 py-2 active:opacity-70"
-    >
-      <MapPin size={14} className="text-[#A2492C]" />
-      <span className="text-sm font-bold flex-1 truncate">Select outlet</span>
-      <ChevronRight size={14} className="text-[#8E8E93]" />
-    </Link>
-  );
-}
+// OutletPickerRow moved to ./_OutletPickerRow so it can read the
+// chosen outlet from localStorage and show its name (was a static
+// "Select outlet" placeholder here).
 
 // Re-export icon components for the client _MenuColumns to use without
 // pulling lucide-react itself (so the client bundle is leaner). Not

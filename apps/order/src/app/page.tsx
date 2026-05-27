@@ -73,17 +73,24 @@ export default async function HomePage() {
         style={{ top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
         <Image
-          src="/icons/icon-192.png"
+          src="/images/icon-192.png"
           alt="Celsius"
           width={28}
           height={28}
-          className="rounded-md"
+          style={{ borderRadius: 6 }}
         />
         <div className="flex-1" />
         <Link
           href="/cart"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 active:opacity-80"
+          className="flex items-center justify-center active:opacity-60"
           aria-label="Cart"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: "rgba(255,255,255,0.92)",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.10)",
+          }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#160800" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="9" cy="21" r="1" />

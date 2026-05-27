@@ -14,7 +14,15 @@ type Outlet = {
   pickup_time_mins: number | null;
 };
 
-type Persisted = { state?: { outletId?: string | null; outletName?: string | null } };
+type Persisted = {
+  state?: {
+    outletId?: string | null;
+    outletName?: string | null;
+    outletIsOpen?: boolean;
+    outletIsBusy?: boolean;
+    outletPickupTimeMins?: number | null;
+  };
+};
 
 export function StoreList({ outlets }: { outlets: Outlet[] }) {
   const router = useRouter();
@@ -40,6 +48,12 @@ export function StoreList({ outlets }: { outlets: Outlet[] }) {
       const state = parsed.state ?? {};
       state.outletId = o.store_id;
       state.outletName = o.name;
+      // Snapshot status fields so the home OutletRow can render the
+      // green/amber/red dot + "~N min" label without a separate fetch,
+      // matching apps/pickup-native/app/index.tsx:554-580.
+      state.outletIsOpen = o.is_open;
+      state.outletIsBusy = o.is_busy;
+      state.outletPickupTimeMins = o.pickup_time_mins;
       window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state }));
     } catch {
       /* ignore */
