@@ -61,51 +61,6 @@ function NavTab({
   );
 }
 
-// Celsius cup mark — same SVG geometry as apps/pickup-native/components
-// /brand/CelsiusCup.tsx (Lid + tapered trapezoid body + "C" wordmark).
-// Hand-authored so it sits centred in the bottom-nav puck and reads as
-// the brand mark rather than a stock coffee glyph.
-function CelsiusCupMark({ size = 28, color = "#FFFFFF" }: { size?: number; color?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <rect
-        x="2.5"
-        y="2"
-        width="19"
-        height="3"
-        rx="1"
-        fill="transparent"
-        stroke={color}
-        strokeWidth={2.4}
-      />
-      <path
-        d="M3 5.5 H21 L19.3 22 a1.5 1.5 0 0 1 -1.5 1.3 H6.2 a1.5 1.5 0 0 1 -1.5 -1.3 Z"
-        fill="transparent"
-        stroke={color}
-        strokeWidth={2.4}
-        strokeLinejoin="round"
-      />
-      <text
-        x="12"
-        y="17.5"
-        fontSize="12"
-        textAnchor="middle"
-        fill={color}
-        stroke={color}
-        strokeWidth={0.6}
-        fontFamily="Peachi-Bold, serif"
-      >
-        C
-      </text>
-    </svg>
-  );
-}
-
 function NavMenuPuck({ href, active }: { href: string; active: boolean }) {
   return (
     <Link href={href} className="flex-1 flex flex-col items-center active:opacity-80" aria-label="Menu tab">
@@ -121,7 +76,19 @@ function NavMenuPuck({ href, active }: { href: string; active: boolean }) {
           boxShadow: "0 3px 8px rgba(0,0,0,0.2)",
         }}
       >
-        <CelsiusCupMark size={28} color="#FFFFFF" />
+        {/* Brand °C mark from /public/images/icon-192.png — the actual
+            Celsius logo (serif C + degree dot), flipped to white via
+            CSS filter. Drops the previous hand-drawn cup outline since
+            the brand mark itself is the C-with-degree, not a takeaway
+            cup. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/icon-192.png"
+          alt=""
+          width={30}
+          height={30}
+          style={{ filter: "brightness(0) invert(1)", display: "block" }}
+        />
       </span>
       <span
         className="text-[12.5px]"
