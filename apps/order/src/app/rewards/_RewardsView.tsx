@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Gift, Sparkles } from "lucide-react";
+import { TierCard } from "./_TierCard";
 
 type Persisted = {
   state?: {
@@ -60,21 +61,12 @@ export function RewardsView() {
         </h1>
       </header>
 
-      {/* BEANS hero */}
-      <section className="px-4 pt-4">
-        <div
-          className="bg-[#160800] text-white rounded-2xl p-5"
-          style={{ minHeight: 120 }}
-        >
-          <p className="text-[10px] uppercase tracking-widest text-white/60">Beans</p>
-          <p
-            className="mt-2 text-3xl"
-            style={{ fontFamily: "Peachi-Bold, serif", fontWeight: 700 }}
-          >
-            {hydrated ? beans.toLocaleString() : "—"}
-          </p>
-        </div>
-      </section>
+      {/* Tier card — espresso hero with current tier badge, beans
+          count, and progress-to-next-tier bar. Wired to
+          /api/loyalty/member-tier which proxies the loyalty service
+          and updates the member's current tier atomically on read.
+          Matches the SPA's TierCardCarousel current-tier card. */}
+      <TierCard />
 
       {!hydrated ? null : !phone ? (
         <div className="flex flex-col items-center px-6 py-12">
