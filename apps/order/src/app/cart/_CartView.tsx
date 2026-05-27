@@ -1,0 +1,218 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { ArrowLeft, Trash2, Plus, Minus } from "lucide-react";
+
+type CartItem = {
+  cartId: string;
+  productId: string;
+  name: string;
+  image?: string;
+  basePrice: number;
+  quantity: number;
+  totalPrice: number;
+  modifiers?: Array<{ groupName?: string; label?: string; priceDelta?: number }>;
+};
+
+type Persisted = {
+  state?: {
+    cart?: CartItem[];
+    outletName?: string | null;
+  };
+};
+
+const KEY = "celsius-pickup";
+
+function readCart(): { items: CartItem[]; outletName: string | null } {
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    if (!raw) return { items: [], outletName: null };
+    const parsed = JSON.parse(raw) as Persisted;
+    return {
+      items: parsed.state?.cart ?? [],
+      outletName: parsed.state?.outletName ?? null,
+    };
+  } catch {
+    return { items: [], outletName: null };
+  }
+}
+
+function writeCart(items: CartItem[]) {
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    const parsed = raw ? (JSON.parse(raw) as Persisted) : { state: {} };
+    const state = parsed.state ?? {};
+    state.cart = items;
+    window.localStorage.setItem(KEY, JSON.stringify({ ...parsed, state }));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function CartView() {
+  const [items, setItems] = useState<CartItem[]>([]);
+  const [outletName, setOutletName] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    const { items, outletName } = readCart();
+    setItems(items);
+    setOutletName(outletName);
+    setHydrated(true);
+  }, []);
+
+  const subtotal = items.reduce((s, i) => s + i.totalPrice, 0);
+  const count = items.reduce((s, i) => s + i.quantity, 0);
+
+  const updateQty = (cartId: string, delta: number) => {
+    const next = items
+      .map((i) => {
+        if (i.cartId !== cartId) return i;
+        const q = Math.max(0, i.quantity + delta);
+        return { ...i, quantity: q, totalPrice: (i.totalPrice / i.quantity) * q };
+      })
+      .filter((i) => i.quantity > 0);
+    setItems(next);
+    writeCart(next);
+  };
+
+  const remove = (cartId: string) => {
+    const next = items.filter((i) => i.cartId !== cartId);
+    setItems(next);
+    writeCart(next);
+  };
+
+  if (!hydrated) {
+    return <CartShell outletName={null}>
+      <div className="p-8 text-center text-[#8E8E93] text-sm">Loading…</div>
+    </CartShell>;
+  }
+
+  if (items.length === 0) {
+    return (
+      <CartShell outletName={outletName}>
+        <div className="p-8 text-center">
+          <p className="text-sm text-[#8E8E93]">Your cart is empty.</p>
+          <Link
+            href="/menu"
+            className="mt-4 inline-block rounded-full bg-[#A2492C] text-white px-5 py-3 font-bold active:opacity-80"
+          >
+            Browse menu →
+          </Link>
+        </div>
+      </CartShell>
+    );
+  }
+
+  return (
+    <CartShell outletName={outletName}>
+      <ul className="px-4 py-4 flex flex-col gap-3">
+        {items.map((item) => (
+          <li
+            key={item.cartId}
+            className="bg-white rounded-2xl border border-[#EBE5DE] p-3 flex gap-3"
+            style={{ boxShadow: "0 2px 6px rgba(0,0,0,0.04)" }}
+          >
+            <Link
+              href={`/product/${item.productId}?cartId=${item.cartId}`}
+              className="relative w-[72px] h-[72px] flex-shrink-0 rounded-xl overflow-hidden bg-[#F2EDE5]"
+            >
+              {item.image ? (
+                <Image src={item.image} alt={item.name} fill sizes="72px" className="object-cover" />
+              ) : null}
+            </Link>
+            <div className="flex-1 min-w-0">
+              <Link href={`/product/${item.productId}?cartId=${item.cartId}`}>
+                <p className="text-sm font-bold truncate">{item.name}</p>
+              </Link>
+              {item.modifiers && item.modifiers.length > 0 ? (
+                <p className="text-[11px] text-[#6E6E73] mt-0.5 line-clamp-1">
+                  {item.modifiers.map((m) => m.label).filter(Boolean).join(", ")}
+                </p>
+              ) : null}
+              <div className="mt-2 flex items-center gap-3">
+                <button
+                  onClick={() => updateQty(item.cartId, -1)}
+                  className="h-7 w-7 rounded-full border border-[#E0D8CE] flex items-center justify-center active:opacity-60"
+                  aria-label="Decrease quantity"
+                >
+                  <Minus size={14} className="text-[#160800]" />
+                </button>
+                <span className="font-bold w-5 text-center">{item.quantity}</span>
+                <button
+                  onClick={() => updateQty(item.cartId, +1)}
+                  className="h-7 w-7 rounded-full bg-[#160800] flex items-center justify-center active:opacity-80"
+                  aria-label="Increase quantity"
+                >
+                  <Plus size={14} color="#FFFFFF" />
+                </button>
+                <span className="ml-auto text-sm text-[#A2492C] font-bold">
+                  RM{item.totalPrice.toFixed(2)}
+                </span>
+                <button
+                  onClick={() => remove(item.cartId)}
+                  className="ml-2 p-1 active:opacity-60"
+                  aria-label="Remove"
+                >
+                  <Trash2 size={16} color="#8E8E93" />
+                </button>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <div className="px-4 pt-4 pb-2 border-t border-[#EBE5DE]">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm text-[#6E6E73]">
+            {count} {count === 1 ? "item" : "items"}
+          </span>
+          <span className="text-base font-bold">RM{subtotal.toFixed(2)}</span>
+        </div>
+        <Link
+          href="/checkout"
+          className="block w-full rounded-full bg-[#A2492C] text-white text-center py-4 font-bold active:opacity-80"
+        >
+          Continue to checkout
+        </Link>
+      </div>
+    </CartShell>
+  );
+}
+
+function CartShell({
+  outletName,
+  children,
+}: {
+  outletName: string | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <header
+        className="bg-[#160800] text-white px-4 pb-3 flex items-center gap-3"
+        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+      >
+        <Link href="/" className="-ml-1 p-1 active:opacity-60" aria-label="Back">
+          <ArrowLeft size={20} color="#FFFFFF" />
+        </Link>
+        <div className="flex-1 min-w-0">
+          {outletName ? (
+            <p className="text-[10px] text-white/50 uppercase tracking-widest truncate">
+              Pickup from {outletName}
+            </p>
+          ) : null}
+          <h1
+            className="text-[22px] truncate"
+            style={{ fontFamily: "Peachi-Bold, serif", letterSpacing: -0.3, fontWeight: 700 }}
+          >
+            Your cart
+          </h1>
+        </div>
+      </header>
+      {children}
+    </>
+  );
+}
