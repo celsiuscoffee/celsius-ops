@@ -35,84 +35,6 @@ const BODY_EXTRA = `
       }
     })();
 
-    // Defeat RN-Web's inner ScrollView so the document scrolls — that's
-    // what iOS Safari watches to collapse its URL bar.
-    //
-    // Strategy: on every render, find the OUTERMOST vertical scroller
-    // under #root (the page's main ScrollView), release its
-    // overflow/flex constraints, then walk up the ancestor chain to
-    // #root, doing the same. Deeper elements that legitimately need
-    // overflow:hidden (rounded card images, carousels, tier cards) are
-    // untouched. Horizontal carousels (overflow-x: auto, overflow-y
-    // hidden) are also untouched.
-    //
-    // Earlier attempts (#157/#158) used blanket CSS like '#root *' which
-    // hit every descendant and broke clipping. This is surgical.
-    (function () {
-      var FIXED = '__celsiusBodyScrollFixed';
-      function isVerticalScroller(el) {
-        if (!el || el.nodeType !== 1) return false;
-        var cs = window.getComputedStyle(el);
-        return (cs.overflowY === 'auto' || cs.overflowY === 'scroll')
-          && cs.overflowX !== 'auto' && cs.overflowX !== 'scroll';
-      }
-      function findOutermost(root) {
-        if (!root) return null;
-        var queue = [root];
-        while (queue.length) {
-          var node = queue.shift();
-          if (node !== root && isVerticalScroller(node)) return node;
-          for (var i = 0; i < node.children.length; i++) queue.push(node.children[i]);
-        }
-        return null;
-      }
-      function release(el) {
-        el.style.setProperty('overflow', 'visible', 'important');
-        el.style.setProperty('flex-grow', '0', 'important');
-        el.style.setProperty('flex-shrink', '0', 'important');
-        el.style.setProperty('flex-basis', 'auto', 'important');
-        el.style.setProperty('min-height', '0', 'important');
-        el.style.setProperty('height', 'auto', 'important');
-      }
-      function tick() {
-        var root = document.getElementById('root');
-        if (!root) return;
-        var sv = findOutermost(root);
-        if (!sv) return;
-        if (sv[FIXED]) return;
-        release(sv);
-        var el = sv.parentElement;
-        while (el && el !== document.body) {
-          release(el);
-          if (el === root) break;
-          el = el.parentElement;
-        }
-        sv[FIXED] = true;
-      }
-      var raf = 0;
-      function schedule() {
-        if (raf) return;
-        raf = requestAnimationFrame(function () { raf = 0; tick(); });
-      }
-      window.addEventListener('DOMContentLoaded', schedule);
-      window.addEventListener('load', schedule);
-      window.addEventListener('popstate', schedule);
-      // Patch pushState/replaceState so route changes also trigger the fix.
-      ['pushState', 'replaceState'].forEach(function (m) {
-        var orig = history[m];
-        history[m] = function () {
-          var r = orig.apply(this, arguments);
-          schedule();
-          return r;
-        };
-      });
-      // React re-renders the screen content under #root — re-check after
-      // each batch of DOM mutations. The FIXED flag means each scroller
-      // is only released once.
-      var mo = new MutationObserver(schedule);
-      mo.observe(document.documentElement, { childList: true, subtree: true });
-    })();
-
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
         navigator.serviceWorker.register('/sw.js').catch(function () {});
@@ -133,25 +55,24 @@ if (html.includes("/manifest.json")) {
 const NEW_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />';
 
-// Body uses min-height so the document can grow with content — that
-// growth is what iOS Safari watches to collapse its URL bar. Paired
-// with the runtime BODY_SCROLL_SCRIPT below that surgically defeats
-// the outermost RN-Web ScrollView's clamping so its content actually
-// extends the document. Previous CSS-only attempts (#157/#158) reached
-// every descendant with !important and broke cards/images that need
-// overflow: hidden for rounded clipping. The JS-walk approach only
-// touches the chain from #root down to the main ScrollView — deeper
-// elements (ProductImage, TierCard, VoucherWallet, etc.) keep their
-// inline overflow rules.
+// Use the JS-measured viewport height (--vph) so iOS Safari PWA
+// standalone gets the real pixel viewport — vh/dvh/lvh/svh all
+// under-report by ~150px in standalone mode. We keep `100vh` as the
+// static fallback for browsers that haven't run the JS yet.
+//
+// URL-bar collapse attempts (#148/#149, #157/#158, #162) all ended up
+// breaking scroll or layouts. This is the known-good pinned-height
+// model — keep it. For customers who want a URL-bar-free experience
+// the answer is Add to Home Screen (standalone mode), nudged via the
+// banner in #154. Don't reopen this without a totally different idea.
 const EXPO_RESET_OLD = `      html,
       body {
         height: 100%;
       }`;
 const EXPO_RESET_NEW = `      html,
       body {
-        min-height: 100vh; /* fallback */
-        min-height: var(--vph, 100vh);
-        min-height: 100dvh;
+        height: 100vh; /* fallback */
+        height: var(--vph, 100vh);
       }`;
 const ROOT_OLD = `      #root {
         display: flex;
@@ -160,10 +81,9 @@ const ROOT_OLD = `      #root {
       }`;
 const ROOT_NEW = `      #root {
         display: flex;
-        flex-direction: column;
-        min-height: 100vh;
-        min-height: var(--vph, 100vh);
-        min-height: 100dvh;
+        height: 100vh;
+        height: var(--vph, 100vh);
+        flex: 1;
       }`;
 
 const patched = html
