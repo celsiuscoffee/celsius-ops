@@ -1,13 +1,12 @@
-// Bumped from celsius-v1 to invalidate the cache after PR #148/#149
-// shipped a broken bundle (body-scroll experiment) — clients with the
-// old SW were stuck serving the cached broken JS even after the #150
-// revert deployed. Bumping the name forces the activate handler below
-// to delete the old cache; clients.claim() + skipWaiting() then push
-// existing PWA sessions onto the new bundle on next fetch.
+// Bumped to v3 after the brute-force CSS in #157/#158 broke layouts in
+// production. Customers stuck on the broken bundle via the cache need
+// the new SW (with a fresh cache name) to install + activate +
+// clients.claim() before they'll see the revert. Same drill as the
+// v1->v2 bump after #148/#149.
 //
 // Future rule of thumb: bump this on ANY production-affecting bundle
 // regression so customers don't get stuck on a bad build.
-const CACHE = "celsius-v2";
+const CACHE = "celsius-v3";
 const SHELL = ["/", "/index.html", "/manifest.json"];
 
 self.addEventListener("install", (e) => {
