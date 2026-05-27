@@ -28,6 +28,7 @@ type Persisted = {
     cart?: CartItem[];
     outletName?: string | null;
     appliedReward?: AppliedReward | null;
+    phone?: string | null;
   };
 };
 
@@ -56,17 +57,18 @@ function clearReward() {
   }
 }
 
-function readCart(): { items: CartItem[]; outletName: string | null } {
+function readCart(): { items: CartItem[]; outletName: string | null; phone: string | null } {
   try {
     const raw = window.localStorage.getItem(KEY);
-    if (!raw) return { items: [], outletName: null };
+    if (!raw) return { items: [], outletName: null, phone: null };
     const parsed = JSON.parse(raw) as Persisted;
     return {
       items: parsed.state?.cart ?? [],
       outletName: parsed.state?.outletName ?? null,
+      phone: parsed.state?.phone ?? null,
     };
   } catch {
-    return { items: [], outletName: null };
+    return { items: [], outletName: null, phone: null };
   }
 }
 
@@ -85,19 +87,23 @@ function writeCart(items: CartItem[]) {
 export function CartView() {
   const [items, setItems] = useState<CartItem[]>([]);
   const [outletName, setOutletName] = useState<string | null>(null);
+  const [phone, setPhone] = useState<string | null>(null);
   const [reward, setReward] = useState<AppliedReward | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const { items, outletName } = readCart();
+    const { items, outletName, phone } = readCart();
     setReward(readReward());
     setItems(items);
     setOutletName(outletName);
+    setPhone(phone);
     setHydrated(true);
   }, []);
 
   const subtotal = items.reduce((s, i) => s + i.totalPrice, 0);
-  const count = items.reduce((s, i) => s + i.quantity, 0);
+  const rewardDiscount = Math.min(reward?.discount_sen ? reward.discount_sen / 100 : 0, subtotal);
+  const grandTotal = Math.max(0, subtotal - rewardDiscount);
+  const signedIn = typeof phone === "string" && phone.length > 0;
 
   const updateQty = (cartId: string, delta: number) => {
     const next = items
@@ -251,13 +257,43 @@ export function CartView() {
         </div>
       ) : null}
 
-      <div className="px-4 pt-4 pb-2 border-t border-[#EBE5DE]">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm text-[#6E6E73]">
-            {count} {count === 1 ? "item" : "items"}
+      <div className="px-4 pt-4 pb-2 border-t border-[rgba(26,2,0,0.10)]">
+        <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+          <span className="text-[13px]" style={{ color: "#6B6B6B" }}>Subtotal</span>
+          <span className="text-[14px]" style={{ color: "#1A0200", fontWeight: 500 }}>
+            RM{subtotal.toFixed(2)}
           </span>
-          <span className="text-base font-bold">RM{subtotal.toFixed(2)}</span>
         </div>
+        {rewardDiscount > 0 ? (
+          <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+            <span className="text-[13px]" style={{ color: "#B91C1C" }}>
+              Reward discount
+            </span>
+            <span className="text-[14px]" style={{ color: "#B91C1C", fontWeight: 500 }}>
+              −RM{rewardDiscount.toFixed(2)}
+            </span>
+          </div>
+        ) : null}
+        <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+          <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 15 }}>
+            Total
+          </span>
+          <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 18 }}>
+            RM{grandTotal.toFixed(2)}
+          </span>
+        </div>
+        {signedIn && grandTotal > 0 ? (
+          <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+            <span style={{ color: "#6B6B6B", fontSize: 11, fontWeight: 500 }}>
+              You&apos;ll earn
+            </span>
+            <span style={{ color: "#6B6B6B", fontSize: 11, fontWeight: 700 }}>
+              +{Math.floor(grandTotal)} pts
+            </span>
+          </div>
+        ) : (
+          <div style={{ marginBottom: 12 }} />
+        )}
         <Link
           href="/checkout"
           className="block w-full rounded-full bg-[#A2492C] text-white text-center py-4 font-bold active:opacity-80"
