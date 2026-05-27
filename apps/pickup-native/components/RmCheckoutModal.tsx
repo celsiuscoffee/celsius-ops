@@ -135,6 +135,21 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, method
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const webViewRef = useRef<WebView | null>(null);
+
+  // On web there's no react-native-webview — it errors with "does not
+  // support this platform" and the modal hangs at "Loading Card…",
+  // making payment impossible on the PWA. Sidestep the WebView entirely:
+  // redirect the browser to the hosted payment URL, let Stripe / RM
+  // collect the card details, and rely on their configured redirectUrl
+  // (set in /api/checkout/initiate to /order/[id]?payment=done) to bring
+  // the customer back. The in-modal cancel button is moot once we
+  // navigate away — the browser back button serves the same purpose.
+  useEffect(() => {
+    if (!visible || !url) return;
+    if (Platform.OS !== "web") return;
+    if (typeof window === "undefined") return;
+    window.location.href = url;
+  }, [visible, url]);
   // useSafeAreaInsets reads from a hook-level context that does propagate
   // into Modal portals — <SafeAreaView edges={["top"]}> often returns 0
   // here on iOS because the modal opens in a separate UIWindow without
@@ -176,6 +191,13 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, method
     setLoading(true);
     webViewRef.current?.reload();
   };
+
+  // Web takes the redirect path above — render nothing here so the
+  // WebView never instantiates (it'd error with "does not support this
+  // platform" inside a Modal that has no working close affordance once
+  // the WebView fails). The useEffect already kicked the browser onto
+  // the hosted payment URL.
+  if (Platform.OS === "web") return null;
 
   return (
     <Modal
