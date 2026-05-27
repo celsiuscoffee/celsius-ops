@@ -12,7 +12,7 @@ import {
   type NativeScrollEvent,
   type LayoutChangeEvent,
 } from "react-native";
-import { Stack, router, useLocalSearchParams, usePathname } from "expo-router";
+import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "@/lib/haptics";
 import {
@@ -50,7 +50,6 @@ import { cloudinaryThumb } from "../lib/image";
 import { useActiveSales } from "../lib/use-active-sales";
 import { bestSaleForProduct } from "../lib/product-sales";
 import { PriceTag } from "../components/PriceTag";
-import { BottomNav } from "../components/BottomNav";
 import { ReservedVoucherBanner } from "../components/ReservedVoucherBanner";
 import { CelsiusLoader } from "../components/CelsiusLoader";
 import { ProductImage } from "../components/ProductImage";
@@ -651,91 +650,16 @@ export default function Menu() {
         </ScrollView>
       </View>
 
-      {/* Cart pill — sits above bottom nav */}
-      {cartCount(cart) > 0 && (
-        <MenuCartFloatingBar
-          count={cartCount(cart)}
-          priceLabel={formatPrice(cartTotal(cart))}
-          insetBottom={insets.bottom}
-          onPress={() => router.push("/cart")}
-        />
-      )}
-
-      <BottomNav />
+      {/* "View cart" pill + BottomNav are both rendered globally in
+          _layout.tsx now — having them inside the screen meant the
+          screen's portal stayed on document.body when expo-router's
+          Stack kept menu mounted in the background while /cart or
+          /checkout was on top. Result was the pill + nav leaking onto
+          pages that explicitly opted out (e.g. cart.tsx never imported
+          BottomNav). Move them to one global instance and the
+          usePathname() gating actually works. */}
     </View>
   );
-}
-
-// Floating cart pill — same pattern as the home screen's ViewCart bar.
-// Portals to <body> + position:fixed on web so it pins to the viewport
-// over the body-scroll layout. Native keeps in-tree absolute.
-function MenuCartFloatingBar({
-  count,
-  priceLabel,
-  insetBottom,
-  onPress,
-}: {
-  count: number;
-  priceLabel: string;
-  insetBottom: number;
-  onPress: () => void;
-}) {
-  const isWeb = Platform.OS === "web";
-  // Same trap as ViewCartFloatingBar in index.tsx — expo-router keeps
-  // the menu screen mounted while /cart, /checkout, etc. sit on top of
-  // the Stack, so this bar's body-portal stays in the DOM and shows on
-  // pages where it's redundant. Gate on pathname so it only renders on
-  // the menu / product detail routes that actually want it.
-  const pathname = usePathname();
-  if (!pathname.startsWith("/menu") && !pathname.startsWith("/product")) {
-    return null;
-  }
-  const webOverrides = isWeb
-    ? ({
-        position: "fixed" as unknown as "absolute",
-        bottom:
-          "calc(env(safe-area-inset-bottom, 0px) + 80px)" as unknown as number,
-        left: 16,
-        right: 16,
-        zIndex: 99,
-      } as const)
-    : null;
-
-  const bar = (
-    <View
-      className="absolute left-4 right-4"
-      style={{
-        bottom: insetBottom + 70,
-        ...(webOverrides ?? {}),
-      }}
-    >
-      <Pressable
-        onPress={onPress}
-        className="bg-primary rounded-full py-3 px-5 flex-row items-center justify-between active:opacity-80"
-        style={{
-          shadowColor: "#A2492C",
-          shadowOpacity: 0.3,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 4 },
-        }}
-      >
-        <View className="flex-row items-center gap-2">
-          <View className="bg-white rounded-full w-6 h-6 items-center justify-center">
-            <Text className="text-primary text-xs font-bold">{count}</Text>
-          </View>
-          <Text className="text-white font-bold">View cart</Text>
-        </View>
-        <Text className="text-white font-bold">{priceLabel}</Text>
-      </Pressable>
-    </View>
-  );
-
-  if (isWeb && typeof document !== "undefined") {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createPortal } = require("react-dom") as typeof import("react-dom");
-    return createPortal(bar, document.body);
-  }
-  return bar;
 }
 
 function SideCategoryPill({

@@ -1,5 +1,5 @@
 import "../global.css";
-import { Stack, router } from "expo-router";
+import { Stack, router, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -14,6 +14,8 @@ import { useFonts } from "expo-font";
 import { SplashPoster } from "../components/SplashPoster";
 import { LogoIntro } from "../components/LogoIntro";
 import { MaintenanceBanner } from "../components/MaintenanceBanner";
+import { GlobalCartPill } from "../components/GlobalCartPill";
+import { BottomNav } from "../components/BottomNav";
 import { StripeUrlHandler } from "../components/StripeUrlHandler";
 import { RootErrorBoundary } from "../components/RootErrorBoundary";
 import { Toast } from "../components/Toast";
@@ -70,6 +72,23 @@ const queryClient = new QueryClient({
 // 1.3 still respects the user's preference noticeably, but our cards,
 // pills, and tier-hero overlays were designed against 1.0–1.2× and
 // start clipping past that.
+// Routes where the BottomNav (Home/Rewards/Menu/Orders/Account) is
+// shown. Everything else (cart, checkout, product detail, order
+// detail, store picker, settings, support, etc.) opts out — matches
+// native iOS behaviour where those screens never imported BottomNav.
+const BOTTOM_NAV_ROUTES = (pathname: string) =>
+  pathname === "/" ||
+  pathname.startsWith("/menu") ||
+  pathname === "/orders" ||
+  pathname === "/rewards" ||
+  pathname === "/account";
+
+function GlobalBottomNav() {
+  const pathname = usePathname();
+  if (!BOTTOM_NAV_ROUTES(pathname)) return null;
+  return <BottomNav />;
+}
+
 function applyDefaultFont() {
   const TextAny = Text as any;
   const InputAny = TextInput as any;
@@ -353,6 +372,18 @@ const RootLayout = function RootLayout() {
                     <Stack.Screen name="account" options={{ animation: "none" }} />
                   </Stack>
                   <MaintenanceBanner />
+                  {/* BottomNav + "View cart" pill are mounted globally
+                      here, not inside each screen. Earlier they were
+                      in index.tsx / menu.tsx / orders.tsx / etc., each
+                      portaling its own copy to document.body. Expo-
+                      router's Stack keeps prior screens mounted on web
+                      while a new route is pushed on top, so every
+                      portal stayed in the DOM and leaked onto pages
+                      that explicitly opt out (cart.tsx, checkout.tsx,
+                      product/[id].tsx, etc.). One instance here means
+                      a single portal, controlled by the live pathname. */}
+                  <GlobalBottomNav />
+                  <GlobalCartPill />
                   {/* Global toast layer — sits above stack content but below
                       the cold-launch logo / splash so it doesn't jitter the
                       first-launch sequence. */}

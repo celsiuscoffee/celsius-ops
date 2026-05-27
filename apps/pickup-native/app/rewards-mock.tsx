@@ -38,7 +38,6 @@ import {
   Tag, Sandwich, Star, Clock, Users, DollarSign, Search,
 } from "lucide-react-native";
 import * as Haptics from "@/lib/haptics";
-import { BottomNav } from "../components/BottomNav";
 import { EspressoHeader } from "../components/EspressoHeader";
 
 // ─── Mock data ──────────────────────────────────────────────────────
@@ -272,7 +271,6 @@ export default function RewardsMock() {
         </Stack>
       </ScrollView>
 
-      <BottomNav />
     </View>
   );
 }
