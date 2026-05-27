@@ -12,7 +12,7 @@ import {
   type NativeScrollEvent,
   type LayoutChangeEvent,
 } from "react-native";
-import { Stack, router, useLocalSearchParams } from "expo-router";
+import { Stack, router, useLocalSearchParams, usePathname } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "@/lib/haptics";
 import {
@@ -681,6 +681,15 @@ function MenuCartFloatingBar({
   onPress: () => void;
 }) {
   const isWeb = Platform.OS === "web";
+  // Same trap as ViewCartFloatingBar in index.tsx — expo-router keeps
+  // the menu screen mounted while /cart, /checkout, etc. sit on top of
+  // the Stack, so this bar's body-portal stays in the DOM and shows on
+  // pages where it's redundant. Gate on pathname so it only renders on
+  // the menu / product detail routes that actually want it.
+  const pathname = usePathname();
+  if (!pathname.startsWith("/menu") && !pathname.startsWith("/product")) {
+    return null;
+  }
   const webOverrides = isWeb
     ? ({
         position: "fixed" as unknown as "absolute",
