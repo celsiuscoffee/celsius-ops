@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk } from "next/font/google";
+import localFont from "next/font/local";
 import { Toaster } from "@celsius/ui";
 import "./globals.css";
 
@@ -7,6 +8,19 @@ const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
+});
+
+// Peachi — the brand display face. Used on titles, KPI numbers, card
+// labels. Same files as apps/pickup-native/assets/fonts so the web
+// surface and the native app render the brand voice identically.
+const peachi = localFont({
+  src: [
+    { path: "../fonts/Peachi-Regular.otf", weight: "400", style: "normal" },
+    { path: "../fonts/Peachi-Medium.otf",  weight: "500", style: "normal" },
+    { path: "../fonts/Peachi-Bold.otf",    weight: "700", style: "normal" },
+  ],
+  variable: "--font-peachi",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -53,7 +67,7 @@ export default function RootLayout({
       // sets body min-height:100dvh so the background still fills the
       // visible area; without an html height clamp, the document can
       // grow with content and Safari sees scroll on the body.
-      className={`${spaceGrotesk.variable} antialiased bg-[#160800]`}
+      className={`${spaceGrotesk.variable} ${peachi.variable} antialiased bg-[#160800]`}
     >
       <body className="flex flex-col">
         {children}

@@ -1,39 +1,26 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronDown, MapPin, Plus, ChevronRight } from "lucide-react";
+import { Plus, ChevronRight } from "lucide-react";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getMenuData } from "@/lib/menu-data";
 import { GlobalCartPill } from "./_GlobalCartPill";
-import { MemberBeansCard } from "./_MemberBeansCard";
 import { BottomNav } from "./_BottomNav";
+import { PosterCarousel } from "./_PosterCarousel";
+import { HeroInfoCard } from "./_HeroInfoCard";
+import { OutletRow } from "./_OutletRow";
 
 /**
- * Customer home (Next.js Server Component) — replaces the pickup-native
- * SPA at `/`.
+ * Customer home — Next.js Server Component. Plain HTML so iOS Safari
+ * can collapse its URL bar on body scroll. Mirrors the SPA's home
+ * structure: floating top bar over the hero, PosterCarousel,
+ * dark info card overlay (Hi-name + Beans + Rewards), outlet picker,
+ * Best Sellers, "Open the menu" CTA, BottomNav.
  *
- * Why this exists: the SPA renders through react-native-web's wrapper
- * chain (GestureHandlerRootView → SafeAreaProvider → Stack → page View
- * → ScrollView), each level clamping the document at viewport height
- * so iOS Safari never sees scroll on the body and never collapses its
- * URL bar. Four attempts to defeat that chain via CSS / JS broke
- * either scroll or layouts and were reverted. Rendering the home as
- * plain HTML here sidesteps the whole problem: body scrolls natively,
- * URL bar collapses, customers get back ~120px of viewport.
- *
- * Native iOS/Android pickup app is untouched — it never hits this
- * Next.js route, it runs the RN bundle directly.
- *
- * Inner routes (/menu, /cart, /product/[id], /order/[id], /rewards,
- * /orders, /account, /store) still rewrite to the SPA's index.html
- * via the middleware. Customers tap a BottomNav tab here and drop
- * into the SPA for those screens. URL bar may re-expand on those
- * routes — to be fixed by rebuilding them in Next.js next.
+ * Inner SPA routes (/product/[id], /checkout, /order/[id], /store)
+ * still rewrite to the RN bundle for now — each one gets ported in
+ * the same pattern as the routes already migrated (#167, #168).
  */
 
-// Re-render the home content at most once a minute. Posters change
-// rarely; product list a bit more often. 60s revalidate keeps the
-// page near-instant on subsequent visits without pinning a stale
-// menu for hours after a backoffice edit.
 export const revalidate = 60;
 
 type HomePoster = {
@@ -69,94 +56,72 @@ async function fetchPosters(): Promise<HomePoster[]> {
 
 export default async function HomePage() {
   const [posters, menu] = await Promise.all([fetchPosters(), getMenuData()]);
-  const hero = posters[0] ?? null;
   const bestSellers = menu.products
     .filter((p) => p.isPopular && p.isAvailable)
     .sort((a, b) => (a.featuredPosition ?? 9999) - (b.featuredPosition ?? 9999))
-    .slice(0, 4);
+    .slice(0, 6);
 
   return (
     <main className="bg-white text-[#160800] pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
-      {/* Hero — single poster, links to its deeplink (e.g. /menu?promo=…)
-          if set. Falls back to /menu so the CTA always lands somewhere. */}
-      <Link
-        href={hero?.deeplink || "/menu"}
-        className="relative block w-full aspect-[3/4] bg-[#160800]"
+      {/* Floating top bar — small wordmark + cart icon, sits over the
+          hero. Same design as the SPA's home (apps/pickup-native/app/
+          index.tsx:330-376). */}
+      <div
+        className="absolute left-4 right-4 z-10 flex items-center"
+        style={{ top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
-        {hero ? (
-          <Image
-            src={hero.image_url}
-            alt={hero.title ?? "Celsius Coffee"}
-            fill
-            priority
-            sizes="(max-width: 430px) 100vw, 430px"
-            className="object-cover"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-white/60 text-sm">
-            Celsius Coffee
-          </div>
-        )}
-        {/* Top bar overlaid on the hero — small logo + cart icon */}
-        <div className="absolute top-3 left-4 right-4 flex items-center" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
-          <Image
-            src="/icons/icon-192.png"
-            alt="Celsius"
-            width={28}
-            height={28}
-            className="rounded-md"
-          />
-          <div className="flex-1" />
-          <Link
-            href="/cart"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90"
-            aria-label="Cart"
-          >
-            <span className="text-[#160800]" style={{ fontWeight: 700 }}>
-              {/* cart icon — use a simple svg to avoid layout shift */}
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="9" cy="21" r="1" />
-                <circle cx="20" cy="21" r="1" />
-                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-              </svg>
-            </span>
-          </Link>
-        </div>
-      </Link>
-
-      {/* Member BEANS / REWARDS card — client component, hydrates from
-          localStorage (the SPA's persisted Zustand store key). */}
-      <div className="-mt-10 mx-4 relative z-10">
-        <MemberBeansCard />
+        <Image
+          src="/icons/icon-192.png"
+          alt="Celsius"
+          width={28}
+          height={28}
+          className="rounded-md"
+        />
+        <div className="flex-1" />
+        <Link
+          href="/cart"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 active:opacity-80"
+          aria-label="Cart"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#160800" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="9" cy="21" r="1" />
+            <circle cx="20" cy="21" r="1" />
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+          </svg>
+        </Link>
       </div>
 
-      {/* Outlet picker → /store (still SPA for the picker flow) */}
-      <Link
-        href="/store"
-        className="mt-4 mx-4 flex items-center gap-2 bg-[#F7F4F0] border border-[#E8E1D8] rounded-2xl px-4 py-3 active:opacity-70"
-      >
-        <MapPin size={14} className="text-[#A2492C]" />
-        <span className="text-sm font-bold flex-1 truncate">Select outlet</span>
-        <ChevronDown size={14} className="text-[#8E8E93]" />
-      </Link>
+      {/* Hero — carousel + info card overlay */}
+      <div className="relative">
+        <PosterCarousel posters={posters} />
+        <HeroInfoCard />
+      </div>
 
-      {/* Best Sellers */}
+      {/* Outlet row — under the hero, brand voice. Client component
+          reads chosen outlet from localStorage so customers see their
+          outlet name instead of the placeholder. */}
+      <OutletRow />
+
+      {/* Best Sellers — card-style horizontal scroll (matching the SPA) */}
       {bestSellers.length > 0 && (
-        <section className="mt-6 mx-4">
-          <div className="flex items-center mb-3">
-            <h2 className="text-lg font-bold flex-1" style={{ fontFamily: "Peachi-Bold, serif", letterSpacing: -0.3 }}>
-              Best Sellers
-            </h2>
-            <Link href="/menu" className="text-sm text-[#A2492C] flex items-center gap-1">
+        <section className="mt-5">
+          <div className="flex items-center px-4 mb-3">
+            <h2 className="font-peachi font-bold text-[20px] flex-1">Best Sellers</h2>
+            <Link
+              href="/menu"
+              className="text-[#A2492C] text-sm flex items-center gap-1 active:opacity-70"
+            >
               More <ChevronRight size={14} />
             </Link>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          <div className="grid grid-cols-2 gap-3 px-4">
             {bestSellers.map((p) => (
               <Link
                 key={p.id}
                 href={`/product/${p.id}`}
                 className="rounded-2xl bg-white border border-[#EBE5DE] overflow-hidden active:opacity-80"
+                style={{ boxShadow: "0 2px 6px rgba(0,0,0,0.04)" }}
               >
                 <div className="relative w-full aspect-square bg-[#F2EDE5]">
                   {p.image ? (
@@ -186,7 +151,7 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* "Open the menu" CTA */}
+      {/* Primary CTA */}
       <div className="mt-6 mx-4">
         <Link
           href="/menu"
@@ -196,11 +161,7 @@ export default async function HomePage() {
         </Link>
       </div>
 
-      {/* Floating "View cart" pill (client component reads cart from
-          localStorage and renders if non-empty). */}
       <GlobalCartPill />
-
-      {/* BottomNav — shared component, gets the active tab as a prop. */}
       <BottomNav active="home" />
     </main>
   );
