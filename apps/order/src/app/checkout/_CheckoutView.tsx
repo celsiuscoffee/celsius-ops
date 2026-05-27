@@ -33,10 +33,16 @@ type Tier = {
   tier_color?: string | null;
 };
 
-const METHODS: Array<{ id: string; label: string; Icon: typeof CreditCard }> = [
-  { id: "card",    label: "Card",     Icon: CreditCard },
-  { id: "fpx",     label: "FPX",      Icon: Banknote },
-  { id: "grabpay", label: "GrabPay",  Icon: Wallet },
+const METHODS: Array<{
+  id: string;
+  label: string;
+  subtitle?: string;
+  iconSrc?: string;
+  iconFallback?: typeof CreditCard;
+}> = [
+  { id: "card",    label: "Credit / Debit Card", iconSrc: "/payment-icons/card.svg",        iconFallback: CreditCard },
+  { id: "fpx",     label: "Online Banking",      subtitle: "FPX",      iconSrc: "/payment-icons/fpx.svg",         iconFallback: Banknote },
+  { id: "grabpay", label: "E-Wallet",            subtitle: "GrabPay",  iconSrc: "/payment-icons/grabpay.svg",     iconFallback: Wallet },
 ];
 
 function readState(): Persisted["state"] {
@@ -172,47 +178,151 @@ export function CheckoutView() {
       </header>
 
       <section className="px-4 pt-4">
-        <h2 className="font-peachi font-bold text-[16px]">Pickup from</h2>
-        <p className="mt-1 text-sm text-[#6E6E73]">{state.outletName ?? "Select an outlet"}</p>
+        <div
+          className="bg-white"
+          style={{
+            border: "1px solid rgba(26,2,0,0.10)",
+            borderRadius: 16,
+            padding: 16,
+          }}
+        >
+          <p
+            className="uppercase"
+            style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4 }}
+          >
+            Pickup from
+          </p>
+          <p
+            className="font-peachi font-bold truncate"
+            style={{ color: "#1A0200", fontSize: 15, marginTop: 4 }}
+          >
+            {state.outletName ?? "Select an outlet"}
+          </p>
+        </div>
       </section>
 
-      <section className="px-4 pt-5">
-        <h2 className="font-peachi font-bold text-[16px]">Your order</h2>
-        <ul className="mt-2 flex flex-col gap-1">
-          {cart.map((i) => (
-            <li key={i.cartId} className="flex items-baseline gap-3 text-sm">
-              <span className="text-[#160800] font-bold w-6">{i.quantity}×</span>
-              <span className="flex-1 truncate">{i.name}</span>
-              <span className="text-[#A2492C] font-bold">RM{i.totalPrice.toFixed(2)}</span>
-            </li>
-          ))}
-        </ul>
+      <section className="px-4 pt-3">
+        <div
+          className="bg-white"
+          style={{
+            border: "1px solid rgba(26,2,0,0.10)",
+            borderRadius: 16,
+            padding: 16,
+          }}
+        >
+          <p
+            className="uppercase"
+            style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4 }}
+          >
+            Order
+          </p>
+          <ul className="mt-2 flex flex-col gap-2">
+            {cart.map((i) => (
+              <li key={i.cartId} className="flex items-baseline gap-3 text-sm">
+                <span className="font-peachi font-bold w-6" style={{ color: "#1A0200" }}>
+                  {i.quantity}×
+                </span>
+                <span className="flex-1 truncate" style={{ color: "#1A0200" }}>
+                  {i.name}
+                </span>
+                <span className="font-peachi font-bold" style={{ color: "#1A0200" }}>
+                  RM{i.totalPrice.toFixed(2)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
 
       <section className="px-4 pt-5">
         <h2 className="font-peachi font-bold text-[16px]">Pay with</h2>
-        <ul className="mt-2 flex flex-col gap-2">
-          {METHODS.map((m) => {
-            const Icon = m.Icon;
+        <ul className="mt-2 flex flex-col">
+          {METHODS.map((m, idx) => {
+            const Fallback = m.iconFallback ?? CreditCard;
             const active = method === m.id;
+            const isLast = idx === METHODS.length - 1;
             return (
               <li key={m.id}>
                 <button
                   type="button"
                   onClick={() => setMethod(m.id)}
-                  className={`w-full flex items-center gap-3 rounded-2xl border px-4 py-3 text-left active:opacity-80 ${
-                    active ? "border-[#160800] bg-[#F7F4F0]" : "border-[#EBE5DE] bg-white"
-                  }`}
+                  className="w-full flex items-center text-left active:opacity-80"
+                  style={{
+                    backgroundColor: "#FFFFFF",
+                    border: active
+                      ? "2px solid #160800"
+                      : "1px solid rgba(26,2,0,0.10)",
+                    borderRadius: 16,
+                    padding: 14,
+                    gap: 14,
+                    marginBottom: isLast ? 0 : 8,
+                  }}
                 >
-                  <Icon size={20} color={active ? "#160800" : "#8E8E93"} />
-                  <span className="text-sm font-bold flex-1">{m.label}</span>
                   <span
-                    className="h-5 w-5 rounded-full border"
+                    className="flex items-center justify-center flex-shrink-0"
                     style={{
+                      width: 44,
+                      height: 36,
+                      borderRadius: 8,
+                      backgroundColor: "#F7F4F0",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {m.iconSrc ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={m.iconSrc}
+                        alt=""
+                        style={{
+                          maxWidth: "70%",
+                          maxHeight: "70%",
+                          objectFit: "contain",
+                        }}
+                      />
+                    ) : (
+                      <Fallback size={20} color="#1A0200" />
+                    )}
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span
+                      className="block truncate"
+                      style={{ color: "#1A0200", fontSize: 14, fontWeight: 700 }}
+                    >
+                      {m.label}
+                    </span>
+                    {m.subtitle ? (
+                      <span
+                        className="block truncate"
+                        style={{ color: "#6B6B6B", fontSize: 12, marginTop: 2, fontWeight: 500 }}
+                      >
+                        {m.subtitle}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span
+                    className="flex-shrink-0 rounded-full border"
+                    style={{
+                      width: 20,
+                      height: 20,
                       borderColor: active ? "#160800" : "#C4BDB3",
                       backgroundColor: active ? "#160800" : "transparent",
+                      borderWidth: active ? 0 : 1,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
-                  />
+                  >
+                    {active ? (
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: 4,
+                          backgroundColor: "#FFFFFF",
+                        }}
+                      />
+                    ) : null}
+                  </span>
                 </button>
               </li>
             );
@@ -220,24 +330,43 @@ export function CheckoutView() {
         </ul>
       </section>
 
-      <section className="px-4 pt-5 border-t border-[#EBE5DE] mt-5">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-[#6E6E73]">Total</span>
-          <span className="font-peachi font-bold text-xl">RM{subtotal.toFixed(2)}</span>
+      <section className="px-4 pt-4">
+        <div
+          className="bg-white"
+          style={{
+            border: "1px solid rgba(26,2,0,0.10)",
+            borderRadius: 16,
+            padding: 16,
+          }}
+        >
+        <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+          <span className="text-[13px]" style={{ color: "#6B6B6B" }}>Subtotal</span>
+          <span className="text-[14px]" style={{ color: "#1A0200", fontWeight: 500 }}>
+            RM{subtotal.toFixed(2)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between pt-3 border-t border-[rgba(26,2,0,0.10)]">
+          <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 15 }}>
+            Total
+          </span>
+          <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 18 }}>
+            RM{subtotal.toFixed(2)}
+          </span>
         </div>
         {tier ? (
           <div className="mt-2 flex items-center justify-between">
-            <span className="text-[13px] text-[#6E6E73] truncate">
+            <span className="text-[12px] truncate" style={{ color: "#6B6B6B" }}>
               {tier.tier_name} · earning {tier.tier_multiplier}×
             </span>
             <span
-              className="text-[13px] font-bold"
+              className="text-[12px] font-bold"
               style={{ color: tier.tier_color ?? "#92400e" }}
             >
               +{Math.round(subtotal * (tier.tier_multiplier ?? 1))} pts
             </span>
           </div>
         ) : null}
+        </div>
       </section>
 
       {stripeContext ? (
