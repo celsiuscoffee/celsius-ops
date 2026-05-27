@@ -22,7 +22,7 @@ type Persisted = {
 };
 
 export function WrappedView() {
-  const [m, setM] = useState<Persisted["state"]["member"] | null>(null);
+  const [m, setM] = useState<NonNullable<Persisted["state"]>["member"] | null>(null);
 
   useEffect(() => {
     try {
