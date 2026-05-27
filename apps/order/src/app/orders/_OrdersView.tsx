@@ -26,10 +26,14 @@ function readPhone(): string | null {
   }
 }
 
+type Tab = "active" | "past";
+const ACTIVE_STATUSES = new Set(["pending", "paid", "preparing", "ready"]);
+
 export function OrdersView() {
   const [phone, setPhone] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("active");
 
   useEffect(() => {
     const p = readPhone();
@@ -46,6 +50,22 @@ export function OrdersView() {
       .catch((err) => setError(String(err)));
   }, []);
 
+  const filtered = orders
+    ? orders.filter((o) =>
+        tab === "active"
+          ? ACTIVE_STATUSES.has(o.status.toLowerCase())
+          : !ACTIVE_STATUSES.has(o.status.toLowerCase()),
+      )
+    : null;
+
+  // Default-flip: if there's no active order but there's history,
+  // land the customer on Past so they don't see an empty list.
+  useEffect(() => {
+    if (!orders || orders.length === 0) return;
+    const hasActive = orders.some((o) => ACTIVE_STATUSES.has(o.status.toLowerCase()));
+    if (!hasActive && tab === "active") setTab("past");
+  }, [orders, tab]);
+
   return (
     <>
       <header
@@ -59,6 +79,13 @@ export function OrdersView() {
           Orders
         </h1>
       </header>
+
+      {phone ? (
+        <div className="flex border-b border-[#EBE5DE] px-4">
+          <TabButton on={tab === "active"} onClick={() => setTab("active")} label="Active" />
+          <TabButton on={tab === "past"} onClick={() => setTab("past")} label="Past" />
+        </div>
+      ) : null}
 
       {!phone ? (
         <EmptyCTA
@@ -78,9 +105,21 @@ export function OrdersView() {
           actionHref="/menu"
           actionLabel="Open the menu"
         />
+      ) : (filtered ?? []).length === 0 ? (
+        <EmptyCTA
+          icon={<ClipboardList size={48} color="#8E8E93" strokeWidth={1.25} />}
+          title={tab === "active" ? "No active orders" : "No past orders"}
+          body={
+            tab === "active"
+              ? "Your in-progress orders will appear here while they're prepared."
+              : "Completed and cancelled orders live here."
+          }
+          actionHref="/menu"
+          actionLabel="Open the menu"
+        />
       ) : (
         <ul className="px-4 py-4 flex flex-col gap-3">
-          {orders.map((o) => (
+          {(filtered ?? []).map((o) => (
             <li key={o.id}>
               <Link
                 href={`/order/${o.id}`}
@@ -151,5 +190,32 @@ function EmptyCTA({
         {actionLabel}
       </Link>
     </div>
+  );
+}
+
+function TabButton({
+  on,
+  onClick,
+  label,
+}: {
+  on: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex-1 py-3 active:opacity-60"
+      aria-current={on ? "true" : undefined}
+      style={{
+        color: on ? "#160800" : "#8E8E93",
+        fontWeight: on ? 700 : 600,
+        borderBottom: on ? "2px solid #160800" : "2px solid transparent",
+        marginBottom: -1,
+      }}
+    >
+      {label}
+    </button>
   );
 }
