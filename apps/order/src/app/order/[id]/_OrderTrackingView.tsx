@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Clock, Coffee, Package, XCircle, X } from "lucide-react";
+import { ArrowLeft, ShoppingBag, Coffee, CheckCircle2, XCircle, X } from "lucide-react";
 
 type OrderItem = {
   product_name: string;
@@ -40,13 +40,23 @@ function rm(cents: number | null | undefined): string {
   return `RM${((cents ?? 0) / 100).toFixed(2)}`;
 }
 
-const STEPS: Array<{ key: string; label: string; Icon: typeof Clock }> = [
-  { key: "pending",    label: "Awaiting payment", Icon: Clock },
-  { key: "paid",       label: "Payment confirmed", Icon: CheckCircle2 },
-  { key: "preparing",  label: "Preparing",         Icon: Coffee },
-  { key: "ready",      label: "Ready for pickup",  Icon: Package },
-  { key: "completed",  label: "Collected",         Icon: CheckCircle2 },
+// Horizontal 3-step pipeline matching apps/pickup-native/components
+// /OrderStepper.tsx. Web order status → stepper index:
+//   pending/paid           → 0 (Received)
+//   preparing              → 1 (Brewing)
+//   ready/completed        → 2 (Ready)
+const STEPPER: Array<{ title: string; sub: string; Icon: typeof ShoppingBag }> = [
+  { title: "Received",  sub: "Order placed",   Icon: ShoppingBag },
+  { title: "Brewing",   sub: "Being prepared", Icon: Coffee },
+  { title: "Ready",     sub: "Pick up now",    Icon: CheckCircle2 },
 ];
+
+function stepperIndex(status: string): number {
+  const s = status.toLowerCase();
+  if (s === "preparing") return 1;
+  if (s === "ready" || s === "completed" || s === "collected") return 2;
+  return 0;
+}
 
 export function OrderTrackingView({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<Order | null>(null);
@@ -105,7 +115,7 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
     );
   }
 
-  const stepIdx = STEPS.findIndex((s) => s.key === order.status.toLowerCase());
+  const stepIdx = stepperIndex(order.status);
 
   return (
     <>
@@ -143,32 +153,105 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
             </div>
           </div>
         ) : (
-          <ul className="flex flex-col gap-3">
-            {STEPS.map((s, i) => {
-              const Icon = s.Icon;
-              const done = i <= stepIdx;
-              const current = i === stepIdx;
+          // Horizontal 3-step pipeline. Done steps fill terracotta-tint,
+          // current step pulses with a subtle scale animation, pending
+          // steps stay hollow. Connected by hairline rails that fill
+          // when the step before them is done.
+          <div className="flex items-start">
+            {STEPPER.map((step, i) => {
+              const isLast = i === STEPPER.length - 1;
+              const state =
+                i < stepIdx ? "done" : i === stepIdx ? "current" : "pending";
+              const bg =
+                state === "done"
+                  ? "#FBEBE8"
+                  : state === "current"
+                  ? "#A2492C"
+                  : "#FFFFFF";
+              const iconColor =
+                state === "done"
+                  ? "#A2492C"
+                  : state === "current"
+                  ? "#FFFFFF"
+                  : "#8E8E93";
+              const border =
+                state === "pending" ? "1px solid rgba(26,2,0,0.12)" : "none";
+              const Icon = step.Icon;
               return (
-                <li
-                  key={s.key}
-                  className="flex items-center gap-3 rounded-2xl border px-3 py-2.5"
-                  style={{
-                    borderColor: done ? "#160800" : "#EBE5DE",
-                    backgroundColor: current ? "#F7F4F0" : "transparent",
-                    opacity: done ? 1 : 0.55,
-                  }}
-                >
-                  <Icon size={18} color={done ? "#160800" : "#8E8E93"} />
-                  <span className="text-sm font-bold flex-1">{s.label}</span>
-                  {current ? (
-                    <span className="text-[10px] uppercase tracking-widest text-[#A2492C] font-bold">
-                      Now
+                <div key={step.title} className="flex-1">
+                  <div className="flex items-center">
+                    <span
+                      className="flex items-center justify-center flex-shrink-0"
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 18,
+                        backgroundColor: bg,
+                        border,
+                        animation:
+                          state === "current"
+                            ? "celsius-step-pulse 1.4s ease-in-out infinite"
+                            : undefined,
+                      }}
+                    >
+                      <Icon
+                        size={18}
+                        color={iconColor}
+                        strokeWidth={state === "current" ? 2.2 : 1.8}
+                      />
                     </span>
-                  ) : null}
-                </li>
+                    {!isLast ? (
+                      <span
+                        className="flex-1"
+                        style={{
+                          height: 2,
+                          marginLeft: 4,
+                          marginRight: 4,
+                          backgroundColor:
+                            i < stepIdx ? "#A2492C" : "rgba(26,2,0,0.10)",
+                        }}
+                      />
+                    ) : null}
+                  </div>
+                  <div className="mt-2.5" style={{ paddingRight: isLast ? 0 : 12 }}>
+                    <p
+                      className="uppercase truncate"
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: 1.5,
+                        color:
+                          state === "current"
+                            ? "#A2492C"
+                            : state === "done"
+                            ? "#1A0200"
+                            : "#8E8E93",
+                      }}
+                    >
+                      {step.title}
+                    </p>
+                    <p
+                      className="truncate"
+                      style={{
+                        fontSize: 11,
+                        marginTop: 2,
+                        fontWeight: 500,
+                        color: state === "current" ? "#A2492C" : "#8E8E93",
+                      }}
+                    >
+                      {step.sub}
+                    </p>
+                  </div>
+                </div>
               );
             })}
-          </ul>
+            <style>{`
+              @keyframes celsius-step-pulse {
+                0%, 100% { transform: scale(1); }
+                50%      { transform: scale(1.12); }
+              }
+            `}</style>
+          </div>
         )}
       </section>
 

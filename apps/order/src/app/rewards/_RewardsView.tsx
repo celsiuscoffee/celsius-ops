@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Gift, Sparkles } from "lucide-react";
-import { TierCard } from "./_TierCard";
+import { BeansHero } from "./_BeansHero";
 import { ActiveChallenges } from "./_ActiveChallenges";
 import { Claimables } from "./_Claimables";
 
@@ -63,12 +63,11 @@ export function RewardsView() {
         </h1>
       </header>
 
-      {/* Tier card — espresso hero with current tier badge, beans
-          count, and progress-to-next-tier bar. Wired to
-          /api/loyalty/member-tier which proxies the loyalty service
-          and updates the member's current tier atomically on read.
-          Matches the SPA's TierCardCarousel current-tier card. */}
-      <TierCard />
+      {/* Beans hero — compact themed card with the customer's bean
+          balance + progress-to-next-tier line. Mirrors the BeansHero
+          on apps/pickup-native/app/rewards.tsx (rewards page uses the
+          compact hero; the larger TierCard lives on /account). */}
+      <BeansHero />
 
       {/* Claimable offers (one-tap welcome / promo / mystery). */}
       <Claimables />
