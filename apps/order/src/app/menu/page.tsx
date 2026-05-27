@@ -76,7 +76,17 @@ export default async function MenuPage() {
     <main className="bg-white text-[#160800] pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
       <Header />
       <OutletPickerRow />
-      <MenuColumns sections={sections} />
+      {/* Pass the complete (visible) product set too so MenuColumns
+          can resolve the customer's recent-item IDs (fetched client-
+          side via /api/loyalty/recent-items) back to full Product
+          records — same hydration the SPA's menu does for its
+          "Usual" pill. */}
+      <MenuColumns
+        sections={sections}
+        allProducts={menu.products.filter(
+          (p) => p.isAvailable && !HIDDEN_CATEGORIES.has(p.categoryId),
+        )}
+      />
       <GlobalCartPill />
       <BottomNav active="menu" />
     </main>

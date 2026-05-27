@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Star, Coffee, Leaf, Cake, Cookie, Sandwich, Candy, CupSoda, Cherry,
   Sparkles, Croissant, Wheat, UtensilsCrossed, Utensils, FlaskConical, Plus,
-  Search, X,
+  Search, X, Heart,
 } from "lucide-react";
 
 /**
@@ -32,6 +32,7 @@ type Section = {
 };
 
 const ICONS: Record<string, typeof Coffee> = {
+  heart:              Heart,
   star:               Star,
   coffee:             Coffee,
   leaf:               Leaf,
@@ -49,11 +50,63 @@ const ICONS: Record<string, typeof Coffee> = {
   flask:              FlaskConical,
 };
 
-export function MenuColumns({ sections }: { sections: Section[] }) {
-  const [active, setActive] = useState(sections[0]?.id ?? "");
+const USUAL_ID = "__usual__";
+
+export function MenuColumns({
+  sections: baseSections,
+  allProducts,
+}: {
+  sections: Section[];
+  allProducts: Product[];
+}) {
   const [query, setQuery] = useState("");
+  const [usual, setUsual] = useState<Product[]>([]);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const userClickedAtRef = useRef(0);
+
+  // Recent items "Usual" pill — same logic as apps/pickup-native/app
+  // /menu.tsx. Fetches the signed-in customer's last 12 ordered items
+  // and resolves them back to in-menu Product records so the section
+  // renders with the same ProductRow design as the rest of the menu.
+  useEffect(() => {
+    let phone: string | null = null;
+    try {
+      const raw = window.localStorage.getItem("celsius-pickup");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { state?: { phone?: string | null } };
+        phone = parsed.state?.phone ?? null;
+      }
+    } catch {
+      /* ignore */
+    }
+    if (!phone) return;
+    fetch(`/api/loyalty/recent-items?phone=${encodeURIComponent(phone)}&limit=12`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        const items = (Array.isArray(data) ? data : (data?.items ?? [])) as Array<{
+          id: string;
+        }>;
+        const byId = new Map(allProducts.map((p) => [p.id, p]));
+        const resolved: Product[] = [];
+        for (const it of items) {
+          const p = byId.get(it.id);
+          if (p) resolved.push(p);
+        }
+        setUsual(resolved);
+      })
+      .catch(() => {
+        /* ignore */
+      });
+  }, [allProducts]);
+
+  // Prepend the Usual section above Best Sellers + categories when
+  // the customer has resolved recent items.
+  const sections: Section[] =
+    usual.length > 0
+      ? [{ id: USUAL_ID, label: "Your usual", products: usual, icon: "heart" }, ...baseSections]
+      : baseSections;
+
+  const [active, setActive] = useState(sections[0]?.id ?? "");
 
   // Search results — flat list across all sections, deduped by product
   // id (Best Sellers + the original category section would otherwise
