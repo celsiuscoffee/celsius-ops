@@ -13,27 +13,27 @@ const HEAD_EXTRA = `
   <meta name="apple-mobile-web-app-title" content="Celsius">
   <meta name="format-detection" content="telephone=no">
   <style>
-    /* iOS Safari URL-bar collapse probe.
-       Forces body to scroll (not the inner ScrollView) so iOS Safari
-       sees document overflow and minimises its URL bar. Targets the
-       first few levels of div nesting under #root because RN-Web's
-       GestureHandlerRootView, SafeAreaProvider, expo-router Stack, and
-       page-level Views all ship min-height:0 + flex:1 defaults that
-       otherwise clamp content at viewport. Wide blast radius — if it
-       breaks any screen layout, the right answer is to revert this
-       block, not to add per-screen overrides.
+    /* iOS Safari URL-bar collapse — escalated version.
+       Earlier nested-5-level selector didn't reach the ScrollView in
+       practice — RN-Web wraps each context provider as its own div,
+       so the actual depth from #root to the scroll container is 8+.
+       Replaced with a universal descendant selector under #root so
+       EVERY wrapper div is sized to its content, no inner element can
+       keep the document at viewport height.
 
-       Scoped to web only (this whole file is the web postbuild). */
+       Cards / images that need overflow: hidden for rounded corners
+       use it via inline style and that's normally beaten by
+       !important — accept the cosmetic regression on those vs.
+       leaving the URL bar permanently expanded. */
     html, body {
       overflow-x: hidden;
     }
-    #root > *,
-    #root > * > *,
-    #root > * > * > *,
-    #root > * > * > * > *,
-    #root > * > * > * > * > * {
-      flex: 0 0 auto !important;
+    #root * {
+      flex-grow: 0 !important;
+      flex-shrink: 0 !important;
+      flex-basis: auto !important;
       min-height: 0 !important;
+      max-height: none !important;
       height: auto !important;
       overflow: visible !important;
     }
