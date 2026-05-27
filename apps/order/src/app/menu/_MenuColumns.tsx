@@ -52,7 +52,7 @@ const ICONS: Record<string, typeof Coffee> = {
 export function MenuColumns({ sections }: { sections: Section[] }) {
   const [active, setActive] = useState(sections[0]?.id ?? "");
   const [query, setQuery] = useState("");
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const userClickedAtRef = useRef(0);
 
   // Search results — flat list across all sections, deduped by product

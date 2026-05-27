@@ -48,7 +48,7 @@ export function CheckoutView() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setState(readState());
+    setState(readState() ?? null);
   }, []);
 
   const subtotal = useMemo(
