@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CreditCard, Wallet, Banknote } from "lucide-react";
+import { StripePaymentForm } from "@/components/stripe-payment-form";
 
 type CartItem = {
   cartId: string;
@@ -46,6 +47,9 @@ export function CheckoutView() {
   const [method, setMethod] = useState("card");
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stripeContext, setStripeContext] = useState<{ orderId: string; clientSecret: string } | null>(null);
+  const [confirmFn, setConfirmFn] = useState<(() => Promise<{ error?: { message?: string } }>) | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     setState(readState() ?? null);
@@ -107,11 +111,11 @@ export function CheckoutView() {
         return;
       }
       if (data.clientSecret) {
-        // For Stripe we'd normally use Stripe.js client-side. For
-        // now, hand the customer over to the order detail page which
-        // polls for status; full Stripe Elements integration is a
-        // follow-up.
-        window.location.href = `/order/${data.orderId}?payment=pending`;
+        // Stripe path — render Stripe Elements inline so the customer
+        // can confirm the payment without leaving the PWA. The form
+        // calls /api/orders/[id]/confirm-stripe on success and
+        // redirects to the order page.
+        setStripeContext({ orderId: data.orderId, clientSecret: data.clientSecret });
         return;
       }
       if (data.freeOrder) {
@@ -193,11 +197,46 @@ export function CheckoutView() {
         </div>
       </section>
 
+      {stripeContext ? (
+        <section className="mt-4 px-4">
+          <h2 className="font-peachi font-bold text-[16px] mb-3">Payment details</h2>
+          <StripePaymentForm
+            clientSecret={stripeContext.clientSecret}
+            paymentMethod={method}
+            orderId={stripeContext.orderId}
+            onReady={(fn) => setConfirmFn(() => fn)}
+          />
+        </section>
+      ) : null}
+
       {error ? (
         <p className="px-4 pt-3 text-[12px] text-red-600">{error}</p>
       ) : null}
 
       <div className="mt-5 px-4">
+        {stripeContext ? (
+          <button
+            type="button"
+            disabled={!confirmFn || confirming}
+            onClick={async () => {
+              if (!confirmFn) return;
+              setConfirming(true);
+              setError(null);
+              const r = await confirmFn();
+              if (r.error) {
+                setError(r.error.message ?? "Payment failed");
+                setConfirming(false);
+                return;
+              }
+              window.location.href = `/order/${stripeContext.orderId}?payment=done`;
+            }}
+            className={`block w-full rounded-full text-white text-center py-4 font-bold active:opacity-80 ${
+              !confirmFn || confirming ? "bg-[#A2492C]/40" : "bg-[#A2492C]"
+            }`}
+          >
+            {confirming ? "Confirming payment…" : `Pay RM${subtotal.toFixed(2)}`}
+          </button>
+        ) : (
         <button
           type="button"
           disabled={placing || !state.outletId}
@@ -208,6 +247,7 @@ export function CheckoutView() {
         >
           {placing ? "Placing order…" : !state.outletId ? "Select an outlet first" : "Place order"}
         </button>
+        )}
       </div>
     </>
   );
