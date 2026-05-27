@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Clock, Coffee, Package, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Coffee, Package, XCircle, X } from "lucide-react";
 
 type OrderItem = {
   product_name: string;
@@ -36,6 +36,28 @@ const STEPS: Array<{ key: string; label: string; Icon: typeof Clock }> = [
 export function OrderTrackingView({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  const cancel = async () => {
+    setCancelling(true);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+      if (res.ok) {
+        setOrder((prev) => (prev ? { ...prev, status: "cancelled" } : prev));
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Couldn't cancel the order");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -134,6 +156,20 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
           </ul>
         )}
       </section>
+
+      {order.status.toLowerCase() === "pending" ? (
+        <section className="px-4 pt-4">
+          <button
+            type="button"
+            disabled={cancelling}
+            onClick={cancel}
+            className="w-full flex items-center justify-center gap-2 rounded-full border border-red-200 bg-red-50 text-red-700 py-3 font-bold active:opacity-80"
+          >
+            <X size={16} />
+            {cancelling ? "Cancelling…" : "Cancel order"}
+          </button>
+        </section>
+      ) : null}
 
       <section className="px-4 pt-5">
         <h2 className="font-peachi font-bold text-[16px] mb-2">Your order</h2>
