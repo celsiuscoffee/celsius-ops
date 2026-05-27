@@ -117,8 +117,50 @@ export function AccountView() {
 
           <Row href="/orders" label="Order history" />
           <Row href="/rewards" label="Rewards" />
-          <Row href="/account?edit=1" label="Edit profile" />
-          <Row href="/account?signout=1" label="Sign out" Icon={LogOut} />
+          <EditProfileRow
+            phone={phone}
+            onSaved={(member) => {
+              setName(member?.name ?? null);
+              try {
+                const raw = window.localStorage.getItem("celsius-pickup");
+                const parsed = raw ? JSON.parse(raw) : { state: {} };
+                const s = parsed.state ?? {};
+                s.member = { ...(s.member ?? {}), ...member };
+                window.localStorage.setItem(
+                  "celsius-pickup",
+                  JSON.stringify({ ...parsed, state: s }),
+                );
+              } catch {
+                /* ignore */
+              }
+            }}
+          />
+          <SignOutRow
+            onConfirm={() => {
+              try {
+                const raw = window.localStorage.getItem("celsius-pickup");
+                const parsed = raw ? JSON.parse(raw) : { state: {} };
+                const s = parsed.state ?? {};
+                s.phone = null;
+                s.loyaltyId = null;
+                s.member = null;
+                s.cart = [];
+                s.appliedReward = null;
+                s.sessionToken = null;
+                s.reservedVoucher = null;
+                window.localStorage.setItem(
+                  "celsius-pickup",
+                  JSON.stringify({ ...parsed, state: s }),
+                );
+              } catch {
+                /* ignore */
+              }
+              setPhone(null);
+              setName(null);
+              setBeans(0);
+              setVisits(0);
+            }}
+          />
         </div>
       )}
     </>
@@ -261,6 +303,178 @@ function SignInForm({
             </button>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function EditProfileRow({
+  phone,
+  onSaved,
+}: {
+  phone: string;
+  onSaved: (member: { id?: string; name?: string | null; email?: string | null; birthday?: string | null }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [birthday, setBirthday] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Hydrate fields from localStorage when the form opens so the
+  // customer sees their current values, not blanks.
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const raw = window.localStorage.getItem("celsius-pickup");
+      if (raw) {
+        const m = (JSON.parse(raw) as {
+          state?: { member?: { name?: string | null; email?: string | null; birthday?: string | null; id?: string } };
+        }).state?.member;
+        setName(m?.name ?? "");
+        setEmail(m?.email ?? "");
+        setBirthday(m?.birthday ?? "");
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [open]);
+
+  const save = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const raw = window.localStorage.getItem("celsius-pickup");
+      const memberId = raw
+        ? (JSON.parse(raw) as { state?: { loyaltyId?: string | null } }).state?.loyaltyId
+        : null;
+      const res = await fetch("/api/members/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          member_id: memberId,
+          phone,
+          name:     name.trim() || undefined,
+          email:    email.trim() || undefined,
+          birthday: birthday.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      onSaved({ id: memberId ?? undefined, name, email, birthday });
+      setOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-3 bg-white border border-[#EBE5DE] rounded-2xl px-4 py-3 active:opacity-80 text-left"
+      >
+        <span className="text-sm font-bold flex-1">Edit profile</span>
+        <ChevronRight size={14} color="#8E8E93" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl bg-white border border-[#EBE5DE] p-4">
+      <p className="font-peachi font-bold text-[16px] mb-3">Edit profile</p>
+      <label className="block text-[11px] uppercase tracking-widest text-[#8E8E93] font-bold mb-1">
+        Name
+      </label>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        className="w-full rounded-xl border border-[#EBE5DE] px-3 py-2 outline-none text-sm mb-3"
+      />
+      <label className="block text-[11px] uppercase tracking-widest text-[#8E8E93] font-bold mb-1">
+        Email
+      </label>
+      <input
+        type="email"
+        autoComplete="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="w-full rounded-xl border border-[#EBE5DE] px-3 py-2 outline-none text-sm mb-3"
+      />
+      <label className="block text-[11px] uppercase tracking-widest text-[#8E8E93] font-bold mb-1">
+        Birthday (DD/MM/YYYY)
+      </label>
+      <input
+        type="text"
+        inputMode="numeric"
+        placeholder="01/01/1990"
+        value={birthday}
+        onChange={(e) => setBirthday(e.target.value)}
+        className="w-full rounded-xl border border-[#EBE5DE] px-3 py-2 outline-none text-sm mb-3"
+      />
+      {error ? <p className="text-[12px] text-red-600 mb-2">{error}</p> : null}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="flex-1 rounded-full border border-[#EBE5DE] text-[#160800] py-3 font-bold active:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={save}
+          className={`flex-1 rounded-full text-white py-3 font-bold active:opacity-80 ${busy ? "bg-[#A2492C]/40" : "bg-[#A2492C]"}`}
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SignOutRow({ onConfirm }: { onConfirm: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        className="flex items-center gap-3 bg-white border border-[#EBE5DE] rounded-2xl px-4 py-3 active:opacity-80 text-left"
+      >
+        <LogOut size={18} color="#8E8E93" />
+        <span className="text-sm font-bold flex-1">Sign out</span>
+        <ChevronRight size={14} color="#8E8E93" />
+      </button>
+    );
+  }
+  return (
+    <div className="rounded-2xl bg-white border border-[#EBE5DE] p-4">
+      <p className="font-peachi font-bold text-[15px]">Sign out of Celsius?</p>
+      <p className="text-[12px] text-[#6E6E73] mt-1">
+        Your cart, beans, and rewards stay on the account — sign in again any time.
+      </p>
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          className="flex-1 rounded-full border border-[#EBE5DE] text-[#160800] py-3 font-bold active:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="flex-1 rounded-full bg-[#B91C1C] text-white py-3 font-bold active:opacity-80"
+        >
+          Sign out
+        </button>
       </div>
     </div>
   );
