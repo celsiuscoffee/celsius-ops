@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Gift, Sparkles } from "lucide-react";
+import { Gift, Sparkles, Check } from "lucide-react";
 
 /**
  * Claimable vouchers section on /rewards — one-tap claim row group.
@@ -85,48 +85,99 @@ export function Claimables() {
         {items.map((c) => {
           const isMystery = c.source_type === "mystery_pending";
           const Icon = isMystery ? Sparkles : Gift;
+          const isClaiming = claimingId === c.id;
           return (
             <li key={c.id}>
               <div
-                className="flex items-center gap-3 rounded-2xl active:opacity-90"
+                className="relative flex items-center bg-white rounded-2xl"
                 style={{
-                  backgroundColor: "rgba(162,73,44,0.10)",
                   border: "1px solid rgba(162,73,44,0.25)",
-                  padding: 14,
+                  padding: 12,
+                  gap: 12,
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.04)",
                 }}
               >
+                {/* Left "fresh" stripe — terracotta, top/bottom inset 14px */}
                 <span
-                  className="flex items-center justify-center flex-shrink-0"
+                  aria-hidden
                   style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 12,
+                    position: "absolute",
+                    left: 0,
+                    top: 14,
+                    bottom: 14,
+                    width: 3,
                     backgroundColor: "#A2492C",
+                    borderTopRightRadius: 2,
+                    borderBottomRightRadius: 2,
+                  }}
+                />
+                {/* NEW badge */}
+                <span
+                  className="uppercase"
+                  style={{
+                    position: "absolute",
+                    top: -7,
+                    left: 14,
+                    backgroundColor: "#A2492C",
+                    paddingLeft: 8,
+                    paddingRight: 8,
+                    paddingTop: 2,
+                    paddingBottom: 2,
+                    borderRadius: 6,
+                    color: "#FFFFFF",
+                    fontSize: 8.5,
+                    fontWeight: 800,
+                    letterSpacing: 1.2,
                   }}
                 >
-                  <Icon size={20} color="#FFFFFF" strokeWidth={1.8} />
+                  New
+                </span>
+
+                <span
+                  className="flex items-center justify-center flex-shrink-0 rounded-xl"
+                  style={{ width: 44, height: 44, backgroundColor: "#FBEBE8" }}
+                >
+                  <Icon size={22} color="#A2492C" strokeWidth={1.8} />
                 </span>
                 <div className="flex-1 min-w-0">
                   <p
                     className="font-peachi font-bold text-[15px] truncate"
-                    style={{ color: "#160800" }}
+                    style={{ color: "#1A0200" }}
                   >
                     {c.title}
                   </p>
                   {c.description ? (
-                    <p className="text-[11px] text-[#6E6E73] mt-0.5 line-clamp-2">
+                    <p
+                      className="text-[11px] mt-0.5 line-clamp-1"
+                      style={{ color: "#6B6B6B", letterSpacing: 0.2, fontWeight: 500 }}
+                    >
                       {c.description}
                     </p>
                   ) : null}
                 </div>
                 <button
                   type="button"
-                  disabled={claimingId === c.id}
+                  disabled={isClaiming}
                   onClick={() => claim(c)}
-                  className="rounded-full bg-[#A2492C] text-white px-3 py-2 text-[12px] font-bold active:opacity-80 flex-shrink-0"
-                  style={{ opacity: claimingId === c.id ? 0.6 : 1 }}
+                  className="flex items-center gap-1 rounded-full active:opacity-80 flex-shrink-0"
+                  style={{
+                    backgroundColor: "#A2492C",
+                    paddingLeft: 14,
+                    paddingRight: 14,
+                    paddingTop: 7,
+                    paddingBottom: 7,
+                    opacity: isClaiming ? 0.6 : 1,
+                  }}
                 >
-                  {claimingId === c.id ? "…" : c.cta_label ?? "Claim"}
+                  <span
+                    className="font-peachi font-bold text-[12px]"
+                    style={{ color: "#FFFFFF" }}
+                  >
+                    {isClaiming ? "Claiming…" : c.cta_label ?? "Claim"}
+                  </span>
+                  {!isClaiming ? (
+                    <Check size={10} color="#FFFFFF" strokeWidth={2.8} />
+                  ) : null}
                 </button>
               </div>
             </li>
