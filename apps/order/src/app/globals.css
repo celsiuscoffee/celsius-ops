@@ -147,6 +147,11 @@
   * {
     @apply border-border outline-ring/50;
   }
+  :root {
+    /* Peachi is the brand display face; falls back to a serif so first
+       paint isn't naked sans-serif while the font swaps in. */
+    --font-display: var(--font-peachi), "Peachi-Bold", "Times New Roman", serif;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
@@ -156,6 +161,11 @@
   }
   h1, h2, h3 {
     font-family: var(--font-display);
+    letter-spacing: -0.3px;
+  }
+  .font-peachi {
+    font-family: var(--font-display);
+    letter-spacing: -0.3px;
   }
 }
 
