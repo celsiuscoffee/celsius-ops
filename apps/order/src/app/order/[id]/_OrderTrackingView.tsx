@@ -20,6 +20,9 @@ type Order = {
   notes?: string | null;
   created_at: string;
   order_items?: OrderItem[];
+  store_id?: string | null;
+  store_name?: string | null;
+  store_address?: string | null;
 };
 
 const STEPS: Array<{ key: string; label: string; Icon: typeof Clock }> = [
@@ -75,6 +78,16 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
         <p className="text-[10px] uppercase tracking-widest text-[#8E8E93]">Order</p>
         <h1 className="font-peachi font-bold text-2xl mt-1">#{order.order_number}</h1>
       </section>
+
+      {order.store_name ? (
+        <section className="px-4 pt-5">
+          <h2 className="font-peachi font-bold text-[16px] mb-1">Pickup from</h2>
+          <p className="text-sm font-bold">{order.store_name}</p>
+          {order.store_address ? (
+            <p className="text-[12px] text-[#6E6E73] mt-0.5">{order.store_address}</p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="px-4 pt-5">
         <h2 className="font-peachi font-bold text-[16px] mb-3">Status</h2>
