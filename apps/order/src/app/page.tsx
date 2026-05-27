@@ -8,6 +8,7 @@ import { BottomNav } from "./_BottomNav";
 import { PosterCarousel } from "./_PosterCarousel";
 import { HeroInfoCard } from "./_HeroInfoCard";
 import { OutletRow } from "./_OutletRow";
+import { ActiveChallengeCard } from "./_ActiveChallengeCard";
 
 /**
  * Customer home — Next.js Server Component. Plain HTML so iOS Safari
@@ -101,6 +102,11 @@ export default async function HomePage() {
           reads chosen outlet from localStorage so customers see their
           outlet name instead of the placeholder. */}
       <OutletRow />
+
+      {/* Active challenge teaser (signed-in customers with an in-
+          progress mission). Mirrors apps/pickup-native/app/index.tsx
+          :764-845. Renders nothing when there's no active mission. */}
+      <ActiveChallengeCard />
 
       {/* Best Sellers — card-style horizontal scroll (matching the SPA) */}
       {bestSellers.length > 0 && (
