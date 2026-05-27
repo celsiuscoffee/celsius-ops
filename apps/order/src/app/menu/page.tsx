@@ -5,6 +5,7 @@ import { getMenuData } from "@/lib/menu-data";
 import { GlobalCartPill } from "../_GlobalCartPill";
 import { BottomNav } from "../_BottomNav";
 import { MenuColumns } from "./_MenuColumns";
+import { ReservedVoucherBanner } from "./_ReservedVoucherBanner";
 
 /**
  * Customer menu — Next.js Server Component. Mirrors the SPA's
@@ -76,6 +77,7 @@ export default async function MenuPage() {
     <main className="bg-white text-[#160800] pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
       <Header />
       <OutletPickerRow />
+      <ReservedVoucherBanner />
       {/* Pass the complete (visible) product set too so MenuColumns
           can resolve the customer's recent-item IDs (fetched client-
           side via /api/loyalty/recent-items) back to full Product
