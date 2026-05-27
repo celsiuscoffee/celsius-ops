@@ -6,6 +6,7 @@ import { GlobalCartPill } from "../_GlobalCartPill";
 import { BottomNav } from "../_BottomNav";
 import { MenuColumns } from "./_MenuColumns";
 import { ReservedVoucherBanner } from "./_ReservedVoucherBanner";
+import { OutletGate } from "./_OutletGate";
 
 /**
  * Customer menu — Next.js Server Component. Mirrors the SPA's
@@ -75,6 +76,7 @@ export default async function MenuPage() {
 
   return (
     <main className="bg-white text-[#160800] pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
+      <OutletGate />
       <Header />
       <OutletPickerRow />
       <ReservedVoucherBanner />

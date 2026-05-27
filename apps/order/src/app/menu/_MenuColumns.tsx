@@ -207,15 +207,19 @@ export function MenuColumns({
 
     <div className="flex" style={{ minHeight: "calc(100dvh - 200px)" }}>
       <aside
-        className="w-[64px] flex-shrink-0 bg-[#F7F4F0] border-r border-[#E8E1D8] sticky overflow-y-auto"
+        className="flex-shrink-0 bg-white sticky overflow-y-auto"
         style={{
+          width: 60,
           top: "calc(env(safe-area-inset-top, 0px) + 100px)",
           alignSelf: "flex-start",
           maxHeight: "calc(100dvh - 100px)",
         }}
         aria-label="Categories"
       >
-        <ul className="flex flex-col gap-1.5 p-1 pt-2">
+        <ul
+          className="flex flex-col"
+          style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 8, paddingBottom: 12, gap: 6 }}
+        >
           {sections.map((s) => {
             const Icon = ICONS[s.icon] ?? Coffee;
             const on = active === s.id;
@@ -224,8 +228,14 @@ export function MenuColumns({
                 <button
                   type="button"
                   onClick={() => onPickPill(s.id)}
-                  className="w-full flex flex-col items-center gap-1 py-2 px-1 rounded-2xl active:opacity-70"
-                  style={{ backgroundColor: on ? "#160800" : "transparent" }}
+                  className="flex flex-col items-center justify-center gap-1 rounded-2xl active:opacity-70"
+                  style={{
+                    width: 52,
+                    height: 64,
+                    paddingLeft: 4,
+                    paddingRight: 4,
+                    backgroundColor: on ? "#160800" : "transparent",
+                  }}
                   aria-current={on ? "true" : undefined}
                 >
                   <Icon
@@ -236,7 +246,7 @@ export function MenuColumns({
                   />
                   <span
                     className="text-[9px] text-center leading-[11px]"
-                    style={{ color: on ? "#FFFFFF" : "#160800", fontWeight: 600 }}
+                    style={{ color: on ? "#FFFFFF" : "#160800", fontWeight: 600, width: 44 }}
                   >
                     {s.label}
                   </span>
@@ -264,35 +274,7 @@ export function MenuColumns({
             </div>
             <ul className="flex flex-col gap-3">
               {s.products.map((p) => (
-                <li key={p.id}>
-                  <Link
-                    href={`/product/${p.id}`}
-                    className="block bg-white rounded-2xl border border-[#EBE5DE] active:opacity-80"
-                    style={{ boxShadow: "0 2px 6px rgba(0,0,0,0.04)" }}
-                  >
-                    <div className="flex items-center gap-3 p-3">
-                      <div className="relative w-[72px] h-[72px] flex-shrink-0 rounded-xl overflow-hidden bg-[#F2EDE5]">
-                        {p.image ? (
-                          <Image src={p.image} alt={p.name} fill sizes="72px" className="object-cover" />
-                        ) : null}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold truncate">{p.name}</p>
-                        {p.description ? (
-                          <p className="text-[11px] text-[#6E6E73] mt-0.5 line-clamp-2">
-                            {p.description}
-                          </p>
-                        ) : null}
-                        <p className="mt-1 text-sm text-[#A2492C] font-bold">
-                          RM{p.basePrice.toFixed(2)}
-                        </p>
-                      </div>
-                      <span className="h-9 w-9 rounded-full bg-[#160800] flex items-center justify-center flex-shrink-0">
-                        <Plus size={16} color="#FFFFFF" strokeWidth={2.5} />
-                      </span>
-                    </div>
-                  </Link>
-                </li>
+                <ProductRow key={p.id} product={p} />
               ))}
             </ul>
           </section>
@@ -306,33 +288,52 @@ export function MenuColumns({
 }
 
 function ProductRow({ product }: { product: Product }) {
+  // Sizing mirrors apps/pickup-native/app/menu.tsx ProductRow (p-2.5,
+  // gap-2.5, 88×88 image with 24px radius, 28×28 add button, Plus 14).
   return (
     <li>
       <Link
         href={`/product/${product.id}`}
-        className="block bg-white rounded-2xl border border-[#EBE5DE] active:opacity-80"
-        style={{ boxShadow: "0 2px 6px rgba(0,0,0,0.04)" }}
+        className="block bg-white rounded-2xl active:opacity-80"
+        style={{
+          border: "1px solid rgba(26, 2, 0, 0.10)",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.04)",
+        }}
       >
-        <div className="flex items-center gap-3 p-3">
-          <div className="relative w-[72px] h-[72px] flex-shrink-0 rounded-xl overflow-hidden bg-[#F2EDE5]">
+        <div className="flex gap-[10px] p-[10px]">
+          <div
+            className="relative flex-shrink-0 overflow-hidden bg-[#F2EDE5]"
+            style={{ width: 88, height: 88, borderRadius: 24 }}
+          >
             {product.image ? (
-              <Image src={product.image} alt={product.name} fill sizes="72px" className="object-cover" />
+              <Image src={product.image} alt={product.name} fill sizes="88px" className="object-cover" />
             ) : null}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold truncate">{product.name}</p>
-            {product.description ? (
-              <p className="text-[11px] text-[#6E6E73] mt-0.5 line-clamp-2">
-                {product.description}
+          <div className="flex-1 min-w-0 flex flex-col justify-between" style={{ paddingTop: 2, paddingBottom: 2 }}>
+            <div>
+              <p
+                className="font-peachi font-bold text-[14px] leading-[18px] text-[#160800]"
+              >
+                {product.name}
               </p>
-            ) : null}
-            <p className="mt-1 text-sm text-[#A2492C] font-bold">
-              RM{product.basePrice.toFixed(2)}
-            </p>
+              {product.description ? (
+                <p className="text-[11px] mt-0.5 leading-[14px] text-[#6E6E73] line-clamp-2">
+                  {product.description}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex items-center justify-between gap-2 mt-1">
+              <span className="text-[14px] text-[#A2492C] font-bold">
+                RM{product.basePrice.toFixed(2)}
+              </span>
+              <span
+                className="rounded-full bg-[#160800] flex items-center justify-center flex-shrink-0"
+                style={{ width: 28, height: 28 }}
+              >
+                <Plus size={14} color="#FFFFFF" strokeWidth={2.5} />
+              </span>
+            </div>
           </div>
-          <span className="h-9 w-9 rounded-full bg-[#160800] flex items-center justify-center flex-shrink-0">
-            <Plus size={16} color="#FFFFFF" strokeWidth={2.5} />
-          </span>
         </div>
       </Link>
     </li>

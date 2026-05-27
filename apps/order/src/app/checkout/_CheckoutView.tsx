@@ -26,6 +26,13 @@ type Persisted = {
   };
 };
 
+type Tier = {
+  tier_id: string;
+  tier_name: string;
+  tier_multiplier: number;
+  tier_color?: string | null;
+};
+
 const METHODS: Array<{ id: string; label: string; Icon: typeof CreditCard }> = [
   { id: "card",    label: "Card",     Icon: CreditCard },
   { id: "fpx",     label: "FPX",      Icon: Banknote },
@@ -50,10 +57,33 @@ export function CheckoutView() {
   const [stripeContext, setStripeContext] = useState<{ orderId: string; clientSecret: string } | null>(null);
   const [confirmFn, setConfirmFn] = useState<(() => Promise<{ error?: { message?: string } }>) | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [tier, setTier] = useState<Tier | null>(null);
 
   useEffect(() => {
     setState(readState() ?? null);
   }, []);
+
+  // Same earn-preview line as apps/pickup-native/app/checkout.tsx —
+  // pull tier so we can show "{tier_name} · earning {multiplier}× = +{X} pts".
+  useEffect(() => {
+    const loyaltyId = state?.loyaltyId;
+    if (!loyaltyId) {
+      setTier(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/loyalty/member-tier?member_id=${encodeURIComponent(loyaltyId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        if (data && data.tier_id) setTier(data as Tier);
+        else setTier(null);
+      })
+      .catch(() => !cancelled && setTier(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [state?.loyaltyId]);
 
   const subtotal = useMemo(
     () => (state?.cart ?? []).reduce((s, i) => s + i.totalPrice, 0),
@@ -195,6 +225,19 @@ export function CheckoutView() {
           <span className="text-sm text-[#6E6E73]">Total</span>
           <span className="font-peachi font-bold text-xl">RM{subtotal.toFixed(2)}</span>
         </div>
+        {tier ? (
+          <div className="mt-2 flex items-center justify-between">
+            <span className="text-[13px] text-[#6E6E73] truncate">
+              {tier.tier_name} · earning {tier.tier_multiplier}×
+            </span>
+            <span
+              className="text-[13px] font-bold"
+              style={{ color: tier.tier_color ?? "#92400e" }}
+            >
+              +{Math.round(subtotal * (tier.tier_multiplier ?? 1))} pts
+            </span>
+          </div>
+        ) : null}
       </section>
 
       {stripeContext ? (
