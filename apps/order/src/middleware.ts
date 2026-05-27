@@ -55,13 +55,21 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
 
+  // "/" is handled by a real Next.js page (apps/order/src/app/page.tsx)
+  // instead of the SPA. The Next.js page renders plain HTML/CSS so iOS
+  // Safari's URL bar collapses on body scroll — the RN-Web SPA can't do
+  // that because its ScrollView clamps the document at viewport height.
+  // Every OTHER customer route (/menu, /cart, /product/[id], etc.)
+  // still rewrites to the SPA shell.
+  const isNextOwned = pathname === "/";
+
   // Customer-facing UI lives in the Expo Web PWA shipped from
   // apps/pickup-native and copied into /public during build. For any
   // non-Next route, rewrite to /index.html so the SPA bootstraps and
   // client-side routing handles the rest. Apply security headers on
   // this branch too — these are the customer-facing pages and need
   // CSP / X-Frame-Options / Referrer-Policy just like any other page.
-  if (!isApi && !PWA_PASSTHROUGH.some((rx) => rx.test(pathname))) {
+  if (!isApi && !isNextOwned && !PWA_PASSTHROUGH.some((rx) => rx.test(pathname))) {
     const url = request.nextUrl.clone();
     url.pathname = "/index.html";
     const r = NextResponse.rewrite(url);
