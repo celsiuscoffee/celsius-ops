@@ -8,6 +8,10 @@ type OrderItem = {
   product_name: string;
   quantity: number;
   item_total: number;
+  modifiers?: {
+    selections?: Array<{ label?: string }>;
+    specialInstructions?: string;
+  } | null;
 };
 
 type Order = {
@@ -23,7 +27,18 @@ type Order = {
   store_id?: string | null;
   store_name?: string | null;
   store_address?: string | null;
+  reward_discount_amount?: number | null;
+  reward_name?: string | null;
+  discount_amount?: number | null;
+  first_order_discount_amount?: number | null;
+  promo_discount?: number | null;
+  sst_amount?: number | null;
+  loyalty_points_earned?: number | null;
 };
+
+function rm(cents: number | null | undefined): string {
+  return `RM${((cents ?? 0) / 100).toFixed(2)}`;
+}
 
 const STEPS: Array<{ key: string; label: string; Icon: typeof Clock }> = [
   { key: "pending",    label: "Awaiting payment", Icon: Clock },
@@ -172,23 +187,109 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
       ) : null}
 
       <section className="px-4 pt-5">
-        <h2 className="font-peachi font-bold text-[16px] mb-2">Your order</h2>
-        <ul className="flex flex-col gap-1">
-          {(order.order_items ?? []).map((it, i) => (
-            <li key={i} className="flex items-baseline gap-3 text-sm">
-              <span className="text-[#160800] font-bold w-6">{it.quantity}×</span>
-              <span className="flex-1 truncate">{it.product_name}</span>
-              <span className="text-[#A2492C] font-bold">
-                RM{((it.item_total ?? 0) / 100).toFixed(2)}
+        <div
+          className="bg-white"
+          style={{
+            border: "1px solid rgba(26, 2, 0, 0.10)",
+            borderRadius: 16,
+            padding: 16,
+          }}
+        >
+          <p
+            className="uppercase"
+            style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4 }}
+          >
+            Items
+          </p>
+          <ul className="mt-2 flex flex-col gap-2">
+            {(order.order_items ?? []).map((it, i) => {
+              const labels = (it.modifiers?.selections ?? [])
+                .map((s) => s?.label)
+                .filter((l): l is string => !!l);
+              const note = it.modifiers?.specialInstructions?.trim() || null;
+              return (
+                <li key={i} className="flex flex-col" style={{ gap: 2 }}>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[#1A0200] flex-1 pr-2">
+                      {it.quantity}× {it.product_name}
+                    </span>
+                    <span className="text-[#1A0200]">{rm(it.item_total)}</span>
+                  </div>
+                  {labels.length > 0 ? (
+                    <p
+                      className="line-clamp-2"
+                      style={{ color: "#6B6B6B", fontSize: 12, paddingRight: 60 }}
+                    >
+                      {labels.join(" · ")}
+                    </p>
+                  ) : null}
+                  {note ? (
+                    <p
+                      className="line-clamp-2 italic"
+                      style={{ color: "#6B6B6B", fontSize: 12, paddingRight: 60 }}
+                    >
+                      &ldquo;{note}&rdquo;
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="mt-3 pt-3 border-t border-[rgba(26,2,0,0.10)] flex flex-col gap-1.5">
+            <div className="flex justify-between text-sm">
+              <span className="text-[#6B6B6B]">Subtotal</span>
+              <span className="text-[#1A0200]">{rm(order.subtotal)}</span>
+            </div>
+            {order.reward_discount_amount && order.reward_discount_amount > 0 ? (
+              <div className="flex justify-between text-[13px]">
+                <span className="text-[#A2492C] truncate pr-2">
+                  Reward{order.reward_name ? ` · ${order.reward_name}` : ""}
+                </span>
+                <span className="text-[#A2492C]">−{rm(order.reward_discount_amount)}</span>
+              </div>
+            ) : null}
+            {order.discount_amount && order.discount_amount > 0 ? (
+              <div className="flex justify-between text-[13px]">
+                <span className="text-[#A2492C]">Tier perk</span>
+                <span className="text-[#A2492C]">−{rm(order.discount_amount)}</span>
+              </div>
+            ) : null}
+            {order.first_order_discount_amount && order.first_order_discount_amount > 0 ? (
+              <div className="flex justify-between text-[13px]">
+                <span className="text-[#A2492C]">First-order discount</span>
+                <span className="text-[#A2492C]">−{rm(order.first_order_discount_amount)}</span>
+              </div>
+            ) : null}
+            {order.promo_discount && order.promo_discount > 0 ? (
+              <div className="flex justify-between text-[13px]">
+                <span className="text-[#A2492C]">Promo</span>
+                <span className="text-[#A2492C]">−{rm(order.promo_discount)}</span>
+              </div>
+            ) : null}
+            {order.sst_amount && order.sst_amount > 0 ? (
+              <div className="flex justify-between text-[13px]">
+                <span className="text-[#6B6B6B]">SST</span>
+                <span className="text-[#6B6B6B]">{rm(order.sst_amount)}</span>
+              </div>
+            ) : null}
+            <div className="mt-1 pt-2 border-t border-[rgba(26,2,0,0.10)] flex items-baseline justify-between">
+              <span className="font-peachi font-bold text-[#1A0200]" style={{ fontSize: 15 }}>
+                Total
               </span>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-3 flex items-center justify-between border-t border-[#EBE5DE] pt-3">
-          <span className="text-sm text-[#6E6E73]">Total</span>
-          <span className="font-peachi font-bold text-xl">
-            RM{((order.total ?? 0) / 100).toFixed(2)}
-          </span>
+              <span className="font-peachi font-bold text-[#A2492C]" style={{ fontSize: 22 }}>
+                {rm(order.total)}
+              </span>
+            </div>
+            {order.loyalty_points_earned && order.loyalty_points_earned > 0 ? (
+              <p
+                className="mt-1 text-right"
+                style={{ color: "#A2492C", fontSize: 12, fontWeight: 700 }}
+              >
+                +{order.loyalty_points_earned} beans earned
+              </p>
+            ) : null}
+          </div>
         </div>
       </section>
     </>

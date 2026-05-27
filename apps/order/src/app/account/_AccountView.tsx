@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { User, ChevronRight, LogOut } from "lucide-react";
+import { TierCard } from "@/components/TierCard";
 
 type Persisted = {
   state?: {
@@ -91,30 +92,58 @@ export function AccountView() {
           }}
         />
       ) : (
-        <div className="px-4 pt-4 flex flex-col gap-3">
-          <section
-            className="bg-[#160800] text-white rounded-2xl p-5"
-            style={{ minHeight: 120 }}
+        <>
+        <section className="px-4 pt-4">
+          <p
+            className="uppercase"
+            style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4 }}
           >
-            <p className="text-[10px] uppercase tracking-widest text-white/60">Hello</p>
-            <p
-              className="mt-1 text-2xl"
-              style={{ fontFamily: "Peachi-Bold, serif", fontWeight: 700 }}
-            >
-              {name ?? phone}
-            </p>
-            <div className="mt-4 flex gap-6">
-              <div>
-                <p className="text-xl font-bold">{beans.toLocaleString()}</p>
-                <p className="text-[10px] uppercase tracking-widest text-white/60">Beans</p>
-              </div>
-              <div>
-                <p className="text-xl font-bold">{visits}</p>
-                <p className="text-[10px] uppercase tracking-widest text-white/60">Visits</p>
-              </div>
+            Hello
+          </p>
+          <p
+            className="mt-1"
+            style={{ fontFamily: "Peachi-Bold, serif", fontWeight: 700, fontSize: 24, color: "#1A0200" }}
+          >
+            {name ?? phone}
+          </p>
+          <div className="mt-3 flex gap-6">
+            <div>
+              <p
+                className="font-peachi font-bold"
+                style={{ fontSize: 22, lineHeight: "26px", color: "#1A0200" }}
+              >
+                {beans.toLocaleString()}
+              </p>
+              <p
+                className="uppercase"
+                style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4 }}
+              >
+                Beans
+              </p>
             </div>
-          </section>
+            <div>
+              <p
+                className="font-peachi font-bold"
+                style={{ fontSize: 22, lineHeight: "26px", color: "#1A0200" }}
+              >
+                {visits}
+              </p>
+              <p
+                className="uppercase"
+                style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4 }}
+              >
+                Visits
+              </p>
+            </div>
+          </div>
+        </section>
 
+        {/* Tier card — same component used on /rewards so the tier hero
+            reads identically on both screens, matching native's
+            TierCardCarousel on apps/pickup-native/app/account.tsx. */}
+        <TierCard />
+
+        <div className="px-4 pt-4 flex flex-col gap-3">
           <Row href="/orders" label="Order history" />
           <Row href="/rewards" label="Rewards" />
           <EditProfileRow
@@ -162,6 +191,7 @@ export function AccountView() {
             }}
           />
         </div>
+        </>
       )}
     </>
   );
