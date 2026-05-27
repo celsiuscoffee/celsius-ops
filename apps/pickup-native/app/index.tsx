@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Platform, View, Text, Pressable, ScrollView, Image, RefreshControl } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { router, usePathname } from "expo-router";
 import { MapPin, ChevronRight, Coffee, Sparkles, Gift, Clock4, ShoppingCart } from "lucide-react-native";
 import * as Haptics from "@/lib/haptics";
 import { supabase, type Outlet } from "../lib/supabase";
@@ -1191,6 +1191,12 @@ function ViewCartFloatingBar({
   onPress: () => void;
 }) {
   const isWeb = Platform.OS === "web";
+  // Expo-router's Stack keeps prior screens mounted while a new one is
+  // pushed on top, so this bar's portal stays in the DOM while the
+  // customer is on /cart / /checkout / /product/[id]. Gate on pathname
+  // so it only renders when home is actually the active route.
+  const pathname = usePathname();
+  if (pathname !== "/") return null;
   const webOverrides = isWeb
     ? ({
         position: "fixed" as unknown as "absolute",
