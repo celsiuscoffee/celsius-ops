@@ -12,35 +12,6 @@ const HEAD_EXTRA = `
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Celsius">
   <meta name="format-detection" content="telephone=no">
-  <style>
-    /* iOS Safari URL-bar collapse — escalated version.
-       Earlier nested-5-level selector didn't reach the ScrollView in
-       practice — RN-Web wraps each context provider as its own div,
-       so the actual depth from #root to the scroll container is 8+.
-       Replaced with a universal descendant selector under #root so
-       EVERY wrapper div is sized to its content, no inner element can
-       keep the document at viewport height.
-
-       Cards / images that need overflow: hidden for rounded corners
-       use it via inline style and that's normally beaten by
-       !important — accept the cosmetic regression on those vs.
-       leaving the URL bar permanently expanded. */
-    html, body {
-      overflow-x: hidden;
-    }
-    #root * {
-      flex-grow: 0 !important;
-      flex-shrink: 0 !important;
-      flex-basis: auto !important;
-      min-height: 0 !important;
-      max-height: none !important;
-      height: auto !important;
-      overflow: visible !important;
-    }
-    /* Keep portals (BottomNav, MenuCartFloatingBar) anchored to the
-       viewport — they're children of <body>, not descendants of #root,
-       so the rules above don't touch them. */
-  </style>
 `;
 
 const BODY_EXTRA = `
@@ -84,21 +55,23 @@ if (html.includes("/manifest.json")) {
 const NEW_VIEWPORT =
   '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />';
 
-// Body uses min-height so the document can grow with content. Paired
-// with the brute-force CSS in HEAD_EXTRA that forces every ancestor
-// under #root to be content-sized (flex:0 0 auto, overflow:visible,
-// min-height:0). Without that pairing this min-height does nothing —
-// see PR #150 for the lesson. With it, body actually overflows when
-// content exceeds the viewport, and iOS Safari collapses its URL bar.
+// Use the JS-measured viewport height (--vph) so iOS Safari PWA
+// standalone gets the real pixel viewport — vh/dvh/lvh/svh all
+// under-report by ~150px in standalone mode. We keep `100vh` as
+// the static fallback for browsers that haven't run the JS yet.
+//
+// (URL-bar collapse experiments shipped in #157/#158 broke layouts
+// and are reverted here. The URL bar stays expanded in non-standalone
+// iOS Safari; customers who use the PWA often should install via Add
+// to Home Screen — that's the only reliable way to lose the URL bar.)
 const EXPO_RESET_OLD = `      html,
       body {
         height: 100%;
       }`;
 const EXPO_RESET_NEW = `      html,
       body {
-        min-height: 100vh; /* fallback */
-        min-height: var(--vph, 100vh);
-        min-height: 100dvh;
+        height: 100vh; /* fallback */
+        height: var(--vph, 100vh);
       }`;
 const ROOT_OLD = `      #root {
         display: flex;
@@ -107,10 +80,9 @@ const ROOT_OLD = `      #root {
       }`;
 const ROOT_NEW = `      #root {
         display: flex;
-        flex-direction: column;
-        min-height: 100vh;
-        min-height: var(--vph, 100vh);
-        min-height: 100dvh;
+        height: 100vh;
+        height: var(--vph, 100vh);
+        flex: 1;
       }`;
 
 const patched = html
