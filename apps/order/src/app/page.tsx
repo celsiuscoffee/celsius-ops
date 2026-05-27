@@ -1,10 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Home, Gift, ClipboardList, User, ChevronDown, MapPin, Plus, ChevronRight } from "lucide-react";
+import { ChevronDown, MapPin, Plus, ChevronRight } from "lucide-react";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getMenuData } from "@/lib/menu-data";
 import { GlobalCartPill } from "./_GlobalCartPill";
 import { MemberBeansCard } from "./_MemberBeansCard";
+import { BottomNav } from "./_BottomNav";
 
 /**
  * Customer home (Next.js Server Component) — replaces the pickup-native
@@ -199,69 +200,8 @@ export default async function HomePage() {
           localStorage and renders if non-empty). */}
       <GlobalCartPill />
 
-      {/* BottomNav — fixed at viewport bottom. Plain <a> links to inner
-          SPA routes; Home is the current page so it gets the active
-          treatment. */}
-      <nav
-        className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#EBE5DE] flex items-stretch z-20"
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-        aria-label="Primary"
-      >
-        <NavTab href="/" label="Home" Icon={Home} active />
-        <NavTab href="/rewards" label="Rewards" Icon={Gift} />
-        <NavMenuPuck href="/menu" />
-        <NavTab href="/orders" label="Orders" Icon={ClipboardList} />
-        <NavTab href="/account" label="Account" Icon={User} />
-      </nav>
+      {/* BottomNav — shared component, gets the active tab as a prop. */}
+      <BottomNav active="home" />
     </main>
-  );
-}
-
-function NavTab({ href, label, Icon, active }: { href: string; label: string; Icon: typeof Home; active?: boolean }) {
-  const color = active ? "#160800" : "#8E8E93";
-  return (
-    <Link
-      href={href}
-      className="flex-1 flex flex-col items-center justify-center gap-1 py-2 active:opacity-60"
-    >
-      <Icon size={24} color={color} strokeWidth={active ? 2.4 : 1.75} />
-      <span className="text-[12.5px]" style={{ color, fontWeight: active ? 700 : 600, letterSpacing: 0.2 }}>
-        {label}
-      </span>
-    </Link>
-  );
-}
-
-// Menu tab: elevated terracotta-on-dark puck CTA in the centre, mirrors
-// the SPA's BottomNav design.
-function NavMenuPuck({ href }: { href: string }) {
-  return (
-    <Link
-      href={href}
-      className="flex-1 flex flex-col items-center active:opacity-80"
-      aria-label="Menu"
-    >
-      <span
-        className="-mt-4 flex items-center justify-center"
-        style={{
-          width: 52,
-          height: 52,
-          borderRadius: 26,
-          backgroundColor: "#8E8E93",
-          border: "3px solid #FFFFFF",
-          boxShadow: "0 3px 8px rgba(0,0,0,0.2)",
-        }}
-      >
-        {/* Celsius cup glyph — simple svg fallback */}
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 3h12l-1 9a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4z" />
-          <path d="M9 21h6" />
-          <path d="M12 17v4" />
-        </svg>
-      </span>
-      <span className="text-[12.5px] mt-0.5" style={{ color: "#8E8E93", fontWeight: 600, letterSpacing: 0.2 }}>
-        Menu
-      </span>
-    </Link>
   );
 }

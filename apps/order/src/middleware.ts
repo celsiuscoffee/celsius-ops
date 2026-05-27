@@ -55,13 +55,20 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
 
-  // "/" is handled by a real Next.js page (apps/order/src/app/page.tsx)
-  // instead of the SPA. The Next.js page renders plain HTML/CSS so iOS
-  // Safari's URL bar collapses on body scroll — the RN-Web SPA can't do
-  // that because its ScrollView clamps the document at viewport height.
-  // Every OTHER customer route (/menu, /cart, /product/[id], etc.)
-  // still rewrites to the SPA shell.
-  const isNextOwned = pathname === "/";
+  // Customer routes that are NOW Next.js pages (apps/order/src/app/…/page.tsx)
+  // bypass the SPA rewrite — they render plain HTML so iOS Safari can
+  // collapse its URL bar on body scroll. Each route added here means
+  // one less screen the customer hits through the RN-Web SPA. Inner
+  // routes that haven't been ported yet (cart, product/[id], orders,
+  // rewards, account, checkout, store, etc.) still rewrite to the
+  // SPA's index.html below.
+  const isNextOwned =
+    pathname === "/" ||
+    pathname === "/menu" ||
+    pathname === "/cart" ||
+    pathname === "/orders" ||
+    pathname === "/rewards" ||
+    pathname === "/account";
 
   // Customer-facing UI lives in the Expo Web PWA shipped from
   // apps/pickup-native and copied into /public during build. For any
