@@ -76,19 +76,37 @@ function NavMenuPuck({ href, active }: { href: string; active: boolean }) {
           boxShadow: "0 3px 8px rgba(0,0,0,0.2)",
         }}
       >
-        {/* Brand °C mark from /public/images/icon-192.png — the actual
-            Celsius logo (serif C + degree dot), flipped to white via
-            CSS filter. Drops the previous hand-drawn cup outline since
-            the brand mark itself is the C-with-degree, not a takeaway
-            cup. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/images/icon-192.png"
-          alt=""
-          width={30}
-          height={30}
-          style={{ filter: "brightness(0) invert(1)", display: "block" }}
-        />
+        {/* °C brand mark — small degree circle + bold serif C, matching
+            apps/pickup-native/assets/icon.png. Inline SVG keeps it
+            crisp at any DPR and avoids the filter:invert workaround
+            that wasn't reliably flipping the black PNG to white. */}
+        <svg
+          width="30"
+          height="30"
+          viewBox="0 0 32 32"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          {/* Degree ring — open circle, top-left of the C */}
+          <circle cx="8.5" cy="10" r="2.25" fill="none" stroke="#FFFFFF" strokeWidth="1.4" />
+          {/* Bold serif C — Peachi-Bold glyph drawn as text so the
+              browser uses the loaded brand font. Stroke gives a tiny
+              extra weight bump matching the chunky letterform in
+              icon-192.png. */}
+          <text
+            x="20"
+            y="24"
+            textAnchor="middle"
+            fontFamily="Peachi, serif"
+            fontWeight="700"
+            fontSize="22"
+            fill="#FFFFFF"
+            stroke="#FFFFFF"
+            strokeWidth="0.6"
+          >
+            C
+          </text>
+        </svg>
       </span>
       <span
         className="text-[12.5px]"

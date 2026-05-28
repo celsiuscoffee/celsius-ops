@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { User, ChevronRight, LogOut } from "lucide-react";
+import {
+  User, ChevronRight, LogOut, Phone, ShoppingBag, Sparkles,
+  Settings as SettingsIcon, CircleHelp, Shield,
+} from "lucide-react";
 import { TierCard } from "@/components/TierCard";
 
 type Persisted = {
@@ -143,9 +146,14 @@ export function AccountView() {
             TierCardCarousel on apps/pickup-native/app/account.tsx. */}
         <TierCard />
 
-        <div className="px-4 pt-4 flex flex-col gap-3">
-          <Row href="/orders" label="Order history" />
-          <Row href="/rewards" label="Rewards" />
+        <div className="px-4 pt-4 flex flex-col gap-2">
+          <SectionLabel>Account</SectionLabel>
+          <Row href="/orders" label="Order history" Icon={ShoppingBag} />
+          <Row
+            href={`/wrapped`}
+            label={`Coffee Wrapped ${new Date().getFullYear()}`}
+            Icon={Sparkles}
+          />
           <EditProfileRow
             phone={phone}
             onSaved={(member) => {
@@ -164,6 +172,14 @@ export function AccountView() {
               }
             }}
           />
+
+          <SectionLabel>Preferences</SectionLabel>
+          <Row href="/settings" label="Settings" Icon={SettingsIcon} />
+
+          <SectionLabel>About</SectionLabel>
+          <Row href="/support" label="Help & support" Icon={CircleHelp} />
+          <Row href="/privacy" label="Privacy policy" Icon={Shield} />
+
           <SignOutRow
             onConfirm={() => {
               try {
@@ -258,82 +274,147 @@ function SignInForm({
   };
 
   return (
-    <div className="px-6 pt-8 pb-4 flex flex-col items-center">
-      <User size={48} color="#8E8E93" strokeWidth={1.25} />
-      <p className="mt-4 font-peachi font-bold text-base">Sign in to Celsius</p>
-      <p className="text-sm text-[#6E6E73] mt-1 text-center max-w-xs">
-        Earn beans, redeem rewards, see your order history.
-      </p>
+    <div className="px-5 pt-8 pb-4">
+      {step === "phone" ? (
+        <>
+          <div
+            className="flex items-center justify-center"
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              backgroundColor: "rgba(162,73,44,0.10)",
+              marginBottom: 16,
+            }}
+          >
+            <Phone size={28} color="#A2492C" strokeWidth={1.5} />
+          </div>
+          <h2 className="font-peachi font-bold text-2xl" style={{ color: "#1A0200" }}>
+            What&apos;s your number?
+          </h2>
+          <p
+            className="text-sm"
+            style={{ color: "#6B6B6B", marginTop: 6, marginBottom: 24 }}
+          >
+            We&apos;ll text you a 6-digit code to verify it&apos;s you.
+          </p>
 
-      <div className="w-full max-w-sm mt-8">
-        {step === "phone" ? (
-          <>
-            <label className="block text-[11px] uppercase tracking-widest text-[#8E8E93] font-bold mb-2">
-              Phone number
-            </label>
-            <div className="flex items-center gap-2 rounded-2xl border border-[#EBE5DE] px-3">
-              <span className="text-[#8E8E93] font-bold">+60</span>
-              <input
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="12 345 6789"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="flex-1 py-3 outline-none text-base"
-              />
-            </div>
-            {error ? (
-              <p className="mt-3 text-[12px] text-red-600">{error}</p>
-            ) : null}
-            <button
-              type="button"
-              onClick={sendOtp}
-              disabled={busy || normalisedPhone.length < 11}
-              className={`mt-5 w-full rounded-full text-white py-4 font-bold active:opacity-80 ${
-                busy || normalisedPhone.length < 11 ? "bg-[#A2492C]/40" : "bg-[#A2492C]"
-              }`}
+          <div
+            className="bg-white flex items-center"
+            style={{
+              border: "1px solid rgba(26,2,0,0.10)",
+              borderRadius: 16,
+              paddingLeft: 16,
+              paddingRight: 16,
+              height: 56,
+            }}
+          >
+            <span
+              style={{
+                color: "#8E8E93",
+                fontSize: 16,
+                fontWeight: 500,
+                marginRight: 8,
+                fontVariantNumeric: "tabular-nums",
+              }}
             >
-              {busy ? "Sending…" : "Send code"}
-            </button>
-          </>
-        ) : (
-          <>
-            <label className="block text-[11px] uppercase tracking-widest text-[#8E8E93] font-bold mb-2">
-              6-digit code sent to {normalisedPhone}
-            </label>
+              +60
+            </span>
             <input
               type="tel"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="000000"
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              className="w-full rounded-2xl border border-[#EBE5DE] px-3 py-3 outline-none text-2xl text-center tracking-widest font-bold"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="12 345 6789"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="flex-1 outline-none bg-transparent"
+              style={{
+                color: "#160800",
+                fontSize: 16,
+                fontWeight: 500,
+                fontVariantNumeric: "tabular-nums",
+              }}
+              maxLength={11}
             />
-            {error ? (
-              <p className="mt-3 text-[12px] text-red-600">{error}</p>
-            ) : null}
-            <button
-              type="button"
-              onClick={verifyOtp}
-              disabled={busy || code.length !== 6}
-              className={`mt-5 w-full rounded-full text-white py-4 font-bold active:opacity-80 ${
-                busy || code.length !== 6 ? "bg-[#A2492C]/40" : "bg-[#A2492C]"
-              }`}
-            >
-              {busy ? "Verifying…" : "Verify"}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setStep("phone"); setCode(""); setError(null); }}
-              className="mt-3 w-full text-sm text-[#8E8E93] active:opacity-60"
-            >
-              ← Change number
-            </button>
-          </>
-        )}
-      </div>
+          </div>
+          {error ? (
+            <p className="mt-3 text-[12px] text-red-600">{error}</p>
+          ) : null}
+          <button
+            type="button"
+            onClick={sendOtp}
+            disabled={busy || normalisedPhone.length < 11}
+            className={`mt-5 w-full rounded-full text-white py-4 font-bold active:opacity-80 ${
+              busy || normalisedPhone.length < 11 ? "bg-[#A2492C]/40" : "bg-[#A2492C]"
+            }`}
+          >
+            {busy ? "Sending…" : "Send code"}
+          </button>
+        </>
+      ) : (
+        <>
+          <div
+            className="flex items-center justify-center"
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              backgroundColor: "rgba(162,73,44,0.10)",
+              marginBottom: 16,
+            }}
+          >
+            <Phone size={28} color="#A2492C" strokeWidth={1.5} />
+          </div>
+          <h2 className="font-peachi font-bold text-2xl" style={{ color: "#1A0200" }}>
+            Enter your code
+          </h2>
+          <p
+            className="text-sm"
+            style={{ color: "#6B6B6B", marginTop: 6, marginBottom: 24 }}
+          >
+            Sent to {normalisedPhone}.
+          </p>
+
+          <input
+            type="tel"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="000000"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            className="w-full bg-white outline-none text-center tracking-[0.5em] font-bold"
+            style={{
+              border: "1px solid rgba(26,2,0,0.10)",
+              borderRadius: 16,
+              height: 56,
+              fontSize: 22,
+              color: "#1A0200",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          />
+          {error ? (
+            <p className="mt-3 text-[12px] text-red-600">{error}</p>
+          ) : null}
+          <button
+            type="button"
+            onClick={verifyOtp}
+            disabled={busy || code.length !== 6}
+            className={`mt-5 w-full rounded-full text-white py-4 font-bold active:opacity-80 ${
+              busy || code.length !== 6 ? "bg-[#A2492C]/40" : "bg-[#A2492C]"
+            }`}
+          >
+            {busy ? "Verifying…" : "Verify"}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setStep("phone"); setCode(""); setError(null); }}
+            className="mt-3 w-full text-sm active:opacity-60"
+            style={{ color: "#8E8E93" }}
+          >
+            ← Change number
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -522,11 +603,44 @@ function Row({
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 bg-white border border-[#EBE5DE] rounded-2xl px-4 py-3 active:opacity-80"
+      className="flex items-center bg-white active:opacity-80"
+      style={{
+        border: "1px solid rgba(26,2,0,0.10)",
+        borderRadius: 14,
+        paddingLeft: 14,
+        paddingRight: 14,
+        paddingTop: 12,
+        paddingBottom: 12,
+        gap: 12,
+      }}
     >
-      {Icon ? <Icon size={18} color="#8E8E93" /> : null}
-      <span className="text-sm font-bold flex-1">{label}</span>
-      <ChevronRight size={14} color="#8E8E93" />
+      {Icon ? <Icon size={18} color="#6B6B6B" strokeWidth={1.75} /> : null}
+      <span
+        className="font-peachi font-bold flex-1"
+        style={{ color: "#1A0200", fontSize: 15 }}
+      >
+        {label}
+      </span>
+      <ChevronRight size={16} color="#8E8E93" />
     </Link>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p
+      className="uppercase"
+      style={{
+        color: "#8E8E93",
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: 1.4,
+        marginTop: 8,
+        marginBottom: 2,
+        paddingLeft: 4,
+      }}
+    >
+      {children}
+    </p>
   );
 }

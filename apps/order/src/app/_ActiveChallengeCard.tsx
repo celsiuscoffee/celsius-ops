@@ -67,55 +67,65 @@ export function ActiveChallengeCard() {
 
   return (
     <Link
-      href="/rewards"
-      className="mt-5 mx-4 flex items-center gap-3 rounded-2xl active:opacity-80"
+      href={`/challenge/${mission.id}`}
+      className="block mt-5 mx-4 flex items-start active:opacity-90"
       style={{
         backgroundColor: "#1A0200",
-        padding: 14,
-        boxShadow: "0 4px 10px rgba(22,8,0,0.18)",
+        border: "1px solid #1A0200",
+        borderRadius: 18,
+        paddingLeft: 14,
+        paddingRight: 14,
+        paddingTop: 14,
+        paddingBottom: 14,
+        gap: 14,
+        boxShadow: "0 4px 10px rgba(0,0,0,0.12)",
       }}
     >
       <span
-        className="flex items-center justify-center"
+        className="flex items-center justify-center flex-shrink-0"
         style={{
-          width: 40,
-          height: 40,
+          width: 48,
+          height: 48,
           borderRadius: 12,
-          backgroundColor: "rgba(251,191,36,0.18)",
+          backgroundColor: "rgba(251,191,36,0.20)",
         }}
       >
-        <Sparkles size={20} color="#FBBF24" strokeWidth={1.8} />
+        <Sparkles size={24} color="#FBBF24" strokeWidth={2} />
       </span>
       <span className="flex-1 min-w-0">
         <span
-          className="block text-[#FBBF24] uppercase truncate"
+          className="block uppercase truncate"
           style={{
+            color: "#FBBF24",
             fontWeight: 700,
             fontSize: 9.5,
             letterSpacing: 1.4,
+            marginBottom: 3,
           }}
         >
-          Active challenge · {progressLabel}
+          Challenge · {progressLabel}
         </span>
         <span
-          className="block text-white truncate mt-0.5"
+          className="block truncate"
           style={{
+            color: "#FFFFFF",
             fontFamily: "var(--font-display)",
             fontWeight: 700,
-            fontSize: 15,
-            letterSpacing: -0.3,
+            fontSize: 17,
+            lineHeight: "21px",
           }}
         >
           {mission.title}
         </span>
         {mission.reward_summary ? (
           <span
-            className="block truncate"
+            className="block line-clamp-2"
             style={{
               color: "rgba(255,255,255,0.65)",
-              fontSize: 11,
+              fontSize: 12,
+              lineHeight: "16px",
+              marginTop: 2,
               fontWeight: 500,
-              marginTop: 1,
             }}
           >
             {mission.reward_summary}

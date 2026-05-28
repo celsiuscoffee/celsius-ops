@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ClipboardList, ChevronRight } from "lucide-react";
+import { ClipboardList, ChevronRight, CheckCircle2, XCircle, Coffee, Clock, MapPin } from "lucide-react";
 
 type Order = {
   id: string;
@@ -11,6 +11,7 @@ type Order = {
   total: number;
   created_at: string;
   order_items?: Array<{ product_name: string; quantity: number }>;
+  store_name?: string | null;
 };
 
 type Persisted = { state?: { phone?: string | null } };
@@ -120,35 +121,7 @@ export function OrdersView() {
       ) : (
         <ul className="px-4 py-4 flex flex-col gap-3">
           {(filtered ?? []).map((o) => (
-            <li key={o.id}>
-              <Link
-                href={`/order/${o.id}`}
-                className="flex items-center gap-3 bg-white rounded-2xl border border-[#EBE5DE] p-3 active:opacity-80"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold">#{o.order_number}</p>
-                  <p className="text-[11px] text-[#6E6E73] mt-0.5">
-                    {new Date(o.created_at).toLocaleDateString("en-MY", {
-                      day: "numeric",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                    {" · "}
-                    {o.status}
-                  </p>
-                  {o.order_items && o.order_items.length > 0 ? (
-                    <p className="text-[11px] text-[#6E6E73] mt-0.5 line-clamp-1">
-                      {o.order_items.map((i) => `${i.quantity}× ${i.product_name}`).join(", ")}
-                    </p>
-                  ) : null}
-                </div>
-                <span className="text-sm text-[#A2492C] font-bold">
-                  RM{((o.total ?? 0) / 100).toFixed(2)}
-                </span>
-                <ChevronRight size={14} color="#8E8E93" />
-              </Link>
-            </li>
+            <OrderRow key={o.id} order={o} />
           ))}
         </ul>
       )}
@@ -157,6 +130,124 @@ export function OrdersView() {
         <p className="px-4 pb-4 text-[11px] text-red-600">Couldn't load orders: {error}</p>
       ) : null}
     </>
+  );
+}
+
+function OrderRow({ order }: { order: Order }) {
+  const status = order.status.toLowerCase();
+  const StatusIcon =
+    status === "completed" || status === "ready"
+      ? CheckCircle2
+      : status === "cancelled" || status === "failed"
+      ? XCircle
+      : status === "preparing" || status === "paid"
+      ? Coffee
+      : Clock;
+  const statusColor =
+    status === "completed" || status === "ready"
+      ? "#16A34A"
+      : status === "cancelled" || status === "failed"
+      ? "#A2492C"
+      : "#8E8E93";
+
+  const date = new Date(order.created_at);
+  const dateLabel = date.toLocaleDateString("en-MY", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const timeLabel = date.toLocaleTimeString("en-MY", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const items = order.order_items ?? [];
+  const itemSummary =
+    items
+      .slice(0, 2)
+      .map((i) => `${i.quantity}× ${i.product_name}`)
+      .join(", ") + (items.length > 2 ? ` · +${items.length - 2} more` : "");
+
+  const totalRm = (order.total ?? 0) / 100;
+
+  return (
+    <li
+      className="bg-white"
+      style={{
+        border: "1px solid rgba(26,2,0,0.10)",
+        borderRadius: 16,
+        padding: 16,
+        boxShadow: "0 2px 6px rgba(0,0,0,0.04)",
+      }}
+    >
+      <Link href={`/order/${order.id}`} className="block active:opacity-70">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <StatusIcon size={16} color={statusColor} strokeWidth={2} />
+            <span
+              className="uppercase"
+              style={{ color: statusColor, fontSize: 12, fontWeight: 700, letterSpacing: 0.8 }}
+            >
+              {status}
+            </span>
+          </div>
+          <span style={{ color: "#6B6B6B", fontSize: 11, fontWeight: 500 }}>
+            #{order.order_number}
+          </span>
+        </div>
+
+        <p
+          className="font-peachi font-bold truncate"
+          style={{ color: "#1A0200", fontSize: 15, marginTop: 8 }}
+        >
+          {itemSummary || "Order"}
+        </p>
+        {order.store_name ? (
+          <div className="flex items-center" style={{ marginTop: 6, gap: 4 }}>
+            <MapPin size={11} color="#8E8E93" strokeWidth={2} />
+            <span className="truncate" style={{ color: "#6B6B6B", fontSize: 12, fontWeight: 500 }}>
+              {order.store_name}
+            </span>
+          </div>
+        ) : null}
+        <p style={{ color: "#6B6B6B", fontSize: 12, marginTop: 2 }}>
+          {dateLabel} · {timeLabel} · RM{totalRm.toFixed(2)}
+        </p>
+      </Link>
+
+      <div
+        className="mt-3 pt-3 flex"
+        style={{ borderTop: "1px solid rgba(26,2,0,0.10)", gap: 8 }}
+      >
+        <Link
+          href={`/order/${order.id}`}
+          className="flex-1 flex items-center justify-center gap-1 rounded-full bg-white active:opacity-70"
+          style={{
+            border: "1px solid rgba(26,2,0,0.10)",
+            paddingTop: 10,
+            paddingBottom: 10,
+          }}
+        >
+          <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 13 }}>
+            View
+          </span>
+          <ChevronRight size={14} color="#160800" />
+        </Link>
+        <Link
+          href="/menu"
+          className="flex-1 flex items-center justify-center gap-1 rounded-full active:opacity-80"
+          style={{
+            backgroundColor: "#1A0200",
+            paddingTop: 10,
+            paddingBottom: 10,
+          }}
+        >
+          <span className="font-peachi font-bold" style={{ color: "#FFFFFF", fontSize: 13 }}>
+            Order again
+          </span>
+        </Link>
+      </div>
+    </li>
   );
 }
 

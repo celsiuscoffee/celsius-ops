@@ -10,6 +10,8 @@ import { HeroInfoCard } from "./_HeroInfoCard";
 import { OutletRow } from "./_OutletRow";
 import { ActiveChallengeCard } from "./_ActiveChallengeCard";
 import { VoucherRail } from "./_VoucherRail";
+import { GuestSignInCTA } from "./_GuestSignInCTA";
+import { ActiveOrderTracker } from "./_ActiveOrderTracker";
 
 /**
  * Customer home — Next.js Server Component. Plain HTML so iOS Safari
@@ -73,17 +75,24 @@ export default async function HomePage() {
         style={{ top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
         <Image
-          src="/icons/icon-192.png"
+          src="/images/icon-192.png"
           alt="Celsius"
           width={28}
           height={28}
-          className="rounded-md"
+          style={{ borderRadius: 6 }}
         />
         <div className="flex-1" />
         <Link
           href="/cart"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 active:opacity-80"
+          className="flex items-center justify-center active:opacity-60"
           aria-label="Cart"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: "rgba(255,255,255,0.92)",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.10)",
+          }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#160800" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="9" cy="21" r="1" />
@@ -103,6 +112,16 @@ export default async function HomePage() {
           reads chosen outlet from localStorage so customers see their
           outlet name instead of the placeholder. */}
       <OutletRow />
+
+      {/* Guest sign-in CTA — espresso panel with gift icon, surfaces
+          for logged-out customers as the first conversion ask. Hidden
+          once signed in. Mirrors apps/pickup-native/app/index.tsx
+          :586-644. */}
+      <GuestSignInCTA />
+
+      {/* In-progress order banner — colored panel that links to the
+          order detail page. Refreshes every 15s. */}
+      <ActiveOrderTracker />
 
       {/* Active challenge teaser (signed-in customers with an in-
           progress mission). Mirrors apps/pickup-native/app/index.tsx
