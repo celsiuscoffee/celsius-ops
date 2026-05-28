@@ -16,7 +16,7 @@ type Order = {
   status: string;
 };
 
-type Persisted = { state?: { phone?: string | null } };
+type Persisted = { state?: { phone?: string | null; sessionToken?: string | null } };
 
 const ACTIVE = new Set(["pending", "paid", "preparing", "ready"]);
 
@@ -34,9 +34,14 @@ export function ActiveOrderTracker() {
 
   useEffect(() => {
     let phone: string | null = null;
+    let token: string | null = null;
     try {
       const raw = window.localStorage.getItem("celsius-pickup");
-      if (raw) phone = (JSON.parse(raw) as Persisted).state?.phone ?? null;
+      if (raw) {
+        const parsed = JSON.parse(raw) as Persisted;
+        phone = parsed.state?.phone ?? null;
+        token = parsed.state?.sessionToken ?? null;
+      }
     } catch {
       /* ignore */
     }
@@ -46,6 +51,7 @@ export function ActiveOrderTracker() {
       try {
         const res = await fetch(
           `/api/loyalty/orders?phone=${encodeURIComponent(phone!)}&limit=5`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
         );
         const data = await res.json();
         const list = (data?.orders ?? data ?? []) as Order[];

@@ -6,7 +6,7 @@ import {
   User, ChevronRight, LogOut, Phone, ShoppingBag, Sparkles,
   Settings as SettingsIcon, CircleHelp, Shield,
 } from "lucide-react";
-import { TierCard } from "@/components/TierCard";
+import { TierCarousel } from "./_TierCarousel";
 
 type Persisted = {
   state?: {
@@ -33,8 +33,6 @@ type Persisted = {
 export function AccountView() {
   const [phone, setPhone] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
-  const [beans, setBeans] = useState(0);
-  const [visits, setVisits] = useState(0);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -44,8 +42,6 @@ export function AccountView() {
         const parsed = JSON.parse(raw) as Persisted;
         setPhone(parsed.state?.phone ?? null);
         setName(parsed.state?.member?.name ?? null);
-        setBeans(parsed.state?.member?.pointsBalance ?? 0);
-        setVisits(parsed.state?.member?.totalVisits ?? 0);
       }
     } catch {
       /* ignore */
@@ -90,13 +86,11 @@ export function AccountView() {
             }
             setPhone(p);
             setName(member?.name ?? null);
-            setBeans(member?.pointsBalance ?? 0);
-            setVisits(member?.totalVisits ?? 0);
           }}
         />
       ) : (
         <>
-        <section className="px-4 pt-4">
+        <section className="px-4 pt-4 pb-3">
           <p
             className="uppercase"
             style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4 }}
@@ -109,42 +103,13 @@ export function AccountView() {
           >
             {name ?? phone}
           </p>
-          <div className="mt-3 flex gap-6">
-            <div>
-              <p
-                className="font-peachi font-bold"
-                style={{ fontSize: 22, lineHeight: "26px", color: "#1A0200" }}
-              >
-                {beans.toLocaleString()}
-              </p>
-              <p
-                className="uppercase"
-                style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4 }}
-              >
-                Beans
-              </p>
-            </div>
-            <div>
-              <p
-                className="font-peachi font-bold"
-                style={{ fontSize: 22, lineHeight: "26px", color: "#1A0200" }}
-              >
-                {visits}
-              </p>
-              <p
-                className="uppercase"
-                style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4 }}
-              >
-                Visits
-              </p>
-            </div>
-          </div>
         </section>
 
-        {/* Tier card — same component used on /rewards so the tier hero
-            reads identically on both screens, matching native's
+        {/* Membership tier carousel — every tier as a swipeable themed
+            hero card, current tier auto-scrolled in with embedded
+            Points/Visits/Earned stats. Matches native's
             TierCardCarousel on apps/pickup-native/app/account.tsx. */}
-        <TierCard />
+        <TierCarousel />
 
         <div className="px-4 pt-4 flex flex-col gap-2">
           <SectionLabel>Account</SectionLabel>
@@ -202,8 +167,6 @@ export function AccountView() {
               }
               setPhone(null);
               setName(null);
-              setBeans(0);
-              setVisits(0);
             }}
           />
         </div>

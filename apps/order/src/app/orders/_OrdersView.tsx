@@ -14,16 +14,19 @@ type Order = {
   store_name?: string | null;
 };
 
-type Persisted = { state?: { phone?: string | null } };
+type Persisted = { state?: { phone?: string | null; sessionToken?: string | null } };
 
-function readPhone(): string | null {
+function readAuth(): { phone: string | null; token: string | null } {
   try {
     const raw = window.localStorage.getItem("celsius-pickup");
-    if (!raw) return null;
+    if (!raw) return { phone: null, token: null };
     const parsed = JSON.parse(raw) as Persisted;
-    return parsed.state?.phone ?? null;
+    return {
+      phone: parsed.state?.phone ?? null,
+      token: parsed.state?.sessionToken ?? null,
+    };
   } catch {
-    return null;
+    return { phone: null, token: null };
   }
 }
 
@@ -37,13 +40,18 @@ export function OrdersView() {
   const [tab, setTab] = useState<Tab>("active");
 
   useEffect(() => {
-    const p = readPhone();
+    const { phone: p, token } = readAuth();
     setPhone(p);
     if (!p) {
       setOrders([]);
       return;
     }
-    fetch(`/api/loyalty/orders?phone=${encodeURIComponent(p)}&limit=20`)
+    // Send the session token as a Bearer header so the request still
+    // resolves when STRICT_CUSTOMER_AUTH is on (the order API matches
+    // the signed phone against the queried phone).
+    fetch(`/api/loyalty/orders?phone=${encodeURIComponent(p)}&limit=20`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
       .then((r) => r.json())
       .then((data) => {
         setOrders((data?.orders ?? data ?? []) as Order[]);
