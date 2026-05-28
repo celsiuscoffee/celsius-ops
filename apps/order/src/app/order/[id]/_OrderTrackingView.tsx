@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ShoppingBag, Coffee, CheckCircle2, XCircle, X } from "lucide-react";
+import { ArrowLeft, ShoppingBag, Coffee, CheckCircle2, XCircle } from "lucide-react";
 import { MysteryReward } from "./_MysteryReward";
 
 type OrderItem = {
@@ -62,28 +62,6 @@ function stepperIndex(status: string): number {
 export function OrderTrackingView({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cancelling, setCancelling] = useState(false);
-
-  const cancel = async () => {
-    setCancelling(true);
-    try {
-      const res = await fetch(`/api/orders/${orderId}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "cancelled" }),
-      });
-      if (res.ok) {
-        setOrder((prev) => (prev ? { ...prev, status: "cancelled" } : prev));
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Couldn't cancel the order");
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setCancelling(false);
-    }
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -130,7 +108,7 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
       {order.store_name ? (
         <section className="px-4 pt-5">
           <h2 className="font-peachi font-bold text-[16px] mb-1">Pickup from</h2>
-          <p className="text-sm font-bold">{order.store_name}</p>
+          <p className="text-sm font-peachi font-bold">{order.store_name}</p>
           {order.store_address ? (
             <p className="text-[12px] text-[#6E6E73] mt-0.5">{order.store_address}</p>
           ) : null}
@@ -143,7 +121,7 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
           <div className="flex items-center gap-3 rounded-2xl bg-red-50 border border-red-200 p-3">
             <XCircle size={20} color="#B91C1C" />
             <div>
-              <p className="font-bold text-sm text-red-800">
+              <p className="font-peachi font-bold text-sm text-red-800">
                 {order.status === "failed" ? "Payment failed" : "Cancelled"}
               </p>
               <p className="text-[12px] text-red-700 mt-0.5">
@@ -255,20 +233,6 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
           </div>
         )}
       </section>
-
-      {order.status.toLowerCase() === "pending" ? (
-        <section className="px-4 pt-4">
-          <button
-            type="button"
-            disabled={cancelling}
-            onClick={cancel}
-            className="w-full flex items-center justify-center gap-2 rounded-full border border-red-200 bg-red-50 text-red-700 py-3 font-bold active:opacity-80"
-          >
-            <X size={16} />
-            {cancelling ? "Cancelling…" : "Cancel order"}
-          </button>
-        </section>
-      ) : null}
 
       {/* Mystery-bean reveal — only once payment is in (not pending /
           failed / cancelled). Renders nothing if the order has no drop. */}

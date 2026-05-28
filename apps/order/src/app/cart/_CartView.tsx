@@ -389,12 +389,11 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
               +{Math.floor(grandTotal)} pts
             </span>
           </div>
-        ) : (
-          <div style={{ marginBottom: 12 }} />
-        )}
+        ) : null}
         <Link
           href="/checkout"
-          className="block w-full rounded-full bg-[#A2492C] text-white text-center py-4 font-bold active:opacity-80"
+          className="block w-full rounded-full bg-[#A2492C] text-white text-center py-4 font-peachi font-bold active:opacity-80"
+          style={{ marginTop: 12 }}
         >
           Continue to checkout
         </Link>

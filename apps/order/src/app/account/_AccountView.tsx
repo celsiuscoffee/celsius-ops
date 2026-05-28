@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   User, ChevronRight, LogOut, Phone, ShoppingBag, Sparkles,
-  Settings as SettingsIcon, CircleHelp, Shield,
+  Settings as SettingsIcon, CircleHelp, Shield, Pencil,
 } from "lucide-react";
 import { TierCarousel } from "./_TierCarousel";
 
@@ -445,10 +445,22 @@ function EditProfileRow({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-3 bg-white border border-[#EBE5DE] rounded-2xl px-4 py-3 active:opacity-80 text-left"
+        className="flex items-center bg-white active:opacity-80 text-left"
+        style={{
+          border: "1px solid rgba(26,2,0,0.10)",
+          borderRadius: 14,
+          paddingLeft: 14,
+          paddingRight: 14,
+          paddingTop: 12,
+          paddingBottom: 12,
+          gap: 12,
+        }}
       >
-        <span className="text-sm font-bold flex-1">Edit profile</span>
-        <ChevronRight size={14} color="#8E8E93" />
+        <Pencil size={18} color="#6B6B6B" strokeWidth={1.75} />
+        <span className="font-peachi font-bold flex-1" style={{ color: "#1A0200", fontSize: 15 }}>
+          Edit profile
+        </span>
+        <ChevronRight size={16} color="#8E8E93" />
       </button>
     );
   }
@@ -515,11 +527,22 @@ function SignOutRow({ onConfirm }: { onConfirm: () => void }) {
       <button
         type="button"
         onClick={() => setConfirming(true)}
-        className="flex items-center gap-3 bg-white border border-[#EBE5DE] rounded-2xl px-4 py-3 active:opacity-80 text-left"
+        className="flex items-center bg-white active:opacity-80 text-left"
+        style={{
+          border: "1px solid rgba(26,2,0,0.10)",
+          borderRadius: 14,
+          paddingLeft: 14,
+          paddingRight: 14,
+          paddingTop: 12,
+          paddingBottom: 12,
+          gap: 12,
+        }}
       >
-        <LogOut size={18} color="#8E8E93" />
-        <span className="text-sm font-bold flex-1">Sign out</span>
-        <ChevronRight size={14} color="#8E8E93" />
+        <LogOut size={18} color="#6B6B6B" strokeWidth={1.75} />
+        <span className="font-peachi font-bold flex-1" style={{ color: "#1A0200", fontSize: 15 }}>
+          Sign out
+        </span>
+        <ChevronRight size={16} color="#8E8E93" />
       </button>
     );
   }
