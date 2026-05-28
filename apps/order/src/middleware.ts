@@ -80,7 +80,8 @@ export async function middleware(request: NextRequest) {
     pathname === "/account-delete" ||
     pathname.startsWith("/product/") ||
     pathname.startsWith("/order/") ||
-    pathname.startsWith("/challenge/");
+    pathname.startsWith("/challenge/") ||
+    pathname.startsWith("/table/");
 
   // Customer-facing UI lives in the Expo Web PWA shipped from
   // apps/pickup-native and copied into /public during build. For any
