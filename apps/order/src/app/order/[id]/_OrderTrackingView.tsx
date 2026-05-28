@@ -334,7 +334,7 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
             ) : null}
             {order.discount_amount && order.discount_amount > 0 ? (
               <div className="flex justify-between text-[13px]">
-                <span className="text-[#A2492C]">Tier perk</span>
+                <span className="text-[#A2492C]">Voucher</span>
                 <span className="text-[#A2492C]">−{rm(order.discount_amount)}</span>
               </div>
             ) : null}

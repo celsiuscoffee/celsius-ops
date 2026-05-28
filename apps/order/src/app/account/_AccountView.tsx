@@ -65,14 +65,18 @@ export function AccountView() {
 
       {!hydrated ? null : !phone ? (
         <SignInForm
-          onSignedIn={(p, member) => {
-            // Persist phone + member into the SPA's localStorage shape
-            // so the rest of the app picks them up.
+          onSignedIn={(p, member, sessionToken) => {
+            // Persist phone + member + session token into the SPA's
+            // localStorage shape so the rest of the app picks them up.
+            // The token is REQUIRED — every /me/* read (rewards,
+            // vouchers, missions, claimables, referral, orders under
+            // strict auth) sends it as a Bearer header.
             try {
               const raw = window.localStorage.getItem("celsius-pickup");
               const parsed = raw ? JSON.parse(raw) : { state: {} };
               const state = parsed.state ?? {};
               state.phone = p;
+              if (sessionToken) state.sessionToken = sessionToken;
               if (member) {
                 state.member = member;
                 state.loyaltyId = member.id;
@@ -182,6 +186,7 @@ function SignInForm({
   onSignedIn: (
     phone: string,
     member: { id: string; name?: string | null; pointsBalance?: number; totalVisits?: number } | null,
+    sessionToken: string | null,
   ) => void;
 }) {
   const [step, setStep] = useState<"phone" | "code">("phone");
@@ -205,7 +210,7 @@ function SignInForm({
       const res = await fetch("/api/otp/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: normalisedPhone, purpose: "signin" }),
+        body: JSON.stringify({ phone: normalisedPhone, purpose: "login" }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Failed to send code");
@@ -224,11 +229,13 @@ function SignInForm({
       const res = await fetch("/api/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: normalisedPhone, code, purpose: "signin" }),
+        body: JSON.stringify({ phone: normalisedPhone, code, purpose: "login" }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Invalid code");
-      onSignedIn(normalisedPhone, data.member ?? null);
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error ?? "Invalid code");
+      }
+      onSignedIn(normalisedPhone, data.member ?? null, data.sessionToken ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

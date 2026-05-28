@@ -118,7 +118,16 @@ export function ProductView({ product }: { product: Product }) {
       specialInstructions: notes || undefined,
       totalPrice,
     });
-    router.push("/cart");
+    // Return to where the customer came from (the menu) rather than
+    // pushing them to the cart — matches apps/pickup-native/app
+    // /product/[id].tsx's router.back(). The floating cart pill keeps
+    // the cart one tap away. Falls back to /menu when there's no
+    // in-app history (e.g. a deep link straight to the product).
+    if (window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/menu");
+    }
   };
 
   const togglePick = (group: ModifierGroup, optId: string) => {

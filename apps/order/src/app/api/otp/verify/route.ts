@@ -15,7 +15,15 @@ import { ensureNewMemberRewards } from '@/lib/loyalty/welcome';
  *  brand-new signups. Now we always create the row up front; same
  *  pattern the /api/loyalty/otp/verify proxy used. Falls safe to
  *  null if creation fails — caller can retry later. */
-async function ensureMemberRow(phone: string): Promise<string | null> {
+type MemberSnapshot = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  pointsBalance: number;
+  totalVisits: number;
+};
+
+async function ensureMemberRow(phone: string): Promise<MemberSnapshot | null> {
   try {
     const member = await findOrCreateMember(phone);
     if (!member?.id) return null;
@@ -26,7 +34,13 @@ async function ensureMemberRow(phone: string): Promise<string | null> {
     ensureNewMemberRewards(member.id).catch((e) => {
       console.warn('[otp/verify] ensureNewMemberRewards failed:', e);
     });
-    return member.id;
+    return {
+      id: member.id,
+      name: member.name ?? null,
+      email: member.email ?? null,
+      pointsBalance: member.points_balance ?? 0,
+      totalVisits: member.total_visits ?? 0,
+    };
   } catch (e) {
     console.error('[otp/verify] ensureMemberRow failed:', e);
     return null;
@@ -59,9 +73,9 @@ export async function POST(request: NextRequest) {
         diff |= code.charCodeAt(i) ^ reviewerCode.charCodeAt(i);
       }
       if (diff === 0) {
-        const memberId = await ensureMemberRow(phone);
-        const sessionToken = signCustomerSession({ memberId, phone });
-        return NextResponse.json({ success: true, sessionToken });
+        const member = await ensureMemberRow(phone);
+        const sessionToken = signCustomerSession({ memberId: member?.id ?? null, phone });
+        return NextResponse.json({ success: true, sessionToken, member });
       }
     }
 
@@ -84,9 +98,9 @@ export async function POST(request: NextRequest) {
     // carries a non-null memberId now (provided findOrCreateMember
     // succeeded), so downstream /me/* calls don't need the loyalty-
     // service fallback to resolve the member.
-    const memberId = await ensureMemberRow(phone);
-    const sessionToken = signCustomerSession({ memberId, phone });
-    return NextResponse.json({ success: true, sessionToken });
+    const member = await ensureMemberRow(phone);
+    const sessionToken = signCustomerSession({ memberId: member?.id ?? null, phone });
+    return NextResponse.json({ success: true, sessionToken, member });
   } catch {
     return NextResponse.json({ success: false, error: 'Verification failed' }, { status: 500 });
   }
