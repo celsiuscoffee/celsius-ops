@@ -1,57 +1,75 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { POSProvider } from "@/lib/pos-context";
 
 /**
- * Register frame — locks the cashier-facing page to the SUNMI D3
- * main display's native resolution (15.6", 1920×1080) so desktop
- * previews match the device exactly.
+ * Register layout.
  *
- * Mirrors the customer-display frame at app/customer-display/layout.tsx
- * — same pattern, different dimensions. The page tree ALWAYS renders
- * at 1920×1080 device pixels; a CSS `transform: scale()` shrinks
- * the *visual* size to fit smaller viewports so a 13"/14" laptop
- * can still preview the full design proportionally without
- * clipping. On the SUNMI itself (1920×1080) the scale is 1 and
- * the frame fills the screen with no surround.
+ * Two render modes:
  *
- * The companion `.pos-frame .h-screen` rule in globals.css remaps
- * `h-screen` (100vh) inside the frame to `h-full` (= 1080px) so
- * the existing page tree resolves heights against the frame
- * instead of the actual viewport.
+ *  • DEVICE (Capacitor native app on the SUNMI, or any real
+ *    register screen): full-bleed. The page fills the actual
+ *    viewport with NO fixed-size frame and NO transform. This is
+ *    critical — wrapping the tree in a 1920×1080 box and applying
+ *    `transform: scale()` on the SUNMI's Rockchip GPU caused heavy
+ *    lag AND mis-sized the UI when the WebView viewport wasn't
+ *    exactly 1920×1080 (status/nav bars, density). On the device
+ *    we want the page to simply be responsive to whatever the
+ *    WebView gives us.
  *
- * `overflow: hidden` on the frame catches overflow bugs at design
- * time — if a panel doesn't fit in the SUNMI display, it won't
- * fit here either, and you'll see the clipping immediately.
+ *  • DESKTOP PREVIEW (regular browser): the 1920×1080 frame +
+ *    scale-to-fit, so we can eyeball the SUNMI layout on a laptop.
+ *    Purely a design aid; never reaches the device.
+ *
+ * Detection: `window.Capacitor?.isNativePlatform()`. We default to
+ * full-bleed (the safe, fast path) and only switch ON the frame
+ * once we've confirmed we're in a non-native browser — so the
+ * device never even briefly mounts the expensive transform.
  */
 export default function RegisterLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // "full" = device / full-bleed (default). "frame" = desktop preview.
+  const [mode, setMode] = useState<"full" | "frame">("full");
   const surroundRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const isNative =
+      typeof window !== "undefined" &&
+      typeof (window as any)?.Capacitor?.isNativePlatform === "function" &&
+      (window as any).Capacitor.isNativePlatform();
+    // Only a non-native desktop browser gets the preview frame.
+    if (!isNative) setMode("frame");
+  }, []);
+
+  // Scale-to-fit only runs in preview (frame) mode.
+  useEffect(() => {
+    if (mode !== "frame") return;
     const surround = surroundRef.current;
     if (!surround) return;
-
-    // Recompute the scale factor whenever the surround resizes.
-    // min(...) so we fit both dimensions; cap at 1 so we never
-    // UPSCALE past native res (would just look fuzzy).
     const apply = () => {
       const w = surround.clientWidth;
       const h = surround.clientHeight;
       const scale = Math.min(w / 1920, h / 1080, 1);
       surround.style.setProperty("--pos-scale", String(scale));
     };
-
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(surround);
     return () => ro.disconnect();
-  }, []);
+  }, [mode]);
 
+  // Device / full-bleed: render the page directly against the real
+  // viewport. No frame, no transform — fixes both the lag and the
+  // size mismatch on the SUNMI.
+  if (mode === "full") {
+    return <POSProvider>{children}</POSProvider>;
+  }
+
+  // Desktop preview: fixed SUNMI-resolution frame, scaled to fit.
   return (
     <POSProvider>
       <div
@@ -70,7 +88,6 @@ export default function RegisterLayout({
         <div
           className="pos-frame"
           style={{
-            // SUNMI D3 main display native resolution.
             width: 1920,
             height: 1080,
             overflow: "hidden",
