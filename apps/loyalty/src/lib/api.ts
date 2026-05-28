@@ -115,20 +115,32 @@ export async function createMember(data: {
   brand_id?: string;
   outlet_id?: string;
 }): Promise<MemberWithBrand | null> {
-  try {
-    const res = await fetch("/api/members", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ brand_id: "brand-celsius", ...data }),
-    });
-    await handleAuthResponse(res);
-    if (!res.ok) return null;
-    return res.json();
-  } catch (err) {
-    if (err instanceof SessionExpiredError) throw err;
-    return null;
+  const body = JSON.stringify({ brand_id: "brand-celsius", ...data });
+  // Registration runs on shop tablets over flaky mobile networks, and this
+  // POST is a cross-region write with several round-trips — the request most
+  // likely to drop mid-flight. A single blip used to surface as a hard
+  // "Failed to register member" to the cashier, so retry transient failures
+  // (thrown fetch or 5xx) with a short backoff. The endpoint is idempotent,
+  // so re-sending after a lost response returns the existing member.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 400 * attempt));
+    try {
+      const res = await fetch("/api/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body,
+      });
+      await handleAuthResponse(res);
+      if (res.ok) return res.json();
+      if (res.status >= 500) continue; // server-side error — worth retrying
+      return null; // 4xx — retrying won't change the outcome
+    } catch (err) {
+      if (err instanceof SessionExpiredError) throw err;
+      // network/transport error — fall through and retry
+    }
   }
+  return null;
 }
 
 // ─── Member Profile (customer self-service) ──────────

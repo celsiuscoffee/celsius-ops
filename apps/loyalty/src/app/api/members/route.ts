@@ -211,11 +211,15 @@ export async function POST(request: NextRequest) {
     const existing = existingList && existingList.length > 0 ? existingList[0] : null;
 
     let memberId: string;
+    let brandAlreadyEnrolled = false;
 
     if (existing) {
       memberId = existing.id;
 
-      // Check if they already have a member_brands record for this brand
+      // Already enrolled in this brand? Treat registration as idempotent.
+      // A retried request — e.g. after a dropped response on a flaky shop
+      // network — should return the existing member, not fail with a 409
+      // that the cashier sees as "Failed to register member".
       const { data: existingBrand } = await supabaseAdmin
         .from('member_brands')
         .select('id')
@@ -223,12 +227,7 @@ export async function POST(request: NextRequest) {
         .eq('brand_id', brand_id)
         .maybeSingle();
 
-      if (existingBrand) {
-        return NextResponse.json(
-          { error: 'Member already exists for this brand' },
-          { status: 409 }
-        );
-      }
+      if (existingBrand) brandAlreadyEnrolled = true;
     } else {
       // Create new member
       const newId = `member-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -255,32 +254,32 @@ export async function POST(request: NextRequest) {
       memberId = newMember.id;
     }
 
-    // Create member_brands record with 0 points
-    const mbId = `mb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const { data: memberBrand, error: mbError } = await supabaseAdmin
-      .from('member_brands')
-      .insert({
-        id: mbId,
-        member_id: memberId,
-        brand_id,
-        points_balance: 0,
-        total_points_earned: 0,
-        total_points_redeemed: 0,
-        total_visits: 0,
-        total_spent: 0,
-      })
-      .select()
-      .single();
+    // Create member_brands record with 0 points (skip if already enrolled)
+    if (!brandAlreadyEnrolled) {
+      const mbId = `mb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const { error: mbError } = await supabaseAdmin
+        .from('member_brands')
+        .insert({
+          id: mbId,
+          member_id: memberId,
+          brand_id,
+          points_balance: 0,
+          total_points_earned: 0,
+          total_points_redeemed: 0,
+          total_visits: 0,
+          total_spent: 0,
+        });
 
-    if (mbError) {
-      return NextResponse.json({ error: mbError.message }, { status: 500 });
+      if (mbError) {
+        return NextResponse.json({ error: mbError.message }, { status: 500 });
+      }
     }
 
     // Auto-issue new member rewards — gated to pickup_app signups so
     // members created via POS / backoffice / direct admin don't get
     // a freebie. The pickup app passes source: "pickup_app" through
     // the order-app's /api/loyalty/otp/verify and /register proxies.
-    const isPickupAppSignup = source === 'pickup_app';
+    const isPickupAppSignup = source === 'pickup_app' && !brandAlreadyEnrolled;
     try {
       const { data: newMemberRewards } = isPickupAppSignup
         ? await supabaseAdmin
@@ -340,7 +339,7 @@ export async function POST(request: NextRequest) {
         : fullMember.brand_data,
     };
 
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json(result, { status: brandAlreadyEnrolled ? 200 : 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[members POST] Error:', message, err);
