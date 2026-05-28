@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { Text, TextInput, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import * as SystemUI from "expo-system-ui";
+import * as NavigationBar from "expo-navigation-bar";
 import { useKeepAwake } from "expo-keep-awake";
 import { useFonts } from "expo-font";
 import {
@@ -52,6 +53,15 @@ export default function RootLayout() {
     SpaceGrotesk_600SemiBold,
     SpaceGrotesk_700Bold,
   });
+
+  // Kiosk: hide the Android navigation bar so the POS owns the full
+  // screen (the SUNMI taskbar + nav buttons otherwise eat the bottom
+  // ~90px and clip the keypad). overlay-swipe lets staff swipe it back
+  // temporarily if they ever need Android, then it auto-hides.
+  useEffect(() => {
+    NavigationBar.setVisibilityAsync("hidden").catch(() => {});
+    NavigationBar.setBehaviorAsync("overlay-swipe").catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded) {
