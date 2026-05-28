@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Trash2, Plus, Minus, Gift, X } from "lucide-react";
+import { ArrowLeft, Trash2, Plus, Minus, Gift, X, Coffee, ChevronRight } from "lucide-react";
+
+type BestSeller = {
+  id: string;
+  name: string;
+  basePrice: number;
+  image: string;
+};
 
 type CartItem = {
   cartId: string;
@@ -84,7 +91,7 @@ function writeCart(items: CartItem[]) {
   }
 }
 
-export function CartView() {
+export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [outletName, setOutletName] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
@@ -132,15 +139,100 @@ export function CartView() {
   if (items.length === 0) {
     return (
       <CartShell outletName={outletName}>
-        <div className="p-8 text-center">
-          <p className="text-sm text-[#8E8E93]">Your cart is empty.</p>
-          <Link
-            href="/menu"
-            className="mt-4 inline-block rounded-full bg-[#A2492C] text-white px-5 py-3 font-bold active:opacity-80"
-          >
-            Browse menu →
-          </Link>
+        {/* Empty cart sells, not just says "empty" — espresso hero +
+            best-seller carousel, matching apps/pickup-native/app
+            /cart.tsx:121-245. */}
+        <div
+          className="mx-4 mt-4 overflow-hidden"
+          style={{
+            backgroundColor: "#160800",
+            borderRadius: 16,
+            boxShadow: "0 6px 14px rgba(22,8,0,0.18)",
+          }}
+        >
+          <div style={{ paddingLeft: 20, paddingRight: 20, paddingTop: 24, paddingBottom: 24 }}>
+            <span
+              className="flex items-center justify-center"
+              style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "#A2492C", marginBottom: 12 }}
+            >
+              <Coffee size={24} color="#FFFFFF" strokeWidth={2} />
+            </span>
+            <p
+              className="uppercase"
+              style={{ color: "#FBBF24", fontSize: 10, fontWeight: 700, letterSpacing: 2 }}
+            >
+              Cart&apos;s feeling thirsty
+            </p>
+            <p className="font-peachi font-bold" style={{ color: "#FFFFFF", fontSize: 24, marginTop: 4 }}>
+              Let&apos;s brew something
+            </p>
+            <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 6, fontWeight: 500 }}>
+              Tap a favourite below or browse the full menu.
+            </p>
+            <Link
+              href="/menu"
+              className="inline-flex items-center gap-1 rounded-full active:opacity-80"
+              style={{ backgroundColor: "#FFFFFF", marginTop: 16, paddingLeft: 20, paddingRight: 20, paddingTop: 10, paddingBottom: 10 }}
+            >
+              <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 13 }}>
+                See what&apos;s brewing
+              </span>
+              <ChevronRight size={14} color="#1A0200" />
+            </Link>
+          </div>
         </div>
+
+        {bestSellers.length > 0 ? (
+          <div className="mt-6">
+            <p
+              className="uppercase px-4 mb-2"
+              style={{ color: "#1A0200", fontSize: 14, fontWeight: 700, letterSpacing: 1.5 }}
+            >
+              Start with these
+            </p>
+            <div
+              className="flex gap-3 px-4 overflow-x-auto pb-1"
+              style={{ scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}
+            >
+              {bestSellers.map((p) => (
+                <Link
+                  key={p.id}
+                  href={`/product/${p.id}`}
+                  className="flex-shrink-0 bg-white overflow-hidden active:opacity-70"
+                  style={{
+                    width: 160,
+                    borderRadius: 16,
+                    border: "1px solid rgba(26,2,0,0.10)",
+                    boxShadow: "0 3px 8px rgba(0,0,0,0.06)",
+                    scrollSnapAlign: "start",
+                  }}
+                >
+                  <div className="relative bg-[#F2EDE5]" style={{ width: 160, height: 200 }}>
+                    {p.image ? (
+                      <Image src={p.image} alt={p.name} fill sizes="160px" className="object-cover" />
+                    ) : null}
+                  </div>
+                  <div style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 10, paddingBottom: 10 }}>
+                    <p className="font-peachi font-bold truncate" style={{ color: "#1A0200", fontSize: 13 }}>
+                      {p.name}
+                    </p>
+                    <div className="flex items-center justify-between" style={{ marginTop: 4 }}>
+                      <span className="font-peachi font-bold" style={{ color: "#A2492C", fontSize: 14 }}>
+                        RM{p.basePrice.toFixed(2)}
+                      </span>
+                      <span
+                        className="rounded-full flex items-center justify-center"
+                        style={{ width: 24, height: 24, backgroundColor: "#160800" }}
+                      >
+                        <ChevronRight size={14} color="#FFFFFF" />
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </CartShell>
     );
   }
