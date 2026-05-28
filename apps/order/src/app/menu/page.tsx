@@ -1,6 +1,4 @@
-import Image from "next/image";
-import Link from "next/link";
-import { ArrowLeft, ShoppingCart, Plus, Star, Coffee, Leaf, Cake, Cookie, Sandwich, Candy, CupSoda, Cherry, Sparkles, Croissant, Wheat, UtensilsCrossed, Utensils, FlaskConical } from "lucide-react";
+import { Plus, Star, Coffee, Leaf, Cake, Cookie, Sandwich, Candy, CupSoda, Cherry, Sparkles, Croissant, Wheat, UtensilsCrossed, Utensils, FlaskConical } from "lucide-react";
 import { getMenuData } from "@/lib/menu-data";
 import { GlobalCartPill } from "../_GlobalCartPill";
 import { BottomNav } from "../_BottomNav";
@@ -78,46 +76,23 @@ export default async function MenuPage() {
   return (
     <main className="bg-white text-[#160800] pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
       <OutletGate />
-      <Header />
-      <OutletPickerRow />
-      <ReservedVoucherBanner />
-      {/* Pass the complete (visible) product set too so MenuColumns
-          can resolve the customer's recent-item IDs (fetched client-
-          side via /api/loyalty/recent-items) back to full Product
-          records — same hydration the SPA's menu does for its
-          "Usual" pill. */}
+      {/* MenuColumns owns the sticky header (with the search toggle),
+          so the outlet picker + reserved-voucher banner are passed in
+          as children to render directly beneath it. */}
       <MenuColumns
         sections={sections}
         allProducts={menu.products.filter(
           (p) => p.isAvailable && !HIDDEN_CATEGORIES.has(p.categoryId),
         )}
-      />
+      >
+        <OutletPickerRow />
+        <ReservedVoucherBanner />
+      </MenuColumns>
       <GlobalCartPill />
       <BottomNav active="menu" />
     </main>
   );
 }
-
-function Header() {
-  return (
-    <header
-      className="bg-[#160800] text-white px-4 pb-3 flex items-center gap-3 sticky top-0 z-10"
-      style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
-    >
-      <Link href="/" className="-ml-1 p-1 active:opacity-60" aria-label="Back to home">
-        <ArrowLeft size={20} color="#FFFFFF" />
-      </Link>
-      <h1 className="flex-1 font-peachi font-bold text-[22px] truncate">Pickup</h1>
-      <Link href="/cart" className="p-1 active:opacity-60" aria-label="Cart">
-        <ShoppingCart size={20} color="rgba(255,255,255,0.85)" />
-      </Link>
-    </header>
-  );
-}
-
-// OutletPickerRow moved to ./_OutletPickerRow so it can read the
-// chosen outlet from localStorage and show its name (was a static
-// "Select outlet" placeholder here).
 
 // Re-export icon components for the client _MenuColumns to use without
 // pulling lucide-react itself (so the client bundle is leaner). Not
