@@ -118,7 +118,51 @@ export function CheckoutView() {
       ),
     [reward, state, subtotal],
   );
-  const grandTotal = Math.max(0, subtotal - rewardDiscount);
+  const rewardDiscountSen = Math.round(rewardDiscount * 100);
+
+  // Server price preview — promo-engine discounts + SST + final total,
+  // computed by /api/checkout/quote with the SAME math the order is
+  // created with, so the breakdown matches the amount charged.
+  const [quote, setQuote] = useState<{
+    promoLines: Array<{ name: string; amountSen: number }>;
+    promoDiscountSen: number;
+    firstOrderDiscountSen: number;
+    sstSen: number;
+    totalSen: number;
+    pointsToEarn: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const cartItems = state?.cart ?? [];
+    if (cartItems.length === 0) {
+      setQuote(null);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/checkout/quote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: cartItems.map((i) => ({ product: { id: i.productId }, quantity: i.quantity })),
+        storeId: state?.outletId ?? null,
+        loyaltyPhone: state?.phone ?? null,
+        loyaltyId: state?.loyaltyId ?? null,
+        rewardDiscountSen,
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setQuote(d);
+      })
+      .catch(() => !cancelled && setQuote(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [state, rewardDiscountSen]);
+
+  // Use the server quote's total when present; fall back to the
+  // client subtotal-minus-reward while it loads.
+  const grandTotal = quote ? quote.totalSen / 100 : Math.max(0, subtotal - rewardDiscount);
 
   if (!state) {
     return <div className="p-8 text-center text-[#8E8E93]">Loading…</div>;
@@ -410,6 +454,32 @@ export function CheckoutView() {
             </span>
           </div>
         ) : null}
+        {(quote?.promoLines ?? []).map((p, i) => (
+          <div key={i} className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+            <span className="text-[13px] truncate pr-2" style={{ color: "#A2492C" }}>
+              {p.name}
+            </span>
+            <span className="text-[14px]" style={{ color: "#A2492C", fontWeight: 500 }}>
+              −RM{(p.amountSen / 100).toFixed(2)}
+            </span>
+          </div>
+        ))}
+        {quote && quote.firstOrderDiscountSen > 0 ? (
+          <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+            <span className="text-[13px]" style={{ color: "#A2492C" }}>First-order discount</span>
+            <span className="text-[14px]" style={{ color: "#A2492C", fontWeight: 500 }}>
+              −RM{(quote.firstOrderDiscountSen / 100).toFixed(2)}
+            </span>
+          </div>
+        ) : null}
+        {quote && quote.sstSen > 0 ? (
+          <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+            <span className="text-[13px]" style={{ color: "#6B6B6B" }}>SST</span>
+            <span className="text-[14px]" style={{ color: "#1A0200", fontWeight: 500 }}>
+              RM{(quote.sstSen / 100).toFixed(2)}
+            </span>
+          </div>
+        ) : null}
         <div className="flex items-center justify-between pt-3 border-t border-[rgba(26,2,0,0.10)]">
           <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 15 }}>
             Total
@@ -427,7 +497,7 @@ export function CheckoutView() {
               className="text-[12px] font-bold"
               style={{ color: tier.tier_color ?? "#92400e" }}
             >
-              +{Math.round(grandTotal * (tier.tier_multiplier ?? 1))} pts
+              +{quote ? quote.pointsToEarn : Math.round(grandTotal * (tier.tier_multiplier ?? 1))} pts
             </span>
           </div>
         ) : null}
