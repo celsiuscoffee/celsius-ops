@@ -174,6 +174,21 @@ export function CheckoutView() {
       if (!res.ok) {
         throw new Error(data.error ?? "Failed to start payment");
       }
+      // Order now exists server-side (pending). Clear the cart + applied
+      // reward so a back-nav or re-open of checkout can't re-submit the
+      // same basket — any retry happens from the order page via the
+      // existing orderId. Mirrors native's clearCart() after placeOrder.
+      try {
+        const raw = window.localStorage.getItem("celsius-pickup");
+        const parsed = raw ? JSON.parse(raw) : { state: {} };
+        const s = parsed.state ?? {};
+        s.cart = [];
+        s.appliedReward = null;
+        s.reservedVoucher = null;
+        window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state: s }));
+      } catch {
+        /* ignore */
+      }
       // Stripe path → confirm via PaymentIntent (TODO: integrate Stripe.js).
       // RM path / hosted-page path → redirect.
       if (data.paymentUrl) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Gift, Sparkles, Coffee, Tag, Cookie, Ticket } from "lucide-react";
 import { BeansHero } from "./_BeansHero";
 import { ActiveChallenges } from "./_ActiveChallenges";
@@ -18,8 +19,51 @@ type Reward = {
   id: string;
   name: string;
   description?: string;
-  beans_cost?: number;
+  points_required?: number;
+  discount_type?:
+    | "flat" | "percent" | "free_item" | "bogo" | "fixed_amount" | "percentage" | "none" | null;
+  discount_value?: number | null;
+  min_order_value?: number | null;
+  applicable_products?: string[] | null;
+  applicable_categories?: string[] | null;
+  free_product_name?: string | null;
+  bogo_buy_qty?: number;
+  bogo_free_qty?: number;
 };
+
+// Write the chosen catalog reward into the SPA's persisted state as the
+// applied reward + reserved-voucher banner, then send the customer to
+// the menu — same flow as apps/pickup-native/app/rewards.tsx useCatalog.
+function applyCatalogReward(r: Reward) {
+  try {
+    const raw = window.localStorage.getItem("celsius-pickup");
+    const parsed = raw ? JSON.parse(raw) : { state: {} };
+    const state = parsed.state ?? {};
+    state.appliedReward = {
+      id: r.id,
+      name: r.name,
+      points_required: r.points_required ?? 0,
+      discount_type: r.discount_type ?? null,
+      discount_value: r.discount_value ?? null,
+      applicable_categories: r.applicable_categories ?? null,
+      applicable_products: r.applicable_products ?? null,
+      free_product_name: r.free_product_name ?? null,
+      min_order_value: r.min_order_value ?? null,
+      bogo_buy_qty: r.bogo_buy_qty,
+      bogo_free_qty: r.bogo_free_qty,
+    };
+    state.reservedVoucher = {
+      id: r.id,
+      title: r.name,
+      category: "bean",
+      icon: "ticket",
+      expires_at: null,
+    };
+    window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state }));
+  } catch {
+    /* ignore */
+  }
+}
 
 export function RewardsView() {
   const [phone, setPhone] = useState<string | null>(null);
@@ -189,7 +233,8 @@ function themeFor(reward: Reward): {
 }
 
 function CatalogCard({ reward, balance }: { reward: Reward; balance: number }) {
-  const required = reward.beans_cost ?? 0;
+  const router = useRouter();
+  const required = reward.points_required ?? 0;
   const canUse = balance >= required;
   const theme = themeFor(reward);
   const Icon = theme.Icon;
@@ -244,8 +289,15 @@ function CatalogCard({ reward, balance }: { reward: Reward; balance: number }) {
               : `${(required - balance).toLocaleString()} beans to go`}
           </p>
         </div>
-        <span
-          className="rounded-full flex items-center justify-center flex-shrink-0"
+        <button
+          type="button"
+          disabled={!canUse}
+          onClick={() => {
+            if (!canUse) return;
+            applyCatalogReward(reward);
+            router.push("/menu");
+          }}
+          className="rounded-full flex items-center justify-center flex-shrink-0 active:opacity-80"
           style={{
             backgroundColor: canUse ? theme.accent : "rgba(0,0,0,0.10)",
             color: canUse ? "#FFFFFF" : theme.fgDim,
@@ -259,7 +311,7 @@ function CatalogCard({ reward, balance }: { reward: Reward; balance: number }) {
           }}
         >
           {canUse ? "Use" : `${required}`}
-        </span>
+        </button>
       </div>
     </li>
   );
