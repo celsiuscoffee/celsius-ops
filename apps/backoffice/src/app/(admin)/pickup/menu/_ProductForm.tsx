@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, Loader2, X, ImagePlus, ZoomIn, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Loader2, X, ImagePlus, ZoomIn } from "lucide-react";
 import { toast } from "@celsius/ui";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { ModifierGroupsEditor, type ModifierGroup } from "./_ModifierGroupsEditor";
@@ -40,9 +40,6 @@ export interface DbProduct {
 }
 
 export interface Category { id: string; name: string; slug: string; position?: number }
-
-interface Ingredient { id: string; name: string; sku: string; baseUom: string; itemType: string }
-interface RecipeRow { ingredient_id: string; quantity_used: number | string; uom: string }
 
 function emptyForm(categories: Category[]) {
   return {
@@ -120,51 +117,6 @@ export function ProductForm({ product, categories }: Props) {
   const [previewZoom, setPreviewZoom] = useState(form.image_zoom);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ─── Recipe / Bill of Materials ──────────────────────────
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [recipe, setRecipe] = useState<RecipeRow[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await adminFetch("/api/pickup/ingredients");
-        const json = (await res.json()) as { ingredients?: Ingredient[] };
-        if (!cancelled) setIngredients(json.ingredients ?? []);
-      } catch { /* picker just stays empty */ }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    if (!product) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await adminFetch(`/api/pickup/products/${product.id}/recipe`);
-        const json = (await res.json()) as { items?: RecipeRow[] };
-        if (!cancelled) setRecipe(json.items ?? []);
-      } catch { /* leave recipe empty */ }
-    })();
-    return () => { cancelled = true; };
-  }, [product]);
-
-  function addRecipeRow() {
-    setRecipe((rows) => [...rows, { ingredient_id: "", quantity_used: "", uom: "" }]);
-  }
-  function removeRecipeRow(idx: number) {
-    setRecipe((rows) => rows.filter((_, i) => i !== idx));
-  }
-  function setRecipeIngredient(idx: number, ingredientId: string) {
-    const ing = ingredients.find((i) => i.id === ingredientId);
-    setRecipe((rows) =>
-      rows.map((r, i) => (i === idx ? { ...r, ingredient_id: ingredientId, uom: ing?.baseUom ?? r.uom } : r)),
-    );
-  }
-  function setRecipeQty(idx: number, qty: string) {
-    setRecipe((rows) => rows.map((r, i) => (i === idx ? { ...r, quantity_used: qty } : r)));
-  }
-
   async function handleImageUpload(file: File) {
     setUploading(true);
     try {
@@ -204,7 +156,6 @@ export function ProductForm({ product, categories }: Props) {
     };
 
     try {
-      let savedId = product?.id ?? "";
       if (isEditing && product) {
         const res = await adminFetch(`/api/pickup/products/${product.id}`, {
           method: "PATCH",
@@ -212,7 +163,7 @@ export function ProductForm({ product, categories }: Props) {
           body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error("Save failed");
-        savedId = product.id;
+        toast.success("Product saved");
       } else {
         const res = await adminFetch("/api/pickup/products", {
           method: "POST",
@@ -220,33 +171,8 @@ export function ProductForm({ product, categories }: Props) {
           body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error("Create failed");
-        const created = (await res.json()) as { id?: string };
-        savedId = created.id ?? "";
+        toast.success("Product created");
       }
-
-      // Persist the recipe (BOM). Product save already succeeded, so a recipe
-      // failure is surfaced but doesn't roll the product back.
-      if (savedId) {
-        const items = recipe
-          .filter((r) => r.ingredient_id && Number(r.quantity_used) > 0)
-          .map((r) => ({
-            ingredient_id: r.ingredient_id,
-            quantity_used: Number(r.quantity_used),
-            uom: r.uom || "unit",
-          }));
-        const rr = await adminFetch(`/api/pickup/products/${savedId}/recipe`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items }),
-        });
-        if (!rr.ok) {
-          toast.error("Product saved, but recipe failed to save");
-          setSaving(false);
-          return;
-        }
-      }
-
-      toast.success(isEditing ? "Product saved" : "Product created");
       router.push("/pickup/menu");
       router.refresh();
     } catch (err) {
@@ -621,65 +547,6 @@ export function ProductForm({ product, categories }: Props) {
             value={form.modifiers}
             onChange={(modifiers) => setForm((f) => ({ ...f, modifiers }))}
           />
-        </div>
-
-        {/* Recipe / Bill of Materials — drives POS inventory depletion.
-            Each row consumes `quantity_used` of an inventory ingredient
-            (in its base unit) per unit of this product sold. */}
-        <div className="border rounded-2xl p-4 bg-muted/10 space-y-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Recipe / Bill of materials</p>
-          <p className="text-[11px] text-muted-foreground -mt-2">
-            Inventory ingredients consumed per unit sold. Selling this product on the POS deducts these from stock; refunds and voids restore them. Quantities are in each ingredient&apos;s base unit.
-          </p>
-
-          <div className="space-y-2">
-            {recipe.length === 0 && (
-              <p className="text-[11px] text-muted-foreground italic">No ingredients yet — this product won&apos;t affect inventory when sold.</p>
-            )}
-            {recipe.map((row, idx) => {
-              const ing = ingredients.find((i) => i.id === row.ingredient_id);
-              return (
-                <div key={idx} className="flex items-center gap-2">
-                  <select
-                    value={row.ingredient_id}
-                    onChange={(e) => setRecipeIngredient(idx, e.target.value)}
-                    className="flex-1 border rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="">Select ingredient…</option>
-                    {ingredients.map((i) => (
-                      <option key={i.id} value={i.id}>{i.name}{i.sku ? ` (${i.sku})` : ""}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.0001"
-                    value={row.quantity_used}
-                    onChange={(e) => setRecipeQty(idx, e.target.value)}
-                    placeholder="Qty"
-                    className="w-24 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                  <span className="w-12 text-xs text-muted-foreground text-center">{ing?.baseUom ?? row.uom ?? ""}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeRecipeRow(idx)}
-                    title="Remove ingredient"
-                    className="flex items-center justify-center w-9 h-9 rounded-xl border hover:bg-muted/40 transition-colors text-muted-foreground"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          <button
-            type="button"
-            onClick={addRecipeRow}
-            className="flex items-center gap-2 text-sm font-medium text-[#160800] hover:underline"
-          >
-            <Plus className="h-4 w-4" /> Add ingredient
-          </button>
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-2 border-t">
