@@ -1,7 +1,7 @@
 // Mirror of apps/pickup-native/public/sw.js — overwritten on each
 // build-pwa run. v3 bumps over v2 to flush customers off the broken
 // CSS shipped in #157/#158 before this revert deployed.
-const CACHE = "celsius-v24";
+const CACHE = "celsius-v26";
 const SHELL = ["/", "/index.html", "/manifest.json"];
 
 self.addEventListener("install", (e) => {

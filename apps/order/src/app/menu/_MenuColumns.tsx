@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Star, Coffee, Leaf, Cake, Cookie, Sandwich, Candy, CupSoda, Cherry,
   Sparkles, Croissant, Wheat, UtensilsCrossed, Utensils, FlaskConical, Plus,
-  Search, X, Heart,
+  Search, X, Heart, ArrowLeft, ShoppingCart,
 } from "lucide-react";
 
 /**
@@ -55,11 +55,14 @@ const USUAL_ID = "__usual__";
 export function MenuColumns({
   sections: baseSections,
   allProducts,
+  children,
 }: {
   sections: Section[];
   allProducts: Product[];
+  children?: React.ReactNode;
 }) {
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [usual, setUsual] = useState<Product[]>([]);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const userClickedAtRef = useRef(0);
@@ -160,32 +163,74 @@ export function MenuColumns({
 
   return (
     <>
-      {/* Search bar — sits below the header + outlet picker, filters
-          products across every section. Empty → sidebar + sections; non-
-          empty → flat results list (sidebar hidden). */}
-      <div className="px-4 py-3 bg-white border-b border-[#EBE5DE]">
-        <div className="flex items-center gap-2 rounded-full bg-[#F7F4F0] px-3 py-2">
-          <Search size={16} color="#8E8E93" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search menu…"
-            className="flex-1 bg-transparent outline-none text-sm"
-            autoComplete="off"
-          />
-          {query ? (
+      {/* Sticky espresso header. Search is a toggle (matching
+          apps/pickup-native/app/menu.tsx:375-430): the title row shows
+          a Search icon + Cart; tapping Search swaps the whole bar into
+          an inline white-tinted field with a Cancel button. */}
+      <header
+        className="bg-[#160800] text-white px-4 pb-3 sticky top-0 z-10"
+        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+      >
+        {searchOpen ? (
+          <div className="flex items-center gap-3">
+            <div
+              className="flex-1 flex items-center gap-2 rounded-full px-3 py-2"
+              style={{ backgroundColor: "rgba(255,255,255,0.12)" }}
+            >
+              <Search size={16} color="rgba(255,255,255,0.7)" />
+              <input
+                type="search"
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search menu…"
+                className="flex-1 bg-transparent outline-none text-sm text-white placeholder:text-white/50"
+                autoComplete="off"
+              />
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="active:opacity-60"
+                  aria-label="Clear search"
+                >
+                  <X size={16} color="rgba(255,255,255,0.7)" />
+                </button>
+              ) : null}
+            </div>
             <button
               type="button"
-              onClick={() => setQuery("")}
-              className="active:opacity-60"
-              aria-label="Clear search"
+              onClick={() => {
+                setSearchOpen(false);
+                setQuery("");
+              }}
+              className="text-sm font-medium text-white active:opacity-60"
             >
-              <X size={16} color="#8E8E93" />
+              Cancel
             </button>
-          ) : null}
-        </div>
-      </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <Link href="/" className="-ml-1 p-1 active:opacity-60" aria-label="Back to home">
+              <ArrowLeft size={20} color="#FFFFFF" />
+            </Link>
+            <h1 className="flex-1 font-peachi font-bold text-[22px] truncate">Pickup</h1>
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              className="p-1 active:opacity-60"
+              aria-label="Search menu"
+            >
+              <Search size={20} color="rgba(255,255,255,0.85)" />
+            </button>
+            <Link href="/cart" className="p-1 active:opacity-60" aria-label="Cart">
+              <ShoppingCart size={20} color="rgba(255,255,255,0.85)" />
+            </Link>
+          </div>
+        )}
+      </header>
+
+      {children}
 
       {searchResults ? (
         <div className="px-3 pt-4">
