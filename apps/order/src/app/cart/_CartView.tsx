@@ -22,6 +22,7 @@ type CartItem = {
   quantity: number;
   totalPrice: number;
   modifiers?: Array<{ groupName?: string; label?: string; priceDelta?: number }>;
+  specialInstructions?: string;
 };
 
 type Persisted = {
@@ -278,7 +279,7 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
                 </Link>
                 <span
                   className="font-peachi font-bold flex-shrink-0"
-                  style={{ color: "#A2492C", fontSize: 14 }}
+                  style={{ color: "#B91C1C", fontSize: 14 }}
                 >
                   RM{item.totalPrice.toFixed(2)}
                 </span>
@@ -288,7 +289,15 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
                   className="line-clamp-1"
                   style={{ color: "#6B6B6B", fontSize: 12, marginTop: 2, fontWeight: 500 }}
                 >
-                  {item.modifiers.map((m) => m.label).filter(Boolean).join(", ")}
+                  {item.modifiers.map((m) => m.label).filter(Boolean).join(" · ")}
+                </p>
+              ) : null}
+              {item.specialInstructions ? (
+                <p
+                  className="line-clamp-1 italic"
+                  style={{ color: "#6B6B6B", fontSize: 12, marginTop: 1 }}
+                >
+                  &ldquo;{item.specialInstructions}&rdquo;
                 </p>
               ) : null}
               <div className="mt-auto pt-2 flex items-center gap-3">
@@ -426,7 +435,7 @@ function CartShell({
           ) : null}
           <h1
             className="text-[22px] truncate"
-            style={{ fontFamily: "Peachi-Bold, serif", letterSpacing: -0.3, fontWeight: 700 }}
+            style={{ fontFamily: "var(--font-display)", letterSpacing: -0.3, fontWeight: 700 }}
           >
             Your cart
           </h1>

@@ -130,7 +130,7 @@ export function OrdersView() {
       >
         <h1
           className="text-[22px]"
-          style={{ fontFamily: "Peachi-Bold, serif", letterSpacing: -0.3, fontWeight: 700 }}
+          style={{ fontFamily: "var(--font-display)", letterSpacing: -0.3, fontWeight: 700 }}
         >
           Orders
         </h1>
@@ -138,8 +138,8 @@ export function OrdersView() {
 
       {phone ? (
         <div className="flex border-b border-[#EBE5DE] px-4">
-          <TabButton on={tab === "active"} onClick={() => setTab("active")} label="Active" />
-          <TabButton on={tab === "past"} onClick={() => setTab("past")} label="Past" />
+          <TabButton on={tab === "active"} onClick={() => setTab("active")} label="In progress" />
+          <TabButton on={tab === "past"} onClick={() => setTab("past")} label="Past orders" />
         </div>
       ) : null}
 
@@ -330,7 +330,7 @@ function EmptyCTA({
       {icon}
       <p
         className="mt-4 text-base"
-        style={{ fontFamily: "Peachi-Bold, serif", fontWeight: 700 }}
+        style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}
       >
         {title}
       </p>
@@ -361,9 +361,9 @@ function TabButton({
       className="flex-1 py-3 active:opacity-60"
       aria-current={on ? "true" : undefined}
       style={{
-        color: on ? "#160800" : "#8E8E93",
+        color: on ? "#A2492C" : "#8E8E93",
         fontWeight: on ? 700 : 600,
-        borderBottom: on ? "2px solid #160800" : "2px solid transparent",
+        borderBottom: on ? "2px solid #A2492C" : "2px solid transparent",
         marginBottom: -1,
       }}
     >

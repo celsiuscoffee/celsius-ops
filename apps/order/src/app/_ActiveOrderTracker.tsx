@@ -24,7 +24,7 @@ function statusLabel(status: string): string {
   const s = (status ?? "").toLowerCase();
   if (s === "pending") return "Awaiting payment";
   if (s === "paid") return "Payment confirmed";
-  if (s === "preparing") return "Brewing";
+  if (s === "preparing") return "Being prepared";
   if (s === "ready") return "Ready for pickup";
   return s;
 }
