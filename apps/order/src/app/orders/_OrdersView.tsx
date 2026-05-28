@@ -2,7 +2,20 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ClipboardList, ChevronRight, CheckCircle2, XCircle, Coffee, Clock, MapPin } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ClipboardList, ChevronRight, CheckCircle2, XCircle, Coffee, Clock, MapPin, RefreshCw } from "lucide-react";
+
+type OrderItem = {
+  product_id?: string;
+  product_name: string;
+  quantity: number;
+  unit_price?: number; // sen
+  item_total?: number; // sen
+  modifiers?: {
+    selections?: Array<{ groupId?: string; groupName?: string; optionId?: string; label?: string; priceDelta?: number }>;
+    specialInstructions?: string;
+  } | null;
+};
 
 type Order = {
   id: string;
@@ -10,9 +23,43 @@ type Order = {
   status: string;
   total: number;
   created_at: string;
-  order_items?: Array<{ product_name: string; quantity: number }>;
+  order_items?: OrderItem[];
   store_name?: string | null;
 };
+
+// Rebuild cart lines from a past order's items and drop them into the
+// persisted cart, then send the customer to the cart. order_items carry
+// product_id, unit_price + item_total (sen) and the modifiers jsonb, so
+// the line reconstructs faithfully. Mirrors native's "Order again".
+function reorder(order: Order): boolean {
+  const items = order.order_items ?? [];
+  if (items.length === 0) return false;
+  try {
+    const raw = window.localStorage.getItem("celsius-pickup");
+    const parsed = raw ? JSON.parse(raw) : { state: {} };
+    const state = parsed.state ?? {};
+    state.cart = items.map((it, i) => ({
+      cartId: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      productId: it.product_id ?? "",
+      name: it.product_name,
+      basePrice: (it.unit_price ?? 0) / 100,
+      quantity: it.quantity,
+      totalPrice: (it.item_total ?? 0) / 100,
+      modifiers: (it.modifiers?.selections ?? []).map((s) => ({
+        groupId: s.groupId ?? "",
+        groupName: s.groupName ?? "",
+        optionId: s.optionId ?? "",
+        label: s.label ?? "",
+        priceDelta: s.priceDelta ?? 0,
+      })),
+      specialInstructions: it.modifiers?.specialInstructions,
+    }));
+    window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state }));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 type Persisted = { state?: { phone?: string | null; sessionToken?: string | null } };
 
@@ -142,6 +189,7 @@ export function OrdersView() {
 }
 
 function OrderRow({ order }: { order: Order }) {
+  const router = useRouter();
   const status = order.status.toLowerCase();
   const StatusIcon =
     status === "completed" || status === "ready"
@@ -241,8 +289,12 @@ function OrderRow({ order }: { order: Order }) {
           </span>
           <ChevronRight size={14} color="#160800" />
         </Link>
-        <Link
-          href="/menu"
+        <button
+          type="button"
+          onClick={() => {
+            if (reorder(order)) router.push("/cart");
+            else router.push("/menu");
+          }}
           className="flex-1 flex items-center justify-center gap-1 rounded-full active:opacity-80"
           style={{
             backgroundColor: "#1A0200",
@@ -250,10 +302,11 @@ function OrderRow({ order }: { order: Order }) {
             paddingBottom: 10,
           }}
         >
+          <RefreshCw size={13} color="#FFFFFF" strokeWidth={2.5} />
           <span className="font-peachi font-bold" style={{ color: "#FFFFFF", fontSize: 13 }}>
             Order again
           </span>
-        </Link>
+        </button>
       </div>
     </li>
   );

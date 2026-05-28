@@ -172,6 +172,11 @@ export function TierCarousel() {
           gap: GAP,
           paddingLeft: 16,
           paddingRight: 16,
+          // scroll-padding makes each snapped card respect the 16px
+          // gutter so it sits centred (16px each side) instead of
+          // flush-left — otherwise scroll-snap-align:start ignores the
+          // container padding for cards past the first.
+          scrollPaddingLeft: 16,
           scrollSnapType: "x mandatory",
           WebkitOverflowScrolling: "touch",
         }}
