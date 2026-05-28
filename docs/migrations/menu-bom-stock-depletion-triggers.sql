@@ -4,6 +4,7 @@
 --   drop_product_recipes_catalog_bom
 --   menu_bom_stock_depletion_triggers
 --   lock_down_pos_stock_trigger_functions
+--   pos_stock_triggers_never_block_writes  (exception guards, below)
 --
 -- Replaces the earlier catalog-keyed product_recipes BOM. Depletion now reads
 -- the maintained MenuIngredient BOM and runs entirely in the database via
@@ -24,6 +25,10 @@
 --     no-op, a restore seeds a base row.
 --   * Outlet bridge: pos_orders.outlet_id is the loyalty id, mapped to the
 --     inventory Outlet via Outlet.loyaltyOutletId (fallback Outlet.id).
+--   * Best-effort: both trigger functions swallow any error (logged as a
+--     warning) so a stock hiccup can never roll back the order write. These
+--     are AFTER-row triggers, so an unhandled exception would otherwise abort
+--     the sale / webhook ingestion.
 
 -- ── 1. Drop the superseded catalog BOM table ────────────────────────────────
 drop table if exists public.product_recipes cascade;
@@ -121,6 +126,10 @@ begin
   end if;
   perform public.pos_apply_item_stock(NEW.product_id, NEW.product_name, v_outlet_ref, NEW.quantity);
   return NEW;
+exception when others then
+  raise warning 'pos_order_items_stock_ins: depletion skipped for item % (order %): %',
+    NEW.id, NEW.order_id, sqlerrm;
+  return NEW;
 end;
 $$;
 
@@ -147,6 +156,9 @@ begin
       perform public.pos_apply_item_stock(it.product_id, it.product_name, NEW.outlet_id, -it.quantity);
     end loop;
   end if;
+  return NEW;
+exception when others then
+  raise warning 'pos_orders_cancel_restore: restore skipped for order %: %', NEW.id, sqlerrm;
   return NEW;
 end;
 $$;
