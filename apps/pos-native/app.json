@@ -14,7 +14,7 @@
       "backgroundColor": "#160800"
     },
     "android": {
-      "package": "com.celsius.pos.native",
+      "package": "com.celsiuscoffee.pos",
       "versionCode": 1,
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "pan",
