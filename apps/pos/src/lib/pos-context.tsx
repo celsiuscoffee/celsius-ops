@@ -153,6 +153,7 @@ type POSContextType = {
     rewardId?: string | null;
     rewardName?: string | null;
     rewardDiscount?: number;
+    loyaltyVoucherId?: string | null;
   }) => Promise<DBOrder>;
   voidOrder: (orderId: string, reason: string) => Promise<void>;
 
@@ -412,6 +413,7 @@ export function POSProvider({ children }: { children: ReactNode }) {
     rewardId?: string | null;
     rewardName?: string | null;
     rewardDiscount?: number;
+    loyaltyVoucherId?: string | null;
   }) => {
     if (!outlet || !register || !currentShift || !staff) throw new Error("No active session");
 
@@ -445,6 +447,7 @@ export function POSProvider({ children }: { children: ReactNode }) {
       reward_id: params.rewardId ?? null,
       reward_name: params.rewardName ?? null,
       reward_discount_amount: params.rewardDiscount ?? 0,
+      loyalty_voucher_id: params.loyaltyVoucherId ?? null,
       notes: params.notes,
     });
 

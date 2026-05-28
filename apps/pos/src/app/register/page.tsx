@@ -908,6 +908,9 @@ export default function RegisterPage() {
         rewardId: rewardRedemptionId,
         rewardName,
         rewardDiscount,
+        // Persist the burned wallet-voucher id so a refund can re-activate it
+        // (the /mark-used burn below otherwise leaves no link on the order).
+        loyaltyVoucherId: appliedVoucherId,
       });
 
       // ── Loyalty post-processing — TRULY fire-and-forget ────

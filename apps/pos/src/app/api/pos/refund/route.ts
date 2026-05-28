@@ -83,6 +83,7 @@ interface OriginalOrderRow {
   reward_id: string | null;
   voucher_code: string | null;
   refund_of_order_id: string | null;
+  loyalty_voucher_id: string | null;
 }
 
 export async function POST(req: NextRequest) {
@@ -149,7 +150,7 @@ export async function POST(req: NextRequest) {
     const { data: original, error: origErr } = await supabase
       .from("pos_orders")
       .select(
-        "id, order_number, outlet_id, register_id, shift_id, employee_id, source, order_type, table_number, queue_number, subtotal, sst_amount, service_charge, discount_amount, promo_discount, rounding_amount, total, customer_phone, customer_name, loyalty_phone, loyalty_points_earned, reward_id, voucher_code, refund_of_order_id",
+        "id, order_number, outlet_id, register_id, shift_id, employee_id, source, order_type, table_number, queue_number, subtotal, sst_amount, service_charge, discount_amount, promo_discount, rounding_amount, total, customer_phone, customer_name, loyalty_phone, loyalty_points_earned, reward_id, voucher_code, refund_of_order_id, loyalty_voucher_id",
       )
       .eq("id", original_order_id)
       .maybeSingle();
@@ -445,14 +446,24 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // 8b. Reward-voucher / Spend-Beans redemption reversal is not wired
-        // yet: the POS order doesn't persist the issued_rewards id of a
-        // burned voucher, so the redeemed reward can't be safely
-        // re-activated from here. Flagged for a follow-up that threads the
-        // voucher/redemption id onto the order.
-        if (orig.reward_id && orig.loyalty_phone) {
+        // 8b. Re-activate a burned wallet voucher. A voucher is single-use
+        // across the whole order, so we only restore it on a FULL refund —
+        // a partial refund still delivered value, so the voucher stays spent.
+        if (fullyRefunded && orig.loyalty_voucher_id) {
+          await supabase
+            .from("issued_rewards")
+            .update({ status: "active", redeemed_at: null })
+            .eq("id", orig.loyalty_voucher_id)
+            .eq("status", "used");
+        }
+
+        // 8c. Spend-Beans point redemptions (points spent for a discount via
+        // /api/loyalty/redeem) are not reversed here: that flow records no
+        // link from the order back to the redemption, so the spent points
+        // can't be safely re-credited. Flagged for a follow-up.
+        if (orig.reward_id && orig.loyalty_phone && !orig.loyalty_voucher_id) {
           console.warn(
-            "[refund] reward/voucher reversal not yet implemented — manual restore for reward_id=",
+            "[refund] spend-beans redemption reversal not implemented — manual restore for reward_id=",
             orig.reward_id,
           );
         }

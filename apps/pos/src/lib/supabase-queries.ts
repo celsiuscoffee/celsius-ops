@@ -182,6 +182,7 @@ export async function createOrder(order: {
   reward_name?: string | null;
   reward_discount_amount?: number;
   loyalty_points_earned?: number;
+  loyalty_voucher_id?: string | null;
   notes?: string | null;
 }) {
   const { data, error } = await supabase
