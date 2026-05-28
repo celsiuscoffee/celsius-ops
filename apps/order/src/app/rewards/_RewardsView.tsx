@@ -310,7 +310,7 @@ function CatalogCard({ reward, balance }: { reward: Reward; balance: number }) {
             fontSize: 12,
           }}
         >
-          {canUse ? "Use" : `${required}`}
+          {canUse ? `Use · ${required.toLocaleString()}` : `${required.toLocaleString()}`}
         </button>
       </div>
     </li>

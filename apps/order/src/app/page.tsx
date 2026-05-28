@@ -193,16 +193,6 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* Primary CTA */}
-      <div className="mt-6 mx-4">
-        <Link
-          href="/menu"
-          className="block w-full rounded-full bg-[#A2492C] text-white text-center py-4 font-peachi font-bold active:opacity-80"
-        >
-          Open the menu →
-        </Link>
-      </div>
-
       <GlobalCartPill />
       <BottomNav active="home" />
     </main>
