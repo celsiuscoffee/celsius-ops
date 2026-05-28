@@ -1,18 +1,25 @@
-import { useMemo, useState } from "react";
-import { View, Text, Pressable, FlatList, ActivityIndicator, Image, ScrollView } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { View, Text, Pressable, FlatList, ActivityIndicator, Image, ScrollView, Modal } from "react-native";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Minus, Trash2, LogOut } from "lucide-react-native";
+import { Plus, Minus, LogOut, Banknote, CreditCard, QrCode, X, CheckCircle2 } from "lucide-react-native";
 import { usePos } from "@/lib/store";
 import { fetchCategories, fetchProducts, type Product } from "@/lib/menu";
 import { useCart, cartSubtotal } from "@/lib/cart";
+import { useDisplay } from "@/lib/display";
+import { createSale } from "@/lib/checkout";
 
 const rm = (sen: number) => `RM ${(sen / 100).toFixed(2)}`;
 
 export default function Register() {
   const { staff, outletId, signOut } = usePos();
   const [activeCat, setActiveCat] = useState<string>("all");
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [paid, setPaid] = useState<{ orderNumber: string; total: number } | null>(null);
+  const setDisplayStatus = useDisplay((s) => s.setStatus);
+  const setOrderNumber = useDisplay((s) => s.setOrderNumber);
 
   const cats = useQuery({ queryKey: ["pos-categories"], queryFn: fetchCategories });
   const prods = useQuery({ queryKey: ["pos-products"], queryFn: fetchProducts });
@@ -37,11 +44,45 @@ export default function Register() {
 
   const subtotal = cartSubtotal(lines);
 
+  // Mirror cart state to the customer-display: ordering while a cart is
+  // open, idle when empty (unless we're showing a paid confirmation).
+  useEffect(() => {
+    if (paid) return;
+    setDisplayStatus(lines.length > 0 ? "ordering" : "idle");
+  }, [lines.length, paid]);
+
   function onAdd(p: Product) {
     Haptics.selectionAsync();
     // NOTE: products with modifier groups should open a picker — that
     // modal is the next slice. For now we add the base product.
     add(p);
+  }
+
+  async function pay(method: string) {
+    if (!outletId || !staff || paying) return;
+    setPaying(true);
+    try {
+      const sale = await createSale({
+        outletId,
+        staffId: staff.staffId,
+        lines,
+        orderType: "takeaway",
+        paymentMethod: method,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setOrderNumber(sale.orderNumber);
+      setDisplayStatus("complete");
+      setPaid({ orderNumber: sale.orderNumber, total: sale.total });
+      clear();
+      setShowCheckout(false);
+    } catch (e: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      console.error("[checkout]", e?.message ?? e);
+      // Surface minimally — keep the modal open so the cashier can retry.
+      alert(`Checkout failed: ${e?.message ?? "unknown error"}`);
+    } finally {
+      setPaying(false);
+    }
   }
 
   return (
@@ -167,7 +208,7 @@ export default function Register() {
           </View>
           <Pressable
             disabled={lines.length === 0}
-            onPress={() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)}
+            onPress={() => { Haptics.selectionAsync(); setShowCheckout(true); }}
             className={`h-14 rounded-2xl items-center justify-center ${lines.length === 0 ? "bg-primary/30" : "bg-primary active:opacity-80"}`}
           >
             <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
@@ -176,7 +217,62 @@ export default function Register() {
           </Pressable>
         </View>
       </View>
+
+      {/* ── Checkout: payment method sheet ── */}
+      <Modal visible={showCheckout} transparent animationType="fade" onRequestClose={() => setShowCheckout(false)}>
+        <View className="flex-1 bg-black/70 items-center justify-center px-8">
+          <View className="w-[480px] rounded-3xl bg-surface border border-border p-7">
+            <View className="flex-row items-center justify-between mb-1">
+              <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>Payment</Text>
+              <Pressable onPress={() => setShowCheckout(false)} className="active:opacity-60"><X size={22} color="rgba(245,243,240,0.7)" /></Pressable>
+            </View>
+            <Text className="text-amber-400 text-4xl mb-6" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(subtotal)}</Text>
+            {paying ? (
+              <View className="h-40 items-center justify-center"><ActivityIndicator color="#FBBF24" size="large" /></View>
+            ) : (
+              <View className="gap-3">
+                <PayMethod icon={<Banknote size={22} color="#F5F3F0" />} label="Cash" onPress={() => pay("cash")} />
+                <PayMethod icon={<CreditCard size={22} color="#F5F3F0" />} label="Card" onPress={() => pay("card")} />
+                <PayMethod icon={<QrCode size={22} color="#F5F3F0" />} label="QR / E-wallet" onPress={() => pay("qr")} />
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Paid confirmation ── */}
+      <Modal visible={!!paid} transparent animationType="fade" onRequestClose={() => { setPaid(null); setDisplayStatus("idle"); }}>
+        <View className="flex-1 bg-black/70 items-center justify-center px-8">
+          <View className="w-[460px] rounded-3xl bg-surface border border-border p-8 items-center">
+            <CheckCircle2 size={64} color="#86efac" />
+            <Text className="text-cream text-2xl mt-4" style={{ fontFamily: "Peachi-Bold" }}>Paid</Text>
+            <Text className="text-cream/55 mt-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{paid?.orderNumber}</Text>
+            <Text className="text-amber-400 text-4xl mt-3 mb-6" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
+              {paid ? rm(paid.total) : ""}
+            </Text>
+            <Pressable
+              onPress={() => { Haptics.selectionAsync(); setPaid(null); setDisplayStatus("idle"); }}
+              className="h-13 px-8 py-3.5 rounded-2xl bg-primary active:opacity-80"
+            >
+              <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>New Order</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
+  );
+}
+
+function PayMethod({ icon, label, onPress }: { icon: React.ReactNode; label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="flex-row items-center gap-4 h-16 px-5 rounded-2xl border border-border active:opacity-70"
+      style={{ backgroundColor: "rgba(245,243,240,0.05)" }}
+    >
+      {icon}
+      <Text className="text-cream text-lg" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{label}</Text>
+    </Pressable>
   );
 }
 
