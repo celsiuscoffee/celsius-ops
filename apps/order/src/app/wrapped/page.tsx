@@ -1,11 +1,11 @@
 import { WrappedView } from "./_WrappedView";
-import { BottomNav } from "../_BottomNav";
 
+// Wrapped is a full-bleed espresso recap with its own back button —
+// no BottomNav, matching apps/pickup-native/app/wrapped.tsx.
 export default function WrappedPage() {
   return (
-    <main className="bg-[#160800] text-white min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
+    <main className="text-white" style={{ backgroundColor: "#1A0200" }}>
       <WrappedView />
-      <BottomNav active="rewards" />
     </main>
   );
 }
