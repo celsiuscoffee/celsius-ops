@@ -28,6 +28,8 @@ type Order = {
   store_id?: string | null;
   store_name?: string | null;
   store_address?: string | null;
+  order_type?: string | null;
+  table_number?: string | null;
   reward_discount_amount?: number | null;
   reward_name?: string | null;
   discount_amount?: number | null;
@@ -42,15 +44,17 @@ function rm(cents: number | null | undefined): string {
 }
 
 // Horizontal 3-step pipeline matching apps/pickup-native/components
-// /OrderStepper.tsx. Web order status → stepper index:
-//   pending/paid           → 0 (Received)
-//   preparing              → 1 (Brewing)
-//   ready/completed        → 2 (Ready)
-const STEPPER: Array<{ title: string; sub: string; Icon: typeof ShoppingBag }> = [
-  { title: "Received",  sub: "Order placed",   Icon: ShoppingBag },
-  { title: "Brewing",   sub: "Being prepared", Icon: Coffee },
-  { title: "Ready",     sub: "Pick up now",    Icon: CheckCircle2 },
-];
+// /OrderStepper.tsx. The final step reads "Ready / Pick up now" for
+// pickup and "Served / Enjoy!" for dine-in (table orders).
+function stepperSteps(dineIn: boolean): Array<{ title: string; sub: string; Icon: typeof ShoppingBag }> {
+  return [
+    { title: "Received", sub: "Order placed", Icon: ShoppingBag },
+    { title: "Brewing", sub: "Being prepared", Icon: Coffee },
+    dineIn
+      ? { title: "Served", sub: "Enjoy!", Icon: CheckCircle2 }
+      : { title: "Ready", sub: "Pick up now", Icon: CheckCircle2 },
+  ];
+}
 
 function stepperIndex(status: string): number {
   const s = status.toLowerCase();
@@ -95,6 +99,8 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
   }
 
   const stepIdx = stepperIndex(order.status);
+  const isDineIn = order.order_type === "dine_in";
+  const STEPPER = stepperSteps(isDineIn);
 
   return (
     <>
@@ -107,8 +113,14 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
 
       {order.store_name ? (
         <section className="px-4 pt-5">
-          <h2 className="font-peachi font-bold text-[16px] mb-1">Pickup from</h2>
-          <p className="text-sm font-peachi font-bold">{order.store_name}</p>
+          <h2 className="font-peachi font-bold text-[16px] mb-1">
+            {isDineIn ? "Dine-in" : "Pickup from"}
+          </h2>
+          <p className="text-sm font-peachi font-bold">
+            {isDineIn && order.table_number
+              ? `Table ${order.table_number} · ${order.store_name}`
+              : order.store_name}
+          </p>
           {order.store_address ? (
             <p className="text-[12px] text-[#6E6E73] mt-0.5">{order.store_address}</p>
           ) : null}
