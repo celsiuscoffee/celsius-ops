@@ -173,3 +173,41 @@ export async function evaluatePromotions(args: EvaluateArgs): Promise<AppliedPro
     return [];
   }
 }
+
+/**
+ * Record the promotions applied to a *completed* sale into the loyalty
+ * ledger (promotion_applications) so per-customer / total usage limits
+ * enforce on the next evaluation. Fire-and-forget at order commit — the
+ * sale is already in the books, so a failure must never surface to the
+ * cashier. The server route holds the shared secret; we just hand it the
+ * cart + the order id to use as the ledger reference.
+ */
+export async function applyPromotions(args: {
+  cart: CartItem[];
+  referenceId: string;
+  memberId?: string | null;
+  memberTierId?: string | null;
+  outletId?: string | null;
+  promoCode?: string | null;
+  rewardPromotionIds?: string[];
+}): Promise<void> {
+  if (args.cart.length === 0) return;
+  const lines = buildEngineLines(args.cart);
+  try {
+    await fetch("/api/loyalty/apply-promotions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        reference_id:         args.referenceId,
+        lines,
+        member_id:            args.memberId ?? null,
+        outlet_id:            args.outletId ?? null,
+        member_tier_id:       args.memberTierId ?? null,
+        promo_code:           args.promoCode ?? null,
+        reward_promotion_ids: args.rewardPromotionIds ?? [],
+      }),
+    });
+  } catch (e) {
+    console.error("[LOYALTY] apply-promotions failed:", e);
+  }
+}

@@ -22,7 +22,7 @@ import { usePickupPrinter } from "@/lib/use-pickup-printer";
 import { adaptProducts } from "@/lib/product-adapter";
 import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/sunmi-printer";
 import { lookupMemberByPhone, type LoyaltyMember } from "@/lib/customer-lookup";
-import { evaluatePromotions } from "@/lib/loyalty/promotions";
+import { evaluatePromotions, applyPromotions } from "@/lib/loyalty/promotions";
 import type { Product, CartItem, ModifierOption, AppliedPromotion, ProductCategory } from "@/types/database";
 import { displayRM } from "@/types/database";
 import {
@@ -940,6 +940,21 @@ export default function RegisterPage() {
             order_number: order.order_number,
           }),
         }).catch((e) => console.error("[LOYALTY] Points earning failed:", e));
+      }
+
+      // Record any applied auto-promotions to the loyalty ledger so usage
+      // limits (per-customer / total) actually enforce on the next sale. Auto
+      // promos can apply to non-members too (e.g. Happy Hour), so this is NOT
+      // gated on loyaltyMember. Fire-and-forget — the order is already paid.
+      if (autoPromotions.length > 0) {
+        void applyPromotions({
+          cart,
+          referenceId: order.id,
+          memberId: loyaltyMember?.id ?? null,
+          memberTierId: loyaltyMember?.tier?.id ?? null,
+          outletId: pos.outlet?.id ?? null,
+          promoCode: appliedManualPromo?.promotion.promo_code ?? null,
+        }).catch(() => {});
       }
 
       // Customer-display deferred-burn voucher: flip status='used' now
