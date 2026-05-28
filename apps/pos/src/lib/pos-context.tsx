@@ -465,6 +465,14 @@ export function POSProvider({ children }: { children: ReactNode }) {
     }));
     await db.createOrderItems(items);
 
+    // Deplete ingredient stock per the catalog BOM. Fire-and-forget — a stock
+    // hiccup must never block the sale.
+    void fetch("/api/pos/inventory/consume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order_id: order.id, direction: "deplete" }),
+    }).catch(() => {});
+
     // Create payment if completed
     if (params.status === "completed" && params.paymentMethod) {
       await db.createOrderPayment({
@@ -484,6 +492,12 @@ export function POSProvider({ children }: { children: ReactNode }) {
 
   const voidOrderFn = useCallback(async (orderId: string, reason: string) => {
     await db.updateOrderStatus(orderId, "cancelled", { cancellation_reason: reason });
+    // Restore the ingredient stock the cancelled order had consumed.
+    void fetch("/api/pos/inventory/consume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order_id: orderId, direction: "restore" }),
+    }).catch(() => {});
     await loadOrders();
   }, [loadOrders]);
 

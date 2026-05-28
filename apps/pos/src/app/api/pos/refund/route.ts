@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { applyRecipeStock } from "@/lib/inventory";
 
 /**
  * POST /api/pos/refund
@@ -384,7 +385,15 @@ export async function POST(req: NextRequest) {
         .eq("id", orig.id);
     }
 
-    // ─── 8. Reverse loyalty side-effects (best-effort) ─────
+    // ─── 8. Restore ingredient stock for the refunded qty ─────
+    // Best-effort and non-blocking: the refund is already in the books.
+    void applyRecipeStock({
+      outletRef: orig.outlet_id,
+      lines: refundLines.map((l) => ({ productId: l.orig.product_id, qty: l.refundQty })),
+      direction: "restore",
+    }).catch((e) => console.warn("[refund] stock restore failed:", e));
+
+    // ─── 9. Reverse loyalty side-effects (best-effort) ─────
     // None of these block the cashier — they're audit-trail repairs.
     // Wrapped in their own try/catch so a loyalty hiccup never breaks
     // a refund that already landed in the books.
