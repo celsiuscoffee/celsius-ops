@@ -101,7 +101,7 @@ export function RewardsView() {
       >
         <h1
           className="text-[22px]"
-          style={{ fontFamily: "Peachi-Bold, serif", letterSpacing: -0.3, fontWeight: 700 }}
+          style={{ fontFamily: "var(--font-display)", letterSpacing: -0.3, fontWeight: 700 }}
         >
           Rewards
         </h1>
@@ -124,7 +124,7 @@ export function RewardsView() {
           <Gift size={48} color="#8E8E93" strokeWidth={1.25} />
           <p
             className="mt-4 text-base"
-            style={{ fontFamily: "Peachi-Bold, serif", fontWeight: 700 }}
+            style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}
           >
             Sign in to claim rewards
           </p>
@@ -145,7 +145,7 @@ export function RewardsView() {
           <Sparkles size={48} color="#8E8E93" strokeWidth={1.25} />
           <p
             className="mt-4 text-base"
-            style={{ fontFamily: "Peachi-Bold, serif", fontWeight: 700 }}
+            style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}
           >
             No rewards available yet
           </p>

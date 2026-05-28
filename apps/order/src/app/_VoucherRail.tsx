@@ -189,7 +189,7 @@ function RewardTicket({ voucher }: { voucher: Voucher }) {
                 paddingTop: 2,
                 paddingBottom: 2,
                 borderRadius: 999,
-                fontFamily: "Peachi-Bold, serif",
+                fontFamily: "var(--font-display)",
                 fontWeight: 700,
                 fontSize: 9,
               }}

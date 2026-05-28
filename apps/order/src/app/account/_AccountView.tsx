@@ -57,7 +57,7 @@ export function AccountView() {
       >
         <h1
           className="text-[22px]"
-          style={{ fontFamily: "Peachi-Bold, serif", letterSpacing: -0.3, fontWeight: 700 }}
+          style={{ fontFamily: "var(--font-display)", letterSpacing: -0.3, fontWeight: 700 }}
         >
           Account
         </h1>
@@ -457,7 +457,7 @@ function EditProfileRow({
         }}
       >
         <Pencil size={18} color="#6B6B6B" strokeWidth={1.75} />
-        <span className="font-peachi font-bold flex-1" style={{ color: "#1A0200", fontSize: 15 }}>
+        <span className="flex-1" style={{ color: "#1A0200", fontSize: 15, fontWeight: 500 }}>
           Edit profile
         </span>
         <ChevronRight size={16} color="#8E8E93" />
@@ -539,7 +539,7 @@ function SignOutRow({ onConfirm }: { onConfirm: () => void }) {
         }}
       >
         <LogOut size={18} color="#6B6B6B" strokeWidth={1.75} />
-        <span className="font-peachi font-bold flex-1" style={{ color: "#1A0200", fontSize: 15 }}>
+        <span className="flex-1" style={{ color: "#1A0200", fontSize: 15, fontWeight: 500 }}>
           Sign out
         </span>
         <ChevronRight size={16} color="#8E8E93" />
@@ -597,8 +597,8 @@ function Row({
     >
       {Icon ? <Icon size={18} color="#6B6B6B" strokeWidth={1.75} /> : null}
       <span
-        className="font-peachi font-bold flex-1"
-        style={{ color: "#1A0200", fontSize: 15 }}
+        className="flex-1"
+        style={{ color: "#1A0200", fontSize: 15, fontWeight: 500 }}
       >
         {label}
       </span>
