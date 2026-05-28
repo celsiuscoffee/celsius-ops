@@ -28,9 +28,11 @@ type CartItem = {
 type Persisted = {
   state?: {
     cart?: CartItem[];
+    outletId?: string | null;
     outletName?: string | null;
     appliedReward?: AppliedReward | null;
     phone?: string | null;
+    loyaltyId?: string | null;
   };
 };
 
@@ -59,18 +61,35 @@ function clearReward() {
   }
 }
 
-function readCart(): { items: CartItem[]; outletName: string | null; phone: string | null } {
+type CartSnapshot = {
+  items: CartItem[];
+  outletId: string | null;
+  outletName: string | null;
+  phone: string | null;
+  loyaltyId: string | null;
+};
+
+function readCart(): CartSnapshot {
+  const empty: CartSnapshot = {
+    items: [],
+    outletId: null,
+    outletName: null,
+    phone: null,
+    loyaltyId: null,
+  };
   try {
     const raw = window.localStorage.getItem(KEY);
-    if (!raw) return { items: [], outletName: null, phone: null };
+    if (!raw) return empty;
     const parsed = JSON.parse(raw) as Persisted;
     return {
       items: parsed.state?.cart ?? [],
+      outletId: parsed.state?.outletId ?? null,
       outletName: parsed.state?.outletName ?? null,
       phone: parsed.state?.phone ?? null,
+      loyaltyId: parsed.state?.loyaltyId ?? null,
     };
   } catch {
-    return { items: [], outletName: null, phone: null };
+    return empty;
   }
 }
 
@@ -86,37 +105,111 @@ function writeCart(items: CartItem[]) {
   }
 }
 
+type Quote = {
+  promoLines: Array<{ name: string; amountSen: number }>;
+  promoDiscountSen: number;
+  minOrderRm: number;
+};
+
 export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [outletId, setOutletId] = useState<string | null>(null);
   const [outletName, setOutletName] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
+  const [loyaltyId, setLoyaltyId] = useState<string | null>(null);
   const [reward, setReward] = useState<AppliedReward | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [outletClosed, setOutletClosed] = useState(false);
 
   useEffect(() => {
-    const { items, outletName, phone } = readCart();
+    const snap = readCart();
     setReward(readReward());
-    setItems(items);
-    setOutletName(outletName);
-    setPhone(phone);
+    setItems(snap.items);
+    setOutletId(snap.outletId);
+    setOutletName(snap.outletName);
+    setPhone(snap.phone);
+    setLoyaltyId(snap.loyaltyId);
     setHydrated(true);
   }, []);
 
   const subtotal = items.reduce((s, i) => s + i.totalPrice, 0);
+  const rewardLines = items.map((i) => ({
+    productId: i.productId,
+    basePrice: i.basePrice,
+    totalPrice: i.totalPrice,
+    quantity: i.quantity,
+  }));
+
+  // Promotion-engine preview (auto + tier-perk + combo + sale) and the
+  // min-order threshold, from the SAME endpoint checkout quotes against
+  // so the cart breakdown lines up with the final number. Re-fires when
+  // the cart, outlet, or member changes.
+  useEffect(() => {
+    if (items.length === 0) {
+      setQuote(null);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/checkout/quote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: items.map((i) => ({ product: { id: i.productId }, quantity: i.quantity })),
+        storeId: outletId,
+        loyaltyPhone: phone,
+        loyaltyId,
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setQuote(d);
+      })
+      .catch(() => !cancelled && setQuote(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [items, outletId, phone, loyaltyId]);
+
+  // Re-check the chosen outlet's open state so a customer who flipped to
+  // closed mid-cart gets a banner here instead of a 422 at checkout.
+  // /api/stores carries a 30s server cache; poll on the same cadence.
+  useEffect(() => {
+    if (!outletId || items.length === 0) {
+      setOutletClosed(false);
+      return;
+    }
+    let cancelled = false;
+    const check = () => {
+      fetch("/api/stores")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((stores: Array<{ id: string; isOpen: boolean }>) => {
+          if (cancelled) return;
+          const me = stores.find((s) => s.id === outletId);
+          setOutletClosed(!!me && me.isOpen === false);
+        })
+        .catch(() => {});
+    };
+    check();
+    const id = window.setInterval(check, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [outletId, items.length]);
+
   const rewardDiscount = Math.min(
-    calcRewardDiscount(
-      reward,
-      items.map((i) => ({
-        productId: i.productId,
-        basePrice: i.basePrice,
-        totalPrice: i.totalPrice,
-        quantity: i.quantity,
-      })),
-      subtotal,
-    ),
+    calcRewardDiscount(reward, rewardLines, subtotal),
     subtotal,
   );
-  const grandTotal = Math.max(0, subtotal - rewardDiscount);
+  // Reward voucher comes off AFTER the promo engine, matching checkout's
+  // discount-layering order. No SST here — that's checkout-only.
+  const promoDiscount = quote ? quote.promoDiscountSen / 100 : 0;
+  const totalAfterPromo = Math.max(0, subtotal - promoDiscount);
+  const discount = Math.min(rewardDiscount, totalAfterPromo);
+  const grandTotal = Math.max(0, totalAfterPromo - discount);
+  const minOrder = quote?.minOrderRm ?? 0;
+  const belowMin = minOrder > 0 && subtotal < minOrder;
   const signedIn = typeof phone === "string" && phone.length > 0;
 
   const updateQty = (cartId: string, delta: number) => {
@@ -344,11 +437,11 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
             <p className="font-peachi font-bold text-[13px]" style={{ color: "#B91C1C" }}>
               {reward.name ?? formatRewardValue(reward)}
             </p>
-            {rewardDiscount > 0 ? (
-              <p className="text-[11px]" style={{ color: "rgba(185,28,28,0.80)" }}>
-                {`−RM${rewardDiscount.toFixed(2)} off`}
-              </p>
-            ) : null}
+            <p className="text-[11px]" style={{ color: "rgba(185,28,28,0.80)" }}>
+              {discount > 0
+                ? `Reward applied · −RM${discount.toFixed(2)}`
+                : "Reward applied — discount at checkout"}
+            </p>
           </div>
           <button
             type="button"
@@ -371,13 +464,23 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
             RM{subtotal.toFixed(2)}
           </span>
         </div>
-        {rewardDiscount > 0 ? (
+        {(quote?.promoLines ?? []).map((p, i) => (
+          <div key={i} className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+            <span className="text-[13px] truncate" style={{ color: "#B91C1C", paddingRight: 8 }}>
+              {p.name}
+            </span>
+            <span className="text-[14px] flex-shrink-0" style={{ color: "#B91C1C", fontWeight: 500 }}>
+              −RM{(p.amountSen / 100).toFixed(2)}
+            </span>
+          </div>
+        ))}
+        {discount > 0 ? (
           <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
             <span className="text-[13px]" style={{ color: "#B91C1C" }}>
               Reward discount
             </span>
             <span className="text-[14px]" style={{ color: "#B91C1C", fontWeight: 500 }}>
-              −RM{rewardDiscount.toFixed(2)}
+              −RM{discount.toFixed(2)}
             </span>
           </div>
         ) : null}
@@ -399,13 +502,65 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
             </span>
           </div>
         ) : null}
-        <Link
-          href="/checkout"
-          className="block w-full rounded-full bg-[#A2492C] text-white text-center py-4 font-peachi font-bold active:opacity-80"
-          style={{ marginTop: 12 }}
-        >
-          Continue to checkout
-        </Link>
+
+        {outletClosed ? (
+          <div
+            className="flex items-start gap-2.5 rounded-2xl px-3 py-3"
+            style={{
+              backgroundColor: "rgba(162, 73, 44, 0.10)",
+              border: "1px solid rgba(162, 73, 44, 0.25)",
+              marginTop: 12,
+              marginBottom: 12,
+            }}
+          >
+            <span
+              style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#A2492C", marginTop: 6 }}
+              className="flex-shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="font-peachi font-bold text-[13px]" style={{ color: "#1A0200" }}>
+                {outletName ?? "This outlet"} just closed
+              </p>
+              <p className="text-[11px]" style={{ color: "#6B6B6B", fontWeight: 500, marginTop: 2 }}>
+                Pick another outlet to continue, or come back when we open.
+              </p>
+            </div>
+            <Link
+              href="/store"
+              className="flex-shrink-0 active:opacity-70 text-[12px] font-bold"
+              style={{ color: "#A2492C" }}
+            >
+              Switch
+            </Link>
+          </div>
+        ) : null}
+
+        {belowMin ? (
+          <p
+            className="text-center text-[12px]"
+            style={{ color: "#A2492C", fontWeight: 500, marginTop: 12, marginBottom: 8 }}
+          >
+            Add RM{(minOrder - subtotal).toFixed(2)} more to checkout (min RM{minOrder.toFixed(2)})
+          </p>
+        ) : null}
+
+        {belowMin || outletClosed ? (
+          <div
+            className="block w-full rounded-full text-white text-center py-4 font-peachi font-bold cursor-not-allowed"
+            style={{ marginTop: belowMin ? 0 : 12, backgroundColor: "rgba(162,73,44,0.40)" }}
+            aria-disabled="true"
+          >
+            {outletClosed ? "Outlet closed" : "Continue to checkout"}
+          </div>
+        ) : (
+          <Link
+            href="/checkout"
+            className="block w-full rounded-full bg-[#A2492C] text-white text-center py-4 font-peachi font-bold active:opacity-80"
+            style={{ marginTop: 12 }}
+          >
+            Continue to checkout
+          </Link>
+        )}
       </div>
     </CartShell>
   );

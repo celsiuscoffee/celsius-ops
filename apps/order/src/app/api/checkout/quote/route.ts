@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     const { data: settings } = await supabase
       .from("app_settings")
       .select("key, value")
-      .in("key", ["points_per_rm", "sst"]);
+      .in("key", ["points_per_rm", "sst", "min_order_value"]);
     const settingsMap = new Map<string, unknown>();
     for (const s of (settings ?? []) as Array<{ key: string; value: unknown }>) {
       settingsMap.set(s.key, s.value);
@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
     const sstEnabled = sstVal?.enabled !== false;
     const sstRate = sstVal?.rate ?? 0.06;
     const pointsPerRm = Number((settingsMap.get("points_per_rm") as { rate?: number } | undefined)?.rate ?? 1);
+    const minOrderRm = Number((settingsMap.get("min_order_value") as { rm?: number } | undefined)?.rm ?? 0);
 
     // First-order discount — lives on the promotions table (same lookup
     // as initiate / orders): most recent active trigger_type=first_order.
@@ -173,6 +174,7 @@ export async function POST(request: NextRequest) {
       sstRate,
       totalSen,
       pointsToEarn,
+      minOrderRm,
     });
   } catch (err) {
     console.error("checkout quote error:", err);
