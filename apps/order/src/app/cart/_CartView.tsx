@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Trash2, Plus, Minus, Gift, X, Coffee, ChevronRight } from "lucide-react";
+import { calcRewardDiscount, formatRewardValue, type AppliedReward } from "@/lib/reward-discount";
 
 type BestSeller = {
   id: string;
@@ -21,13 +22,6 @@ type CartItem = {
   quantity: number;
   totalPrice: number;
   modifiers?: Array<{ groupName?: string; label?: string; priceDelta?: number }>;
-};
-
-type AppliedReward = {
-  voucher_id?: string;
-  name?: string;
-  discount_label?: string;
-  discount_sen?: number;
 };
 
 type Persisted = {
@@ -108,7 +102,19 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
   }, []);
 
   const subtotal = items.reduce((s, i) => s + i.totalPrice, 0);
-  const rewardDiscount = Math.min(reward?.discount_sen ? reward.discount_sen / 100 : 0, subtotal);
+  const rewardDiscount = Math.min(
+    calcRewardDiscount(
+      reward,
+      items.map((i) => ({
+        productId: i.productId,
+        basePrice: i.basePrice,
+        totalPrice: i.totalPrice,
+        quantity: i.quantity,
+      })),
+      subtotal,
+    ),
+    subtotal,
+  );
   const grandTotal = Math.max(0, subtotal - rewardDiscount);
   const signedIn = typeof phone === "string" && phone.length > 0;
 
@@ -327,11 +333,11 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
           </span>
           <div className="flex-1 min-w-0">
             <p className="font-peachi font-bold text-[13px]" style={{ color: "#B91C1C" }}>
-              {reward.name ?? reward.discount_label ?? "Reward applied"}
+              {reward.name ?? formatRewardValue(reward)}
             </p>
-            {reward.discount_sen ? (
+            {rewardDiscount > 0 ? (
               <p className="text-[11px]" style={{ color: "rgba(185,28,28,0.80)" }}>
-                {`−RM${(reward.discount_sen / 100).toFixed(2)} off`}
+                {`−RM${rewardDiscount.toFixed(2)} off`}
               </p>
             ) : null}
           </div>

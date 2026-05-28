@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CreditCard, Wallet, Banknote } from "lucide-react";
 import { StripePaymentForm } from "@/components/stripe-payment-form";
+import { calcRewardDiscount, type AppliedReward } from "@/lib/reward-discount";
 
 type CartItem = {
   cartId: string;
@@ -23,6 +24,7 @@ type Persisted = {
     outletName?: string | null;
     phone?: string | null;
     loyaltyId?: string | null;
+    appliedReward?: AppliedReward | null;
   };
 };
 
@@ -96,6 +98,26 @@ export function CheckoutView() {
     [state],
   );
 
+  const reward = state?.appliedReward ?? null;
+  const rewardDiscount = useMemo(
+    () =>
+      Math.min(
+        calcRewardDiscount(
+          reward,
+          (state?.cart ?? []).map((i) => ({
+            productId: i.productId,
+            basePrice: i.basePrice,
+            totalPrice: i.totalPrice,
+            quantity: i.quantity,
+          })),
+          subtotal,
+        ),
+        subtotal,
+      ),
+    [reward, state, subtotal],
+  );
+  const grandTotal = Math.max(0, subtotal - rewardDiscount);
+
   if (!state) {
     return <div className="p-8 text-center text-[#8E8E93]">Loading…</div>;
   }
@@ -129,10 +151,22 @@ export function CheckoutView() {
             quantity:  i.quantity,
             totalPrice: i.totalPrice,
           })),
-          storeId: state.outletId,
+          // The route requires `selectedStore` (with .id) — sending a
+          // bare `storeId` string 400s with "Invalid order data".
+          // `total` is the pre-discount subtotal in RM; the server
+          // applies the reward discount + SST itself.
+          selectedStore: { id: state.outletId, name: state.outletName ?? undefined },
+          total: subtotal,
           paymentMethod: method,
           loyaltyPhone: state.phone ?? null,
           loyaltyId:    state.loyaltyId ?? null,
+          // Forward the applied reward so the server actually discounts
+          // the order (otherwise the customer is charged full price).
+          rewardId:          reward?.id ?? null,
+          rewardName:        reward?.name ?? null,
+          rewardPointsCost:  reward?.points_required ?? 0,
+          rewardDiscountSen: Math.round(rewardDiscount * 100),
+          voucherId:         reward?.voucher_id ?? null,
           orderType:    "pickup",
         }),
       });
@@ -345,12 +379,22 @@ export function CheckoutView() {
             RM{subtotal.toFixed(2)}
           </span>
         </div>
+        {rewardDiscount > 0 ? (
+          <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+            <span className="text-[13px] truncate" style={{ color: "#A2492C" }}>
+              Reward{reward?.name ? ` · ${reward.name}` : ""}
+            </span>
+            <span className="text-[14px]" style={{ color: "#A2492C", fontWeight: 500 }}>
+              −RM{rewardDiscount.toFixed(2)}
+            </span>
+          </div>
+        ) : null}
         <div className="flex items-center justify-between pt-3 border-t border-[rgba(26,2,0,0.10)]">
           <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 15 }}>
             Total
           </span>
           <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 18 }}>
-            RM{subtotal.toFixed(2)}
+            RM{grandTotal.toFixed(2)}
           </span>
         </div>
         {tier ? (
@@ -362,7 +406,7 @@ export function CheckoutView() {
               className="text-[12px] font-bold"
               style={{ color: tier.tier_color ?? "#92400e" }}
             >
-              +{Math.round(subtotal * (tier.tier_multiplier ?? 1))} pts
+              +{Math.round(grandTotal * (tier.tier_multiplier ?? 1))} pts
             </span>
           </div>
         ) : null}
@@ -406,7 +450,7 @@ export function CheckoutView() {
               !confirmFn || confirming ? "bg-[#A2492C]/40" : "bg-[#A2492C]"
             }`}
           >
-            {confirming ? "Confirming payment…" : `Pay RM${subtotal.toFixed(2)}`}
+            {confirming ? "Confirming payment…" : `Pay RM${grandTotal.toFixed(2)}`}
           </button>
         ) : (
         <button
