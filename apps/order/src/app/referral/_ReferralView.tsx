@@ -2,23 +2,31 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Copy, Check, Users } from "lucide-react";
+import { ArrowLeft, Users, Share2 } from "lucide-react";
 
 /**
- * Referral page — share code + see signups. Wired to /api/loyalty/me
- * /referral (same as the SPA's referral screen).
+ * Referral — share-and-earn screen. Port of apps/pickup-native/app
+ * /referral.tsx: espresso hero with a 56×56 gold tile + 40px Peachi
+ * code + Share button, a 3-up Total/Pending/Rewarded stat row, a
+ * "How it works" 4-step card, and a recent-referrals list.
+ *
+ * Wired to /api/loyalty/me/referral (same endpoint as native's
+ * fetchMyReferral).
  */
+type RecentReferral = { created_at: string; status: string };
+
 type Referral = {
   code?: string | null;
   total_referred?: number;
-  reward_summary?: string | null;
+  pending?: number;
+  rewarded?: number;
+  recent?: RecentReferral[];
 };
 
 type Persisted = { state?: { sessionToken?: string | null } };
 
 export function ReferralView() {
   const [data, setData] = useState<Referral | null>(null);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let token: string | null = null;
@@ -35,16 +43,21 @@ export function ReferralView() {
       .catch(() => setData(null));
   }, []);
 
-  const copy = async () => {
+  const share = async () => {
     if (!data?.code) return;
+    const message = `Try Celsius Coffee with me ☕\nUse my code ${data.code} when you sign up — we both get a free drink.\n\nhttps://order.celsiuscoffee.com`;
     try {
-      await navigator.clipboard.writeText(data.code);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      if (navigator.share) {
+        await navigator.share({ text: message });
+      } else {
+        await navigator.clipboard.writeText(data.code);
+      }
     } catch {
-      /* ignore */
+      /* user dismissed */
     }
   };
+
+  const recent = data?.recent ?? [];
 
   return (
     <>
@@ -55,49 +68,221 @@ export function ReferralView() {
         <Link href="/rewards" className="-ml-1 p-1 active:opacity-60" aria-label="Back">
           <ArrowLeft size={20} color="#FFFFFF" />
         </Link>
-        <h1 className="font-peachi font-bold text-[22px]">Refer a friend</h1>
+        <h1 className="font-peachi font-bold text-[22px]">Share &amp; Earn</h1>
       </header>
 
-      <section className="px-4 pt-5">
+      <div className="p-4">
+        {/* Hero — code + share */}
         <div
-          className="rounded-2xl bg-[#160800] text-white p-5"
-          style={{ minHeight: 140 }}
+          className="flex flex-col items-center text-center"
+          style={{
+            backgroundColor: "#1A0200",
+            borderRadius: 16,
+            paddingLeft: 24,
+            paddingRight: 24,
+            paddingTop: 32,
+            paddingBottom: 32,
+            boxShadow: "0 8px 18px rgba(26,2,0,0.18)",
+          }}
         >
           <span
             className="flex items-center justify-center"
-            style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(251,191,36,0.18)" }}
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 16,
+              backgroundColor: "rgba(251,191,36,0.18)",
+              marginBottom: 14,
+            }}
           >
-            <Users size={18} color="#FBBF24" strokeWidth={1.8} />
+            <Users size={28} color="#FBBF24" strokeWidth={1.8} />
           </span>
-          <p className="mt-3 text-[10px] uppercase tracking-widest text-white/60">Your code</p>
-          <p className="mt-1 font-peachi font-bold text-3xl tracking-widest">
-            {data?.code ?? "—"}
+          <p
+            className="uppercase"
+            style={{
+              color: "rgba(251,191,36,0.85)",
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 2,
+              marginBottom: 8,
+            }}
+          >
+            Your code
           </p>
-          {data?.reward_summary ? (
-            <p className="mt-3 text-[12px] text-white/70 leading-snug">
-              {data.reward_summary}
-            </p>
-          ) : null}
+          <button type="button" onClick={share} className="active:opacity-70">
+            <span
+              className="font-peachi font-bold"
+              style={{ color: "#FBBF24", fontSize: 40, letterSpacing: 4 }}
+            >
+              {data?.code ?? "—"}
+            </span>
+          </button>
           <button
             type="button"
-            onClick={copy}
+            onClick={share}
             disabled={!data?.code}
-            className={`mt-4 rounded-full px-4 py-2 text-[12px] font-bold flex items-center gap-2 active:opacity-80 ${
-              data?.code ? "bg-[#FBBF24] text-[#160800]" : "bg-white/15 text-white/50"
-            }`}
+            className="flex items-center gap-1.5 rounded-full active:opacity-80"
+            style={{
+              backgroundColor: "#A2492C",
+              marginTop: 20,
+              paddingLeft: 20,
+              paddingRight: 20,
+              paddingTop: 10,
+              paddingBottom: 10,
+              opacity: data?.code ? 1 : 0.5,
+            }}
           >
-            {copied ? <Check size={14} /> : <Copy size={14} />}
-            {copied ? "Copied" : "Copy code"}
+            <Share2 size={15} color="#FFFFFF" strokeWidth={2} />
+            <span className="font-peachi font-bold" style={{ color: "#FFFFFF", fontSize: 14 }}>
+              Share code
+            </span>
           </button>
         </div>
-      </section>
 
-      <section className="px-4 pt-5">
-        <p className="text-[11px] uppercase tracking-widest text-[#8E8E93] font-bold mb-1">
-          Friends signed up
-        </p>
-        <p className="font-peachi font-bold text-2xl">{data?.total_referred ?? 0}</p>
-      </section>
+        {/* Stats */}
+        <div className="flex mt-4" style={{ gap: 8 }}>
+          <StatCard label="Total" value={data?.total_referred ?? 0} />
+          <StatCard label="Pending" value={data?.pending ?? 0} tone="warn" />
+          <StatCard label="Rewarded" value={data?.rewarded ?? 0} tone="good" />
+        </div>
+
+        {/* How it works */}
+        <div
+          className="mt-4 bg-white"
+          style={{
+            border: "1px solid rgba(26,2,0,0.10)",
+            borderRadius: 16,
+            padding: 16,
+            boxShadow: "0 2px 6px rgba(0,0,0,0.04)",
+          }}
+        >
+          <p
+            className="uppercase"
+            style={{ color: "#1A0200", fontSize: 12, fontWeight: 700, letterSpacing: 1.5, marginBottom: 12 }}
+          >
+            How it works
+          </p>
+          <Step n={1} text="Share your code with a friend" />
+          <Step n={2} text="They sign up and enter your code" />
+          <Step n={3} text="They complete their first order" />
+          <Step n={4} text="Both of you get a free drink reward 🎉" last />
+        </div>
+
+        {/* Recent referrals */}
+        {recent.length > 0 ? (
+          <div
+            className="mt-4 bg-white"
+            style={{
+              border: "1px solid rgba(26,2,0,0.10)",
+              borderRadius: 16,
+              padding: 16,
+              boxShadow: "0 2px 6px rgba(0,0,0,0.04)",
+            }}
+          >
+            <p
+              className="uppercase"
+              style={{ color: "#1A0200", fontSize: 12, fontWeight: 700, letterSpacing: 1.5, marginBottom: 12 }}
+            >
+              Your referrals
+            </p>
+            {recent.slice(0, 10).map((r, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between"
+                style={{
+                  paddingTop: 10,
+                  paddingBottom: 10,
+                  borderBottom:
+                    i === Math.min(recent.length, 10) - 1
+                      ? "none"
+                      : "1px solid rgba(26,2,0,0.06)",
+                }}
+              >
+                <span style={{ color: "#6B6B6B", fontSize: 13, fontWeight: 500 }}>
+                  {new Date(r.created_at).toLocaleDateString("en-MY", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+                <span
+                  className="rounded-full uppercase"
+                  style={{
+                    paddingLeft: 8,
+                    paddingRight: 8,
+                    paddingTop: 3,
+                    paddingBottom: 3,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: 0.5,
+                    backgroundColor: r.status === "rewarded" ? "#E6F1DD" : "#FDF3E0",
+                    color: r.status === "rewarded" ? "#2F6A18" : "#8A6614",
+                  }}
+                >
+                  {r.status === "rewarded" ? "Rewarded" : "Pending order"}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "good" | "warn";
+}) {
+  const color = tone === "good" ? "#2F6A18" : tone === "warn" ? "#8A6614" : "#1A0200";
+  return (
+    <div
+      className="flex-1 bg-white"
+      style={{
+        border: "1px solid rgba(26,2,0,0.10)",
+        borderRadius: 16,
+        padding: 12,
+        boxShadow: "0 2px 6px rgba(0,0,0,0.04)",
+      }}
+    >
+      <p className="font-peachi font-bold" style={{ color, fontSize: 22 }}>
+        {value}
+      </p>
+      <p
+        className="uppercase"
+        style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.2, marginTop: 2 }}
+      >
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function Step({ n, text, last }: { n: number; text: string; last?: boolean }) {
+  return (
+    <div
+      className="flex items-center"
+      style={{
+        paddingTop: 8,
+        paddingBottom: 8,
+        gap: 12,
+        borderBottom: last ? "none" : "1px solid rgba(26,2,0,0.06)",
+      }}
+    >
+      <span
+        className="flex items-center justify-center flex-shrink-0"
+        style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#FBEBE8" }}
+      >
+        <span className="font-peachi font-bold" style={{ color: "#A2492C", fontSize: 12 }}>
+          {n}
+        </span>
+      </span>
+      <span style={{ color: "#1A0200", fontSize: 13, fontWeight: 500 }}>{text}</span>
+    </div>
   );
 }
