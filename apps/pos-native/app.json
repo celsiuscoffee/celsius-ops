@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "Celsius POS",
+    "slug": "celsius-pos-native",
+    "scheme": "celsiuspos",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#160800"
+    },
+    "android": {
+      "package": "com.celsius.pos.native",
+      "versionCode": 1,
+      "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "pan",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#160800"
+      }
+    },
+    "androidStatusBar": {
+      "hidden": true,
+      "translucent": true,
+      "backgroundColor": "#160800"
+    },
+    "androidNavigationBar": {
+      "visible": "leanback",
+      "backgroundColor": "#160800"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#160800",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3ea8d8f6-1552-408d-b9c8-5259b5e91542"
+      }
+    },
+    "owner": "celsiuscoffee"
+  }
+}

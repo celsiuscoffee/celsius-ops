@@ -1,0 +1,38 @@
+{
+  "cli": {
+    "version": ">= 17.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://kqdcdhpnyuwrxqhbuyfl.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxZGNkaHBueXV3cnhxaGJ1eWZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2Nzc4MDAsImV4cCI6MjA5MDI1MzgwMH0.5_nnl-RLtSEVgHyT9Q9VMXVqx_cIOjGSySr2CTvL4W0",
+        "EXPO_PUBLIC_API_BASE": "https://celsius-pos.vercel.app"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://kqdcdhpnyuwrxqhbuyfl.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxZGNkaHBueXV3cnhxaGJ1eWZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2Nzc4MDAsImV4cCI6MjA5MDI1MzgwMH0.5_nnl-RLtSEVgHyT9Q9VMXVqx_cIOjGSySr2CTvL4W0",
+        "EXPO_PUBLIC_API_BASE": "https://celsius-pos.vercel.app"
+      }
+    },
+    "production-apk": {
+      "distribution": "internal",
+      "channel": "production",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://kqdcdhpnyuwrxqhbuyfl.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxZGNkaHBueXV3cnhxaGJ1eWZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2Nzc4MDAsImV4cCI6MjA5MDI1MzgwMH0.5_nnl-RLtSEVgHyT9Q9VMXVqx_cIOjGSySr2CTvL4W0",
+        "EXPO_PUBLIC_API_BASE": "https://celsius-pos.vercel.app"
+      }
+    }
+  }
+}
