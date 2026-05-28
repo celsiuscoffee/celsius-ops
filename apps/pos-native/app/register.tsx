@@ -5,7 +5,7 @@ import * as Haptics from "expo-haptics";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, Minus, LogOut, Banknote, CreditCard, QrCode, X, CheckCircle2 } from "lucide-react-native";
 import { usePos } from "@/lib/store";
-import { fetchCategories, fetchProducts, type Product } from "@/lib/menu";
+import { fetchCategories, fetchProducts, type Product, type ModifierOption } from "@/lib/menu";
 import { useCart, cartSubtotal } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
 import { createSale } from "@/lib/checkout";
@@ -18,6 +18,7 @@ export default function Register() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState<{ orderNumber: string; total: number } | null>(null);
+  const [modProduct, setModProduct] = useState<Product | null>(null);
   const setDisplayStatus = useDisplay((s) => s.setStatus);
   const setOrderNumber = useDisplay((s) => s.setOrderNumber);
 
@@ -53,9 +54,14 @@ export default function Register() {
 
   function onAdd(p: Product) {
     Haptics.selectionAsync();
-    // NOTE: products with modifier groups should open a picker — that
-    // modal is the next slice. For now we add the base product.
-    add(p);
+    // Products with modifier groups open the picker so the cashier can
+    // choose options (and we charge the add-on prices). No-modifier
+    // products drop straight into the cart.
+    if (p.modifiers.length > 0) {
+      setModProduct(p);
+    } else {
+      add(p);
+    }
   }
 
   async function pay(method: string) {
@@ -240,6 +246,17 @@ export default function Register() {
         </View>
       </Modal>
 
+      {/* ── Modifier picker ── */}
+      <Modal visible={!!modProduct} transparent animationType="fade" onRequestClose={() => setModProduct(null)}>
+        {modProduct && (
+          <ModifierSheet
+            product={modProduct}
+            onClose={() => setModProduct(null)}
+            onConfirm={(opts) => { add(modProduct, opts); Haptics.selectionAsync(); setModProduct(null); }}
+          />
+        )}
+      </Modal>
+
       {/* ── Paid confirmation ── */}
       <Modal visible={!!paid} transparent animationType="fade" onRequestClose={() => { setPaid(null); setDisplayStatus("idle"); }}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
@@ -259,6 +276,92 @@ export default function Register() {
           </View>
         </View>
       </Modal>
+    </View>
+  );
+}
+
+function ModifierSheet({
+  product, onClose, onConfirm,
+}: {
+  product: Product;
+  onClose: () => void;
+  onConfirm: (opts: ModifierOption[]) => void;
+}) {
+  // selected option ids per group.
+  const [sel, setSel] = useState<Record<string, string[]>>({});
+
+  function toggle(groupId: string, optId: string, multi: boolean) {
+    Haptics.selectionAsync();
+    setSel((cur) => {
+      const have = cur[groupId] ?? [];
+      if (multi) {
+        return { ...cur, [groupId]: have.includes(optId) ? have.filter((x) => x !== optId) : [...have, optId] };
+      }
+      return { ...cur, [groupId]: have.includes(optId) ? [] : [optId] };
+    });
+  }
+
+  // Flatten selected options + sum add-on price. Required groups must
+  // have at least one pick before we allow Add.
+  const chosen: ModifierOption[] = [];
+  for (const g of product.modifiers) {
+    const ids = sel[g.id] ?? [];
+    for (const o of g.options) if (ids.includes(o.id)) chosen.push(o);
+  }
+  const addOn = chosen.reduce((s, o) => s + o.price_sen, 0);
+  const missingRequired = product.modifiers.some((g) => g.required && (sel[g.id] ?? []).length === 0);
+
+  return (
+    <View className="flex-1 bg-black/70 items-center justify-center px-8">
+      <View className="w-[560px] max-h-[88%] rounded-3xl bg-surface border border-border p-6">
+        <View className="flex-row items-center justify-between mb-4">
+          <View>
+            <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>{product.name}</Text>
+            <Text className="text-amber-400 text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(product.price_sen)}</Text>
+          </View>
+          <Pressable onPress={onClose} className="active:opacity-60"><X size={22} color="rgba(245,243,240,0.7)" /></Pressable>
+        </View>
+
+        <ScrollView className="max-h-[420px]">
+          {product.modifiers.map((g) => (
+            <View key={g.id} className="mb-4">
+              <Text className="text-cream/55 text-xs tracking-[1.5px] mb-2" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
+                {g.name.toUpperCase()}{g.required ? "  • REQUIRED" : ""}{g.multi ? "  • MULTI" : ""}
+              </Text>
+              <View className="gap-2">
+                {g.options.map((o) => {
+                  const on = (sel[g.id] ?? []).includes(o.id);
+                  return (
+                    <Pressable
+                      key={o.id}
+                      onPress={() => toggle(g.id, o.id, g.multi)}
+                      className={`flex-row items-center justify-between h-12 px-4 rounded-2xl border ${on ? "border-amber-400 bg-amber-400/10" : "border-border"}`}
+                      style={!on ? { backgroundColor: "rgba(245,243,240,0.04)" } : undefined}
+                    >
+                      <Text className={on ? "text-cream" : "text-cream/75"} style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                        {o.name}
+                      </Text>
+                      <Text className={on ? "text-amber-400" : "text-cream/45"} style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                        {o.price_sen > 0 ? `+${rm(o.price_sen)}` : ""}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+
+        <Pressable
+          disabled={missingRequired}
+          onPress={() => onConfirm(chosen)}
+          className={`h-14 rounded-2xl items-center justify-center mt-3 ${missingRequired ? "bg-primary/30" : "bg-primary active:opacity-80"}`}
+        >
+          <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
+            {missingRequired ? "Select required options" : `Add — ${rm(product.price_sen + addOn)}`}
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
