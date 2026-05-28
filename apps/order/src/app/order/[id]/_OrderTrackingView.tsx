@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ShoppingBag, Coffee, CheckCircle2, XCircle, X } from "lucide-react";
+import { MysteryReward } from "./_MysteryReward";
 
 type OrderItem = {
   product_name: string;
@@ -267,6 +268,17 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
             {cancelling ? "Cancelling…" : "Cancel order"}
           </button>
         </section>
+      ) : null}
+
+      {/* Mystery-bean reveal — only once payment is in (not pending /
+          failed / cancelled). Renders nothing if the order has no drop. */}
+      {["paid", "preparing", "ready", "completed", "collected"].includes(
+        order.status.toLowerCase(),
+      ) ? (
+        <MysteryReward
+          orderId={orderId}
+          baseBeansEarned={order.loyalty_points_earned ?? undefined}
+        />
       ) : null}
 
       <section className="px-4 pt-5">
