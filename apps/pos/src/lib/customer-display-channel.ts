@@ -232,23 +232,39 @@ function buildChannel(sb: NonNullable<ReturnType<typeof getSupabase>>): Promise<
       // builds a fresh channel. A small backoff prevents a tight
       // reconnect loop if the server is unreachable.
       if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        if (currentChannel === ch) {
-          currentChannel = null;
-          channelPromise = null;
-        }
-        try {
-          void sb.removeChannel(ch);
-        } catch {
-          /* already gone */
-        }
-        // Re-arm the connection after a short delay. We don't await
+        // Re-entrancy guard: Realtime can fire CLOSED/CHANNEL_ERROR
+        // repeatedly for the same channel. Only the FIRST event for
+        // THIS channel object should trigger teardown + rebuild;
+        // ignore the rest (currentChannel is nulled below).
+        if (currentChannel !== ch) return;
+        currentChannel = null;
+        channelPromise = null;
+
+        // CRITICAL: defer removeChannel() OUT of this status callback.
+        // Calling sb.removeChannel(ch) synchronously here re-enters the
+        // channel's own leave→unsubscribe→trigger event dispatch, which
+        // fires THIS callback again with another CLOSED status →
+        // infinite synchronous recursion → "Maximum call stack size
+        // exceeded". On the SUNMI WebView (where the realtime socket
+        // flaps) this looped ~8×/sec and pegged the CPU — the POS felt
+        // very laggy. A 0ms timer runs the teardown on a fresh stack,
+        // breaking the cycle.
+        setTimeout(() => {
+          try {
+            void sb.removeChannel(ch);
+          } catch {
+            /* already gone */
+          }
+        }, 0);
+
+        // Re-arm the connection after a short backoff. We don't await
         // anything here — broadcastToCustomerDisplay / sendToRegister
         // will lazily resolve the next channelPromise when they fire.
         setTimeout(() => {
           if (!channelPromise) {
             channelPromise = buildChannel(sb);
           }
-        }, 1500);
+        }, 3000);
       }
     });
   });
