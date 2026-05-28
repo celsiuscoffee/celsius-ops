@@ -94,26 +94,14 @@ export function AccountView() {
         />
       ) : (
         <>
-        <section className="px-4 pt-4 pb-3">
-          <p
-            className="uppercase"
-            style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4 }}
-          >
-            Hello
-          </p>
-          <p
-            className="mt-1"
-            style={{ fontFamily: "Peachi-Bold, serif", fontWeight: 700, fontSize: 24, color: "#1A0200" }}
-          >
-            {name ?? phone}
-          </p>
-        </section>
-
         {/* Membership tier carousel — every tier as a swipeable themed
             hero card, current tier auto-scrolled in with embedded
-            Points/Visits/Earned stats. Matches native's
-            TierCardCarousel on apps/pickup-native/app/account.tsx. */}
-        <TierCarousel />
+            Points/Visits/Earned stats. Leads the screen like native's
+            TierCardCarousel on apps/pickup-native/app/account.tsx (no
+            separate greeting block — the "MY TIER" card is the hero). */}
+        <div className="pt-3">
+          <TierCarousel />
+        </div>
 
         <div className="px-4 pt-4 flex flex-col gap-2">
           <SectionLabel>Account</SectionLabel>
