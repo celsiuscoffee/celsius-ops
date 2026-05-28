@@ -76,30 +76,47 @@ function NavMenuPuck({ href, active }: { href: string; active: boolean }) {
           boxShadow: "0 3px 8px rgba(0,0,0,0.2)",
         }}
       >
-        {/* °C brand mark — small degree circle + bold serif C, matching
-            apps/pickup-native/assets/icon.png. Inline SVG keeps it
-            crisp at any DPR and avoids the filter:invert workaround
-            that wasn't reliably flipping the black PNG to white. */}
+        {/* Celsius takeaway cup with the brand "C" on the cup face —
+            same SVG geometry as apps/pickup-native/components/brand
+            /CelsiusCup.tsx (lid rect + tapered trapezoid body + C
+            wordmark). Rendered white on the puck. The C uses the loaded
+            Peachi brand font (CSS @font-face family "Peachi", weight
+            700) with a thin same-colour stroke for the extra-bold
+            weight native synthesises. */}
         <svg
-          width="30"
-          height="30"
-          viewBox="0 0 32 32"
+          width="28"
+          height="28"
+          viewBox="0 0 24 24"
           xmlns="http://www.w3.org/2000/svg"
           aria-hidden="true"
         >
-          {/* Degree ring — open circle, top-left of the C */}
-          <circle cx="8.5" cy="10" r="2.25" fill="none" stroke="#FFFFFF" strokeWidth="1.4" />
-          {/* Bold serif C — Peachi-Bold glyph drawn as text so the
-              browser uses the loaded brand font. Stroke gives a tiny
-              extra weight bump matching the chunky letterform in
-              icon-192.png. */}
+          {/* Lid — slightly wider than the cup mouth */}
+          <rect
+            x="2.5"
+            y="2"
+            width="19"
+            height="3"
+            rx="1"
+            fill="none"
+            stroke="#FFFFFF"
+            strokeWidth="2.2"
+          />
+          {/* Cup body — tapered trapezoid with rounded base */}
+          <path
+            d="M3 5.5 H21 L19.3 22 a1.5 1.5 0 0 1 -1.5 1.3 H6.2 a1.5 1.5 0 0 1 -1.5 -1.3 Z"
+            fill="none"
+            stroke="#FFFFFF"
+            strokeWidth="2.2"
+            strokeLinejoin="round"
+          />
+          {/* "C" wordmark on the cup face */}
           <text
-            x="20"
-            y="24"
+            x="12"
+            y="17.5"
             textAnchor="middle"
-            fontFamily="Peachi, serif"
+            fontFamily="Peachi, Georgia, serif"
             fontWeight="700"
-            fontSize="22"
+            fontSize="12"
             fill="#FFFFFF"
             stroke="#FFFFFF"
             strokeWidth="0.6"
