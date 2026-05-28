@@ -385,50 +385,76 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── 8. Reverse loyalty side-effects (best-effort) ─────
-    // None of these block the cashier — they're audit-trail repairs.
-    // Wrapped in their own try/catch so a loyalty hiccup never breaks
-    // a refund that already landed in the books.
+    // Never blocks the cashier — the refund already landed in the books.
     void (async () => {
       try {
-        const baseUrl = req.nextUrl.origin;
+        // 8a. Reverse the points EARNED on the original sale. /earn stamps
+        // point_transactions.reference_id with the order id, so we can find
+        // and reverse the exact points granted — proportional to the share
+        // being refunded.
+        //
+        // This replaces the old approach, which never worked: it gated on
+        // pos_orders.loyalty_points_earned (the POS never writes that column)
+        // and tried to reverse via POST /api/loyalty/earn with a negative
+        // amount (which /earn rejects with a 400). Net effect was a permanent
+        // double-credit on every refunded loyalty order.
+        const { data: earnTxns } = await supabase
+          .from("point_transactions")
+          .select("member_id, brand_id, points")
+          .eq("reference_id", orig.id)
+          .eq("type", "earn");
 
-        // 8a. If the original used a reward voucher, flip it back to
-        // active so the customer can use it again. mark-used is the
-        // existing helper; it accepts member_id + voucher_id and
-        // flips status='used' — we want the reverse, but the loyalty
-        // tables only support a forward flip. For now, fire a best-
-        // effort note so an operator can manually restore. (TODO:
-        // dedicated /api/loyalty/unmark-used.)
-        if (orig.reward_id && orig.loyalty_phone) {
-          console.warn(
-            "[refund] reward voucher reversal not yet implemented — manual restore needed for reward_id=",
-            orig.reward_id,
-          );
-        }
+        const earned = (earnTxns ?? []).reduce((sum, t) => sum + (Number(t.points) || 0), 0);
+        const memberId = earnTxns?.[0]?.member_id as string | undefined;
+        const brandId = (earnTxns?.[0]?.brand_id as string | undefined) ?? "brand-celsius";
 
-        // 8b. If the original earned points, deduct them by calling
-        // /earn with a negative amount_rm. We need member_id which is
-        // not stored on the order — look it up by phone.
-        if (orig.loyalty_points_earned > 0 && orig.loyalty_phone) {
-          const lookup = await fetch(
-            `${baseUrl}/api/loyalty/lookup?phone=${encodeURIComponent(orig.loyalty_phone)}`,
-          );
-          if (lookup.ok) {
-            const { member } = (await lookup.json()) as { member?: { id: string } };
-            if (member?.id) {
-              await fetch(`${baseUrl}/api/loyalty/earn`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  member_id: member.id,
-                  outlet_id: orig.outlet_id,
-                  amount_rm: -(refundTotal / 100),
-                  order_id: newRefundOrderId,
-                  order_number: refundOrderNumber,
-                }),
-              }).catch((e) => console.warn("[refund] earn-reverse failed:", e));
+        if (memberId && earned > 0) {
+          // Full refund reverses everything; partials reverse their share of
+          // the order total.
+          const fraction = orig.total > 0 ? Math.min(1, refundTotal / orig.total) : 1;
+          const reverse = Math.round(earned * fraction);
+          if (reverse > 0) {
+            const { data: mb } = await supabase
+              .from("member_brands")
+              .select("id, points_balance, total_points_earned")
+              .eq("member_id", memberId)
+              .eq("brand_id", brandId)
+              .maybeSingle();
+            if (mb) {
+              const newBalance = Math.max(0, (Number(mb.points_balance) || 0) - reverse);
+              await supabase
+                .from("member_brands")
+                .update({
+                  points_balance: newBalance,
+                  total_points_earned: Math.max(0, (Number(mb.total_points_earned) || 0) - reverse),
+                })
+                .eq("id", mb.id as string);
+              await supabase.from("point_transactions").insert({
+                id: `txn-refund-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`,
+                member_id: memberId,
+                brand_id: brandId,
+                outlet_id: orig.outlet_id,
+                type: "adjust",
+                points: -reverse,
+                balance_after: newBalance,
+                description: `Refund reversal for ${orig.order_number}`,
+                reference_id: newRefundOrderId,
+                multiplier: 1,
+              });
             }
           }
+        }
+
+        // 8b. Reward-voucher / Spend-Beans redemption reversal is not wired
+        // yet: the POS order doesn't persist the issued_rewards id of a
+        // burned voucher, so the redeemed reward can't be safely
+        // re-activated from here. Flagged for a follow-up that threads the
+        // voucher/redemption id onto the order.
+        if (orig.reward_id && orig.loyalty_phone) {
+          console.warn(
+            "[refund] reward/voucher reversal not yet implemented — manual restore for reward_id=",
+            orig.reward_id,
+          );
         }
       } catch (e) {
         console.warn("[refund] loyalty reversal best-effort error:", e);
