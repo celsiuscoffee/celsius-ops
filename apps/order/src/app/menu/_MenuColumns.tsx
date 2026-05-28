@@ -163,12 +163,16 @@ export function MenuColumns({
 
   return (
     <>
-      {/* Sticky espresso header. Search is a toggle (matching
+      {/* Chrome block — header + outlet picker (+ reserved-voucher
+          banner) freeze together at the top so the outlet stays in view
+          while the product list scrolls under it. */}
+      <div className="sticky top-0 z-10">
+      {/* Espresso header. Search is a toggle (matching
           apps/pickup-native/app/menu.tsx:375-430): the title row shows
           a Search icon + Cart; tapping Search swaps the whole bar into
           an inline white-tinted field with a Cancel button. */}
       <header
-        className="bg-[#160800] text-white px-4 pb-3 sticky top-0 z-10"
+        className="bg-[#160800] text-white px-4 pb-3"
         style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
         {searchOpen ? (
@@ -231,6 +235,7 @@ export function MenuColumns({
       </header>
 
       {children}
+      </div>
 
       {searchResults ? (
         <div className="px-3 pt-4">
