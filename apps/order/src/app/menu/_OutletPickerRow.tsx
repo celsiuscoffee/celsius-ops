@@ -7,17 +7,23 @@ import { MapPin, ChevronDown } from "lucide-react";
 /**
  * Outlet picker row at the top of /menu. Shows the actual selected
  * outlet name from localStorage; same visual as apps/pickup-native
- * /app/menu.tsx:460-473 (MapPin terracotta + Peachi/sans bold name +
- * ChevronDown).
+ * /app/menu.tsx:460-473 (MapPin terracotta + bold name + ChevronDown).
+ *
+ * In dine-in (table-QR) mode it shows "Table N · {outlet}" and is not
+ * a link — the customer is seated, so there's no outlet to change.
  */
 type Persisted = {
   state?: {
     outletName?: string | null;
+    orderType?: "pickup" | "dine_in" | null;
+    tableNumber?: string | null;
   };
 };
 
 export function OutletPickerRow() {
   const [name, setName] = useState<string | null>(null);
+  const [dineIn, setDineIn] = useState(false);
+  const [table, setTable] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -25,11 +31,24 @@ export function OutletPickerRow() {
       if (raw) {
         const parsed = JSON.parse(raw) as Persisted;
         setName(parsed.state?.outletName ?? null);
+        setDineIn(parsed.state?.orderType === "dine_in");
+        setTable(parsed.state?.tableNumber ?? null);
       }
     } catch {
       /* ignore */
     }
   }, []);
+
+  if (dineIn) {
+    return (
+      <div className="flex items-center gap-2 bg-white border-b border-[rgba(26,2,0,0.10)] px-4 py-2">
+        <MapPin size={14} color="#A2492C" />
+        <span className="font-bold flex-1 truncate" style={{ color: "#1A0200", fontSize: 14 }}>
+          Table {table} · {name ?? "Dine-in"}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <Link

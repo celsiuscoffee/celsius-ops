@@ -6,7 +6,7 @@
 //
 // Future rule of thumb: bump this on ANY production-affecting bundle
 // regression so customers don't get stuck on a bad build.
-const CACHE = "celsius-v38";
+const CACHE = "celsius-v39";
 const SHELL = ["/", "/index.html", "/manifest.json"];
 
 self.addEventListener("install", (e) => {

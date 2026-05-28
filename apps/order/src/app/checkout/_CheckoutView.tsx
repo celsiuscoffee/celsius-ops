@@ -25,6 +25,8 @@ type Persisted = {
     phone?: string | null;
     loyaltyId?: string | null;
     appliedReward?: AppliedReward | null;
+    orderType?: "pickup" | "dine_in" | null;
+    tableNumber?: string | null;
   };
 };
 
@@ -123,6 +125,7 @@ export function CheckoutView() {
   }
 
   const cart = state.cart ?? [];
+  const isDineIn = state.orderType === "dine_in";
   if (cart.length === 0) {
     return (
       <div className="p-8 text-center">
@@ -160,6 +163,8 @@ export function CheckoutView() {
           paymentMethod: method,
           loyaltyPhone: state.phone ?? null,
           loyaltyId:    state.loyaltyId ?? null,
+          orderType:    state.orderType === "dine_in" ? "dine_in" : "pickup",
+          tableNumber:  state.orderType === "dine_in" ? (state.tableNumber ?? null) : null,
           // Forward the applied reward so the server actually discounts
           // the order (otherwise the customer is charged full price).
           rewardId:          reward?.id ?? null,
@@ -167,7 +172,6 @@ export function CheckoutView() {
           rewardPointsCost:  reward?.points_required ?? 0,
           rewardDiscountSen: Math.round(rewardDiscount * 100),
           voucherId:         reward?.voucher_id ?? null,
-          orderType:    "pickup",
         }),
       });
       const data = await res.json();
@@ -239,13 +243,15 @@ export function CheckoutView() {
             className="uppercase"
             style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4 }}
           >
-            Pickup from
+            {isDineIn ? "Dine-in" : "Pickup from"}
           </p>
           <p
             className="font-peachi font-bold truncate"
             style={{ color: "#1A0200", fontSize: 15, marginTop: 4 }}
           >
-            {state.outletName ?? "Select an outlet"}
+            {isDineIn
+              ? `Table ${state.tableNumber ?? ""} · ${state.outletName ?? ""}`.trim()
+              : state.outletName ?? "Select an outlet"}
           </p>
         </div>
       </section>
