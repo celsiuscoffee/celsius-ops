@@ -41,15 +41,22 @@ type Persisted = {
   };
 };
 
-type Theme = { gradTop: string; gradBottom: string; accent: string; subtle: string; dark: boolean };
+type Theme = {
+  gradTop: string;
+  gradBottom: string;
+  accent: string;
+  subtle: string;
+  watermark: string;
+  dark: boolean;
+};
 
 const TIER_THEMES: Record<string, Theme> = {
-  bronze:        { gradTop: "#FFF6E2", gradBottom: "#E4CFA5", accent: "#7A4B16", subtle: "rgba(73,42,7,0.62)",   dark: false },
-  silver:        { gradTop: "#F1F4F6", gradBottom: "#B6C3CC", accent: "#3F4A55", subtle: "rgba(31,38,46,0.58)",  dark: false },
-  gold:          { gradTop: "#FFF1C2", gradBottom: "#D6A55A", accent: "#6B4A0F", subtle: "rgba(63,42,4,0.62)",   dark: false },
-  elite:         { gradTop: "#241408", gradBottom: "#040201", accent: "#E8C766", subtle: "rgba(232,199,102,0.72)", dark: true },
-  "arba-staff":  { gradTop: "#5A1F16", gradBottom: "#1A0200", accent: "#FBBF24", subtle: "rgba(251,191,36,0.72)", dark: true },
-  "black-card":  { gradTop: "#1F1916", gradBottom: "#000000", accent: "#D4B978", subtle: "rgba(212,185,120,0.70)", dark: true },
+  bronze:        { gradTop: "#FFF6E2", gradBottom: "#E4CFA5", accent: "#7A4B16", subtle: "rgba(73,42,7,0.62)",   watermark: "rgba(122,75,22,0.10)",  dark: false },
+  silver:        { gradTop: "#F1F4F6", gradBottom: "#B6C3CC", accent: "#3F4A55", subtle: "rgba(31,38,46,0.58)",  watermark: "rgba(63,74,85,0.10)",   dark: false },
+  gold:          { gradTop: "#FFF1C2", gradBottom: "#D6A55A", accent: "#6B4A0F", subtle: "rgba(63,42,4,0.62)",   watermark: "rgba(107,74,15,0.10)",  dark: false },
+  elite:         { gradTop: "#241408", gradBottom: "#040201", accent: "#E8C766", subtle: "rgba(232,199,102,0.72)", watermark: "rgba(232,199,102,0.08)", dark: true },
+  "arba-staff":  { gradTop: "#5A1F16", gradBottom: "#1A0200", accent: "#FBBF24", subtle: "rgba(251,191,36,0.72)", watermark: "rgba(251,191,36,0.08)",  dark: true },
+  "black-card":  { gradTop: "#1F1916", gradBottom: "#000000", accent: "#D4B978", subtle: "rgba(212,185,120,0.70)", watermark: "rgba(212,185,120,0.08)", dark: true },
 };
 
 function themeForTier(slug: string): Theme {
@@ -63,7 +70,6 @@ function daysUntil(iso: string | null | undefined): number | null {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
-const CARD_W = 300;
 const GAP = 12;
 
 export function TierCarousel() {
@@ -72,6 +78,20 @@ export function TierCarousel() {
   const [stats, setStats] = useState({ points: 0, visits: 0, earned: 0 });
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeIdx, setActiveIdx] = useState(0);
+  // Card spans the full content width (viewport minus the 16px gutters)
+  // so one tier fills the view and the next sits fully off-screen —
+  // same one-card-per-page snap as native (CARD_W = SCREEN_W - 32).
+  const [cardW, setCardW] = useState(330);
+
+  useEffect(() => {
+    const measure = () => {
+      const w = scrollRef.current?.clientWidth;
+      if (w) setCardW(w - 32);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
 
   useEffect(() => {
     let memberId: string | null = null;
@@ -119,14 +139,14 @@ export function TierCarousel() {
     if (tiers.length === 0) return;
     setActiveIdx(currentIdx);
     requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ left: currentIdx * (CARD_W + GAP), behavior: "auto" });
+      scrollRef.current?.scrollTo({ left: currentIdx * (cardW + GAP), behavior: "auto" });
     });
-  }, [tiers.length, currentIdx]);
+  }, [tiers.length, currentIdx, cardW]);
 
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    const idx = Math.round(el.scrollLeft / (CARD_W + GAP));
+    const idx = Math.round(el.scrollLeft / (cardW + GAP));
     if (idx !== activeIdx && idx >= 0 && idx < tiers.length) setActiveIdx(idx);
   };
 
@@ -165,6 +185,7 @@ export function TierCarousel() {
             <TierHeroCard
               key={t.id}
               tier={t}
+              width={cardW}
               isCurrent={idx === currentIdx}
               isLocked={idx > currentIdx}
               isAchieved={idx < currentIdx}
@@ -198,6 +219,7 @@ export function TierCarousel() {
 
 function TierHeroCard({
   tier,
+  width,
   isCurrent,
   isLocked,
   isAchieved,
@@ -207,6 +229,7 @@ function TierHeroCard({
   stats,
 }: {
   tier: Tier;
+  width: number;
   isCurrent: boolean;
   isLocked: boolean;
   isAchieved: boolean;
@@ -226,12 +249,15 @@ function TierHeroCard({
   const trackBg = theme.dark ? "rgba(232,199,102,0.22)" : "rgba(0,0,0,0.10)";
   const dividerBg = theme.dark ? "rgba(232,199,102,0.22)" : "rgba(0,0,0,0.08)";
 
+  const cardHeight = isCurrent && stats ? 232 : 192;
+  const markSize = cardHeight * 1.15;
+
   return (
     <div
-      className="flex-shrink-0 flex flex-col justify-between"
+      className="flex-shrink-0 flex flex-col justify-between relative overflow-hidden"
       style={{
-        width: CARD_W,
-        minHeight: isCurrent && stats ? 232 : 192,
+        width,
+        minHeight: cardHeight,
         borderRadius: 18,
         padding: 18,
         background: `linear-gradient(160deg, ${theme.gradTop}, ${theme.gradBottom})`,
@@ -240,7 +266,39 @@ function TierHeroCard({
         scrollSnapAlign: "start",
       }}
     >
-      <div>
+      {/* Giant "°c" brand watermark behind the content — same mark as
+          native's CelsiusWordmark, theme-tinted at low opacity. */}
+      <span
+        aria-hidden
+        style={{ position: "absolute", left: -markSize * 0.04, top: -markSize * 0.04, width: markSize, height: markSize, pointerEvents: "none", zIndex: 0 }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            left: markSize * 0.18,
+            top: markSize * 0.18,
+            width: markSize * 0.1,
+            height: markSize * 0.1,
+            borderRadius: markSize * 0.05,
+            border: `${Math.max(2, markSize * 0.015)}px solid ${theme.watermark}`,
+          }}
+        />
+        <span
+          className="font-peachi font-bold"
+          style={{
+            position: "absolute",
+            left: markSize * 0.2,
+            top: markSize * 0.05,
+            fontSize: markSize * 0.95,
+            lineHeight: `${markSize * 0.95}px`,
+            color: theme.watermark,
+          }}
+        >
+          c
+        </span>
+      </span>
+
+      <div style={{ position: "relative", zIndex: 1 }}>
         {/* Status badge */}
         {isCurrent ? (
           <span
@@ -295,7 +353,7 @@ function TierHeroCard({
         </p>
       </div>
 
-      <div>
+      <div style={{ position: "relative", zIndex: 1 }}>
         <div style={{ width: "62%" }}>
           {isCurrent ? (
             <>
