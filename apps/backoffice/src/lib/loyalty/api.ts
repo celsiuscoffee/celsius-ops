@@ -10,7 +10,6 @@ import type {
   PointTransaction,
   Campaign,
   DashboardStats,
-  Product,
 } from "./types";
 
 // ─── Brands ──────────────────────────────────────────
@@ -306,42 +305,6 @@ export async function fetchPointsLog(
     return res.json();
   } catch {
     return [];
-  }
-}
-
-// ─── Products ───────────────────────────────────────
-export async function fetchProducts(
-  brandId: string = "brand-celsius",
-  options?: { category?: string; search?: string; all?: boolean },
-): Promise<Product[]> {
-  try {
-    const params = new URLSearchParams({ brand_id: brandId });
-    if (options?.category) params.set("category", options.category);
-    if (options?.search) params.set("search", options.search);
-    if (options?.all) params.set("all", "true");
-
-    const res = await fetch(`/api/loyalty/products?${params.toString()}`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.products ?? [];
-  } catch {
-    return [];
-  }
-}
-
-export async function syncProductsFromStoreHub(
-  brandId: string = "brand-celsius",
-): Promise<{ success: boolean; synced?: number; errors?: number; error?: string }> {
-  try {
-    const res = await fetch("/api/loyalty/products/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ brand_id: brandId }),
-    });
-    return res.json();
-  } catch {
-    return { success: false, error: "Network error" };
   }
 }
 
