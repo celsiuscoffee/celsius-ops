@@ -45,8 +45,8 @@ const APP_MODULES: Record<string, { label: string; key: string }[]> = {
   pickup: [
     { label: "Orders", key: "orders" },
     { label: "Menu", key: "menu" },
-    { label: "Analytics", key: "analytics" },
     { label: "Customers", key: "customers" },
+    { label: "Settings (Pickup + POS)", key: "settings" },
   ],
   inventory: [
     { label: "Products", key: "products" },
@@ -65,12 +65,12 @@ const APP_MODULES: Record<string, { label: string; key: string }[]> = {
     { label: "Reports", key: "reports" },
   ],
   loyalty: [
+    { label: "Overview", key: "dashboard" },
     { label: "Members", key: "members" },
     { label: "Rewards", key: "rewards" },
     { label: "Redemptions", key: "redemptions" },
     { label: "Campaigns", key: "campaigns" },
     { label: "Engage", key: "engage" },
-    { label: "AI Insights", key: "insights" },
   ],
   sales: [
     { label: "Dashboard", key: "dashboard" },
@@ -80,14 +80,14 @@ const APP_MODULES: Record<string, { label: string; key: string }[]> = {
     { label: "Staff & Access", key: "staff" },
     { label: "Approval Rules", key: "rules" },
     { label: "Integrations", key: "integrations" },
+    { label: "Stock Count", key: "stock-count" },
     { label: "System", key: "system" },
   ],
   ops: [
+    { label: "Dashboard & Performance", key: "performance" },
+    { label: "Audit", key: "audit" },
     { label: "SOPs", key: "sops" },
     { label: "Categories", key: "categories" },
-    { label: "Checklists", key: "checklists" },
-    { label: "Audit", key: "audit" },
-    { label: "Dashboard", key: "dashboard" },
   ],
   hr: [
     { label: "Dashboard", key: "dashboard" },
@@ -100,7 +100,19 @@ const APP_MODULES: Record<string, { label: string; key: string }[]> = {
     { label: "Performance", key: "performance" },
     { label: "Allowances", key: "allowances" },
     { label: "Review Penalties", key: "review-penalties" },
+    { label: "Memos", key: "memos" },
     { label: "Settings", key: "settings" },
+  ],
+  reviews: [
+    { label: "All Reviews", key: "list" },
+    { label: "Settings", key: "settings" },
+  ],
+  ads: [
+    { label: "Marketing (Google)", key: "overview" },
+    { label: "Campaigns", key: "campaigns" },
+    { label: "Invoices", key: "invoices" },
+    { label: "Ad Settings", key: "settings" },
+    { label: "Recruitment (Indeed)", key: "recruitment" },
   ],
 };
 
@@ -113,6 +125,7 @@ const MODULE_GROUPS: Record<string, { label: string; keys: string[] }[]> = {
     { label: "Leave", keys: ["leave"] },
     { label: "Payroll & Compensation", keys: ["payroll", "allowances"] },
     { label: "Performance", keys: ["performance", "review-penalties"] },
+    { label: "Communication", keys: ["memos"] },
     { label: "Admin", keys: ["settings"] },
   ],
 };
@@ -603,7 +616,7 @@ export default function StaffPage() {
                   <h3 className="text-sm font-semibold text-gray-900 mb-1">Module Access</h3>
                   <p className="text-xs text-gray-400 mb-3">Control which modules this user can see within each app. Empty = full access.</p>
                   <div className="space-y-4">
-                    {[...form.appAccess.filter((app) => APP_MODULES[app]), ...(form.appAccess.includes("backoffice") ? ["settings", "hr"].filter((a) => APP_MODULES[a]) : [])].map((app) => {
+                    {[...form.appAccess.filter((app) => APP_MODULES[app]), ...(form.appAccess.includes("backoffice") ? ["settings", "hr", "reviews", "ads"].filter((a) => APP_MODULES[a]) : [])].map((app) => {
                       const modules = APP_MODULES[app];
                       const selected = form.moduleAccess[app] || [];
                       const allSelected = modules.every((m) => selected.includes(m.key));
