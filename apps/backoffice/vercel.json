@@ -1,6 +1,6 @@
 {
   "regions": ["sin1"],
-  "ignoreCommand": "git diff HEAD~3 HEAD --quiet -- . ../../packages/",
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- . ../../packages/",
   "crons": [
     {
       "path": "/api/ai-agent/celsius-overview",
