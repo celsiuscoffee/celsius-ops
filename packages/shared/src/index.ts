@@ -1,5 +1,19 @@
 // ─── Re-exports from submodules ─────────────────────────
 export { cn } from "./cn";
+// ─── Canonical domain entities (shared by order + loyalty) ───
+export type {
+  Brand,
+  Outlet,
+  Member,
+  PointTransaction,
+  Redemption,
+  Campaign,
+  SMSLog,
+  StaffUser,
+  TopSpender,
+  DashboardStats,
+  IssuedReward,
+} from "./domain";
 export {
   OUTLET_IDS,
   OUTLET_LABELS,
