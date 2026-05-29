@@ -1,5 +1,5 @@
 // Celsius Backoffice — Service Worker
-const CACHE_NAME = "celsius-backoffice-v1";
+const CACHE_NAME = "celsius-backoffice-v2";
 const PRECACHE_URLS = ["/", "/apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {
