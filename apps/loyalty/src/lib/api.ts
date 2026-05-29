@@ -324,22 +324,6 @@ export async function fetchProducts(
   }
 }
 
-export async function syncProductsFromStoreHub(
-  brandId: string = "brand-celsius",
-): Promise<{ success: boolean; synced?: number; errors?: number; error?: string }> {
-  try {
-    const res = await fetch("/api/products/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ brand_id: brandId }),
-    });
-    return res.json();
-  } catch {
-    return { success: false, error: "Network error" };
-  }
-}
-
 // ─── Points Log (Admin) ─────────────────────────────
 export interface PointTransactionWithDetails {
   id: string;

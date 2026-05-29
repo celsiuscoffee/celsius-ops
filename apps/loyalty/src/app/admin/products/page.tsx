@@ -4,24 +4,19 @@ import { useState, useEffect, useMemo } from "react";
 import {
   Package,
   Search,
-  RefreshCw,
   Coffee,
   Cake,
   Tag,
   ShoppingBag,
-  Check,
-  X,
   AlertCircle,
   Download,
   Loader2,
-  Clock,
   Eye,
   EyeOff,
 } from "lucide-react";
-import { fetchProducts, syncProductsFromStoreHub } from "@/lib/api";
+import { fetchProducts } from "@/lib/api";
 import type { Product } from "@/types";
 import { formatCurrency } from "@/lib/utils";
-import { cn } from "@/lib/utils";
 import { exportToCSV } from "@/lib/export";
 
 /* ------------------------------------------------------------------ */
@@ -53,13 +48,6 @@ export default function ProductsPage() {
   const [error, setError] = useState(false);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{
-    success: boolean;
-    synced?: number;
-    errors?: number;
-    error?: string;
-  } | null>(null);
 
   async function loadProducts() {
     setLoading(true);
@@ -116,32 +104,6 @@ export default function ProductsPage() {
     }
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [filtered]);
-
-  async function handleSync() {
-    setSyncing(true);
-    setSyncResult(null);
-    try {
-      const result = await syncProductsFromStoreHub("brand-celsius");
-      setSyncResult(result);
-      if (result.success) {
-        await loadProducts();
-      }
-    } catch {
-      setSyncResult({ success: false, error: "Network error" });
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  // Last sync time
-  const lastSynced = useMemo(() => {
-    if (products.length === 0) return null;
-    const dates = products
-      .filter((p) => p.synced_at)
-      .map((p) => new Date(p.synced_at!).getTime());
-    if (dates.length === 0) return null;
-    return new Date(Math.max(...dates));
-  }, [products]);
 
   function handleExport() {
     const rows = products.map((p) => ({
@@ -216,19 +178,7 @@ export default function ProductsPage() {
             Products
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Synced from StoreHub POS
-            {lastSynced && (
-              <span className="ml-2 inline-flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" />
-                Last sync:{" "}
-                {lastSynced.toLocaleDateString("en-MY", {
-                  day: "numeric",
-                  month: "short",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-            )}
+            Product catalog — managed in the backoffice menu editor
           </p>
         </div>
 
@@ -241,58 +191,8 @@ export default function ProductsPage() {
             <Download className="w-4 h-4" />
             Export
           </button>
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className={cn(
-              "inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg font-medium transition-colors",
-              syncing
-                ? "bg-gray-100 text-gray-400 dark:bg-neutral-800 dark:text-gray-500"
-                : "bg-[#C2452D] text-white hover:bg-[#a93b26]"
-            )}
-          >
-            <RefreshCw
-              className={cn("w-4 h-4", syncing && "animate-spin")}
-            />
-            {syncing ? "Syncing..." : "Sync from StoreHub"}
-          </button>
         </div>
       </div>
-
-      {/* ── Sync result banner ── */}
-      {syncResult && (
-        <div
-          className={cn(
-            "flex items-center gap-2 px-4 py-3 rounded-lg text-sm",
-            syncResult.success
-              ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
-              : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"
-          )}
-        >
-          {syncResult.success ? (
-            <>
-              <Check className="w-4 h-4" />
-              Synced {syncResult.synced} product{syncResult.synced !== 1 ? "s" : ""} from StoreHub
-              {(syncResult.errors ?? 0) > 0 && (
-                <span className="ml-1 text-amber-600 dark:text-amber-400">
-                  ({syncResult.errors} error{syncResult.errors !== 1 ? "s" : ""})
-                </span>
-              )}
-            </>
-          ) : (
-            <>
-              <X className="w-4 h-4" />
-              {syncResult.error || "Sync failed"}
-            </>
-          )}
-          <button
-            onClick={() => setSyncResult(null)}
-            className="ml-auto hover:opacity-70"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* ── Stats cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -361,20 +261,11 @@ export default function ProductsPage() {
         <div className="text-center py-16 bg-white dark:bg-neutral-800 rounded-xl border border-gray-200 dark:border-neutral-700">
           <Package className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600" />
           <h3 className="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
-            No products synced yet
+            No products yet
           </h3>
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-            Click &quot;Sync from StoreHub&quot; to pull your product catalog from
-            StoreHub POS into the rewards system.
+            Add products in the backoffice menu editor — they&apos;ll appear here.
           </p>
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg font-medium bg-[#C2452D] text-white hover:bg-[#a93b26]"
-          >
-            <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
-            {syncing ? "Syncing..." : "Sync Now"}
-          </button>
         </div>
       )}
 
@@ -509,12 +400,6 @@ export default function ProductsPage() {
       {products.length > 0 && (
         <p className="text-xs text-gray-400 dark:text-gray-500 text-center pb-4">
           Showing {filtered.length} of {products.length} products
-          {lastSynced && (
-            <>
-              {" "}
-              &middot; Auto-syncs every 6 hours from StoreHub
-            </>
-          )}
         </p>
       )}
     </div>
