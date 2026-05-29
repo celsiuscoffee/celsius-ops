@@ -9,10 +9,7 @@ import {
   type CartLine,
 } from "@/lib/loyalty/promotions";
 import type { OrderRow } from "@/lib/supabase/types";
-
-// All active payment methods route through Stripe (live keys, MYR).
-const DEFAULT_STRIPE_METHODS = new Set(["card", "apple_pay", "google_pay", "fpx", "grabpay"]);
-const DEFAULT_RM_METHODS     = new Set<string>();
+import { defaultMethodSets } from "@/lib/payments/gateway-methods";
 
 function generateOrderNumber(): string {
   return `C-${Date.now().toString(36).slice(-4).toUpperCase()}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`;
@@ -135,8 +132,9 @@ export async function POST(request: NextRequest) {
         pgRows.filter((r) => r.enabled && r.provider === "revenue_monster").map((r) => r.method_id as string)
       );
     } else {
-      STRIPE_METHODS = DEFAULT_STRIPE_METHODS;
-      RM_METHODS     = DEFAULT_RM_METHODS;
+      const defaults = defaultMethodSets();
+      STRIPE_METHODS = defaults.stripe;
+      RM_METHODS     = defaults.rm;
     }
 
     // Per-method routing is now authoritative: whatever provider the
