@@ -112,7 +112,7 @@ export function defaultPairLinePrice(p: Product): number {
  *
  *  Dedupes by product id so a product that appears in both combo and
  *  co-purchase doesn't take two slots. Caps at MAX_PAIRS total. */
-export function buildPairSuggestions(args: {
+function buildPairSuggestions(args: {
   current: Product;
   allProducts: Product[];
   cartProductIds: Set<string>;
