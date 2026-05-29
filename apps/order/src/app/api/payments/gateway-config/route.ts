@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { DEFAULT_GATEWAY_METHODS, METHOD_ORDER, type GatewayProvider } from "@/lib/payments/gateway-methods";
 
 /**
  * GET /api/payments/gateway-config
@@ -25,30 +26,6 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
  * split that initiate/route.ts also falls back to.
  */
 
-type GatewayProvider = "stripe" | "revenue_monster";
-
-// Defaults applied only when payment_gateway_config is empty (fresh DB).
-// Routing intent: keep Apple/Google Pay on Stripe (only Stripe supports
-// the native iOS/Android wallet sheets), keep GrabPay on Stripe (Stripe
-// MY has solid GrabPay support); push everything else through Revenue
-// Monster for direct settlement to the merchant's MY bank account.
-// Once a row exists for a method, the backoffice toggle is authoritative.
-const DEFAULT_METHODS: Array<{ method_id: string; enabled: boolean; provider: GatewayProvider }> = [
-  { method_id: "card",       enabled: true,  provider: "revenue_monster" },
-  { method_id: "apple_pay",  enabled: true,  provider: "stripe" },
-  { method_id: "google_pay", enabled: true,  provider: "stripe" },
-  { method_id: "fpx",        enabled: true,  provider: "revenue_monster" },
-  { method_id: "grabpay",    enabled: true,  provider: "stripe" },
-  { method_id: "tng",        enabled: true,  provider: "revenue_monster" },
-  { method_id: "boost",      enabled: true,  provider: "revenue_monster" },
-  { method_id: "shopeepay",  enabled: true,  provider: "revenue_monster" },
-  { method_id: "duitnow",    enabled: false, provider: "revenue_monster" },
-];
-
-// Matches the ZUS-style grouping the customer is familiar with:
-// Online Banking first, then e-wallets, then card, then platform wallets.
-const METHOD_ORDER = ["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card", "apple_pay", "google_pay"];
-
 export async function GET() {
   const supabase = getSupabaseAdmin();
 
@@ -72,7 +49,7 @@ export async function GET() {
   const dbMethods =
     pgRows && pgRows.length > 0
       ? (pgRows as Array<{ method_id: string; enabled: boolean; provider: GatewayProvider }>)
-      : DEFAULT_METHODS;
+      : DEFAULT_GATEWAY_METHODS;
 
   // Stable, customer-facing order. Card first, wallets next, redirects last —
   // matches how most MY F&B apps present payment options.
