@@ -37,17 +37,30 @@ type Tier = {
   tier_color?: string | null;
 };
 
-const METHODS: Array<{
-  id: string;
-  label: string;
-  subtitle?: string;
-  iconSrc?: string;
-  iconFallback?: typeof CreditCard;
-}> = [
-  { id: "card",    label: "Credit / Debit Card", iconSrc: "/payment-icons/card.svg",        iconFallback: CreditCard },
-  { id: "fpx",     label: "Online Banking",      subtitle: "FPX",      iconSrc: "/payment-icons/fpx.svg",         iconFallback: Banknote },
-  { id: "grabpay", label: "E-Wallet",            subtitle: "GrabPay",  iconSrc: "/payment-icons/grabpay.svg",     iconFallback: Wallet },
-];
+type GatewayMethodRow = {
+  method_id: string;
+  enabled: boolean;
+  provider: "stripe" | "revenue_monster";
+};
+type GatewayConfig = { paymentsEnabled: boolean; methods: GatewayMethodRow[] };
+
+// Display metadata per method_id. WHICH methods are shown and their gateway
+// routing come from /api/payments/gateway-config (the same source the native
+// pickup app reads) — this map only supplies labels/icons.
+const METHOD_DISPLAY: Record<
+  string,
+  { label: string; subtitle?: string; iconSrc?: string; iconFallback: typeof CreditCard }
+> = {
+  fpx:        { label: "Online Banking",       subtitle: "FPX",     iconSrc: "/payment-icons/fpx.svg",        iconFallback: Banknote },
+  tng:        { label: "Touch 'n Go",          subtitle: "eWallet", iconSrc: "/payment-icons/tng.svg",        iconFallback: Wallet },
+  boost:      { label: "Boost",                subtitle: "eWallet", iconSrc: "/payment-icons/boost.svg",      iconFallback: Wallet },
+  shopeepay:  { label: "ShopeePay",            subtitle: "eWallet",                                            iconFallback: Wallet },
+  grabpay:    { label: "GrabPay",              subtitle: "eWallet", iconSrc: "/payment-icons/grabpay.svg",    iconFallback: Wallet },
+  duitnow:    { label: "DuitNow",              subtitle: "QR",                                                 iconFallback: Wallet },
+  card:       { label: "Credit / Debit Card",                       iconSrc: "/payment-icons/card.svg",       iconFallback: CreditCard },
+  apple_pay:  { label: "Apple Pay",                                 iconSrc: "/payment-icons/apple-pay.svg",  iconFallback: CreditCard },
+  google_pay: { label: "Google Pay",                                iconSrc: "/payment-icons/google-pay.svg", iconFallback: CreditCard },
+};
 
 function readState(): Persisted["state"] {
   try {
@@ -68,6 +81,7 @@ export function CheckoutView() {
   const [confirmFn, setConfirmFn] = useState<(() => Promise<{ error?: { message?: string } }>) | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [tier, setTier] = useState<Tier | null>(null);
+  const [gateway, setGateway] = useState<GatewayConfig | null>(null);
 
   useEffect(() => {
     setState(readState() ?? null);
@@ -94,6 +108,21 @@ export function CheckoutView() {
       cancelled = true;
     };
   }, [state?.loyaltyId]);
+
+  // Fetch the same gateway-config the native pickup app uses, so the web
+  // PWA shows + routes the identical set of payment methods.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/payments/gateway-config")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d) setGateway(d as GatewayConfig);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const subtotal = useMemo(
     () => (state?.cart ?? []).reduce((s, i) => s + i.totalPrice, 0),
@@ -163,6 +192,43 @@ export function CheckoutView() {
   // Use the server quote's total when present; fall back to the
   // client subtotal-minus-reward while it loads.
   const grandTotal = quote ? quote.totalSen / 100 : Math.max(0, subtotal - rewardDiscount);
+
+  // Payment tiles + routing follow /api/payments/gateway-config — the same
+  // source the native pickup app uses — so web and native offer/route the
+  // identical method set. Falls back to card/FPX/GrabPay until it loads so
+  // checkout is never empty. Apple Pay shows only where the device supports
+  // it; on Apple devices we prefer Apple Pay over Google Pay (like native).
+  const visibleMethods = useMemo(() => {
+    const supportsApplePay =
+      typeof window !== "undefined" &&
+      !!(window as unknown as { ApplePaySession?: unknown }).ApplePaySession;
+    const ids =
+      gateway && gateway.methods.length > 0
+        ? gateway.methods.filter((m) => m.enabled).map((m) => m.method_id)
+        : ["card", "fpx", "grabpay"];
+    return ids
+      .filter((id) =>
+        id === "apple_pay" ? supportsApplePay : id === "google_pay" ? !supportsApplePay : true,
+      )
+      .map((id) => {
+        const d = METHOD_DISPLAY[id] ?? { label: id, iconFallback: CreditCard };
+        return {
+          id,
+          label: d.label,
+          subtitle: d.subtitle,
+          iconSrc: d.iconSrc,
+          iconFallback: d.iconFallback,
+        };
+      });
+  }, [gateway]);
+
+  const paymentsOff = gateway != null && gateway.paymentsEnabled === false;
+
+  // Keep the selected method valid as the available set resolves.
+  useEffect(() => {
+    if (visibleMethods.length === 0) return;
+    if (!visibleMethods.some((m) => m.id === method)) setMethod(visibleMethods[0].id);
+  }, [visibleMethods, method]);
 
   if (!state) {
     return <div className="p-8 text-center text-[#8E8E93]">Loading…</div>;
@@ -336,10 +402,10 @@ export function CheckoutView() {
       <section className="px-4 pt-5">
         <h2 className="font-peachi font-bold text-[16px]">Pay with</h2>
         <ul className="mt-2 flex flex-col">
-          {METHODS.map((m, idx) => {
+          {visibleMethods.map((m, idx) => {
             const Fallback = m.iconFallback ?? CreditCard;
             const active = method === m.id;
-            const isLast = idx === METHODS.length - 1;
+            const isLast = idx === visibleMethods.length - 1;
             return (
               <li key={m.id}>
                 <button
@@ -546,13 +612,13 @@ export function CheckoutView() {
         ) : (
         <button
           type="button"
-          disabled={placing || !state.outletId}
+          disabled={placing || !state.outletId || paymentsOff}
           onClick={placeOrder}
           className={`block w-full rounded-full text-white text-center py-4 font-bold active:opacity-80 ${
-            placing || !state.outletId ? "bg-[#A2492C]/40" : "bg-[#A2492C]"
+            placing || !state.outletId || paymentsOff ? "bg-[#A2492C]/40" : "bg-[#A2492C]"
           }`}
         >
-          {placing ? "Placing order…" : !state.outletId ? "Select an outlet first" : "Place order"}
+          {placing ? "Placing order…" : paymentsOff ? "Payment unavailable" : !state.outletId ? "Select an outlet first" : "Place order"}
         </button>
         )}
       </div>
