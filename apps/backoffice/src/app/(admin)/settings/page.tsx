@@ -131,7 +131,7 @@ const GROUPS: Group[] = [
         blurb: "Bronze / Silver / Gold / Platinum / Staff / Black Card — discount %, stackable rule, qualifying thresholds.",
       },
       {
-        href: "/promotions",
+        href: "/loyalty/promotions",
         Icon: TicketPercent,
         title: "Promotions",
         blurb: "Auto-promos, first-order discount, combos, BOGO, time-window deals. Per-channel + per-outlet.",
@@ -143,7 +143,7 @@ const GROUPS: Group[] = [
         blurb: "RM50 Bill, Weekend Run, Make it a Meal — gamified goals that mint vouchers.",
       },
       {
-        href: "/loyalty/mystery-pool",
+        href: "/loyalty/mystery",
         Icon: Star,
         title: "Mystery Bean Pool",
         blurb: "Surprise reward outcomes shown on the customer-display after checkout.",
