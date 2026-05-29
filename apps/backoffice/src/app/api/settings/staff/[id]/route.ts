@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders, hasModulePermission, type SessionUser } from "@/lib/auth";
+import { clampGrantsToCaller } from "@/lib/staff-grants";
 import { hashPassword } from "@/lib/password";
 import { hashPin, verifyPin } from "@celsius/auth";
 import { logActivity, diffFields } from "@/lib/activity-log";
@@ -107,8 +108,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.outletIds !== undefined) data.outletIds = body.outletIds;
   if (body.username !== undefined) data.username = body.username || null;
   if (body.status !== undefined) data.status = body.status;
-  if (body.appAccess !== undefined) data.appAccess = body.appAccess;
-  if (body.moduleAccess !== undefined) data.moduleAccess = body.moduleAccess;
+  // A manager can't grant a Staff member apps/modules they don't hold themselves.
+  const grants = await clampGrantsToCaller(caller, body.appAccess, body.moduleAccess);
+  if (grants.appAccess !== undefined) data.appAccess = grants.appAccess;
+  if (grants.moduleAccess !== undefined) data.moduleAccess = grants.moduleAccess;
 
   // Password — hash before saving
   if (body.password && body.password.length >= 8) {

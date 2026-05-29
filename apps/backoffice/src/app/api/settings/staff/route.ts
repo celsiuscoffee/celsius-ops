@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders, hasModulePermission, AuthError } from "@/lib/auth";
+import { clampGrantsToCaller } from "@/lib/staff-grants";
 import { getAccessibleOutletIds } from "@/lib/hr/scope";
 import { hashPassword } from "@/lib/password";
 import { hashPin, verifyPin } from "@celsius/auth";
@@ -102,6 +103,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // A manager can't grant a Staff member apps/modules they don't hold themselves.
+  const grants = await clampGrantsToCaller(caller, appAccess, moduleAccess);
+
   const data: Record<string, unknown> = {
     name,
     phone,
@@ -110,8 +114,8 @@ export async function POST(req: NextRequest) {
     outletId: outletId || (caller.role === "MANAGER" ? caller.outletId : null),
     outletIds: outletIds || [],
     username: username || null,
-    appAccess: appAccess || [],
-    moduleAccess: moduleAccess || {},
+    appAccess: grants.appAccess ?? [],
+    moduleAccess: grants.moduleAccess ?? {},
   };
 
   if (password && password.length >= 8) {
