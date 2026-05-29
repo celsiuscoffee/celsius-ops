@@ -92,6 +92,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useFetch } from "@/lib/use-fetch";
+import { GRANTABLE_MODULE_KEYS } from "@/lib/modules";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -457,6 +458,27 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
 ];
+
+// Dev-time guard against nav <-> permission-registry drift. If a nav item
+// gates on a module that isn't grantable in the Staff & Access editor (or a
+// grantable module has no nav destination), managers silently lose access —
+// the exact failure that hid Reviews/Ads/POS settings. finance:* is OWNER-only
+// and intentionally not grantable, so it's skipped.
+if (process.env.NODE_ENV !== "production") {
+  const navKeys = new Set<string>();
+  for (const section of NAV_SECTIONS) {
+    const items = [...(section.items ?? []), ...(section.subgroups?.flatMap((sg) => sg.items) ?? [])];
+    for (const item of items) if (item.moduleKey) navKeys.add(item.moduleKey);
+  }
+  const missingFromRegistry = [...navKeys].filter((k) => !k.startsWith("finance:") && !GRANTABLE_MODULE_KEYS.has(k));
+  const missingFromNav = [...GRANTABLE_MODULE_KEYS].filter((k) => !navKeys.has(k));
+  if (missingFromRegistry.length) {
+    console.warn("[perms] nav moduleKeys not grantable in Staff & Access (add to lib/modules.ts):", missingFromRegistry);
+  }
+  if (missingFromNav.length) {
+    console.warn("[perms] grantable modules with no nav destination (remove from lib/modules.ts or add to nav):", missingFromNav);
+  }
+}
 
 // ─── RBAC helper ────────────────────────────────────────────────────────
 
