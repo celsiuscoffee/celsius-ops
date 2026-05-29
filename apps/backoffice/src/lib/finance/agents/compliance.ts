@@ -76,6 +76,20 @@ async function buildConsolidatedDoc(opts: {
 }): Promise<EinvoiceDocument | null> {
   const client = getFinanceClient();
   const { companyId, yearMonth, outletId } = opts;
+
+  // SST rate for the line-level rate label, sourced from app_settings.sst —
+  // the same config the order app charges customers with — so the rate we
+  // report to LHDN tracks the rate we collect. enabled=false ⇒ 0, matching
+  // the checkout path. The submitted sstAmount/taxTotal still come from the
+  // recorded fin_invoices amounts, not this rate.
+  const { data: sstSetting } = await client
+    .from("app_settings")
+    .select("value")
+    .eq("key", "sst")
+    .maybeSingle();
+  const sstConfig = (sstSetting?.value as { rate?: number; enabled?: boolean } | undefined) ?? {};
+  const sstRate = sstConfig.enabled === false ? 0 : Number(sstConfig.rate ?? 0.06);
+
   const [yearStr, monthStr] = yearMonth.split("-");
   const year = Number(yearStr);
   const month = Number(monthStr);
@@ -130,7 +144,7 @@ async function buildConsolidatedDoc(opts: {
     unitPrice: round2(agg.subtotal / Math.max(agg.count, 1)),
     classification: "022",       // F&B service classification
     subtotal: round2(agg.subtotal),
-    sstRate: 0.06,
+    sstRate,
     sstAmount: round2(agg.sst),
   }));
 
