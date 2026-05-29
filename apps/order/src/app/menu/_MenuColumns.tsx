@@ -257,7 +257,7 @@ export function MenuColumns({
 
     <div className="flex" style={{ minHeight: "calc(100dvh - 200px)" }}>
       <aside
-        className="flex-shrink-0 bg-white overflow-y-auto w-[60px] min-[420px]:w-20"
+        className="flex-shrink-0 bg-white overflow-y-auto w-[76px] min-[420px]:w-24"
         style={{
           position: "sticky",
           top: "calc(env(safe-area-inset-top, 0px) + 100px)",
@@ -279,9 +279,9 @@ export function MenuColumns({
                 <button
                   type="button"
                   onClick={() => onPickPill(s.id)}
-                  className="flex flex-col items-center justify-center gap-1 rounded-2xl active:opacity-70 w-[52px] min-[420px]:w-[72px]"
+                  className="flex flex-col items-center justify-center gap-1 rounded-2xl active:opacity-70 w-[68px] min-[420px]:w-[88px]"
                   style={{
-                    height: 64,
+                    height: 78,
                     paddingLeft: 4,
                     paddingRight: 4,
                     backgroundColor: on ? "#160800" : "transparent",
@@ -289,13 +289,13 @@ export function MenuColumns({
                   aria-current={on ? "true" : undefined}
                 >
                   <Icon
-                    size={16}
+                    size={22}
                     color={on ? "#FFFFFF" : "#6E6E73"}
                     strokeWidth={1.75}
                     fill={on && s.icon === "star" ? "#FFFFFF" : "transparent"}
                   />
                   <span
-                    className="text-[9px] text-center leading-[11px]"
+                    className="text-[11px] text-center leading-[13px]"
                     style={{ color: on ? "#FFFFFF" : "#160800", fontWeight: 600 }}
                   >
                     {s.label}
