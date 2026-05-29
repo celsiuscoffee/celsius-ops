@@ -1060,7 +1060,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     // Empty moduleAccess = full access (legacy behavior)
     if (!user.moduleAccess || user.moduleAccess.length === 0) return;
 
-    // Find the moduleKey for the current path
+    // Match the current path to the MOST SPECIFIC (longest-href) nav item,
+    // then gate on that item's module. A first-match loop let a broad parent
+    // like the Settings "Hub" (/settings) shadow more specific siblings such
+    // as /settings/staff — so a manager who has settings:staff but not the
+    // Hub's settings:outlets got bounced to /dashboard the instant they
+    // opened Settings. Longest-match mirrors the sidebar's active-link logic.
+    let best: NavItem | undefined;
     for (const section of NAV_SECTIONS) {
       const allItems = [
         ...(section.items ?? []),
@@ -1068,13 +1074,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       ];
       for (const item of allItems) {
         if (pathname === item.href || pathname.startsWith(item.href + "/")) {
-          if (item.moduleKey && !canAccess(user, item.moduleKey)) {
-            router.replace("/dashboard");
-            return;
-          }
-          return; // Found matching route, access OK
+          if (!best || item.href.length > best.href.length) best = item;
         }
       }
+    }
+    if (best?.moduleKey && !canAccess(user, best.moduleKey)) {
+      router.replace("/dashboard");
     }
   }, [user, pathname, router]);
 
