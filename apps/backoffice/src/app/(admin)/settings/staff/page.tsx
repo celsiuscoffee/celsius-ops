@@ -53,7 +53,7 @@ export default function StaffPage() {
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [form, setForm] = useState<StaffForm>(emptyForm);
   const [outlets, setOutlets] = useState<OutletOption[]>([]);
-  const [me, setMe] = useState<{ role: string; outletId: string | null } | null>(null);
+  const [me, setMe] = useState<{ role: string; outletId: string | null; appAccess: string[]; moduleAccess: string[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -73,11 +73,20 @@ export default function StaffPage() {
     loadStaff();
     fetch("/api/settings/outlets").then((r) => r.json()).then(setOutlets);
     fetch("/api/auth/me").then((r) => r.ok ? r.json() : null).then((d) => {
-      if (d) setMe({ role: d.role, outletId: d.outletId ?? null });
+      if (d) setMe({ role: d.role, outletId: d.outletId ?? null, appAccess: d.appAccess ?? [], moduleAccess: d.moduleAccess ?? [] });
     });
   }, []);
 
   const isManagerOnly = me?.role === "MANAGER";
+
+  // A manager can only grant apps/modules they hold themselves (also enforced
+  // server-side). Empty moduleAccess = full access, so no module clamp then.
+  const managerApps = new Set(me?.appAccess ?? []);
+  const managerModuleKeys = new Set(me?.moduleAccess ?? []);
+  const managerFullModules = managerModuleKeys.size === 0;
+  const canGrantApp = (app: string) => !isManagerOnly || managerApps.has(app);
+  const canGrantModule = (app: string, key: string) =>
+    !isManagerOnly || managerFullModules || managerModuleKeys.has(`${app}:${key}`);
 
   const filtered = staff.filter((s) => {
     const matchStatus = filter === "all" || s.status === filter;
@@ -496,7 +505,7 @@ export default function StaffPage() {
                   {isOwnerOrAdmin ? "Owner and Admin roles have full access to all apps." : "Select which apps this user can access."}
                 </p>
                 <div className="grid grid-cols-2 gap-1.5">
-                  {availableApps.map((app) => {
+                  {availableApps.filter((app) => canGrantApp(app)).map((app) => {
                     const isSelected = isOwnerOrAdmin || form.appAccess.includes(app);
                     return (
                       <button
@@ -527,8 +536,10 @@ export default function StaffPage() {
                   <h3 className="text-sm font-semibold text-gray-900 mb-1">Module Access</h3>
                   <p className="text-xs text-gray-400 mb-3">Control which modules this user can see within each app. Empty = full access.</p>
                   <div className="space-y-4">
-                    {[...form.appAccess.filter((app) => APP_MODULES[app]), ...(form.appAccess.includes("backoffice") ? BACKOFFICE_SUB_APPS.filter((a) => APP_MODULES[a]) : [])].map((app) => {
-                      const modules = APP_MODULES[app];
+                    {[...form.appAccess.filter((app) => APP_MODULES[app]), ...(form.appAccess.includes("backoffice") ? BACKOFFICE_SUB_APPS.filter((a) => APP_MODULES[a]) : [])]
+                      .filter((app) => APP_MODULES[app].some((m) => canGrantModule(app, m.key)))
+                      .map((app) => {
+                      const modules = APP_MODULES[app].filter((m) => canGrantModule(app, m.key));
                       const selected = form.moduleAccess[app] || [];
                       const allSelected = modules.every((m) => selected.includes(m.key));
                       const noneSelected = selected.length === 0;
