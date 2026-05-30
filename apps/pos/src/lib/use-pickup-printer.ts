@@ -47,6 +47,7 @@ type PickupOrderRow = {
   store_id: string;
   status: string;
   order_type: string | null;
+  table_number: string | null;
   pickup_at: string | null;
   notes: string | null;
   customer_name: string | null;
@@ -106,7 +107,7 @@ export function usePickupPrinter(
         const { data: order } = await supabase
           .from("orders")
           .select(
-            "id, order_number, store_id, status, order_type, pickup_at, notes, customer_name, customer_phone, created_at, kitchen_docket_printed_at",
+            "id, order_number, store_id, status, order_type, table_number, pickup_at, notes, customer_name, customer_phone, created_at, kitchen_docket_printed_at",
           )
           .eq("id", orderId)
           .maybeSingle();
@@ -138,19 +139,21 @@ export function usePickupPrinter(
           notes: null,
         }));
 
-        // Build the "order" shape. Pickup orders are always
-        // collected at the counter — no table number — so we
-        // surface order_number as the queue label.
+        // Build the "order" shape. For pickup/takeaway we surface
+        // order_number as the queue label; for QR dine-in we pass
+        // order_type "dine_in" + the table number so the docket
+        // shows "TABLE N" instead of a counter queue label.
+        const isDineIn = row.order_type === "dine_in";
         const orderForPrint = {
           order_number: row.order_number,
-          order_type: "takeaway",
-          table_number: null,
+          order_type: isDineIn ? "dine_in" : "takeaway",
+          table_number: isDineIn ? row.table_number ?? null : null,
           queue_number: row.order_number,
           created_at: row.created_at,
           pos_order_items,
         };
 
-        await printKitchenDocket80mm(orderForPrint, "Celsius Coffee Pickup");
+        await printKitchenDocket80mm(orderForPrint, isDineIn ? "Celsius Coffee Dine-in" : "Celsius Coffee Pickup");
 
         // Atomic claim: only mark printed if it's still NULL. If
         // the UPDATE returns no rows, another terminal beat us —
