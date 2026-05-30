@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.celsiuscoffee.customerdisplay'
+version = '0.1.0'
+
+android {
+  namespace "com.celsiuscoffee.customerdisplay"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // React Native core — for ReactApplication / ReactHost / ReactSurface
+  // (the Fabric Presentation surface). compileOnly: the app module already
+  // bundles react-android at runtime, so we only need the symbols to compile.
+  compileOnly "com.facebook.react:react-android:0.81.5"
+}

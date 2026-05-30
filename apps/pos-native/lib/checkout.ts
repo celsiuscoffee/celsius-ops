@@ -88,16 +88,33 @@ export type SaleParams = {
   lines: CartLine[];
   orderType: "dine_in" | "takeaway";
   paymentMethod: string; // "cash" | "card" | "qr"
+  /** Outlet service-charge percent from pos_branch_settings (e.g. 10 = 10%). */
+  serviceChargeRate?: number;
   tableNumber?: string | null;
   queueNumber?: string | null;
   customerPhone?: string | null;
   notes?: string | null;
+  // Loyalty (member + applied reward).
+  loyaltyPhone?: string | null;
+  rewardId?: string | null;
+  rewardName?: string | null;
+  rewardDiscount?: number; // sen — redeemed voucher
+  // Auto-applied tier % + promotions (sen) and a human label for the receipt.
+  promoDiscount?: number; // sen
+  promoName?: string | null;
+  // Cashier-applied manual discount (sen). Folds into discount_amount —
+  // mirrors the web POS, which has no dedicated manual-discount column.
+  manualDiscount?: number; // sen
 };
 
 export type Sale = {
   id: string;
   orderNumber: string;
+  subtotal: number;
+  serviceCharge: number;
+  discount: number;
   total: number;
+  createdAt: string;
 };
 
 export async function createSale(params: SaleParams): Promise<Sale> {
@@ -105,7 +122,21 @@ export async function createSale(params: SaleParams): Promise<Sale> {
   if (lines.length === 0) throw new Error("Cart is empty");
 
   const subtotal = lines.reduce((s, l) => s + l.unit_sen * l.qty, 0);
-  const total = subtotal; // tax / service charge / discounts: future slice
+  // Service charge is a backoffice-set percent on the subtotal (sen),
+  // applied to DINE-IN only (mirrors the web register). Reward discount
+  // comes off the total. Total floors at 0 (a fully-discounted order is
+  // valid — e.g. a free-drink voucher).
+  const serviceCharge =
+    params.orderType === "dine_in"
+      ? Math.round((subtotal * (params.serviceChargeRate ?? 0)) / 100)
+      : 0;
+  // Total discount = redeemed voucher + auto tier% / promotions + the
+  // cashier's manual discount, clamped so it never exceeds what's owed.
+  const rewardDiscount = Math.max(0, params.rewardDiscount ?? 0);
+  const promoDiscount = Math.max(0, params.promoDiscount ?? 0);
+  const manualDiscount = Math.max(0, params.manualDiscount ?? 0);
+  const discount = Math.min(rewardDiscount + promoDiscount + manualDiscount, subtotal + serviceCharge);
+  const total = Math.max(0, subtotal + serviceCharge - discount);
 
   const registerId = await resolveRegisterId(outletId);
   const shiftId = await ensureOpenShift(outletId, registerId, staffId);
@@ -125,11 +156,19 @@ export async function createSale(params: SaleParams): Promise<Sale> {
       table_number: params.tableNumber ?? null,
       queue_number: params.queueNumber ?? null,
       subtotal,
+      service_charge: serviceCharge,
+      discount_amount: discount,
+      promo_discount: promoDiscount,
+      promo_name: params.promoName ?? null,
       total,
       customer_phone: params.customerPhone ?? null,
+      loyalty_phone: params.loyaltyPhone ?? null,
+      reward_id: params.rewardId ?? null,
+      reward_name: params.rewardName ?? null,
+      reward_discount_amount: rewardDiscount,
       notes: params.notes ?? null,
     })
-    .select("id, order_number, total")
+    .select("id, order_number, total, created_at")
     .single();
   if (orderErr) throw orderErr;
 
@@ -158,5 +197,35 @@ export async function createSale(params: SaleParams): Promise<Sale> {
   });
   if (payErr) throw payErr;
 
-  return { id: order.id, orderNumber: order.order_number, total: order.total };
+  return {
+    id: order.id,
+    orderNumber: order.order_number,
+    subtotal,
+    serviceCharge,
+    discount,
+    total: order.total,
+    createdAt: order.created_at ?? new Date().toISOString(),
+  };
+}
+
+/**
+ * Next queue number for takeaway orders — reads + increments
+ * pos_branch_settings.queue_counter for the outlet (mirrors the web
+ * getNextQueueNumber). Best-effort: on any error we fall back to a
+ * time-based number so checkout never blocks.
+ */
+export async function getNextQueueNumber(outletId: string): Promise<string> {
+  try {
+    const { data } = await supabase
+      .from("pos_branch_settings")
+      .select("queue_counter")
+      .eq("outlet_id", outletId)
+      .maybeSingle();
+    const counter = (data?.queue_counter as number | null) ?? 0;
+    const next = counter + 1;
+    await supabase.from("pos_branch_settings").update({ queue_counter: next }).eq("outlet_id", outletId);
+    return String(next);
+  } catch {
+    return String((Date.now() % 1000) + 1);
+  }
 }

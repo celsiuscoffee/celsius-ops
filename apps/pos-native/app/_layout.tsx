@@ -1,4 +1,6 @@
 import "../global.css";
+import "@/lib/register-customer-display";
+import CustomerDisplayNative from "@/modules/customer-display";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -67,6 +69,10 @@ export default function RootLayout() {
     if (fontsLoaded) {
       applyDefaultFont();
       SplashScreen.hideAsync();
+      // Mount the customer-facing screen on the SUNMI's secondary display
+      // (no-op on single-screen devices / where the module isn't present).
+      // Small delay lets the React host settle before we spin a 2nd surface.
+      setTimeout(() => { CustomerDisplayNative?.present().catch(() => {}); }, 800);
     }
   }, [fontsLoaded]);
 

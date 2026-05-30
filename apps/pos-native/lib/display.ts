@@ -24,15 +24,42 @@ export type DisplayMember = {
   name: string | null;
   phone: string;
   pointsBalance: number;
+  tierName?: string | null;
+  tierColor?: string | null;
 } | null;
+
+export type DisplayReward = { name: string; discountSen: number } | null;
+/** Auto tier% + promotions, combined, mirrored to the customer screen. */
+export type DisplayExtraDiscount = { label: string; sen: number } | null;
+export type DisplayOrderType = "dine_in" | "takeaway";
+/** Reverse channel: a reward the customer tapped to redeem on the 2nd screen.
+ *  The register watches this, applies it to the cart, then clears it. */
+export type DisplayRedeemRequest = { rewardId: string | null; issuedRewardId: string | null; name: string } | null;
 
 type DisplayState = {
   status: DisplayStatus;
   member: DisplayMember;
   orderNumber: string | null;
+  // Order context mirrored to the customer screen.
+  orderType: DisplayOrderType;
+  tableNumber: string | null;
+  reward: DisplayReward;
+  extraDiscount: DisplayExtraDiscount;
+  /** Cashier-applied manual discount, mirrored as its own line. */
+  manualDiscount: DisplayExtraDiscount;
+  /** Amount payable on the pay screen (sen). */
+  payTotal: number;
+  redeemRequest: DisplayRedeemRequest;
   setStatus: (s: DisplayStatus) => void;
   setMember: (m: DisplayMember) => void;
   setOrderNumber: (n: string | null) => void;
+  setOrderType: (t: DisplayOrderType) => void;
+  setTableNumber: (n: string | null) => void;
+  setReward: (r: DisplayReward) => void;
+  setExtraDiscount: (d: DisplayExtraDiscount) => void;
+  setManualDiscount: (d: DisplayExtraDiscount) => void;
+  setPayTotal: (n: number) => void;
+  setRedeemRequest: (r: DisplayRedeemRequest) => void;
   reset: () => void;
 };
 
@@ -40,8 +67,24 @@ export const useDisplay = create<DisplayState>((set) => ({
   status: "idle",
   member: null,
   orderNumber: null,
+  orderType: "takeaway",
+  tableNumber: null,
+  reward: null,
+  extraDiscount: null,
+  manualDiscount: null,
+  payTotal: 0,
+  redeemRequest: null,
   setStatus: (status) => set({ status }),
   setMember: (member) => set({ member }),
   setOrderNumber: (orderNumber) => set({ orderNumber }),
-  reset: () => set({ status: "idle", member: null, orderNumber: null }),
+  setOrderType: (orderType) => set({ orderType }),
+  setTableNumber: (tableNumber) => set({ tableNumber }),
+  setReward: (reward) => set({ reward }),
+  setExtraDiscount: (extraDiscount) => set({ extraDiscount }),
+  setManualDiscount: (manualDiscount) => set({ manualDiscount }),
+  setPayTotal: (payTotal) => set({ payTotal }),
+  setRedeemRequest: (redeemRequest) => set({ redeemRequest }),
+  // Keep member identified across orders (a returning regular stays
+  // logged in for the next basket); only clear cart-scoped context.
+  reset: () => set({ status: "idle", orderNumber: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, payTotal: 0, redeemRequest: null }),
 }));

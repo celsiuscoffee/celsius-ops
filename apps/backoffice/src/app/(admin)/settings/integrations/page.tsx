@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  Loader2, CheckCircle2, RefreshCw,
+  Loader2, CheckCircle2, RefreshCw, QrCode,
   Wallet, Store, ChevronDown, ChevronRight,
   ShieldCheck, Eye, EyeOff, Save, Zap,
   CreditCard, FileText, Link2, Info,
@@ -32,6 +32,9 @@ interface PaymentGatewayConfig {
   enabled: boolean;
   provider: string;
 }
+
+type MaybankQrOutlet = { payload: string; enabled: boolean };
+type MaybankQrConfig = { enabled: boolean; outlets: Record<string, MaybankQrOutlet> };
 
 /* ─── Static data ───────────────────────────────────────────────────────── */
 
@@ -267,6 +270,14 @@ export default function IntegrationsPage() {
 
   const [toggling, setToggling] = useState<string | null>(null);
 
+  // Maybank static QR (app_settings 'maybank_qr' blob) + config sync.
+  const [qr, setQr] = useState<MaybankQrConfig>({ enabled: false, outlets: {} });
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrSaving, setQrSaving] = useState(false);
+  const [qrMsg, setQrMsg] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
   /* ── Load ──────────────────────────────────────────────────────────────── */
 
   const loadOutlets = useCallback(async () => {
@@ -297,7 +308,54 @@ export default function IntegrationsPage() {
     setPgLoading(false);
   }, []);
 
-  useEffect(() => { loadOutlets(); loadPgConfig(); }, [loadOutlets, loadPgConfig]);
+  const loadQr = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings?key=maybank_qr");
+      const data = await res.json();
+      if (data && typeof data === "object") {
+        setQr({ enabled: !!data.enabled, outlets: data.outlets ?? {} });
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { loadOutlets(); loadPgConfig(); loadQr(); }, [loadOutlets, loadPgConfig, loadQr]);
+
+  /* ── Maybank QR + config sync ──────────────────────────────────────────── */
+
+  async function saveQr(next: MaybankQrConfig) {
+    setQr(next);
+    setQrSaving(true);
+    setQrMsg(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "maybank_qr", value: next }),
+      });
+      if (!res.ok) throw new Error();
+      setQrMsg("Saved");
+    } catch {
+      setQrMsg("Save failed");
+    }
+    setQrSaving(false);
+  }
+
+  async function syncConfig() {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "pickup_config_version", value: Date.now() }),
+      });
+      if (!res.ok) throw new Error();
+      setSyncMsg("Synced — POS displays and the order app will pick up the latest config.");
+    } catch {
+      setSyncMsg("Sync failed — try again.");
+    }
+    setSyncing(false);
+  }
 
   /* ── Payment methods ───────────────────────────────────────────────────── */
 
@@ -530,6 +588,80 @@ export default function IntegrationsPage() {
               );
             })}
           </div>
+        </div>
+      </SectionCard>
+
+      {/* ── Maybank QR (static, manual staff confirm) ───────────────────── */}
+      <SectionCard
+        icon={<QrCode className="h-5 w-5 text-emerald-600" />}
+        iconBg="bg-emerald-50"
+        title="Maybank QR"
+        subtitle="Static DuitNow QR per outlet — staff confirm payment before the order is released"
+        badge={<StatusPill ok={qr.enabled} label={qr.enabled ? "Live" : "Off"} />}
+        open={qrOpen}
+        onToggle={() => setQrOpen(!qrOpen)}
+      >
+        <div className="mt-4 space-y-4">
+          {/* Master enable */}
+          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3">
+            <div className="pr-4">
+              <div className="text-sm font-medium text-gray-900">Show Maybank QR at checkout</div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                When on, customers can pay by scanning the outlet&apos;s Maybank QR. The order waits as
+                <span className="font-medium"> pending</span> until staff confirm payment and release it to the kitchen.
+              </div>
+            </div>
+            <Toggle checked={qr.enabled} onChange={(v) => saveQr({ ...qr, enabled: v })} disabled={qrSaving} />
+          </div>
+
+          {/* Per-outlet QR payloads */}
+          <div className="rounded-lg border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+            {outlets.map((o) => {
+              const sid = o.store_id;
+              const oc = qr.outlets[sid] ?? { payload: "", enabled: false };
+              return (
+                <div key={sid} className="px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Store className="h-4 w-4 text-gray-400 shrink-0" />
+                      <span className="text-sm font-medium text-gray-900 truncate">{STORE_NAMES[sid] ?? sid}</span>
+                      <StatusPill ok={!!oc.payload} label={oc.payload ? "QR set" : "No QR"} />
+                    </div>
+                    <Toggle
+                      checked={oc.enabled}
+                      onChange={(v) => saveQr({ ...qr, outlets: { ...qr.outlets, [sid]: { ...oc, enabled: v } } })}
+                      disabled={qrSaving}
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={oc.payload}
+                    onChange={(e) => setQr({ ...qr, outlets: { ...qr.outlets, [sid]: { ...oc, payload: e.target.value } } })}
+                    onBlur={() => saveQr(qr)}
+                    placeholder="Maybank QR payload (e.g. MBBQR1671618)"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono text-gray-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Sync */}
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+            <div className="text-xs text-gray-600">
+              {qrMsg && <span className="mr-2 font-medium text-emerald-600">{qrMsg}</span>}
+              Push the latest QR + payment config to the POS displays and the order app.
+            </div>
+            <button
+              onClick={syncConfig}
+              disabled={syncing}
+              className="flex shrink-0 items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {syncing ? "Syncing…" : "Sync now"}
+            </button>
+          </div>
+          {syncMsg && <p className="text-xs text-gray-500">{syncMsg}</p>}
         </div>
       </SectionCard>
 

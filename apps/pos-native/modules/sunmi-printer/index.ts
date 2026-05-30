@@ -1,0 +1,50 @@
+import { requireOptionalNativeModule } from "expo-modules-core";
+
+/**
+ * Typed JS handle to the native SunmiPrinter module (Android-only).
+ *
+ * Uses requireOptionalNativeModule so the app keeps running where the
+ * native module isn't compiled in — Expo Go, the Metro web target, or a
+ * non-SUNMI device — instead of throwing at import time. Callers must
+ * null-check (lib/printer.ts does).
+ */
+
+export type ReceiptOptions = {
+  header: string;
+  body: string;
+  footer: string;
+  showLogo?: boolean;
+  qrUrl?: string;
+  qrLabel?: string;
+  promoText?: string;
+};
+
+export type DocketOptions = {
+  station: string;
+  orderNumber: string;
+  orderType: string;
+  tableNumber?: string;
+  queueNumber?: string;
+  time: string;
+  items: string;
+};
+
+export type PrinterStatus = {
+  connected: boolean;
+  status?: string;
+  name?: string;
+  paper?: string;
+};
+
+export type SunmiPrinterModule = {
+  isConnected(): Promise<{ connected: boolean }>;
+  printerInit(): Promise<{ connected: boolean }>;
+  getStatus(): Promise<PrinterStatus>;
+  printText(text: string): Promise<void>;
+  printFormattedReceipt(options: ReceiptOptions): Promise<void>;
+  printOrderDocket(options: DocketOptions): Promise<void>;
+};
+
+const SunmiPrinter = requireOptionalNativeModule<SunmiPrinterModule>("SunmiPrinter");
+
+export default SunmiPrinter;

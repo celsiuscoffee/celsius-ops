@@ -1,0 +1,25 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.celsiuscoffee.sunmiprinter'
+version = '0.1.0'
+
+android {
+  namespace "com.celsiuscoffee.sunmiprinter"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  // Official SUNMI PrinterX SDK — same version the Capacitor POS used
+  // (apps/pos/android/app/build.gradle). Drives the D3 built-in 80mm head.
+  implementation 'com.sunmi:printerx:1.0.18'
+}

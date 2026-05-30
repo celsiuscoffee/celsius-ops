@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { View, Text, Pressable, ActivityIndicator, Modal, ScrollView } from "react-native";
+import { View, Text, Pressable, ActivityIndicator, Modal, ScrollView, Image, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Delete, ChevronDown, Check } from "lucide-react-native";
@@ -85,57 +85,72 @@ export default function Login() {
 
   const selected = outlets.find((o) => o.id === outletId);
 
+  // The two-column login block is ~644×400 at full size. On smaller / narrower
+  // SUNMI panels it overflowed and clipped the keypad, so scale the whole block
+  // down to fit the actual screen. Capped at 1 — a full-size landscape till is
+  // unchanged; only constrained screens shrink.
+  const { width: winW, height: winH } = useWindowDimensions();
+  const loginScale = Math.min(1, (winW - 56) / 644, (winH - 56) / 400);
+
   return (
     <View className="flex-1 bg-espresso items-center justify-center">
-      <View className="items-center" style={{ gap: 32 }}>
-        {/* Brand */}
-        <View className="items-center" style={{ gap: 12 }}>
-          <View className="h-24 w-24 rounded-3xl bg-cream items-center justify-center">
-            <Text className="text-espresso text-5xl" style={{ fontFamily: "Peachi-Bold" }}>°C</Text>
+      {/* Landscape two-column: identity on the left, keypad on the right.
+          The screen is only 720dp tall — stacking everything in one column
+          overflowed, so the tall keypad sits beside the brand instead.
+          loginScale shrinks the block to fit smaller panels (never upscales). */}
+      <View className="flex-row items-center" style={{ gap: 72, transform: [{ scale: loginScale }] }}>
+        {/* Left: identity + outlet + PIN dots */}
+        <View className="items-center" style={{ gap: 22, width: 300 }}>
+          <Image
+            source={require("@/assets/icon.png")}
+            style={{ width: 104, height: 104, borderRadius: 26 }}
+            resizeMode="contain"
+          />
+          <View className="items-center" style={{ gap: 4 }}>
+            <Text className="text-cream text-3xl" style={{ fontFamily: "Peachi-Bold" }}>Celsius Coffee</Text>
+            <Text className="text-cream/55 text-base" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Staff Login</Text>
           </View>
-          <Text className="text-cream text-4xl" style={{ fontFamily: "Peachi-Bold" }}>Celsius Coffee</Text>
-          <Text className="text-cream/55 text-lg" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Staff Login</Text>
+
+          {/* Outlet dropdown */}
+          <Pressable
+            onPress={() => { Haptics.selectionAsync(); setPickerOpen(true); }}
+            className="w-full flex-row items-center justify-between rounded-xl px-4 py-3.5 border"
+            style={{ backgroundColor: SURFACE_RAISED, borderColor: "rgba(245,243,240,0.14)" }}
+          >
+            <Text className={selected ? "text-cream" : "text-cream/40"} style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 16 }}>
+              {selected ? label(selected) : "Select Outlet"}
+            </Text>
+            <ChevronDown size={20} color="rgba(245,243,240,0.5)" />
+          </Pressable>
+
+          {/* PIN dots */}
+          <View className="flex-row" style={{ gap: 16 }}>
+            {[0, 1, 2, 3, 4, 5].map((i) => {
+              const filled = i < pin.length;
+              return (
+                <View
+                  key={i}
+                  className="h-5 w-5 rounded-full"
+                  style={{
+                    backgroundColor: filled ? (error ? DANGER : BRAND) : "#444",
+                    transform: [{ scale: filled ? 1.25 : 1 }],
+                  }}
+                />
+              );
+            })}
+          </View>
+
+          {/* Status line */}
+          <View className="h-6 justify-center">
+            {busy ? (
+              <Text className="text-cream/55 text-lg" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Verifying…</Text>
+            ) : error ? (
+              <Text className="text-lg" style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: DANGER }}>{error}</Text>
+            ) : null}
+          </View>
         </View>
 
-        {/* Outlet dropdown */}
-        <Pressable
-          onPress={() => { Haptics.selectionAsync(); setPickerOpen(true); }}
-          className="w-72 flex-row items-center justify-between rounded-xl px-4 py-3.5 border"
-          style={{ backgroundColor: SURFACE_RAISED, borderColor: "rgba(245,243,240,0.14)" }}
-        >
-          <Text className={selected ? "text-cream" : "text-cream/40"} style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 16 }}>
-            {selected ? label(selected) : "Select Outlet"}
-          </Text>
-          <ChevronDown size={20} color="rgba(245,243,240,0.5)" />
-        </Pressable>
-
-        {/* PIN dots */}
-        <View className="flex-row" style={{ gap: 16 }}>
-          {[0, 1, 2, 3, 4, 5].map((i) => {
-            const filled = i < pin.length;
-            return (
-              <View
-                key={i}
-                className="h-5 w-5 rounded-full"
-                style={{
-                  backgroundColor: filled ? (error ? DANGER : BRAND) : "#444",
-                  transform: [{ scale: filled ? 1.25 : 1 }],
-                }}
-              />
-            );
-          })}
-        </View>
-
-        {/* Status line */}
-        <View className="h-6 justify-center">
-          {busy ? (
-            <Text className="text-cream/55 text-lg" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Verifying…</Text>
-          ) : error ? (
-            <Text className="text-lg" style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: DANGER }}>{error}</Text>
-          ) : null}
-        </View>
-
-        {/* Keypad — 3-col grid: 1-9, Clear · 0 · ⌫ */}
+        {/* Right: keypad — 3-col grid: 1-9, Clear · 0 · ⌫ */}
         <View style={{ gap: 16 }}>
           {[["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"]].map((row, ri) => (
             <View key={ri} className="flex-row" style={{ gap: 16 }}>

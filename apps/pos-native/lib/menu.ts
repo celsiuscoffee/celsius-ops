@@ -53,12 +53,16 @@ function parseModifiers(raw: unknown): ModifierGroup[] {
       id: String(g?.id ?? g?.name ?? `g${gi}`),
       name: String(g?.name ?? "Options"),
       required: Boolean(g?.required ?? g?.is_required ?? false),
-      multi: Boolean(g?.multi ?? g?.multiple ?? g?.allow_multiple ?? false),
+      // Live catalog uses `multiSelect`; keep the older aliases as fallbacks.
+      multi: Boolean(g?.multiSelect ?? g?.multi ?? g?.multiple ?? g?.allow_multiple ?? false),
       options: Array.isArray(g?.options)
         ? g.options.map((o: any, oi: number) => ({
-            id: String(o?.id ?? o?.name ?? `o${oi}`),
-            name: String(o?.name ?? ""),
-            price_sen: toSen(o?.price ?? o?.price_rm ?? 0),
+            // Option label is stored under `label` (price under `priceDelta`,
+            // in RM). Earlier `name`/`price` were wrong fields → blank rows
+            // with no add-on price. Keep both as fallbacks.
+            id: String(o?.id ?? o?.label ?? o?.name ?? `o${oi}`),
+            name: String(o?.label ?? o?.name ?? ""),
+            price_sen: toSen(o?.priceDelta ?? o?.price ?? o?.price_rm ?? 0),
           }))
         : [],
     }))
@@ -97,5 +101,33 @@ export async function fetchProducts(): Promise<Product[]> {
     tax_rate: Number(p.tax_rate ?? 0),
     tax_inclusive: p.tax_inclusive ?? true,
     modifiers: parseModifiers(p.modifiers),
+  }));
+}
+
+// Food/snack categories used as "pair with a bite" upsell suggestions on
+// the customer-display — guest-friendly (no member needed).
+const BITE_CATEGORIES = ["cakes", "cookies", "croissant", "fries", "nasi-lemak", "noodle", "pasta", "roti-bakar", "sandwiches"];
+
+export type DisplayBite = { id: string; name: string; category: string; price_sen: number; image_url: string | null };
+
+/** Available bite/snack products (with images, anon read) to upsell
+ *  alongside a drink order. Used by the customer-display hero. */
+export async function fetchBites(limit = 8): Promise<DisplayBite[]> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, name, category, price, image_url, position")
+    .eq("brand_id", BRAND_ID)
+    .eq("is_available", true)
+    .in("category", BITE_CATEGORIES)
+    .not("image_url", "is", null)
+    .order("position", { ascending: true })
+    .limit(limit);
+  if (error) return [];
+  return (data ?? []).map((p: any) => ({
+    id: p.id,
+    name: p.name,
+    category: p.category ?? "",
+    price_sen: toSen(p.price),
+    image_url: p.image_url ?? null,
   }));
 }
