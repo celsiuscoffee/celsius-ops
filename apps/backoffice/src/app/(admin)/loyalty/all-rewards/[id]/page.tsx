@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import RewardForm, { type FormValue, type DiscountType, type Scope } from "../RewardForm";
+import RewardForm, { type FormValue, type DiscountType, type Scope, type TriggerType } from "../RewardForm";
 
 const BRAND_ID = "brand-celsius";
 
@@ -23,7 +23,7 @@ type ApiRow = {
   bogo_free_qty: number | null;
   multiplier_value: number | null;
   expires_days: number | null;
-  triggers: { type: string }[];
+  triggers: { type: TriggerType; label: string }[];
 };
 
 export default function EditRewardPage() {
@@ -41,10 +41,6 @@ export default function EditRewardPage() {
         if (!row) {
           setError("Reward not found");
           return;
-        }
-        const triggers: FormValue["triggers"] = {};
-        for (const t of row.triggers) {
-          (triggers as Record<string, Record<string, unknown>>)[t.type] = {};
         }
         setInitial({
           id: row.id,
@@ -65,7 +61,7 @@ export default function EditRewardPage() {
           stacks_with_beans: true,
           stacks_with_other: false,
           is_active: row.is_active,
-          triggers,
+          existingTriggers: row.triggers, // read-only chips
         });
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load"));

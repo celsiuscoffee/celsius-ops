@@ -1,21 +1,23 @@
 "use client";
 
-// RewardForm — the unified "New Reward" / "Edit Reward" form.
+// RewardForm — the "New Reward" / "Edit Reward" form.
 //
-// One form covers: the canonical voucher template (9 discount types,
-// scope/target_ids eligibility, modifier filter, type-specific knobs,
-// limits) PLUS optional trigger config for the 3 channels we can write
-// to today (Mystery / Mission / Admin Push). The remaining 4 channels
-// (Bean Shop / Birthday / Tier Upgrade / Manual Grant) surface as
-// deferred chips with a deep-link to the existing channel page — they
-// land properly when the trigger consolidation (Commit 4 of the
-// refactor) replaces the per-channel tables.
+// This is the TEMPLATE REGISTRY. The form defines what a voucher
+// does (discount math + eligibility + theming + limits) and that's
+// the entirety of its scope. Channel pages (Mystery Pool / Challenges
+// / Birthday / Tier Upgrade / Admin Claimables / Manual Grant) stay
+// as separate surfaces — each picks from this template registry
+// when configuring its own trigger rules.
+//
+// In short: this form creates a voucher template. Where and when it
+// fires is set up on the channel pages.
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
-  ChevronLeft, Save, Trash2, X, Plus, Search,
-  Coins, Target, Gift, Cake, Crown, Megaphone, Hand,
+  ChevronLeft, Save, Trash2, X, Plus, Search, ExternalLink,
+  Gift, Target,
 } from "lucide-react";
 
 const BRAND_ID = "brand-celsius";
@@ -35,7 +37,6 @@ export type ProductOpt    = { id: string; name: string; category: string };
 export type CategoryOpt   = { id: string; name: string };
 
 export type FormValue = {
-  // template
   id?: string;
   title: string;
   description: string;
@@ -55,8 +56,10 @@ export type FormValue = {
   stacks_with_beans: boolean;
   stacks_with_other: boolean;
   is_active: boolean;
-  // triggers
-  triggers: Partial<Record<TriggerType, Record<string, unknown>>>;
+  /** Read-only — channels currently referencing this template.
+   *  Surfaces in the form as deep-links to the channel page so admin
+   *  knows where to go to wire/unwire a trigger. Not edited here. */
+  existingTriggers?: Array<{ type: TriggerType; label: string }>;
 };
 
 const EMPTY: FormValue = {
@@ -78,20 +81,20 @@ const EMPTY: FormValue = {
   stacks_with_beans: true,
   stacks_with_other: false,
   is_active: true,
-  triggers: {},
+  existingTriggers: [],
 };
 
-const TRIGGER_META: Record<TriggerType, { label: string; tagline: string; icon: typeof Coins; writeSupported: boolean; channelPage?: string }> = {
-  points_shop:   { label: "Spend Beans (Bean Points Shop)", tagline: "Customer redeems with their beans balance.", icon: Coins,     writeSupported: false, channelPage: "/loyalty/rewards" },
-  mission:       { label: "Complete a Challenge",            tagline: "Auto-issued when member hits a progress goal.", icon: Target,    writeSupported: true },
-  mystery:       { label: "Mystery Drop",                    tagline: "Random drop on every order, weighted.",          icon: Gift,      writeSupported: true },
-  birthday:      { label: "On Birthday",                     tagline: "Cron drops in wallet on member's birthday.",     icon: Cake,      writeSupported: false, channelPage: "/loyalty/birthday" },
-  tier_upgrade:  { label: "On Tier Upgrade",                 tagline: "Awarded when member crosses to specific tier.",  icon: Crown,     writeSupported: false, channelPage: "/loyalty/tiers" },
-  admin_push:    { label: "Admin Push (Claimable)",          tagline: "Queue for an audience; customer claims it.",     icon: Megaphone, writeSupported: true },
-  manual_grant:  { label: "Manual Grant Only",               tagline: "No auto-issue. Admin grants directly per member.", icon: Hand,    writeSupported: true },
+/** Channel-page deep-links — surface alongside read-only trigger
+ *  chips so admin can jump straight to the right config page. */
+const TRIGGER_CHANNEL_PAGE: Record<TriggerType, string> = {
+  points_shop:  "/loyalty/rewards",
+  mission:      "/loyalty/missions",
+  mystery:      "/loyalty/mystery",
+  birthday:     "/loyalty/birthday",
+  tier_upgrade: "/loyalty/tiers",
+  admin_push:   "/loyalty/admin-claimables",
+  manual_grant: "/loyalty/manual-grant",
 };
-
-const TRIGGER_ORDER: TriggerType[] = ["points_shop", "mission", "mystery", "birthday", "tier_upgrade", "admin_push", "manual_grant"];
 
 // Drink/food category slugs as defined on Celsius's product catalog.
 // In a follow-up we'll source these from /api/loyalty/categories so
@@ -115,21 +118,12 @@ type Props = {
   initial?: Partial<FormValue>;
 };
 
-export type MysteryPoolEntry = {
-  id: string;
-  label: string;
-  weight: number;
-  outcome_type: string;
-  is_active: boolean;
-};
-
 export default function RewardForm({ mode, initial }: Props) {
   const router = useRouter();
   const [val, setVal]     = useState<FormValue>({ ...EMPTY, ...initial });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState<string | null>(null);
   const [products, setProducts] = useState<ProductOpt[]>([]);
-  const [mysteryPool, setMysteryPool] = useState<MysteryPoolEntry[]>([]);
 
   // Fetch products once so the Specific Products picker can typeahead.
   // Backoffice already exposes /api/pickup/products with the catalog.
@@ -142,29 +136,8 @@ export default function RewardForm({ mode, initial }: Props) {
       .catch(() => setProducts([]));
   }, []);
 
-  // Fetch the live mystery pool so the Mystery trigger config can
-  // show drop-% in real time as the admin types a weight. Also drives
-  // the "Current pool" overview that contextualises the new entry.
-  useEffect(() => {
-    fetch(`/api/loyalty/mystery?brand_id=${BRAND_ID}`, { credentials: "include" })
-      .then((res) => res.json())
-      .then((rows: MysteryPoolEntry[]) => setMysteryPool(Array.isArray(rows) ? rows : []))
-      .catch(() => setMysteryPool([]));
-  }, []);
-
   function update<K extends keyof FormValue>(k: K, v: FormValue[K]) {
     setVal((p) => ({ ...p, [k]: v }));
-  }
-  function toggleTrigger(t: TriggerType) {
-    setVal((p) => {
-      const next = { ...p.triggers };
-      if (t in next) { delete next[t]; }
-      else { next[t] = defaultTriggerConfig(t); }
-      return { ...p, triggers: next };
-    });
-  }
-  function updateTrigger(t: TriggerType, key: string, v: unknown) {
-    setVal((p) => ({ ...p, triggers: { ...p.triggers, [t]: { ...(p.triggers[t] ?? {}), [key]: v } } }));
   }
   function toggleTargetId(id: string) {
     setVal((p) => ({
@@ -202,7 +175,6 @@ export default function RewardForm({ mode, initial }: Props) {
         stacks_with_beans:  val.stacks_with_beans,
         stacks_with_other:  val.stacks_with_other,
         is_active:          val.is_active,
-        triggers: mode === "create" ? val.triggers : undefined,  // trigger writes only on create
       };
       const res = await fetch(
         mode === "create" ? "/api/loyalty/all-rewards" : `/api/loyalty/all-rewards?id=${val.id}`,
@@ -445,63 +417,35 @@ export default function RewardForm({ mode, initial }: Props) {
         </Field>
       </Card>
 
-      {/* 3. Triggers */}
-      <Card title="How customers earn it" sub="Pick one or more. One template, many triggers." n={3}>
-        <div className="space-y-2">
-          {TRIGGER_ORDER.map((t) => {
-            const meta = TRIGGER_META[t];
-            const Icon = meta.icon;
-            const on = t in val.triggers;
-            const isSupported = meta.writeSupported;
-            return (
-              <div key={t} className={`border rounded-lg ${on ? "bg-amber-50 border-amber-300" : "bg-white border-slate-200"} transition`}>
-                <button onClick={() => toggleTrigger(t)} disabled={mode === "edit"} className="w-full flex items-start gap-3 p-3 text-left">
-                  <span className={`w-5 h-5 rounded border-2 flex-shrink-0 mt-0.5 flex items-center justify-center ${on ? "bg-slate-900 border-slate-900" : "border-slate-300"}`}>
-                    {on && <span className="text-white text-[11px] font-bold">✓</span>}
-                  </span>
-                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${on ? "bg-amber-200/60" : "bg-slate-100"}`}>
-                    <Icon className={`w-4 h-4 ${on ? "text-amber-800" : "text-slate-500"}`} />
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm text-slate-900 flex items-center gap-2">
-                      {meta.label}
-                      {!isSupported && (
-                        <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
-                          Configure separately
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-0.5">{meta.tagline}</div>
-                  </span>
-                </button>
-                {on && isSupported && mode === "create" && (
-                  <div className="px-3 pb-3 pl-14 space-y-2">
-                    <TriggerConfig type={t} value={val.triggers[t] ?? {}} onChange={(k, v) => updateTrigger(t, k, v)} mysteryPool={mysteryPool} />
-                  </div>
-                )}
-                {on && !isSupported && (
-                  <div className="px-3 pb-3 pl-14 text-xs text-slate-600">
-                    {meta.channelPage ? (
-                      <>Trigger writes for this channel land with the trigger-consolidation refactor.
-                      Configure in <a href={meta.channelPage} className="text-indigo-600 font-semibold underline">{meta.channelPage}</a> meanwhile.</>
-                    ) : (
-                      <>No setup needed. Any active template is grantable from the Manual Grant page.</>
-                    )}
-                  </div>
-                )}
-                {mode === "edit" && on && (
-                  <div className="px-3 pb-3 pl-14 text-xs text-slate-500 italic">
-                    Trigger config is locked during edit. Delete the trigger row from the channel page if you need to remove or reconfigure.
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+      {/* 3. Used by — read-only chips showing which channels reference this template.
+            Edits happen on the channel pages, not here. */}
+      {mode === "edit" && val.existingTriggers && val.existingTriggers.length > 0 && (
+        <Card title="Used by" sub="Channels currently referencing this reward. Edit the trigger config on each channel's page." n={3}>
+          <div className="space-y-2">
+            {val.existingTriggers.map((t, i) => (
+              <Link
+                key={i}
+                href={TRIGGER_CHANNEL_PAGE[t.type]}
+                className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition"
+              >
+                <span className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                  {t.type === "mystery"  && <Gift className="w-4 h-4 text-yellow-700" />}
+                  {t.type === "mission"  && <Target className="w-4 h-4 text-emerald-700" />}
+                  {t.type !== "mystery" && t.type !== "mission" && <Search className="w-4 h-4 text-slate-500" />}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-slate-900 truncate">{t.label}</div>
+                  <div className="text-xs text-slate-500">{TRIGGER_CHANNEL_PAGE[t.type]}</div>
+                </div>
+                <ExternalLink className="w-4 h-4 text-slate-400" />
+              </Link>
+            ))}
+          </div>
+        </Card>
+      )}
 
-      {/* 4. Limits */}
-      <Card title="Limits" sub="Validity + stacking rules." n={4}>
+      {/* Limits */}
+      <Card title="Limits" sub="Validity + stacking rules." n={mode === "edit" && val.existingTriggers && val.existingTriggers.length > 0 ? 4 : 3}>
         <Field label="Voucher expiry" help="How long the issued voucher stays in the customer's wallet.">
           <Prefix unit="days">
             <input type="number" value={val.validity_days} onChange={(e) => update("validity_days", Number(e.target.value))} />
@@ -523,170 +467,6 @@ export default function RewardForm({ mode, initial }: Props) {
         </Field>
       </Card>
 
-    </div>
-  );
-}
-
-// ─── Default per-trigger config ─────────────────────────────────
-function defaultTriggerConfig(t: TriggerType): Record<string, unknown> {
-  switch (t) {
-    case "mystery":    return { weight: 5, min_tier: null, birthday_month_boost: false, outcome_type: "voucher", flat_beans_value: 100, multiplier_value: 2 };
-    case "mission":    return { title: "", description: "", difficulty: "medium", goal: { type: "spend_rm", value: 30, period: "weekly" }, cooldown_weeks: 2 };
-    case "admin_push": return { title: "", description: "", audience_label: "", min_tier: null, max_claims: null, member_ids: [] };
-    default:           return {};
-  }
-}
-
-// ─── Trigger config sub-forms ───────────────────────────────────
-function TriggerConfig({ type, value, onChange, mysteryPool }: { type: TriggerType; value: Record<string, unknown>; onChange: (key: string, v: unknown) => void; mysteryPool: MysteryPoolEntry[] }) {
-  if (type === "mystery") {
-    const v = value as { weight?: number; min_tier?: string | null; birthday_month_boost?: boolean; outcome_type?: string; flat_beans_value?: number; multiplier_value?: number };
-    const newWeight = v.weight ?? 5;
-    // Live drop-% computation. The new entry adds to the existing
-    // active pool's weight, so drop% = newWeight / (existing + newWeight).
-    const activePool = mysteryPool.filter((p) => p.is_active);
-    const existingTotal = activePool.reduce((s, p) => s + p.weight, 0);
-    const newTotal = existingTotal + newWeight;
-    const newDropPct = newTotal > 0 ? (newWeight / newTotal) * 100 : 0;
-    return (
-      <>
-        <TriggerRow label="Outcome type" help="What the customer actually gets when this entry rolls.">
-          <select value={v.outcome_type ?? "voucher"} onChange={(e) => onChange("outcome_type", e.target.value)} className="px-2.5 py-1.5 text-sm border border-slate-200 rounded bg-white">
-            <option value="voucher">Voucher — uses the template above</option>
-            <option value="flat_beans">Flat bonus beans</option>
-            <option value="multiplier">Beans multiplier</option>
-            <option value="no_bonus">No bonus — placebo entry</option>
-          </select>
-        </TriggerRow>
-        {v.outcome_type === "flat_beans" && (
-          <TriggerRow label="Bonus beans" help="Flat bean award on top of normal earn.">
-            <input type="number" value={v.flat_beans_value ?? 100} onChange={(e) => onChange("flat_beans_value", Number(e.target.value))} className="w-24 px-2.5 py-1.5 text-sm border border-slate-200 rounded" />
-          </TriggerRow>
-        )}
-        {v.outcome_type === "multiplier" && (
-          <TriggerRow label="Multiplier" help="e.g. 2.0 = 2× beans on the customer's next order.">
-            <input type="number" step={0.1} value={v.multiplier_value ?? 2} onChange={(e) => onChange("multiplier_value", Number(e.target.value))} className="w-24 px-2.5 py-1.5 text-sm border border-slate-200 rounded" />
-          </TriggerRow>
-        )}
-        <TriggerRow label="Weight" help="Higher = more likely to drop. Existing pool weights show below.">
-          <div className="flex items-center gap-3">
-            <input type="number" min={0} value={newWeight} onChange={(e) => onChange("weight", Number(e.target.value))} className="w-24 px-2.5 py-1.5 text-sm border border-slate-200 rounded" />
-            <div className="text-xs text-slate-600">
-              <span className="font-semibold text-emerald-700">{newDropPct.toFixed(1)}%</span> drop chance
-              <span className="text-slate-400"> · weight {newWeight} of {newTotal} total</span>
-            </div>
-          </div>
-        </TriggerRow>
-        <TriggerRow label="Min tier">
-          <select value={v.min_tier ?? ""} onChange={(e) => onChange("min_tier", e.target.value || null)} className="px-2.5 py-1.5 text-sm border border-slate-200 rounded bg-white">
-            <option value="">Any</option>
-            <option value="bronze">Bronze+</option>
-            <option value="silver">Silver+</option>
-            <option value="gold">Gold+</option>
-            <option value="platinum">Platinum+</option>
-          </select>
-        </TriggerRow>
-        <TriggerRow label="Birthday boost">
-          <Switch checked={!!v.birthday_month_boost} onChange={(b) => onChange("birthday_month_boost", b)} label="Higher weight during member's birthday week" small />
-        </TriggerRow>
-        {activePool.length > 0 && (
-          <div className="mt-2 ml-32 border border-slate-200 rounded-lg bg-slate-50 p-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
-              Current pool · {activePool.length} entries · weight {existingTotal}
-            </div>
-            <div className="space-y-1">
-              {activePool
-                .slice()
-                .sort((a, b) => b.weight - a.weight)
-                .map((p) => {
-                  const futurePct = newTotal > 0 ? (p.weight / newTotal) * 100 : 0;
-                  return (
-                    <div key={p.id} className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-700 flex-1 truncate">{p.label}</span>
-                      <span className="text-[10px] text-slate-500 uppercase tracking-wider w-20 text-right">{p.outcome_type}</span>
-                      <span className="tabular-nums text-slate-500 w-12 text-right">w {p.weight}</span>
-                      <span className="tabular-nums font-semibold text-slate-700 w-12 text-right">{futurePct.toFixed(1)}%</span>
-                    </div>
-                  );
-                })}
-              <div className="border-t border-slate-200 pt-1 mt-1.5">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-emerald-700 flex-1 font-semibold truncate">+ {value && (value as { _previewTitle?: string })._previewTitle ? (value as { _previewTitle: string })._previewTitle : "This new entry"}</span>
-                  <span className="text-[10px] text-emerald-700 uppercase tracking-wider w-20 text-right">{v.outcome_type ?? "voucher"}</span>
-                  <span className="tabular-nums text-emerald-700 w-12 text-right">w {newWeight}</span>
-                  <span className="tabular-nums font-semibold text-emerald-700 w-12 text-right">{newDropPct.toFixed(1)}%</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </>
-    );
-  }
-  if (type === "mission") {
-    const v = value as { title?: string; description?: string; difficulty?: string; goal?: { type?: string; value?: number; period?: string }; cooldown_weeks?: number };
-    const g = v.goal ?? { type: "spend_rm", value: 30, period: "weekly" };
-    return (
-      <>
-        <TriggerRow label="Mission title"><input type="text" value={v.title ?? ""} onChange={(e) => onChange("title", e.target.value)} placeholder="Weekly Regular" className="flex-1 px-2.5 py-1.5 text-sm border border-slate-200 rounded" /></TriggerRow>
-        <TriggerRow label="Mission description"><input type="text" value={v.description ?? ""} onChange={(e) => onChange("description", e.target.value)} placeholder="Spend RM30 in a week" className="flex-1 px-2.5 py-1.5 text-sm border border-slate-200 rounded" /></TriggerRow>
-        <TriggerRow label="Goal type">
-          <select value={g.type ?? "spend_rm"} onChange={(e) => onChange("goal", { ...g, type: e.target.value })} className="px-2.5 py-1.5 text-sm border border-slate-200 rounded bg-white">
-            <option value="spend_rm">Spend RM</option>
-            <option value="order_count">Place N orders</option>
-            <option value="distinct_outlets">Visit N distinct outlets</option>
-          </select>
-        </TriggerRow>
-        <TriggerRow label="Goal value"><input type="number" value={g.value ?? 30} onChange={(e) => onChange("goal", { ...g, value: Number(e.target.value) })} className="w-32 px-2.5 py-1.5 text-sm border border-slate-200 rounded" /></TriggerRow>
-        <TriggerRow label="Period">
-          <select value={g.period ?? "weekly"} onChange={(e) => onChange("goal", { ...g, period: e.target.value })} className="px-2.5 py-1.5 text-sm border border-slate-200 rounded bg-white">
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-          </select>
-        </TriggerRow>
-        <TriggerRow label="Difficulty">
-          <select value={v.difficulty ?? "medium"} onChange={(e) => onChange("difficulty", e.target.value)} className="px-2.5 py-1.5 text-sm border border-slate-200 rounded bg-white">
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-        </TriggerRow>
-        <TriggerRow label="Cooldown (weeks)" help="After completion, member can't pick this challenge again for N weeks."><input type="number" value={v.cooldown_weeks ?? 2} onChange={(e) => onChange("cooldown_weeks", Number(e.target.value))} className="w-24 px-2.5 py-1.5 text-sm border border-slate-200 rounded" /></TriggerRow>
-      </>
-    );
-  }
-  if (type === "admin_push") {
-    const v = value as { title?: string; description?: string; audience_label?: string; min_tier?: string | null; max_claims?: number | null };
-    return (
-      <>
-        <TriggerRow label="Claimable title"><input type="text" value={v.title ?? ""} onChange={(e) => onChange("title", e.target.value)} placeholder="e.g., Welcome Back!" className="flex-1 px-2.5 py-1.5 text-sm border border-slate-200 rounded" /></TriggerRow>
-        <TriggerRow label="Description"><input type="text" value={v.description ?? ""} onChange={(e) => onChange("description", e.target.value)} className="flex-1 px-2.5 py-1.5 text-sm border border-slate-200 rounded" /></TriggerRow>
-        <TriggerRow label="Audience label" help="Free-text — e.g. 'VIP tier' or 'New Members'."><input type="text" value={v.audience_label ?? ""} onChange={(e) => onChange("audience_label", e.target.value)} className="flex-1 px-2.5 py-1.5 text-sm border border-slate-200 rounded" /></TriggerRow>
-        <TriggerRow label="Min tier">
-          <select value={v.min_tier ?? ""} onChange={(e) => onChange("min_tier", e.target.value || null)} className="px-2.5 py-1.5 text-sm border border-slate-200 rounded bg-white">
-            <option value="">Any</option>
-            <option value="bronze">Bronze+</option>
-            <option value="silver">Silver+</option>
-            <option value="gold">Gold+</option>
-            <option value="platinum">Platinum+</option>
-          </select>
-        </TriggerRow>
-        <TriggerRow label="Max claims" help="Cap on total claims (across all members). Blank = unlimited."><input type="number" value={v.max_claims ?? ""} onChange={(e) => onChange("max_claims", e.target.value === "" ? null : Number(e.target.value))} className="w-32 px-2.5 py-1.5 text-sm border border-slate-200 rounded" /></TriggerRow>
-      </>
-    );
-  }
-  return null;
-}
-
-function TriggerRow({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="w-32 flex-shrink-0">
-        <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{label}</div>
-        {help && <div className="text-[11px] text-slate-400 mt-0.5">{help}</div>}
-      </div>
-      <div className="flex-1">{children}</div>
     </div>
   );
 }

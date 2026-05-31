@@ -232,7 +232,6 @@ export default function AllRewardsPage() {
           stacks_with_beans:  true,
           stacks_with_other:  false,
           is_active:          false, // duplicate paused by default — admin reviews + enables
-          triggers:           {},    // duplicates don't carry triggers — they're separate config rows
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Failed");

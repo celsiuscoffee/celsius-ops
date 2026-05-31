@@ -363,20 +363,15 @@ export async function GET(request: NextRequest) {
 
 // ─── Write handlers ────────────────────────────────────────────────
 //
-// POST  /api/loyalty/all-rewards    → create template + trigger fan-out
-// PATCH /api/loyalty/all-rewards?id=… → update template fields
+// POST   /api/loyalty/all-rewards     → create voucher_templates row
+// PATCH  /api/loyalty/all-rewards?id=… → update voucher_templates row
 // DELETE /api/loyalty/all-rewards?id=… → soft-delete (is_active=false)
 //
-// Trigger writes during the transition:
-//   • mystery       → INSERT mystery_pool
-//   • mission       → INSERT reward_missions
-//   • admin_push    → INSERT admin_claimables
-//   • birthday      → deferred (existing birthday config lives elsewhere)
-//   • tier_upgrade  → deferred
-//   • points_shop   → handled by setting `is_in_points_shop` flag for now;
-//                     real Bean-Points cost lives on legacy rewards table
-//                     until Commit 1 of the refactor lands
-//   • manual_grant  → no-op (every active template is grantable)
+// This route is the template registry. Channel-specific triggers
+// (Mystery Pool entries, Mission rules, Birthday config, Tier Upgrade
+// attaches, Admin Claimables) live on their own pages and reference
+// templates via voucher_template_id. Wire/unwire those on the
+// channel pages — never from here.
 
 type CreateBody = {
   brand_id?: string;
@@ -401,12 +396,6 @@ type CreateBody = {
   stacks_with_beans?: boolean;
   stacks_with_other?: boolean;
   is_active?: boolean;
-  // triggers — config per channel
-  triggers?: {
-    mystery?:      { weight: number; min_tier?: string | null; birthday_month_boost?: boolean; outcome_type?: string; flat_beans_value?: number; multiplier_value?: number };
-    mission?:      { title: string; description: string; difficulty: string; goal: { type: string; value: number; period?: string }; cooldown_weeks?: number };
-    admin_push?:   { title: string; description: string; audience_label?: string; min_tier?: string | null; max_claims?: number | null; member_ids?: string[]; starts_at?: string | null; ends_at?: string | null };
-  };
 };
 
 export async function POST(request: NextRequest) {
@@ -452,73 +441,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: tplErr?.message ?? "Failed to create template" }, { status: 500 });
   }
 
-  const triggerErrors: string[] = [];
-
-  // ── Fan out triggers ──
-  if (body.triggers?.mystery) {
-    const m = body.triggers.mystery;
-    const outcomeType = m.outcome_type ?? "voucher";
-    // outcome-specific values: voucher uses the template_id we just
-    // minted; flat_beans uses flat_beans_value; multiplier uses
-    // multiplier_value; no_bonus uses none of the above.
-    const { error } = await supabaseAdmin.from("mystery_pool").insert({
-      brand_id:               brandId,
-      label:                  body.title,
-      icon:                   body.icon ?? "gift",
-      voucher_template_id:    outcomeType === "voucher" ? tpl.id : null,
-      flat_beans_value:       outcomeType === "flat_beans" ? (m.flat_beans_value ?? 100) : null,
-      multiplier_value:       outcomeType === "multiplier" ? (m.multiplier_value ?? 2) : null,
-      weight:                 m.weight,
-      min_tier:               m.min_tier ?? null,
-      birthday_month_boost:   m.birthday_month_boost ?? false,
-      outcome_type:           outcomeType,
-      is_active:              true,
-    });
-    if (error) triggerErrors.push(`mystery: ${error.message}`);
-  }
-
-  if (body.triggers?.mission) {
-    const m = body.triggers.mission;
-    const { error } = await supabaseAdmin.from("reward_missions").insert({
-      brand_id:                       brandId,
-      title:                          m.title,
-      description:                    m.description,
-      icon:                           body.icon ?? "target",
-      difficulty:                     m.difficulty,
-      goal:                           m.goal,
-      cooldown_weeks:                 m.cooldown_weeks ?? 1,
-      reward_voucher_template_ids:    [tpl.id],
-      reward_bonus_beans:             0,
-      is_active:                      true,
-      is_swap_eligible:               false,
-      starts_at:                      new Date().toISOString(),
-    });
-    if (error) triggerErrors.push(`mission: ${error.message}`);
-  }
-
-  if (body.triggers?.admin_push) {
-    const a = body.triggers.admin_push;
-    const { error } = await supabaseAdmin.from("admin_claimables").insert({
-      brand_id:               brandId,
-      title:                  a.title,
-      description:            a.description,
-      voucher_template_id:    tpl.id,
-      member_ids:             a.member_ids ?? [],
-      min_tier:               a.min_tier ?? null,
-      audience_label:         a.audience_label ?? null,
-      max_claims:             a.max_claims ?? null,
-      total_claimed:          0,
-      starts_at:              a.starts_at ?? new Date().toISOString(),
-      ends_at:                a.ends_at ?? null,
-      is_active:              true,
-    });
-    if (error) triggerErrors.push(`admin_push: ${error.message}`);
-  }
-
-  return NextResponse.json({
-    template: tpl,
-    trigger_warnings: triggerErrors,
-  });
+  return NextResponse.json({ template: tpl });
 }
 
 export async function PATCH(request: NextRequest) {
