@@ -55,21 +55,28 @@ export type AffordableCatalogReward = {
   redemption_count: number;
 };
 
-/** Raw rewards row shape — internal, do not export. */
-type RawReward = {
+/** Raw voucher_templates row shape (Bean-Shop catalog mirror) —
+ *  internal, do not export.
+ *
+ *  Commit 3 of the rewards refactor: the catalog now reads from
+ *  voucher_templates (rows where points_cost IS NOT NULL), not the
+ *  legacy `rewards` table. `legacy_reward_id` carries the original
+ *  text id so the redeem/mint flow (which still reads `rewards` during
+ *  the grace window) keeps resolving — the AffordableCatalogReward.id
+ *  returned to clients is the legacy id, unchanged from before. */
+type RawTemplate = {
   id: string;
+  legacy_reward_id: string | null;
   brand_id: string;
-  name: string;
+  title: string;
   description: string | null;
-  points_required: number;
+  points_cost: number;
   category: string;
   stock: number | null;
   image_url: string | null;
-  reward_type: string | null;
   validity_days: number | null;
-  max_redemptions_per_member: number | null;
+  max_per_member: number | null;
   is_active: boolean;
-  auto_issue: boolean | null;
   discount_type: string | null;
   discount_value: number | null;
   max_discount_value: number | null;
@@ -85,22 +92,27 @@ type RawReward = {
   valid_until: string | null;
 };
 
-/** Fetch affordable catalog rewards for a member. Filters applied:
+/** Fetch affordable catalog rewards for a member. Reads the Bean-Shop
+ *  catalog from voucher_templates (rows with points_cost set) — the
+ *  canonical source after Commit 3. Filters applied:
  *    - brand_id = brandId
  *    - is_active = true
- *    - auto_issue = false (auto-issued rewards are surfaced via
- *      issued_rewards, not the public catalog)
- *    - points_required <= balance
+ *    - points_cost IS NOT NULL  (i.e. this template is a points-shop item)
+ *    - points_cost <= balance
  *    - stock is null or > 0
  *    - valid_from is null or <= now()
  *    - valid_until is null or > now()
- *    - max_redemptions_per_member is null or > member's current
- *      redemption count for that reward
+ *    - max_per_member is null or > member's current redemption count
  *    - if fulfillmentChannel is set: fulfillment_type is null
  *      (any channel) or includes the channel
  *
- *  Joins redemptions table to compute per-reward redemption count so
- *  the client can enforce per-member caps without an extra trip. */
+ *  The returned `id` is the template's legacy_reward_id (the original
+ *  'reward-X' text id) so the redeem/mint flow — which still reads the
+ *  `rewards` table during the grace window — keeps resolving. Falls
+ *  back to the template UUID if a mirror somehow lacks legacy_reward_id.
+ *
+ *  Joins redemptions table (keyed by the legacy reward_id) to compute
+ *  per-reward redemption count for max_per_member enforcement. */
 export async function fetchAffordableCatalogForMember(args: {
   supabase: SupabaseClient;
   memberId: string;
@@ -110,12 +122,11 @@ export async function fetchAffordableCatalogForMember(args: {
 }): Promise<AffordableCatalogReward[]> {
   const brandId = args.brandId ?? "brand-celsius";
 
-  const { data: rawRewards, error } = await args.supabase
-    .from("rewards")
+  const { data: rawTemplates, error } = await args.supabase
+    .from("voucher_templates")
     .select(`
-      id, brand_id, name, description, points_required, category, stock,
-      image_url, reward_type, validity_days, max_redemptions_per_member,
-      is_active, auto_issue,
+      id, legacy_reward_id, brand_id, title, description, points_cost, category, stock,
+      image_url, validity_days, max_per_member, is_active,
       discount_type, discount_value, max_discount_value, min_order_value,
       applicable_products, applicable_categories,
       free_product_ids, free_product_name, bogo_buy_qty, bogo_free_qty,
@@ -123,22 +134,22 @@ export async function fetchAffordableCatalogForMember(args: {
     `)
     .eq("brand_id", brandId)
     .eq("is_active", true)
-    .order("points_required", { ascending: true });
+    .not("points_cost", "is", null)
+    .order("points_cost", { ascending: true });
 
   if (error) {
     throw new Error(`fetchAffordableCatalogForMember: ${error.message}`);
   }
 
-  const rewards = ((rawRewards ?? []) as unknown as RawReward[])
-    // Auto-issued rewards (welcome BOGO, birthday) are intentionally
-    // excluded from the public points-shop list — they're surfaced
-    // via issued_rewards once the system has granted them.
-    .filter((r) => !r.auto_issue);
+  const templates = (rawTemplates ?? []) as unknown as RawTemplate[];
+
+  // The id we expose to clients is the legacy reward id (for redeem
+  // compatibility). Redemption counts are keyed on that same id.
+  const publicId = (t: RawTemplate): string => t.legacy_reward_id ?? t.id;
 
   // Bulk-fetch this member's redemption counts across the candidate
-  // reward ids so we can enforce max_redemptions_per_member without
-  // an extra trip per row.
-  const rewardIds = rewards.map((r) => r.id);
+  // reward ids so we can enforce max_per_member without a trip per row.
+  const rewardIds = templates.map(publicId);
   const redemptionCounts = new Map<string, number>();
   if (rewardIds.length > 0) {
     const { data: redemptions } = await args.supabase
@@ -152,54 +163,54 @@ export async function fetchAffordableCatalogForMember(args: {
   }
 
   const nowMs = Date.now();
-  const eligible = rewards.filter((r) => {
+  const eligible = templates.filter((t) => {
     // Affordability
-    if (r.points_required <= 0 || r.points_required > args.balance) return false;
+    if (t.points_cost <= 0 || t.points_cost > args.balance) return false;
     // Stock
-    if (r.stock != null && r.stock <= 0) return false;
+    if (t.stock != null && t.stock <= 0) return false;
     // Validity window
-    if (r.valid_from && new Date(r.valid_from).getTime() > nowMs) return false;
-    if (r.valid_until && new Date(r.valid_until).getTime() < nowMs) return false;
+    if (t.valid_from && new Date(t.valid_from).getTime() > nowMs) return false;
+    if (t.valid_until && new Date(t.valid_until).getTime() < nowMs) return false;
     // Per-member cap
     if (
-      r.max_redemptions_per_member != null &&
-      (redemptionCounts.get(r.id) ?? 0) >= r.max_redemptions_per_member
+      t.max_per_member != null &&
+      (redemptionCounts.get(publicId(t)) ?? 0) >= t.max_per_member
     ) {
       return false;
     }
     // Channel
-    if (args.fulfillmentChannel && Array.isArray(r.fulfillment_type) && r.fulfillment_type.length > 0) {
-      if (!r.fulfillment_type.includes(args.fulfillmentChannel)) return false;
+    if (args.fulfillmentChannel && Array.isArray(t.fulfillment_type) && t.fulfillment_type.length > 0) {
+      if (!t.fulfillment_type.includes(args.fulfillmentChannel)) return false;
     }
     return true;
   });
 
-  return eligible.map((r): AffordableCatalogReward => ({
-    id: r.id,
-    brand_id: r.brand_id,
-    name: r.name,
-    description: r.description,
-    points_required: r.points_required,
-    category: r.category,
-    stock: r.stock,
-    image_url: r.image_url,
-    reward_type: r.reward_type ?? "voucher",
-    validity_days: r.validity_days,
-    max_redemptions_per_member: r.max_redemptions_per_member,
+  return eligible.map((t): AffordableCatalogReward => ({
+    id: publicId(t),                       // legacy reward id for redeem compat
+    brand_id: t.brand_id,
+    name: t.title,
+    description: t.description,
+    points_required: t.points_cost,
+    category: t.category,
+    stock: t.stock,
+    image_url: t.image_url,
+    reward_type: "voucher",
+    validity_days: t.validity_days,
+    max_redemptions_per_member: t.max_per_member,
     is_active: true,
-    discount_type: (r.discount_type as VoucherDiscountType | null) ?? null,
-    discount_value: r.discount_value,
-    max_discount_value: r.max_discount_value,
-    min_order_value: r.min_order_value,
-    applicable_products: r.applicable_products,
-    applicable_categories: r.applicable_categories,
-    free_product_ids: r.free_product_ids,
-    free_product_name: r.free_product_name,
-    bogo_buy_qty: r.bogo_buy_qty ?? 0,
-    bogo_free_qty: r.bogo_free_qty ?? 0,
-    fulfillment_type: r.fulfillment_type,
-    valid_from: r.valid_from,
-    valid_until: r.valid_until,
-    redemption_count: redemptionCounts.get(r.id) ?? 0,
+    discount_type: (t.discount_type as VoucherDiscountType | null) ?? null,
+    discount_value: t.discount_value,
+    max_discount_value: t.max_discount_value,
+    min_order_value: t.min_order_value,
+    applicable_products: t.applicable_products,
+    applicable_categories: t.applicable_categories,
+    free_product_ids: t.free_product_ids,
+    free_product_name: t.free_product_name,
+    bogo_buy_qty: t.bogo_buy_qty ?? 0,
+    bogo_free_qty: t.bogo_free_qty ?? 0,
+    fulfillment_type: t.fulfillment_type,
+    valid_from: t.valid_from,
+    valid_until: t.valid_until,
+    redemption_count: redemptionCounts.get(publicId(t)) ?? 0,
   }));
 }

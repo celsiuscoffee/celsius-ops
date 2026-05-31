@@ -80,25 +80,10 @@ type VoucherTemplateRow = {
   is_active: boolean;
   validity_days: number | null;
   updated_at: string;
-};
-
-type LegacyRewardRow = {
-  id: string;
-  name: string;
-  description: string | null;
-  discount_type: string | null;
-  discount_value: number | string | null;
-  max_discount_value: number | string | null;
-  min_order_value: number | string | null;
-  applicable_categories: string[] | null;
-  applicable_products: string[] | null;
-  free_product_name: string | null;
+  // Commit 3: catalog fields now live on the template (Bean-Shop mirror)
+  points_cost: number | null;
   bogo_buy_qty: number | null;
   bogo_free_qty: number | null;
-  points_required: number;
-  is_active: boolean;
-  validity_days: number | null;
-  updated_at: string;
 };
 
 type MissionRow = {
@@ -159,17 +144,15 @@ export async function GET(request: NextRequest) {
   // (30d issued / 30d used) come back as compact group counts.
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [tplRes, catRes, missionRes, mysteryRes, issued30Res] = await Promise.all([
+  // Commit 3: the catalog is now sourced from voucher_templates (rows
+  // with points_cost set) — the legacy `rewards` table is no longer
+  // fetched here, killing the previous 6-row Bean-Shop duplication
+  // (3 catalog + 3 mirror). Catalog rows ARE templates now.
+  const [tplRes, missionRes, mysteryRes, issued30Res] = await Promise.all([
     supabaseAdmin
       .from("voucher_templates")
       .select(
-        "id, title, description, icon, discount_type, discount_value, max_discount_value, min_order_value, multiplier_value, applicable_categories, applicable_products, free_product_ids, free_product_name, is_active, validity_days, updated_at",
-      )
-      .eq("brand_id", brandId),
-    supabaseAdmin
-      .from("rewards")
-      .select(
-        "id, name, description, discount_type, discount_value, max_discount_value, min_order_value, applicable_categories, applicable_products, free_product_name, bogo_buy_qty, bogo_free_qty, points_required, is_active, validity_days, updated_at",
+        "id, title, description, icon, discount_type, discount_value, max_discount_value, min_order_value, multiplier_value, applicable_categories, applicable_products, free_product_ids, free_product_name, is_active, validity_days, updated_at, points_cost, bogo_buy_qty, bogo_free_qty",
       )
       .eq("brand_id", brandId),
     supabaseAdmin
@@ -184,24 +167,21 @@ export async function GET(request: NextRequest) {
       .eq("brand_id", brandId),
     supabaseAdmin
       .from("issued_rewards")
-      .select("id, status, reward_id, source_type, source_ref_id, issued_at, redeemed_at")
+      .select("id, status, voucher_template_id, source_type, issued_at, redeemed_at")
       .eq("brand_id", brandId)
       .gte("issued_at", cutoff),
   ]);
 
   if (tplRes.error) return NextResponse.json({ error: tplRes.error.message }, { status: 500 });
-  if (catRes.error) return NextResponse.json({ error: catRes.error.message }, { status: 500 });
 
   const templates = (tplRes.data ?? []) as VoucherTemplateRow[];
-  const catalog   = (catRes.data ?? []) as LegacyRewardRow[];
   const missions  = (missionRes.data ?? []) as MissionRow[];
   const mystery   = (mysteryRes.data ?? []) as MysteryRow[];
   const issued    = (issued30Res.data ?? []) as Array<{
     id: string;
     status: string;
-    reward_id: string | null;
+    voucher_template_id: string | null;
     source_type: string | null;
-    source_ref_id: string | null;
     issued_at: string;
     redeemed_at: string | null;
   }>;
@@ -246,35 +226,29 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // ─── Stats: 30d issued + used, grouped by template/catalog id ───
-  // Catalog redemptions in issued_rewards still carry reward_id; the
-  // newer template-backed rows carry source_type+source_ref_id (which
-  // points back at the mystery_pool or mission row, NOT the template
-  // directly). For now we attribute mystery/mission issued rows back
-  // to their template via the trigger source we just built — once
-  // Commit 2 adds template_id on issued_rewards this becomes a
-  // straight GROUP BY.
-  const sourceRefToTemplate = new Map<string, string>();
-  for (const my of mystery) {
-    if (my.voucher_template_id) sourceRefToTemplate.set(my.id, my.voucher_template_id);
-  }
-  for (const m of missions) {
-    const tpls = m.reward_voucher_template_ids ?? [];
-    if (tpls.length) sourceRefToTemplate.set(m.id, tpls[0]);
+  // Bean-Shop trigger: any template with points_cost is a points-shop
+  // item. Surfaced as a chip so the list reads "Bean Shop · 300".
+  for (const t of templates) {
+    if (t.points_cost != null && t.points_cost > 0) {
+      pushTrig(t.id, {
+        type: "points_shop",
+        label: `Bean Shop · ${t.points_cost}`,
+        config: { cost_beans: t.points_cost },
+      });
+    }
   }
 
+  // ─── Stats: 30d issued + used, keyed by voucher_template_id ─────
+  // Commit 2 backfilled voucher_template_id on every active issued row,
+  // so this is now a straight group-by — no more reward_id / source_ref
+  // attribution gymnastics.
   const issued30 = new Map<string, number>();
   const used30   = new Map<string, number>();
   const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
 
   for (const row of issued) {
-    let key: string | null = null;
-    if (row.reward_id) {
-      key = `catalog:${row.reward_id}`;
-    } else if (row.source_ref_id && sourceRefToTemplate.has(row.source_ref_id)) {
-      key = `template:${sourceRefToTemplate.get(row.source_ref_id)!}`;
-    }
-    if (!key) continue;
+    if (!row.voucher_template_id) continue;
+    const key = `template:${row.voucher_template_id}`;
     bump(issued30, key);
     if (row.redeemed_at) bump(used30, key);
   }
@@ -304,10 +278,10 @@ export async function GET(request: NextRequest) {
       is_active: t.is_active,
       max_discount_value: numOrNull(t.max_discount_value),
       min_order_value: numOrNull(t.min_order_value),
-      bogo_buy_qty: null,
-      bogo_free_qty: null,
+      bogo_buy_qty: t.bogo_buy_qty ?? null,
+      bogo_free_qty: t.bogo_free_qty ?? null,
       multiplier_value: numOrNull(t.multiplier_value),
-      points_cost: null,
+      points_cost: t.points_cost ?? null,
       triggers,
       issued_30d: issued30.get(key) ?? 0,
       used_30d: used30.get(key) ?? 0,
@@ -316,44 +290,8 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  for (const c of catalog) {
-    const scope = deriveScope({
-      applicable_categories: c.applicable_categories,
-      applicable_products:   c.applicable_products,
-      free_product_ids:      null,
-      free_product_name:     c.free_product_name,
-    });
-    const key = `catalog:${c.id}`;
-    rows.push({
-      id: c.id,
-      origin: "catalog",
-      title: c.name,
-      description: c.description,
-      icon: null,
-      discount_type: c.discount_type,
-      discount_value: numOrNull(c.discount_value),
-      scope: scope.scope,
-      target_ids: scope.target_ids,
-      is_active: c.is_active,
-      max_discount_value: numOrNull(c.max_discount_value),
-      min_order_value: numOrNull(c.min_order_value),
-      bogo_buy_qty: c.bogo_buy_qty,
-      bogo_free_qty: c.bogo_free_qty,
-      multiplier_value: null,
-      points_cost: c.points_required,
-      triggers: [
-        {
-          type: "points_shop",
-          label: `Bean Shop · ${c.points_required}`,
-          config: { cost_beans: c.points_required },
-        },
-      ],
-      issued_30d: issued30.get(key) ?? 0,
-      used_30d: used30.get(key) ?? 0,
-      expires_days: c.validity_days,
-      updated_at: c.updated_at,
-    });
-  }
+  // (Legacy `rewards` catalog loop removed in Commit 3 — those rows are
+  // now voucher_templates with points_cost, handled by the loop above.)
 
   // Newest first by default; the page sorts client-side after.
   rows.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
