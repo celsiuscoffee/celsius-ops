@@ -9,6 +9,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { awardBonusBeans } from "@/lib/loyalty/points";
 import { notifyMissionCompleted, notifyReferralRewarded } from "@/lib/push/templates";
+import { catalogMirrorTemplateId } from "@/lib/loyalty/catalog-mirror";
 
 const BRAND_ID = (process.env.LOYALTY_BRAND_ID ?? "brand-celsius").trim();
 
@@ -238,6 +239,16 @@ export async function redeemPointsShopReward(args: {
   const newBalance = Array.isArray(data) && data.length > 0
     ? Number((data[0] as { new_balance: number }).new_balance)
     : 0;
+
+  // Commit 2: the redeem_points_shop_reward RPC inserts the voucher
+  // without voucher_template_id (the stored proc predates the template
+  // registry). Stamp it here so the minted voucher carries its
+  // canonical link. Non-fatal if it fails — the inline discount fields
+  // still drive checkout during the grace window.
+  await supabase
+    .from("issued_rewards")
+    .update({ voucher_template_id: catalogMirrorTemplateId(reward.id as string) })
+    .eq("id", id);
 
   // Hydrate the voucher row for the caller. The RPC inserted it
   // already, this is just a read-back so we return the same shape

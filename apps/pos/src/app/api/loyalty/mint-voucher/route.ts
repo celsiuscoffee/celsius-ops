@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { catalogMirrorTemplateId } from "@/lib/catalog-mirror";
 
 /**
  * POST /api/loyalty/mint-voucher
@@ -25,67 +26,6 @@ function getAdmin() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
-}
-
-/** When the catalog row's `discount_type` is null (legacy / admin
- *  oversight), infer it from the reward's name so the minted voucher
- *  actually works at checkout. Without this, customers spent beans and
- *  got vouchers that quietly applied a 0 discount — Free Drink would
- *  let them tap "Use" but the cart still charged for the drink. This
- *  mirrors the inference the original /api/loyalty/redeem path used
- *  to do; we dropped it during the Phase 2 shared-engine refactor and
- *  this is the regression replacement.
- *
- *  Returns the same shape the catalog row has so the caller can splat
- *  into the issued_rewards insert. Returns nulls only when the name
- *  doesn't match any known pattern — the engine then reports
- *  `no_discount_type`, which surfaces in the receipt as "voucher
- *  needs admin attention" instead of silently charging full price. */
-function inferDiscount(reward: {
-  name: string;
-  discount_type: string | null;
-  discount_value: number | string | null;
-}): { discount_type: string | null; discount_value: number | null } {
-  // Cast: rewards.discount_value can come back as a numeric-typed
-  // string from PostgREST. Normalise to number | null here.
-  const existingValue =
-    reward.discount_value == null
-      ? null
-      : typeof reward.discount_value === "string"
-      ? parseFloat(reward.discount_value)
-      : reward.discount_value;
-
-  if (reward.discount_type) {
-    return { discount_type: reward.discount_type, discount_value: existingValue };
-  }
-
-  const name = reward.name || "";
-  // "Free Drink" / "Free Coffee" / "Free Upgrade" / "Free <anything>"
-  //   → free_item (cheapest eligible line, value is null — engine
-  //     uses the line's unit_price_sen as the discount).
-  if (/^\s*free\s+/i.test(name) || /\bfree\s+(drink|coffee|upgrade|item)/i.test(name)) {
-    return { discount_type: "free_item", discount_value: null };
-  }
-  // "RM 5" / "RM10" / "RM 12.50 off" → flat (sen). RM value × 100.
-  const rmMatch = name.match(/^\s*rm\s*(\d+(?:\.\d+)?)/i);
-  if (rmMatch) {
-    const rm = parseFloat(rmMatch[1]);
-    if (Number.isFinite(rm)) {
-      return { discount_type: "flat", discount_value: Math.round(rm * 100) };
-    }
-  }
-  // "15% off" / "20%" → percent (raw percentage, no ×100).
-  const pctMatch = name.match(/(\d+(?:\.\d+)?)\s*%/);
-  if (pctMatch) {
-    const pct = parseFloat(pctMatch[1]);
-    if (Number.isFinite(pct)) {
-      return { discount_type: "percent", discount_value: pct };
-    }
-  }
-  // Unknown pattern — leave null so the engine fails open with a
-  // recognisable reason ("no_discount_type") rather than silently
-  // charging full price.
-  return { discount_type: null, discount_value: existingValue };
 }
 
 export async function POST(req: NextRequest) {
@@ -170,17 +110,14 @@ export async function POST(req: NextRequest) {
       .toString(36)
       .slice(2, 8)}`;
 
-    // Defensive inference — see inferDiscount() for why.
-    const inferred = inferDiscount({
-      name: reward.name,
-      discount_type: reward.discount_type as string | null,
-      discount_value: reward.discount_value as number | string | null,
-    });
-    if (!reward.discount_type && inferred.discount_type) {
-      console.warn(
-        `[LOYALTY] mint-voucher: catalog row ${reward.id} (${reward.name}) had null discount_type — inferred '${inferred.discount_type}'. Backfill the rewards row to silence this warning.`,
-      );
-    }
+    // Commit 2: link the minted voucher to its canonical template (the
+    // Bean-Shop mirror of this catalog row — same deterministic UUID
+    // the Commit-1 migration generated). Readers can resolve canonical
+    // fields through voucher_template_id; the inline discount fields
+    // below stay as a grace-window snapshot until Commit 3 drops them.
+    // inferDiscount is gone — the catalog row carries a real
+    // discount_type now (backfilled), so we copy it straight through.
+    const voucherTemplateId = catalogMirrorTemplateId(reward.id);
 
     const { data: voucher, error: voucherErr } = await supabase
       .from("issued_rewards")
@@ -189,14 +126,15 @@ export async function POST(req: NextRequest) {
         brand_id: BRAND_ID,
         member_id,
         reward_id: reward.id,
+        voucher_template_id: voucherTemplateId,
         source_type: "points_redemption",
         source_ref_id: null,
         title: reward.name,
         description: reward.description,
         icon: null,
         category: reward.category,
-        discount_type: inferred.discount_type,
-        discount_value: inferred.discount_value,
+        discount_type: reward.discount_type,
+        discount_value: reward.discount_value,
         min_order_value: reward.min_order_value,
         applicable_categories: reward.applicable_categories,
         applicable_products: reward.applicable_products,

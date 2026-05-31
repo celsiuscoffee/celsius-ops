@@ -15,6 +15,7 @@
 import { after } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { notifyWelcomeBonus } from "@/lib/push/templates";
+import { catalogMirrorTemplateId } from "@/lib/loyalty/catalog-mirror";
 
 const BRAND_ID = "brand-celsius";
 
@@ -82,6 +83,9 @@ export async function ensureNewMemberRewards(
         id,
         member_id:  memberId,
         reward_id:  reward.id as string,
+        // Commit 2: link to the canonical Bean-Shop mirror template so
+        // every freshly issued welcome reward carries voucher_template_id.
+        voucher_template_id: catalogMirrorTemplateId(reward.id as string),
         brand_id:   brandId,
         status:     "active",
         expires_at: expiresAt,
