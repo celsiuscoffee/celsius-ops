@@ -9,8 +9,29 @@
 > |---|---|
 > | **Commit 1** — canonical shape on `voucher_templates` (scope / target_ids / modifier_filter / points_cost + backfill) | **DONE** — `docs/migrations/rewards-canonical-shape-commit1.sql` |
 > | **Commit 2** — every mint path writes `issued_rewards.voucher_template_id` | **DONE** — commit `eb05593d` |
-> | **Commit 3** — customer catalog reads `voucher_templates`, backoffice list de-duplicated | **DONE (safe slice)** — `docs/migrations/rewards-canonical-shape-commit3.sql`. The full `DROP TABLE rewards` is **deferred** (30+ refs across 4 apps; `legacy_reward_id` bridges catalog↔redeem until then). |
+> | **Commit 3** — customer catalog reads `voucher_templates`, backoffice list de-duplicated | **DONE.** Catalog reader migration now **COMPLETE** — see *Reader migration ledger* below. `DROP TABLE rewards` is still **deferred** (non-catalog readers across `apps/loyalty` + admin remain; `legacy_reward_id` bridges catalog↔redeem until then). |
 > | **Commits 4 & 5** — `voucher_triggers` table + collapse channel tables | **NOT PURSUED.** See decision below. |
+>
+> ### Reader migration ledger (follow-up, 2026-05-31)
+>
+> Every **Bean-Shop catalog** path (the points-redemption flow) now
+> resolves `voucher_templates` by `legacy_reward_id`. The `rewards` table
+> is no longer read on **any redemption path**:
+>
+> | Reader | Commit |
+> |---|---|
+> | order checkout `validateAppliedReward` + POS `mint-voucher` + order `redeemPointsShopReward` | `01f37928` |
+> | cashier redeem ×3 (pos, backoffice/pos/loyalty, backoffice/loyalty) + points-shop snapshot ×2 (pos, backoffice) | `b524fb21` |
+> | shared `fetchAffordableCatalogForMember` | Commit 3 safe slice |
+> | legacy **Points Shop** page + nav removed — All Rewards is the sole catalog editor | `b18dd3e0` |
+>
+> **Still reading `rewards` (NON-catalog — these gate the table DROP):**
+> - **`apps/loyalty`** — the LIVE auth/portal service (`loyalty.celsiuscoffee.com`, OTP login): rewards CRUD (+delete), redeem, points/award, members, ai-insights, benefits. Dropping the table before migrating these = login/portal outage.
+> - **`apps/order` auto-issue feature** — `welcome.ts` (`ensureNewMemberRewards`, 0 rows today) + `points.ts` (`deductLoyaltyPoints`, live post-payment burn). Both branch on `reward_type`/`auto_issue`, columns that don't exist on `voucher_templates`; the canonical model expresses entitlement via `issued_rewards` instead, so this is a feature redesign, not an alias swap.
+> - **backoffice admin/analytics** — `/api/loyalty/rewards` CRUD (UI orphaned after the page removal; `lib/loyalty/api.ts` helper remains), ai-insights, members, pickup engagement.
+>
+> Only 3 `rewards` rows exist (`reward-1`/`-3`/`-1776593225967`), all
+> mirrored in `voucher_templates` with matching `legacy_reward_id`.
 >
 > ### Decision: channels stay separate
 >
