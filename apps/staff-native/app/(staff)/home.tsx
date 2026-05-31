@@ -206,8 +206,16 @@ export default function Home() {
           />
         }
       >
-        {/* Header */}
-        <View className="flex-row items-center gap-3">
+        {/* Header — avatar + name are now tappable and navigate to the
+            Profile screen. Profile is registered as a hidden tab
+            (href: null in (staff)/_layout) so the avatar is the only
+            entry point. Without this tap, the screen was unreachable. */}
+        <Pressable
+          onPress={() => router.push("/(staff)/profile")}
+          accessibilityRole="button"
+          accessibilityLabel="Open profile"
+          className="flex-row items-center gap-3 active:opacity-80"
+        >
           <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
             <Text className="text-base font-display text-primary">
               {session?.name?.charAt(0)?.toUpperCase() ?? "?"}
@@ -222,7 +230,7 @@ export default function Home() {
               {dateLabel()}
             </Text>
           </View>
-        </View>
+        </Pressable>
 
         {/* Clock card — biggest CTA on the page (matches web behavior). */}
         {session?.outletId ? (
