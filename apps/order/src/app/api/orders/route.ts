@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireMinAppVersion } from "@/lib/min-app-version";
 import type { OrderRow } from "@/lib/supabase/types";
-import { checkRateLimit, RATE_LIMITS } from "@celsius/shared";
+import {
+  checkRateLimit,
+  RATE_LIMITS,
+  computeVoucherDiscount,
+  type VoucherDiscountSpec,
+  type DiscountCartLine,
+} from "@celsius/shared";
 import { getTierMultiplier } from "@/lib/loyalty/points";
 import {
   evaluatePromotions,
@@ -55,18 +61,111 @@ function generateOrderNumber(): string {
   return `C-${String(Math.floor(Math.random() * 9999)).padStart(4, "0")}`;
 }
 
-/** Server-side reward validation + price recompute. Was: trust the
- *  client's `rewardDiscountSen`. Now: fetch the reward, gate it on
- *  is_active / valid_until / stock, and bound the discount at the
- *  cart subtotal so a malicious or stale client can't drain the
- *  order to RM0. Full client/server discount-math parity is a
- *  separate refactor; for now we trust the client's number IF it
- *  passes these gates. */
+/** The canonical discount-mechanics columns on voucher_templates — the
+ *  full set the shared engine needs to compute any of the 9 types. */
+const DISCOUNT_SPEC_COLUMNS =
+  "discount_type, discount_value, max_discount_value, min_order_value, " +
+  "applicable_categories, applicable_products, free_product_ids, free_product_name, " +
+  "bogo_buy_qty, bogo_free_qty, combo_price_sen, override_price_sen";
+
+type DiscountSpecRow = {
+  discount_type: string | null;
+  discount_value: number | null;
+  max_discount_value: number | null;
+  min_order_value: number | null;
+  applicable_categories: string[] | null;
+  applicable_products: string[] | null;
+  free_product_ids: string[] | null;
+  free_product_name: string | null;
+  bogo_buy_qty: number | null;
+  bogo_free_qty: number | null;
+  combo_price_sen: number | null;
+  override_price_sen: number | null;
+};
+
+/** Build the sen-based engine spec from a voucher_templates row. Mixed
+ *  units on the row: discount_value(flat)/max_discount_value/
+ *  combo_price_sen/override_price_sen are SEN; min_order_value is RM;
+ *  discount_value(percent) is a raw percentage. */
+function rowToDiscountSpec(t: DiscountSpecRow): VoucherDiscountSpec {
+  return {
+    discount_type: (t.discount_type as VoucherDiscountSpec["discount_type"]) ?? null,
+    discount_value: t.discount_value,
+    max_discount_value_sen: t.max_discount_value,
+    min_order_value_sen: t.min_order_value != null ? Math.round(t.min_order_value * 100) : null,
+    applicable_categories: t.applicable_categories,
+    applicable_products: t.applicable_products,
+    free_product_ids: t.free_product_ids,
+    free_product_name: t.free_product_name,
+    bogo_buy_qty: t.bogo_buy_qty,
+    bogo_free_qty: t.bogo_free_qty,
+    combo_price_sen: t.combo_price_sen,
+    override_price_sen: t.override_price_sen,
+  };
+}
+
+type RawOrderItem = {
+  product?: { id?: string; name?: string };
+  productId?: string;
+  product_id?: string;
+  quantity: number;
+  basePrice?: number;
+  totalPrice?: number;
+};
+
+/** Build sen-based engine cart lines from incoming order items.
+ *  unit_price_sen uses the BASE price (modifier upcharges stay paid —
+ *  matches the established "free drink covers the base only" rule);
+ *  modifier_total_sen carries the upcharge so free_upgrade can free the
+ *  add-on. Resolves each line's category from the products table only
+ *  when the spec filters by category (product filters match on id). */
+async function buildEngineCart(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  items: unknown,
+  resolveCategories: boolean,
+): Promise<DiscountCartLine[]> {
+  const lines: DiscountCartLine[] = (items as RawOrderItem[]).map((i) => {
+    const pid = i.product?.id ?? i.productId ?? i.product_id ?? "";
+    const qty = Math.max(1, i.quantity);
+    const effRm = (i.totalPrice ?? 0) / qty; // per-unit, incl modifiers
+    const unitRm = i.basePrice != null ? i.basePrice : effRm;
+    const modRm = i.basePrice != null ? Math.max(0, effRm - i.basePrice) : 0;
+    return {
+      product_id: pid,
+      quantity: qty,
+      unit_price_sen: Math.round(unitRm * 100),
+      modifier_total_sen: Math.round(modRm * 100),
+      category: null,
+      category_id: null,
+      name: i.product?.name ?? "",
+    };
+  });
+  if (resolveCategories) {
+    const ids = Array.from(new Set(lines.map((l) => l.product_id).filter((x): x is string => !!x)));
+    if (ids.length) {
+      const { data } = await supabase.from("products").select("id, category").in("id", ids);
+      const byId = new Map(
+        ((data ?? []) as Array<{ id: string; category: string | null }>).map((p) => [p.id, p.category]),
+      );
+      for (const l of lines) l.category = byId.get(l.product_id) ?? null;
+    }
+  }
+  return lines;
+}
+
+/** Server-side reward validation + AUTHORITATIVE discount recompute.
+ *  Was: trust the client's `rewardDiscountSen` (clamped to subtotal).
+ *  Now: gate the reward (active / window / stock / min-order / points)
+ *  AND recompute the discount from the canonical voucher_templates spec
+ *  via the shared engine — the client number is never used for money,
+ *  so a stale or malicious client can't claim a discount the reward
+ *  doesn't grant, and combo/bogo/override_price/free_upgrade actually
+ *  apply. */
 async function validateAppliedReward(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   args: {
     rewardId: string;
-    rewardDiscountSen: number;
+    items: unknown;
     subtotalSen: number;
     minOrderRm: number;
     totalRm: number;
@@ -78,7 +177,7 @@ async function validateAppliedReward(
   // the template's name for points_required.
   const { data: reward } = await supabase
     .from("voucher_templates")
-    .select("id, is_active, valid_from, valid_until, stock, min_order_value, points_cost")
+    .select("id, is_active, valid_from, valid_until, stock, points_cost, " + DISCOUNT_SPEC_COLUMNS)
     .eq("legacy_reward_id", args.rewardId)
     .maybeSingle<{
       id: string;
@@ -86,9 +185,8 @@ async function validateAppliedReward(
       valid_from: string | null;
       valid_until: string | null;
       stock: number | null;
-      min_order_value: number | null;
       points_cost: number | null;
-    }>();
+    } & DiscountSpecRow>();
 
   if (!reward) {
     return { ok: false, error: "Reward no longer available" };
@@ -149,10 +247,21 @@ async function validateAppliedReward(
     }
   }
 
-  // Sanity-bound the client-supplied discount: never negative,
-  // never larger than the cart subtotal.
-  const clamped = Math.max(0, Math.min(args.subtotalSen, Math.round(args.rewardDiscountSen ?? 0)));
-  return { ok: true, discountSen: clamped };
+  // Authoritative discount: recompute from the canonical spec via the
+  // shared engine — the client's number is never trusted for money, and
+  // every type (flat/percent/free_item/free_upgrade/bogo/combo/
+  // override_price) is computed the same way the wallet path does.
+  const spec = rowToDiscountSpec(reward);
+  const cart = await buildEngineCart(
+    supabase,
+    args.items,
+    !!(spec.applicable_categories && spec.applicable_categories.length),
+  );
+  const result = computeVoucherDiscount({ spec, cart });
+  // Final guard against the order subtotal (the engine already bounds at
+  // its own line-sum; this re-clamps against the authoritative subtotal).
+  const discountSen = Math.max(0, Math.min(args.subtotalSen, result.discount_sen));
+  return { ok: true, discountSen };
 }
 
 export async function POST(request: NextRequest) {
@@ -184,7 +293,8 @@ export async function POST(request: NextRequest) {
       discountSen,
       voucherCode: voucherCodeInput,
       voucherId,
-      rewardDiscountSen,
+      // rewardDiscountSen (client-claimed) intentionally ignored — the
+      // discount is recomputed server-side from the canonical spec.
       rewardId: rewardIdInput,
       rewardName: rewardNameInput,
       walletVoucherId: walletVoucherIdInput,
@@ -412,7 +522,7 @@ export async function POST(request: NextRequest) {
       const { data: voucher } = await supabase
         .from("issued_rewards")
         .select(`
-          id, member_id, status, expires_at, min_order_value,
+          id, member_id, status, expires_at, voucher_template_id, min_order_value,
           discount_type, discount_value,
           applicable_categories, applicable_products, free_product_name
         `)
@@ -428,89 +538,45 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Voucher expired" }, { status: 400 });
       }
 
-      // Build a lite cart-line shape in SEN — the shared engine
-      // works in sen throughout. unit_price_sen here folds in any
-      // modifier upcharges (we infer unit price from totalPrice /
-      // quantity rather than basePrice, matching what the customer
-      // would have paid for the line).
-      type CartLineLite = {
-        product_id: string;
-        quantity: number;
-        unit_price_sen: number;
-      };
-      const localLines: CartLineLite[] = (items as Array<{
-        product?: { id?: string };
-        productId?: string;
-        product_id?: string;
-        quantity: number;
-        basePrice?: number;
-        totalPrice?: number;
-      }>).map((i) => {
-        const pid = i.product?.id ?? i.productId ?? i.product_id ?? "";
-        const unitRm = i.basePrice != null
-          ? i.basePrice
-          : (i.totalPrice ?? 0) / Math.max(1, i.quantity);
-        return {
-          product_id: pid,
-          quantity: i.quantity,
-          unit_price_sen: Math.round(unitRm * 100),
-        };
-      });
+      // Canonical spec: prefer the voucher's voucher_template (it carries
+      // max_discount_value, free_product_ids, and the bogo/combo/override
+      // knobs that issued_rewards doesn't). Fall back to the issued_rewards
+      // inline columns for legacy vouchers minted before the template link.
+      const templateId = (voucher as { voucher_template_id?: string | null }).voucher_template_id ?? null;
+      const { data: tmpl } = templateId
+        ? await supabase
+            .from("voucher_templates")
+            .select(DISCOUNT_SPEC_COLUMNS)
+            .eq("id", templateId)
+            .maybeSingle<DiscountSpecRow>()
+        : { data: null };
+      const spec: VoucherDiscountSpec = tmpl
+        ? rowToDiscountSpec(tmpl)
+        : {
+            discount_type: (voucher.discount_type as VoucherDiscountSpec["discount_type"]) ?? null,
+            discount_value: (voucher.discount_value as number | null) ?? null,
+            max_discount_value_sen: null,
+            min_order_value_sen: voucher.min_order_value != null
+              ? Math.round((voucher.min_order_value as number) * 100)
+              : null,
+            applicable_categories: (voucher.applicable_categories as string[] | null) ?? null,
+            applicable_products: (voucher.applicable_products as string[] | null) ?? null,
+            free_product_ids: null,
+            free_product_name: (voucher.free_product_name as string | null) ?? null,
+            bogo_buy_qty: null,
+            bogo_free_qty: null,
+            combo_price_sen: null,
+            override_price_sen: null,
+          };
 
-      // When the voucher has a category/product filter, hydrate each
-      // line's category from the products table so the engine can
-      // evaluate applicable_categories server-authoritatively.
-      const cats  = (voucher.applicable_categories as string[] | null) ?? null;
-      const prods = (voucher.applicable_products as string[] | null) ?? null;
-      const hasFilter = (cats && cats.length > 0) || (prods && prods.length > 0);
-      const categoryByProductId = new Map<string, string | null>();
-      if (hasFilter) {
-        const productIds = Array.from(new Set(
-          localLines.map((l) => l.product_id).filter((id): id is string => !!id),
-        ));
-        if (productIds.length > 0) {
-          const { data: prodRows } = await supabase
-            .from("products")
-            .select("id, category, name")
-            .in("id", productIds);
-          for (const p of ((prodRows ?? []) as Array<{
-            id: string; category: string | null; name: string | null;
-          }>)) {
-            categoryByProductId.set(p.id, p.category);
-          }
-        }
-      }
-
-      const { computeVoucherDiscount } = await import("@celsius/shared");
-      const result = computeVoucherDiscount({
-        spec: {
-          // issued_rewards stores `flat` discounts in sen and `percent`
-          // discounts as a raw percentage — same vocab the engine
-          // expects, no translation needed here.
-          discount_type: (voucher.discount_type as never) ?? null,
-          discount_value: (voucher.discount_value as number | null) ?? null,
-          // issued_rewards doesn't carry max_discount_value or
-          // free_product_ids (those live on voucher_templates). Phase
-          // 4 can join the template when needed; for now null is the
-          // safe default — engine treats null as "no cap".
-          max_discount_value_sen: null,
-          min_order_value_sen: voucher.min_order_value != null
-            ? Math.round((voucher.min_order_value as number) * 100)
-            : null,
-          applicable_categories: cats,
-          applicable_products: prods,
-          free_product_ids: null,
-          free_product_name: (voucher.free_product_name as string | null) ?? null,
-        },
-        cart: localLines.map((l) => ({
-          product_id: l.product_id,
-          quantity: l.quantity,
-          unit_price_sen: l.unit_price_sen,
-          category: categoryByProductId.get(l.product_id) ?? null,
-          category_id: null,
-          name: "",
-        })),
-      });
+      // unit_price_sen uses base price (modifiers stay paid); category
+      // resolved only when the spec filters by category.
+      const cart = await buildEngineCart(
+        supabase,
+        items,
+        !!(spec.applicable_categories && spec.applicable_categories.length),
+      );
+      const result = computeVoucherDiscount({ spec, cart });
 
       // Translate engine reasons → user-facing 400 messages where
       // they're customer-actionable (preserves the previous
@@ -521,11 +587,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Minimum order not met for voucher" }, { status: 400 });
       }
 
-      rewardDiscountSenAmt = Math.max(0, Math.min(rewardDiscountSen ?? 0, result.discount_sen));
+      // Authoritative: use the engine's value directly (bounded by the
+      // order subtotal), NOT min(client, engine). The client number is a
+      // preview only — trusting it would cap newly-supported types
+      // (combo/override_price/free_upgrade) at the client's stale 0.
+      rewardDiscountSenAmt = Math.max(0, Math.min(subtotalSen, result.discount_sen));
     } else if (rewardId) {
       const validated = await validateAppliedReward(supabase, {
         rewardId,
-        rewardDiscountSen,
+        items,
         subtotalSen,
         minOrderRm,
         totalRm: total,
