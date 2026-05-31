@@ -131,13 +131,27 @@ export default function RewardForm({ mode, initial }: Props) {
   const [error, setError]   = useState<string | null>(null);
   const [products, setProducts] = useState<ProductOpt[]>([]);
 
-  // Fetch products once so the Specific Products picker can typeahead.
-  // Backoffice already exposes /api/pickup/products with the catalog.
+  // Fetch the live catalog once so the Specific Products picker can
+  // typeahead. /api/pickup/products returns { products, categories } —
+  // NOT a bare array. The old code did rows.map() on the object, which
+  // threw and hit the catch → the picker was always empty ("no products").
+  // Mirror the Discount Engine page: read d.products, and resolve
+  // category_id → category name so the dropdown groups under real labels.
   useEffect(() => {
     fetch("/api/pickup/products", { credentials: "include" })
       .then((res) => res.json())
-      .then((rows: Array<{ id: string; name: string; category_id?: string }>) => {
-        setProducts(rows.map((p) => ({ id: p.id, name: p.name, category: p.category_id ?? "" })));
+      .then((d: {
+        products?: Array<{ id: string; name: string; category_id?: string | null }>;
+        categories?: Array<{ id: string; name: string }>;
+      }) => {
+        const catName = new Map((d.categories ?? []).map((c) => [c.id, c.name]));
+        setProducts(
+          (d.products ?? []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            category: catName.get(p.category_id ?? "") ?? "Other",
+          })),
+        );
       })
       .catch(() => setProducts([]));
   }, []);
