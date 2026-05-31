@@ -172,9 +172,7 @@ export default function Profile() {
   return (
     <Screen>
       {/* Sticky header */}
-      <View className="pt-3">
-        <PageHeader title="Profile" subtitle="Personal info, PIN, biometric" />
-      </View>
+      <PageHeader title="Profile" subtitle="Personal info, PIN, biometric" />
 
       <ScrollView
         showsVerticalScrollIndicator={false}

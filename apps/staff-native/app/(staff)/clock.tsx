@@ -11,6 +11,7 @@ import {
 import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
 import { Screen } from "../../components/Screen";
+import { PageHeader } from "../../components/PageHeader";
 import { SelfieCapture } from "../../components/SelfieCapture";
 import { ApiError } from "../../lib/api";
 import {
@@ -198,16 +199,14 @@ export default function ClockScreen() {
 
   return (
     <Screen>
-      <View className="pt-8">
-        <Text className="text-2xl font-display text-espresso">Clock</Text>
-        {status?.activeLog ? (
-          <Text className="mt-1 text-sm text-success">
-            Clocked in at {formatTime(status.activeLog.clock_in)}
-          </Text>
-        ) : (
-          <Text className="mt-1 text-sm text-muted-fg">Not clocked in</Text>
-        )}
-      </View>
+      <PageHeader
+        title="Clock"
+        subtitle={
+          status?.activeLog
+            ? `Clocked in at ${formatTime(status.activeLog.clock_in)}`
+            : "Not clocked in"
+        }
+      />
 
       {!permsReady ? (
         <View className="mt-8 rounded-3xl border border-border bg-surface p-5">

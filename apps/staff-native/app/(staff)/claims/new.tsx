@@ -214,13 +214,11 @@ export default function NewClaim() {
     >
       <Screen>
         {/* Sticky header */}
-        <View className="pt-3">
-          <PageHeader
+                  <PageHeader
             title="New claim"
             subtitle="Review and submit for reimbursement."
             back
           />
-        </View>
 
         <ScrollView
           showsVerticalScrollIndicator={false}

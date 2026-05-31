@@ -354,13 +354,11 @@ export default function NewPO() {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View className="pt-3">
-          <PageHeader
+                  <PageHeader
             title="New PO"
             subtitle={session?.outletName ?? "Your outlet"}
             back
           />
-        </View>
 
         {/* Smart / All tabs */}
         <View className="mb-3 flex-row gap-2">

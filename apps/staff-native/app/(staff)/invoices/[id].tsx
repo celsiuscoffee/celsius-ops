@@ -220,13 +220,11 @@ export default function InvoiceDetailScreen() {
           : undefined
       }
     >
-      <View className="pt-3">
-        <PageHeader
+      <PageHeader
           title={isPlaceholder ? "Attach invoice" : invoice.invoiceNumber}
           subtitle={invoice.supplier?.name ?? "Invoice"}
           back
         />
-      </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}

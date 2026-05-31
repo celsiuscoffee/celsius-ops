@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Plus, Receipt } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import { listClaims, type Claim } from "../../../lib/claims";
 
 export default function ClaimsList() {
@@ -29,20 +30,19 @@ export default function ClaimsList() {
 
   return (
     <Screen>
-      <View className="flex-row items-center justify-between pt-8">
-        <View>
-          <Text className="text-2xl font-display text-espresso">Claims</Text>
-          <Text className="mt-1 text-sm font-body text-muted-fg">
-            Out-of-pocket purchases
-          </Text>
-        </View>
-        <Pressable
-          onPress={() => router.push("/(staff)/claims/new")}
-          className="h-14 w-14 items-center justify-center rounded-2xl bg-primary active:opacity-80"
-        >
-          <Plus color="#FFFFFF" size={26} />
-        </Pressable>
-      </View>
+      <PageHeader
+        title="Claims"
+        subtitle="Out-of-pocket purchases"
+        right={
+          <Pressable
+            onPress={() => router.push("/(staff)/claims/new")}
+            accessibilityLabel="New claim"
+            className="h-11 w-11 items-center justify-center rounded-2xl bg-primary active:opacity-80"
+          >
+            <Plus color="#FFFFFF" size={22} />
+          </Pressable>
+        }
+      />
 
       {isLoading ? (
         <View className="flex-1 items-center justify-center">

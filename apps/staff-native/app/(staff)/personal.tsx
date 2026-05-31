@@ -97,13 +97,11 @@ export default function PersonalScreen() {
   return (
     <Screen edges={["top", "left", "right"]}>
       {/* Sticky header */}
-      <View className="pt-3">
-        <PageHeader
+      <PageHeader
           title="Personal info"
           subtitle="Address, IC, emergency contact"
           back
         />
-      </View>
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}

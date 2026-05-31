@@ -94,8 +94,7 @@ export default function OrdersList() {
   return (
     <Screen>
       {/* Sticky header with inline "+ New PO" */}
-      <View className="pt-3">
-        <PageHeader
+              <PageHeader
           title="Purchase Orders"
           subtitle="Order stock from suppliers"
           back
@@ -110,7 +109,6 @@ export default function OrdersList() {
             </Pressable>
           }
         />
-      </View>
 
       {/* Tabs */}
       <View className="mb-3 flex-row gap-2">

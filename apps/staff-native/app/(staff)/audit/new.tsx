@@ -10,6 +10,8 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Check, ChevronDown } from "lucide-react-native";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import {
   createAudit,
   listAuditOutlets,
@@ -111,12 +113,13 @@ export default function NewAudit() {
   }
 
   return (
-    <View className="flex-1 bg-background">
-      <ScrollView contentContainerClassName="px-5 pt-6 pb-12">
-        <Text className="text-2xl font-display text-espresso">New audit</Text>
-        <Text className="mt-1 text-sm font-body text-muted-fg">
-          Pick a template and outlet to start.
-        </Text>
+    <Screen>
+      <PageHeader
+        title="New audit"
+        subtitle="Pick a template and outlet to start."
+        back
+      />
+      <ScrollView contentContainerClassName="pb-12">
 
         <SelectorField
           label="Template"
@@ -227,7 +230,7 @@ export default function NewAudit() {
           </ScrollView>
         </View>
       </Modal>
-    </View>
+    </Screen>
   );
 }
 

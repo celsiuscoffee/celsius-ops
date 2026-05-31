@@ -40,7 +40,11 @@ export function PageHeader({ title, subtitle, right, back }: Props) {
   const iconColor = colorScheme === "dark" ? "#FAFAFA" : "#160800";
 
   return (
-    <View className="pb-3">
+    // Top padding lives HERE so screens don't have to wrap PageHeader
+    // in `<View className="pt-3">` (some forgot to, some used pt-8,
+    // some omitted entirely). One canonical position for every page
+    // header across the app — title always lands at the same Y.
+    <View className="pt-3 pb-3">
       {back ? (
         <Pressable
           onPress={() => router.back()}

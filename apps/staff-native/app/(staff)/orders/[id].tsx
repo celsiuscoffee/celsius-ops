@@ -202,9 +202,7 @@ export default function OrderDetailScreen() {
           : undefined
       }
     >
-      <View className="pt-3">
-        <PageHeader title={order.orderNumber} subtitle={order.supplier} back />
-      </View>
+      <PageHeader title={order.orderNumber} subtitle={order.supplier} back />
 
       <ScrollView
         showsVerticalScrollIndicator={false}

@@ -22,6 +22,7 @@ import {
   Wallet,
 } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import {
   fetchAllowances,
   fetchMyReviews,
@@ -137,8 +138,9 @@ export default function HrIndex() {
 
   return (
     <Screen>
+      <PageHeader title="HR" />
       <ScrollView
-        contentContainerClassName="pt-8 pb-12"
+        contentContainerClassName="pb-12"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -150,7 +152,6 @@ export default function HrIndex() {
           />
         }
       >
-        <Text className="text-2xl font-display text-espresso">HR</Text>
 
         {/* Clock card */}
         <Pressable

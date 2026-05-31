@@ -260,13 +260,11 @@ export default function InvoicesList() {
 
   return (
     <Screen>
-      <View className="pt-3">
-        <PageHeader
+      <PageHeader
           title="Invoices"
           subtitle="Supplier invoices & payment status"
           back
         />
-      </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}

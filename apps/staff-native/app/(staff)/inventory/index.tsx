@@ -144,9 +144,7 @@ export default function InventoryHub() {
   return (
     <Screen>
       {/* Sticky header */}
-      <View className="pt-3">
-        <PageHeader title="Inventory" subtitle="Stock operations" />
-      </View>
+      <PageHeader title="Inventory" subtitle="Stock operations" />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
