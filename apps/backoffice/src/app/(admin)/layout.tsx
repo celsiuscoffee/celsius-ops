@@ -269,15 +269,13 @@ const NAV_SECTIONS: NavSection[] = [
         // pickup app's rewards screen top-to-bottom so admin mental
         // model matches what the customer sees.
         //
-        // Channels = where rewards reach customers. Each references the
-        // template registry (All Rewards, under Setup). "All Rewards"
-        // moved to Setup — it's the registry, not a channel. "Points
-        // Shop" stays for now (still the edit surface for the rewards
-        // table that mint reads) and is removed once the Bean-Shop
-        // readers migrate to voucher_templates.
+        // The Bean-Points Shop has no entry here: its catalog is managed
+        // in All Rewards (Setup) — any template with points_cost set is a
+        // points-shop item. The legacy rewards-table editor (/loyalty/
+        // rewards) was removed once the Bean-Shop readers migrated to
+        // voucher_templates, so there's a single edit surface again.
         label: "Channels",
         items: [
-          { label: "Points Shop",      href: "/loyalty/rewards",          icon: <Star className={ICON_SIZE} />,     moduleKey: "loyalty:rewards" },
           { label: "Challenges",       href: "/loyalty/missions",         icon: <Target className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
           { label: "Mystery Pool",     href: "/loyalty/mystery",          icon: <Sparkles className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
           { label: "Birthday Treats",  href: "/loyalty/birthday",         icon: <Cake className={ICON_SIZE} />,     moduleKey: "loyalty:rewards" },
