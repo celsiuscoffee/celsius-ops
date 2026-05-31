@@ -192,12 +192,21 @@ export const useApp = create<AppState>()(
       // don't crash on hydrate. Without a baseline, every future
       // change risks an NPE on every device on first launch after
       // the new bundle lands.
-      version: 1,
+      version: 2,
       migrate: (persisted, fromVersion) => {
-        // No previous versions yet — accept whatever we get and let
-        // partialize re-pin the shape. Future migrations branch on
-        // `fromVersion` to transform old payloads.
-        if (fromVersion < 1) return persisted as AppState;
+        // v1 → v2: clear any persisted appliedReward. Reason — the
+        //   `rewards` catalog rows (Free Drink, RM5, RM10) shipped
+        //   with discount_type=null for ~3 weeks. Customers who
+        //   tapped Free Drink during that window have a persisted
+        //   appliedReward.discount_type=null in localStorage that
+        //   never refreshes — silently returns 0 discount at
+        //   checkout, even after we backfilled the catalog (commit
+        //   e4c0d792). Wipe it on first launch so the next tap
+        //   picks up the live `discount_type='free_item'`.
+        const p = persisted as { appliedReward?: unknown };
+        if (fromVersion < 2 && p && typeof p === "object") {
+          p.appliedReward = null;
+        }
         return persisted as AppState;
       },
       storage: createJSONStorage(() => AsyncStorage),
