@@ -42,6 +42,12 @@ export type DiscountCartLine = {
   /** Product display name — used only as a last-resort fallback for
    *  legacy `free_product_name` matches. */
   name: string;
+  /** The modifier-upcharge portion of unit_price_sen (oat milk, extra
+   *  shot, large size, …) — i.e. unit_price_sen minus the base product
+   *  price. Used ONLY by `free_upgrade`, which frees the add-on, not the
+   *  whole drink. Optional: callers that don't supply it make
+   *  free_upgrade a no-op (returns 0) rather than over-discounting. */
+  modifier_total_sen?: number | null;
 };
 
 /** Canonical v2 voucher spec — the engine's input. Always uses
@@ -64,6 +70,17 @@ export type VoucherDiscountSpec = {
   applicable_products: string[] | null;
   free_product_ids: string[] | null;
   free_product_name: string | null;
+  /** BOGO knobs: buy `bogo_buy_qty`, get `bogo_free_qty` free (cheapest
+   *  eligible units). Default 1/1 when null. */
+  bogo_buy_qty?: number | null;
+  bogo_free_qty?: number | null;
+  /** Combo: the bundle's fixed total in SEN. Discount = (one unit of each
+   *  required product) − combo_price_sen. The "required set" is
+   *  applicable_products (ALL must be present in the cart). */
+  combo_price_sen?: number | null;
+  /** Override price: a single eligible item is repriced to this SEN
+   *  value. Discount = cheapest eligible unit_price_sen − override_price_sen. */
+  override_price_sen?: number | null;
 };
 
 export type DiscountReason =
@@ -180,14 +197,92 @@ export function computeVoucherDiscount(args: {
       discountSen = Math.min(computed, eligibleSubtotalSen);
       break;
     }
-    case "free_item":
-    case "free_upgrade": {
+    case "free_item": {
       // Cheapest eligible line's unit_price_sen. unit_price_sen
       // already includes modifier upcharges (the price the customer
       // would have paid for that line if voucher hadn't been applied),
       // so the discount equals the line's real cost.
       const cheapest = Math.min(...eligible.map((l) => l.unit_price_sen));
       discountSen = Number.isFinite(cheapest) ? cheapest : 0;
+      break;
+    }
+    case "free_upgrade": {
+      // Free the cheapest eligible line's MODIFIER upcharge only (oat
+      // milk / extra shot / size bump) — NOT the whole drink. That's what
+      // distinguishes it from free_item.
+      //
+      // Migration-safe: a caller is "modifier-aware" only if at least one
+      // eligible line supplies a numeric modifier_total_sen. Modifier-aware
+      // callers get the correct add-on logic (free cheapest positive
+      // upcharge; 0 if the cart has no upcharges). LEGACY callers that
+      // don't pass modifier_total_sen fall back to free_item behaviour
+      // (cheapest whole line) so the one existing free_upgrade voucher
+      // never silently regresses to 0. Remove the fallback once POS +
+      // Pickup + server all pass modifier_total_sen.
+      const modifierAware = eligible.some((l) => typeof l.modifier_total_sen === "number");
+      if (modifierAware) {
+        const upcharges = eligible
+          .map((l) => l.modifier_total_sen ?? 0)
+          .filter((m) => m > 0);
+        discountSen = upcharges.length ? Math.min(...upcharges) : 0;
+      } else {
+        const cheapest = Math.min(...eligible.map((l) => l.unit_price_sen));
+        discountSen = Number.isFinite(cheapest) ? cheapest : 0;
+      }
+      break;
+    }
+    case "bogo": {
+      // Buy bogo_buy_qty, get bogo_free_qty free — off the cheapest
+      // eligible UNITS. Expand eligible lines into per-unit prices, sort
+      // ascending, and for each complete (buy + free) group free the
+      // cheapest free_qty units. Multiple complete groups stack.
+      const buyQty  = Math.max(1, Math.round(spec.bogo_buy_qty  ?? 1));
+      const freeQty = Math.max(1, Math.round(spec.bogo_free_qty ?? 1));
+      const units: number[] = [];
+      for (const l of eligible) {
+        for (let i = 0; i < l.quantity; i++) units.push(l.unit_price_sen);
+      }
+      units.sort((a, b) => a - b); // cheapest first → those get freed
+      const groupSize = buyQty + freeQty;
+      const totalFree = Math.floor(units.length / groupSize) * freeQty;
+      let freed = 0;
+      for (let i = 0; i < totalFree && i < units.length; i++) freed += units[i];
+      discountSen = freed;
+      break;
+    }
+    case "combo": {
+      // Required set: EVERY product in applicable_products must be in the
+      // cart. When satisfied, the bundle (one cheapest unit of each
+      // required product) is repriced to combo_price_sen.
+      const required = spec.applicable_products ?? [];
+      if (required.length === 0 || spec.combo_price_sen == null) {
+        return { ...ZERO, reason: "unsupported_discount_type" };
+      }
+      const present = new Set(cart.map((l) => l.product_id));
+      if (!required.every((pid) => present.has(pid))) {
+        return { ...ZERO, reason: "no_eligible_items" };
+      }
+      let bundleSen = 0;
+      for (const pid of required) {
+        const cheapestForPid = Math.min(
+          ...cart.filter((l) => l.product_id === pid).map((l) => l.unit_price_sen),
+        );
+        if (Number.isFinite(cheapestForPid)) bundleSen += cheapestForPid;
+      }
+      discountSen = Math.max(0, bundleSen - spec.combo_price_sen);
+      break;
+    }
+    case "override_price": {
+      // A single eligible item is repriced to override_price_sen. Applied
+      // to the CHEAPEST eligible unit (conservative — smallest saving) so
+      // we never over-discount when multiple eligible items are present.
+      if (spec.override_price_sen == null) {
+        return { ...ZERO, reason: "unsupported_discount_type" };
+      }
+      const cheapest = Math.min(...eligible.map((l) => l.unit_price_sen));
+      discountSen = Number.isFinite(cheapest)
+        ? Math.max(0, cheapest - spec.override_price_sen)
+        : 0;
       break;
     }
     case "beans_multiplier":

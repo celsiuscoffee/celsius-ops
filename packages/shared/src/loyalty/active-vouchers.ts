@@ -30,6 +30,9 @@ export type VoucherDiscountType =
   | "percent"
   | "free_item"
   | "free_upgrade"
+  | "bogo"
+  | "combo"
+  | "override_price"
   | "beans_multiplier"
   | "none";
 
