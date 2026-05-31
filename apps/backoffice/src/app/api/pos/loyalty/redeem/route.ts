@@ -210,6 +210,12 @@ function buildDiscountInfo(reward: Record<string, any>) {
       applicable_categories: reward.applicable_categories ?? null,
       free_product_ids: reward.free_product_ids ?? null,
       free_product_name: reward.free_product_name ?? null,
+      // Type-specific knobs so the POS-native engine can apply bogo /
+      // combo / override_price (it's client-authoritative on the register).
+      bogo_buy_qty: reward.bogo_buy_qty ?? null,
+      bogo_free_qty: reward.bogo_free_qty ?? null,
+      combo_price_sen: reward.combo_price_sen ?? null,
+      override_price_sen: reward.override_price_sen ?? null,
     };
   }
 

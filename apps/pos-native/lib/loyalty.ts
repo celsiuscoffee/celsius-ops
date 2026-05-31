@@ -63,7 +63,9 @@ export type UsualItem = {
 };
 
 export type RedeemDiscount = {
-  type: string | null; // "flat" | "percent" | "free_item" | "free_upgrade" | "none"
+  // flat | percent | free_item | free_upgrade | bogo | combo |
+  // override_price | beans_multiplier | none
+  type: string | null;
   value: number | null;
   max_discount: number | null;
   min_order: number | null;
@@ -71,6 +73,11 @@ export type RedeemDiscount = {
   applicable_categories: string[] | null;
   free_product_ids: string[] | null;
   free_product_name: string | null;
+  // Type-specific knobs (mirror @celsius/shared VoucherDiscountSpec).
+  bogo_buy_qty?: number | null;
+  bogo_free_qty?: number | null;
+  combo_price_sen?: number | null;
+  override_price_sen?: number | null;
 };
 
 export type RedeemResponse = {
@@ -176,10 +183,62 @@ export function computeRewardDiscount(d: RedeemDiscount, lines: CartLine[]): num
       discount = Math.min(computed, eligibleSubtotal);
       break;
     }
-    case "free_item":
-    case "free_upgrade": {
+    case "free_item": {
       const cheapest = Math.min(...eligible.map((l) => l.unit_sen));
       discount = Number.isFinite(cheapest) ? cheapest : 0;
+      break;
+    }
+    case "free_upgrade": {
+      // Free the cheapest eligible line's MODIFIER upcharge (add-on), not
+      // the whole line. unit_sen − product.price_sen = the modifier total.
+      // Falls back to free_item when no eligible line has modifiers
+      // (mirrors the shared engine's migration-safe fallback).
+      const upcharges = eligible
+        .map((l) => l.unit_sen - l.product.price_sen)
+        .filter((m) => m > 0);
+      if (upcharges.length) {
+        discount = Math.min(...upcharges);
+      } else {
+        const cheapest = Math.min(...eligible.map((l) => l.unit_sen));
+        discount = Number.isFinite(cheapest) ? cheapest : 0;
+      }
+      break;
+    }
+    case "bogo": {
+      // Buy bogo_buy_qty, get bogo_free_qty free off the cheapest units.
+      const buyQty = Math.max(1, Math.round(d.bogo_buy_qty ?? 1));
+      const freeQty = Math.max(1, Math.round(d.bogo_free_qty ?? 1));
+      const units: number[] = [];
+      for (const l of eligible) for (let i = 0; i < l.qty; i++) units.push(l.unit_sen);
+      units.sort((a, b) => a - b);
+      const totalFree = Math.floor(units.length / (buyQty + freeQty)) * freeQty;
+      let freed = 0;
+      for (let i = 0; i < totalFree && i < units.length; i++) freed += units[i];
+      discount = freed;
+      break;
+    }
+    case "combo": {
+      // Every applicable_products entry must be present in the cart; the
+      // bundle (one cheapest unit of each) is repriced to combo_price_sen.
+      const required = d.applicable_products ?? [];
+      if (required.length === 0 || d.combo_price_sen == null) return 0;
+      const present = new Set(lines.map((l) => l.product.id));
+      if (!required.every((pid) => present.has(pid))) return 0;
+      let bundle = 0;
+      for (const pid of required) {
+        const cheapest = Math.min(
+          ...lines.filter((l) => l.product.id === pid).map((l) => l.unit_sen),
+        );
+        if (Number.isFinite(cheapest)) bundle += cheapest;
+      }
+      discount = Math.max(0, bundle - d.combo_price_sen);
+      break;
+    }
+    case "override_price": {
+      // Cheapest eligible item repriced to override_price_sen.
+      if (d.override_price_sen == null) return 0;
+      const cheapest = Math.min(...eligible.map((l) => l.unit_sen));
+      discount = Number.isFinite(cheapest) ? Math.max(0, cheapest - d.override_price_sen) : 0;
       break;
     }
     default:
@@ -331,6 +390,49 @@ export async function fetchSnapshot(memberId: string): Promise<LoyaltySnapshot |
     return await apiGet<LoyaltySnapshot>(`/api/pos/loyalty/snapshot?member_id=${encodeURIComponent(memberId)}`);
   } catch {
     return null;
+  }
+}
+
+/** Lightweight read of currently-active combo + category promos for the
+ *  customer-display ordering screen. Snapshot-style `active_promos` is
+ *  member-gated; this is the guest fallback so the "Pair with a bite"
+ *  banner still surfaces deals when no one has signed in yet.
+ *
+ *  Direct table read via anon key (RLS grants SELECT). Maps the raw
+ *  promotions row into the same ActivePromo shape the display already
+ *  knows how to render. */
+export async function fetchActivePromos(): Promise<ActivePromo[]> {
+  try {
+    const { supabase } = await import("./supabase");
+    const { data, error } = await supabase
+      .from("promotions")
+      .select("id, name, trigger_type, discount_type, discount_value, combo_category_ids, applicable_categories")
+      .eq("is_active", true)
+      .order("priority", { ascending: false })
+      .limit(20);
+    if (error) return [];
+    return (data ?? []).map((p: any) => {
+      const dv = Number(p.discount_value ?? 0);
+      const isPct = p.discount_type === "percentage_off";
+      const isFlat = p.discount_type === "fixed_amount_off";
+      const label = isPct ? `${dv}% off` : isFlat ? `RM ${dv.toFixed(0)} off` : "Deal";
+      const flavour: ActivePromo["flavour"] =
+        Array.isArray(p.combo_category_ids) && p.combo_category_ids.length > 0
+          ? "category"
+          : Array.isArray(p.applicable_categories) && p.applicable_categories.length > 0
+          ? "category"
+          : "always";
+      return {
+        id: p.id,
+        name: p.name,
+        discount_label: label,
+        window_label: "",
+        flavour,
+        live: true,
+      };
+    });
+  } catch {
+    return [];
   }
 }
 

@@ -21,7 +21,9 @@ export type Reward = {
   category: string;
   image_url: string | null;
   is_active: boolean;
-  discount_type: "flat" | "percent" | "free_item" | "fixed_amount" | "percentage" | "bogo" | "none" | null;
+  discount_type:
+    | "flat" | "percent" | "free_item" | "free_upgrade" | "fixed_amount"
+    | "percentage" | "bogo" | "combo" | "override_price" | "none" | null;
   discount_value: number | null;
   max_discount_value: number | null;
   min_order_value: number | null;
@@ -31,6 +33,9 @@ export type Reward = {
   free_product_name: string | null;
   bogo_buy_qty: number;
   bogo_free_qty: number;
+  /** SEN. combo: bundle fixed total; override_price: single-item price. */
+  combo_price_sen?: number | null;
+  override_price_sen?: number | null;
   fulfillment_type: string[] | null;
   valid_from?: string | null;
   valid_until?: string | null;
@@ -282,6 +287,8 @@ export function calcRewardDiscount(
     discount_value?: number | null;
     bogo_buy_qty?: number;
     bogo_free_qty?: number;
+    combo_price_sen?: number | null;
+    override_price_sen?: number | null;
     min_order_value?: number | null;
     applicable_categories?: string[] | null;
     applicable_products?: string[] | null;
@@ -346,6 +353,38 @@ export function calcRewardDiscount(
   }
   if (t === "fixed_amount" && reward.discount_value) {
     return reward.discount_value;
+  }
+  if (t === "free_upgrade") {
+    // Cheapest eligible MODIFIER upcharge (add-on), not the whole drink.
+    // Falls back to free_item (cheapest base) when no add-on is present.
+    // Mirrors @celsius/shared computeVoucherDiscount. Preview only — the
+    // order endpoint recomputes server-authoritatively.
+    if (eligible.length === 0) return 0;
+    const upcharges = eligible
+      .map((i) => i.totalPrice / i.quantity - i.basePrice)
+      .filter((m) => m > 0);
+    if (upcharges.length) return Math.min(...upcharges);
+    return Math.min(...eligible.map((i) => i.basePrice));
+  }
+  if (t === "combo") {
+    // Every applicable_products entry must be in the cart; the bundle
+    // (one cheapest unit of each) is repriced to combo_price_sen.
+    const required = reward.applicable_products ?? [];
+    if (required.length === 0 || reward.combo_price_sen == null) return 0;
+    const present = new Set(cartItems.map((i) => i.productId));
+    if (!required.every((pid) => present.has(pid))) return 0;
+    let bundle = 0;
+    for (const pid of required) {
+      const matches = cartItems.filter((i) => i.productId === pid).map((i) => i.basePrice);
+      if (matches.length) bundle += Math.min(...matches);
+    }
+    return Math.max(0, bundle - reward.combo_price_sen / 100); // sen → RM
+  }
+  if (t === "override_price") {
+    // Cheapest eligible item repriced to override_price_sen.
+    if (reward.override_price_sen == null || eligible.length === 0) return 0;
+    const cheapest = Math.min(...eligible.map((i) => i.basePrice));
+    return Math.max(0, cheapest - reward.override_price_sen / 100); // sen → RM
   }
   return 0;
 }
