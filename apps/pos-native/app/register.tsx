@@ -13,6 +13,7 @@ import {
 import { usePos } from "@/lib/store";
 import { apiPost } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
+import { usePickupPrinter } from "@/lib/use-pickup-printer";
 import { fetchCategories, fetchProducts, type Product, type ModifierOption } from "@/lib/menu";
 import { useCart, cartSubtotal } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
@@ -145,6 +146,20 @@ export default function Register() {
 
   const cats = useQuery({ queryKey: ["pos-categories"], queryFn: fetchCategories });
   const prods = useQuery({ queryKey: ["pos-products"], queryFn: fetchProducts });
+
+  // Pickup-order auto-printer — subscribes to the `orders` table and
+  // fires a kitchen docket on the native SUNMI head when a paid pickup
+  // or QR-dine-in order lands for this outlet. Ported from the
+  // (retiring) Capacitor web POS's use-pickup-printer.ts. Needs the
+  // products catalog as a Map for per-line kitchen_station routing.
+  const productsByIdForPrinter = useMemo(() => {
+    const m = new Map<string, { id: string; kitchen_station: string | null }>();
+    for (const p of prods.data ?? []) {
+      m.set(p.id, { id: p.id, kitchen_station: p.kitchen_station ?? null });
+    }
+    return m;
+  }, [prods.data]);
+  usePickupPrinter(outletId, productsByIdForPrinter);
 
   const lines = useCart((s) => s.lines);
   const add = useCart((s) => s.add);
