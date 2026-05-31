@@ -37,6 +37,7 @@ const METHOD_LABELS: Record<string, string> = {
   boost:      "Boost",
   shopeepay:  "ShopeePay",
   duitnow:    "DuitNow QR",
+  maybank_qr: "Maybank QR",
 };
 
 type GatewayMethod = {
@@ -66,6 +67,7 @@ import {
 } from "../lib/rewards";
 import { useEvaluatePromotions } from "../lib/use-evaluate-promotions";
 import { getSetting } from "../lib/settings";
+import { useMaybankQrConfig, maybankQrAvailableFor } from "../lib/maybank-qr";
 import { showToast } from "../lib/toast";
 import { trackEvent } from "../lib/analytics";
 import { EspressoHeader } from "../components/EspressoHeader";
@@ -184,6 +186,11 @@ export default function Checkout() {
   // is also what we treat as "still loading" for the payment tile section.
   const [gatewayMethods, setGatewayMethods] = useState<GatewayMethod[]>([]);
   const [tier, setTier] = useState<MemberTier | null>(null);
+  // Backoffice-managed Maybank static QR config (live via realtime).
+  // Gates the "Maybank QR" tile + drives the per-outlet payload shown on
+  // the post-checkout scan-to-pay screen.
+  const maybankQrConfig = useMaybankQrConfig();
+  const maybankQrAvail = maybankQrAvailableFor(maybankQrConfig, outletId);
   useEffect(() => {
     getSetting("sst").then(setSstConfig);
     // One round-trip to read both the global on/off and the per-method list.
@@ -375,7 +382,7 @@ export default function Checkout() {
   // banks) they then pick a specific one inside the expanded row. The
   // existing place-order code reads selectedMethodId, so we keep that as
   // a derived value rather than refactoring the downstream code.
-  type Category = "online_banking" | "ewallet" | "card" | "apple_pay" | "google_pay";
+  type Category = "online_banking" | "ewallet" | "card" | "apple_pay" | "google_pay" | "maybank_qr";
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   // The specific wallet inside the e-wallet category. Reset whenever the
   // customer switches away from e-wallet so a stale choice can't ride
@@ -519,6 +526,7 @@ export default function Checkout() {
     if (selectedCategory === "card")           return "card";
     if (selectedCategory === "apple_pay")      return "apple_pay";
     if (selectedCategory === "google_pay")     return "google_pay";
+    if (selectedCategory === "maybank_qr")     return "maybank_qr";
     return null;
   })();
 
@@ -860,6 +868,22 @@ export default function Checkout() {
           trackEvent("payment_rm_cancelled", { orderId: res.orderId, type: result });
           router.replace("/orders");
         }
+        return;
+      }
+
+      // ─── Maybank static QR branch ───────────────────────────────
+      // No payment gateway — order sits as `pending` until a staff member
+      // verifies the Maybank transfer and releases it (which flips it to
+      // `preparing` and triggers the kitchen print). The order detail
+      // screen renders the per-outlet Maybank QR + a waiting state.
+      if (selectedMethodId === "maybank_qr" && !isFreeOrder) {
+        stage = "maybank-qr-pending";
+        setBusyLabel("Saving your order…");
+        trackEvent("order_placed_maybank_qr", { orderId: res.orderId });
+        router.replace({
+          pathname: "/order/[id]",
+          params: { id: res.orderId, justPaid: "1" },
+        });
         return;
       }
 
@@ -1351,6 +1375,26 @@ export default function Checkout() {
                       />
                     );
                   })()}
+
+                  {/* Maybank QR — manual / cash-counter confirmation.
+                      No payment gateway: order sits as pending until staff
+                      verify the Maybank transfer in the staff order feed
+                      and release it (which is when the kitchen receives it). */}
+                  {maybankQrAvail && (
+                    <CategoryRow
+                      selected={selectedCategory === "maybank_qr"}
+                      onPress={() => {
+                        Haptics.selectionAsync();
+                        setSelectedCategory("maybank_qr");
+                        setSelectedWalletId(null);
+                        setFpxBankCode(null);
+                      }}
+                      title="Maybank QR"
+                      subtitle="Scan-to-pay, staff confirms"
+                      iconMethodId="duitnow"
+                      hasDivider
+                    />
+                  )}
                 </View>
               </View>
             )}
