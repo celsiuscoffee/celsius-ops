@@ -4,6 +4,12 @@
  * apps/pickup-native/lib/store.ts AppliedReward so a reward applied on
  * one surface reads correctly on the other.
  */
+import {
+  computeVoucherDiscount,
+  type VoucherDiscountSpec,
+  type DiscountCartLine,
+} from "@celsius/shared";
+
 export type AppliedReward = {
   id: string;
   name: string;
@@ -12,14 +18,23 @@ export type AppliedReward = {
     | "flat"
     | "percent"
     | "free_item"
+    | "free_upgrade"
     | "bogo"
+    | "combo"
+    | "override_price"
     | "fixed_amount"
     | "percentage"
     | "none"
     | null;
   discount_value: number | null;
+  max_discount_value?: number | null;
   bogo_buy_qty?: number;
   bogo_free_qty?: number;
+  /** combo bundle price / override single-item price, in SEN. */
+  combo_price_sen?: number | null;
+  override_price_sen?: number | null;
+  /** bogo/free_item: the specific product(s) given free. */
+  free_product_ids?: string[] | null;
   free_product_name?: string | null;
   applicable_categories?: string[] | null;
   applicable_products?: string[] | null;
@@ -35,57 +50,66 @@ type CartLine = {
   quantity: number;
 };
 
+/** Map the stored reward → the shared engine's sen-based spec. Normalises
+ *  the legacy POS vocab (fixed_amount/percentage) to canonical, and
+ *  converts the RM-denominated fields (min_order_value, fixed_amount value)
+ *  to sen. */
+function toSpec(reward: AppliedReward): VoucherDiscountSpec {
+  let dt: string | null = reward.discount_type;
+  let dv = reward.discount_value;
+  if (dt === "fixed_amount") {
+    dt = "flat";
+    dv = dv != null ? Math.round(dv * 100) : null; // legacy RM → sen
+  } else if (dt === "percentage") {
+    dt = "percent";
+  }
+  return {
+    discount_type: (dt as VoucherDiscountSpec["discount_type"]) ?? null,
+    discount_value: dv,
+    max_discount_value_sen: reward.max_discount_value ?? null,
+    min_order_value_sen:
+      reward.min_order_value != null ? Math.round(reward.min_order_value * 100) : null,
+    applicable_categories: reward.applicable_categories ?? null,
+    applicable_products: reward.applicable_products ?? null,
+    free_product_ids: reward.free_product_ids ?? null,
+    free_product_name: reward.free_product_name ?? null,
+    bogo_buy_qty: reward.bogo_buy_qty ?? null,
+    bogo_free_qty: reward.bogo_free_qty ?? null,
+    combo_price_sen: reward.combo_price_sen ?? null,
+    override_price_sen: reward.override_price_sen ?? null,
+  };
+}
+
 /**
- * Client-side reward-discount preview. Port of
- * apps/pickup-native/lib/rewards.ts calcRewardDiscount. The server
- * recomputes the authoritative discount at checkout; this keeps the
- * cart/checkout totals honest so the customer sees the same number.
+ * Client-side reward-discount preview, returned in RM. Delegates to the
+ * shared @celsius/shared computeVoucherDiscount — the EXACT engine the
+ * server uses at checkout (/api/orders + /api/checkout/initiate) — so the
+ * cart/checkout total the customer sees matches what they're charged,
+ * across all 9 discount types. The server remains authoritative; this is
+ * the preview.
  */
 export function calcRewardDiscount(
   reward: AppliedReward | null,
   cartItems: CartLine[],
-  subtotal: number,
+  _subtotal: number,
 ): number {
   if (!reward) return 0;
-  if (reward.min_order_value != null && subtotal < reward.min_order_value) return 0;
-
-  const cats = reward.applicable_categories;
-  const prods = reward.applicable_products;
-  const hasFilter = (cats && cats.length > 0) || (prods && prods.length > 0);
-  const someHaveCategory = cartItems.some((i) => !!i.category);
-  const eligible =
-    hasFilter && someHaveCategory
-      ? cartItems.filter((i) => {
-          if (cats && cats.length > 0 && i.category && cats.includes(i.category)) return true;
-          if (prods && prods.length > 0 && i.productId && prods.includes(i.productId)) return true;
-          return false;
-        })
-      : cartItems;
-
-  const t = reward.discount_type;
-  if (t === "free_item") {
-    if (eligible.length === 0) return 0;
-    return Math.min(...eligible.map((i) => i.basePrice));
-  }
-  if (t === "bogo") {
-    if (eligible.length === 0) return 0;
-    const unitPrices = eligible.flatMap((i) =>
-      Array(i.quantity).fill(i.totalPrice / i.quantity),
-    ) as number[];
-    unitPrices.sort((a, b) => b - a);
-    // Free the cheaper of the top pair (preview only; engine is authoritative).
-    return unitPrices.length >= 2 ? unitPrices[1] : 0;
-  }
-  if ((t === "percent" || t === "percentage") && reward.discount_value) {
-    return subtotal * (reward.discount_value / 100);
-  }
-  if (t === "flat" && reward.discount_value) {
-    return reward.discount_value / 100;
-  }
-  if (t === "fixed_amount" && reward.discount_value) {
-    return reward.discount_value;
-  }
-  return 0;
+  const cart: DiscountCartLine[] = cartItems.map((i) => {
+    const qty = Math.max(1, i.quantity);
+    const effRm = i.totalPrice / qty; // per-unit, incl modifiers
+    const modRm = Math.max(0, effRm - i.basePrice);
+    return {
+      product_id: i.productId ?? "",
+      quantity: qty,
+      unit_price_sen: Math.round(i.basePrice * 100),
+      modifier_total_sen: Math.round(modRm * 100),
+      category: i.category ?? null,
+      category_id: null,
+      name: "",
+    };
+  });
+  const { discount_sen } = computeVoucherDiscount({ spec: toSpec(reward), cart });
+  return discount_sen / 100; // sen → RM (cart/checkout views work in RM)
 }
 
 export function formatRewardValue(r: AppliedReward): string {
@@ -100,8 +124,21 @@ export function formatRewardValue(r: AppliedReward): string {
   if (r.discount_type === "free_item") {
     return r.free_product_name ? `Free ${r.free_product_name}` : "Free item";
   }
+  if (r.discount_type === "free_upgrade") {
+    return "Free upgrade";
+  }
   if (r.discount_type === "bogo") {
     return `Buy ${r.bogo_buy_qty} get ${r.bogo_free_qty} free`;
+  }
+  if (r.discount_type === "combo") {
+    return r.combo_price_sen != null
+      ? `Combo · RM${(r.combo_price_sen / 100).toFixed(2).replace(/\.00$/, "")}`
+      : "Combo deal";
+  }
+  if (r.discount_type === "override_price") {
+    return r.override_price_sen != null
+      ? `RM${(r.override_price_sen / 100).toFixed(2).replace(/\.00$/, "")} each`
+      : "Special price";
   }
   return "Reward";
 }
