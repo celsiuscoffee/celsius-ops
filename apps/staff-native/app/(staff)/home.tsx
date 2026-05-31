@@ -212,15 +212,15 @@ export default function Home() {
             </Text>
           </View>
           <View className="flex-1">
-            <Text className="text-base font-display text-espresso">
+            {/* Greeting matches the standard page-title size (24px
+                Peachi-Bold) — same anchor weight as every other screen
+                so Home doesn't feel like a different app. */}
+            <Text className="text-2xl font-display text-espresso">
               {greeting()}, {firstName(session?.name)}
             </Text>
             <Text className="text-xs font-body text-muted-fg">
               {session?.outletName ? `${session.outletName} · ` : ""}
               {dateLabel()}
-              {Updates.updateId
-                ? ` · build ${Updates.updateId.slice(0, 8)}`
-                : ""}
             </Text>
           </View>
         </Pressable>
@@ -307,7 +307,7 @@ export default function Home() {
         {totalCount > 0 ? (
           <View className="mt-4 rounded-3xl border border-border bg-surface px-4 py-3">
             <View className="flex-row items-center justify-between">
-              <Text className="text-sm font-body-semi text-espresso">
+              <Text className="text-base font-body-semi text-espresso">
                 Today's tasks
               </Text>
               <Text className="text-xs font-body-bold text-muted-fg">
@@ -426,7 +426,7 @@ export default function Home() {
 
         {/* Quick actions */}
         <View className="mt-6">
-          <Text className="mb-2 text-sm font-body-semi text-espresso">
+          <Text className="mb-2 text-base font-body-semi text-espresso">
             Quick actions
           </Text>
           <View className="flex-row flex-wrap gap-2">
@@ -468,7 +468,7 @@ export default function Home() {
               <ClipboardCheck color="#A2492C" size={20} />
             </View>
             <View className="flex-1">
-              <Text className="text-sm font-body-semi text-espresso">
+              <Text className="text-base font-body-semi text-espresso">
                 Checklists
               </Text>
               <Text className="text-xs font-body text-muted-fg">
@@ -485,7 +485,7 @@ export default function Home() {
               <ClipboardList color="#A2492C" size={20} />
             </View>
             <View className="flex-1">
-              <Text className="text-sm font-body-semi text-espresso">
+              <Text className="text-base font-body-semi text-espresso">
                 Audits
               </Text>
               <Text className="text-xs font-body text-muted-fg">
@@ -541,7 +541,7 @@ function TaskCard({
         </View>
         <View className="flex-1">
           <Text
-            className="text-sm font-body-medium text-espresso"
+            className="text-base font-body-medium text-espresso"
             numberOfLines={1}
           >
             {task.title}

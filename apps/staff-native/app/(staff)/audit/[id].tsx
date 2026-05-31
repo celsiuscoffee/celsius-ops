@@ -441,7 +441,7 @@ export default function AuditDetail() {
               ) : (
                 <Camera color="#4A4A4A" size={16} />
               )}
-              <Text className="text-sm font-body-bold text-espresso">
+              <Text className="text-base font-body-bold text-espresso">
                 {item.photos.length > 0 ? "Add another" : "Add photo"}
               </Text>
             </Pressable>
@@ -453,7 +453,7 @@ export default function AuditDetail() {
               className="h-12 flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border border-border active:bg-primary-50"
             >
               <MessageSquare color="#4A4A4A" size={16} />
-              <Text className="text-sm font-body-bold text-espresso">
+              <Text className="text-base font-body-bold text-espresso">
                 {item.notes ? "Edit note" : "Add note"}
               </Text>
             </Pressable>
@@ -765,7 +765,7 @@ function CompletedView({
                   className="rounded-2xl border border-border bg-surface p-3"
                 >
                   <View className="flex-row items-center gap-2">
-                    <Text className="flex-1 text-sm font-body-medium text-espresso">
+                    <Text className="flex-1 text-base font-body-medium text-espresso">
                       {i.itemTitle}
                     </Text>
                     {i.rating === null ? (
@@ -793,7 +793,7 @@ function CompletedView({
                         </Text>
                       </View>
                     ) : (
-                      <Text className="text-sm font-body-bold text-espresso">
+                      <Text className="text-base font-body-bold text-espresso">
                         {i.rating}
                       </Text>
                     )}

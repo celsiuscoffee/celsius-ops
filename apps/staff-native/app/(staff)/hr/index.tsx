@@ -195,7 +195,7 @@ export default function HrIndex() {
                   <Wallet color="#A2492C" size={18} />
                 </View>
                 <View>
-                  <Text className="text-sm font-body-semi text-espresso">
+                  <Text className="text-base font-body-semi text-espresso">
                     {MONTHS[allowance.period.month - 1]} allowances
                   </Text>
                   <Text className="text-xs font-body text-muted">
@@ -298,12 +298,12 @@ function AllowanceBar({
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-1.5">
           <Icon color={barColor} size={14} />
-          <Text className="text-sm font-body-semi text-espresso">{label}</Text>
+          <Text className="text-base font-body-semi text-espresso">{label}</Text>
           {badge ? (
             <Text className="text-xs font-body text-muted">· {badge}</Text>
           ) : null}
         </View>
-        <Text className="text-sm font-body-bold text-espresso">
+        <Text className="text-base font-body-bold text-espresso">
           RM {earned} / RM {base}
         </Text>
       </View>

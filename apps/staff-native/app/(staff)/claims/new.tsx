@@ -199,7 +199,7 @@ export default function NewClaim() {
           onPress={startManualEntry}
           className="mt-4 h-14 items-center justify-center rounded-2xl border border-border bg-surface active:bg-primary-50"
         >
-          <Text className="text-sm font-body-semi text-espresso">
+          <Text className="text-base font-body-semi text-espresso">
             Enter manually without photo
           </Text>
         </Pressable>
@@ -423,7 +423,7 @@ function PhotoStatus({
           <ImageIcon color="#9CA3AF" size={20} />
         </View>
         <View className="ml-3 flex-1">
-          <Text className="text-sm font-body-semi text-espresso">
+          <Text className="text-base font-body-semi text-espresso">
             No photo attached
           </Text>
           <Text className="mt-0.5 text-xs font-body text-muted-fg">
@@ -453,7 +453,7 @@ function PhotoStatus({
           )}
         </View>
         <View className="ml-3 flex-1">
-          <Text className="text-sm font-body-semi text-espresso">
+          <Text className="text-base font-body-semi text-espresso">
             {uploadError
               ? "Upload failed"
               : extracting

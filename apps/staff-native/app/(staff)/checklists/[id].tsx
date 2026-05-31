@@ -286,10 +286,10 @@ export default function ChecklistDetail() {
         {/* Progress */}
         <View className="mt-4 rounded-3xl border border-border bg-surface p-4">
           <View className="flex-row items-center justify-between">
-            <Text className="text-sm font-body-semi text-espresso">
+            <Text className="text-base font-body-semi text-espresso">
               Progress
             </Text>
-            <Text className="text-sm font-body-bold text-espresso">
+            <Text className="text-base font-body-bold text-espresso">
               {completed}/{total} · {pct}%
             </Text>
           </View>

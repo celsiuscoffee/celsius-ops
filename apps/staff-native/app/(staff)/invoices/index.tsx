@@ -649,7 +649,7 @@ export default function InvoicesList() {
                 onPress={() => setFilterSheet(false)}
                 className="h-14 flex-1 items-center justify-center rounded-2xl border border-border active:bg-primary-50"
               >
-                <Text className="text-sm font-body-bold text-espresso">
+                <Text className="text-base font-body-bold text-espresso">
                   Cancel
                 </Text>
               </Pressable>
@@ -872,7 +872,7 @@ function InvoiceCard({
                   month: "short",
                 })}`}
         </Text>
-        <Text className="text-sm font-body-bold text-espresso tabular-nums">
+        <Text className="text-base font-body-bold text-espresso tabular-nums">
           RM {invoice.amount.toFixed(2)}
         </Text>
       </View>

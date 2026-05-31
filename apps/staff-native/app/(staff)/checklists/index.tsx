@@ -226,7 +226,7 @@ function ChecklistRow({
         </View>
         <View className="flex-1">
           <Text
-            className="text-sm font-body-medium text-espresso"
+            className="text-base font-body-medium text-espresso"
             numberOfLines={1}
           >
             {cl.sop.title}
@@ -237,7 +237,7 @@ function ChecklistRow({
           </Text>
         </View>
         <View className="items-end">
-          <Text className="text-sm font-body-bold text-espresso">
+          <Text className="text-base font-body-bold text-espresso">
             {cl.progress}%
           </Text>
         </View>

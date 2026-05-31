@@ -333,7 +333,7 @@ function RequestCard({ request }: { request: LeaveRequest }) {
     <View className="flex-row items-center gap-3 rounded-2xl border border-border bg-surface px-3 py-2.5">
       {icon}
       <View className="flex-1">
-        <Text className="text-sm font-body-semi text-espresso">
+        <Text className="text-base font-body-semi text-espresso">
           {request.leave_type}
         </Text>
         <Text className="text-xs font-body text-muted">

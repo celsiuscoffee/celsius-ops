@@ -594,7 +594,7 @@ export default function StockCount() {
                         </View>
                         <View className="flex-1">
                           <Text
-                            className="text-sm font-body-medium text-espresso"
+                            className="text-base font-body-medium text-espresso"
                             numberOfLines={1}
                           >
                             {item.name}
@@ -729,7 +729,7 @@ export default function StockCount() {
                   }}
                   className="h-14 flex-1 items-center justify-center rounded-2xl border border-border"
                 >
-                  <Text className="text-sm font-body-bold text-espresso">
+                  <Text className="text-base font-body-bold text-espresso">
                     Keep theirs
                   </Text>
                 </Pressable>

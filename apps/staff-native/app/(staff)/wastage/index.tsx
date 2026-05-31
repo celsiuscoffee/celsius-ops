@@ -188,7 +188,7 @@ export default function WastagePage() {
           <View className="rounded-2xl border border-border bg-surface px-3 py-2.5">
             <View className="flex-row items-start justify-between">
               <View className="flex-1 pr-3">
-                <Text className="text-sm font-body-medium text-espresso">
+                <Text className="text-base font-body-medium text-espresso">
                   {w.product}
                 </Text>
                 <Text className="text-xs font-body text-muted">
@@ -307,7 +307,7 @@ export default function WastagePage() {
                       }}
                       className="rounded-2xl border border-border bg-surface px-3 py-3 active:bg-primary-50"
                     >
-                      <Text className="text-sm font-body-medium text-espresso">
+                      <Text className="text-base font-body-medium text-espresso">
                         {p.name}
                       </Text>
                       <Text className="text-xs font-body text-muted">

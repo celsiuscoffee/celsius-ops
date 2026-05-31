@@ -281,7 +281,7 @@ export default function OrderDetailScreen() {
               <View className="flex-row items-start justify-between gap-3">
                 <View className="flex-1">
                   <Text
-                    className="text-sm font-body-bold text-espresso"
+                    className="text-base font-body-bold text-espresso"
                     numberOfLines={2}
                   >
                     {item.product}
@@ -296,7 +296,7 @@ export default function OrderDetailScreen() {
                     </Text>
                   ) : null}
                 </View>
-                <Text className="text-sm font-body-bold text-espresso tabular-nums">
+                <Text className="text-base font-body-bold text-espresso tabular-nums">
                   RM {item.totalPrice.toFixed(2)}
                 </Text>
               </View>
@@ -334,7 +334,7 @@ export default function OrderDetailScreen() {
                   className="flex-row items-center justify-between rounded-3xl border border-border bg-surface px-4 py-3 active:bg-primary-50"
                 >
                   <View>
-                    <Text className="text-sm font-body-bold text-espresso">
+                    <Text className="text-base font-body-bold text-espresso">
                       {inv.invoiceNumber}
                     </Text>
                     <Text className="text-xs font-body text-muted-fg">
@@ -344,7 +344,7 @@ export default function OrderDetailScreen() {
                         : ""}
                     </Text>
                   </View>
-                  <Text className="text-sm font-body-bold text-espresso tabular-nums">
+                  <Text className="text-base font-body-bold text-espresso tabular-nums">
                     RM {Number(inv.amount).toFixed(2)}
                   </Text>
                 </Pressable>

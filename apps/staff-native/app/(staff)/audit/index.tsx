@@ -167,7 +167,7 @@ function AuditCard({
         <View className="flex-1">
           <View className="flex-row items-center gap-1.5">
             <Text
-              className="flex-1 text-sm font-body-medium text-espresso"
+              className="flex-1 text-base font-body-medium text-espresso"
               numberOfLines={1}
             >
               {audit.template.name}
@@ -208,7 +208,7 @@ function AuditCard({
             </Text>
           </View>
         ) : (
-          <Text className="text-sm font-body-bold text-espresso">
+          <Text className="text-base font-body-bold text-espresso">
             {audit.progress}%
           </Text>
         )}

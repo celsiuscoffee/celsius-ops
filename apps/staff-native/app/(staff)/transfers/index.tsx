@@ -72,11 +72,11 @@ export default function TransfersPage() {
       renderItem={({ item: t }) => (
         <View className="rounded-2xl border border-border bg-surface p-4">
           <View className="flex-row items-center gap-2">
-            <Text className="text-sm font-body-medium text-espresso">
+            <Text className="text-base font-body-medium text-espresso">
               {t.fromOutlet}
             </Text>
             <ArrowRight color="#9CA3AF" size={14} />
-            <Text className="text-sm font-body-medium text-espresso">
+            <Text className="text-base font-body-medium text-espresso">
               {t.toOutlet}
             </Text>
             <Text className="ml-auto text-xs font-body text-muted">

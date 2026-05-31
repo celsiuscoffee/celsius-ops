@@ -83,7 +83,7 @@ function AttendanceCard({ item }: { item: AttendanceItem }) {
   return (
     <View className="rounded-2xl border border-border bg-surface p-4">
       <View className="flex-row items-center justify-between">
-        <Text className="text-sm font-body-semi text-espresso">{dayLabel}</Text>
+        <Text className="text-base font-body-semi text-espresso">{dayLabel}</Text>
         <Text className="text-sm font-display-medium text-espresso">
           {item.total_hours != null ? `${item.total_hours.toFixed(2)}h` : "—"}
         </Text>

@@ -91,7 +91,7 @@ export default function MySkills() {
             <View className="h-6 w-6 items-center justify-center rounded-full bg-primary/15">
               <Sparkles color="#A2492C" size={12} />
             </View>
-            <Text className="text-sm font-body-semi text-espresso">
+            <Text className="text-base font-body-semi text-espresso">
               Coach insights
             </Text>
           </View>
@@ -155,7 +155,7 @@ export default function MySkills() {
           >
             <View className="flex-row items-start justify-between gap-3">
               <View className="flex-1">
-                <Text className="text-sm font-body-semi text-espresso">
+                <Text className="text-base font-body-semi text-espresso">
                   {template.name}
                 </Text>
                 <Text className="text-[10px] font-body text-muted">

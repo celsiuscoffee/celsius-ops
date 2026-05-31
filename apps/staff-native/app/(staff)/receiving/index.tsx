@@ -240,7 +240,7 @@ export default function ReceivingPage() {
         <View>
           <View className="flex-row items-center gap-2">
             <Truck color="#A2492C" size={16} />
-            <Text className="text-sm font-body-semi text-espresso">
+            <Text className="text-base font-body-semi text-espresso">
               Expected today
             </Text>
             <View className="rounded-full bg-primary-50 px-2 py-0.5">
@@ -267,7 +267,7 @@ export default function ReceivingPage() {
         >
           <View className="flex-row items-center justify-between gap-3">
             <View className="flex-1">
-              <Text className="text-sm font-body-medium text-espresso">
+              <Text className="text-base font-body-medium text-espresso">
                 {po.supplier}
               </Text>
               <Text className="text-xs font-body text-muted">
@@ -302,7 +302,7 @@ export default function ReceivingPage() {
                   className="flex-row items-center justify-between rounded-2xl border border-border bg-surface px-3 py-2.5"
                 >
                   <View className="flex-1">
-                    <Text className="text-sm font-body-medium text-espresso">
+                    <Text className="text-base font-body-medium text-espresso">
                       {r.supplier}
                     </Text>
                     <Text className="text-xs font-body text-muted">
@@ -414,7 +414,7 @@ function ReceiveDetail({
                 >
                   <View className="flex-row items-start justify-between">
                     <View className="flex-1 pr-2">
-                      <Text className="text-sm font-body-medium text-espresso">
+                      <Text className="text-base font-body-medium text-espresso">
                         {item.product}
                       </Text>
                       <Text className="text-xs font-body text-muted">

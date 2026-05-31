@@ -408,7 +408,7 @@ export default function NewPO() {
             ) : aiRecs.length === 0 ? (
               <View className="rounded-3xl border border-dashed border-border bg-surface px-4 py-8 items-center">
                 <Sparkles color="#C2452D" size={28} />
-                <Text className="mt-2 text-sm font-body-bold text-espresso">
+                <Text className="mt-2 text-base font-body-bold text-espresso">
                   Nothing to restock right now
                 </Text>
                 <Text className="mt-1 text-xs font-body text-muted-fg text-center">
@@ -458,7 +458,7 @@ export default function NewPO() {
                           : "lead unknown"}
                       </Text>
                       <View className="mt-2 flex-row items-center justify-between">
-                        <Text className="text-sm font-body-bold text-espresso tabular-nums">
+                        <Text className="text-base font-body-bold text-espresso tabular-nums">
                           RM {rec.totalAmount.toFixed(2)}
                         </Text>
                         <Text className="text-xs font-body-bold text-primary">
@@ -611,7 +611,7 @@ export default function NewPO() {
                         <View className="flex-row items-start justify-between gap-3">
                           <View className="flex-1">
                             <Text
-                              className="text-sm font-body-bold text-espresso"
+                              className="text-base font-body-bold text-espresso"
                               numberOfLines={2}
                             >
                               {p.name}
@@ -680,11 +680,11 @@ export default function NewPO() {
                                   keyboardType="decimal-pad"
                                   placeholder="0.00"
                                   placeholderTextColor="#9CA3AF"
-                                  className="h-9 flex-1 px-1 text-sm font-body-bold text-espresso text-right tabular-nums"
+                                  className="h-9 flex-1 px-1 text-base font-body-bold text-espresso text-right tabular-nums"
                                 />
                               </View>
                             </View>
-                            <Text className="text-sm font-body-bold text-espresso tabular-nums">
+                            <Text className="text-base font-body-bold text-espresso tabular-nums">
                               RM {(qty * unitPrice).toFixed(2)}
                             </Text>
                           </View>
@@ -831,7 +831,7 @@ export default function NewPO() {
               if (filteredSuppliers.length === 0) {
                 return (
                   <View className="mt-10 items-center px-6">
-                    <Text className="text-center text-sm font-body-bold text-espresso">
+                    <Text className="text-center text-base font-body-bold text-espresso">
                       {q
                         ? "No suppliers match"
                         : "No active suppliers"}

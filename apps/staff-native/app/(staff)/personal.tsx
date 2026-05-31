@@ -116,7 +116,7 @@ export default function PersonalScreen() {
           {/* Completeness */}
           <View className="rounded-2xl border border-border bg-surface p-4">
             <View className="flex-row items-center justify-between">
-              <Text className="text-sm font-body-semi text-espresso">
+              <Text className="text-base font-body-semi text-espresso">
                 Profile completeness
               </Text>
               <Text className="text-sm font-body-bold text-primary">

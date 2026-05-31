@@ -246,7 +246,7 @@ export default function InvoiceDetailScreen() {
           {invoice.dueDate ? (
             <View className="mt-3 flex-row items-center justify-between border-t border-border pt-3">
               <Text className="text-xs font-body text-muted-fg">Due</Text>
-              <Text className="text-sm font-body-bold text-espresso">
+              <Text className="text-base font-body-bold text-espresso">
                 {new Date(invoice.dueDate).toLocaleDateString([], {
                   weekday: "short",
                   day: "numeric",
@@ -276,7 +276,7 @@ export default function InvoiceDetailScreen() {
             <Text className="text-xs font-body-bold uppercase tracking-wider text-muted">
               Purchase order
             </Text>
-            <Text className="mt-1 text-sm font-body-bold text-espresso">
+            <Text className="mt-1 text-base font-body-bold text-espresso">
               {invoice.order.orderNumber}
             </Text>
             <Text className="text-xs font-body text-muted-fg">
