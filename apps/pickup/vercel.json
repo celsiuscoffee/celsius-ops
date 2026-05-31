@@ -1,4 +1,0 @@
-{
-  "regions": ["sin1"],
-  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- . ../../packages/"
-}
