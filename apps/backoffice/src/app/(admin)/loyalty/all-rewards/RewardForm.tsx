@@ -57,6 +57,9 @@ export type FormValue = {
    *  is the "get Y free" item (the scope/target_ids below are the
    *  qualifying "buy" set). Empty = free the same item that's bought. */
   free_product_ids: string[];
+  /** Bean Shop cost. When set (> 0), this reward is redeemable in the
+   *  customer Bean Shop for this many Beans. Blank = not a points-shop item. */
+  points_cost: number | null;
   scope: Scope;
   target_ids: string[];
   modifier_filter: Record<string, string>;
@@ -85,6 +88,7 @@ const EMPTY: FormValue = {
   combo_price_sen: null,
   override_price_sen: null,
   free_product_ids: [],
+  points_cost: null,
   scope: "categories",
   target_ids: [],
   modifier_filter: {},
@@ -98,7 +102,10 @@ const EMPTY: FormValue = {
 /** Channel-page deep-links — surface alongside read-only trigger
  *  chips so admin can jump straight to the right config page. */
 const TRIGGER_CHANNEL_PAGE: Record<TriggerType, string> = {
-  points_shop:  "/loyalty/rewards",
+  // Bean Shop is configured on THIS page now (the "Bean Shop cost" field) —
+  // the standalone /loyalty/rewards page was retired, so it has no
+  // deep-link (empty = render a non-clickable chip).
+  points_shop:  "",
   mission:      "/loyalty/missions",
   mystery:      "/loyalty/mystery",
   birthday:     "/loyalty/birthday",
@@ -205,6 +212,7 @@ export default function RewardForm({ mode, initial }: Props) {
         combo_price_sen:    val.combo_price_sen,
         override_price_sen: val.override_price_sen,
         free_product_ids:   val.free_product_ids,
+        points_cost:        val.points_cost,
         scope:              val.scope,
         target_ids:         val.target_ids,
         validity_days:      val.validity_days,
@@ -487,6 +495,16 @@ export default function RewardForm({ mode, initial }: Props) {
             />
           </Prefix>
         </Field>
+
+        <Field label="Bean Shop cost" help="Beans the customer spends to redeem this in the Bean Shop. Leave blank if it isn't a points-shop item. (Replaces the old Points Shop page — Bean Shop rewards are configured here now.)">
+          <input
+            type="number" step={1} min={0}
+            value={val.points_cost ?? ""}
+            onChange={(e) => update("points_cost", e.target.value === "" ? null : Math.max(0, Math.round(Number(e.target.value))))}
+            placeholder="Blank = not in Bean Shop"
+            className="w-40 px-3 py-2 text-sm border border-slate-200 rounded-lg"
+          />
+        </Field>
       </Card>
 
       {/* 3. Used by — read-only chips showing which channels reference this template.
@@ -494,24 +512,43 @@ export default function RewardForm({ mode, initial }: Props) {
       {mode === "edit" && val.existingTriggers && val.existingTriggers.length > 0 && (
         <Card title="Used by" sub="Channels currently referencing this reward. Edit the trigger config on each channel's page." n={3}>
           <div className="space-y-2">
-            {val.existingTriggers.map((t, i) => (
-              <Link
-                key={i}
-                href={TRIGGER_CHANNEL_PAGE[t.type]}
-                className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition"
-              >
+            {val.existingTriggers.map((t, i) => {
+              const page = TRIGGER_CHANNEL_PAGE[t.type];
+              const icon = (
                 <span className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
                   {t.type === "mystery"  && <Gift className="w-4 h-4 text-yellow-700" />}
                   {t.type === "mission"  && <Target className="w-4 h-4 text-emerald-700" />}
                   {t.type !== "mystery" && t.type !== "mission" && <Search className="w-4 h-4 text-slate-500" />}
                 </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-slate-900 truncate">{t.label}</div>
-                  <div className="text-xs text-slate-500">{TRIGGER_CHANNEL_PAGE[t.type]}</div>
-                </div>
-                <ExternalLink className="w-4 h-4 text-slate-400" />
-              </Link>
-            ))}
+              );
+              // No channel page (Bean Shop) → non-clickable chip, since
+              // it's configured here via the Bean Shop cost field.
+              if (!page) {
+                return (
+                  <div key={i} className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg bg-slate-50/50">
+                    {icon}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-slate-900 truncate">{t.label}</div>
+                      <div className="text-xs text-slate-500">Configured on this page — see “Bean Shop cost”.</div>
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <Link
+                  key={i}
+                  href={page}
+                  className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition"
+                >
+                  {icon}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 truncate">{t.label}</div>
+                    <div className="text-xs text-slate-500">{page}</div>
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-slate-400" />
+                </Link>
+              );
+            })}
           </div>
         </Card>
       )}

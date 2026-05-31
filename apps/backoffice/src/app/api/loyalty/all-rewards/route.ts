@@ -341,6 +341,8 @@ type CreateBody = {
   /** bogo/free_item: the specific product(s) given free (the "get Y" item
    *  for BOGO). The scope/target_ids are the qualifying buy set. */
   free_product_ids?: string[] | null;
+  /** Bean Shop cost (beans). > 0 makes the reward a points-shop item. */
+  points_cost?: number | null;
   // theming / lifecycle
   category?: string;
   validity_days?: number;
@@ -383,6 +385,7 @@ export async function POST(request: NextRequest) {
       combo_price_sen:       body.combo_price_sen ?? null,
       override_price_sen:    body.override_price_sen ?? null,
       free_product_ids:      body.free_product_ids ?? null,
+      points_cost:           body.points_cost ?? null,
       applicable_categories,
       applicable_products,
       validity_days:         body.validity_days ?? 30,
@@ -434,6 +437,7 @@ export async function PATCH(request: NextRequest) {
   if (body.combo_price_sen !== undefined) update.combo_price_sen    = body.combo_price_sen;
   if (body.override_price_sen !== undefined) update.override_price_sen = body.override_price_sen;
   if (body.free_product_ids !== undefined) update.free_product_ids  = body.free_product_ids;
+  if (body.points_cost     !== undefined) update.points_cost        = body.points_cost;
   if (body.validity_days   !== undefined) update.validity_days      = body.validity_days;
   if (body.stacks_with_beans !== undefined) update.stacks_with_beans = body.stacks_with_beans;
   if (body.stacks_with_other !== undefined) update.stacks_with_other = body.stacks_with_other;

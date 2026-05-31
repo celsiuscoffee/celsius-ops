@@ -24,6 +24,7 @@ type ApiRow = {
   combo_price_sen: number | null;
   override_price_sen: number | null;
   free_product_ids: string[] | null;
+  points_cost: number | null;
   multiplier_value: number | null;
   expires_days: number | null;
   triggers: { type: TriggerType; label: string }[];
@@ -60,6 +61,7 @@ export default function EditRewardPage() {
           combo_price_sen: row.combo_price_sen ?? null,
           override_price_sen: row.override_price_sen ?? null,
           free_product_ids: row.free_product_ids ?? [],
+          points_cost: row.points_cost ?? null,
           scope: row.scope,
           target_ids: row.target_ids,
           modifier_filter: {},
