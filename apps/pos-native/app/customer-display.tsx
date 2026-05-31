@@ -6,6 +6,7 @@ import { useCart, cartSubtotal } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
 import { usePos } from "@/lib/store";
 import { useSettings, serviceChargeRate } from "@/lib/settings";
+import { useMaybankQr } from "@/lib/maybank-qr";
 import { outletShort } from "@/lib/outlets";
 import {
   lookupMember, fetchSnapshot, claimMystery, fetchRewards,
@@ -30,12 +31,6 @@ const GREEN = "#86efac";
 const DARKFG = "#1A0200";
 const rm = (sen: number) => `RM ${(sen / 100).toFixed(2)}`;
 
-const MAYBANK: Record<string, string> = {
-  "outlet-sa": "MBBQR1671618",
-  "outlet-con": "MBBQR2449289",
-  "outlet-tam": "MBBQR2430878",
-};
-
 function lum(hex?: string | null): number {
   if (!hex) return 1;
   const c = hex.replace("#", "");
@@ -57,6 +52,8 @@ export default function CustomerDisplay() {
   const payTotal = useDisplay((s) => s.payTotal);
   const outletId = usePos((s) => s.outletId);
   const settings = useSettings((s) => s.settings);
+  // Backoffice-managed Maybank QR (live via realtime on app_settings).
+  const maybankPayload = useMaybankQr(outletId);
   // 60/40 columns sized from the row's ACTUAL on-screen width (measured via
   // onLayout). We can't use useWindowDimensions here: this view lives on the
   // secondary SUNMI screen via a Presentation, and useWindowDimensions reports
@@ -118,7 +115,7 @@ export default function CustomerDisplay() {
 
   // ── 1. Payment ──
   if (status === "payment") {
-    const merchantId = MAYBANK[outletId ?? ""] ?? "";
+    const merchantId = maybankPayload ?? "";
     return (
       <View className="flex-1 items-center justify-center px-8" style={{ backgroundColor: PAGE }}>
         <Eyebrow color={GOLD}>SCAN TO PAY</Eyebrow>

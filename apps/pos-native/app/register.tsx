@@ -396,7 +396,13 @@ export default function Register() {
     setPaying(true);
     const printLines = [...lines];
     try {
-      const queueNumber = orderType === "takeaway" ? await getNextQueueNumber(outletId) : null;
+      // Respect the backoffice "Checkout Option" — queue_number (default)
+      // assigns an auto queue # for takeaway; table_number / none skip it.
+      const checkoutOpt = settings?.checkout_option ?? "queue_number";
+      const queueNumber =
+        checkoutOpt === "queue_number" && orderType === "takeaway"
+          ? await getNextQueueNumber(outletId)
+          : null;
       const tableNum = orderType === "dine_in" ? (tableNumber || null) : null;
       const promoName = [
         member?.tier && (member.tier.discount_percent ?? 0) > 0 ? `${member.tier.name} ${member.tier.discount_percent}% off` : null,
