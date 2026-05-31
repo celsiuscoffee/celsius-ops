@@ -264,8 +264,14 @@ const NAV_SECTIONS: NavSection[] = [
         // Channels = "where rewards reach customers". Order mirrors the
         // pickup app's rewards screen top-to-bottom so admin mental
         // model matches what the customer sees.
+        //
+        // "All Rewards" sits at the top — it's the new unified view
+        // that replaces the per-channel pages once the trigger
+        // consolidation lands (Commit 4 of the rewards refactor). The
+        // 5 channel-specific entries stay accessible during transition.
         label: "Channels",
         items: [
+          { label: "All Rewards",      href: "/loyalty/all-rewards",      icon: <Ticket className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
           { label: "Points Shop",      href: "/loyalty/rewards",          icon: <Star className={ICON_SIZE} />,     moduleKey: "loyalty:rewards" },
           { label: "Challenges",       href: "/loyalty/missions",         icon: <Target className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
           { label: "Mystery Pool",     href: "/loyalty/mystery",          icon: <Sparkles className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
