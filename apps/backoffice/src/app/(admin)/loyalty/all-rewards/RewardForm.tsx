@@ -53,6 +53,10 @@ export type FormValue = {
   combo_price_sen: number | null;
   /** override_price: the single eligible item's fixed price in SEN. */
   override_price_sen: number | null;
+  /** bogo / free_item: the specific product(s) given FREE. For BOGO this
+   *  is the "get Y free" item (the scope/target_ids below are the
+   *  qualifying "buy" set). Empty = free the same item that's bought. */
+  free_product_ids: string[];
   scope: Scope;
   target_ids: string[];
   modifier_filter: Record<string, string>;
@@ -80,6 +84,7 @@ const EMPTY: FormValue = {
   bogo_free_qty: 1,
   combo_price_sen: null,
   override_price_sen: null,
+  free_product_ids: [],
   scope: "categories",
   target_ids: [],
   modifier_filter: {},
@@ -165,6 +170,14 @@ export default function RewardForm({ mode, initial }: Props) {
       target_ids: p.target_ids.includes(id) ? p.target_ids.filter((x) => x !== id) : [...p.target_ids, id],
     }));
   }
+  function toggleFreeProductId(id: string) {
+    setVal((p) => ({
+      ...p,
+      free_product_ids: p.free_product_ids.includes(id)
+        ? p.free_product_ids.filter((x) => x !== id)
+        : [...p.free_product_ids, id],
+    }));
+  }
 
   async function onSave() {
     setError(null);
@@ -191,6 +204,7 @@ export default function RewardForm({ mode, initial }: Props) {
         bogo_free_qty:      val.bogo_free_qty,
         combo_price_sen:    val.combo_price_sen,
         override_price_sen: val.override_price_sen,
+        free_product_ids:   val.free_product_ids,
         scope:              val.scope,
         target_ids:         val.target_ids,
         validity_days:      val.validity_days,
@@ -363,8 +377,16 @@ export default function RewardForm({ mode, initial }: Props) {
 
         {val.discount_type === "bogo" && (
           <>
-            <Field label="Buy quantity"><input type="number" value={val.bogo_buy_qty} onChange={(e) => update("bogo_buy_qty", Number(e.target.value))} className="w-32 px-3 py-2 text-sm border border-slate-200 rounded-lg" /></Field>
-            <Field label="Free quantity"><input type="number" value={val.bogo_free_qty} onChange={(e) => update("bogo_free_qty", Number(e.target.value))} className="w-32 px-3 py-2 text-sm border border-slate-200 rounded-lg" /></Field>
+            <Field label="Buy quantity" help="How many qualifying items (the 'Applies to' set below) must be bought."><input type="number" value={val.bogo_buy_qty} onChange={(e) => update("bogo_buy_qty", Number(e.target.value))} className="w-32 px-3 py-2 text-sm border border-slate-200 rounded-lg" /></Field>
+            <Field label="Free quantity" help="How many free items the customer gets per qualifying group."><input type="number" value={val.bogo_free_qty} onChange={(e) => update("bogo_free_qty", Number(e.target.value))} className="w-32 px-3 py-2 text-sm border border-slate-200 rounded-lg" /></Field>
+            <Field label="Free item" help="What the customer gets FREE. Pick a different product for 'buy X get Y free' (e.g. buy a drink → free pastry). Leave empty to free the same item they buy. The 'Applies to' set below is the qualifying (buy) item.">
+              <ProductPicker
+                products={products}
+                selected={val.free_product_ids}
+                onToggle={toggleFreeProductId}
+                onClear={() => update("free_product_ids", [])}
+              />
+            </Field>
           </>
         )}
 

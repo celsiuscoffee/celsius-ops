@@ -289,6 +289,7 @@ export function calcRewardDiscount(
     bogo_free_qty?: number;
     combo_price_sen?: number | null;
     override_price_sen?: number | null;
+    free_product_ids?: string[] | null;
     min_order_value?: number | null;
     applicable_categories?: string[] | null;
     applicable_products?: string[] | null;
@@ -334,16 +335,44 @@ export function calcRewardDiscount(
     return Math.min(...prices);
   }
   if (t === "bogo") {
-    // Pair items by quantity and free the cheaper of each pair. With
-    // n units sorted descending, we keep p1 (paid) and free p2; with
-    // 4+ units, this currently only frees one — which matches the
-    // client-side preview legacy. The loyalty engine evaluates BOGO
-    // against `bogo_buy_qty` / `bogo_free_qty` on its own pass and
-    // is the authoritative path; this client number is a preview.
+    // Mirrors @celsius/shared computeVoucherDiscount (preview only — the
+    // order endpoint recomputes server-authoritatively).
+    const buyQty = Math.max(1, Math.round(reward.bogo_buy_qty ?? 1));
+    const freeQty = Math.max(1, Math.round(reward.bogo_free_qty ?? 1));
+    const freeSet = reward.free_product_ids ?? [];
+    if (freeSet.length > 0) {
+      // Cross-item BOGO ("buy X, get Y free"): qualify on applicable_*
+      // (none set → anything but the free item), free freeQty of the
+      // chosen free product(s) per buyQty qualifying units bought.
+      const hasApplicable = (cats?.length ?? 0) > 0 || (prods?.length ?? 0) > 0;
+      const isBuy = (i: { productId?: string; category?: string }): boolean => {
+        if (i.productId && freeSet.includes(i.productId)) return false;
+        if (!hasApplicable) return true;
+        if (i.productId && prods && prods.includes(i.productId)) return true;
+        if (i.category && cats && cats.includes(i.category)) return true;
+        return false;
+      };
+      const buyCount = cartItems.filter(isBuy).reduce((s, i) => s + i.quantity, 0);
+      const allowance = Math.floor(buyCount / buyQty) * freeQty;
+      const freeUnits: number[] = [];
+      for (const i of cartItems) {
+        if (i.productId && freeSet.includes(i.productId)) {
+          for (let k = 0; k < i.quantity; k++) freeUnits.push(i.basePrice);
+        }
+      }
+      freeUnits.sort((a, b) => a - b);
+      let freed = 0;
+      for (let k = 0; k < Math.min(allowance, freeUnits.length); k++) freed += freeUnits[k];
+      return freed;
+    }
+    // Same-item BOGO: complete (buy+free) groups over the eligible pool.
     if (eligible.length === 0) return 0;
-    const unitPrices = eligible.flatMap((i) => Array(i.quantity).fill(i.totalPrice / i.quantity)) as number[];
-    unitPrices.sort((a, b) => b - a);
-    return unitPrices[1] ?? 0;
+    const units = eligible.flatMap((i) => Array(i.quantity).fill(i.basePrice)) as number[];
+    units.sort((a, b) => a - b);
+    const totalFree = Math.floor(units.length / (buyQty + freeQty)) * freeQty;
+    let freed = 0;
+    for (let k = 0; k < totalFree && k < units.length; k++) freed += units[k];
+    return freed;
   }
   if ((t === "percent" || t === "percentage") && reward.discount_value) {
     return subtotal * (reward.discount_value / 100);

@@ -238,22 +238,55 @@ export function computeVoucherDiscount(args: {
       break;
     }
     case "bogo": {
-      // Buy bogo_buy_qty, get bogo_free_qty free — off the cheapest
-      // eligible UNITS. Expand eligible lines into per-unit prices, sort
-      // ascending, and for each complete (buy + free) group free the
-      // cheapest free_qty units. Multiple complete groups stack.
       const buyQty  = Math.max(1, Math.round(spec.bogo_buy_qty  ?? 1));
       const freeQty = Math.max(1, Math.round(spec.bogo_free_qty ?? 1));
-      const units: number[] = [];
-      for (const l of eligible) {
-        for (let i = 0; i < l.quantity; i++) units.push(l.unit_price_sen);
+      const freeSet = spec.free_product_ids ?? [];
+
+      if (freeSet.length > 0) {
+        // CROSS-ITEM BOGO ("buy X, get Y free"): the qualifying/buy set is
+        // applicable_* (when neither is set, anything except the free item
+        // qualifies); the free set is free_product_ids. For each buyQty
+        // qualifying units purchased, free freeQty of the chosen free
+        // product(s) — which must actually be in the cart.
+        const hasApplicable =
+          !!(spec.applicable_products && spec.applicable_products.length) ||
+          !!(spec.applicable_categories && spec.applicable_categories.length);
+        const isBuyLine = (l: DiscountCartLine): boolean => {
+          if (freeSet.includes(l.product_id)) return false; // the free item never counts as a purchase
+          if (!hasApplicable) return true;                  // scope=everything → any other item qualifies
+          if (spec.applicable_products && spec.applicable_products.includes(l.product_id)) return true;
+          if (spec.applicable_categories) {
+            if (l.category && spec.applicable_categories.includes(l.category)) return true;
+            if (l.category_id && spec.applicable_categories.includes(l.category_id)) return true;
+          }
+          return false;
+        };
+        const buyCount = cart.filter(isBuyLine).reduce((s, l) => s + l.quantity, 0);
+        const allowance = Math.floor(buyCount / buyQty) * freeQty;
+        const freeUnits: number[] = [];
+        for (const l of cart) {
+          if (freeSet.includes(l.product_id)) {
+            for (let i = 0; i < l.quantity; i++) freeUnits.push(l.unit_price_sen);
+          }
+        }
+        freeUnits.sort((a, b) => a - b); // cheapest free units first
+        let freed = 0;
+        for (let i = 0; i < Math.min(allowance, freeUnits.length); i++) freed += freeUnits[i];
+        discountSen = freed;
+      } else {
+        // SAME-ITEM BOGO: complete (buy + free) groups over the eligible
+        // pool; free the cheapest freeQty units per group. Multiple
+        // complete groups stack.
+        const units: number[] = [];
+        for (const l of eligible) {
+          for (let i = 0; i < l.quantity; i++) units.push(l.unit_price_sen);
+        }
+        units.sort((a, b) => a - b); // cheapest first → those get freed
+        const totalFree = Math.floor(units.length / (buyQty + freeQty)) * freeQty;
+        let freed = 0;
+        for (let i = 0; i < totalFree && i < units.length; i++) freed += units[i];
+        discountSen = freed;
       }
-      units.sort((a, b) => a - b); // cheapest first → those get freed
-      const groupSize = buyQty + freeQty;
-      const totalFree = Math.floor(units.length / groupSize) * freeQty;
-      let freed = 0;
-      for (let i = 0; i < totalFree && i < units.length; i++) freed += units[i];
-      discountSen = freed;
       break;
     }
     case "combo": {

@@ -23,6 +23,7 @@ type ApiRow = {
   bogo_free_qty: number | null;
   combo_price_sen: number | null;
   override_price_sen: number | null;
+  free_product_ids: string[] | null;
   multiplier_value: number | null;
   expires_days: number | null;
   triggers: { type: TriggerType; label: string }[];
@@ -58,6 +59,7 @@ export default function EditRewardPage() {
           bogo_free_qty: row.bogo_free_qty ?? 1,
           combo_price_sen: row.combo_price_sen ?? null,
           override_price_sen: row.override_price_sen ?? null,
+          free_product_ids: row.free_product_ids ?? [],
           scope: row.scope,
           target_ids: row.target_ids,
           modifier_filter: {},

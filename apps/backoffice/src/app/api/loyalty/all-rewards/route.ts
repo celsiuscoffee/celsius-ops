@@ -53,6 +53,7 @@ export type RewardRow = {
   bogo_free_qty: number | null;
   combo_price_sen: number | null;
   override_price_sen: number | null;
+  free_product_ids: string[] | null;
   multiplier_value: number | null;
   /** Bean-Points cost. NULL for templates with no shop trigger;
    *  populated when origin='catalog' or when a points_shop trigger
@@ -286,6 +287,7 @@ export async function GET(request: NextRequest) {
       bogo_free_qty: t.bogo_free_qty ?? null,
       combo_price_sen: t.combo_price_sen ?? null,
       override_price_sen: t.override_price_sen ?? null,
+      free_product_ids: t.free_product_ids ?? null,
       multiplier_value: numOrNull(t.multiplier_value),
       points_cost: t.points_cost ?? null,
       triggers,
@@ -336,6 +338,9 @@ type CreateBody = {
   bogo_free_qty?: number;
   combo_price_sen?: number | null;
   override_price_sen?: number | null;
+  /** bogo/free_item: the specific product(s) given free (the "get Y" item
+   *  for BOGO). The scope/target_ids are the qualifying buy set. */
+  free_product_ids?: string[] | null;
   // theming / lifecycle
   category?: string;
   validity_days?: number;
@@ -377,6 +382,7 @@ export async function POST(request: NextRequest) {
       bogo_free_qty:         body.bogo_free_qty ?? null,
       combo_price_sen:       body.combo_price_sen ?? null,
       override_price_sen:    body.override_price_sen ?? null,
+      free_product_ids:      body.free_product_ids ?? null,
       applicable_categories,
       applicable_products,
       validity_days:         body.validity_days ?? 30,
@@ -427,6 +433,7 @@ export async function PATCH(request: NextRequest) {
   if (body.bogo_free_qty   !== undefined) update.bogo_free_qty      = body.bogo_free_qty;
   if (body.combo_price_sen !== undefined) update.combo_price_sen    = body.combo_price_sen;
   if (body.override_price_sen !== undefined) update.override_price_sen = body.override_price_sen;
+  if (body.free_product_ids !== undefined) update.free_product_ids  = body.free_product_ids;
   if (body.validity_days   !== undefined) update.validity_days      = body.validity_days;
   if (body.stacks_with_beans !== undefined) update.stacks_with_beans = body.stacks_with_beans;
   if (body.stacks_with_other !== undefined) update.stacks_with_other = body.stacks_with_other;

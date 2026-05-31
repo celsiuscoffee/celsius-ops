@@ -33,10 +33,17 @@ export type AppliedReward = {
   id: string;
   name: string;
   points_required: number;
-  discount_type: "flat" | "percent" | "free_item" | "bogo" | "fixed_amount" | "percentage" | "none" | null;
+  discount_type:
+    | "flat" | "percent" | "free_item" | "free_upgrade" | "fixed_amount"
+    | "percentage" | "bogo" | "combo" | "override_price" | "none" | null;
   discount_value: number | null;
   bogo_buy_qty?: number;
   bogo_free_qty?: number;
+  /** combo bundle price / override single-item price, in SEN. */
+  combo_price_sen?: number | null;
+  override_price_sen?: number | null;
+  /** bogo/free_item: the specific product(s) given free. */
+  free_product_ids?: string[] | null;
   free_product_name?: string | null;
   /** Categories the reward applies to. When set + non-empty, the
    *  free_item / bogo discount picks the cheapest item whose

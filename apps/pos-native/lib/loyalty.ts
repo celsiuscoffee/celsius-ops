@@ -205,16 +205,38 @@ export function computeRewardDiscount(d: RedeemDiscount, lines: CartLine[]): num
       break;
     }
     case "bogo": {
-      // Buy bogo_buy_qty, get bogo_free_qty free off the cheapest units.
       const buyQty = Math.max(1, Math.round(d.bogo_buy_qty ?? 1));
       const freeQty = Math.max(1, Math.round(d.bogo_free_qty ?? 1));
-      const units: number[] = [];
-      for (const l of eligible) for (let i = 0; i < l.qty; i++) units.push(l.unit_sen);
-      units.sort((a, b) => a - b);
-      const totalFree = Math.floor(units.length / (buyQty + freeQty)) * freeQty;
-      let freed = 0;
-      for (let i = 0; i < totalFree && i < units.length; i++) freed += units[i];
-      discount = freed;
+      const freeSet = d.free_product_ids ?? [];
+      if (freeSet.length > 0) {
+        // Cross-item BOGO ("buy X, get Y free"): qualify on applicable_*
+        // (scope=everything → anything but the free item), free freeQty of
+        // the chosen free product(s) per buyQty qualifying units bought.
+        const hasApplicable =
+          (d.applicable_products?.length ?? 0) > 0 || (d.applicable_categories?.length ?? 0) > 0;
+        const isBuyLine = (l: CartLine): boolean => {
+          if (freeSet.includes(l.product.id)) return false;
+          if (!hasApplicable) return true;
+          if (d.applicable_products?.includes(l.product.id)) return true;
+          if (l.product.category && d.applicable_categories?.includes(l.product.category)) return true;
+          return false;
+        };
+        const buyCount = lines.filter(isBuyLine).reduce((s, l) => s + l.qty, 0);
+        const allowance = Math.floor(buyCount / buyQty) * freeQty;
+        const freeUnits: number[] = [];
+        for (const l of lines) {
+          if (freeSet.includes(l.product.id)) for (let i = 0; i < l.qty; i++) freeUnits.push(l.unit_sen);
+        }
+        freeUnits.sort((a, b) => a - b);
+        for (let i = 0; i < Math.min(allowance, freeUnits.length); i++) discount += freeUnits[i];
+      } else {
+        // Same-item BOGO: complete (buy+free) groups over the eligible pool.
+        const units: number[] = [];
+        for (const l of eligible) for (let i = 0; i < l.qty; i++) units.push(l.unit_sen);
+        units.sort((a, b) => a - b);
+        const totalFree = Math.floor(units.length / (buyQty + freeQty)) * freeQty;
+        for (let i = 0; i < totalFree && i < units.length; i++) discount += units[i];
+      }
       break;
     }
     case "combo": {
