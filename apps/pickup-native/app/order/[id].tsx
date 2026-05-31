@@ -36,6 +36,8 @@ type GatewayMethod = {
   provider: "stripe" | "revenue_monster";
 };
 import { fetchOrder } from "../../lib/menu";
+import QRCode from "react-native-qrcode-svg";
+import { useMaybankQrConfig, maybankQrPayloadFor } from "../../lib/maybank-qr";
 import { formatPrice } from "../../lib/api";
 import { useApp } from "../../lib/store";
 import { EspressoHeader } from "../../components/EspressoHeader";
@@ -556,6 +558,16 @@ export default function OrderStatus() {
     data?.status === "pending" &&
     !!data?.payment_method &&
     rmConfirmMethods.has(data.payment_method);
+  // Maybank static QR: order sits as pending until staff release it.
+  // The QR payload is per-outlet, sourced from the backoffice
+  // (app_settings.maybank_qr) and live via realtime so an admin can
+  // update the merchant ID without redeploying the customer app.
+  const maybankConfig = useMaybankQrConfig();
+  const showMaybankWaiting =
+    data?.status === "pending" && data?.payment_method === "maybank_qr";
+  const maybankPayload = showMaybankWaiting
+    ? maybankQrPayloadFor(maybankConfig, data?.store_id ?? null)
+    : null;
   // Only show "Confirming payment…" when the checkout screen explicitly
   // signals a successful RM return via justPaid=1. The previous 90s
   // creation-time fallback ran for cancelled orders too, making the
@@ -622,6 +634,59 @@ export default function OrderStatus() {
           />
         )}
         <ScrollView contentContainerClassName="px-4 py-4 pb-12 gap-4">
+          {/* Maybank QR — scan-to-pay panel, shown only while this order
+              is pending + paid via Maybank QR. The order polling above
+              will auto-redirect the customer to the regular brewing /
+              ready state the moment a staff member releases it. */}
+          {showMaybankWaiting && (
+            <View
+              className="bg-surface rounded-2xl border border-border p-5 items-center"
+              style={{
+                shadowColor: "#000",
+                shadowOpacity: 0.04,
+                shadowRadius: 6,
+                shadowOffset: { width: 0, height: 2 },
+              }}
+            >
+              <Text
+                className="text-espresso text-xl"
+                style={{ fontFamily: "Peachi-Bold" }}
+              >
+                Scan to pay
+              </Text>
+              <Text
+                className="text-muted-fg text-sm mt-1 text-center"
+                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+              >
+                Scan this Maybank QR with your banking app.
+              </Text>
+              {maybankPayload ? (
+                <View
+                  className="mt-4 rounded-2xl p-4 bg-white"
+                  style={{ borderWidth: 1, borderColor: "#E5E7EB" }}
+                >
+                  <QRCode value={maybankPayload} size={220} backgroundColor="#FFFFFF" color="#000000" />
+                </View>
+              ) : (
+                <View className="mt-4 h-[220] w-[220] items-center justify-center rounded-2xl bg-gray-100">
+                  <ActivityIndicator size="large" color="#9CA3AF" />
+                </View>
+              )}
+              <Text
+                className="text-amber-600 mt-4 text-3xl"
+                style={{ fontFamily: "Peachi-Bold" }}
+              >
+                {formatPrice(data.total ?? 0)}
+              </Text>
+              <Text
+                className="text-muted-fg text-xs mt-3 text-center"
+                style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+              >
+                After paying, show order #{data.order_number} at the counter so we can release it to the kitchen.
+              </Text>
+            </View>
+          )}
+
           {/* Status timeline — one card per lifecycle state. */}
           <View
             className="bg-surface rounded-2xl border border-border p-5"
