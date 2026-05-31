@@ -255,7 +255,105 @@ Same flow every time. The "trigger" section is the *only* place where channel ru
 - **Cross-channel rewards become trivial**: "Free Drink is sold for 300 beans AND given on birthday" is two trigger rows. Today: two duplicate template rows in two different tables that can drift.
 - **Audit gets cleaner**: one place where vouchers are defined, one place where channels are configured, one place where instances live.
 
-### Refactor expands to 5 commits
+### Wiring existing data — nothing gets orphaned
+
+Every existing reward-related row has a defined home in the new structure. The migration is **lossless** — no data deleted that doesn't have an explicit replacement path.
+
+### Table-by-table migration map (counts as of 2026-05-31)
+
+| Existing table | Rows | Lands in (new structure) | How |
+|---|---:|---|---|
+| `voucher_templates` | 14 | `voucher_templates` (stays) | Add `scope`/`target_ids`/`modifier_filter` columns; backfill from existing `applicable_categories` / `applicable_products` / `free_product_ids` / `free_product_name`. Drop the legacy 4 columns. |
+| `rewards` | 3 | `voucher_templates` (merged in) | INSERT 3 new template rows mirroring catalog rows; carry `points_required` into `points_cost`. Preserve mapping `(rewards.id → new template uuid)` for FK resolution on issued rows. Then `DROP TABLE rewards`. |
+| `issued_rewards` (active) | 119 | `issued_rewards` (stays) | Add `template_id` FK + `trigger_id` FK; backfill both from existing source-type/source-ref-id/reward-id signals. Drop legacy inline eligibility columns once readers cut over. |
+| `issued_rewards` (used/expired/cancelled) | 39 | `issued_rewards` (stays, no changes needed) | Read-only historical rows. We snapshot what was issued; their `template_id` is best-effort backfill, can be null on rows that pre-date the trigger model. |
+| `reward_missions` | 9 | `voucher_triggers` (type='mission') | INSERT one `voucher_triggers` row per mission with `type='mission'`, `template_id` from `reward_voucher_template_ids[0]`, `config={goal_type, goal_value, period_days, difficulty, cooldown_weeks, is_swap_eligible}`. Then `DROP TABLE reward_missions`. |
+| `mission_assignments` | 107 | `member_mission_state` (renamed table) | RENAME `mission_assignments` → `member_mission_state`. Drop reward-shape columns if any leaked in. Add `trigger_id` FK pointing at the corresponding new `voucher_triggers` row. |
+| `mystery_pool` | 7 | `voucher_triggers` (type='mystery') | INSERT one `voucher_triggers` row per pool entry with `type='mystery'`, `template_id` from `voucher_template_id`, `config={weight, min_tier, birthday_month_boost, outcome_type, multiplier_value, flat_beans_value}`. Then `DROP TABLE mystery_pool`. |
+| `mystery_drops` | 44 | `member_mystery_history` (renamed) | RENAME `mystery_drops` → `member_mystery_history`. Add `trigger_id` FK. Existing `voucher_id` reference (links to the minted issued_reward) stays. |
+| `admin_claimables` | (varies) | `voucher_triggers` (type='admin_push') + `member_admin_claims` (new state table) | INSERT one `voucher_triggers` row per claimable with `type='admin_push'`, `config={audience_tags, max_claims, starts_at, ends_at}`. Per-member claim state moves to `member_admin_claims`. Then `DROP TABLE admin_claimables`. |
+| `tier_benefit_grants` | 6 | `voucher_triggers` (type='tier_upgrade') | INSERT one `voucher_triggers` row per grant rule with `type='tier_upgrade'`, `config={tier_id}`. Per-member grant state moves to `member_tier_grants` (renamed). |
+| `reward_kinds` | 5 | `voucher_templates.reward_kind_id` (existing FK) | No change — already orthogonal. Stays as theming reference. |
+| `reward_configs` | 4 | `reward_configs` (stays) | Holds global config (tier multipliers, daily earn cap, etc.). Not template-shaped. Untouched. |
+| `tiers` | 6 | `tiers` (stays) | Tier definitions + perks. Untouched. |
+
+**Total**: 5 tables disappear, 1 new table introduced (`voucher_triggers`), 3 tables get renamed for clarity, 0 rows lost.
+
+### Per-commit row-accountability gates
+
+Every commit ends with verification SQL that asserts the row count math:
+
+**After Commit 1** (canonical shape, additive):
+```sql
+-- Every active template has a scope set
+SELECT COUNT(*) FROM voucher_templates WHERE is_active = true AND scope IS NULL;
+-- expected: 0
+
+-- Every active points-shop catalog row has been mirrored as a template
+SELECT COUNT(*) FROM rewards WHERE brand_id = 'brand-celsius' AND is_active = true;
+-- expected: 3 (rows still exist, just mirrored)
+SELECT COUNT(*) FROM voucher_templates WHERE points_cost IS NOT NULL AND brand_id = 'brand-celsius';
+-- expected: 3 (matched mirrors)
+```
+
+**After Commit 2** (writers re-wired):
+```sql
+-- Every active issued row created from this point has template_id set
+SELECT COUNT(*) FROM issued_rewards
+  WHERE status = 'active' AND created_at > '<commit-2-deploy-ts>' AND template_id IS NULL;
+-- expected: 0
+```
+
+**After Commit 3** (readers + drop `rewards`):
+```sql
+-- The rewards table is gone
+SELECT to_regclass('rewards');
+-- expected: NULL
+
+-- No code path references it (grep guard in CI)
+```
+
+**After Commit 4** (`voucher_triggers` populated + backfilled from channels):
+```sql
+-- Every mystery_pool row has a corresponding voucher_triggers entry
+SELECT COUNT(*) FROM mystery_pool;       -- baseline
+SELECT COUNT(*) FROM voucher_triggers WHERE type = 'mystery';
+-- expected: equal
+
+-- Same for reward_missions
+SELECT COUNT(*) FROM reward_missions;
+SELECT COUNT(*) FROM voucher_triggers WHERE type = 'mission';
+-- expected: equal
+
+-- Every active issued_reward from a channel has a trigger_id set
+SELECT COUNT(*) FROM issued_rewards
+  WHERE status = 'active'
+    AND source_type IN ('mystery', 'mission', 'birthday', 'manual', 'points_redemption')
+    AND trigger_id IS NULL;
+-- expected: 0  (orphaned legacy rows excluded — those are the 108 already expired)
+```
+
+**After Commit 5** (drop legacy tables + collapse backoffice):
+```sql
+-- The 4 channel tables are gone
+SELECT to_regclass('mystery_pool'), to_regclass('reward_missions'),
+       to_regclass('admin_claimables'), to_regclass('rewards');
+-- expected: NULL, NULL, NULL, NULL
+
+-- Renamed state tables exist
+SELECT to_regclass('member_mission_state'), to_regclass('member_mystery_history'),
+       to_regclass('member_admin_claims'), to_regclass('member_tier_grants');
+-- expected: 4 tables present
+```
+
+### Risk: legacy issued_rewards that pre-date the trigger model
+
+The 39 used/expired/cancelled `issued_rewards` rows from before `source_type` was added (the same legacy cohort that produced the 108 orphans we expired earlier today) won't have a clean trigger_id. Their `template_id` is best-effort — if `reward_id` resolves to a known catalog row, we wire them up; if not, `template_id` stays null and the row is treated as a historical record only (no replay, no count in active reports). This is acceptable because:
+- They're terminal-state (already used/expired)
+- The orphan-cleanup migration earlier today removed the 108 active ones
+- New issuance from Commit 2+ always writes both FKs
+
+## Refactor expands to 5 commits
 
 The earlier 3-commit plan (Commits 1–3) ships the canonical shape and collapses `rewards` into `voucher_templates`. Commits 4–5 ship the trigger consolidation:
 
