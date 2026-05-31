@@ -302,7 +302,10 @@ export function calcRewardDiscount(
   // with a 400 if subtotal is below); checking here keeps the cart
   // total honest so the customer doesn't see a discount that won't
   // actually land at checkout.
-  if (reward.min_order_value != null && subtotal < reward.min_order_value) {
+  // min_order_value is SEN; this preview works in RM, so compare against
+  // min_order_value / 100 (was comparing RM subtotal to a sen value, which
+  // demanded ~100× the real minimum).
+  if (reward.min_order_value != null && subtotal < reward.min_order_value / 100) {
     return 0;
   }
 

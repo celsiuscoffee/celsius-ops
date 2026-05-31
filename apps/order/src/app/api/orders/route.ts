@@ -118,10 +118,13 @@ async function validateAppliedReward(
   if (reward.stock != null && reward.stock <= 0) {
     return { ok: false, error: "Reward is out of stock" };
   }
-  if (reward.min_order_value != null && args.totalRm < reward.min_order_value) {
+  // min_order_value is SEN — compare against the sen subtotal, not the RM
+  // total (the old `totalRm < min_order_value` made an "RM15+" reward
+  // demand RM1500).
+  if (reward.min_order_value != null && args.subtotalSen < Number(reward.min_order_value)) {
     return {
       ok: false,
-      error: `Reward needs a minimum order of RM${reward.min_order_value.toFixed(2)}`,
+      error: `Reward needs a minimum order of RM${(Number(reward.min_order_value) / 100).toFixed(2)}`,
     };
   }
 
@@ -471,7 +474,7 @@ export async function POST(request: NextRequest) {
             discount_value: (voucher.discount_value as number | null) ?? null,
             max_discount_value_sen: null,
             min_order_value_sen: voucher.min_order_value != null
-              ? Math.round((voucher.min_order_value as number) * 100)
+              ? Number(voucher.min_order_value) // issued_rewards.min_order_value is SEN
               : null,
             applicable_categories: (voucher.applicable_categories as string[] | null) ?? null,
             applicable_products: (voucher.applicable_products as string[] | null) ?? null,

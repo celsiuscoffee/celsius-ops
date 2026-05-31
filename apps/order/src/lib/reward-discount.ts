@@ -51,9 +51,9 @@ type CartLine = {
 };
 
 /** Map the stored reward → the shared engine's sen-based spec. Normalises
- *  the legacy POS vocab (fixed_amount/percentage) to canonical, and
- *  converts the RM-denominated fields (min_order_value, fixed_amount value)
- *  to sen. */
+ *  the legacy POS vocab (fixed_amount/percentage) to canonical, converting
+ *  the legacy fixed_amount value (RM) to sen. min_order_value /
+ *  max_discount_value are already SEN and pass straight through. */
 function toSpec(reward: AppliedReward): VoucherDiscountSpec {
   let dt: string | null = reward.discount_type;
   let dv = reward.discount_value;
@@ -67,8 +67,7 @@ function toSpec(reward: AppliedReward): VoucherDiscountSpec {
     discount_type: (dt as VoucherDiscountSpec["discount_type"]) ?? null,
     discount_value: dv,
     max_discount_value_sen: reward.max_discount_value ?? null,
-    min_order_value_sen:
-      reward.min_order_value != null ? Math.round(reward.min_order_value * 100) : null,
+    min_order_value_sen: reward.min_order_value ?? null, // already SEN
     applicable_categories: reward.applicable_categories ?? null,
     applicable_products: reward.applicable_products ?? null,
     free_product_ids: reward.free_product_ids ?? null,

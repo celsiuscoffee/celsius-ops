@@ -30,16 +30,20 @@ export type DiscountSpecRow = {
   override_price_sen: number | null;
 };
 
-/** Build the sen-based engine spec from a voucher_templates row. Mixed
- *  units on the row: discount_value(flat)/max_discount_value/
- *  combo_price_sen/override_price_sen are SEN; min_order_value is RM;
+/** Build the sen-based engine spec from a voucher_templates row. All
+ *  money fields on the row are already SEN — discount_value(flat),
+ *  max_discount_value, min_order_value, combo_price_sen,
+ *  override_price_sen — so they pass straight through (no ×100).
  *  discount_value(percent) is a raw percentage. */
 export function rowToDiscountSpec(t: DiscountSpecRow): VoucherDiscountSpec {
   return {
     discount_type: (t.discount_type as VoucherDiscountSpec["discount_type"]) ?? null,
     discount_value: t.discount_value,
     max_discount_value_sen: t.max_discount_value,
-    min_order_value_sen: t.min_order_value != null ? Math.round(t.min_order_value * 100) : null,
+    // min_order_value is SEN (e.g. "RM15+" = 1500), same as
+    // max_discount_value — NOT RM. The earlier ×100 made min-order
+    // rewards require ~100× the intended minimum and never fire.
+    min_order_value_sen: t.min_order_value != null ? Number(t.min_order_value) : null,
     applicable_categories: t.applicable_categories,
     applicable_products: t.applicable_products,
     free_product_ids: t.free_product_ids,
