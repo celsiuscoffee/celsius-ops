@@ -309,3 +309,30 @@ Should we also collapse `reward_kinds` + `mystery_pool` + `reward_missions` into
 `voucher_templates`? They each define "what a voucher looks like" for a specific
 issue path. Not in scope for this refactor — those tables already point at
 templates, so they're orchestration not duplication. Revisit if drift emerges.
+
+## Decisions captured 2026-05-31 (sign-off log)
+
+- **BOGO and Combo stay as first-class `discount_type` values.** They fit the
+  canonical shape with type-specific semantics on the SAME six fields:
+  - **`bogo`** — `target_ids` is the *eligible set*. Customer must have at least
+    `bogo_buy_qty` lines from that set; the cheapest `bogo_free_qty` of those
+    become free.  Works with `scope='products'` (specific SKU BOGO) or
+    `scope='categories'` (any-from-category BOGO).
+  - **`combo`** — `target_ids` is the *required set*. ALL listed items must be
+    in cart; the engine overrides their combined price to `combo_price`.  Only
+    sensible with `scope='products'`.
+
+  No new fields beyond the existing `bogo_buy_qty` / `bogo_free_qty` /
+  `combo_price` (kept) and `target_ids` (the canonical eligibility column).
+
+- **`modifier_filter` as jsonb** — accepted. Cardinality is low (max ~3 modifier
+  groups per drink today), un-indexed is fine. If query patterns demand it
+  later we add a GIN index.
+
+- **`target_ids` as a single text[] column** discriminated by `scope` — same
+  type-discipline as `modifier_filter`. The trade-off is no array-FK, but
+  PostgreSQL doesn't natively support array FKs anyway and adding two columns
+  (`target_product_ids` + `target_category_ids`) doubles the read-path
+  branching without buying integrity. The discount engine validates membership
+  at use-time against the live products/categories tables, which is the
+  real correctness guard.
