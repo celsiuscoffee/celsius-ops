@@ -1,9 +1,15 @@
 // Shared, canonical voucher-discount engine — single source of truth
 // for the math that turns "voucher + cart" into "discount in sen".
-// Used by both:
-//   * apps/order /api/orders/route.ts   (Pickup, server-side at order create)
-//   * apps/pos register page            (POS, client-side on the in-store cart)
+// Directly imported by the Next.js apps:
+//   * apps/order /api/orders/route.ts   (Pickup, server-AUTHORITATIVE at order create)
+//   * apps/pos register page            (POS web, client-side on the in-store cart)
 //   * apps/pos /api/loyalty/apply-voucher (descriptor builder for the register)
+//
+// MIRRORED (not imported) by the Expo apps — Metro can't resolve
+// @celsius/shared, so these maintain hand-kept PORTS that must match the
+// switch below case-for-case. Update them together:
+//   * apps/pos-native/lib/loyalty.ts     computeRewardDiscount  (POS is client-authoritative)
+//   * apps/pickup-native/lib/rewards.ts  calcRewardDiscount     (preview only; server recomputes)
 //
 // Was — two near-identical implementations with subtle drift:
 //   * POS client used vocab `fixed_amount` / `percentage` and treated
