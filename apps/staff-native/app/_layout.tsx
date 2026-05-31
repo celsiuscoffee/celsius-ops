@@ -110,12 +110,22 @@ function RootLayout() {
             outletName?: string | null;
             moduleAccess?: Record<string, unknown>;
           };
+          // Trust the server response as the source of truth — a null
+          // outletId from /api/auth/me is meaningful (means the user
+          // had their outlet assignment removed), so we must NOT use
+          // nullish coalescing to fall back to the cached value here.
+          // We do still keep `cached.token / userId / staffNo / name`
+          // because the /api/auth/me payload doesn't include those.
           const merged: StaffSession = {
             ...cached,
-            role: me.role ?? cached.role,
-            outletId: me.outletId ?? cached.outletId,
-            outletName: me.outletName ?? cached.outletName,
-            moduleAccess: me.moduleAccess ?? cached.moduleAccess,
+            ...(me.role !== undefined ? { role: me.role } : {}),
+            ...(me.outletId !== undefined ? { outletId: me.outletId } : {}),
+            ...(me.outletName !== undefined
+              ? { outletName: me.outletName }
+              : {}),
+            ...(me.moduleAccess !== undefined
+              ? { moduleAccess: me.moduleAccess }
+              : {}),
           };
           await saveSession(merged);
           setSession(merged);
