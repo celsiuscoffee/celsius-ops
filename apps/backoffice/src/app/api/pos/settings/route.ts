@@ -71,6 +71,10 @@ export async function PUT(request: NextRequest) {
     "einvoice_tin",
     "einvoice_brn",
     "einvoice_sst_no",
+    // GrabFood ordering hours (drives the menu serviceHours we serve to Grab).
+    "grab_open_time",
+    "grab_close_time",
+    "grab_open_24h",
   ] as const;
   const updates: Record<string, unknown> = { outlet_id: body.outlet_id, updated_at: new Date().toISOString() };
   for (const k of allowed) if (k in body) updates[k] = body[k];

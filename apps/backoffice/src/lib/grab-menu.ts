@@ -116,17 +116,27 @@ export function convertProductToGrabItem(product: RawProduct, sequence = 1): Gra
   };
 }
 
-// Single all-day section wraps the whole catalogue (we don't day-part the menu).
-const ALL_DAY_PERIOD = { startTime: "08:00", endTime: "22:00" };
-const ALL_DAY_SERVICE_HOURS = {
-  mon: { openPeriodType: "OpenPeriod", periods: [ALL_DAY_PERIOD] },
-  tue: { openPeriodType: "OpenPeriod", periods: [ALL_DAY_PERIOD] },
-  wed: { openPeriodType: "OpenPeriod", periods: [ALL_DAY_PERIOD] },
-  thu: { openPeriodType: "OpenPeriod", periods: [ALL_DAY_PERIOD] },
-  fri: { openPeriodType: "OpenPeriod", periods: [ALL_DAY_PERIOD] },
-  sat: { openPeriodType: "OpenPeriod", periods: [ALL_DAY_PERIOD] },
-  sun: { openPeriodType: "OpenPeriod", periods: [ALL_DAY_PERIOD] },
-};
+// Single section wraps the whole catalogue (we don't day-part the menu). The
+// open/close window is now per-outlet (pos_branch_settings.grab_open_time /
+// grab_close_time / grab_open_24h) — see buildGrabServiceHours. Default below
+// is the historical 08:00–22:00 used when an outlet has no override.
+const DEFAULT_PERIOD = { startTime: "08:00", endTime: "22:00" };
+const sameEveryDay = <T>(period: T) => ({
+  mon: period, tue: period, wed: period, thu: period, fri: period, sat: period, sun: period,
+});
+const DEFAULT_SERVICE_HOURS = sameEveryDay({ openPeriodType: "OpenPeriod", periods: [DEFAULT_PERIOD] });
+
+export type GrabHours = { open?: string | null; close?: string | null; open24h?: boolean | null };
+
+/** Build a 7-day serviceHours block from an outlet's open/close (or 24h). A
+ *  24h outlet becomes a full 00:00–23:59 daily window (Grab has no finer
+ *  "always open" we rely on here, and the 1-minute seam at midnight is moot). */
+export function buildGrabServiceHours(h: GrabHours) {
+  const period = h.open24h
+    ? { openPeriodType: "OpenPeriod", periods: [{ startTime: "00:00", endTime: "23:59" }] }
+    : { openPeriodType: "OpenPeriod", periods: [{ startTime: h.open || "08:00", endTime: h.close || "22:00" }] };
+  return sameEveryDay(period);
+}
 
 export interface GrabMenuOptions {
   /** Our identifier for the store — Grab's "Partner store ID" / partnerMerchantID. */
@@ -139,6 +149,8 @@ export interface GrabMenuOptions {
    * as the visible category header. Pass the categories table here.
    */
   categoryNames?: Record<string, string>;
+  /** Per-outlet open hours (from pos_branch_settings). Defaults to 08:00–22:00. */
+  serviceHours?: ReturnType<typeof buildGrabServiceHours>;
 }
 
 /** Read menu options (partner store ID + currency override) from env. */
@@ -176,7 +188,7 @@ export function buildGrabMenuPayload(
     id: "section-all-day",
     name: "All Day",
     sequence: 1,
-    serviceHours: ALL_DAY_SERVICE_HOURS,
+    serviceHours: opts.serviceHours ?? DEFAULT_SERVICE_HOURS,
     categories,
   };
   return {

@@ -18,7 +18,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifyGrabPartnerToken } from "@/lib/grab-partner";
-import { buildGrabMenuPayload, grabMenuOptionsFromEnv, type RawProduct } from "@/lib/grab-menu";
+import { buildGrabMenuPayload, buildGrabServiceHours, grabMenuOptionsFromEnv, type RawProduct } from "@/lib/grab-menu";
 
 function serviceClient() {
   return createClient(
@@ -51,6 +51,27 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
   }
 
+  // Per-outlet open hours: merchantID → outlets.grab_merchant_id → outlet id →
+  // pos_branch_settings.grab_open_time/close/24h. Falls back to 08:00–22:00.
+  let serviceHours: ReturnType<typeof buildGrabServiceHours> | undefined;
+  if (merchantId) {
+    const { data: outlet } = await supabase
+      .from("outlets").select("id").eq("grab_merchant_id", merchantId).maybeSingle();
+    if (outlet?.id) {
+      const { data: bs } = await supabase
+        .from("pos_branch_settings")
+        .select("grab_open_time, grab_close_time, grab_open_24h")
+        .eq("outlet_id", outlet.id)
+        .maybeSingle();
+      if (bs) {
+        serviceHours = buildGrabServiceHours({
+          open: bs.grab_open_time, close: bs.grab_close_time, open24h: bs.grab_open_24h,
+        });
+        console.log(`[grab:get-menu] hours outlet=${outlet.id} 24h=${bs.grab_open_24h} ${bs.grab_open_time}-${bs.grab_close_time}`);
+      }
+    }
+  }
+
   // Build slug→displayName map so Grab sees "Artisan Choc" instead of "artisan-choc".
   const categoryNames: Record<string, string> = {};
   for (const c of categoriesRes.data || []) {
@@ -61,6 +82,7 @@ export async function GET(request: NextRequest) {
   const menu = buildGrabMenuPayload(productsRes.data as RawProduct[], merchantId, {
     ...grabMenuOptionsFromEnv(),
     categoryNames,
+    serviceHours,
   });
   const catCount = menu.sections.reduce((n, s) => n + s.categories.length, 0);
   console.log(

@@ -25,6 +25,9 @@ export interface DbProduct {
   position: number;
   featured_position: number;
   print_additional_docket: boolean;
+  // Kitchen station routing — drives the per-station docket split on the
+  // SUNMI POS-native printer. Null/empty = no kitchen docket printed.
+  kitchen_station: string | null;
   e_invoice_classification_code: string;
   schedule_start_date: string | null;
   schedule_end_date: string | null;
@@ -54,6 +57,7 @@ function emptyForm(categories: Category[]) {
     is_popular:    false,
     is_new:        false,
     print_additional_docket:        false,
+    kitchen_station:                "" as string,
     e_invoice_classification_code:  "",
     schedule_start_date:            "" as string,
     schedule_end_date:              "" as string,
@@ -94,6 +98,7 @@ export function ProductForm({ product, categories }: Props) {
       is_popular:    product.is_popular,
       is_new:        product.is_new,
       print_additional_docket:        product.print_additional_docket ?? false,
+      kitchen_station:                product.kitchen_station ?? "",
       e_invoice_classification_code:  product.e_invoice_classification_code ?? "",
       schedule_start_date:            product.schedule_start_date ?? "",
       schedule_end_date:              product.schedule_end_date ?? "",
@@ -392,18 +397,49 @@ export function ProductForm({ product, categories }: Props) {
           ))}
         </div>
 
-        {/* Print + e-Invoice */}
-        <Field label="Print additional kitchen docket">
+        {/* Kitchen Station — drives the per-station docket routing on
+            the SUNMI POS. "Print Kitchen docket" is the master toggle:
+            ON requires a station, OFF stores NULL kitchen_station which
+            means no station-routed docket prints (the item still appears
+            on the combined receipt). */}
+        <div className="border rounded-2xl p-4 bg-muted/10 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-primary">Kitchen Station</p>
+
           <label className="flex items-center gap-2 cursor-pointer text-sm">
             <input
               type="checkbox"
-              checked={form.print_additional_docket}
-              onChange={(e) => setForm((f) => ({ ...f, print_additional_docket: e.target.checked }))}
+              checked={!!form.kitchen_station}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  // Default to "Kitchen" when first ticked; preserve any
+                  // existing station value when re-ticking.
+                  kitchen_station: e.target.checked ? (f.kitchen_station || "Kitchen") : "",
+                }))
+              }
               className="h-4 w-4 accent-[#160800]"
             />
-            <span className="text-muted-foreground">Print a second copy of the kitchen docket for this item (e.g. set meals, beer packages).</span>
+            <span className="font-medium">Print Kitchen docket</span>
           </label>
-        </Field>
+
+          {!!form.kitchen_station && (
+            <Field label="Station">
+              <select
+                value={form.kitchen_station ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, kitchen_station: e.target.value }))}
+                className="w-full px-3 py-2 border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="Kitchen">Kitchen</option>
+                <option value="Bar">Bar</option>
+                <option value="Counter">Counter</option>
+                <option value="Pastry">Pastry</option>
+              </select>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Items routed to the same station print together on one docket. Match the printer name in BackOffice → Settings → Printers.
+              </p>
+            </Field>
+          )}
+        </div>
 
         <Field label="e-Invoice classification code (LHDN)">
           <input

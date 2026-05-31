@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Save, Store, Receipt, QrCode, Megaphone, CreditCard, LayoutGrid, FileText } from "lucide-react";
+import { Loader2, Save, Store, Receipt, QrCode, Megaphone, CreditCard, LayoutGrid, FileText, Clock } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
 
@@ -35,6 +35,11 @@ type Settings = {
   einvoice_tin:            string | null;
   einvoice_brn:            string | null;
   einvoice_sst_no:         string | null;
+  // GrabFood ordering hours — drives the serviceHours we serve to Grab. Outside
+  // this window Grab shows "no menu available". 24h overrides the open/close.
+  grab_open_time:          string | null;
+  grab_close_time:         string | null;
+  grab_open_24h:           boolean | null;
 };
 
 // Labels come from the shared registry so every app reads the same
@@ -306,6 +311,39 @@ export default function POSSettingsPage() {
               placeholder="TID"
             />
           </Field>
+        </Section>
+
+        {/* GrabFood ordering hours — drives the menu serviceHours sent to Grab.
+            Outside this window Grab serves "no menu available". */}
+        <Section title="GrabFood Hours" Icon={Clock}>
+          <Toggle
+            checked={editing.grab_open_24h === true}
+            onChange={(v) => update("grab_open_24h", v)}
+            label="Open 24 hours on GrabFood"
+          />
+          {editing.grab_open_24h !== true && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Opens">
+                <input
+                  type="time"
+                  value={editing.grab_open_time ?? "08:00"}
+                  onChange={(e) => update("grab_open_time", e.target.value)}
+                  className="input"
+                />
+              </Field>
+              <Field label="Closes">
+                <input
+                  type="time"
+                  value={editing.grab_close_time ?? "22:00"}
+                  onChange={(e) => update("grab_close_time", e.target.value)}
+                  className="input"
+                />
+              </Field>
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            Outside these hours GrabFood shows &ldquo;no menu available&rdquo;. For past-midnight trade, switch on 24 hours and toggle your store open/closed in the Grab Merchant app.
+          </p>
         </Section>
 
         {/* Tax + LHDN e-Invoice — outlet-level defaults. Products can override
