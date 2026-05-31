@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ActivityIndicator, FlatList, Text, View } from "react-native";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import { fetchPayslips, type Payslip } from "../../../lib/hr/api";
 
 export default function PayslipsScreen() {
@@ -7,40 +9,37 @@ export default function PayslipsScreen() {
     queryKey: ["hr-payslips"],
     queryFn: fetchPayslips,
   });
-
-  if (isLoading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator />
-      </View>
-    );
-  }
-  if (error) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background px-6">
-        <Text className="text-sm text-danger text-center">
-          {(error as Error).message}
-        </Text>
-      </View>
-    );
-  }
-
   const payslips = data?.payslips ?? [];
 
   return (
-    <FlatList
-      className="flex-1 bg-background"
-      contentContainerClassName="px-5 pt-4 pb-8"
-      data={payslips}
-      keyExtractor={(p) => p.id}
-      ItemSeparatorComponent={() => <View className="h-3" />}
-      renderItem={({ item }) => <PayslipCard payslip={item} />}
-      ListEmptyComponent={
-        <Text className="mt-12 text-center text-sm text-muted-fg">
-          No confirmed payslips yet.
-        </Text>
-      }
-    />
+    <Screen>
+      <PageHeader title="Payslips" back />
+      {isLoading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator />
+        </View>
+      ) : error ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-sm text-danger text-center">
+            {(error as Error).message}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          className="flex-1"
+          contentContainerClassName="pt-2 pb-8"
+          data={payslips}
+          keyExtractor={(p) => p.id}
+          ItemSeparatorComponent={() => <View className="h-3" />}
+          renderItem={({ item }) => <PayslipCard payslip={item} />}
+          ListEmptyComponent={
+            <Text className="mt-12 text-center text-sm text-muted-fg">
+              No confirmed payslips yet.
+            </Text>
+          }
+        />
+      )}
+    </Screen>
   );
 }
 

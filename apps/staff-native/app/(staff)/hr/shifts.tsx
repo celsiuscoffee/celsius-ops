@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ActivityIndicator, FlatList, Text, View } from "react-native";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import { fetchShifts, type Shift } from "../../../lib/hr/api";
 
 export default function ShiftsScreen() {
@@ -7,47 +9,41 @@ export default function ShiftsScreen() {
     queryKey: ["hr-shifts"],
     queryFn: fetchShifts,
   });
-
-  if (isLoading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator />
-      </View>
-    );
-  }
-  if (error) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background px-6">
-        <Text className="text-sm text-danger text-center">
-          {(error as Error).message}
-        </Text>
-      </View>
-    );
-  }
-
   const shifts = data?.shifts ?? [];
-  if (shifts.length === 0) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background px-6">
-        <Text className="text-base font-display-medium text-espresso">
-          No upcoming shifts
-        </Text>
-        <Text className="mt-1 text-sm text-muted-fg text-center">
-          Once your manager publishes the next schedule, it'll show up here.
-        </Text>
-      </View>
-    );
-  }
 
   return (
-    <FlatList
-      className="flex-1 bg-background"
-      contentContainerClassName="px-5 pt-4 pb-8"
-      data={shifts}
-      keyExtractor={(s) => s.id}
-      ItemSeparatorComponent={() => <View className="h-3" />}
-      renderItem={({ item }) => <ShiftCard shift={item} />}
-    />
+    <Screen>
+      <PageHeader title="My Shifts" back />
+      {isLoading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator />
+        </View>
+      ) : error ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-sm text-danger text-center">
+            {(error as Error).message}
+          </Text>
+        </View>
+      ) : shifts.length === 0 ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-base font-display-medium text-espresso">
+            No upcoming shifts
+          </Text>
+          <Text className="mt-1 text-sm text-muted-fg text-center">
+            Once your manager publishes the next schedule, it'll show up here.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          className="flex-1"
+          contentContainerClassName="pt-2 pb-8"
+          data={shifts}
+          keyExtractor={(s) => s.id}
+          ItemSeparatorComponent={() => <View className="h-3" />}
+          renderItem={({ item }) => <ShiftCard shift={item} />}
+        />
+      )}
+    </Screen>
   );
 }
 

@@ -6,6 +6,8 @@ import {
   Text,
   View,
 } from "react-native";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import { acknowledgeMemo, fetchMemos, type Memo } from "../../../lib/hr/api";
 
 export default function MemosScreen() {
@@ -14,30 +16,25 @@ export default function MemosScreen() {
     queryKey: ["hr-memos"],
     queryFn: fetchMemos,
   });
-
-  if (isLoading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator />
-      </View>
-    );
-  }
-  if (error) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background px-6">
-        <Text className="text-sm text-danger text-center">
-          {(error as Error).message}
-        </Text>
-      </View>
-    );
-  }
-
   const memos = data?.memos ?? [];
 
   return (
+    <Screen>
+      <PageHeader title="Memos" back />
+      {isLoading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator />
+        </View>
+      ) : error ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-sm text-danger text-center">
+            {(error as Error).message}
+          </Text>
+        </View>
+      ) : (
     <FlatList
-      className="flex-1 bg-background"
-      contentContainerClassName="px-5 pt-4 pb-8"
+      className="flex-1"
+      contentContainerClassName="pt-2 pb-8"
       data={memos}
       keyExtractor={(m) => m.id}
       ItemSeparatorComponent={() => <View className="h-3" />}
@@ -56,6 +53,8 @@ export default function MemosScreen() {
         </Text>
       }
     />
+      )}
+    </Screen>
   );
 }
 

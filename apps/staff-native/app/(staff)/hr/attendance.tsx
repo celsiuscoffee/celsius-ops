@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ActivityIndicator, FlatList, Text, View } from "react-native";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import { fetchAttendance, type AttendanceItem } from "../../../lib/hr/api";
 
 export default function AttendanceScreen() {
@@ -7,42 +9,39 @@ export default function AttendanceScreen() {
     queryKey: ["hr-attendance", 30],
     queryFn: () => fetchAttendance(30),
   });
-
-  if (isLoading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator />
-      </View>
-    );
-  }
-  if (error) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background px-6">
-        <Text className="text-sm text-danger text-center">
-          {(error as Error).message}
-        </Text>
-      </View>
-    );
-  }
-
   const items = data?.attendance ?? [];
   const stats = data?.stats;
 
   return (
-    <FlatList
-      className="flex-1 bg-background"
-      contentContainerClassName="px-5 pt-4 pb-8"
-      data={items}
-      keyExtractor={(a) => a.id}
-      ListHeaderComponent={stats ? <StatsCard stats={stats} /> : null}
-      ItemSeparatorComponent={() => <View className="h-2" />}
-      renderItem={({ item }) => <AttendanceCard item={item} />}
-      ListEmptyComponent={
-        <Text className="mt-12 text-center text-sm text-muted-fg">
-          No attendance records in the last 30 days.
-        </Text>
-      }
-    />
+    <Screen>
+      <PageHeader title="Attendance" back />
+      {isLoading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator />
+        </View>
+      ) : error ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-sm text-danger text-center">
+            {(error as Error).message}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          className="flex-1"
+          contentContainerClassName="pt-2 pb-8"
+          data={items}
+          keyExtractor={(a) => a.id}
+          ListHeaderComponent={stats ? <StatsCard stats={stats} /> : null}
+          ItemSeparatorComponent={() => <View className="h-2" />}
+          renderItem={({ item }) => <AttendanceCard item={item} />}
+          ListEmptyComponent={
+            <Text className="mt-12 text-center text-sm text-muted-fg">
+              No attendance records in the last 30 days.
+            </Text>
+          }
+        />
+      )}
+    </Screen>
   );
 }
 

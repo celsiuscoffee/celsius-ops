@@ -10,6 +10,8 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import {
   AlertTriangle,
   Check,
@@ -420,9 +422,10 @@ export default function StockCount() {
   }
 
   return (
-    <View className="flex-1 bg-background">
-      {/* Sticky header */}
-      <View className="border-b border-border bg-background px-5 pt-3 pb-3">
+    <Screen>
+      <PageHeader title="Stock count" back />
+      {/* Sticky frequency tabs — sits below the PageHeader. */}
+      <View className="border-b border-border bg-background pb-3">
         <View className="flex-row items-center gap-2">
           {(["daily", "weekly", "monthly"] as Frequency[]).map((f) => (
             <Pressable
@@ -751,7 +754,7 @@ export default function StockCount() {
           ) : null}
         </View>
       </Modal>
-    </View>
+    </Screen>
   );
 }
 

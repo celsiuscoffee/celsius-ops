@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Bot, CheckCircle2, Clock, Plus, XCircle } from "lucide-react-native";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import {
   fetchLeave,
   submitLeave,
@@ -96,14 +98,18 @@ export default function LeaveScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="#A2492C" />
-      </View>
+      <Screen>
+        <PageHeader title="Leave" back />
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#A2492C" />
+        </View>
+      </Screen>
     );
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
+      <PageHeader title="Leave" back />
       <ScrollView
         className="flex-1"
         contentContainerClassName="px-5 pt-4 pb-32"
@@ -297,7 +303,7 @@ export default function LeaveScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </Screen>
   );
 }
 

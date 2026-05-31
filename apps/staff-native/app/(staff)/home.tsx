@@ -196,9 +196,48 @@ export default function Home() {
 
   return (
     <Screen>
+      {/* Frozen header — sits OUTSIDE the ScrollView so the avatar +
+          gear icon stay tappable while you scroll the task list. */}
+      <View className="flex-row items-center gap-3 pt-3 pb-3">
+        <Pressable
+          onPress={() => router.push("/(staff)/profile")}
+          accessibilityRole="button"
+          accessibilityLabel="Open profile"
+          hitSlop={8}
+          className="flex-1 flex-row items-center gap-3 active:opacity-80"
+        >
+          <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
+            <Text className="text-base font-display text-primary">
+              {session?.name?.charAt(0)?.toUpperCase() ?? "?"}
+            </Text>
+          </View>
+          <View className="flex-1">
+            <Text className="text-base font-display text-espresso">
+              {greeting()}, {firstName(session?.name)}
+            </Text>
+            <Text className="text-xs font-body text-muted-fg">
+              {session?.outletName ? `${session.outletName} · ` : ""}
+              {dateLabel()}
+              {Updates.updateId
+                ? ` · build ${Updates.updateId.slice(0, 8)}`
+                : ""}
+            </Text>
+          </View>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push("/(staff)/profile")}
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+          hitSlop={10}
+          className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 active:opacity-80"
+        >
+          <Settings color="#A2492C" size={20} />
+        </Pressable>
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="pt-6 pb-12"
+        contentContainerClassName="pb-12"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -208,49 +247,6 @@ export default function Home() {
           />
         }
       >
-        {/* Header — TWO entry points to Profile so it's not lost again:
-              (a) Tap the avatar+name block on the left
-              (b) Tap the gear icon on the right
-            The build-id chip on the subtitle is a debug aid — proves
-            which OTA bundle you're actually running so we can stop
-            chasing "did the OTA land or not". */}
-        <View className="flex-row items-center gap-3">
-          <Pressable
-            onPress={() => router.push("/(staff)/profile")}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
-            hitSlop={8}
-            className="flex-1 flex-row items-center gap-3 active:opacity-80"
-          >
-            <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
-              <Text className="text-base font-display text-primary">
-                {session?.name?.charAt(0)?.toUpperCase() ?? "?"}
-              </Text>
-            </View>
-            <View className="flex-1">
-              <Text className="text-base font-display text-espresso">
-                {greeting()}, {firstName(session?.name)}
-              </Text>
-              <Text className="text-xs font-body text-muted-fg">
-                {session?.outletName ? `${session.outletName} · ` : ""}
-                {dateLabel()}
-                {Updates.updateId
-                  ? ` · build ${Updates.updateId.slice(0, 8)}`
-                  : ""}
-              </Text>
-            </View>
-          </Pressable>
-          <Pressable
-            onPress={() => router.push("/(staff)/profile")}
-            accessibilityRole="button"
-            accessibilityLabel="Settings"
-            hitSlop={10}
-            className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 active:opacity-80"
-          >
-            <Settings color="#A2492C" size={20} />
-          </Pressable>
-        </View>
-
         {/* Clock card — biggest CTA on the page (matches web behavior). */}
         {session?.outletId ? (
           <Pressable

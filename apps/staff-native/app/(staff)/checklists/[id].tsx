@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import {
   Camera,
   CheckCircle2,
@@ -265,23 +267,21 @@ export default function ChecklistDetail() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        className="flex-1 bg-background"
-        contentContainerClassName="px-5 pt-4 pb-12"
-        keyboardShouldPersistTaps="handled"
+    <Screen>
+      <PageHeader
+        title={detail.sop.title}
+        subtitle={`${detail.outlet.name} · ${detail.sop.category.name}`}
+        back
+      />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Header */}
-        <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
-          {detail.outlet.name} · {detail.sop.category.name}
-        </Text>
-        <Text className="mt-1 text-2xl font-display text-espresso">
-          {detail.sop.title}
-        </Text>
-
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="pt-2 pb-12"
+          keyboardShouldPersistTaps="handled"
+        >
         {/* Progress */}
         <View className="mt-4 rounded-3xl border border-border bg-surface p-4">
           <View className="flex-row items-center justify-between">
@@ -535,5 +535,6 @@ export default function ChecklistDetail() {
         </View>
       </Modal>
     </KeyboardAvoidingView>
+    </Screen>
   );
 }

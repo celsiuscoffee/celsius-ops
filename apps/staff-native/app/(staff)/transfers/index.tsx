@@ -7,6 +7,8 @@ import {
   View,
 } from "react-native";
 import { ArrowLeftRight, ArrowRight } from "lucide-react-native";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import { useStaff } from "../../../lib/store";
 import { listTransfers, type Transfer } from "../../../lib/ops/inventory";
 
@@ -30,20 +32,19 @@ export default function TransfersPage() {
     load();
   }, [load]);
 
-  if (loading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="#A2492C" />
-      </View>
-    );
-  }
-
   return (
+    <Screen>
+      <PageHeader title="Transfers" back />
+      {loading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#A2492C" />
+        </View>
+      ) : (
     <FlatList
-      className="flex-1 bg-background"
+      className="flex-1"
       data={items}
       keyExtractor={(t) => t.id}
-      contentContainerClassName="px-5 pt-4 pb-12"
+      contentContainerClassName="pt-2 pb-12"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -94,6 +95,8 @@ export default function TransfersPage() {
         </View>
       )}
     />
+      )}
+    </Screen>
   );
 }
 

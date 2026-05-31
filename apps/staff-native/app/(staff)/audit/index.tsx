@@ -8,6 +8,8 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import {
   CheckCircle2,
   ChevronRight,
@@ -45,19 +47,23 @@ export default function AuditList() {
 
   if (loading && items.length === 0) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="#A2492C" />
-      </View>
+      <Screen>
+        <PageHeader title="Audits" />
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#A2492C" />
+        </View>
+      </Screen>
     );
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
+      <PageHeader title="Audits" />
       <FlatList
         data={[]}
         keyExtractor={() => ""}
         renderItem={() => null}
-        contentContainerClassName="px-5 pt-4 pb-32"
+        contentContainerClassName="pt-2 pb-32"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -133,7 +139,7 @@ export default function AuditList() {
           </Text>
         </Pressable>
       </View>
-    </View>
+    </Screen>
   );
 }
 

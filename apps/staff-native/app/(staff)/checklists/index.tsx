@@ -8,6 +8,8 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import {
   AlertCircle,
   CheckCircle2,
@@ -100,7 +102,8 @@ export default function ChecklistsList() {
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
+      <PageHeader title="Checklists" />
       {loading && items.length === 0 ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#A2492C" />
@@ -113,7 +116,7 @@ export default function ChecklistsList() {
         <FlatList
           data={grouped}
           keyExtractor={(g) => g.shift}
-          contentContainerClassName="px-5 pt-4 pb-12"
+          contentContainerClassName="pt-2 pb-12"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -179,7 +182,7 @@ export default function ChecklistsList() {
           )}
         />
       )}
-    </View>
+    </Screen>
   );
 }
 

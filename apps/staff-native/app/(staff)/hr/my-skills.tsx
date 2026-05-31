@@ -7,6 +7,8 @@ import {
   View,
 } from "react-native";
 import { Sparkles, Target, TrendingDown, TrendingUp } from "lucide-react-native";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import { useStaff } from "../../../lib/store";
 import {
   fetchMySkills,
@@ -46,35 +48,31 @@ export default function MySkills() {
     load();
   }, [load]);
 
-  if (loading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="#A2492C" />
-      </View>
-    );
-  }
-
   const templates = data?.templates ?? [];
-  if (templates.length === 0) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background px-6">
-        <View className="h-20 w-20 items-center justify-center rounded-3xl bg-primary-50">
-          <Target color="#A2492C" size={32} />
-        </View>
-        <Text className="mt-4 text-base font-display text-espresso">
-          No skill audits yet
-        </Text>
-        <Text className="mt-1 text-sm font-body text-muted-fg text-center">
-          Once a manager audits you, your scores will show up here.
-        </Text>
-      </View>
-    );
-  }
 
   return (
+    <Screen>
+      <PageHeader title="My Skills" back />
+      {loading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#A2492C" />
+        </View>
+      ) : templates.length === 0 ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <View className="h-20 w-20 items-center justify-center rounded-3xl bg-primary-50">
+            <Target color="#A2492C" size={32} />
+          </View>
+          <Text className="mt-4 text-base font-display text-espresso">
+            No skill audits yet
+          </Text>
+          <Text className="mt-1 text-sm font-body text-muted-fg text-center">
+            Once a manager audits you, your scores will show up here.
+          </Text>
+        </View>
+      ) : (
     <ScrollView
-      className="flex-1 bg-background"
-      contentContainerClassName="px-5 pt-4 pb-12 gap-3"
+      className="flex-1"
+      contentContainerClassName="pt-2 pb-12 gap-3"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -219,6 +217,8 @@ export default function MySkills() {
         );
       })}
     </ScrollView>
+      )}
+    </Screen>
   );
 }
 

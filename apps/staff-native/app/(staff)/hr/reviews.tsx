@@ -7,6 +7,8 @@ import {
   View,
 } from "react-native";
 import { Star, MessageSquare } from "lucide-react-native";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import { fetchMyReviews, type MyReview } from "../../../lib/hr/api";
 
 export default function ReviewsScreen() {
@@ -31,20 +33,19 @@ export default function ReviewsScreen() {
     load();
   }, [load]);
 
-  if (loading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="#A2492C" />
-      </View>
-    );
-  }
-
   return (
+    <Screen>
+      <PageHeader title="Feedback" back />
+      {loading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#A2492C" />
+        </View>
+      ) : (
     <FlatList
-      className="flex-1 bg-background"
+      className="flex-1"
       data={reviews}
       keyExtractor={(r) => r.id}
-      contentContainerClassName="px-5 pt-4 pb-12"
+      contentContainerClassName="pt-2 pb-12"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -97,6 +98,8 @@ export default function ReviewsScreen() {
         </View>
       )}
     />
+      )}
+    </Screen>
   );
 }
 

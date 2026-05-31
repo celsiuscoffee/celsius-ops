@@ -14,6 +14,8 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -129,19 +131,23 @@ export default function WastagePage() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="#A2492C" />
-      </View>
+      <Screen>
+        <PageHeader title="Wastage" back />
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#A2492C" />
+        </View>
+      </Screen>
     );
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
+      <PageHeader title="Wastage" back />
       <FlatList
         className="flex-1"
         data={entries}
         keyExtractor={(w) => w.id}
-        contentContainerClassName="px-5 pt-4 pb-32"
+        contentContainerClassName="pt-2 pb-32"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -444,7 +450,7 @@ export default function WastagePage() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </Screen>
   );
 }
 

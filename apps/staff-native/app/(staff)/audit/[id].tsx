@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import {
   Camera,
   Check,
@@ -276,22 +278,19 @@ export default function AuditDetail() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View className="flex-1 bg-background">
-        {/* Sticky progress header */}
-        <View className="border-b border-border bg-background px-5 pt-3 pb-3">
-          <View className="flex-row items-center justify-between">
-            <Text className="text-xs font-body text-muted">
-              {audit.template.name}
-            </Text>
-            <Text className="text-xs font-body-bold text-muted">
-              {cursor + 1} / {total} · {rated} rated
-            </Text>
-          </View>
-          <View className="mt-2 h-1.5 overflow-hidden rounded-full bg-primary-50">
+    <Screen>
+      <PageHeader
+        title={audit.template.name}
+        subtitle={`${cursor + 1} of ${total} · ${rated} rated`}
+        back
+      />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        {/* Sticky progress bar — sits right below PageHeader */}
+        <View className="border-b border-border bg-background pb-3">
+          <View className="h-1.5 overflow-hidden rounded-full bg-primary-50">
             <View
               className="h-full bg-primary"
               style={{ width: `${((cursor + 1) / total) * 100}%` }}
@@ -646,8 +645,8 @@ export default function AuditDetail() {
             </Pressable>
           </View>
         </Modal>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
@@ -704,11 +703,9 @@ function CompletedView({
   }, [audit.items]);
 
   return (
-    <View className="flex-1 bg-background">
-      <ScrollView contentContainerClassName="px-5 pt-6 pb-12">
-        <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
-          {audit.template.name}
-        </Text>
+    <Screen>
+      <PageHeader title={audit.template.name} subtitle="Completed audit" back />
+      <ScrollView contentContainerClassName="pt-2 pb-12">
         <View className="mt-1 flex-row items-end gap-2">
           <Text className="text-4xl font-display text-espresso">
             {audit.overallScore ?? 0}
@@ -842,6 +839,6 @@ function CompletedView({
           </Pressable>
         </View>
       </Modal>
-    </View>
+    </Screen>
   );
 }

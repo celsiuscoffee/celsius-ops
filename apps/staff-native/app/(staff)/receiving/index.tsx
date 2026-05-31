@@ -15,6 +15,8 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import { Screen } from "../../../components/Screen";
+import { PageHeader } from "../../../components/PageHeader";
 import {
   AlertTriangle,
   Camera,
@@ -217,11 +219,13 @@ export default function ReceivingPage() {
   }
 
   return (
-    <FlatList
-      className="flex-1 bg-background"
-      data={orders}
-      keyExtractor={(o) => o.id}
-      contentContainerClassName="px-5 pt-4 pb-12"
+    <Screen>
+      <PageHeader title="Receive" back />
+      <FlatList
+        className="flex-1"
+        data={orders}
+        keyExtractor={(o) => o.id}
+        contentContainerClassName="pt-2 pb-12"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -321,7 +325,8 @@ export default function ReceivingPage() {
           </View>
         ) : null
       }
-    />
+      />
+    </Screen>
   );
 }
 
