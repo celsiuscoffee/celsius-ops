@@ -2,11 +2,11 @@
 -- Spec: docs/rewards-storehub-refactor.md
 --
 -- Purely additive. Adds the canonical 6-field eligibility shape + the
--- type-specific knobs to voucher_templates, adds template_id to
--- issued_rewards, mirrors the 3 legacy `rewards` catalog rows into
--- voucher_templates (with points_cost), and backfills template_id on
--- every active issued voucher. Zero customer-visible behaviour change —
--- the rewards catalog table is untouched (it drops in Commit 3 after
+-- type-specific knobs to voucher_templates, mirrors the 3 legacy
+-- `rewards` catalog rows into voucher_templates (with points_cost), and
+-- backfills the pre-existing issued_rewards.voucher_template_id on every
+-- active issued voucher. Zero customer-visible behaviour change — the
+-- rewards catalog table is untouched (it drops in Commit 3 after
 -- readers cut over).
 --
 -- Idempotent: ADD COLUMN IF NOT EXISTS, deterministic UUIDs for the
@@ -44,8 +44,12 @@ BEGIN
   END IF;
 END $$;
 
-ALTER TABLE issued_rewards
-  ADD COLUMN IF NOT EXISTS template_id uuid REFERENCES voucher_templates(id);
+-- NOTE (corrected post-apply): issued_rewards ALREADY has a
+-- voucher_template_id column (written by issueVoucher in
+-- apps/order/src/lib/loyalty/v2.ts). The first pass of this migration
+-- added a redundant `template_id` column, then dropped it after
+-- discovering the overlap. The canonical column is voucher_template_id;
+-- the backfill below targets it. No ALTER needed on issued_rewards.
 
 -- ── Step 2: backfill scope + target_ids on existing voucher_templates ─
 -- Derivation: free_product_ids → applicable_products → applicable_categories
@@ -116,30 +120,30 @@ FROM rewards r
 WHERE r.brand_id = 'brand-celsius'
 ON CONFLICT (id) DO NOTHING;
 
--- ── Step 4: backfill issued_rewards.template_id (active rows) ─────────
+-- ── Step 4: backfill issued_rewards.voucher_template_id (active rows) ─────────
 -- 4a: catalog redemptions (text reward_id → mirror UUID)
 UPDATE issued_rewards ir
-   SET template_id = uuid_generate_v5(uuid_ns_url(), 'rewards-catalog:' || ir.reward_id)
- WHERE ir.brand_id = 'brand-celsius' AND ir.reward_id IS NOT NULL AND ir.template_id IS NULL
+   SET voucher_template_id = uuid_generate_v5(uuid_ns_url(), 'rewards-catalog:' || ir.reward_id)
+ WHERE ir.brand_id = 'brand-celsius' AND ir.reward_id IS NOT NULL AND ir.voucher_template_id IS NULL
    AND EXISTS (SELECT 1 FROM voucher_templates t
                 WHERE t.id = uuid_generate_v5(uuid_ns_url(), 'rewards-catalog:' || ir.reward_id));
 
 -- 4b: mystery — source_ref_id → mystery_drops.id → pool_entry_id
 --     → mystery_pool.voucher_template_id (2-hop)
 UPDATE issued_rewards ir
-   SET template_id = mp.voucher_template_id
+   SET voucher_template_id = mp.voucher_template_id
   FROM mystery_drops md
   JOIN mystery_pool   mp ON mp.id = md.pool_entry_id
- WHERE ir.source_ref_id ~ '^[0-9a-f-]{36}$' AND ir.template_id IS NULL
+ WHERE ir.source_ref_id ~ '^[0-9a-f-]{36}$' AND ir.voucher_template_id IS NULL
    AND md.id = ir.source_ref_id::uuid AND mp.voucher_template_id IS NOT NULL;
 
 -- 4c: mission — source_ref_id → mission_assignments.id → mission_id
 --     → reward_missions.reward_voucher_template_ids[1] (2-hop)
 UPDATE issued_rewards ir
-   SET template_id = (rm.reward_voucher_template_ids)[1]::uuid
+   SET voucher_template_id = (rm.reward_voucher_template_ids)[1]::uuid
   FROM mission_assignments ma
   JOIN reward_missions     rm ON rm.id = ma.mission_id
- WHERE ir.source_ref_id ~ '^[0-9a-f-]{36}$' AND ir.template_id IS NULL
+ WHERE ir.source_ref_id ~ '^[0-9a-f-]{36}$' AND ir.voucher_template_id IS NULL
    AND ma.id = ir.source_ref_id::uuid
    AND rm.reward_voucher_template_ids IS NOT NULL
    AND array_length(rm.reward_voucher_template_ids, 1) > 0;
@@ -148,9 +152,9 @@ UPDATE issued_rewards ir
 --     / removed mission). Conservative title + discount_type + value
 --     match against an active non-bean-shop template.
 UPDATE issued_rewards ir
-   SET template_id = t.id
+   SET voucher_template_id = t.id
   FROM voucher_templates t
- WHERE ir.brand_id = 'brand-celsius' AND ir.status = 'active' AND ir.template_id IS NULL
+ WHERE ir.brand_id = 'brand-celsius' AND ir.status = 'active' AND ir.voucher_template_id IS NULL
    AND t.brand_id = 'brand-celsius' AND t.is_active = true AND t.points_cost IS NULL
    AND t.title = ir.title AND t.discount_type = ir.discount_type
    AND ((t.discount_value IS NULL AND ir.discount_value IS NULL) OR (t.discount_value = ir.discount_value));
@@ -158,7 +162,7 @@ UPDATE issued_rewards ir
 -- ── Acceptance gates (each returns 0 on success) ─────────────────────
 -- A: SELECT COUNT(*) FROM voucher_templates WHERE brand_id='brand-celsius' AND is_active AND scope IS NULL;          -- 0
 -- B: 3 voucher_templates rows with points_cost IS NOT NULL.                                                          -- 3
--- C: SELECT COUNT(*) FROM issued_rewards WHERE brand_id='brand-celsius' AND status='active' AND template_id IS NULL; -- 0
+-- C: SELECT COUNT(*) FROM issued_rewards WHERE brand_id='brand-celsius' AND status='active' AND voucher_template_id IS NULL; -- 0
 -- D: 3 catalog redemptions (reward_id set) linked to a template.                                                     -- 3
 -- E: 0 issued_rewards.template_id values that don't resolve to a voucher_templates row.                              -- 0
 --
