@@ -279,28 +279,184 @@ export async function fetchPrinterConfigs(outletId: string) {
   return data ?? [];
 }
 
-export async function fetchOpenOrders(outletId: string) {
+// ─── Web QR-dine-in orders surfaced into the POS panels ──────────
+//
+// QR-table orders come from the customer PWA (apps/order) and live in
+// the `orders` / `order_items` tables — separate from POS-register orders
+// in `pos_orders`. Fetch the web dine-in rows here and normalize each into
+// the same shape POS rows have, so the existing open-orders + KDS panel
+// UI renders them with no further change. The kitchen-docket printer
+// (apps/pos/src/lib/use-pickup-printer.ts) is the back-of-house path;
+// this is the front-of-house digital queue.
+
+// Map web orders.status → pos_orders.status enum so the existing UI's
+// status branching (open / sent_to_kitchen / ready / ...) keeps working.
+const WEB_TO_POS_STATUS: Record<string, string> = {
+  paid:            "sent_to_kitchen",
+  sent_to_kitchen: "sent_to_kitchen",
+  preparing:       "sent_to_kitchen",
+  ready:           "ready",
+  completed:       "completed",
+  cancelled:       "cancelled",
+  failed:          "failed",
+};
+
+function webStatusesFor(posStatuses: string[]): string[] {
+  const out = new Set<string>();
+  for (const [web, pos] of Object.entries(WEB_TO_POS_STATUS)) {
+    if (posStatuses.includes(pos)) out.add(web);
+  }
+  return Array.from(out);
+}
+
+type WebOrderItemRow = {
+  id: string;
+  order_id: string;
+  product_id: string | null;
+  product_name: string | null;
+  variant_id: string | null;
+  variant_name: string | null;
+  quantity: number;
+  modifiers: unknown;
+};
+
+type WebOrderRow = {
+  id: string;
+  order_number: string;
+  store_id: string;
+  status: string;
+  order_type: string | null;
+  table_number: string | null;
+  subtotal: number | null;
+  sst_amount: number | null;
+  discount_amount: number | null;
+  reward_discount_amount: number | null;
+  reward_id: string | null;
+  reward_name: string | null;
+  voucher_code: string | null;
+  total: number | null;
+  customer_phone: string | null;
+  customer_name: string | null;
+  loyalty_phone: string | null;
+  loyalty_points_earned: number | null;
+  notes: string | null;
+  created_at: string;
+  order_items?: WebOrderItemRow[];
+};
+
+async function fetchWebDineInOrders(outletId: string, posStatuses: string[]) {
+  const webStatuses = webStatusesFor(posStatuses);
+  if (webStatuses.length === 0) return [];
   const { data, error } = await supabase
-    .from("pos_orders")
-    .select("*, pos_order_items(*)")
-    .eq("outlet_id", outletId)
-    .in("status", ["open", "sent_to_kitchen"])
+    .from("orders")
+    .select("*, order_items(*)")
+    .eq("store_id", outletId)
+    .eq("order_type", "dine_in")
+    .in("status", webStatuses)
     .order("created_at", { ascending: false });
-  if (error) throw error;
-  return data ?? [];
+  if (error) {
+    console.warn("[fetchWebDineInOrders]", error.message);
+    return [];
+  }
+  return ((data ?? []) as WebOrderRow[]).map((r) => ({
+    id:                     r.id,
+    order_number:           r.order_number,
+    branch_id:              r.store_id,
+    register_id:            null,
+    shift_id:               null,
+    employee_id:            null,
+    source:                 "qr_dine_in",
+    order_type:             "dine_in",
+    status:                 WEB_TO_POS_STATUS[r.status] ?? "sent_to_kitchen",
+    table_number:           r.table_number,
+    queue_number:           null,
+    subtotal:               r.subtotal ?? 0,
+    sst_amount:             r.sst_amount ?? 0,
+    service_charge:         0,
+    discount_amount:        r.discount_amount ?? 0,
+    rounding_amount:        0,
+    total:                  r.total ?? 0,
+    customer_phone:         r.customer_phone,
+    customer_name:          r.customer_name,
+    loyalty_phone:          r.loyalty_phone,
+    loyalty_points_earned:  r.loyalty_points_earned ?? 0,
+    reward_id:              r.reward_id,
+    reward_name:            r.reward_name,
+    reward_discount_amount: r.reward_discount_amount ?? 0,
+    voucher_code:           r.voucher_code,
+    cancellation_reason:    null,
+    notes:                  r.notes,
+    created_at:             r.created_at,
+    updated_at:             r.created_at,
+    pos_order_items: (r.order_items ?? []).map((it) => ({
+      id:                 it.id,
+      order_id:           it.order_id,
+      product_id:         it.product_id,
+      product_name:       it.product_name,
+      variant_id:         it.variant_id ?? null,
+      variant_name:       it.variant_name,
+      quantity:           it.quantity,
+      unit_price:         0,
+      modifiers:          it.modifiers ?? [],
+      modifier_total:     0,
+      discount_amount:    0,
+      tax_amount:         0,
+      item_total:         0,
+      notes:              null,
+      kitchen_station:    null,
+      kitchen_status:     "pending",
+      sent_to_kitchen_at: null,
+      created_at:         r.created_at,
+    })),
+  }));
+}
+
+export async function fetchOpenOrders(outletId: string) {
+  const [posRes, webRows] = await Promise.all([
+    supabase
+      .from("pos_orders")
+      .select("*, pos_order_items(*)")
+      .eq("outlet_id", outletId)
+      .in("status", ["open", "sent_to_kitchen"])
+      .order("created_at", { ascending: false }),
+    fetchWebDineInOrders(outletId, ["open", "sent_to_kitchen"]),
+  ]);
+  if (posRes.error) throw posRes.error;
+  const combined = [
+    ...((posRes.data ?? []) as unknown[]),
+    ...(webRows as unknown[]),
+  ];
+  combined.sort((a, b) => {
+    const aT = new Date((a as { created_at: string }).created_at).getTime();
+    const bT = new Date((b as { created_at: string }).created_at).getTime();
+    return bT - aT;
+  });
+  return combined;
 }
 
 // ─── KDS (Realtime) ────────────────────────────────────────
 
 export async function fetchKDSOrders(outletId: string) {
-  const { data, error } = await supabase
-    .from("pos_orders")
-    .select("*, pos_order_items(*)")
-    .eq("outlet_id", outletId)
-    .in("status", ["sent_to_kitchen", "ready"])
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return data ?? [];
+  const [posRes, webRows] = await Promise.all([
+    supabase
+      .from("pos_orders")
+      .select("*, pos_order_items(*)")
+      .eq("outlet_id", outletId)
+      .in("status", ["sent_to_kitchen", "ready"])
+      .order("created_at", { ascending: true }),
+    fetchWebDineInOrders(outletId, ["sent_to_kitchen", "ready"]),
+  ]);
+  if (posRes.error) throw posRes.error;
+  const combined = [
+    ...((posRes.data ?? []) as unknown[]),
+    ...(webRows as unknown[]),
+  ];
+  combined.sort((a, b) => {
+    const aT = new Date((a as { created_at: string }).created_at).getTime();
+    const bT = new Date((b as { created_at: string }).created_at).getTime();
+    return aT - bT;
+  });
+  return combined;
 }
 
 export async function updateKitchenItemStatus(itemId: string, status: string) {
@@ -325,6 +481,18 @@ export function subscribeToKDSOrders(outletId: string, callback: () => void) {
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "pos_order_items" },
+      callback
+    )
+    // Also wake the panel when a web QR-dine-in order lands or
+    // changes status for this outlet (apps/order writes to `orders`).
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "orders", filter: `store_id=eq.${outletId}` },
+      callback
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "order_items" },
       callback
     )
     .subscribe();
