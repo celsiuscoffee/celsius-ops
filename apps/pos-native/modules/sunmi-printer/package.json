@@ -1,0 +1,7 @@
+{
+  "name": "sunmi-printer",
+  "version": "0.1.0",
+  "description": "Local Expo module — SUNMI PrinterX SDK bridge for the D3 built-in 80mm thermal printer.",
+  "main": "index.ts",
+  "private": true
+}

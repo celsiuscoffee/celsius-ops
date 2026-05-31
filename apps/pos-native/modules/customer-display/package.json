@@ -1,0 +1,7 @@
+{
+  "name": "customer-display",
+  "version": "0.1.0",
+  "description": "Local Expo module — Android Presentation bridge for the SUNMI D3 secondary customer-facing display.",
+  "main": "index.ts",
+  "private": true
+}
