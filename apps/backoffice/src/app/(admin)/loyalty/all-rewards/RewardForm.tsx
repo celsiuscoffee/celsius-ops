@@ -49,6 +49,10 @@ export type FormValue = {
   multiplier_value: number | null;
   bogo_buy_qty: number;
   bogo_free_qty: number;
+  /** combo: the bundle's fixed total in SEN (discount = bundle − this). */
+  combo_price_sen: number | null;
+  /** override_price: the single eligible item's fixed price in SEN. */
+  override_price_sen: number | null;
   scope: Scope;
   target_ids: string[];
   modifier_filter: Record<string, string>;
@@ -74,6 +78,8 @@ const EMPTY: FormValue = {
   multiplier_value: null,
   bogo_buy_qty: 1,
   bogo_free_qty: 1,
+  combo_price_sen: null,
+  override_price_sen: null,
   scope: "categories",
   target_ids: [],
   modifier_filter: {},
@@ -169,6 +175,8 @@ export default function RewardForm({ mode, initial }: Props) {
         multiplier_value:   val.multiplier_value,
         bogo_buy_qty:       val.bogo_buy_qty,
         bogo_free_qty:      val.bogo_free_qty,
+        combo_price_sen:    val.combo_price_sen,
+        override_price_sen: val.override_price_sen,
         scope:              val.scope,
         target_ids:         val.target_ids,
         validity_days:      val.validity_days,
@@ -344,6 +352,34 @@ export default function RewardForm({ mode, initial }: Props) {
             <Field label="Buy quantity"><input type="number" value={val.bogo_buy_qty} onChange={(e) => update("bogo_buy_qty", Number(e.target.value))} className="w-32 px-3 py-2 text-sm border border-slate-200 rounded-lg" /></Field>
             <Field label="Free quantity"><input type="number" value={val.bogo_free_qty} onChange={(e) => update("bogo_free_qty", Number(e.target.value))} className="w-32 px-3 py-2 text-sm border border-slate-200 rounded-lg" /></Field>
           </>
+        )}
+
+        {val.discount_type === "combo" && (
+          <Field label="Combo price" help="Bundle total. Discount = (one of each required product) − this. Set 'Applies to' = Specific products and pick the items that must ALL be in the cart.">
+            <Prefix unit="RM">
+              <input
+                type="number" step={0.1}
+                value={val.combo_price_sen != null ? val.combo_price_sen / 100 : ""}
+                onChange={(e) => update("combo_price_sen", e.target.value === "" ? null : Math.round(Number(e.target.value) * 100))}
+                placeholder="e.g. 12.00"
+              />
+            </Prefix>
+            <Help>Stored as sen (e.g. 12.00 → 1200).</Help>
+          </Field>
+        )}
+
+        {val.discount_type === "override_price" && (
+          <Field label="Override price" help="The single eligible item is repriced to this fixed price. Use 'Applies to' below to scope which item(s) qualify.">
+            <Prefix unit="RM">
+              <input
+                type="number" step={0.1}
+                value={val.override_price_sen != null ? val.override_price_sen / 100 : ""}
+                onChange={(e) => update("override_price_sen", e.target.value === "" ? null : Math.round(Number(e.target.value) * 100))}
+                placeholder="e.g. 4.00"
+              />
+            </Prefix>
+            <Help>Stored as sen (e.g. 4.00 → 400).</Help>
+          </Field>
         )}
 
         {val.discount_type === "beans_multiplier" && (

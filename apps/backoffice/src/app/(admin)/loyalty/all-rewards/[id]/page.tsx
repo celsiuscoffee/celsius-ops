@@ -21,6 +21,8 @@ type ApiRow = {
   min_order_value: number | null;
   bogo_buy_qty: number | null;
   bogo_free_qty: number | null;
+  combo_price_sen: number | null;
+  override_price_sen: number | null;
   multiplier_value: number | null;
   expires_days: number | null;
   triggers: { type: TriggerType; label: string }[];
@@ -54,6 +56,8 @@ export default function EditRewardPage() {
           multiplier_value: row.multiplier_value,
           bogo_buy_qty: row.bogo_buy_qty ?? 1,
           bogo_free_qty: row.bogo_free_qty ?? 1,
+          combo_price_sen: row.combo_price_sen ?? null,
+          override_price_sen: row.override_price_sen ?? null,
           scope: row.scope,
           target_ids: row.target_ids,
           modifier_filter: {},

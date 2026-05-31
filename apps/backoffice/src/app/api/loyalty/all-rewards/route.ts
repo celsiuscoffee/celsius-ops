@@ -51,6 +51,8 @@ export type RewardRow = {
   min_order_value: number | null;
   bogo_buy_qty: number | null;
   bogo_free_qty: number | null;
+  combo_price_sen: number | null;
+  override_price_sen: number | null;
   multiplier_value: number | null;
   /** Bean-Points cost. NULL for templates with no shop trigger;
    *  populated when origin='catalog' or when a points_shop trigger
@@ -84,6 +86,8 @@ type VoucherTemplateRow = {
   points_cost: number | null;
   bogo_buy_qty: number | null;
   bogo_free_qty: number | null;
+  combo_price_sen: number | null;
+  override_price_sen: number | null;
 };
 
 type MissionRow = {
@@ -152,7 +156,7 @@ export async function GET(request: NextRequest) {
     supabaseAdmin
       .from("voucher_templates")
       .select(
-        "id, title, description, icon, discount_type, discount_value, max_discount_value, min_order_value, multiplier_value, applicable_categories, applicable_products, free_product_ids, free_product_name, is_active, validity_days, updated_at, points_cost, bogo_buy_qty, bogo_free_qty",
+        "id, title, description, icon, discount_type, discount_value, max_discount_value, min_order_value, multiplier_value, applicable_categories, applicable_products, free_product_ids, free_product_name, is_active, validity_days, updated_at, points_cost, bogo_buy_qty, bogo_free_qty, combo_price_sen, override_price_sen",
       )
       .eq("brand_id", brandId),
     supabaseAdmin
@@ -280,6 +284,8 @@ export async function GET(request: NextRequest) {
       min_order_value: numOrNull(t.min_order_value),
       bogo_buy_qty: t.bogo_buy_qty ?? null,
       bogo_free_qty: t.bogo_free_qty ?? null,
+      combo_price_sen: t.combo_price_sen ?? null,
+      override_price_sen: t.override_price_sen ?? null,
       multiplier_value: numOrNull(t.multiplier_value),
       points_cost: t.points_cost ?? null,
       triggers,
@@ -328,6 +334,8 @@ type CreateBody = {
   // type-specific knobs
   bogo_buy_qty?: number;
   bogo_free_qty?: number;
+  combo_price_sen?: number | null;
+  override_price_sen?: number | null;
   // theming / lifecycle
   category?: string;
   validity_days?: number;
@@ -365,6 +373,10 @@ export async function POST(request: NextRequest) {
       max_discount_value:    body.max_discount_value ?? null,
       min_order_value:       body.min_order_value ?? null,
       multiplier_value:      body.multiplier_value ?? null,
+      bogo_buy_qty:          body.bogo_buy_qty ?? null,
+      bogo_free_qty:         body.bogo_free_qty ?? null,
+      combo_price_sen:       body.combo_price_sen ?? null,
+      override_price_sen:    body.override_price_sen ?? null,
       applicable_categories,
       applicable_products,
       validity_days:         body.validity_days ?? 30,
@@ -411,6 +423,10 @@ export async function PATCH(request: NextRequest) {
   if (body.max_discount_value !== undefined) update.max_discount_value = body.max_discount_value;
   if (body.min_order_value !== undefined) update.min_order_value    = body.min_order_value;
   if (body.multiplier_value !== undefined) update.multiplier_value  = body.multiplier_value;
+  if (body.bogo_buy_qty    !== undefined) update.bogo_buy_qty       = body.bogo_buy_qty;
+  if (body.bogo_free_qty   !== undefined) update.bogo_free_qty      = body.bogo_free_qty;
+  if (body.combo_price_sen !== undefined) update.combo_price_sen    = body.combo_price_sen;
+  if (body.override_price_sen !== undefined) update.override_price_sen = body.override_price_sen;
   if (body.validity_days   !== undefined) update.validity_days      = body.validity_days;
   if (body.stacks_with_beans !== undefined) update.stacks_with_beans = body.stacks_with_beans;
   if (body.stacks_with_other !== undefined) update.stacks_with_other = body.stacks_with_other;
