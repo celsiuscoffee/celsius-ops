@@ -10,10 +10,12 @@
 // spec), this becomes the only Rewards landing.
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Search, Plus, Filter, MoreHorizontal, Download, AlertCircle,
   Coins, Target, Gift, Cake, Crown, Megaphone, Hand, Ticket, Sparkles,
-  Coffee, Percent, Tag,
+  Coffee, Percent, Tag, Pencil, Copy, PauseCircle, PlayCircle, Trash2,
 } from "lucide-react";
 import type { RewardRow, TriggerType } from "@/app/api/loyalty/all-rewards/route";
 
@@ -115,9 +117,12 @@ function pickRewardIcon(r: RewardRow) {
 // ─── Page ───────────────────────────────────────────────────────
 
 export default function AllRewardsPage() {
+  const router = useRouter();
   const [rows, setRows] = useState<RewardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionsOpen, setActionsOpen] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   // Filter state
   const [search, setSearch]               = useState("");
@@ -126,25 +131,84 @@ export default function AllRewardsPage() {
   const [statusFilter, setStatusFilter]   = useState<Set<StatusKey>>(new Set());
   const [sort, setSort]                   = useState<SortKey>("updated");
 
-  useEffect(() => {
-    let cancelled = false;
+  async function load() {
     setLoading(true);
     setError(null);
-    fetch(`/api/loyalty/all-rewards?brand_id=${BRAND_ID}`, { credentials: "include" })
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.text();
-          throw new Error(`HTTP ${res.status} — ${body.slice(0, 120)}`);
-        }
-        const json = await res.json();
-        if (!cancelled) setRows(json.rows ?? []);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load rewards");
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
+    try {
+      const res = await fetch(`/api/loyalty/all-rewards?brand_id=${BRAND_ID}`, { credentials: "include" });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`HTTP ${res.status} — ${body.slice(0, 120)}`);
+      }
+      const json = await res.json();
+      setRows(json.rows ?? []);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load rewards");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  // ─── Row actions ─────────────────────────────────────────────
+  function onRowClick(r: RewardRow) {
+    // Catalog rows (legacy `rewards` table) keep their existing
+    // Points Shop editor until the merge ships. Template rows go to
+    // the unified editor.
+    if (r.origin === "catalog") {
+      router.push("/loyalty/rewards");
+    } else {
+      router.push(`/loyalty/all-rewards/${r.id}`);
+    }
+  }
+
+  async function togglePause(r: RewardRow) {
+    if (r.origin === "catalog") {
+      alert("Pause for legacy catalog rows — please use the Points Shop page until the catalog merge ships.");
+      return;
+    }
+    setBusyId(r.id);
+    try {
+      const res = await fetch(`/api/loyalty/all-rewards?id=${r.id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: !r.is_active }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      await load();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusyId(null); setActionsOpen(null);
+    }
+  }
+
+  async function archive(r: RewardRow) {
+    if (!confirm(`Archive "${r.title}"? It will be paused and hidden from active filters. Existing issued vouchers remain valid.`)) return;
+    if (r.origin === "catalog") {
+      alert("Archive for legacy catalog rows — please use the Points Shop page until the catalog merge ships.");
+      return;
+    }
+    setBusyId(r.id);
+    try {
+      const res = await fetch(`/api/loyalty/all-rewards?id=${r.id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      await load();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusyId(null); setActionsOpen(null);
+    }
+  }
+
+  // Close action menu on outside click
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const close = () => setActionsOpen(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [actionsOpen]);
 
   // ─── Per-filter counts (compute on full set, not the filtered subset) ─
   const counts = useMemo(() => {
@@ -244,9 +308,9 @@ export default function AllRewardsPage() {
           <button className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50">
             <Download className="w-4 h-4" /> Export
           </button>
-          <button className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800">
+          <Link href="/loyalty/all-rewards/new" className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800">
             <Plus className="w-4 h-4" /> New Reward
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -376,8 +440,9 @@ export default function AllRewardsPage() {
                 const Icon = pickRewardIcon(r);
                 const dtMeta = DISCOUNT_META[r.discount_type ?? ""] ?? { label: r.discount_type ?? "—", className: "bg-slate-50 text-slate-600 border-slate-200" };
                 const redemptionPct = r.issued_30d > 0 ? Math.round((r.used_30d / r.issued_30d) * 100) : 0;
+                const rowKey = `${r.origin}:${r.id}`;
                 return (
-                  <tr key={`${r.origin}:${r.id}`} className={`border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition ${!r.is_active ? "opacity-55" : ""}`}>
+                  <tr key={rowKey} className={`border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition cursor-pointer ${!r.is_active ? "opacity-55" : ""}`} onClick={() => onRowClick(r)}>
                     <td className="px-4 py-3">
                       <span className={`inline-block w-2 h-2 rounded-full ${r.is_active ? "bg-emerald-500" : "bg-slate-400"}`} title={r.is_active ? "Active" : "Paused"} />
                     </td>
@@ -430,10 +495,26 @@ export default function AllRewardsPage() {
                     <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-600">
                       {r.expires_days != null ? `${r.expires_days} days` : "—"}
                     </td>
-                    <td className="px-2 py-3">
-                      <button className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700">
+                    <td className="px-2 py-3 relative" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActionsOpen(actionsOpen === rowKey ? null : rowKey); }}
+                        disabled={busyId === r.id}
+                        className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700 disabled:opacity-50"
+                      >
                         <MoreHorizontal className="w-4 h-4" />
                       </button>
+                      {actionsOpen === rowKey && (
+                        <div className="absolute right-2 top-10 z-20 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]" onClick={(e) => e.stopPropagation()}>
+                          <ActionItem icon={Pencil} label="Edit" onClick={() => { setActionsOpen(null); onRowClick(r); }} disabled={r.origin === "catalog"} />
+                          {r.is_active ? (
+                            <ActionItem icon={PauseCircle} label="Pause" onClick={() => togglePause(r)} />
+                          ) : (
+                            <ActionItem icon={PlayCircle} label="Resume" onClick={() => togglePause(r)} />
+                          )}
+                          <div className="my-1 border-t border-slate-100" />
+                          <ActionItem icon={Trash2} label="Archive" onClick={() => archive(r)} danger />
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -448,6 +529,25 @@ export default function AllRewardsPage() {
 }
 
 // ─── Sub-components ─────────────────────────────────────────────
+
+function ActionItem({ icon: Icon, label, onClick, disabled = false, danger = false }: { icon: typeof Coins; label: string; onClick: () => void; disabled?: boolean; danger?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-left transition ${
+        disabled
+          ? "text-slate-300 cursor-not-allowed"
+          : danger
+            ? "text-rose-600 hover:bg-rose-50"
+            : "text-slate-700 hover:bg-slate-50"
+      }`}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </button>
+  );
+}
 
 function Stat({ n, label, dim = false }: { n: number | string; label: string; dim?: boolean }) {
   return (

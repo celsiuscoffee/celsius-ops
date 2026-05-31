@@ -355,3 +355,233 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ rows });
 }
+
+// ─── Write handlers ────────────────────────────────────────────────
+//
+// POST  /api/loyalty/all-rewards    → create template + trigger fan-out
+// PATCH /api/loyalty/all-rewards?id=… → update template fields
+// DELETE /api/loyalty/all-rewards?id=… → soft-delete (is_active=false)
+//
+// Trigger writes during the transition:
+//   • mystery       → INSERT mystery_pool
+//   • mission       → INSERT reward_missions
+//   • admin_push    → INSERT admin_claimables
+//   • birthday      → deferred (existing birthday config lives elsewhere)
+//   • tier_upgrade  → deferred
+//   • points_shop   → handled by setting `is_in_points_shop` flag for now;
+//                     real Bean-Points cost lives on legacy rewards table
+//                     until Commit 1 of the refactor lands
+//   • manual_grant  → no-op (every active template is grantable)
+
+type CreateBody = {
+  brand_id?: string;
+  // template fields
+  title: string;
+  description?: string;
+  icon?: string;
+  discount_type: string;
+  discount_value?: number | null;
+  max_discount_value?: number | null;
+  min_order_value?: number | null;
+  multiplier_value?: number | null;
+  // scope (canonical, mapped to legacy fields on write)
+  scope: "everything" | "products" | "categories";
+  target_ids?: string[];
+  // type-specific knobs
+  bogo_buy_qty?: number;
+  bogo_free_qty?: number;
+  // theming / lifecycle
+  category?: string;
+  validity_days?: number;
+  stacks_with_beans?: boolean;
+  stacks_with_other?: boolean;
+  is_active?: boolean;
+  // triggers — config per channel
+  triggers?: {
+    mystery?:      { weight: number; min_tier?: string | null; birthday_month_boost?: boolean; outcome_type?: string };
+    mission?:      { title: string; description: string; difficulty: string; goal: { type: string; value: number; period?: string }; cooldown_weeks?: number };
+    admin_push?:   { title: string; description: string; audience_label?: string; min_tier?: string | null; max_claims?: number | null; member_ids?: string[]; starts_at?: string | null; ends_at?: string | null };
+  };
+};
+
+export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
+
+  const body = (await request.json()) as CreateBody;
+  const brandId = body.brand_id ?? "brand-celsius";
+
+  if (!body.title || !body.discount_type || !body.scope) {
+    return NextResponse.json({ error: "title, discount_type, scope are required" }, { status: 400 });
+  }
+
+  // Map canonical scope + target_ids back to the legacy column trio.
+  // After Commit 1 of the refactor this collapses to a direct write.
+  const applicable_categories = body.scope === "categories" ? body.target_ids ?? null : null;
+  const applicable_products   = body.scope === "products"   ? body.target_ids ?? null : null;
+
+  const { data: tpl, error: tplErr } = await supabaseAdmin
+    .from("voucher_templates")
+    .insert({
+      brand_id:              brandId,
+      title:                 body.title,
+      description:           body.description ?? "",
+      icon:                  body.icon ?? "ticket",
+      category:              body.category ?? "discount",
+      discount_type:         body.discount_type,
+      discount_value:        body.discount_value ?? null,
+      max_discount_value:    body.max_discount_value ?? null,
+      min_order_value:       body.min_order_value ?? null,
+      multiplier_value:      body.multiplier_value ?? null,
+      applicable_categories,
+      applicable_products,
+      validity_days:         body.validity_days ?? 30,
+      stacks_with_beans:     body.stacks_with_beans ?? true,
+      stacks_with_other:     body.stacks_with_other ?? false,
+      is_active:             body.is_active ?? true,
+    })
+    .select()
+    .single();
+
+  if (tplErr || !tpl) {
+    return NextResponse.json({ error: tplErr?.message ?? "Failed to create template" }, { status: 500 });
+  }
+
+  const triggerErrors: string[] = [];
+
+  // ── Fan out triggers ──
+  if (body.triggers?.mystery) {
+    const m = body.triggers.mystery;
+    const { error } = await supabaseAdmin.from("mystery_pool").insert({
+      brand_id:               brandId,
+      label:                  body.title,
+      icon:                   body.icon ?? "gift",
+      voucher_template_id:    tpl.id,
+      weight:                 m.weight,
+      min_tier:               m.min_tier ?? null,
+      birthday_month_boost:   m.birthday_month_boost ?? false,
+      outcome_type:           m.outcome_type ?? "voucher",
+      is_active:              true,
+    });
+    if (error) triggerErrors.push(`mystery: ${error.message}`);
+  }
+
+  if (body.triggers?.mission) {
+    const m = body.triggers.mission;
+    const { error } = await supabaseAdmin.from("reward_missions").insert({
+      brand_id:                       brandId,
+      title:                          m.title,
+      description:                    m.description,
+      icon:                           body.icon ?? "target",
+      difficulty:                     m.difficulty,
+      goal:                           m.goal,
+      cooldown_weeks:                 m.cooldown_weeks ?? 1,
+      reward_voucher_template_ids:    [tpl.id],
+      reward_bonus_beans:             0,
+      is_active:                      true,
+      is_swap_eligible:               false,
+      starts_at:                      new Date().toISOString(),
+    });
+    if (error) triggerErrors.push(`mission: ${error.message}`);
+  }
+
+  if (body.triggers?.admin_push) {
+    const a = body.triggers.admin_push;
+    const { error } = await supabaseAdmin.from("admin_claimables").insert({
+      brand_id:               brandId,
+      title:                  a.title,
+      description:            a.description,
+      voucher_template_id:    tpl.id,
+      member_ids:             a.member_ids ?? [],
+      min_tier:               a.min_tier ?? null,
+      audience_label:         a.audience_label ?? null,
+      max_claims:             a.max_claims ?? null,
+      total_claimed:          0,
+      starts_at:              a.starts_at ?? new Date().toISOString(),
+      ends_at:                a.ends_at ?? null,
+      is_active:              true,
+    });
+    if (error) triggerErrors.push(`admin_push: ${error.message}`);
+  }
+
+  return NextResponse.json({
+    template: tpl,
+    trigger_warnings: triggerErrors,
+  });
+}
+
+export async function PATCH(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
+
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+  // Origin gate: legacy catalog rows have text ids ("reward-1", etc.) —
+  // we only update voucher_templates here. The legacy `rewards` table
+  // edits go through the existing Points Shop page until the merge.
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+    return NextResponse.json({
+      error: "Legacy catalog rows (rewards table) must be edited via the Points Shop page until the catalog merge ships.",
+    }, { status: 400 });
+  }
+
+  const body = (await request.json()) as Partial<CreateBody>;
+
+  const update: Record<string, unknown> = {};
+  if (body.title           !== undefined) update.title              = body.title;
+  if (body.description     !== undefined) update.description        = body.description ?? "";
+  if (body.icon            !== undefined) update.icon               = body.icon;
+  if (body.category        !== undefined) update.category           = body.category;
+  if (body.discount_type   !== undefined) update.discount_type      = body.discount_type;
+  if (body.discount_value  !== undefined) update.discount_value     = body.discount_value;
+  if (body.max_discount_value !== undefined) update.max_discount_value = body.max_discount_value;
+  if (body.min_order_value !== undefined) update.min_order_value    = body.min_order_value;
+  if (body.multiplier_value !== undefined) update.multiplier_value  = body.multiplier_value;
+  if (body.validity_days   !== undefined) update.validity_days      = body.validity_days;
+  if (body.stacks_with_beans !== undefined) update.stacks_with_beans = body.stacks_with_beans;
+  if (body.stacks_with_other !== undefined) update.stacks_with_other = body.stacks_with_other;
+  if (body.is_active       !== undefined) update.is_active          = body.is_active;
+  if (body.scope !== undefined) {
+    update.applicable_categories = body.scope === "categories" ? body.target_ids ?? null : null;
+    update.applicable_products   = body.scope === "products"   ? body.target_ids ?? null : null;
+  }
+  update.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabaseAdmin
+    .from("voucher_templates")
+    .update(update)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ template: data });
+}
+
+export async function DELETE(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
+
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+  // Soft-delete: flip is_active=false. We never hard-delete a template
+  // because issued_rewards rows reference it; deleting would orphan
+  // historical vouchers in customer wallets.
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+    return NextResponse.json({
+      error: "Legacy catalog rows must be archived via the Points Shop page until the catalog merge ships.",
+    }, { status: 400 });
+  }
+
+  const { error } = await supabaseAdmin
+    .from("voucher_templates")
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}
