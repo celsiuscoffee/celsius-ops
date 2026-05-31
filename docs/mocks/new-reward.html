@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Reward — Celsius Backoffice (mock)</title>
+<style>
+  /* ---- Celsius brand tokens ---- */
+  :root {
+    --bg:          #160800;  /* deepest espresso */
+    --surface:     #1F0F05;  /* card surface on espresso */
+    --surface-2:   #2A1411;  /* raised surface */
+    --border:      rgba(245, 243, 240, 0.10);
+    --border-hi:   rgba(245, 243, 240, 0.22);
+    --fg:          #F5F3F0;  /* cream */
+    --fg-dim:      rgba(245, 243, 240, 0.60);
+    --fg-muted:    rgba(245, 243, 240, 0.42);
+    --terracotta:  #A2492C;
+    --terracotta-2:#8E3A20;
+    --gold:        #FBBF24;
+    --peach:       #F4D3B0;
+    --danger:      #E5544B;
+    --shadow:      0 4px 24px rgba(0,0,0,0.45);
+    --radius:      14px;
+    --radius-sm:   10px;
+    --gap:         16px;
+    --font-display:Georgia, 'Times New Roman', serif;
+    --font-body:   -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.5; }
+  body { min-height: 100vh; }
+
+  /* ---- Top bar ---- */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .crumbs { display: flex; gap: 8px; align-items: center; color: var(--fg-dim); font-size: 13px; }
+  .crumbs a { color: var(--fg-dim); text-decoration: none; }
+  .crumbs a:hover { color: var(--gold); }
+  .crumbs .sep { opacity: 0.4; }
+  .crumbs .here { color: var(--fg); }
+  .top-actions { display: flex; gap: 10px; }
+
+  /* ---- Layout ---- */
+  .wrap { max-width: 920px; margin: 32px auto; padding: 0 28px 80px; }
+  h1 {
+    font-family: var(--font-display); font-weight: 700; font-style: italic;
+    font-size: 32px; letter-spacing: -0.01em; margin: 0 0 28px;
+    color: var(--gold);
+  }
+
+  /* ---- Card ---- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 18px;
+    overflow: hidden;
+  }
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .card-head .title {
+    font-family: var(--font-display); font-weight: 700;
+    font-size: 18px; color: var(--fg);
+  }
+  .card-head .sub { font-size: 12px; color: var(--fg-muted); margin-top: 2px; }
+  .card-head .left { display: flex; align-items: center; gap: 12px; }
+  .card-head .num {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--terracotta);
+    color: #fff; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+  }
+  .card-body { padding: 20px; }
+
+  /* ---- Form rows ---- */
+  .row { display: grid; grid-template-columns: 200px 1fr; gap: 18px; align-items: start; padding: 12px 0; border-bottom: 1px dashed var(--border); }
+  .row:last-child { border-bottom: none; }
+  .row .label { font-size: 12px; color: var(--fg-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; padding-top: 8px; }
+  .row .label .req { color: var(--terracotta); margin-left: 2px; }
+  .row .field { display: flex; flex-direction: column; gap: 6px; }
+  .row .help { font-size: 12px; color: var(--fg-muted); }
+
+  /* ---- Inputs ---- */
+  input[type=text], input[type=number], input[type=date], select, textarea {
+    background: var(--surface-2);
+    border: 1px solid var(--border-hi);
+    color: var(--fg);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px;
+    font-family: inherit; font-size: 14px;
+    outline: none; transition: border-color 0.15s;
+    width: 100%;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--gold);
+  }
+  textarea { min-height: 60px; resize: vertical; }
+
+  .input-prefix {
+    display: grid; grid-template-columns: auto 1fr; align-items: center;
+    background: var(--surface-2);
+    border: 1px solid var(--border-hi);
+    border-radius: var(--radius-sm);
+  }
+  .input-prefix .pre {
+    padding: 0 12px; color: var(--fg-muted); font-size: 13px;
+    border-right: 1px solid var(--border);
+  }
+  .input-prefix input {
+    border: none; background: transparent; padding: 9px 12px;
+  }
+  .input-prefix input:focus { border: none; outline: none; }
+
+  /* ---- Switches ---- */
+  .switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .switch input { display: none; }
+  .switch .track {
+    width: 38px; height: 22px; border-radius: 999px; background: var(--surface-2);
+    border: 1px solid var(--border-hi); position: relative; transition: 0.15s;
+  }
+  .switch .track::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; border-radius: 50%; background: var(--fg-dim);
+    transition: 0.15s;
+  }
+  .switch input:checked + .track { background: var(--gold); border-color: var(--gold); }
+  .switch input:checked + .track::after { left: 18px; background: #1A0200; }
+  .switch .lbl { font-size: 13px; color: var(--fg); }
+
+  /* ---- Buttons ---- */
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; border: 1px solid transparent; transition: 0.15s; text-transform: uppercase; letter-spacing: 0.05em; }
+  .btn-primary { background: var(--gold); color: #1A0200; }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-ghost { background: transparent; color: var(--fg-dim); border-color: var(--border-hi); }
+  .btn-ghost:hover { color: var(--fg); border-color: var(--fg-dim); }
+  .btn-danger { background: transparent; color: var(--danger); border-color: rgba(229, 84, 75, 0.3); }
+  .btn-danger:hover { border-color: var(--danger); }
+
+  /* ---- Radio segmented ---- */
+  .segment { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border-hi); border-radius: 999px; padding: 3px; gap: 2px; }
+  .segment input { display: none; }
+  .segment label { padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--fg-dim); transition: 0.15s; }
+  .segment input:checked + label { background: var(--gold); color: #1A0200; }
+  .segment label:hover { color: var(--fg); }
+
+  /* ---- Chip multi-select ---- */
+  .chips {
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 9px 12px;
+    background: var(--surface-2); border: 1px solid var(--border-hi);
+    border-radius: var(--radius-sm); min-height: 42px; align-items: center;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--terracotta);
+    color: #fff;
+    padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  }
+  .chip .x { cursor: pointer; opacity: 0.7; font-size: 14px; line-height: 1; }
+  .chip .x:hover { opacity: 1; }
+  .chips .placeholder { color: var(--fg-muted); font-size: 13px; }
+
+  /* ---- Trigger checkbox card ---- */
+  .triggers { display: flex; flex-direction: column; gap: 10px; }
+  .trig {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    transition: 0.15s;
+  }
+  .trig.on { border-color: var(--gold); background: rgba(251, 191, 36, 0.05); }
+  .trig-head { display: flex; align-items: center; gap: 12px; cursor: pointer; user-select: none; }
+  .trig-head input { display: none; }
+  .trig-head .checkbox {
+    width: 20px; height: 20px; border-radius: 5px; border: 1.5px solid var(--border-hi);
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: 0.15s;
+  }
+  .trig.on .trig-head .checkbox { background: var(--gold); border-color: var(--gold); }
+  .trig.on .trig-head .checkbox::after { content: "✓"; color: #1A0200; font-weight: 800; font-size: 13px; }
+  .trig-head .icon { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; background: rgba(251, 191, 36, 0.10); color: var(--gold); border-radius: 6px; font-size: 15px; }
+  .trig-head .name { font-weight: 700; font-size: 14px; }
+  .trig-head .desc { font-size: 12px; color: var(--fg-dim); }
+  .trig-body { padding: 14px 0 0 32px; display: none; flex-direction: column; gap: 10px; }
+  .trig.on .trig-body { display: flex; }
+  .trig-row { display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: center; }
+  .trig-row .l { font-size: 12px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+
+  /* ---- Sticky footer ---- */
+  .sticky-actions {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(180deg, transparent 0%, var(--bg) 40%);
+    padding: 24px 28px;
+    display: flex; justify-content: flex-end; gap: 12px;
+  }
+  .sticky-actions .inner { max-width: 920px; width: 100%; display: flex; justify-content: flex-end; gap: 12px; }
+
+  /* ---- Live-preview pill at the top ---- */
+  .preview-banner {
+    display: flex; align-items: center; gap: 14px; padding: 14px 18px;
+    background: rgba(251, 191, 36, 0.07);
+    border: 1px solid rgba(251, 191, 36, 0.25);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    font-size: 13px; color: var(--peach);
+  }
+  .preview-banner .badge { background: var(--gold); color: #1A0200; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .schema-hint { font-size: 11px; color: var(--fg-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; padding-top: 4px; }
+
+  /* ---- Show/hide by discount type ---- */
+  .only-flat, .only-percent, .only-bogo, .only-combo, .only-multiplier, .only-override { display: none; }
+  body.dt-flat .only-flat,
+  body.dt-percent .only-percent,
+  body.dt-bogo .only-bogo,
+  body.dt-combo .only-combo,
+  body.dt-override_price .only-override,
+  body.dt-beans_multiplier .only-multiplier { display: grid; }
+  body.dt-free_item .only-free,
+  body.dt-free_upgrade .only-free { display: grid; }
+
+  /* ---- Show/hide by scope ---- */
+  .only-products, .only-categories { display: none; }
+  body.scope-products .only-products,
+  body.scope-categories .only-categories { display: flex; }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 720px) {
+    .row { grid-template-columns: 1fr; gap: 6px; }
+    .trig-row { grid-template-columns: 1fr; }
+    .wrap { padding: 0 16px 80px; }
+    .topbar { padding: 12px 16px; }
+  }
+</style>
+</head>
+<body class="dt-free_item scope-categories">
+
+<div class="topbar">
+  <div class="crumbs">
+    <a href="#">Dashboard</a><span class="sep">›</span>
+    <a href="#">Rewards</a><span class="sep">›</span>
+    <span class="here">New Reward</span>
+  </div>
+  <div class="top-actions">
+    <button class="btn btn-ghost">Cancel</button>
+    <button class="btn btn-primary">Save Reward</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <h1>New Reward</h1>
+
+  <div class="preview-banner">
+    <span class="badge">Mock</span>
+    <div>This page replaces the 5 separate channel pages — Points Shop / Challenges / Mystery Pool / Birthday Treats / Admin Claimables — with one unified form. Toggle the triggers below to see channel-specific config inline.</div>
+  </div>
+
+  <!-- 1. Enable -->
+  <div class="card">
+    <div class="card-head">
+      <div class="left">
+        <span class="num">1</span>
+        <div>
+          <div class="title">Enable</div>
+          <div class="sub">Reward is active and visible to customers when this is on.</div>
+        </div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" checked>
+        <span class="track"></span>
+        <span class="lbl">Enabled</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- 2. The Voucher (template) -->
+  <div class="card">
+    <div class="card-head">
+      <div class="left">
+        <span class="num">2</span>
+        <div>
+          <div class="title">The Voucher</div>
+          <div class="sub">What the customer actually gets. Same shape for every reward.</div>
+        </div>
+      </div>
+      <div class="schema-hint">→ <code>voucher_templates</code></div>
+    </div>
+    <div class="card-body">
+
+      <div class="row">
+        <div class="label">Name <span class="req">*</span></div>
+        <div class="field">
+          <input type="text" value="Free Drink" placeholder="e.g. Free Drink, RM5 Off, 2× Beans Boost">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Description</div>
+        <div class="field">
+          <textarea placeholder="Optional. Shown on the wallet card subline.">Any drink, on us. Cheapest eligible line is on the house.</textarea>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Icon</div>
+        <div class="field">
+          <select>
+            <option>☕ Coffee</option>
+            <option>🎁 Gift</option>
+            <option>%  Percent</option>
+            <option>🥐 Croissant</option>
+            <option>🍰 Cake</option>
+            <option>✨ Sparkle</option>
+            <option>🎫 Ticket</option>
+          </select>
+          <div class="help">Picked from the same Lucide set the customer wallet uses.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Discount type <span class="req">*</span></div>
+        <div class="field">
+          <select id="discount-type">
+            <option value="free_item" selected>Free item (cheapest eligible line)</option>
+            <option value="free_upgrade">Free upgrade (cheapest add-on)</option>
+            <option value="flat">Flat — RM off</option>
+            <option value="percent">Percent off</option>
+            <option value="bogo">Buy X get Y free (BOGO)</option>
+            <option value="combo">Combo — required set, override total</option>
+            <option value="override_price">Override price — single item, fixed price</option>
+            <option value="beans_multiplier">Beans multiplier (post-payment)</option>
+          </select>
+          <div class="help">Drives the discount math. The canonical 6 types — every reward uses one of these.</div>
+        </div>
+      </div>
+
+      <div class="row only-flat">
+        <div class="label">Discount value</div>
+        <div class="field">
+          <div class="input-prefix"><span class="pre">RM</span><input type="number" step="0.10" value="5.00"></div>
+          <div class="help">Stored in sen on the row (5.00 → 500).</div>
+        </div>
+      </div>
+      <div class="row only-percent">
+        <div class="label">Discount value</div>
+        <div class="field">
+          <div class="input-prefix"><span class="pre">%</span><input type="number" step="1" value="15"></div>
+        </div>
+      </div>
+      <div class="row only-percent">
+        <div class="label">Cap discount at</div>
+        <div class="field">
+          <div class="input-prefix"><span class="pre">RM</span><input type="number" step="0.10" placeholder="Optional"></div>
+          <div class="help"><code>max_discount_value</code>. Blank = no cap.</div>
+        </div>
+      </div>
+      <div class="row only-bogo">
+        <div class="label">Buy quantity</div>
+        <div class="field"><input type="number" value="1"></div>
+      </div>
+      <div class="row only-bogo">
+        <div class="label">Free quantity</div>
+        <div class="field"><input type="number" value="1"></div>
+      </div>
+      <div class="row only-combo">
+        <div class="label">Combo price</div>
+        <div class="field">
+          <div class="input-prefix"><span class="pre">RM</span><input type="number" step="0.10" value="18.00"></div>
+          <div class="help">All <em>target products</em> below must be in cart. The combined line total is replaced with this price.</div>
+        </div>
+      </div>
+      <div class="row only-override">
+        <div class="label">Override price</div>
+        <div class="field">
+          <div class="input-prefix"><span class="pre">RM</span><input type="number" step="0.10" value="5.00"></div>
+          <div class="help">Each eligible cart line's price is replaced with this. Best for happy-hour pricing, loss-leader items, or tier-locked single-item prices.</div>
+        </div>
+      </div>
+      <div class="row only-multiplier">
+        <div class="label">Multiplier</div>
+        <div class="field">
+          <div class="input-prefix"><span class="pre">×</span><input type="number" step="0.1" value="2.0"></div>
+          <div class="help">Beans awarded post-payment, applied to the after-discount subtotal.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Applies to <span class="req">*</span></div>
+        <div class="field">
+          <div class="segment" role="radiogroup">
+            <input type="radio" id="scope-everything" name="scope" value="everything">
+            <label for="scope-everything">Everything</label>
+            <input type="radio" id="scope-products" name="scope" value="products">
+            <label for="scope-products">Specific products</label>
+            <input type="radio" id="scope-categories" name="scope" value="categories" checked>
+            <label for="scope-categories">Categories</label>
+          </div>
+          <div class="help"><code>scope</code> — what the reward targets. Drives the eligibility filter at checkout.</div>
+        </div>
+      </div>
+
+      <div class="row only-products">
+        <div class="label">Target products</div>
+        <div class="field">
+          <div class="chips">
+            <span class="chip">Almond Croissant <span class="x">×</span></span>
+            <span class="placeholder">Type to search…</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row only-categories">
+        <div class="label">Target categories</div>
+        <div class="field">
+          <div class="chips">
+            <span class="chip">classic <span class="x">×</span></span>
+            <span class="chip">flavoured <span class="x">×</span></span>
+            <span class="chip">mocha <span class="x">×</span></span>
+            <span class="chip">fruit-tea <span class="x">×</span></span>
+            <span class="chip">gourmet-tea <span class="x">×</span></span>
+            <span class="chip">artisan-choc <span class="x">×</span></span>
+            <span class="chip">artisan-matcha <span class="x">×</span></span>
+            <span class="chip">mocktails <span class="x">×</span></span>
+            <span class="placeholder">Add category…</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Modifier filter</div>
+        <div class="field">
+          <div class="chips">
+            <span class="placeholder">Optional — e.g. {"size":"large"}. Add a modifier requirement…</span>
+          </div>
+          <div class="help">Only matches cart lines whose modifiers contain ALL listed key:value pairs. Today Celsius only has add-ons, no size groups — leave blank.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Min order value</div>
+        <div class="field">
+          <div class="input-prefix"><span class="pre">RM</span><input type="number" step="0.10" placeholder="Blank = no minimum"></div>
+          <div class="help">Cart subtotal must be ≥ this for the reward to fire.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 3. Triggers -->
+  <div class="card">
+    <div class="card-head">
+      <div class="left">
+        <span class="num">3</span>
+        <div>
+          <div class="title">How customers earn it</div>
+          <div class="sub">Pick one or more. Each checked option creates a trigger row. One template, many triggers.</div>
+        </div>
+      </div>
+      <div class="schema-hint">→ <code>voucher_triggers</code></div>
+    </div>
+    <div class="card-body">
+      <div class="triggers">
+
+        <label class="trig on" id="trig-points_shop">
+          <div class="trig-head">
+            <input type="checkbox" checked>
+            <span class="checkbox"></span>
+            <span class="icon">🪙</span>
+            <div>
+              <div class="name">Spend Beans (Points Shop)</div>
+              <div class="desc">Customer redeems with their beans balance.</div>
+            </div>
+          </div>
+          <div class="trig-body">
+            <div class="trig-row">
+              <div class="l">Cost (beans)</div>
+              <div><input type="number" value="300"></div>
+            </div>
+          </div>
+        </label>
+
+        <label class="trig" id="trig-mission">
+          <div class="trig-head">
+            <input type="checkbox">
+            <span class="checkbox"></span>
+            <span class="icon">🎯</span>
+            <div>
+              <div class="name">Complete a Challenge</div>
+              <div class="desc">Auto-issued when the member hits a progress goal.</div>
+            </div>
+          </div>
+          <div class="trig-body">
+            <div class="trig-row">
+              <div class="l">Goal type</div>
+              <div>
+                <select>
+                  <option>Spend RM in a week</option>
+                  <option>Order N drinks in a month</option>
+                  <option>Visit on N distinct days</option>
+                  <option>Order from N distinct outlets</option>
+                </select>
+              </div>
+            </div>
+            <div class="trig-row">
+              <div class="l">Goal value</div>
+              <div><input type="number" value="30"></div>
+            </div>
+            <div class="trig-row">
+              <div class="l">Period</div>
+              <div><select><option>7 days</option><option>14 days</option><option>30 days</option></select></div>
+            </div>
+            <div class="trig-row">
+              <div class="l">Difficulty</div>
+              <div><select><option>Easy</option><option selected>Medium</option><option>Hard</option></select></div>
+            </div>
+          </div>
+        </label>
+
+        <label class="trig" id="trig-mystery">
+          <div class="trig-head">
+            <input type="checkbox">
+            <span class="checkbox"></span>
+            <span class="icon">🎁</span>
+            <div>
+              <div class="name">Mystery Drop</div>
+              <div class="desc">Randomly drops as a Mystery Bag outcome on order placement.</div>
+            </div>
+          </div>
+          <div class="trig-body">
+            <div class="trig-row">
+              <div class="l">Weight</div>
+              <div><input type="number" value="10"><div class="help" style="margin-top:6px">Relative weight in the mystery pool. Higher = more likely.</div></div>
+            </div>
+            <div class="trig-row">
+              <div class="l">Min tier</div>
+              <div><select><option>Any</option><option>Silver+</option><option>Gold+</option><option>Platinum+</option></select></div>
+            </div>
+            <div class="trig-row">
+              <div class="l">Birthday boost</div>
+              <div><label class="switch"><input type="checkbox"><span class="track"></span><span class="lbl">Higher weight on member's birthday week</span></label></div>
+            </div>
+          </div>
+        </label>
+
+        <label class="trig on" id="trig-birthday">
+          <div class="trig-head">
+            <input type="checkbox" checked>
+            <span class="checkbox"></span>
+            <span class="icon">🎂</span>
+            <div>
+              <div class="name">On Birthday</div>
+              <div class="desc">Auto-issued by the birthday cron.</div>
+            </div>
+          </div>
+          <div class="trig-body">
+            <div class="trig-row">
+              <div class="l">Days before birthday</div>
+              <div><input type="number" value="0"><div class="help" style="margin-top:6px">0 = on the day. 7 = drops in their wallet a week before.</div></div>
+            </div>
+          </div>
+        </label>
+
+        <label class="trig" id="trig-tier_upgrade">
+          <div class="trig-head">
+            <input type="checkbox">
+            <span class="checkbox"></span>
+            <span class="icon">👑</span>
+            <div>
+              <div class="name">On Tier Upgrade</div>
+              <div class="desc">Awarded when a member crosses into a specific tier.</div>
+            </div>
+          </div>
+          <div class="trig-body">
+            <div class="trig-row">
+              <div class="l">Tier reached</div>
+              <div><select><option>Silver</option><option selected>Gold</option><option>Platinum</option><option>Black Card</option></select></div>
+            </div>
+          </div>
+        </label>
+
+        <label class="trig" id="trig-admin_push">
+          <div class="trig-head">
+            <input type="checkbox">
+            <span class="checkbox"></span>
+            <span class="icon">📣</span>
+            <div>
+              <div class="name">Admin Push (Claimable)</div>
+              <div class="desc">Admin queues for an audience; customer claims from the home banner.</div>
+            </div>
+          </div>
+          <div class="trig-body">
+            <div class="trig-row">
+              <div class="l">Audience</div>
+              <div>
+                <div class="chips">
+                  <span class="chip">vip <span class="x">×</span></span>
+                  <span class="chip">new-member <span class="x">×</span></span>
+                  <span class="placeholder">Add tag…</span>
+                </div>
+              </div>
+            </div>
+            <div class="trig-row">
+              <div class="l">Claim window</div>
+              <div>
+                <div style="display:flex; gap:8px;">
+                  <input type="date">
+                  <span style="align-self:center; color:var(--fg-muted);">to</span>
+                  <input type="date">
+                </div>
+              </div>
+            </div>
+          </div>
+        </label>
+
+        <label class="trig" id="trig-manual">
+          <div class="trig-head">
+            <input type="checkbox">
+            <span class="checkbox"></span>
+            <span class="icon">✋</span>
+            <div>
+              <div class="name">Manual Grant Only</div>
+              <div class="desc">No auto-issue. Used only when an admin explicitly grants this template to a specific member.</div>
+            </div>
+          </div>
+          <div class="trig-body">
+            <div class="help">No config — this just marks the template as eligible for direct admin grants on the Customer page.</div>
+          </div>
+        </label>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Limits -->
+  <div class="card">
+    <div class="card-head">
+      <div class="left">
+        <span class="num">4</span>
+        <div>
+          <div class="title">Limits</div>
+          <div class="sub">Inventory, cap per member, validity window, stacking rules.</div>
+        </div>
+      </div>
+      <div class="schema-hint">→ <code>voucher_templates</code></div>
+    </div>
+    <div class="card-body">
+
+      <div class="row">
+        <div class="label">Stock</div>
+        <div class="field">
+          <input type="number" placeholder="Blank = unlimited">
+          <div class="help">Total redemptions across all customers. Decrement on every mint.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Per-member cap</div>
+        <div class="field">
+          <input type="number" placeholder="Blank = unlimited">
+          <div class="help">How many times one member can earn / redeem this reward.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Valid from</div>
+        <div class="field">
+          <input type="date">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Valid until</div>
+        <div class="field">
+          <input type="date">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Voucher expiry</div>
+        <div class="field">
+          <div class="input-prefix"><span class="pre">days</span><input type="number" value="30"></div>
+          <div class="help">How long the issued voucher stays in the customer's wallet before expiring.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Stacks with beans</div>
+        <div class="field">
+          <label class="switch"><input type="checkbox" checked><span class="track"></span><span class="lbl">Earn beans on the discounted subtotal</span></label>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Stacks with other vouchers</div>
+        <div class="field">
+          <label class="switch"><input type="checkbox"><span class="track"></span><span class="lbl">Can be combined with other reward vouchers in the same cart</span></label>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div class="sticky-actions"><div class="inner">
+  <button class="btn btn-danger">Delete reward</button>
+  <button class="btn btn-ghost">Cancel</button>
+  <button class="btn btn-primary">Save Reward</button>
+</div></div>
+
+<script>
+  // Discount-type → show right value fields
+  const dtSel = document.getElementById('discount-type');
+  function applyDt() {
+    document.body.className = document.body.className.replace(/\bdt-[a-z_]+\b/g, '').trim();
+    document.body.classList.add('dt-' + dtSel.value);
+  }
+  dtSel.addEventListener('change', applyDt);
+  applyDt();
+
+  // Scope → show right target field
+  document.querySelectorAll('input[name="scope"]').forEach(r => {
+    r.addEventListener('change', () => {
+      document.body.className = document.body.className.replace(/\bscope-[a-z]+\b/g, '').trim();
+      document.body.classList.add('scope-' + r.value);
+    });
+  });
+
+  // Trigger checkbox → highlight + reveal config
+  document.querySelectorAll('.trig').forEach(t => {
+    const cb = t.querySelector('input[type=checkbox]');
+    cb.addEventListener('change', () => {
+      t.classList.toggle('on', cb.checked);
+    });
+  });
+
+  // Chip × to remove
+  document.querySelectorAll('.chip .x').forEach(x => {
+    x.addEventListener('click', (e) => {
+      e.preventDefault();
+      x.closest('.chip').remove();
+    });
+  });
+</script>
+
+</body>
+</html>

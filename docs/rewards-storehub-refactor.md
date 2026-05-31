@@ -19,14 +19,23 @@ Every reward — points-shop catalog item, mission completion, mystery drop, bir
 
 | Field | Type | Meaning |
 |---|---|---|
-| `discount_type` | enum | `flat` / `percent` / `free_item` / `free_upgrade` / `bogo` / `combo` |
-| `discount_value` | numeric | sen for `flat`, percentage 0–100 for `percent`, null for `free_*` |
+| `discount_type` | enum | `flat` / `percent` / `free_item` / `free_upgrade` / `bogo` / `combo` / `override_price` / `beans_multiplier` / `none` |
+| `discount_value` | numeric | sen for `flat`, percentage 0–100 for `percent`, null for `free_*`, multiplier (e.g. 2.0) for `beans_multiplier` |
 | `scope` | enum | `everything` / `products` / `categories` — what the reward targets |
 | `target_ids` | text[] | product IDs (scope=products) or category IDs (scope=categories); null for `everything` |
 | `modifier_filter` | jsonb | optional: only matches lines whose modifiers satisfy this (e.g. `{"size":"large"}`) |
 | `min_order_value` | numeric (sen) | optional cart-subtotal floor before reward fires |
 
 That's it. Six fields define every reward. Below: every reward type expressed in this shape.
+
+The 9 `discount_type` values cover the canonical set audited against StoreHub's promotion types + Celsius's existing 14 templates. Three additional type-specific knobs live on the same row but are read only by the relevant types — they don't add columns to most rewards:
+
+| Type-specific knob | Read by | Purpose |
+|---|---|---|
+| `max_discount_value_sen` | `percent` | cap on % discount (e.g., "15% off, max RM10") |
+| `bogo_buy_qty` / `bogo_free_qty` | `bogo` | the X and Y in "buy X get Y free" |
+| `combo_price_sen` | `combo` | the override total for the required product set |
+| `override_price_sen` | `override_price` | the fixed price each eligible line is replaced with |
 
 ### Worked examples
 
@@ -94,6 +103,23 @@ That's it. Six fields define every reward. Below: every reward type expressed in
   target_ids: ["prod-espresso"],
   bogo_buy_qty: 1,           // existing fields, kept
   bogo_free_qty: 1,
+  modifier_filter: null }
+
+// "Bagel + Coffee combo for RM18" (REQUIRED set, override total)
+{ discount_type: "combo",
+  scope: "products",
+  target_ids: ["prod-bagel", "prod-coffee-black"],
+  combo_price_sen: 1800,
+  modifier_filter: null }
+
+// "Happy-hour Iced Americano for RM5 (3–5pm)"
+//   — single product, fixed price, no required set.
+//   Time-gating is done by the auto-promotions layer; the reward
+//   shape itself just says "this line is RM5".
+{ discount_type: "override_price",
+  scope: "products",
+  target_ids: ["prod-iced-americano"],
+  override_price_sen: 500,
   modifier_filter: null }
 ```
 
