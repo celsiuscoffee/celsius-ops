@@ -92,14 +92,14 @@ export type RedeemResponse = {
  */
 export async function lookupMember(phone: string): Promise<Member | null> {
   const res = await apiGet<{ member: Member | null }>(
-    `/api/loyalty/lookup?phone=${encodeURIComponent(phone)}&create=1`,
+    `/api/pos/loyalty/lookup?phone=${encodeURIComponent(phone)}&create=1`,
   );
   return res.member ?? null;
 }
 
 export async function fetchRewards(memberId: string): Promise<RewardsResponse> {
   const res = await apiGet<RewardsResponse>(
-    `/api/loyalty/rewards?member_id=${encodeURIComponent(memberId)}`,
+    `/api/pos/loyalty/rewards?member_id=${encodeURIComponent(memberId)}`,
   );
   return {
     balance: res.balance ?? 0,
@@ -113,7 +113,7 @@ export async function fetchRewards(memberId: string): Promise<RewardsResponse> {
 export async function fetchUsual(memberId: string): Promise<UsualItem[]> {
   try {
     const res = await apiGet<{ usual?: UsualItem[] }>(
-      `/api/loyalty/snapshot?member_id=${encodeURIComponent(memberId)}`,
+      `/api/pos/loyalty/snapshot?member_id=${encodeURIComponent(memberId)}`,
     );
     return res.usual ?? [];
   } catch {
@@ -127,7 +127,7 @@ export async function redeemReward(args: {
   outletId: string;
   issuedRewardId?: string | null;
 }): Promise<RedeemResponse> {
-  return apiPost<RedeemResponse>("/api/loyalty/redeem", {
+  return apiPost<RedeemResponse>("/api/pos/loyalty/redeem", {
     member_id: args.memberId,
     reward_id: args.rewardId,
     outlet_id: args.outletId,
@@ -208,7 +208,7 @@ export type AppliedPromo = { discountAmount: number; description: string };
 
 /**
  * Server-side auto-promotions (time-window / category / promo-code combos)
- * via /api/loyalty/evaluate-promotions — the same engine the web register
+ * via /api/pos/loyalty/evaluate-promotions — the same engine the web register
  * uses. Tier % is computed client-side (computeTierDiscount) and NOT sent
  * here, so the two never double-count. Best-effort: returns [] on error.
  */
@@ -221,7 +221,7 @@ export async function evaluatePromotions(args: {
   if (args.lines.length === 0) return [];
   try {
     const res = await apiPost<{ discounts?: { discount_amount: number; promotion_name: string }[] }>(
-      "/api/loyalty/evaluate-promotions",
+      "/api/pos/loyalty/evaluate-promotions",
       {
         lines: args.lines,
         member_id: args.memberId ?? null,
@@ -242,7 +242,7 @@ export async function evaluatePromotions(args: {
 }
 
 // ─── Customer-display snapshot (the rich 2nd-screen payload) ──
-// Mirrors apps/pos/src/lib/loyalty-snapshot.ts → /api/loyalty/snapshot.
+// Mirrors apps/pos/src/lib/loyalty-snapshot.ts → /api/pos/loyalty/snapshot.
 
 export type SnapshotTierInfo = {
   name: string;
@@ -328,7 +328,7 @@ export type LoyaltySnapshot = {
 
 export async function fetchSnapshot(memberId: string): Promise<LoyaltySnapshot | null> {
   try {
-    return await apiGet<LoyaltySnapshot>(`/api/loyalty/snapshot?member_id=${encodeURIComponent(memberId)}`);
+    return await apiGet<LoyaltySnapshot>(`/api/pos/loyalty/snapshot?member_id=${encodeURIComponent(memberId)}`);
   } catch {
     return null;
   }
@@ -337,7 +337,7 @@ export async function fetchSnapshot(memberId: string): Promise<LoyaltySnapshot |
 /** Reveal a pending mystery drop. Best-effort — returns a human label. */
 export async function claimMystery(memberId: string, claimableId: string): Promise<{ label: string; emoji: string } | null> {
   try {
-    const res = await apiPost<any>("/api/loyalty/claim", { member_id: memberId, claimable_id: claimableId });
+    const res = await apiPost<any>("/api/pos/loyalty/claim", { member_id: memberId, claimable_id: claimableId });
     return {
       label: res?.reward_name ?? res?.title ?? (res?.beans ? `${res.beans} Beans` : "Reward unlocked"),
       emoji: res?.emoji ?? "🎁",

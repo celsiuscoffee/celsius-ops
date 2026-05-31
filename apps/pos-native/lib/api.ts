@@ -8,7 +8,7 @@ import Constants from "expo-constants";
  * The CSRF middleware on the POS API requires an Origin/Referer that
  * matches the deployment, so we always send them.
  */
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "https://celsius-pos.vercel.app";
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "https://backoffice.celsiuscoffee.com";
 
 function headers(extra?: Record<string, string>): Record<string, string> {
   return {

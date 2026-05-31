@@ -1011,7 +1011,7 @@ function DiscountSheet({ subtotal, staffRole, onClose, onApply }: { subtotal: nu
       if (managerPin.length < 4) { setPinError("Enter manager PIN"); return; }
       setVerifying(true);
       try {
-        await apiPost("/api/auth/verify-manager", { pin: managerPin });
+        await apiPost("/api/pos/auth/verify-manager", { pin: managerPin });
       } catch {
         setPinError("Invalid manager PIN");
         setVerifying(false);

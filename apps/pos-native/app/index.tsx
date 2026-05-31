@@ -50,7 +50,7 @@ export default function Login() {
       setBusy(true);
       setError(null);
       try {
-        const u = await apiPost<{ id: string; name: string; role: string }>("/api/auth/pin", {
+        const u = await apiPost<{ id: string; name: string; role: string }>("/api/pos/auth/pin", {
           pin: fullPin, outletId,
         });
         setStaff({ staffId: u.id, staffName: u.name, role: u.role });

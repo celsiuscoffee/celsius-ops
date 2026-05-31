@@ -2,7 +2,7 @@ import { apiGet } from "./api";
 
 /**
  * POS customer-display posters (idle carousel). Mirrors the web
- * customer-display: GET /api/posters → active pos-display posters,
+ * customer-display: GET /api/pos/posters → active pos-display posters,
  * already schedule-filtered + sorted server-side.
  */
 export type DisplayPoster = {
@@ -15,7 +15,7 @@ export type DisplayPoster = {
 
 export async function fetchPosters(): Promise<DisplayPoster[]> {
   try {
-    const res = await apiGet<{ posters?: DisplayPoster[] }>("/api/posters");
+    const res = await apiGet<{ posters?: DisplayPoster[] }>("/api/pos/posters");
     return (res.posters ?? []).filter((p) => !!p.imageUrl);
   } catch {
     return [];
