@@ -6,10 +6,10 @@
 // (and merged in issued_rewards via a legacy rewards-table join that
 // silently dropped modern voucher-template-backed rows).
 //
-// After this lands, both surfaces hit the rewards table directly and
-// apply identical eligibility rules. The only knob is
-// fulfillmentChannel — POS = "in_store" / null (no channel filter),
-// Pickup = "pickup" (rewards must be tagged pickup-capable).
+// After this lands, both surfaces hit voucher_templates directly (rows
+// with points_cost set) and apply identical eligibility rules. The only
+// knob is fulfillmentChannel — POS = "in_store" / null (no channel
+// filter), Pickup = "pickup" (rewards must be tagged pickup-capable).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { VoucherDiscountType } from "./active-vouchers";
@@ -60,10 +60,12 @@ export type AffordableCatalogReward = {
  *
  *  Commit 3 of the rewards refactor: the catalog now reads from
  *  voucher_templates (rows where points_cost IS NOT NULL), not the
- *  legacy `rewards` table. `legacy_reward_id` carries the original
- *  text id so the redeem/mint flow (which still reads `rewards` during
- *  the grace window) keeps resolving — the AffordableCatalogReward.id
- *  returned to clients is the legacy id, unchanged from before. */
+ *  legacy `rewards` table. The redeem/mint flow now reads
+ *  voucher_templates too (resolving by `legacy_reward_id`); the
+ *  `rewards` table is no longer read on any redemption path. The
+ *  AffordableCatalogReward.id returned to clients stays the legacy id
+ *  (issued_rewards.reward_id + redemptions.reward_id remain legacy-keyed
+ *  during the grace window), unchanged from before. */
 type RawTemplate = {
   id: string;
   legacy_reward_id: string | null;
@@ -107,9 +109,9 @@ type RawTemplate = {
  *      (any channel) or includes the channel
  *
  *  The returned `id` is the template's legacy_reward_id (the original
- *  'reward-X' text id) so the redeem/mint flow — which still reads the
- *  `rewards` table during the grace window — keeps resolving. Falls
- *  back to the template UUID if a mirror somehow lacks legacy_reward_id.
+ *  'reward-X' text id) so the redeem/mint flow — which now resolves
+ *  voucher_templates by legacy_reward_id — keeps working. Falls back to
+ *  the template UUID if a mirror somehow lacks legacy_reward_id.
  *
  *  Joins redemptions table (keyed by the legacy reward_id) to compute
  *  per-reward redemption count for max_per_member enforcement. */
