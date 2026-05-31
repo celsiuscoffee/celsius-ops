@@ -5,15 +5,112 @@
 
 ## Problem
 
-Today's Celsius loyalty schema has ~12 tables that overlap and drift. Specifically:
+Every reward type today expresses "what does this apply to?" differently. Free Drink uses `applicable_categories`. A specific-product reward might use `free_product_ids`. Combo rewards use `combo_product_ids`. Free-text product names live in `free_product_name`. Member-tag-gated rewards use `applicable_tags`. The same row might have several of these set with conflicting or overlapping intent.
 
-- `rewards` (3 rows: Free Drink, RM5, RM10) — the Bean-Points-Shop catalog
-- `voucher_templates` (14 rows) — modern reward definitions used by mystery/mission/birthday/tier paths
-- `issued_rewards` (158 rows, 119 active) — instances minted into customer wallets
+Result: every place that *reads* a reward has to branch on which eligibility field is set, and every place that *writes* a reward picks whichever field the author happened to think of. The shared discount engine has 60+ lines of eligibility-resolution logic that lives only because no two rewards share a shape.
 
-These three tables carry near-identical columns (`discount_type`, `discount_value`, `applicable_categories`, `applicable_products`, `free_product_name`, `min_order_value`, …). The Bean-Points-Shop "Free Drink doesn't deduct" bug (fixed 2026-05-31, commit `e4c0d792`) was a direct consequence: `rewards.discount_type` was null, `mint-voucher` copied the null, `issued_rewards.discount_type` became null, and the discount engine returned 0.
+The Bean-Points-Shop "Free Drink doesn't deduct" bug (fixed 2026-05-31, commit `e4c0d792`) was the loudest symptom: `rewards.discount_type` was null, `mint-voucher` copied the null, `issued_rewards.discount_type` became null, the engine returned 0. But the deeper issue is that *every reward shape is bespoke*. Fix one and the next mint path regresses.
 
-This is structural drift — every place that mints a voucher copies fields independently. Fix once, regress next month.
+Goal: **one canonical reward shape** so that "Free Drink" and "RM5 off any coffee" and "Free 15g bag with order over RM30" all serialise to the same six columns, regardless of which event minted them.
+
+## The canonical shape (the actual deliverable)
+
+Every reward — points-shop catalog item, mission completion, mystery drop, birthday gift, tier upgrade, manual grant — collapses to these six fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `discount_type` | enum | `flat` / `percent` / `free_item` / `free_upgrade` / `bogo` / `combo` |
+| `discount_value` | numeric | sen for `flat`, percentage 0–100 for `percent`, null for `free_*` |
+| `scope` | enum | `everything` / `products` / `categories` — what the reward targets |
+| `target_ids` | text[] | product IDs (scope=products) or category IDs (scope=categories); null for `everything` |
+| `modifier_filter` | jsonb | optional: only matches lines whose modifiers satisfy this (e.g. `{"size":"large"}`) |
+| `min_order_value` | numeric (sen) | optional cart-subtotal floor before reward fires |
+
+That's it. Six fields define every reward. Below: every reward type expressed in this shape.
+
+### Worked examples
+
+```jsonc
+// "Free Drink" (any drink, any modifier) — Bean Points Shop or Mission win
+{ discount_type: "free_item",
+  discount_value: null,
+  scope: "categories",
+  target_ids: ["classic","flavoured","mocha","fruit-tea","gourmet-tea",
+               "artisan-choc","artisan-matcha","mocktails"],
+  modifier_filter: null,
+  min_order_value: null }
+
+// "Free Almond Croissant" (specific product)
+{ discount_type: "free_item",
+  discount_value: null,
+  scope: "products",
+  target_ids: ["prod-almond-croissant"],
+  modifier_filter: null,
+  min_order_value: null }
+
+// "Free Large Upgrade on any coffee" (specific modifier on a category)
+{ discount_type: "free_upgrade",
+  discount_value: null,
+  scope: "categories",
+  target_ids: ["classic","flavoured","mocha"],
+  modifier_filter: { size: "large" },
+  min_order_value: null }
+
+// "RM5 off any order"
+{ discount_type: "flat",
+  discount_value: 500,
+  scope: "everything",
+  target_ids: null,
+  modifier_filter: null,
+  min_order_value: null }
+
+// "RM5 off any drink order over RM15" (current mystery-bag default)
+{ discount_type: "flat",
+  discount_value: 500,
+  scope: "categories",
+  target_ids: ["classic","flavoured","mocha","fruit-tea","gourmet-tea",
+               "artisan-choc","artisan-matcha","mocktails"],
+  modifier_filter: null,
+  min_order_value: 1500 }
+
+// "15% off coffee, max RM10"
+{ discount_type: "percent",
+  discount_value: 15,
+  scope: "categories",
+  target_ids: ["classic","flavoured","mocha"],
+  modifier_filter: null,
+  min_order_value: null,
+  max_discount_value: 1000 }  // existing field, kept
+
+// "Buy 1 espresso, get 1 free"
+{ discount_type: "bogo",
+  scope: "products",
+  target_ids: ["prod-espresso"],
+  bogo_buy_qty: 1,           // existing fields, kept
+  bogo_free_qty: 1,
+  modifier_filter: null }
+```
+
+### What gets dropped from the schema
+
+- `applicable_categories` → folded into `target_ids` when `scope='categories'`
+- `applicable_products` → folded into `target_ids` when `scope='products'`
+- `free_product_ids` → folded into `target_ids` when `scope='products'` and `discount_type='free_item'`
+- `free_product_name` → **dropped entirely** (free-text name matching is fragile and was the source of POS↔Pickup drift)
+- `applicable_tags` → **dropped** (only on `rewards` table, unused in code)
+- `combo_product_ids` → folded into `target_ids` when `discount_type='combo'`
+
+### What stays as-is
+
+- `min_order_value`, `max_discount_value`, `bogo_buy_qty`, `bogo_free_qty`, `combo_price` — kept (existing semantics)
+- `outlets_allowlist` (on voucher_templates) — kept (orthogonal: store-level gating, not product-level)
+- `validity_days`, `stock`, `points_required`, etc. — kept (lifecycle / inventory / cost, orthogonal to eligibility)
+
+## Why three tables become two
+
+Once the canonical shape exists, the only structural difference between `rewards` and `voucher_templates` is that `rewards` carries a `points_required` field (Bean Points Shop cost). Adding that field to `voucher_templates` lets us drop the `rewards` table entirely.
+
+So the table consolidation is a side effect of the shape standardisation, not the goal. The goal is: *one row shape, one read path, one write path*.
 
 ## What StoreHub does (reference architecture)
 
@@ -59,35 +156,45 @@ duplicate template fields.
 
 ### Add to `voucher_templates`
 
-| New column | Type | Purpose | Source |
-|---|---|---|---|
-| `points_cost` | integer | NULL for non-shop templates; >0 for Bean-Points-Shop items | from `rewards.points_required` |
-| `image_url` | text | display asset | from `rewards.image_url` |
-| `stock` | integer | NULL = unlimited; ≥0 = inventory remaining | from `rewards.stock` |
-| `max_per_member` | integer | NULL = unlimited; cap per-member redemptions | from `rewards.max_redemptions_per_member` |
-| `valid_from` | timestamptz | NULL = no lower bound | from `rewards.valid_from` |
-| `valid_until` | timestamptz | NULL = no upper bound | from `rewards.valid_until` |
-| `applicable_tags` | text[] | member-tag-based eligibility | from `rewards.applicable_tags` |
-| `is_points_shop` | boolean | `points_cost IS NOT NULL` materialised for index | derived |
+| New column | Type | Purpose |
+|---|---|---|
+| `scope` | text CHECK in (`everything`,`products`,`categories`) | canonical eligibility discriminator — replaces 3 legacy "applicable_*" fields |
+| `target_ids` | text[] | product or category IDs that this reward targets (NULL when `scope='everything'`) |
+| `modifier_filter` | jsonb | optional `{modifier_name: required_value}` map — only matches cart lines whose modifiers contain ALL of these |
+| `points_cost` | integer | NULL for non-shop templates; >0 for Bean-Points-Shop items (carries `rewards.points_required`) |
+| `image_url` | text | display asset (from `rewards.image_url`) |
+| `stock` | integer | NULL = unlimited; ≥0 = inventory remaining (from `rewards.stock`) |
+| `max_per_member` | integer | NULL = unlimited; cap per-member redemptions |
+| `valid_from` | timestamptz | optional date-window lower bound |
+| `valid_until` | timestamptz | optional date-window upper bound |
+| `is_points_shop` | boolean GENERATED `points_cost IS NOT NULL` STORED | materialised flag for index/filter |
 
-### Deprecate in `rewards`
+### Drop from `voucher_templates` (after backfill into `target_ids`)
 
-Drop the whole table after migration completes. The 3 rows become templates.
+| Dropped column | Replacement |
+|---|---|
+| `applicable_categories` | folded into `target_ids` when `scope='categories'` |
+| `applicable_products` | folded into `target_ids` when `scope='products'` |
+| `free_product_ids` | folded into `target_ids` when `scope='products'` and `discount_type IN ('free_item','free_upgrade')` |
+| `free_product_name` | dropped entirely — no more free-text name matching |
+
+### Drop from `rewards` table (after rows migrated)
+
+Drop the whole table after migration completes. The 3 catalog rows become regular voucher_templates rows with `points_cost` populated. The `applicable_tags` column on `rewards` is dropped without replacement — unused in code.
 
 ### `issued_rewards` change
 
-Already has `template_id` referenced in code paths (per the `loyalty-snapshot.ts`
-comment `ir-points_redemption-mpj9ivks-…`) but the column **does not exist on
-the table** (confirmed by failed query: `column "template_id" does not exist`).
+Today's `issued_rewards` rows duplicate the eligibility fields inline (`applicable_categories`, `applicable_products`, `free_product_name`, etc.). This is the drift trap — a mint path forgets a field and the voucher silently misfires.
 
-Add it:
+Two moves:
 
-```sql
-ALTER TABLE issued_rewards ADD COLUMN template_id uuid REFERENCES voucher_templates(id);
-```
+1. **Add `template_id`** (currently referenced in code as if it existed but the column doesn't):
+   ```sql
+   ALTER TABLE issued_rewards ADD COLUMN template_id uuid REFERENCES voucher_templates(id);
+   ```
+   Backfill from `reward_id` (3 rows → catalog template) and from source-type-specific lookups for the other 155.
 
-Then backfill `template_id` for all 158 existing rows from `reward_id` (3 rows
-pointing at `rewards.id`) and from existing template lookups for the other 155.
+2. **Drop the inline eligibility fields** from `issued_rewards` after Commit 2 lands. Engine reads through `template_id`. The inline `discount_type` / `discount_value` columns stay (snapshot at mint time so a template edit doesn't retroactively change an issued voucher) — but `applicable_categories` / `applicable_products` / `free_product_name` / `free_product_ids` come off, replaced by `scope` + `target_ids` snapshots.
 
 ## Migration plan — 3 commits
 
@@ -133,14 +240,68 @@ Acceptance: POS modal + Pickup wallet + customer-display all render identical vo
 | POS offline cache (SUNMI) holds old voucher shape | Cache TTL is short (60s for vouchers); no persistent client cache to invalidate. |
 | RLS policies referencing `rewards` table | Audit before `DROP TABLE`. Add SELECT policy on `voucher_templates` mirroring the one on `rewards`. |
 
+## How the discount engine simplifies
+
+Before — `packages/shared/src/loyalty/discount-engine.ts` `isLineEligible()` today (paraphrased):
+
+```typescript
+const hasProductFilter   = !!(spec.applicable_products?.length);
+const hasCategoryFilter  = !!(spec.applicable_categories?.length);
+const hasFreeProductIds  = !!(spec.free_product_ids?.length);
+const hasFreeProductName = !!spec.free_product_name;
+if (!hasProductFilter && !hasCategoryFilter && !hasFreeProductIds && !hasFreeProductName) {
+  return true;  // no filter → everything matches
+}
+if (hasFreeProductIds && spec.free_product_ids.includes(line.product_id))  return true;
+if (hasProductFilter && spec.applicable_products.includes(line.product_id)) return true;
+if (hasCategoryFilter) {
+  if (line.category    && spec.applicable_categories.includes(line.category))    return true;
+  if (line.category_id && spec.applicable_categories.includes(line.category_id)) return true;
+}
+if (hasFreeProductName && line.name.toLowerCase() === spec.free_product_name.toLowerCase()) return true;
+return false;
+```
+
+5 different fields to inspect, lowercase-string matching as a fallback. Drift surface area.
+
+After:
+
+```typescript
+function isLineEligible(line, spec) {
+  // 1. Scope check
+  if (spec.scope === "everything") {
+    // fall through to modifier check
+  } else if (spec.scope === "products") {
+    if (!spec.target_ids.includes(line.product_id)) return false;
+  } else if (spec.scope === "categories") {
+    const matched = spec.target_ids.includes(line.category)
+                 || spec.target_ids.includes(line.category_id);
+    if (!matched) return false;
+  }
+  // 2. Optional modifier filter
+  if (spec.modifier_filter) {
+    for (const [k, v] of Object.entries(spec.modifier_filter)) {
+      if (line.modifiers?.[k] !== v) return false;
+    }
+  }
+  return true;
+}
+```
+
+Two branches. No string-matching fallback. The shape is the contract — if any new reward type emerges, it goes through these same six fields or it's not a reward.
+
 ## What this does NOT change
 
 - The `tiers` table and tier-upgrade voucher attach mechanic — already clean.
-- The `discount-engine.ts` shared module — already correct, just gets richer input.
-- The POS / Pickup discount math (Phase 2 consolidation) — stays.
+- The discount engine's discount-math switch (flat / percent / free_item / free_upgrade) — stays.
+- The POS / Pickup discount-math consolidation (Phase 2) — stays.
 - The wallet-display filter that hides `source_type='points_redemption'` rows
   (commit `222c006`) — stays. The points-shop redemption flow continues to mint
   a voucher and apply it via the existing pipeline.
+- Other loyalty tables (`reward_kinds`, `mission_assignments`, `mystery_drops`,
+  `tier_benefit_grants`, `reward_missions`, `mystery_pool`, `reward_configs`) —
+  unchanged. They orchestrate **when** to mint a template, not what a reward
+  looks like.
 
 ## Open question for after Commit 3
 
