@@ -11,10 +11,10 @@
 // land properly when the trigger consolidation (Commit 4 of the
 // refactor) replaces the per-channel tables.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ChevronLeft, Save, Trash2,
+  ChevronLeft, Save, Trash2, X, Plus, Search,
   Coins, Target, Gift, Cake, Crown, Megaphone, Hand,
 } from "lucide-react";
 
@@ -120,6 +120,18 @@ export default function RewardForm({ mode, initial }: Props) {
   const [val, setVal]     = useState<FormValue>({ ...EMPTY, ...initial });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState<string | null>(null);
+  const [products, setProducts] = useState<ProductOpt[]>([]);
+
+  // Fetch products once so the Specific Products picker can typeahead.
+  // Backoffice already exposes /api/pickup/products with the catalog.
+  useEffect(() => {
+    fetch("/api/pickup/products", { credentials: "include" })
+      .then((res) => res.json())
+      .then((rows: Array<{ id: string; name: string; category_id?: string }>) => {
+        setProducts(rows.map((p) => ({ id: p.id, name: p.name, category: p.category_id ?? "" })));
+      })
+      .catch(() => setProducts([]));
+  }, []);
 
   function update<K extends keyof FormValue>(k: K, v: FormValue[K]) {
     setVal((p) => ({ ...p, [k]: v }));
@@ -385,16 +397,22 @@ export default function RewardForm({ mode, initial }: Props) {
         )}
 
         {val.scope === "products" && (
-          <Field label="Target products" help="Product picker pending — paste product IDs comma-separated for now.">
-            <input
-              type="text"
-              value={val.target_ids.join(", ")}
-              onChange={(e) => update("target_ids", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
-              placeholder="prod-abc, prod-xyz"
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400"
+          <Field label="Target products" help="Type to search the live catalog. Pick one or more.">
+            <ProductPicker
+              products={products}
+              selected={val.target_ids}
+              onToggle={(id) => toggleTargetId(id)}
+              onClear={() => update("target_ids", [])}
             />
           </Field>
         )}
+
+        <Field label="Modifier filter" help="Optional. Only match cart lines whose modifiers contain ALL these key:value pairs. Today Celsius only has add-ons (no size/milk groups) — leave blank unless you're adding a new modifier group.">
+          <ModifierFilterEditor
+            value={val.modifier_filter}
+            onChange={(mf) => update("modifier_filter", mf)}
+          />
+        </Field>
 
         <Field label="Min order value" help="Cart subtotal must be ≥ this for the reward to fire.">
           <Prefix unit="RM">
@@ -664,4 +682,156 @@ function Prefix({ unit, children }: { unit: string; children: React.ReactElement
 
 function Help({ children }: { children: React.ReactNode }) {
   return <div className="text-[11px] text-slate-500 mt-1">{children}</div>;
+}
+
+// ─── Product picker ────────────────────────────────────────────────
+function ProductPicker({ products, selected, onToggle, onClear }: { products: ProductOpt[]; selected: string[]; onToggle: (id: string) => void; onClear: () => void }) {
+  const [q, setQ]      = useState("");
+  const [open, setOpen] = useState(false);
+  const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+
+  // Group products by category for the dropdown
+  const grouped = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    const filtered = products.filter((p) => !term || p.name.toLowerCase().includes(term) || p.category.toLowerCase().includes(term));
+    const map = new Map<string, ProductOpt[]>();
+    for (const p of filtered) {
+      const cat = p.category || "Uncategorised";
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat)!.push(p);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [products, q]);
+
+  return (
+    <div className="space-y-2 relative">
+      {/* Selected chips */}
+      <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+        {selected.length === 0 ? (
+          <div className="text-xs text-slate-400 italic">No products selected.</div>
+        ) : (
+          <>
+            {selected.map((id) => {
+              const p = byId.get(id);
+              return (
+                <span key={id} className="inline-flex items-center gap-1 bg-slate-900 text-white text-xs font-semibold px-2.5 py-1 rounded-full">
+                  {p ? p.name : id}
+                  <button onClick={() => onToggle(id)} className="opacity-70 hover:opacity-100">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              );
+            })}
+            <button onClick={onClear} className="text-[11px] text-slate-400 hover:text-slate-700 px-2 py-1">Clear all</button>
+          </>
+        )}
+      </div>
+
+      {/* Search + dropdown */}
+      <div className="relative">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Type to search products…"
+          className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400"
+        />
+        {open && grouped.length > 0 && (
+          <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+            {grouped.map(([cat, items]) => (
+              <div key={cat}>
+                <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 sticky top-0">
+                  {cat} · {items.length}
+                </div>
+                {items.map((p) => {
+                  const on = selected.includes(p.id);
+                  return (
+                    <button
+                      key={p.id}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => onToggle(p.id)}
+                      className={`w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center justify-between ${on ? "bg-emerald-50 text-emerald-900" : "text-slate-700"}`}
+                    >
+                      <span>{p.name}</span>
+                      {on && <span className="text-emerald-600 text-xs">✓ selected</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+        {open && grouped.length === 0 && (
+          <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-xs text-slate-500">
+            No products match &quot;{q}&quot;.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Modifier filter editor ───────────────────────────────────────
+// Renders the `modifier_filter` jsonb as a list of key:value pairs.
+// Add row with the + button, remove with the × button.
+function ModifierFilterEditor({ value, onChange }: { value: Record<string, string>; onChange: (v: Record<string, string>) => void }) {
+  const entries = Object.entries(value);
+  const [pendingKey, setPendingKey] = useState("");
+  const [pendingVal, setPendingVal] = useState("");
+
+  function addPair() {
+    if (!pendingKey.trim()) return;
+    onChange({ ...value, [pendingKey.trim()]: pendingVal.trim() });
+    setPendingKey("");
+    setPendingVal("");
+  }
+  function removePair(k: string) {
+    const next = { ...value };
+    delete next[k];
+    onChange(next);
+  }
+
+  return (
+    <div className="space-y-2">
+      {entries.length === 0 ? (
+        <div className="text-xs text-slate-400 italic">No modifier filters — reward applies regardless of modifiers.</div>
+      ) : (
+        <div className="space-y-1">
+          {entries.map(([k, v]) => (
+            <div key={k} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+              <code className="text-xs font-semibold text-slate-900">{k}</code>
+              <span className="text-slate-400">:</span>
+              <code className="text-xs text-slate-700">&quot;{v}&quot;</code>
+              <button onClick={() => removePair(k)} className="ml-auto text-slate-400 hover:text-rose-600">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-1.5">
+        <input
+          type="text"
+          value={pendingKey}
+          onChange={(e) => setPendingKey(e.target.value)}
+          placeholder="modifier key (e.g. size)"
+          className="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400"
+        />
+        <input
+          type="text"
+          value={pendingVal}
+          onChange={(e) => setPendingVal(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") addPair(); }}
+          placeholder="required value (e.g. large)"
+          className="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400"
+        />
+        <button onClick={addPair} className="px-2.5 py-1.5 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 inline-flex items-center gap-1">
+          <Plus className="w-3 h-3" /> Add
+        </button>
+      </div>
+    </div>
+  );
 }

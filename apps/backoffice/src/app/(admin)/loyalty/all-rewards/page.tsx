@@ -130,6 +130,7 @@ export default function AllRewardsPage() {
   const [dtFilter, setDtFilter]           = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter]   = useState<Set<StatusKey>>(new Set());
   const [sort, setSort]                   = useState<SortKey>("updated");
+  const [view, setView]                   = useState<"table" | "grouped">("table");
 
   async function load() {
     setLoading(true);
@@ -202,6 +203,48 @@ export default function AllRewardsPage() {
     }
   }
 
+  async function duplicate(r: RewardRow) {
+    if (r.origin === "catalog") {
+      alert("Duplicate for legacy catalog rows — please use the Points Shop page until the catalog merge ships.");
+      return;
+    }
+    setBusyId(r.id);
+    try {
+      const res = await fetch("/api/loyalty/all-rewards", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brand_id:           BRAND_ID,
+          title:              `${r.title} (copy)`,
+          description:        r.description ?? "",
+          icon:               r.icon ?? "ticket",
+          category:           "discount",
+          discount_type:      r.discount_type ?? "free_item",
+          discount_value:     r.discount_value,
+          max_discount_value: r.max_discount_value,
+          min_order_value:    r.min_order_value,
+          multiplier_value:   r.multiplier_value,
+          bogo_buy_qty:       r.bogo_buy_qty ?? 1,
+          bogo_free_qty:      r.bogo_free_qty ?? 1,
+          scope:              r.scope,
+          target_ids:         r.target_ids,
+          validity_days:      r.expires_days ?? 30,
+          stacks_with_beans:  true,
+          stacks_with_other:  false,
+          is_active:          false, // duplicate paused by default — admin reviews + enables
+          triggers:           {},    // duplicates don't carry triggers — they're separate config rows
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      const json = await res.json();
+      router.push(`/loyalty/all-rewards/${json.template.id}`);
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusyId(null); setActionsOpen(null);
+    }
+  }
+
   // Close action menu on outside click
   useEffect(() => {
     if (!actionsOpen) return;
@@ -209,6 +252,110 @@ export default function AllRewardsPage() {
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
   }, [actionsOpen]);
+
+  // ─── Row renderer (shared across flat + grouped views) ───────
+  function renderRow(r: RewardRow) {
+    const Icon = pickRewardIcon(r);
+    const dtMeta = DISCOUNT_META[r.discount_type ?? ""] ?? { label: r.discount_type ?? "—", className: "bg-slate-50 text-slate-600 border-slate-200" };
+    const redemptionPct = r.issued_30d > 0 ? Math.round((r.used_30d / r.issued_30d) * 100) : 0;
+    const rowKey = `${r.origin}:${r.id}`;
+    return (
+      <tr key={rowKey} className={`border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition cursor-pointer ${!r.is_active ? "opacity-55" : ""}`} onClick={() => onRowClick(r)}>
+        <td className="px-4 py-3">
+          <span className={`inline-block w-2 h-2 rounded-full ${r.is_active ? "bg-emerald-500" : "bg-slate-400"}`} title={r.is_active ? "Active" : "Paused"} />
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+              <Icon className="w-4 h-4 text-slate-600" />
+            </div>
+            <div className="min-w-0">
+              <div className="font-semibold text-slate-900 text-sm leading-tight">{r.title}</div>
+              {r.description && (
+                <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">{r.description}</div>
+              )}
+            </div>
+          </div>
+        </td>
+        <td className="px-4 py-3">
+          <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold border ${dtMeta.className}`}>
+            {formatDiscount(r)}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex gap-1 flex-wrap">
+            {r.triggers.length === 0 ? (
+              <span className="text-xs text-slate-400 italic">No active trigger</span>
+            ) : r.triggers.map((t, i) => {
+              const meta = TRIGGER_META[t.type];
+              const TIcon = meta.icon;
+              return (
+                <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold border ${meta.className}`}>
+                  <TIcon className="w-3 h-3" />
+                  {t.label}
+                </span>
+              );
+            })}
+          </div>
+        </td>
+        <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-600">
+          {formatEligibility(r)}
+        </td>
+        <td className="px-4 py-3 hidden md:table-cell">
+          <div className="tabular-nums text-sm font-semibold text-slate-900">{r.issued_30d} · {r.used_30d}</div>
+          <div className="text-[11px] text-slate-500">{r.issued_30d > 0 ? `${redemptionPct}% redeemed` : "Never issued"}</div>
+          {r.issued_30d > 0 && (
+            <div className="mt-1 h-1 rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full bg-emerald-500" style={{ width: `${redemptionPct}%` }} />
+            </div>
+          )}
+        </td>
+        <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-600">
+          {r.expires_days != null ? `${r.expires_days} days` : "—"}
+        </td>
+        <td className="px-2 py-3 relative" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setActionsOpen(actionsOpen === rowKey ? null : rowKey); }}
+            disabled={busyId === r.id}
+            className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700 disabled:opacity-50"
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+          {actionsOpen === rowKey && (
+            <div className="absolute right-2 top-10 z-20 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]" onClick={(e) => e.stopPropagation()}>
+              <ActionItem icon={Pencil} label="Edit" onClick={() => { setActionsOpen(null); onRowClick(r); }} disabled={r.origin === "catalog"} />
+              <ActionItem icon={Copy}   label="Duplicate" onClick={() => duplicate(r)} disabled={r.origin === "catalog"} />
+              {r.is_active ? (
+                <ActionItem icon={PauseCircle} label="Pause" onClick={() => togglePause(r)} />
+              ) : (
+                <ActionItem icon={PlayCircle} label="Resume" onClick={() => togglePause(r)} />
+              )}
+              <div className="my-1 border-t border-slate-100" />
+              <ActionItem icon={Trash2} label="Archive" onClick={() => archive(r)} danger />
+            </div>
+          )}
+        </td>
+      </tr>
+    );
+  }
+
+  // ─── Common table header (used in both views) ────────────────
+  function tableHead() {
+    return (
+      <thead className="bg-slate-50 border-b border-slate-200">
+        <tr>
+          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 w-8"></th>
+          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Reward</th>
+          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Discount</th>
+          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Triggers</th>
+          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Eligible</th>
+          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Issued · Used (30d)</th>
+          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Expires</th>
+          <th className="w-8"></th>
+        </tr>
+      </thead>
+    );
+  }
 
   // ─── Per-filter counts (compute on full set, not the filtered subset) ─
   const counts = useMemo(() => {
@@ -278,6 +425,21 @@ export default function AllRewardsPage() {
     });
     return out;
   }, [rows, search, triggerFilter, dtFilter, statusFilter, sort]);
+
+  // ─── Group rows by trigger for the "By Trigger" view ──────────
+  const grouped = useMemo(() => {
+    if (view !== "grouped") return [];
+    const groups: Array<{ type: TriggerType | "none"; label: string; rows: RewardRow[] }> = TRIGGER_ORDER.map((t) => ({
+      type: t,
+      label: TRIGGER_META[t].label,
+      rows: visible.filter((r) => r.triggers.some((tr) => tr.type === t)),
+    }));
+    const untriggered = visible.filter((r) => r.triggers.length === 0);
+    if (untriggered.length > 0) {
+      groups.push({ type: "none", label: "No active trigger", rows: untriggered });
+    }
+    return groups.filter((g) => g.rows.length > 0);
+  }, [visible, view]);
 
   // ─── Pill helpers ─────────────────────────────────────────────
   function toggleTrigger(t: TriggerType) {
@@ -397,6 +559,10 @@ export default function AllRewardsPage() {
         <div className="text-sm text-slate-500">
           Showing <strong className="text-slate-900">{visible.length}</strong> of {rows.length} · last 30d data
         </div>
+        <div className="inline-flex bg-slate-100 rounded-full p-1 gap-1">
+          <button onClick={() => setView("table")} className={`px-3 py-1 text-xs font-semibold rounded-full transition ${view === "table" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}>Table</button>
+          <button onClick={() => setView("grouped")} className={`px-3 py-1 text-xs font-semibold rounded-full transition ${view === "grouped" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}>By Trigger</button>
+        </div>
       </div>
 
       {/* Table */}
@@ -420,107 +586,42 @@ export default function AllRewardsPage() {
             Clear filters
           </button>
         </div>
-      ) : (
+      ) : view === "table" ? (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 w-8"></th>
-                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Reward</th>
-                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Discount</th>
-                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Triggers</th>
-                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Eligible</th>
-                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Issued · Used (30d)</th>
-                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Expires</th>
-                <th className="w-8"></th>
-              </tr>
-            </thead>
+            {tableHead()}
             <tbody>
-              {visible.map((r) => {
-                const Icon = pickRewardIcon(r);
-                const dtMeta = DISCOUNT_META[r.discount_type ?? ""] ?? { label: r.discount_type ?? "—", className: "bg-slate-50 text-slate-600 border-slate-200" };
-                const redemptionPct = r.issued_30d > 0 ? Math.round((r.used_30d / r.issued_30d) * 100) : 0;
-                const rowKey = `${r.origin}:${r.id}`;
-                return (
-                  <tr key={rowKey} className={`border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition cursor-pointer ${!r.is_active ? "opacity-55" : ""}`} onClick={() => onRowClick(r)}>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block w-2 h-2 rounded-full ${r.is_active ? "bg-emerald-500" : "bg-slate-400"}`} title={r.is_active ? "Active" : "Paused"} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                          <Icon className="w-4 h-4 text-slate-600" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-semibold text-slate-900 text-sm leading-tight">{r.title}</div>
-                          {r.description && (
-                            <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">{r.description}</div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold border ${dtMeta.className}`}>
-                        {formatDiscount(r)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1 flex-wrap">
-                        {r.triggers.length === 0 ? (
-                          <span className="text-xs text-slate-400 italic">No active trigger</span>
-                        ) : r.triggers.map((t, i) => {
-                          const meta = TRIGGER_META[t.type];
-                          const TIcon = meta.icon;
-                          return (
-                            <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold border ${meta.className}`}>
-                              <TIcon className="w-3 h-3" />
-                              {t.label}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-600">
-                      {formatEligibility(r)}
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <div className="tabular-nums text-sm font-semibold text-slate-900">{r.issued_30d} · {r.used_30d}</div>
-                      <div className="text-[11px] text-slate-500">{r.issued_30d > 0 ? `${redemptionPct}% redeemed` : "Never issued"}</div>
-                      {r.issued_30d > 0 && (
-                        <div className="mt-1 h-1 rounded-full bg-slate-100 overflow-hidden">
-                          <div className="h-full bg-emerald-500" style={{ width: `${redemptionPct}%` }} />
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-600">
-                      {r.expires_days != null ? `${r.expires_days} days` : "—"}
-                    </td>
-                    <td className="px-2 py-3 relative" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setActionsOpen(actionsOpen === rowKey ? null : rowKey); }}
-                        disabled={busyId === r.id}
-                        className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700 disabled:opacity-50"
-                      >
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
-                      {actionsOpen === rowKey && (
-                        <div className="absolute right-2 top-10 z-20 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]" onClick={(e) => e.stopPropagation()}>
-                          <ActionItem icon={Pencil} label="Edit" onClick={() => { setActionsOpen(null); onRowClick(r); }} disabled={r.origin === "catalog"} />
-                          {r.is_active ? (
-                            <ActionItem icon={PauseCircle} label="Pause" onClick={() => togglePause(r)} />
-                          ) : (
-                            <ActionItem icon={PlayCircle} label="Resume" onClick={() => togglePause(r)} />
-                          )}
-                          <div className="my-1 border-t border-slate-100" />
-                          <ActionItem icon={Trash2} label="Archive" onClick={() => archive(r)} danger />
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+              {visible.map(renderRow)}
             </tbody>
           </table>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {grouped.map((g) => {
+            const meta = g.type === "none"
+              ? { label: g.label, icon: Filter, className: "bg-slate-50 text-slate-600 border-slate-200" }
+              : TRIGGER_META[g.type];
+            const TIcon = meta.icon;
+            return (
+              <div key={g.type}>
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${meta.className}`}>
+                    <TIcon className="w-3.5 h-3.5" />
+                    {g.label}
+                    <span className="text-[11px] opacity-60 ml-0.5">{g.rows.length}</span>
+                  </span>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full">
+                    {tableHead()}
+                    <tbody>
+                      {g.rows.map(renderRow)}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
