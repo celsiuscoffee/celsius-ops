@@ -151,3 +151,47 @@ export function getAuditInsights(outletId?: string) {
   const q = outletId ? `?outletId=${outletId}` : "";
   return api<AuditInsightsResponse>(`/api/audits/insights${q}`);
 }
+
+// Per-staff audit coverage — answers "who hasn't been audited yet, and
+// how did the ones audited do?". Returned per active STAFF template.
+export type AuditCoverageStatus = "never" | "stale" | "recent";
+
+export type AuditCoverageAuditee = {
+  userId: string;
+  name: string;
+  position: string | null;
+  status: AuditCoverageStatus;
+  lastAudit: {
+    reportId: string;
+    date: string;            // YYYY-MM-DD
+    overallScore: number | null;
+  } | null;
+};
+
+export type AuditCoverageTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  jobRoleFilter: string[];
+  totals: {
+    eligible: number;
+    recent: number;
+    stale: number;
+    never: number;
+    avgScore: number | null;
+  };
+  auditees: AuditCoverageAuditee[];
+};
+
+export type AuditCoverageResponse = {
+  templates: AuditCoverageTemplate[];
+  windowDays: number;
+};
+
+export function fetchAuditCoverage(opts?: { outletId?: string; windowDays?: number }) {
+  const params = new URLSearchParams();
+  if (opts?.outletId) params.set("outletId", opts.outletId);
+  if (opts?.windowDays) params.set("windowDays", String(opts.windowDays));
+  const q = params.toString();
+  return api<AuditCoverageResponse>(`/api/audits/coverage${q ? `?${q}` : ""}`);
+}

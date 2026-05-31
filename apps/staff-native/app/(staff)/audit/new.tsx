@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Check, ChevronDown } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
@@ -24,13 +24,20 @@ import {
 
 export default function NewAudit() {
   const router = useRouter();
+  // Coverage cards on /audit pass `?templateId=...&auditeeId=...` so
+  // the form opens pre-filled — one tap from "this staff needs audit"
+  // to actually doing the audit.
+  const params = useLocalSearchParams<{
+    templateId?: string;
+    auditeeId?: string;
+  }>();
   const [templates, setTemplates] = useState<AuditTemplate[]>([]);
   const [outlets, setOutlets] = useState<AuditOutlet[]>([]);
   const [auditees, setAuditees] = useState<AuditAuditee[]>([]);
   const [loading, setLoading] = useState(true);
-  const [templateId, setTemplateId] = useState("");
+  const [templateId, setTemplateId] = useState(params.templateId ?? "");
   const [outletId, setOutletId] = useState("");
-  const [auditeeId, setAuditeeId] = useState("");
+  const [auditeeId, setAuditeeId] = useState(params.auditeeId ?? "");
   const [creating, setCreating] = useState(false);
   const [picker, setPicker] = useState<"template" | "outlet" | "auditee" | null>(
     null,
