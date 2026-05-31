@@ -83,6 +83,13 @@ export function usePickupPrinter(
   // refresh.
   const outletRef = useRef(outletId);
   const productsRef = useRef(productsById);
+  // Web slug that maps to this POS outletId, resolved at mount via
+  // outlet_settings.loyalty_outlet_id. The customer PWA writes a
+  // different identifier on the orders row (e.g. "conezion") than
+  // the POS uses internally (e.g. "outlet-con"); without this
+  // resolver every web order failed the store_id check and silently
+  // never printed.
+  const storeIdRef = useRef<string | null>(null);
   useEffect(() => { outletRef.current = outletId; }, [outletId]);
   useEffect(() => { productsRef.current = productsById; }, [productsById]);
 
@@ -112,7 +119,7 @@ export function usePickupPrinter(
           .maybeSingle();
         const row = order as PickupOrderRow | null;
         if (!row) return;
-        if (row.store_id !== outletRef.current) return;
+        if (!storeIdRef.current || row.store_id !== storeIdRef.current) return;
         if (row.kitchen_docket_printed_at) return;
         if (!PRINTABLE_STATUSES.has(row.status)) return;
 
@@ -171,14 +178,40 @@ export function usePickupPrinter(
       }
     };
 
-    // ── 1. Catch-up pass ──────────────────────────────────────
-    // Anything paid + unprinted right now (POS was just opened,
-    // network blip, etc.) gets printed once on mount.
+    // The customer PWA (apps/order) writes a different outlet identifier
+    // on the orders row (e.g. "conezion") than the POS uses internally
+    // (e.g. "outlet-con"). They're linked via outlet_settings.loyalty_outlet_id.
+    // Resolve the web slug once here so the catch-up query, the per-row
+    // guard, and the Realtime filter all compare against the right
+    // identifier. Until this resolver was added every web order failed
+    // the store_id check and silently never printed.
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
     (async () => {
+      const { data: settings } = await supabase
+        .from("outlet_settings")
+        .select("store_id")
+        .eq("loyalty_outlet_id", outletId)
+        .maybeSingle();
+      const storeId = (settings as { store_id?: string } | null)?.store_id;
+      if (cancelled) return;
+      if (!storeId) {
+        console.warn(
+          "[pickup-printer] no outlet_settings.store_id maps to loyalty_outlet_id",
+          outletId,
+        );
+        return;
+      }
+      storeIdRef.current = storeId;
+
+      // ── 1. Catch-up pass ──────────────────────────────────────
+      // Anything paid + unprinted right now (POS was just opened,
+      // network blip, etc.) gets printed once on mount.
       const { data } = await supabase
         .from("orders")
         .select("id, status")
-        .eq("store_id", outletId)
+        .eq("store_id", storeId)
         .is("kitchen_docket_printed_at", null)
         .in("status", Array.from(PRINTABLE_STATUSES))
         // Last 6 hours only — we don't want to dump a day's worth
@@ -188,58 +221,62 @@ export function usePickupPrinter(
         .gte("created_at", new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString())
         .order("created_at", { ascending: true })
         .limit(20);
+      if (cancelled) return;
       for (const r of (data ?? []) as { id: string }[]) {
+        if (cancelled) break;
         // Sequential — back-to-back prints can starve the SUNMI
         // bridge if fired in parallel.
         // eslint-disable-next-line no-await-in-loop
         await tryPrintOrder(r.id);
       }
+      if (cancelled) return;
+
+      // ── 2. Live subscription ──────────────────────────────────
+      channel = supabase
+        .channel(`pickup-printer-${outletId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "orders",
+            filter: `store_id=eq.${storeId}`,
+          },
+          (payload) => {
+            const id = (payload.new as PickupOrderRow | null)?.id;
+            if (id) void tryPrintOrder(id);
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "orders",
+            filter: `store_id=eq.${storeId}`,
+          },
+          (payload) => {
+            const next = payload.new as PickupOrderRow | null;
+            const prev = payload.old as PickupOrderRow | null;
+            if (!next?.id) return;
+            // Only react when a status transition pushed the row
+            // into a printable state — paying for an existing
+            // pending order, or moving from "preparing" back into
+            // queue. Skip the UPDATE that sets printed_at (avoids
+            // an infinite loop with our own claim write).
+            if (next.kitchen_docket_printed_at) return;
+            const becamePrintable =
+              PRINTABLE_STATUSES.has(next.status) &&
+              (!prev || !PRINTABLE_STATUSES.has(prev.status));
+            if (becamePrintable) void tryPrintOrder(next.id);
+          },
+        )
+        .subscribe();
     })();
 
-    // ── 2. Live subscription ──────────────────────────────────
-    const channel = supabase
-      .channel(`pickup-printer-${outletId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "orders",
-          filter: `store_id=eq.${outletId}`,
-        },
-        (payload) => {
-          const id = (payload.new as PickupOrderRow | null)?.id;
-          if (id) void tryPrintOrder(id);
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "orders",
-          filter: `store_id=eq.${outletId}`,
-        },
-        (payload) => {
-          const next = payload.new as PickupOrderRow | null;
-          const prev = payload.old as PickupOrderRow | null;
-          if (!next?.id) return;
-          // Only react when a status transition pushed the row
-          // into a printable state — paying for an existing
-          // pending order, or moving from "preparing" back into
-          // queue. Skip the UPDATE that sets printed_at (avoids
-          // an infinite loop with our own claim write).
-          if (next.kitchen_docket_printed_at) return;
-          const becamePrintable =
-            PRINTABLE_STATUSES.has(next.status) &&
-            (!prev || !PRINTABLE_STATUSES.has(prev.status));
-          if (becamePrintable) void tryPrintOrder(next.id);
-        },
-      )
-      .subscribe();
-
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) void supabase.removeChannel(channel);
     };
   }, [outletId]);
 }
