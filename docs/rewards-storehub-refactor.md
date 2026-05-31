@@ -118,6 +118,133 @@ Once the canonical shape exists, the only structural difference between `rewards
 
 So the table consolidation is a side effect of the shape standardisation, not the goal. The goal is: *one row shape, one read path, one write path*.
 
+## The deeper collapse — Template + Trigger + Instance (2026-05-31 decision)
+
+The shape consolidation above stops the field-level drift, but the system still has *six* almost-identical "channel" tables that each carry "what's the voucher + when do we issue it":
+
+| Channel | Template table today | State table today | What's actually different? |
+|---|---|---|---|
+| Points Shop | `rewards` | (none) | trigger = customer spends N beans |
+| Challenges | `reward_missions` | `mission_assignments` | trigger = customer hits a progress goal |
+| Mystery Pool | `mystery_pool` | `mystery_drops` | trigger = random roll on every order, weighted |
+| Birthday | template ref on config | (none) | trigger = cron on member.birthday |
+| Tier Upgrade | template ref on `tiers` | `tier_benefit_grants` | trigger = member crosses tier threshold |
+| Admin Claimables | `admin_claimables` | per-member claim state | trigger = admin enqueues, customer claims |
+| Manual Grant | template ref | (none) | trigger = admin assigns directly |
+
+Read the "what's actually different" column. **Everything except the trigger is the same.** The voucher itself, its shape, its lifecycle, its discount math — identical. The difference is *when* and *who*.
+
+Yet today each channel has its own template table (`rewards`, `reward_missions`, `mystery_pool`, …), its own field set, its own inline-discount drift, its own backoffice page. The fundamentals of each reward channel are NOT different — only the trigger is.
+
+### Target model — 3 tables, one row shape for each concept
+
+```
+voucher_templates    ← "what the voucher does"
+                       (the canonical shape we standardised above)
+
+voucher_triggers     ← "when/how this template gets issued to a member"
+                       (one row per channel rule, type-discriminated)
+
+issued_rewards       ← "this template was issued to this member at this time"
+                       (already exists; gains template_id + trigger_id)
+```
+
+`voucher_triggers` columns:
+
+```
+id                uuid
+template_id       uuid REFERENCES voucher_templates(id)
+type              text CHECK in ('points_shop','mission','mystery',
+                                  'birthday','tier_upgrade','admin_push',
+                                  'manual_grant')
+is_active         boolean
+config            jsonb   -- type-specific config:
+                          --   points_shop:  { cost_beans: 300 }
+                          --   mission:      { goal_type: 'spend_rm',
+                          --                   goal_value: 30,
+                          --                   period_days: 7 }
+                          --   mystery:      { weight: 10, min_tier: 'bronze' }
+                          --   birthday:     { days_before: 0 }
+                          --   tier_upgrade: { tier_id: 'gold' }
+                          --   admin_push:   { audience_tags: ['vip'] }
+                          --   manual_grant: (no auto-issue, empty)
+valid_from        timestamptz
+valid_until       timestamptz
+created_at        timestamptz
+```
+
+One template can have MULTIPLE triggers — "Free Drink" can be sold for 300 beans AND awarded on birthday AND given on Gold tier upgrade. Today that's three rows in three different tables; after the refactor it's one template + three trigger rows.
+
+### Per-channel state tables stay thin
+
+Mission progress and mystery roll history still need somewhere to live, but they become **state tables**, not template tables — they carry per-member tracking, not reward shape:
+
+```
+member_mission_state    (member_id, trigger_id, progress, started_at, completed_at)
+member_mystery_history  (member_id, order_id, trigger_id, rolled_at)
+member_birthday_grants  (member_id, year, trigger_id)  -- prevents double-grant
+member_admin_claims     (member_id, trigger_id, claimed_at)
+```
+
+Each is ~5 columns. They're tracking, not configuration.
+
+### What the backoffice collapses to
+
+Today: 5 separate channel pages (Points Shop, Challenges, Mystery Pool, Birthday Treats, Admin Claimables) — each with its own form, fields, vocabulary.
+
+After: **one "New Reward" page** modeled on StoreHub's "New Promotion":
+
+```
+┌─ Enable [toggle] ──────────────────────────────────────────┐
+│                                                            │
+├─ The Voucher (template) ──────────────────────────────────┤
+│   Name · Description · Icon                                │
+│   Discount type [free_item ▾]   Value [—]                  │
+│   Scope [categories ▾]   Targets [chips: classic, mocha…]  │
+│   Min order · Max discount · Modifier filter (optional)    │
+│   Expiry policy                                            │
+│                                                            │
+├─ How customers earn it (one or more triggers) ────────────┤
+│   ☑ Spend Beans          Cost: [300] beans                 │
+│   ☑ Complete Challenge   Goal: [Spend RM30 in a week]      │
+│   ☐ Mystery Drop         Weight: [—]   Min tier: [—]       │
+│   ☑ On Birthday          Days before: [0]                  │
+│   ☐ On Tier Upgrade      Tier: [—]                         │
+│   ☐ Admin push           Audience: [—]                     │
+│   ☐ Manual grant only    (no auto-issue)                   │
+│                                                            │
+├─ Limits ──────────────────────────────────────────────────┤
+│   Stock · Per-member cap · Valid from/until · Stackable    │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+                                              [Save] [Cancel]
+```
+
+Same flow every time. The "trigger" section is the *only* place where channel rules live, and they're checkboxes — not separate pages. A reward list view can filter by trigger type ("show me just the mysteries") without needing dedicated pages.
+
+### Why this isn't just renaming
+
+- **Reporting collapses**: `JOIN issued_rewards.trigger_id` answers "which channels drove the most redemptions?" in one query. Today this needs UNIONs across 5 tables.
+- **Adding a new channel is one trigger type**: want "Refer-a-friend gives a voucher"? Add `type='referral'` to the enum + a small evaluator. No new template table, no new backoffice page, no new mint route.
+- **Cross-channel rewards become trivial**: "Free Drink is sold for 300 beans AND given on birthday" is two trigger rows. Today: two duplicate template rows in two different tables that can drift.
+- **Audit gets cleaner**: one place where vouchers are defined, one place where channels are configured, one place where instances live.
+
+### Refactor expands to 5 commits
+
+The earlier 3-commit plan (Commits 1–3) ships the canonical shape and collapses `rewards` into `voucher_templates`. Commits 4–5 ship the trigger consolidation:
+
+**Commit 4** — introduce `voucher_triggers` + backfill from the channel-specific tables:
+- Backfill `voucher_triggers` rows from `mystery_pool` (mystery type), `reward_missions` (mission type), birthday config (birthday type), tier upgrade refs (tier_upgrade type), `admin_claimables` (admin_push type).
+- Add `trigger_id` to `issued_rewards`; backfill where derivable from `source_type` + `source_ref_id`.
+- Channel-specific tables stay readable in parallel — readers gradually migrate to `voucher_triggers`.
+
+**Commit 5** — collapse the backoffice + drop legacy tables:
+- New "New Reward" page (replaces 5 channel pages). Old pages stay accessible as filtered views ("just mysteries", "just missions") for the first week, then removed.
+- `DROP TABLE mystery_pool, reward_missions, admin_claimables`. Per-channel state tables stay (renamed for clarity).
+- Drop legacy mint paths that wrote channel-specific tables. All mints go through one `mintFromTrigger(triggerId, memberId)` helper.
+
+Acceptance after Commit 5: 5 deletions (rewards, mystery_pool, reward_missions, admin_claimables, old mint glue), 1 addition (voucher_triggers), 5 backoffice pages → 1.
+
 ## What StoreHub does (reference architecture)
 
 Studied via `celsiuscoffee.storehubhq.com` on 2026-05-31. StoreHub's loyalty is split cleanly into three orthogonal concerns:
