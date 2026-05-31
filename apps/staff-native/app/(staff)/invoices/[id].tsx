@@ -295,7 +295,8 @@ export default function InvoiceDetailScreen() {
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerClassName="gap-2"
-            >
+      showsVerticalScrollIndicator={false}
+    >
               {invoice.photos.map((url) => (
                 <Image
                   key={url}
@@ -514,7 +515,8 @@ function AttachSheet({
           <ScrollView
             contentContainerClassName="px-5 py-4"
             keyboardShouldPersistTaps="handled"
-          >
+      showsVerticalScrollIndicator={false}
+    >
             <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
               Invoice number
             </Text>

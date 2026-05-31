@@ -151,7 +151,8 @@ export default function HrIndex() {
             tintColor="#A2492C"
           />
         }
-      >
+      showsVerticalScrollIndicator={false}
+    >
 
         {/* Clock card */}
         <Pressable

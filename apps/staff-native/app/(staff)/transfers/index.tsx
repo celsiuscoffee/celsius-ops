@@ -94,6 +94,7 @@ export default function TransfersPage() {
           ) : null}
         </View>
       )}
+      showsVerticalScrollIndicator={false}
     />
       )}
     </Screen>

@@ -542,7 +542,8 @@ function ChangePinSheet({
                 className="flex-1"
                 contentContainerClassName="px-5 pt-4"
                 keyboardShouldPersistTaps="handled"
-              >
+      showsVerticalScrollIndicator={false}
+    >
                 <PinField
                   label="Current PIN"
                   value={currentPin}

@@ -284,7 +284,9 @@ function OutletPicker({
               </Text>
             </Pressable>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 20, gap: 8 }}>
+          <ScrollView contentContainerStyle={{ padding: 20, gap: 8 }}
+      showsVerticalScrollIndicator={false}
+    >
             {outlets.map((o) => {
               const active = o.id === selectedId;
               return (

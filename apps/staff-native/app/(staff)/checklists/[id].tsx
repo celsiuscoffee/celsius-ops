@@ -281,7 +281,8 @@ export default function ChecklistDetail() {
           className="flex-1"
           contentContainerClassName="pt-2 pb-12"
           keyboardShouldPersistTaps="handled"
-        >
+      showsVerticalScrollIndicator={false}
+    >
         {/* Progress */}
         <View className="mt-4 rounded-3xl border border-border bg-surface p-4">
           <View className="flex-row items-center justify-between">

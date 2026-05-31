@@ -37,7 +37,8 @@ export default function PayslipsScreen() {
               No confirmed payslips yet.
             </Text>
           }
-        />
+      showsVerticalScrollIndicator={false}
+    />
       )}
     </Screen>
   );

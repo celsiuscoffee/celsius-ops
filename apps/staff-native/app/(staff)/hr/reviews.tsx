@@ -97,6 +97,7 @@ export default function ReviewsScreen() {
           </Text>
         </View>
       )}
+      showsVerticalScrollIndicator={false}
     />
       )}
     </Screen>

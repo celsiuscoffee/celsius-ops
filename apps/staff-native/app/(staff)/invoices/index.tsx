@@ -371,7 +371,8 @@ export default function InvoicesList() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 6 }}
             className="mb-3"
-          >
+      showsVerticalScrollIndicator={false}
+    >
             {filters.popStatus ? (
               <FilterChip
                 label={
@@ -481,7 +482,9 @@ export default function InvoicesList() {
               <XIcon color={iconColor} size={20} />
             </Pressable>
           </View>
-          <ScrollView contentContainerClassName="px-4 py-4 gap-5">
+          <ScrollView contentContainerClassName="px-4 py-4 gap-5"
+      showsVerticalScrollIndicator={false}
+    >
             {/* POP status — paid-only meaning. Three-state segmented. */}
             <View>
               <Text className="mb-2 text-[11px] font-body-semi uppercase tracking-wide text-muted">
@@ -685,7 +688,9 @@ export default function InvoicesList() {
               <Text className="text-sm font-body-bold text-muted">Close</Text>
             </Pressable>
           </View>
-          <ScrollView contentContainerClassName="px-4 py-4 gap-2">
+          <ScrollView contentContainerClassName="px-4 py-4 gap-2"
+      showsVerticalScrollIndicator={false}
+    >
             {suppliers.map((s) => {
               const selected = s.id === pendingFilters.supplierId;
               return (
@@ -731,7 +736,9 @@ export default function InvoicesList() {
               <Text className="text-sm font-body-bold text-muted">Close</Text>
             </Pressable>
           </View>
-          <ScrollView contentContainerClassName="px-4 py-4 gap-2">
+          <ScrollView contentContainerClassName="px-4 py-4 gap-2"
+      showsVerticalScrollIndicator={false}
+    >
             {outlets.map((o) => {
               const selected = o.id === pendingFilters.outletId;
               return (

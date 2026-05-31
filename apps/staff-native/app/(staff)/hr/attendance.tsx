@@ -39,7 +39,8 @@ export default function AttendanceScreen() {
               No attendance records in the last 30 days.
             </Text>
           }
-        />
+      showsVerticalScrollIndicator={false}
+    />
       )}
     </Screen>
   );

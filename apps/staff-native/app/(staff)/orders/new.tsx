@@ -817,7 +817,8 @@ export default function NewPO() {
           <ScrollView
             contentContainerClassName="px-4 py-3 gap-2"
             keyboardShouldPersistTaps="handled"
-          >
+      showsVerticalScrollIndicator={false}
+    >
             {(() => {
               const q = supplierSearch.trim().toLowerCase();
               const filteredSuppliers = q

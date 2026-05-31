@@ -41,7 +41,8 @@ export default function ShiftsScreen() {
           keyExtractor={(s) => s.id}
           ItemSeparatorComponent={() => <View className="h-3" />}
           renderItem={({ item }) => <ShiftCard shift={item} />}
-        />
+      showsVerticalScrollIndicator={false}
+    />
       )}
     </Screen>
   );

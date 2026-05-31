@@ -206,7 +206,8 @@ export default function WastagePage() {
             </View>
           </View>
         )}
-      />
+      showsVerticalScrollIndicator={false}
+    />
 
       {/* Pinned bottom CTA */}
       <View className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3 pb-8">
@@ -314,7 +315,8 @@ export default function WastagePage() {
                       </Text>
                     </Pressable>
                   )}
-                />
+      showsVerticalScrollIndicator={false}
+    />
               </View>
             ) : step === "quantity" ? (
               <View className="flex-1 items-center justify-center px-5">
@@ -376,7 +378,8 @@ export default function WastagePage() {
                 className="flex-1"
                 contentContainerClassName="px-5 pt-4 pb-12"
                 keyboardShouldPersistTaps="handled"
-              >
+      showsVerticalScrollIndicator={false}
+    >
                 <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
                   Reason
                 </Text>

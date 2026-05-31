@@ -64,7 +64,8 @@ export default function ClaimsList() {
           ItemSeparatorComponent={() => <View className="h-3" />}
           contentContainerClassName="pb-12"
           renderItem={({ item }) => <ClaimCard claim={item} />}
-        />
+      showsVerticalScrollIndicator={false}
+    />
       )}
     </Screen>
   );

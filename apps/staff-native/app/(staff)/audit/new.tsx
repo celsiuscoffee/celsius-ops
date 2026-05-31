@@ -119,7 +119,9 @@ export default function NewAudit() {
         subtitle="Pick a template and outlet to start."
         back
       />
-      <ScrollView contentContainerClassName="pb-12">
+      <ScrollView contentContainerClassName="pb-12"
+      showsVerticalScrollIndicator={false}
+    >
 
         <SelectorField
           label="Template"
@@ -187,7 +189,9 @@ export default function NewAudit() {
               <Text className="text-sm font-body-bold text-muted">Close</Text>
             </Pressable>
           </View>
-          <ScrollView contentContainerClassName="px-5 py-4 gap-2">
+          <ScrollView contentContainerClassName="px-5 py-4 gap-2"
+      showsVerticalScrollIndicator={false}
+    >
             {picker === "template"
               ? templates.map((t) => (
                   <PickerRow

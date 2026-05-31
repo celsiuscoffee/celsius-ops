@@ -535,7 +535,9 @@ function SupplierPicker({
             className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body text-espresso"
           />
         </View>
-        <ScrollView className="flex-1" contentContainerClassName="px-5 py-4">
+        <ScrollView className="flex-1" contentContainerClassName="px-5 py-4"
+      showsVerticalScrollIndicator={false}
+    >
           {filtered.length === 0 ? (
             <Text className="mt-8 text-center text-sm text-muted-fg">
               No suppliers match "{query}"

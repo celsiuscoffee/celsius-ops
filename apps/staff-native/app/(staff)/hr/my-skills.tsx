@@ -83,6 +83,7 @@ export default function MySkills() {
           tintColor="#A2492C"
         />
       }
+      showsVerticalScrollIndicator={false}
     >
       {coach && !coach.needs_more_data ? (
         <View className="rounded-3xl border border-primary/30 bg-primary-50/30 p-4">

@@ -325,7 +325,8 @@ export default function ReceivingPage() {
           </View>
         ) : null
       }
-      />
+      showsVerticalScrollIndicator={false}
+    />
     </Screen>
   );
 }
@@ -388,7 +389,8 @@ function ReceiveDetail({
           className="flex-1"
           contentContainerClassName="px-5 pt-4 pb-32"
           keyboardShouldPersistTaps="handled"
-        >
+      showsVerticalScrollIndicator={false}
+    >
           {/* Items */}
           <View className="gap-2">
             {po.items.map((item) => {

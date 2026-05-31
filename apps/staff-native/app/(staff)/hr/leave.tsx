@@ -123,7 +123,8 @@ export default function LeaveScreen() {
             tintColor="#A2492C"
           />
         }
-      >
+      showsVerticalScrollIndicator={false}
+    >
         {/* Balances */}
         <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
           Balances ({new Date().getFullYear()})
@@ -213,7 +214,8 @@ export default function LeaveScreen() {
               className="flex-1"
               contentContainerClassName="px-5 pt-4 pb-8"
               keyboardShouldPersistTaps="handled"
-            >
+      showsVerticalScrollIndicator={false}
+    >
               <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
                 Type
               </Text>

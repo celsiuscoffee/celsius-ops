@@ -111,7 +111,8 @@ export default function PersonalScreen() {
           className="flex-1"
           contentContainerClassName="pb-40"
           keyboardShouldPersistTaps="handled"
-        >
+      showsVerticalScrollIndicator={false}
+    >
           {/* Completeness */}
           <View className="rounded-2xl border border-border bg-surface p-4">
             <View className="flex-row items-center justify-between">
@@ -583,7 +584,9 @@ function PickerField({
               <Text className="text-sm font-body-bold text-primary">Close</Text>
             </Pressable>
           </View>
-          <ScrollView className="flex-1" contentContainerClassName="px-5 py-4">
+          <ScrollView className="flex-1" contentContainerClassName="px-5 py-4"
+      showsVerticalScrollIndicator={false}
+    >
             {options.map((opt) => {
               const active = (value ?? "").toLowerCase() === opt.toLowerCase();
               return (

@@ -302,7 +302,8 @@ export default function AuditDetail() {
         <ScrollView
           className="flex-1"
           contentContainerClassName="px-5 pt-6 pb-12"
-        >
+      showsVerticalScrollIndicator={false}
+    >
           <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
             {item.sectionName}
           </Text>
@@ -573,7 +574,9 @@ export default function AuditDetail() {
                   </Text>
                 </Pressable>
               </View>
-              <ScrollView contentContainerClassName="px-5 pt-4 pb-12">
+              <ScrollView contentContainerClassName="px-5 pt-4 pb-12"
+      showsVerticalScrollIndicator={false}
+    >
                 <View className="rounded-2xl border border-border bg-surface p-4">
                   <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
                     Summary
@@ -705,7 +708,9 @@ function CompletedView({
   return (
     <Screen>
       <PageHeader title={audit.template.name} subtitle="Completed audit" back />
-      <ScrollView contentContainerClassName="pt-2 pb-12">
+      <ScrollView contentContainerClassName="pt-2 pb-12"
+      showsVerticalScrollIndicator={false}
+    >
         <View className="mt-1 flex-row items-end gap-2">
           <Text className="text-4xl font-display text-espresso">
             {audit.overallScore ?? 0}

@@ -628,7 +628,8 @@ export default function StockCount() {
             </View>
           );
         }}
-      />
+      showsVerticalScrollIndicator={false}
+    />
 
       {/* Finalize CTA pinned bottom */}
       <View className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3 pb-8">

@@ -180,7 +180,8 @@ export default function ChecklistsList() {
               </View>
             </View>
           )}
-        />
+      showsVerticalScrollIndicator={false}
+    />
       )}
     </Screen>
   );

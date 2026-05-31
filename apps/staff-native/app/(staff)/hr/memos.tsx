@@ -52,6 +52,7 @@ export default function MemosScreen() {
           No memos right now.
         </Text>
       }
+      showsVerticalScrollIndicator={false}
     />
       )}
     </Screen>

@@ -125,7 +125,8 @@ export default function AuditList() {
             ) : null}
           </View>
         }
-      />
+      showsVerticalScrollIndicator={false}
+    />
 
       {/* Pinned bottom CTA */}
       <View className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3 pb-8">
