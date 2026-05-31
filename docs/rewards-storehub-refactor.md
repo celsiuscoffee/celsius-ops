@@ -1,7 +1,49 @@
 # Rewards / Loyalty Refactor — StoreHub-style Consolidation
 
-**Status:** Spec • **Decision date:** 2026-05-31 • **Owner:** Ammar
+**Status:** Commits 1–3 SHIPPED • **Decision date:** 2026-05-31 • **Owner:** Ammar
 **Prereq context:** see [rewards-v2-setup.md](./rewards-v2-setup.md) for the existing v2 schema.
+
+> ## ✅ Final shape (2026-05-31) — read this first
+>
+> | Phase | Status |
+> |---|---|
+> | **Commit 1** — canonical shape on `voucher_templates` (scope / target_ids / modifier_filter / points_cost + backfill) | **DONE** — `docs/migrations/rewards-canonical-shape-commit1.sql` |
+> | **Commit 2** — every mint path writes `issued_rewards.voucher_template_id` | **DONE** — commit `eb05593d` |
+> | **Commit 3** — customer catalog reads `voucher_templates`, backoffice list de-duplicated | **DONE (safe slice)** — `docs/migrations/rewards-canonical-shape-commit3.sql`. The full `DROP TABLE rewards` is **deferred** (30+ refs across 4 apps; `legacy_reward_id` bridges catalog↔redeem until then). |
+> | **Commits 4 & 5** — `voucher_triggers` table + collapse channel tables | **NOT PURSUED.** See decision below. |
+>
+> ### Decision: channels stay separate
+>
+> The "Template + Trigger + Instance" collapse (introduce a single
+> `voucher_triggers` table, fold Mystery Pool / Challenges / Birthday /
+> Tier Upgrade / Admin Claimables into it, collapse the 5 backoffice
+> pages into one form) is **explicitly NOT happening.**
+>
+> Instead:
+> - `voucher_templates` is the **single source of truth for what a
+>   reward is** (the template registry — managed on the new All Rewards
+>   page).
+> - Each **channel keeps its own table + its own backoffice page**
+>   (`mystery_pool`, `reward_missions`, `admin_claimables`, birthday
+>   config, tier-upgrade attach) and **references templates** via
+>   `voucher_template_id`. They were already doing this — no migration
+>   needed on the channel side.
+> - The "How customers earn it" trigger checkboxes were removed from the
+>   reward form (commit `da0abff9`). Wire/unwire triggers on the channel
+>   pages.
+>
+> Rationale: the channels have genuinely different config surfaces
+> (mystery weighting/drop-%, mission goals/cooldown, tier thresholds,
+> admin audiences). Forcing them through one `voucher_triggers.config`
+> jsonb lost the purpose-built UX without a real payoff. The drift the
+> refactor targeted lived in the *reward shape*, not the *trigger
+> config* — and that's fixed by Commits 1–3.
+>
+> Everything below the divider is the original spec, kept for history.
+> Sections describing `voucher_triggers` / the 5-commit plan are
+> **superseded** by the box above.
+
+---
 
 ## Problem
 
@@ -145,6 +187,11 @@ Once the canonical shape exists, the only structural difference between `rewards
 So the table consolidation is a side effect of the shape standardisation, not the goal. The goal is: *one row shape, one read path, one write path*.
 
 ## The deeper collapse — Template + Trigger + Instance (2026-05-31 decision)
+
+> **⚠️ SUPERSEDED — NOT BUILT.** This entire section (voucher_triggers,
+> the 3-table model, the unified "New Reward" form with trigger
+> checkboxes, Commits 4 & 5) was retired. Channels stay separate — see
+> the "Final shape" box at the top of this doc. Kept for history only.
 
 The shape consolidation above stops the field-level drift, but the system still has *six* almost-identical "channel" tables that each carry "what's the voucher + when do we issue it":
 
