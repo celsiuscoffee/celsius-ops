@@ -48,12 +48,18 @@ That's it. Six fields define every reward. Below: every reward type expressed in
   modifier_filter: null,
   min_order_value: null }
 
-// "Free Large Upgrade on any coffee" (specific modifier on a category)
+// "Free Add-on" — refund customer's selected add-on modifier on any drink.
+// Celsius today has ONE modifier group called Add-ons (no size/milk
+// variants), so the modifier_filter is empty and the engine works at the
+// modifier-priceDelta level inside discount_type='free_upgrade'. (Engine
+// semantics for free_upgrade still needs the refinement described in the
+// reward audit — current behaviour is "free the whole cheapest line",
+// which is too generous.)
 { discount_type: "free_upgrade",
   discount_value: null,
-  scope: "categories",
-  target_ids: ["classic","flavoured","mocha"],
-  modifier_filter: { size: "large" },
+  scope: "everything",
+  target_ids: null,
+  modifier_filter: null,
   min_order_value: null }
 
 // "RM5 off any order"
@@ -309,6 +315,27 @@ Should we also collapse `reward_kinds` + `mystery_pool` + `reward_missions` into
 `voucher_templates`? They each define "what a voucher looks like" for a specific
 issue path. Not in scope for this refactor — those tables already point at
 templates, so they're orchestration not duplication. Revisit if drift emerges.
+
+## Reward audit (2026-05-31) — does every existing row fit?
+
+Walked all 14 `voucher_templates` + 3 `rewards` rows through the canonical shape.
+`mystery_pool` (7 rows) and `reward_missions` (9 rows) are pure orchestration —
+they reference `voucher_template_id`(s) and inherit shape automatically. No
+migration touch needed on either.
+
+**31 of 33 rows fit cleanly.** The 2 outliers are both `free_item`/`free_upgrade`
+templates with no eligibility set anywhere on the row:
+
+- **Free Pastry** (inactive) — abandoned mid-config. **Decision: delete the row
+  during migration**, don't migrate. If admins want a "free pastry" reward
+  later they create it fresh with proper category targeting.
+- **Free Add-on** (active) — name suggests "free your selected add-on modifier"
+  but no eligibility wired. Celsius's catalog has only ONE modifier group
+  ("Add-ons" — no size/milk variants), so `modifier_filter` doesn't help here.
+  **Decision: migrate as `scope='everything'`** (matches today's
+  every-line-eligible engine fallback) and **add a follow-up ticket** to give
+  `free_upgrade` distinct engine semantics — "refund the modifier upcharge on
+  the cheapest line that has add-ons", not "free the whole line."
 
 ## Decisions captured 2026-05-31 (sign-off log)
 
