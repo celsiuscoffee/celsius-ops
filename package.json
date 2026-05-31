@@ -6,14 +6,12 @@
     "apps/loyalty",
     "apps/order",
     "apps/pickup",
-    "apps/pos",
     "apps/staff",
     "packages/*"
   ],
   "scripts": {
     "dev:loyalty": "cd apps/loyalty && npm run dev",
     "dev:backoffice": "cd apps/backoffice && npm run dev",
-    "dev:pos": "cd apps/pos && npm run dev",
     "dev:staff": "cd apps/staff && npm run dev",
     "dev:order": "cd apps/order && npm run dev",
     "db:generate": "cd packages/db && npx prisma generate",
