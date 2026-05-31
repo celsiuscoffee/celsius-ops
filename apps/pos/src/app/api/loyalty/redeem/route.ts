@@ -33,14 +33,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "member_id and reward_id required" }, { status: 400 });
     }
 
-    // Fetch reward details
+    // Cleanup: resolve the canonical voucher_templates row (Bean-Shop
+    // mirror) by legacy_reward_id, not the legacy rewards table. The
+    // name:title and points_required:points_cost aliases keep all the
+    // downstream code (buildDiscountInfo, points math) unchanged; "*"
+    // still pulls discount_type/value/free_product_* for the discount.
     const { data: reward, error: rwErr } = await supabase
-      .from("rewards")
-      .select("*")
-      .eq("id", reward_id)
+      .from("voucher_templates")
+      .select("*, name:title, points_required:points_cost")
+      .eq("legacy_reward_id", reward_id)
       .eq("brand_id", BRAND_ID)
       .eq("is_active", true)
-      .single();
+      .maybeSingle();
 
     if (rwErr || !reward) {
       return NextResponse.json({ error: "Reward not found or inactive" }, { status: 404 });
@@ -164,12 +168,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to create redemption" }, { status: 500 });
     }
 
-    // Decrement stock
+    // Decrement stock on the canonical template, keyed by legacy id.
     if (reward.stock !== null) {
       await supabase
-        .from("rewards")
+        .from("voucher_templates")
         .update({ stock: Math.max(0, reward.stock - 1) })
-        .eq("id", reward_id)
+        .eq("legacy_reward_id", reward_id)
         .gt("stock", 0);
     }
 

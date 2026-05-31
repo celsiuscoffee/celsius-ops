@@ -32,14 +32,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch reward
+    // Cleanup: resolve the canonical voucher_templates row (Bean-Shop
+    // mirror) by legacy_reward_id, not the legacy rewards table. The
+    // name:title / points_required:points_cost / max_redemptions_per_member:
+    // max_per_member aliases keep the handler below unchanged; "*" pulls
+    // discount_type/value/bogo_* for the pickup discount payload.
+    // (expiry_minutes has no template column → undefined → defaults to 60,
+    // identical to the null catalog rows.)
     const { data: reward, error: rewardError } = await supabaseAdmin
-      .from('rewards')
-      .select('*')
-      .eq('id', reward_id)
+      .from('voucher_templates')
+      .select('*, name:title, points_required:points_cost, max_redemptions_per_member:max_per_member')
+      .eq('legacy_reward_id', reward_id)
       .eq('brand_id', brand_id)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
 
     if (rewardError || !reward) {
       return NextResponse.json(
@@ -87,7 +93,7 @@ export async function POST(request: NextRequest) {
       console.error('deduct_points RPC error:', deductError.message);
       // Fallback: if RPC doesn't exist yet, use legacy non-atomic method
       if (deductError.message.includes('function') || deductError.code === '42883') {
-        return await legacyRedeem(member_id, reward, brand_id, outlet_id, staff_redeem);
+        return await legacyRedeem(member_id, reward_id, reward, brand_id, outlet_id, staff_redeem);
       }
       return NextResponse.json({ error: 'Failed to deduct points' }, { status: 500 });
     }
@@ -162,12 +168,12 @@ export async function POST(request: NextRequest) {
         multiplier: 1,
       });
 
-    // Atomic stock decrement (only if stock is tracked)
+    // Atomic stock decrement on the canonical template, keyed by legacy id.
     if (reward.stock !== null) {
       await supabaseAdmin
-        .from('rewards')
+        .from('voucher_templates')
         .update({ stock: Math.max(0, reward.stock - 1) })
-        .eq('id', reward_id)
+        .eq('legacy_reward_id', reward_id)
         .gt('stock', 0);
     }
 
@@ -204,6 +210,10 @@ export async function POST(request: NextRequest) {
 // Legacy fallback for when the RPC function hasn't been created yet
 async function legacyRedeem(
   member_id: string,
+  // legacyRewardId is the original 'reward-X' text id. redemptions.reward_id
+  // is keyed to it, and reward.id is now the voucher_templates UUID — so any
+  // write that targets the legacy id must use this param, not reward.id.
+  legacyRewardId: string,
   reward: { id: string; name: string; points_required: number; stock: number | null },
   brand_id: string,
   outlet_id: string | null,
@@ -236,7 +246,7 @@ async function legacyRedeem(
     .insert({
       id: rdmId,
       member_id,
-      reward_id: reward.id,
+      reward_id: legacyRewardId,
       brand_id,
       outlet_id: outlet_id || null,
       points_spent: reward.points_required,
@@ -277,9 +287,9 @@ async function legacyRedeem(
 
   if (reward.stock !== null) {
     await supabaseAdmin
-      .from('rewards')
+      .from('voucher_templates')
       .update({ stock: Math.max(0, reward.stock - 1) })
-      .eq('id', reward.id)
+      .eq('legacy_reward_id', legacyRewardId)
       .gt('stock', 0);
   }
 

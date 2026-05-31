@@ -711,14 +711,21 @@ export async function fetchLoyaltySnapshot(
       )
       .eq("brand_id", BRAND_ID)
       .eq("is_active", true),
+    // Cleanup: the points shop reads the canonical voucher_templates
+    // catalog (rows with points_cost set), not the legacy rewards table.
+    // id:legacy_reward_id exposes the original 'reward-X' id so tapping a
+    // tile still routes through /redeem (which keys on legacy_reward_id).
+    // reward_type is dropped — it isn't on the template (all rows are
+    // vouchers); the consumer below never reads it.
     supabase
-      .from("rewards")
+      .from("voucher_templates")
       .select(
-        "id, name, description, points_required, image_url, category, stock, is_active, reward_type, discount_type, discount_value, max_discount_value, free_product_name, free_product_ids, applicable_categories, applicable_products",
+        "id:legacy_reward_id, name:title, description, points_required:points_cost, image_url, category, stock, is_active, discount_type, discount_value, max_discount_value, free_product_name, free_product_ids, applicable_categories, applicable_products",
       )
       .eq("brand_id", BRAND_ID)
       .eq("is_active", true)
-      .order("points_required", { ascending: true })
+      .not("points_cost", "is", null)
+      .order("points_cost", { ascending: true })
       .limit(20),
     // Fetch ALL active tiers (no sort_order filter). The previous
     // <= 50 cap hid admin tiers like Black Card (99) and Staff (90),
