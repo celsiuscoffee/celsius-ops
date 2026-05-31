@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rewards — Celsius Backoffice (mock)</title>
+<style>
+  :root {
+    --bg:          #160800;
+    --surface:     #1F0F05;
+    --surface-2:   #2A1411;
+    --surface-3:   #3A1F1A;
+    --border:      rgba(245, 243, 240, 0.10);
+    --border-hi:   rgba(245, 243, 240, 0.22);
+    --fg:          #F5F3F0;
+    --fg-dim:      rgba(245, 243, 240, 0.60);
+    --fg-muted:    rgba(245, 243, 240, 0.42);
+    --terracotta:  #A2492C;
+    --gold:        #FBBF24;
+    --peach:       #F4D3B0;
+    --danger:      #E5544B;
+    --ok:          #5BC579;
+    --warn:        #F2A03F;
+    --radius:      14px;
+    --radius-sm:   10px;
+    --font-display:Georgia, 'Times New Roman', serif;
+    --font-body:   -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.5; }
+
+  /* ---- Top bar ---- */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; border-bottom: 1px solid var(--border);
+    background: var(--bg); position: sticky; top: 0; z-index: 10;
+  }
+  .crumbs { display: flex; gap: 8px; align-items: center; color: var(--fg-dim); font-size: 13px; }
+  .crumbs a { color: var(--fg-dim); text-decoration: none; }
+  .crumbs a:hover { color: var(--gold); }
+  .crumbs .sep { opacity: 0.4; }
+  .crumbs .here { color: var(--fg); }
+
+  .wrap { max-width: 1280px; margin: 28px auto; padding: 0 28px 80px; }
+  h1 {
+    font-family: var(--font-display); font-weight: 700; font-style: italic;
+    font-size: 32px; letter-spacing: -0.01em; margin: 0 0 8px;
+    color: var(--gold);
+  }
+  .subtitle { color: var(--fg-dim); margin-bottom: 20px; font-size: 14px; }
+
+  /* ---- Stats row ---- */
+  .stats {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px;
+    margin-bottom: 22px;
+  }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .stat .n { font-family: var(--font-display); font-style: italic; font-weight: 700; font-size: 24px; color: var(--gold); }
+  .stat .lbl { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; margin-top: 4px; }
+  .stat.warn .n { color: var(--warn); }
+  .stat.dim .n { color: var(--fg-dim); }
+
+  /* ---- Filter bar ---- */
+  .filterbar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 20px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .filterbar .row1 { display: flex; gap: 10px; align-items: center; }
+  .filterbar .search {
+    flex: 1; display: grid; grid-template-columns: auto 1fr; align-items: center;
+    background: var(--surface-2); border: 1px solid var(--border-hi); border-radius: var(--radius-sm);
+    padding: 0 12px;
+  }
+  .filterbar .search .ic { color: var(--fg-muted); margin-right: 8px; }
+  .filterbar .search input {
+    background: transparent; border: none; outline: none; padding: 10px 0;
+    color: var(--fg); font-size: 14px; font-family: inherit;
+  }
+  .filterbar select {
+    background: var(--surface-2); border: 1px solid var(--border-hi); color: var(--fg);
+    padding: 9px 12px; border-radius: var(--radius-sm); font-family: inherit; font-size: 13px;
+  }
+  .filterbar .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill {
+    padding: 6px 12px; border-radius: 999px; background: var(--surface-2);
+    border: 1px solid var(--border-hi); color: var(--fg-dim);
+    cursor: pointer; font-size: 12px; font-weight: 600;
+    user-select: none; transition: 0.15s;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .pill:hover { color: var(--fg); border-color: var(--fg-dim); }
+  .pill.on { background: var(--gold); color: #1A0200; border-color: var(--gold); }
+  .pill .ic { font-size: 13px; }
+  .pill .count {
+    font-size: 11px; padding: 0 6px; background: rgba(0,0,0,0.15); border-radius: 999px;
+    font-weight: 700;
+  }
+  .pill.on .count { background: rgba(0,0,0,0.18); }
+  .filtergroup-label {
+    font-size: 11px; color: var(--fg-muted); font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; margin-right: 6px; align-self: center;
+  }
+
+  /* ---- Filter divider ---- */
+  .filterbar .pillgroup { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+  /* ---- Toolbar (sort + view + bulk) ---- */
+  .toolbar {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px; gap: 12px;
+  }
+  .toolbar .result-count { font-size: 13px; color: var(--fg-dim); }
+  .toolbar .right { display: flex; gap: 8px; align-items: center; }
+
+  /* ---- Buttons ---- */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; border: 1px solid transparent; transition: 0.15s; text-transform: uppercase; letter-spacing: 0.05em; }
+  .btn-primary { background: var(--gold); color: #1A0200; }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-ghost { background: transparent; color: var(--fg-dim); border-color: var(--border-hi); }
+  .btn-ghost:hover { color: var(--fg); border-color: var(--fg-dim); }
+  .btn-sm { padding: 6px 12px; font-size: 11px; }
+
+  /* ---- Table ---- */
+  .table {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 700;
+    color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.08em;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  tbody td { padding: 14px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody tr { transition: 0.1s; }
+  tbody tr:hover { background: var(--surface-2); cursor: pointer; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .reward-cell { display: flex; align-items: flex-start; gap: 10px; min-width: 220px; }
+  .reward-icon {
+    width: 40px; height: 40px; flex-shrink: 0;
+    border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .icon-bean { background: rgba(162, 73, 44, 0.15); color: var(--terracotta); }
+  .icon-mystery { background: rgba(251, 191, 36, 0.15); color: var(--gold); }
+  .icon-challenge { background: rgba(91, 197, 121, 0.12); color: var(--ok); }
+  .icon-birthday { background: rgba(244, 211, 176, 0.16); color: var(--peach); }
+  .icon-tier { background: rgba(242, 160, 63, 0.14); color: var(--warn); }
+  .icon-admin { background: rgba(229, 84, 75, 0.12); color: var(--danger); }
+  .icon-manual { background: rgba(245, 243, 240, 0.06); color: var(--fg-dim); }
+
+  .reward-meta { display: flex; flex-direction: column; gap: 2px; }
+  .reward-name { font-weight: 700; color: var(--fg); font-size: 14px; line-height: 1.3; }
+  .reward-desc { font-size: 12px; color: var(--fg-muted); line-height: 1.4; }
+
+  /* ---- Cells ---- */
+  .badge {
+    display: inline-block; padding: 3px 9px; border-radius: 6px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+    background: var(--surface-2); color: var(--fg-dim);
+    border: 1px solid var(--border-hi);
+  }
+  .badge-flat { background: rgba(91, 197, 121, 0.12); color: var(--ok); border-color: rgba(91, 197, 121, 0.3); }
+  .badge-percent { background: rgba(242, 160, 63, 0.12); color: var(--warn); border-color: rgba(242, 160, 63, 0.3); }
+  .badge-free_item { background: rgba(244, 211, 176, 0.14); color: var(--peach); border-color: rgba(244, 211, 176, 0.3); }
+  .badge-free_upgrade { background: rgba(244, 211, 176, 0.14); color: var(--peach); border-color: rgba(244, 211, 176, 0.3); }
+  .badge-bogo { background: rgba(251, 191, 36, 0.14); color: var(--gold); border-color: rgba(251, 191, 36, 0.3); }
+  .badge-combo { background: rgba(251, 191, 36, 0.14); color: var(--gold); border-color: rgba(251, 191, 36, 0.3); }
+  .badge-override_price { background: rgba(229, 84, 75, 0.12); color: var(--danger); border-color: rgba(229, 84, 75, 0.3); }
+  .badge-beans_multiplier { background: rgba(162, 73, 44, 0.15); color: var(--terracotta); border-color: rgba(162, 73, 44, 0.3); }
+
+  .trig-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+  .trig-chip {
+    display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px;
+    border-radius: 6px; font-size: 11px; font-weight: 600;
+    background: var(--surface-2); color: var(--fg-dim); border: 1px solid var(--border);
+    transition: 0.15s;
+  }
+  .trig-chip .ic { font-size: 12px; }
+  .trig-chip.points_shop { color: var(--terracotta); border-color: rgba(162, 73, 44, 0.3); background: rgba(162, 73, 44, 0.08); }
+  .trig-chip.mission { color: var(--ok); border-color: rgba(91, 197, 121, 0.3); background: rgba(91, 197, 121, 0.08); }
+  .trig-chip.mystery { color: var(--gold); border-color: rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.08); }
+  .trig-chip.birthday { color: var(--peach); border-color: rgba(244, 211, 176, 0.3); background: rgba(244, 211, 176, 0.08); }
+  .trig-chip.tier_upgrade { color: var(--warn); border-color: rgba(242, 160, 63, 0.3); background: rgba(242, 160, 63, 0.08); }
+  .trig-chip.admin_push { color: var(--danger); border-color: rgba(229, 84, 75, 0.3); background: rgba(229, 84, 75, 0.08); }
+  .trig-chip.manual_grant { color: var(--fg-dim); }
+
+  .status-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ok); box-shadow: 0 0 0 2px rgba(91, 197, 121, 0.15);
+  }
+  .status-dot.paused { background: var(--fg-muted); box-shadow: 0 0 0 2px rgba(245,243,240,0.1); }
+  .status-dot.archived { background: var(--danger); box-shadow: 0 0 0 2px rgba(229,84,75,0.15); }
+
+  .stats-cell { font-variant-numeric: tabular-nums; }
+  .stats-cell .big { font-weight: 700; color: var(--fg); font-size: 14px; }
+  .stats-cell .small { font-size: 11px; color: var(--fg-muted); margin-top: 2px; }
+  .stats-cell .rate {
+    margin-top: 4px; height: 4px; background: var(--surface-3); border-radius: 999px; overflow: hidden;
+  }
+  .stats-cell .rate .bar { height: 100%; background: var(--ok); border-radius: 999px; }
+
+  .actions-menu {
+    width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 6px; cursor: pointer; color: var(--fg-dim);
+  }
+  .actions-menu:hover { background: var(--surface-2); color: var(--fg); }
+
+  /* ---- Empty state ---- */
+  .empty { padding: 60px 20px; text-align: center; color: var(--fg-muted); }
+
+  /* ---- Footer ---- */
+  .table-foot {
+    padding: 12px 16px; display: flex; justify-content: space-between;
+    align-items: center; font-size: 12px; color: var(--fg-dim);
+    border-top: 1px solid var(--border);
+  }
+  .pager { display: flex; gap: 4px; }
+  .pager .pg {
+    width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+    background: var(--surface-2); border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border);
+  }
+  .pager .pg.on { background: var(--gold); color: #1A0200; border-color: var(--gold); }
+  .pager .pg:hover:not(.on) { color: var(--fg); }
+
+  /* ---- View toggle ---- */
+  .view-toggle { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border-hi); border-radius: 999px; padding: 3px; }
+  .view-toggle button { background: transparent; color: var(--fg-dim); border: none; padding: 6px 12px; border-radius: 999px; font-family: inherit; font-size: 12px; cursor: pointer; font-weight: 600; }
+  .view-toggle button.on { background: var(--gold); color: #1A0200; }
+
+  /* ---- Grouped view ---- */
+  .group-header {
+    padding: 16px 20px 10px;
+    font-size: 12px; font-weight: 700; color: var(--gold);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .group-header:first-child { border-top: none; }
+  .group-header .cnt { color: var(--fg-muted); font-weight: 600; }
+
+  .top-actions { display: flex; gap: 10px; }
+
+  @media (max-width: 900px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .filterbar .row1 { flex-direction: column; align-items: stretch; }
+    table { font-size: 12px; }
+    .hide-mobile { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="crumbs">
+    <a href="#">Dashboard</a><span class="sep">›</span>
+    <span class="here">Rewards</span>
+  </div>
+  <div class="top-actions">
+    <button class="btn btn-ghost">Export CSV</button>
+    <button class="btn btn-primary" onclick="location.href='new-reward.html'">+ New Reward</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <h1>Rewards</h1>
+  <div class="subtitle">All reward templates across every channel. One template can fire on multiple triggers.</div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat"><div class="n">17</div><div class="lbl">Total Rewards</div></div>
+    <div class="stat"><div class="n">15</div><div class="lbl">Active</div></div>
+    <div class="stat dim"><div class="n">2</div><div class="lbl">Paused</div></div>
+    <div class="stat"><div class="n">312</div><div class="lbl">Issued (30d)</div></div>
+    <div class="stat warn"><div class="n">38%</div><div class="lbl">Redemption Rate</div></div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filterbar">
+    <div class="row1">
+      <div class="search">
+        <span class="ic">🔍</span>
+        <input type="text" placeholder="Search by name, description, or reward ID…">
+      </div>
+      <select id="sort">
+        <option>Sort: Recently updated</option>
+        <option>Sort: Name A→Z</option>
+        <option>Sort: Most issued</option>
+        <option>Sort: Most redeemed</option>
+        <option>Sort: Lowest redemption rate</option>
+        <option>Sort: Oldest first</option>
+      </select>
+      <div class="view-toggle">
+        <button class="on" onclick="setView('table')">Table</button>
+        <button onclick="setView('grouped')">By Trigger</button>
+      </div>
+    </div>
+
+    <div class="pillgroup">
+      <span class="filtergroup-label">Trigger</span>
+      <span class="pill on" data-group="trig" data-v="all">All <span class="count">17</span></span>
+      <span class="pill" data-group="trig" data-v="points_shop"><span class="ic">🪙</span> Bean Shop <span class="count">3</span></span>
+      <span class="pill" data-group="trig" data-v="mission"><span class="ic">🎯</span> Challenges <span class="count">5</span></span>
+      <span class="pill" data-group="trig" data-v="mystery"><span class="ic">🎁</span> Mystery <span class="count">6</span></span>
+      <span class="pill" data-group="trig" data-v="birthday"><span class="ic">🎂</span> Birthday <span class="count">1</span></span>
+      <span class="pill" data-group="trig" data-v="tier_upgrade"><span class="ic">👑</span> Tier Upgrade <span class="count">2</span></span>
+      <span class="pill" data-group="trig" data-v="admin_push"><span class="ic">📣</span> Admin Push <span class="count">0</span></span>
+      <span class="pill" data-group="trig" data-v="manual_grant"><span class="ic">✋</span> Manual <span class="count">2</span></span>
+    </div>
+
+    <div class="pillgroup">
+      <span class="filtergroup-label">Discount</span>
+      <span class="pill on" data-group="dt" data-v="all">All</span>
+      <span class="pill" data-group="dt" data-v="flat">Flat — RM off <span class="count">6</span></span>
+      <span class="pill" data-group="dt" data-v="percent">Percent <span class="count">1</span></span>
+      <span class="pill" data-group="dt" data-v="free_item">Free item <span class="count">6</span></span>
+      <span class="pill" data-group="dt" data-v="free_upgrade">Free upgrade <span class="count">1</span></span>
+      <span class="pill" data-group="dt" data-v="bogo">BOGO <span class="count">1</span></span>
+      <span class="pill" data-group="dt" data-v="combo">Combo <span class="count">0</span></span>
+      <span class="pill" data-group="dt" data-v="override_price">Override price <span class="count">0</span></span>
+      <span class="pill" data-group="dt" data-v="beans_multiplier">Beans × <span class="count">1</span></span>
+    </div>
+
+    <div class="pillgroup">
+      <span class="filtergroup-label">Status</span>
+      <span class="pill on" data-group="st" data-v="all">All</span>
+      <span class="pill" data-group="st" data-v="active">Active <span class="count">15</span></span>
+      <span class="pill" data-group="st" data-v="paused">Paused <span class="count">2</span></span>
+      <span class="pill" data-group="st" data-v="out_of_stock">Out of stock <span class="count">0</span></span>
+      <span class="pill" data-group="st" data-v="expiring">Expiring &lt; 14d <span class="count">3</span></span>
+      <span class="pill" data-group="st" data-v="never_issued">Never issued <span class="count">2</span></span>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="result-count">Showing <strong>17</strong> rewards · last 30d data shown</div>
+    <div class="right">
+      <button class="btn btn-ghost btn-sm">Bulk pause</button>
+      <button class="btn btn-ghost btn-sm">Bulk archive</button>
+    </div>
+  </div>
+
+  <!-- Table view -->
+  <div class="table" id="view-table">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:30px"></th>
+          <th>Reward</th>
+          <th>Discount</th>
+          <th>Triggers</th>
+          <th class="hide-mobile">Eligible</th>
+          <th class="hide-mobile">Issued · Used (30d)</th>
+          <th class="hide-mobile">Expires</th>
+          <th style="width:40px"></th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <!-- Row 1: Free Drink (multi-trigger flagship) -->
+        <tr>
+          <td><span class="status-dot" title="Active"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-bean">☕</div>
+              <div class="reward-meta">
+                <div class="reward-name">Free Drink</div>
+                <div class="reward-desc">Any drink, on us. Cheapest eligible line is on the house.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-free_item">free_item</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip points_shop"><span class="ic">🪙</span> Bean Shop · 300</span>
+            <span class="trig-chip birthday"><span class="ic">🎂</span> Birthday</span>
+            <span class="trig-chip tier_upgrade"><span class="ic">👑</span> → Gold</span>
+          </div></td>
+          <td class="hide-mobile">8 drink cats</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">47 · 23</div>
+            <div class="small">49% redeemed</div>
+            <div class="rate"><div class="bar" style="width:49%"></div></div>
+          </td>
+          <td class="hide-mobile">30 days</td>
+          <td><span class="actions-menu" title="Actions">⋯</span></td>
+        </tr>
+
+        <!-- Row 2: RM5 Off -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-bean">%</div>
+              <div class="reward-meta">
+                <div class="reward-name">RM5 Off</div>
+                <div class="reward-desc">RM5 off any order.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-flat">flat · 500¢</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip points_shop"><span class="ic">🪙</span> Bean Shop · 100</span>
+            <span class="trig-chip mystery"><span class="ic">🎁</span> Mystery · weight 10</span>
+          </div></td>
+          <td class="hide-mobile">Everything</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">89 · 12</div>
+            <div class="small">13% redeemed</div>
+            <div class="rate"><div class="bar" style="width:13%"></div></div>
+          </td>
+          <td class="hide-mobile">30 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 3: RM10 Off -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-bean">%</div>
+              <div class="reward-meta">
+                <div class="reward-name">RM10 Off</div>
+                <div class="reward-desc">RM10 off any order.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-flat">flat · 1000¢</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip points_shop"><span class="ic">🪙</span> Bean Shop · 200</span>
+          </div></td>
+          <td class="hide-mobile">Everything</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">12 · 4</div>
+            <div class="small">33% redeemed</div>
+            <div class="rate"><div class="bar" style="width:33%"></div></div>
+          </td>
+          <td class="hide-mobile">30 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 4: RM2 Off (Mystery) -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-mystery">🎁</div>
+              <div class="reward-meta">
+                <div class="reward-name">RM2 Off</div>
+                <div class="reward-desc">Small mystery reward. High frequency drop.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-flat">flat · 200¢</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip mystery"><span class="ic">🎁</span> Mystery · weight 20</span>
+          </div></td>
+          <td class="hide-mobile">Everything</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">102 · 48</div>
+            <div class="small">47% redeemed</div>
+            <div class="rate"><div class="bar" style="width:47%"></div></div>
+          </td>
+          <td class="hide-mobile">14 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 5: RM3 Off RM15+ -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-mystery">🎁</div>
+              <div class="reward-meta">
+                <div class="reward-name">RM3 Off RM15+</div>
+                <div class="reward-desc">RM3 off when your order is RM15 or more.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-flat">flat · 300¢ · min 1500¢</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip mystery"><span class="ic">🎁</span> Mystery · weight 15</span>
+          </div></td>
+          <td class="hide-mobile">Everything</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">31 · 14</div>
+            <div class="small">45% redeemed</div>
+            <div class="rate"><div class="bar" style="width:45%"></div></div>
+          </td>
+          <td class="hide-mobile">14 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 6: RM10 Off RM30+ -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-mystery">🎁</div>
+              <div class="reward-meta">
+                <div class="reward-name">RM10 Off RM30+</div>
+                <div class="reward-desc">Bigger mystery reward. Min order RM30.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-flat">flat · 1000¢ · min 3000¢</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip mystery"><span class="ic">🎁</span> Mystery · weight 5</span>
+          </div></td>
+          <td class="hide-mobile">Everything</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">23 · 9</div>
+            <div class="small">39% redeemed</div>
+            <div class="rate"><div class="bar" style="width:39%"></div></div>
+          </td>
+          <td class="hide-mobile">14 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 7: RM15 Off RM50+ -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-mystery">🎁</div>
+              <div class="reward-meta">
+                <div class="reward-name">RM15 Off RM50+</div>
+                <div class="reward-desc">Rare big-ticket mystery reward.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-flat">flat · 1500¢ · min 5000¢</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip mystery"><span class="ic">🎁</span> Mystery · weight 3</span>
+          </div></td>
+          <td class="hide-mobile">Everything</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">8 · 3</div>
+            <div class="small">38% redeemed</div>
+            <div class="rate"><div class="bar" style="width:38%"></div></div>
+          </td>
+          <td class="hide-mobile">14 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 8: 15% Off RM40+ -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-tier">%</div>
+              <div class="reward-meta">
+                <div class="reward-name">15% Off RM40+</div>
+                <div class="reward-desc">Mid-tier perk reward for Gold members on bigger orders.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-percent">percent · 15%</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip tier_upgrade"><span class="ic">👑</span> → Platinum</span>
+          </div></td>
+          <td class="hide-mobile">Everything · min 4000¢</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">2 · 1</div>
+            <div class="small">50% redeemed</div>
+            <div class="rate"><div class="bar" style="width:50%"></div></div>
+          </td>
+          <td class="hide-mobile">60 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 9: Birthday Drink -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-birthday">🎂</div>
+              <div class="reward-meta">
+                <div class="reward-name">Birthday Drink</div>
+                <div class="reward-desc">Free drink dropped into wallet on the customer's birthday.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-free_item">free_item</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip birthday"><span class="ic">🎂</span> Birthday · day-of</span>
+          </div></td>
+          <td class="hide-mobile">8 drink cats</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">4 · 3</div>
+            <div class="small">75% redeemed</div>
+            <div class="rate"><div class="bar" style="width:75%"></div></div>
+          </td>
+          <td class="hide-mobile">30 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 10: Free Croissant (Mission) -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-challenge">🥐</div>
+              <div class="reward-meta">
+                <div class="reward-name">Free Croissant</div>
+                <div class="reward-desc">Reward for completing the "Spend RM30 this week" challenge.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-free_item">free_item</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip mission"><span class="ic">🎯</span> Spend RM30/wk</span>
+          </div></td>
+          <td class="hide-mobile">pastries</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">14 · 7</div>
+            <div class="small">50% redeemed</div>
+            <div class="rate"><div class="bar" style="width:50%"></div></div>
+          </td>
+          <td class="hide-mobile">14 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 11: Free Sandwich -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-challenge">🥪</div>
+              <div class="reward-meta">
+                <div class="reward-name">Free Sandwich</div>
+                <div class="reward-desc">Reward for completing the "Order from 3 outlets" challenge.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-free_item">free_item</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip mission"><span class="ic">🎯</span> 3 outlets</span>
+          </div></td>
+          <td class="hide-mobile">sandwiches</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">3 · 1</div>
+            <div class="small">33% redeemed</div>
+            <div class="rate"><div class="bar" style="width:33%"></div></div>
+          </td>
+          <td class="hide-mobile">14 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 12: Free Cake (Manual Grant) -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-manual">🍰</div>
+              <div class="reward-meta">
+                <div class="reward-name">Free Cake</div>
+                <div class="reward-desc">Manual-only. Given out for service recovery / VIP gestures.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-free_item">free_item</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip manual_grant"><span class="ic">✋</span> Manual only</span>
+          </div></td>
+          <td class="hide-mobile">cakes</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">2 · 2</div>
+            <div class="small">100% redeemed</div>
+            <div class="rate"><div class="bar" style="width:100%"></div></div>
+          </td>
+          <td class="hide-mobile">7 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 13: Free Add-on (active but no usage) -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-manual">+</div>
+              <div class="reward-meta">
+                <div class="reward-name">Free Add-on</div>
+                <div class="reward-desc">Manual-only. Refunds customer's add-on selection on any drink.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-free_upgrade">free_upgrade</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip manual_grant"><span class="ic">✋</span> Manual only</span>
+          </div></td>
+          <td class="hide-mobile">Everything</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">0 · 0</div>
+            <div class="small" style="color:var(--warn)">Never issued</div>
+          </td>
+          <td class="hide-mobile">30 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 14: 2× Beans Boost -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-mystery">✨</div>
+              <div class="reward-meta">
+                <div class="reward-name">2× Beans Boost</div>
+                <div class="reward-desc">Doubles bean award on the next order. Post-payment.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-beans_multiplier">beans × 2.0</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip mystery"><span class="ic">🎁</span> Mystery · weight 1, min Gold</span>
+          </div></td>
+          <td class="hide-mobile">N/A (post-payment)</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">8 · 6</div>
+            <div class="small">75% redeemed</div>
+            <div class="rate"><div class="bar" style="width:75%"></div></div>
+          </td>
+          <td class="hide-mobile">14 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 15: Spend RM30/wk Challenge -->
+        <tr>
+          <td><span class="status-dot"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-challenge">🎯</div>
+              <div class="reward-meta">
+                <div class="reward-name">Weekly Regular</div>
+                <div class="reward-desc">Spend RM30 across the week → get RM5 off your next order.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-flat">flat · 500¢</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip mission"><span class="ic">🎯</span> Spend RM30/wk · Medium</span>
+          </div></td>
+          <td class="hide-mobile">Everything</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">38 · 19</div>
+            <div class="small">50% redeemed</div>
+            <div class="rate"><div class="bar" style="width:50%"></div></div>
+          </td>
+          <td class="hide-mobile">14 days</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 16: Free Pastry (paused) -->
+        <tr style="opacity:0.55">
+          <td><span class="status-dot paused" title="Paused"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-manual">🥐</div>
+              <div class="reward-meta">
+                <div class="reward-name">Free Pastry</div>
+                <div class="reward-desc">Paused — never finished configuring eligibility. Earmarked for delete.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-free_item">free_item</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip manual_grant"><span class="ic">✋</span> Manual only</span>
+          </div></td>
+          <td class="hide-mobile" style="color:var(--danger)">⚠ none</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">0 · 0</div>
+            <div class="small">Never issued</div>
+          </td>
+          <td class="hide-mobile">—</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+        <!-- Row 17: Welcome BOGO (paused) -->
+        <tr style="opacity:0.55">
+          <td><span class="status-dot paused"></span></td>
+          <td>
+            <div class="reward-cell">
+              <div class="reward-icon icon-manual">📦</div>
+              <div class="reward-meta">
+                <div class="reward-name">Welcome BOGO</div>
+                <div class="reward-desc">Paused — deprecated. 108 orphan vouchers expired 2026-05-31.</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="badge badge-bogo">bogo · 1+1</span></td>
+          <td><div class="trig-chips">
+            <span class="trig-chip admin_push"><span class="ic">📣</span> (deactivated)</span>
+          </div></td>
+          <td class="hide-mobile">8 drink cats</td>
+          <td class="hide-mobile stats-cell">
+            <div class="big">108 · 0</div>
+            <div class="small" style="color:var(--danger)">0% — expired before use</div>
+          </td>
+          <td class="hide-mobile">—</td>
+          <td><span class="actions-menu">⋯</span></td>
+        </tr>
+
+      </tbody>
+    </table>
+
+    <div class="table-foot">
+      <div>Showing 17 of 17</div>
+      <div class="pager">
+        <span class="pg">‹</span>
+        <span class="pg on">1</span>
+        <span class="pg">›</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Pill filter mock — just toggles ".on" + flips "All" off in the same group
+  document.querySelectorAll('.pill').forEach(p => {
+    p.addEventListener('click', () => {
+      const group = p.dataset.group;
+      const v = p.dataset.v;
+      const peers = document.querySelectorAll(`.pill[data-group="${group}"]`);
+      if (v === 'all') {
+        peers.forEach(x => x.classList.remove('on'));
+        p.classList.add('on');
+      } else {
+        peers.forEach(x => { if (x.dataset.v === 'all') x.classList.remove('on'); });
+        p.classList.toggle('on');
+        // If nothing left selected, fall back to All
+        const anyOn = Array.from(peers).some(x => x.classList.contains('on'));
+        if (!anyOn) {
+          peers[0].classList.add('on');
+        }
+      }
+    });
+  });
+
+  function setView(name) {
+    const tbl = document.getElementById('view-table');
+    document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('on'));
+    document.querySelector(`.view-toggle button[onclick="setView('${name}')"]`).classList.add('on');
+    // For the mock we keep the table visible. In real build, 'grouped' would re-group rows under section headers.
+    tbl.style.display = 'block';
+  }
+</script>
+
+</body>
+</html>
