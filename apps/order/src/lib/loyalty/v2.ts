@@ -9,7 +9,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { awardBonusBeans } from "@/lib/loyalty/points";
 import { notifyMissionCompleted, notifyReferralRewarded } from "@/lib/push/templates";
-import { catalogMirrorTemplateId } from "@/lib/loyalty/catalog-mirror";
 
 const BRAND_ID = (process.env.LOYALTY_BRAND_ID ?? "brand-celsius").trim();
 
@@ -150,46 +149,33 @@ export async function redeemPointsShopReward(args: {
 > {
   const supabase = getSupabaseAdmin();
 
+  // Cleanup: read the canonical template (Bean-Shop mirror) by
+  // legacy_reward_id. The template carries discount_type/value directly,
+  // so the old reward_configs merge is unnecessary (config stays null).
+  // Aliases (name:title, points_required:points_cost) keep downstream
+  // code unchanged.
   const [{ data: reward }, { data: config }] = await Promise.all([
     supabase
-      .from("rewards")
+      .from("voucher_templates")
       .select(`
-        id, name, description, points_required, validity_days,
+        id, name:title, description, points_required:points_cost, validity_days,
         category, discount_type, discount_value, min_order_value,
         applicable_categories, applicable_products, free_product_name,
-        is_active, auto_issue
+        is_active
       `)
-      .eq("id", args.rewardId)
+      .eq("legacy_reward_id", args.rewardId)
       .eq("brand_id", BRAND_ID)
       .eq("is_active", true)
-      .single(),
-    // Discount metadata for most rewards lives in reward_configs, not on
-    // the rewards row directly. Without this lookup the issued voucher
-    // lands with discount_type=null and the cart-side discount engine
-    // returns 0, which presents as "the voucher banner shows but the
-    // subtotal doesn't drop". Joining via reward_id keeps existing
-    // backoffice editors as the single source of truth for discount config.
-    //
-    // reward_configs is a slim override table: only reward_id,
-    // discount_type, discount_value, updated_at. Earlier SELECT named
-    // columns that don't exist (max_discount_value, min_order_value,
-    // applicable_categories, applicable_products, free_product_name,
-    // bogo_buy_qty, bogo_free_qty) — the query errored with
-    // "column reward_configs.max_discount_value does not exist" and
-    // EVERY claim attempt failed. Limit the SELECT to what's actually
-    // on the table; everything else falls back to the rewards row.
-    supabase
-      .from("reward_configs")
-      .select("discount_type, discount_value")
-      .eq("reward_id", args.rewardId)
       .maybeSingle(),
+    // reward_configs merge dropped — the template carries canonical
+    // discount_type/value directly, so there's no override table to
+    // consult. Kept the tuple shape so the destructure below is stable.
+    Promise.resolve({ data: null as { discount_type?: string | null; discount_value?: number | null } | null }),
   ]);
 
   if (!reward) return { ok: false, reason: "reward_not_found" };
 
-  // Merge: reward_configs overrides discount_type / discount_value when
-  // present (that's all that table actually stores). Eligibility +
-  // min-order filters live exclusively on the rewards row.
+  // Discount comes straight off the template now (single source).
   const discountType         = (config?.discount_type as string | null) ?? (reward.discount_type as string | null);
   const discountValue        = (config?.discount_value as number | null) ?? (reward.discount_value as number | null);
   const minOrderValue        = (reward.min_order_value as number | null);
@@ -213,7 +199,7 @@ export async function redeemPointsShopReward(args: {
   const { data, error: rpcErr } = await supabase.rpc("redeem_points_shop_reward", {
     p_member_id: args.memberId,
     p_brand_id:  BRAND_ID,
-    p_reward_id: reward.id as string,
+    p_reward_id: args.rewardId,  // legacy text id — issued_rewards.reward_id stays legacy-keyed
     p_voucher_id: id,
     p_points_required: pointsRequired,
     p_title: reward.name as string,
@@ -247,7 +233,7 @@ export async function redeemPointsShopReward(args: {
   // still drive checkout during the grace window.
   await supabase
     .from("issued_rewards")
-    .update({ voucher_template_id: catalogMirrorTemplateId(reward.id as string) })
+    .update({ voucher_template_id: reward.id as string })  // reward.id is the template UUID now
     .eq("id", id);
 
   // Hydrate the voucher row for the caller. The RPC inserted it

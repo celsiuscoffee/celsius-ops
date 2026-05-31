@@ -40,15 +40,18 @@ export async function POST(req: NextRequest) {
 
     const supabase = getAdmin();
 
+    // Cleanup: read the canonical template (Bean-Shop mirror) by
+    // legacy_reward_id, not the rewards table. Aliases keep the
+    // downstream insert code unchanged (name:title, points_required:points_cost).
     const { data: reward, error: rwErr } = await supabase
-      .from("rewards")
+      .from("voucher_templates")
       .select(
-        "id, name, description, points_required, validity_days, category, discount_type, discount_value, max_discount_value, min_order_value, applicable_categories, applicable_products, free_product_name, free_product_ids, stock, is_active",
+        "template_uuid:id, name:title, description, points_required:points_cost, validity_days, category, discount_type, discount_value, max_discount_value, min_order_value, applicable_categories, applicable_products, free_product_name, free_product_ids, stock, is_active",
       )
-      .eq("id", reward_id)
+      .eq("legacy_reward_id", reward_id)
       .eq("brand_id", BRAND_ID)
       .eq("is_active", true)
-      .single();
+      .maybeSingle();
 
     if (rwErr || !reward) {
       return NextResponse.json({ error: "Reward not found" }, { status: 404 });
@@ -112,12 +115,11 @@ export async function POST(req: NextRequest) {
 
     // Commit 2: link the minted voucher to its canonical template (the
     // Bean-Shop mirror of this catalog row — same deterministic UUID
-    // the Commit-1 migration generated). Readers can resolve canonical
-    // fields through voucher_template_id; the inline discount fields
-    // below stay as a grace-window snapshot until Commit 3 drops them.
-    // inferDiscount is gone — the catalog row carries a real
-    // discount_type now (backfilled), so we copy it straight through.
-    const voucherTemplateId = catalogMirrorTemplateId(reward.id);
+    // Template read above is the canonical source. voucher_template_id
+    // is the template's own UUID; reward_id stays the legacy text id
+    // (the request param) so existing reward_id-keyed logic still works.
+    const voucherTemplateId = (reward as { template_uuid?: string }).template_uuid
+      ?? catalogMirrorTemplateId(reward_id);
 
     const { data: voucher, error: voucherErr } = await supabase
       .from("issued_rewards")
@@ -125,7 +127,7 @@ export async function POST(req: NextRequest) {
         id,
         brand_id: BRAND_ID,
         member_id,
-        reward_id: reward.id,
+        reward_id: reward_id,
         voucher_template_id: voucherTemplateId,
         source_type: "points_redemption",
         source_ref_id: null,
@@ -172,10 +174,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (reward.stock !== null) {
+      // Decrement stock on the canonical template, keyed by legacy id.
       await supabase
-        .from("rewards")
+        .from("voucher_templates")
         .update({ stock: Math.max(0, reward.stock - 1) })
-        .eq("id", reward.id)
+        .eq("legacy_reward_id", reward_id)
         .gt("stock", 0);
     }
 

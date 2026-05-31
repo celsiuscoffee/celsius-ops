@@ -73,18 +73,21 @@ async function validateAppliedReward(
     loyaltyId: string | null;
   },
 ): Promise<{ ok: true; discountSen: number } | { ok: false; error: string }> {
+  // Cleanup: catalog validation reads voucher_templates (the canonical
+  // source) by legacy_reward_id, not the rewards table. points_cost is
+  // the template's name for points_required.
   const { data: reward } = await supabase
-    .from("rewards")
-    .select("id, is_active, valid_from, valid_until, stock, min_order_value, points_required")
-    .eq("id", args.rewardId)
-    .single<{
+    .from("voucher_templates")
+    .select("id, is_active, valid_from, valid_until, stock, min_order_value, points_cost")
+    .eq("legacy_reward_id", args.rewardId)
+    .maybeSingle<{
       id: string;
       is_active: boolean | null;
       valid_from: string | null;
       valid_until: string | null;
       stock: number | null;
       min_order_value: number | null;
-      points_required: number | null;
+      points_cost: number | null;
     }>();
 
   if (!reward) {
@@ -117,13 +120,15 @@ async function validateAppliedReward(
   // but the reward never gets consumed. Skip the check when the
   // member already holds an active issued_reward row for this
   // reward (auto-issued vouchers don't deduct from points balance).
-  const pointsCost = reward.points_required ?? 0;
+  const pointsCost = reward.points_cost ?? 0;
   if (pointsCost > 0 && args.loyaltyId) {
     const { data: voucher } = await supabase
       .from("issued_rewards")
       .select("id")
       .eq("member_id", args.loyaltyId)
-      .eq("reward_id", reward.id)
+      // issued_rewards.reward_id holds the legacy text id, so match on
+      // the original args.rewardId — NOT reward.id (now a template UUID).
+      .eq("reward_id", args.rewardId)
       .eq("status", "active")
       .limit(1)
       .maybeSingle();
