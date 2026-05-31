@@ -256,7 +256,11 @@ const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "Tiers",           href: "/loyalty/tiers",            icon: <Crown className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
           { label: "Discount Engine", href: "/loyalty/promotions",       icon: <Tag className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
-          { label: "Voucher Library", href: "/loyalty/voucher-templates", icon: <Ticket className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
+          // All Rewards is the single template registry — the manager for
+          // WHAT every reward is. Replaces the old "Voucher Library" (which
+          // edited the same voucher_templates table) and absorbs the
+          // Bean-Points Shop catalog (templates with points_cost set).
+          { label: "All Rewards",     href: "/loyalty/all-rewards",      icon: <Ticket className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
           { label: "Outcome Types",   href: "/loyalty/reward-kinds",     icon: <Layers className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
         ],
       },
@@ -265,13 +269,14 @@ const NAV_SECTIONS: NavSection[] = [
         // pickup app's rewards screen top-to-bottom so admin mental
         // model matches what the customer sees.
         //
-        // "All Rewards" sits at the top — it's the new unified view
-        // that replaces the per-channel pages once the trigger
-        // consolidation lands (Commit 4 of the rewards refactor). The
-        // 5 channel-specific entries stay accessible during transition.
+        // Channels = where rewards reach customers. Each references the
+        // template registry (All Rewards, under Setup). "All Rewards"
+        // moved to Setup — it's the registry, not a channel. "Points
+        // Shop" stays for now (still the edit surface for the rewards
+        // table that mint reads) and is removed once the Bean-Shop
+        // readers migrate to voucher_templates.
         label: "Channels",
         items: [
-          { label: "All Rewards",      href: "/loyalty/all-rewards",      icon: <Ticket className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
           { label: "Points Shop",      href: "/loyalty/rewards",          icon: <Star className={ICON_SIZE} />,     moduleKey: "loyalty:rewards" },
           { label: "Challenges",       href: "/loyalty/missions",         icon: <Target className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
           { label: "Mystery Pool",     href: "/loyalty/mystery",          icon: <Sparkles className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
