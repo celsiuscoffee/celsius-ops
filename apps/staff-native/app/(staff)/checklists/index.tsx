@@ -101,6 +101,13 @@ export default function ChecklistsList() {
   const total = items.length;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
+  // Personal contribution across every checklist today — sum of
+  // items the calling user has marked done divided by the total
+  // possible items across all checklists. Surfaces the "you did X
+  // of Y" number staff care about (vs the team-level X/Y above).
+  const myItems = items.reduce((s, c) => s + (c.myCompletedItems ?? 0), 0);
+  const totalItemCount = items.reduce((s, c) => s + c.totalItems, 0);
+
   return (
     <Screen>
       <PageHeader title="Checklists" />
@@ -129,15 +136,18 @@ export default function ChecklistsList() {
           }
           ListHeaderComponent={
             <View>
-              {/* Progress bar */}
+              {/* Progress card — team progress on top (checklists
+                  fully completed) + personal contribution below
+                  (items the calling user has ticked off across every
+                  checklist today). */}
               {total > 0 ? (
-                <View className="mb-5">
+                <View className="mb-5 rounded-3xl border border-border bg-surface px-4 py-3.5">
                   <View className="flex-row items-center justify-between">
                     <Text className="text-xs font-body-semi text-muted uppercase tracking-wide">
                       {dateLabel()}
                     </Text>
                     <Text className="text-xs font-body-bold text-muted-fg">
-                      {completed}/{total}
+                      Team {completed} / {total}
                     </Text>
                   </View>
                   <View className="mt-2 h-2 overflow-hidden rounded-full bg-primary-50">
@@ -145,6 +155,14 @@ export default function ChecklistsList() {
                       className={`h-full ${pct === 100 ? "bg-success" : "bg-primary"}`}
                       style={{ width: `${pct}%` }}
                     />
+                  </View>
+                  <View className="mt-3 flex-row items-center justify-between border-t border-border pt-3">
+                    <Text className="text-xs font-body-semi text-muted uppercase tracking-wide">
+                      Your contribution
+                    </Text>
+                    <Text className="text-sm font-body-bold text-primary tabular-nums">
+                      {myItems} of {totalItemCount} items
+                    </Text>
                   </View>
                 </View>
               ) : null}
@@ -233,6 +251,7 @@ function ChecklistRow({
           </Text>
           <Text className="text-[10px] font-body text-muted">
             {cl.sop.category.name} · {cl.completedItems}/{cl.totalItems} items
+            {cl.myCompletedItems > 0 ? ` · ${cl.myCompletedItems} by you` : ""}
             {cl.assignedTo ? ` · ${cl.assignedTo.name}` : " · Anyone"}
           </Text>
         </View>

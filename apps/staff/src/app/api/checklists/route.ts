@@ -27,7 +27,11 @@ export async function GET(req: NextRequest) {
     where.date = new Date(Date.UTC(y, mo - 1, d));
   }
 
-  // Single query — include item completion counts inline
+  // Single query — include item completion counts inline.
+  // `items` (where: isCompleted) gives us the team total completed.
+  // We also pull just the completedById so we can count how many were
+  // done by the calling user (`myCompletedItems`) — surfaces the
+  // individual's contribution on the native list ("X by you / Y total").
   const checklists = await prisma.checklist.findMany({
     where,
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
@@ -39,17 +43,24 @@ export async function GET(req: NextRequest) {
       assignedTo: { select: { id: true, name: true } },
       completedBy: { select: { id: true, name: true } },
       _count: { select: { items: true } },
-      items: { where: { isCompleted: true }, select: { id: true } },
+      items: {
+        where: { isCompleted: true },
+        select: { id: true, completedById: true },
+      },
     },
   });
 
   const result = checklists.map(({ items, ...cl }) => {
     const totalItems = cl._count.items;
     const completedItems = items.length;
+    const myCompletedItems = items.filter(
+      (i) => i.completedById === session.id,
+    ).length;
     return {
       ...cl,
       totalItems,
       completedItems,
+      myCompletedItems,
       progress: totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0,
     };
   });

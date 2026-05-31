@@ -16,6 +16,10 @@ export type ChecklistSummary = {
   completedBy: { id: string; name: string } | null;
   totalItems: number;
   completedItems: number;
+  // How many items on this checklist the calling user has ticked off.
+  // 0 if the user hasn't touched it yet. Used to show personal
+  // contribution alongside the team total.
+  myCompletedItems: number;
   progress: number;
 };
 
