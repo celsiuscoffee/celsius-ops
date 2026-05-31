@@ -27,6 +27,8 @@ import com.sunmi.printerx.style.TextStyle
 
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
+import java.net.InetSocketAddress
+import java.net.Socket
 
 /**
  * Expo native module for the SUNMI D3 built-in 80mm thermal printer.
@@ -86,6 +88,13 @@ class SunmiPrinterModule : Module() {
 
     AsyncFunction("printOrderDocket") { options: DocketOptions ->
       printOrderDocket(options)
+    }
+
+    // Send a pre-built ESC/POS byte stream to a LAN thermal printer
+    // (Bar / Kitchen station printers on the shop network). `data` is a
+    // plain JS number[] of 0-255 byte values built by lib/network-printer.ts.
+    AsyncFunction("printNetworkRaw") { host: String, port: Int, data: IntArray, timeoutMs: Int ->
+      printNetworkRaw(host, port, data, timeoutMs)
     }
   }
 
@@ -343,6 +352,35 @@ class SunmiPrinterModule : Module() {
     val full = "** ${o.station.uppercase()} **\nOrder: ${o.orderNumber}\n${o.orderType}\nTime: ${o.time}\n" +
       "================================\n${o.items}\n-- END --\n"
     cmd.sendEscCommand(buildEscReceipt(full))
+  }
+
+  // ─── Print: raw bytes to a LAN (ESC/POS) printer ─────────
+  //
+  // One-shot TCP socket to a network thermal printer (the Bar / Kitchen
+  // station heads on the shop LAN). Runs on the Expo async queue (a
+  // background thread), so the blocking socket I/O never hits the UI
+  // thread. THROWS on any connect/write failure so the TS caller leaves
+  // the order unprinted and retries on the next catch-up — same fail-loud
+  // contract as ensurePrinterReady() guards for the built-in head.
+  private fun printNetworkRaw(host: String, port: Int, data: IntArray, timeoutMs: Int): Map<String, Any?> {
+    val bytes = ByteArray(data.size) { (data[it] and 0xFF).toByte() }
+    val p = if (port in 1..65535) port else 9100
+    val t = if (timeoutMs in 200..30000) timeoutMs else 4000
+    val socket = Socket()
+    try {
+      socket.connect(InetSocketAddress(host, p), t)
+      socket.getOutputStream().apply {
+        write(bytes)
+        flush()
+      }
+      // Let the head drain before we yank the socket — closing immediately
+      // truncates the last line on some cheaper printers.
+      try { Thread.sleep(150) } catch (_: InterruptedException) {}
+      Log.i(TAG, "printNetworkRaw ok host=$host:$p bytes=${bytes.size}")
+      return mapOf("ok" to true, "bytes" to bytes.size)
+    } finally {
+      try { socket.close() } catch (_: Exception) {}
+    }
   }
 }
 

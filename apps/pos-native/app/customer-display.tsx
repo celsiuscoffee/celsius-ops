@@ -9,8 +9,8 @@ import { useSettings, serviceChargeRate } from "@/lib/settings";
 import { useMaybankQr } from "@/lib/maybank-qr";
 import { outletShort } from "@/lib/outlets";
 import {
-  lookupMember, fetchSnapshot, claimMystery, fetchRewards,
-  type LoyaltySnapshot, type VoucherCard, type ClaimableCard, type ShopCard, type MissionCard, type BiteItem, type IssuedVoucher,
+  lookupMember, fetchSnapshot, claimMystery, fetchRewards, fetchActivePromos,
+  type LoyaltySnapshot, type VoucherCard, type ClaimableCard, type ShopCard, type MissionCard, type BiteItem, type IssuedVoucher, type ActivePromo,
 } from "@/lib/loyalty";
 import { fetchPosters, type DisplayPoster } from "@/lib/posters";
 import { fetchBites, type DisplayBite } from "@/lib/menu";
@@ -53,7 +53,10 @@ export default function CustomerDisplay() {
   const outletId = usePos((s) => s.outletId);
   const settings = useSettings((s) => s.settings);
   // Backoffice-managed Maybank QR (live via realtime on app_settings).
-  const maybankPayload = useMaybankQr(outletId);
+  // Returns { payload, image_url }: image_url is the uploaded Maybank
+  // poster (preferred — actual pink poster customers know), payload is
+  // the merchant id fallback that we render via QRCode.
+  const maybankQr = useMaybankQr(outletId);
   // 60/40 columns sized from the row's ACTUAL on-screen width (measured via
   // onLayout). We can't use useWindowDimensions here: this view lives on the
   // secondary SUNMI screen via a Presentation, and useWindowDimensions reports
@@ -62,11 +65,25 @@ export default function CustomerDisplay() {
   const [rowW, setRowW] = useState(0);
   const heroW = rowW > 0 ? Math.round(rowW * 0.65) : 0;
   const sideW = rowW > 0 ? rowW - heroW : 0;
+  // The Scan-to-Pay screen measures its own frame (the SUNMI customer
+  // display is FLAG_SECURE — can't be screenshot — so we size everything
+  // off the REAL on-screen dimensions instead of hardcoded guesses that
+  // overflow). Logged once so the actual panel size is knowable.
+  const [payFrame, setPayFrame] = useState({ w: 0, h: 0 });
+  // Measured size of the flex-middle QR slot (the space left after the fixed
+  // amount/beans header + bottom hints). The QR is sized off THIS, never the
+  // whole frame, so the card can't push the amount/hints off-screen.
+  const [paySlot, setPaySlot] = useState({ w: 0, h: 0 });
 
   const [snapshot, setSnapshot] = useState<LoyaltySnapshot | null>(null);
   const [snapLoading, setSnapLoading] = useState(false);
   const [posters, setPosters] = useState<DisplayPoster[]>([]);
   const [heroBites, setHeroBites] = useState<DisplayBite[]>([]);
+  // Guest fallback: snapshot.active_promos is member-gated, so when no
+  // one's signed in we'd otherwise show NO combo banners. Load promos
+  // independently from the public promotions table so the deals
+  // surface for every customer, member or not.
+  const [guestPromos, setGuestPromos] = useState<ActivePromo[]>([]);
   // Pop-up sign-in keypad for the ORDERING screen (its right column is too
   // narrow for an inline keypad; idle keeps the keypad always visible).
   const [signInOpen, setSignInOpen] = useState(false);
@@ -79,6 +96,7 @@ export default function CustomerDisplay() {
 
   useEffect(() => { fetchPosters().then(setPosters).catch(() => {}); }, []);
   useEffect(() => { fetchBites(9).then(setHeroBites).catch(() => {}); }, []);
+  useEffect(() => { fetchActivePromos().then(setGuestPromos).catch(() => {}); }, []);
   // Close the pop-up once a member is identified.
   useEffect(() => { if (member) setSignInOpen(false); }, [member]);
 
@@ -115,31 +133,105 @@ export default function CustomerDisplay() {
 
   // ── 1. Payment ──
   if (status === "payment") {
-    const merchantId = maybankPayload ?? "";
+    const imageUrl = maybankQr?.image_url ?? null;
+    const merchantId = maybankQr?.payload ?? "";
+    const hasAny = !!imageUrl || !!merchantId;
+    // Beans this order earns. 1 Bean per RM (points_per_rm default) on the
+    // post-discount total — members bank it; guests see what they're
+    // missing as a sign-up nudge. (Matches the order app's basePoints =
+    // floor(afterDiscount/100 * pointsPerRm), members only.)
+    const beans = Math.max(0, Math.floor((payTotal || total) / 100));
+    const cardShadow = {
+      shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 28,
+      shadowOffset: { width: 0, height: 14 }, elevation: 10,
+    } as const;
+    // Amount scales with the frame height (capped). The QR is sized off the
+    // MEASURED middle slot below — card height ≈ qr×1.39 and width ≈ qr×1.2,
+    // so dividing the slot by those (≈ ×0.70 / ×0.80) keeps the whole card
+    // inside the leftover space. Conservative slot fallback errs SMALL so the
+    // first paint is never oversized.
+    const fh = payFrame.h || 600;
+    const amt = Math.max(28, Math.min(Math.round(fh * 0.075), 50));
+    const sh = paySlot.h || 280;
+    const sw = paySlot.w || 880;
+    const qr = Math.max(150, Math.min(Math.round(sh * 0.70), Math.round(sw * 0.80), 320));
     return (
-      <View className="flex-1 items-center justify-center px-8" style={{ backgroundColor: PAGE }}>
-        <Eyebrow color={GOLD}>SCAN TO PAY</Eyebrow>
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 96, color: GOLD, marginTop: 8 }}>{rm(payTotal || total)}</Text>
-        {merchantId ? (
-          <>
-            <View className="mt-8 rounded-3xl p-5" style={{ backgroundColor: "#fff" }}>
-              <QRCode value={merchantId} size={280} backgroundColor="#fff" color="#000" />
+      <View
+        onLayout={(e) => {
+          const l = e.nativeEvent.layout;
+          if (Math.abs(l.width - payFrame.w) > 2 || Math.abs(l.height - payFrame.h) > 2) {
+            setPayFrame({ w: l.width, h: l.height });
+          }
+        }}
+        className="flex-1 items-center"
+        style={{ backgroundColor: PAGE, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14 }}
+      >
+        {/* Fixed header — amount + Beans (always visible) */}
+        <View className="items-center">
+          <Eyebrow color={GOLD}>SCAN TO PAY</Eyebrow>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: amt, lineHeight: Math.round(amt * 1.05), color: GOLD, marginTop: 2 }}>{rm(payTotal || total)}</Text>
+          {beans > 0 && (
+            <View
+              className="flex-row items-center rounded-full"
+              style={{
+                marginTop: 8, gap: 7, paddingHorizontal: 14, paddingVertical: 5,
+                backgroundColor: member ? "rgba(251,191,36,0.12)" : "rgba(134,239,172,0.10)",
+                borderWidth: 1,
+                borderColor: member ? "rgba(251,191,36,0.40)" : "rgba(134,239,172,0.30)",
+              }}
+            >
+              <Sparkles size={14} color={member ? GOLD : GREEN} />
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 13, color: member ? GOLD : GREEN }}>
+                {member ? `You'll earn ${beans} Beans` : `Sign up & earn ${beans} Beans`}
+              </Text>
             </View>
-            <View className="mt-5 flex-row items-center gap-2">
-              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 22, color: GOLD }}>Maybank</Text>
-              <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, color: "rgba(245,243,240,0.55)" }}>DuitNow QR</Text>
+          )}
+        </View>
+
+        {/* Flex middle — the QR card fits THIS slot; can't overflow the panel */}
+        <View
+          className="self-stretch items-center justify-center"
+          style={{ flex: 1, marginVertical: 8 }}
+          onLayout={(e) => {
+            const l = e.nativeEvent.layout;
+            if (Math.abs(l.width - paySlot.w) > 2 || Math.abs(l.height - paySlot.h) > 2) {
+              setPaySlot({ w: l.width, h: l.height });
+              console.log(`[cust-pay] slot ${Math.round(l.width)}x${Math.round(l.height)} qr=${qr}`);
+            }
+          }}
+        >
+          {hasAny ? (
+            <View className="items-center" style={{ backgroundColor: "#fff", borderRadius: Math.round(qr * 0.09), paddingHorizontal: Math.round(qr * 0.1), paddingVertical: Math.round(qr * 0.085), ...cardShadow }}>
+              <View className="flex-row items-center" style={{ gap: 6, marginBottom: Math.round(qr * 0.05) }}>
+                <Text style={{ fontFamily: "Peachi-Bold", fontSize: Math.round(qr * 0.075), color: "#EC1C7E" }}>DuitNow</Text>
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: Math.round(qr * 0.048), color: "#555" }}>QR</Text>
+              </View>
+              {imageUrl ? (
+                <Image source={{ uri: imageUrl }} style={{ width: qr, height: qr }} resizeMode="contain" />
+              ) : (
+                <QRCode value={merchantId} size={qr} backgroundColor="#fff" color="#160800" />
+              )}
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: Math.round(qr * 0.044), letterSpacing: 0.4, color: "#555", marginTop: Math.round(qr * 0.05) }}>Malaysia National QR · Maybank</Text>
             </View>
-            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, color: "rgba(245,243,240,0.4)", marginTop: 6 }}>{merchantId}</Text>
-          </>
-        ) : (
-          <View className="mt-8 rounded-3xl px-10 py-12 items-center" style={{ borderWidth: 1, borderColor: "rgba(251,191,36,0.35)", backgroundColor: "rgba(251,191,36,0.08)" }}>
-            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 30, color: GOLD }}>Pay at the counter</Text>
-            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(245,243,240,0.7)", marginTop: 8, textAlign: "center" }}>
-              Please complete payment{"\n"}with our cashier
-            </Text>
-          </View>
+          ) : (
+            <View className="items-center justify-center" style={{ maxWidth: 420, paddingVertical: 34, paddingHorizontal: 40, borderRadius: 28, borderWidth: 1, borderColor: "rgba(251,191,36,0.35)", backgroundColor: "rgba(251,191,36,0.07)" }}>
+              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: GOLD, textAlign: "center" }}>Pay at the counter</Text>
+              <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(245,243,240,0.7)", marginTop: 10, textAlign: "center" }}>Please complete payment with our cashier</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Fixed footer hints (always visible) */}
+        {hasAny && (
+          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, color: "rgba(245,243,240,0.55)" }}>
+            Scan with any banking or e-wallet app
+          </Text>
         )}
-        {!!orderNumber && <Eyebrow color="rgba(245,243,240,0.45)" style={{ marginTop: 24 }}>{orderNumber}</Eyebrow>}
+        {!!orderNumber && (
+          <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12, letterSpacing: 2, color: "rgba(245,243,240,0.35)", marginTop: 5 }}>
+            {orderNumber}
+          </Text>
+        )}
       </View>
     );
   }
@@ -217,12 +309,17 @@ export default function CustomerDisplay() {
 
   // ── 4. Ordering — 60/20/20: upsell hero (main) | order | rewards ──
   // Guest-friendly bites (general fetch) drive the hero; fall back to the
-  // member's popular bites if the general list hasn't loaded.
-  const bites = (heroBites.length > 0 ? heroBites : pickBites(snapshot)).slice(0, 9);
+  // member's popular bites if the general list hasn't loaded. 8 items =
+  // two rows of 4 — gives customers more choice without scrolling.
+  const bites = (heroBites.length > 0 ? heroBites : pickBites(snapshot)).slice(0, 8);
   // Combo/promo offers are badged ONTO the matching bite card (matched by
   // category/name). Anything that doesn't map to a shown bite surfaces as a
-  // slim chip row so no live offer is lost.
-  const liveOffers = (snapshot?.active_promos ?? []).filter((p) => p.live);
+  // slim chip row so no live offer is lost. Snapshot is member-only;
+  // fall through to the guest promos so non-members still see deals.
+  const liveOffers = (snapshot?.active_promos && snapshot.active_promos.length > 0
+    ? snapshot.active_promos
+    : guestPromos
+  ).filter((p) => p.live);
   const biteOffers = bites.map((b) => matchOffer(b, liveOffers));
   const matchedIds = new Set(biteOffers.filter(Boolean).map((p) => p!.id));
   const unmatchedOffers = liveOffers.filter((p) => !matchedIds.has(p.id)).slice(0, 3);
@@ -235,32 +332,37 @@ export default function CustomerDisplay() {
         if (w > 0 && Math.abs(w - rowW) > 0.5) setRowW(w);
       }}
     >
-      {/* ═══ MAIN UPSELL — 60% (explicit px from measured width; flex until measured) ═══ */}
-      <View style={rowW > 0 ? { width: heroW } : { flex: 3 }} className="p-7">
-        <View className="flex-row items-center" style={{ gap: 10, marginBottom: 2 }}>
-          <Image source={require("@/assets/icon.png")} style={{ width: 34, height: 34, borderRadius: 9 }} resizeMode="contain" />
-          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 26, color: CREAM }}>Pair with a bite</Text>
+      {/* ═══ MAIN UPSELL — 60% (explicit px from measured width; flex until measured) ═══
+          Designed to fit on display 1 (1280×800) with NO vertical scroll.
+          Header (~50px) + chips row (~28px when shown) + 2 tile rows
+          (~620px) = ~700px, leaves room within the column's height. */}
+      <View style={rowW > 0 ? { width: heroW } : { flex: 3 }} className="px-5 pt-4 pb-3">
+        <View className="flex-row items-center" style={{ gap: 8, marginBottom: 1 }}>
+          <Image source={require("@/assets/icon.png")} style={{ width: 28, height: 28, borderRadius: 7 }} resizeMode="contain" />
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 22, color: CREAM }}>Pair with a bite</Text>
         </View>
-        <Eyebrow color="rgba(251,191,36,0.85)" style={{ letterSpacing: 2 }}>ADD A LITTLE SOMETHING TO YOUR ORDER</Eyebrow>
+        <Eyebrow color="rgba(251,191,36,0.85)" style={{ letterSpacing: 2, fontSize: 10 }}>ADD A LITTLE SOMETHING TO YOUR ORDER</Eyebrow>
 
-        <ScrollView style={{ flex: 1, marginTop: 14 }} showsVerticalScrollIndicator={false}>
+        {/* No ScrollView — content sizes to fit the column. flex:1 lets
+            the bite grid take the remaining vertical room evenly. */}
+        <View style={{ flex: 1, marginTop: 10 }}>
           {unmatchedOffers.length > 0 && (
-            <View className="flex-row flex-wrap" style={{ gap: 7, marginBottom: 12 }}>
+            <View className="flex-row flex-wrap" style={{ gap: 6, marginBottom: 8 }}>
               {unmatchedOffers.map((p) => (
-                <View key={p.id} className="flex-row items-center rounded-full px-3 py-1.5" style={{ backgroundColor: TERRA + "22", borderWidth: 1, borderColor: TERRA + "55", gap: 6 }}>
-                  <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11.5, color: GOLD }}>{offerPill(p.discount_label)}</Text>
-                  <Text style={{ fontFamily: "Peachi-Medium", fontSize: 12.5, color: CREAM }} numberOfLines={1}>{offerHook(p)}</Text>
+                <View key={p.id} className="flex-row items-center rounded-full px-2.5 py-1" style={{ backgroundColor: TERRA + "22", borderWidth: 1, borderColor: TERRA + "55", gap: 5 }}>
+                  <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: GOLD }}>{offerPill(p.discount_label)}</Text>
+                  <Text style={{ fontFamily: "Peachi-Medium", fontSize: 11, color: CREAM }} numberOfLines={1}>{offerHook(p)}</Text>
                 </View>
               ))}
             </View>
           )}
-          <View className="flex-row flex-wrap" style={{ justifyContent: "space-between", rowGap: 12 }}>
+          <View className="flex-row flex-wrap" style={{ justifyContent: "space-between", rowGap: 10 }}>
             {bites.map((b, i) => <BiteCard key={b.id} bite={b} offer={biteOffers[i]} />)}
             {bites.length === 0 && (
               <Text style={{ fontFamily: "SpaceGrotesk_500Medium", color: "rgba(245,243,240,0.4)", fontSize: 14 }}>Ask our barista about today's treats.</Text>
             )}
           </View>
-        </ScrollView>
+        </View>
       </View>
 
       {/* ═══ RIGHT 40% = MEMBER/TIER (top) + CART (below) ═══ */}
@@ -269,7 +371,14 @@ export default function CustomerDisplay() {
             the idle screen so this stays small and the cart gets the room) ── */}
         <View style={{ borderBottomWidth: 1, borderColor: "rgba(245,243,240,0.1)" }} className="px-4 py-4">
           {member ? (
-            snapshot ? <BeansHero snapshot={snapshot} memberName={member.name} /> :
+            snapshot ? (
+              <BeansHero
+                snapshot={snapshot}
+                memberName={member.name}
+                redeemedReward={reward ? { name: reward.name } : null}
+                onRedeem={openRedeem}
+              />
+            ) :
             snapLoading ? <View className="items-center py-6"><ActivityIndicator color={GOLD} /></View> :
             <PendingMemberPanel member={member} />
           ) : (
@@ -290,29 +399,34 @@ export default function CustomerDisplay() {
             keyExtractor={(l) => l.key}
             style={{ flex: 1 }}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <View className="flex-row items-center justify-between py-1.5">
-                <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.85)", flex: 1 }} numberOfLines={1}>
-                  <Text style={{ color: "rgba(245,243,240,0.4)" }}>{item.qty}× </Text>{item.product.name}
-                </Text>
-                <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12, color: "rgba(245,243,240,0.7)", marginLeft: 8 }}>{rm(item.unit_sen * item.qty)}</Text>
-              </View>
-            )}
+            renderItem={({ item }) => {
+              const gross = item.unit_sen * item.qty;
+              const lineDisc = item.line_discount_sen ?? 0;
+              const net = Math.max(0, gross - lineDisc);
+              return (
+                <View className="py-1.5">
+                  <View className="flex-row items-center justify-between">
+                    <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.85)", flex: 1 }} numberOfLines={1}>
+                      <Text style={{ color: "rgba(245,243,240,0.4)" }}>{item.qty}× </Text>{item.product.name}
+                    </Text>
+                    <View className="items-end" style={{ marginLeft: 8 }}>
+                      {lineDisc > 0 && (
+                        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10, color: "rgba(245,243,240,0.35)", textDecorationLine: "line-through" }}>{rm(gross)}</Text>
+                      )}
+                      <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12, color: "rgba(245,243,240,0.7)" }}>{rm(net)}</Text>
+                    </View>
+                  </View>
+                  {lineDisc > 0 && (
+                    <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 10, color: GREEN, marginLeft: 14, marginTop: 1 }}>
+                      − {rm(lineDisc)} OFF
+                    </Text>
+                  )}
+                </View>
+              );
+            }}
           />
-          {/* Redeem reward — parity with the register's Redeem button. */}
-          {member && (
-            reward ? (
-              <View className="flex-row items-center justify-between rounded-xl px-3 py-2 mb-2" style={{ backgroundColor: "rgba(134,239,172,0.12)", borderWidth: 1, borderColor: "rgba(134,239,172,0.35)" }}>
-                <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12, color: GREEN, flex: 1 }} numberOfLines={1}>✓ {reward.name}</Text>
-                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 1, color: GREEN, marginLeft: 8 }}>APPLIED</Text>
-              </View>
-            ) : (
-              <Pressable onPress={openRedeem} className="flex-row items-center justify-center rounded-xl py-2.5 mb-2 active:opacity-80" style={{ borderWidth: 1, borderColor: GOLD + "66", backgroundColor: GOLD + "14", gap: 7 }}>
-                <Gift size={15} color={GOLD} />
-                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 1, color: GOLD }}>REDEEM REWARD</Text>
-              </Pressable>
-            )
-          )}
+          {/* Redeem button moved onto the BeansHero tier card above to
+              free vertical room in the cart for more order lines. */}
           <View style={{ borderTopWidth: 1, borderColor: "rgba(245,243,240,0.12)", paddingTop: 8, gap: 3 }}>
             <Row label="Subtotal" value={rm(subtotal)} />
             {serviceCharge > 0 && <Row label="Service" value={rm(serviceCharge)} />}
@@ -450,8 +564,11 @@ function Posters({ posters }: { posters: DisplayPoster[] }) {
 function SignInButton({ onPress }: { onPress: () => void }) {
   return (
     <View className="items-center" style={{ gap: 9 }}>
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 19, color: CREAM, textAlign: "center" }}>Member? Earn Beans</Text>
-      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.55)", textAlign: "center" }}>Sign in to use your rewards</Text>
+      {/* Headline phrased for the customer, not the staff — "Member? Earn
+          Beans" assumed customers know the loyalty currency name. "Get
+          Rewards" reads cold and still invites the action. */}
+      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 19, color: CREAM, textAlign: "center" }}>Get Rewards</Text>
+      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.55)", textAlign: "center" }}>Sign in with your phone to earn + redeem</Text>
       <Pressable onPress={onPress} className="rounded-2xl px-8 py-3 mt-1 active:opacity-80" style={{ backgroundColor: GOLD }}>
         <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 13, letterSpacing: 1.6, color: DARKFG }}>SIGN IN</Text>
       </Pressable>
@@ -647,7 +764,20 @@ function RewardCardStatic({ title, sub }: { title: string; sub: string }) {
   );
 }
 
-function BeansHero({ snapshot, memberName }: { snapshot: LoyaltySnapshot; memberName: string | null }) {
+function BeansHero({
+  snapshot,
+  memberName,
+  redeemedReward,
+  onRedeem,
+}: {
+  snapshot: LoyaltySnapshot;
+  memberName: string | null;
+  // Pulled up onto the tier card to free vertical room in the cart for
+  // more order lines. When a voucher is already applied we show a small
+  // "✓ APPLIED" pill instead of the action button.
+  redeemedReward?: { name: string } | null;
+  onRedeem?: () => void;
+}) {
   const t = snapshot.tier.current;
   const tierColor = t?.color ?? TERRA;
   const fg = lum(tierColor) >= 0.08 ? tierColor : CREAM;
@@ -664,42 +794,62 @@ function BeansHero({ snapshot, memberName }: { snapshot: LoyaltySnapshot; member
       ].filter(Boolean).join(" + ")
     : "";
   const spendLabel = prog?.metric === "spend" ? `RM ${(moreNeeded / 100).toFixed(0)}` : `${moreNeeded} visit${moreNeeded === 1 ? "" : "s"}`;
+  // Tier card — sized down ~25% from the original on 2026-05-31 per
+  // request, freeing more vertical room in the right column for the
+  // cart / order list below. All font sizes, paddings, bars, and gaps
+  // scaled proportionally.
   return (
-    <View className="rounded-2xl overflow-hidden" style={{ backgroundColor: tierColor + "1A", borderWidth: 1, borderColor: tierColor + "38" }}>
-      <View style={{ height: 4, backgroundColor: tierColor }} />
-      <View style={{ paddingHorizontal: 16, paddingTop: 11, paddingBottom: 12 }}>
+    <View className="rounded-xl overflow-hidden" style={{ backgroundColor: tierColor + "1A", borderWidth: 1, borderColor: tierColor + "38" }}>
+      <View style={{ height: 3, backgroundColor: tierColor }} />
+      <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 9 }}>
         <View className="flex-row items-start justify-between">
           <View className="flex-1 pr-2">
-            <Eyebrow color={fg + "B3"}>{memberName ? `HI, ${memberName.toUpperCase()}` : "WELCOME"}</Eyebrow>
-            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 22, color: fg, marginTop: 2 }}>{t?.name ?? "Member"}</Text>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 8.5, letterSpacing: 1.5, color: fg + "B3" }}>{memberName ? `HI, ${memberName.toUpperCase()}` : "WELCOME"}</Text>
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 17, color: fg, marginTop: 1 }}>{t?.name ?? "Member"}</Text>
           </View>
           <View className="items-end">
-            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 26, color: GOLD, lineHeight: 28 }}>{snapshot.balance.toLocaleString()}</Text>
-            <Eyebrow color={fg + "8C"}>BEANS</Eyebrow>
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: GOLD, lineHeight: 22 }}>{snapshot.balance.toLocaleString()}</Text>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 8.5, letterSpacing: 1.5, color: fg + "8C" }}>BEANS</Text>
           </View>
         </View>
+        {/* Redeem pill — absolute, overlays the empty bottom-right corner. */}
+        {onRedeem && (
+          <View style={{ position: "absolute", right: 9, bottom: 7, zIndex: 1 }}>
+            {redeemedReward ? (
+              <View className="flex-row items-center rounded-full px-2 py-0.5" style={{ backgroundColor: "rgba(134,239,172,0.18)", borderWidth: 1, borderColor: "rgba(134,239,172,0.5)", gap: 4 }}>
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 7.5, letterSpacing: 0.6, color: GREEN }}>✓</Text>
+                <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 8, color: GREEN, maxWidth: 90 }} numberOfLines={1}>{redeemedReward.name}</Text>
+              </View>
+            ) : (
+              <Pressable onPress={onRedeem} className="flex-row items-center rounded-full px-2 py-0.5 active:opacity-80" style={{ backgroundColor: GOLD + "26", borderWidth: 1, borderColor: GOLD + "80", gap: 3 }}>
+                <Gift size={8} color={GOLD} />
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 7, letterSpacing: 0.8, color: GOLD }}>REDEEM</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
         {prog && nextName && (
-          <View style={{ marginTop: 10 }}>
-            <View style={{ height: 6, borderRadius: 3, backgroundColor: fg + "2E", overflow: "hidden" }}>
-              <View style={{ height: 6, width: `${pct}%`, backgroundColor: fg }} />
+          <View style={{ marginTop: 7 }}>
+            <View style={{ height: 4, borderRadius: 2, backgroundColor: fg + "2E", overflow: "hidden" }}>
+              <View style={{ height: 4, width: `${pct}%`, backgroundColor: fg }} />
             </View>
             {/* Motivator: spend X → unlock the next tier + its perks. */}
-            <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 11.5, color: GOLD, marginTop: 5 }}>
+            <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 9, color: GOLD, marginTop: 4 }}>
               {spendLabel} more → {nextName}
             </Text>
             {!!nextPerks && (
-              <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10.5, color: fg + "99", marginTop: 1 }}>
+              <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 8, color: fg + "99", marginTop: 1 }}>
                 Unlock {nextPerks}
               </Text>
             )}
           </View>
         )}
         {(t?.benefits?.length ?? 0) > 0 && (
-          <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderColor: fg + "22", gap: 3 }}>
+          <View style={{ marginTop: 7, paddingTop: 6, borderTopWidth: 1, borderColor: fg + "22", gap: 2 }}>
             {t!.benefits.slice(0, 2).map((b, i) => (
-              <View key={i} className="flex-row items-center" style={{ gap: 8 }}>
-                <View style={{ width: 3, height: 3, borderRadius: 2, backgroundColor: fg }} />
-                <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: fg + "C7" }}>{b}</Text>
+              <View key={i} className="flex-row items-center" style={{ gap: 6 }}>
+                <View style={{ width: 2.5, height: 2.5, borderRadius: 2, backgroundColor: fg }} />
+                <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 8.5, color: fg + "C7" }}>{b}</Text>
               </View>
             ))}
           </View>
@@ -813,22 +963,38 @@ function Suggestions({ bites, promos }: { bites: BiteItem[]; promos: LoyaltySnap
 }
 
 // ─── Upsell hero cards ─────────────────────────────────────
+/** Bite tile for the Pair-with-a-bite upsell row — 4 across in ONE row.
+ *  Card width is ~23.5% so all four fit side-by-side in the upsell area.
+ *  Product name still allowed to wrap onto 2 lines so long names like
+ *  "Mini Chocolate Chip No Nuts (3 pcs)" stay fully readable. When a live
+ *  combo/promo matches this bite, the card carries a full-width gold
+ *  banner stripe across the top with the discount label + combo hook —
+ *  visible at a glance from customer side. */
 function BiteCard({ bite, offer }: { bite: { id: string; name: string; price_sen: number; image_url: string | null }; offer?: LoyaltySnapshot["active_promos"][number] | null }) {
   return (
-    <View style={{ width: "31.5%", backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: offer ? GOLD + "66" : "rgba(245,243,240,0.1)", borderRadius: 16, overflow: "hidden" }}>
-      <View style={{ aspectRatio: 1, backgroundColor: "rgba(245,243,240,0.06)" }}>
-        {bite.image_url && <Image source={{ uri: bite.image_url }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
-        {/* Offer badge — incorporates the combo deal onto the menu box. */}
-        {offer && (
-          <View style={{ position: "absolute", top: 8, left: 8, backgroundColor: GOLD, borderRadius: 9, paddingHorizontal: 8, paddingVertical: 3 }}>
-            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, color: DARKFG }}>{offerPill(offer.discount_label)}</Text>
+    <View style={{ width: "23.5%", backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: offer ? GOLD + "80" : "rgba(245,243,240,0.1)", borderRadius: 14, overflow: "hidden" }}>
+      {/* Promotion banner — full-width stripe above the image. Stays
+          compact for the narrower 4-up tiles: smaller pill + tighter
+          padding so the hook text still has room to read. */}
+      {offer && (
+        <View className="flex-row items-center" style={{ backgroundColor: GOLD, paddingHorizontal: 6, paddingVertical: 4, gap: 5 }}>
+          <View style={{ backgroundColor: DARKFG, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1.5 }}>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, color: GOLD, letterSpacing: 0.3 }}>{offerPill(offer.discount_label)}</Text>
           </View>
-        )}
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 10.5, color: DARKFG, flex: 1 }} numberOfLines={1}>{offerHook(offer)}</Text>
+        </View>
+      )}
+      {/* Shorter aspect ratio (4:3 vs 1:1) keeps each tile ~50px less
+          tall — needed so two rows fit on the 800px tall display 1 with
+          header + chips above. */}
+      <View style={{ aspectRatio: 4 / 3, backgroundColor: "rgba(245,243,240,0.06)" }}>
+        {bite.image_url && <Image source={{ uri: bite.image_url }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
       </View>
-      <View style={{ paddingHorizontal: 10, paddingVertical: 9 }}>
-        <Text style={{ fontFamily: "Peachi-Medium", fontSize: 15, color: CREAM }} numberOfLines={1}>{bite.name}</Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 14, color: GOLD, marginTop: 2 }}>{rm(bite.price_sen)}</Text>
-        {offer && <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 10.5, color: TERRA, marginTop: 2 }} numberOfLines={1}>{offerHook(offer)}</Text>}
+      <View style={{ paddingHorizontal: 8, paddingVertical: 6 }}>
+        {/* Wraps to 2 lines for long names. Tight lineHeight saves a few
+            more pixels per tile while still reading clearly. */}
+        <Text style={{ fontFamily: "Peachi-Medium", fontSize: 12.5, color: CREAM, lineHeight: 15 }} numberOfLines={2}>{bite.name}</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, color: GOLD, marginTop: 1 }}>{rm(bite.price_sen)}</Text>
       </View>
     </View>
   );

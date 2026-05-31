@@ -43,6 +43,14 @@ export type SunmiPrinterModule = {
   printText(text: string): Promise<void>;
   printFormattedReceipt(options: ReceiptOptions): Promise<void>;
   printOrderDocket(options: DocketOptions): Promise<void>;
+  /** Send a pre-built ESC/POS byte stream (0-255 values) to a LAN printer.
+   *  Rejects on connect/write failure. */
+  printNetworkRaw(
+    host: string,
+    port: number,
+    data: number[],
+    timeoutMs: number,
+  ): Promise<{ ok: boolean; bytes?: number }>;
 };
 
 const SunmiPrinter = requireOptionalNativeModule<SunmiPrinterModule>("SunmiPrinter");

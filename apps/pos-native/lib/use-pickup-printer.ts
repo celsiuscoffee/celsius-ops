@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
+import { AppState, Alert } from "react-native";
 import { supabase } from "./supabase";
-import { printKitchenDocket80mm } from "./printer";
+import { printKitchenDocket80mm, printReceipt80mm, isPrinterFault, shouldAlertPrinterFault } from "./printer";
 
 /**
  * Pickup-order kitchen-docket auto-printer (native port of
@@ -56,6 +57,13 @@ type PickupOrderRow = {
   customer_phone: string | null;
   created_at: string;
   kitchen_docket_printed_at: string | null;
+  // Totals needed for the customer receipt slip. All sen-based.
+  subtotal: number | null;
+  sst_amount: number | null;
+  discount_amount: number | null;
+  total: number | null;
+  payment_method: string | null;
+  loyalty_phone: string | null;
 };
 
 type PickupOrderItemRow = {
@@ -63,6 +71,8 @@ type PickupOrderItemRow = {
   product_name: string;
   variant_name: string | null;
   quantity: number;
+  unit_price: number | null;
+  item_total: number | null;
   modifiers: unknown;
 };
 
@@ -75,6 +85,33 @@ const PRINTABLE_STATUSES = new Set([
   "preparing",
   "ready",
 ]);
+
+/** The pickup/order app stores per-item customer notes as
+ *  `modifiers.specialInstructions` and chosen options as
+ *  `modifiers.selections[].label` — NOT the flat array shape Grab uses. These
+ *  two helpers normalize a pickup item's modifiers JSONB so the kitchen docket
+ *  prints item notes + chosen options exactly like a Grab order does (this is
+ *  why pickup item notes previously never printed — they were passed as null). */
+function pickupItemNote(mods: unknown): string | null {
+  if (mods && typeof mods === "object" && !Array.isArray(mods)) {
+    const si = (mods as { specialInstructions?: unknown }).specialInstructions;
+    if (typeof si === "string" && si.trim()) return si.trim();
+  }
+  return null;
+}
+function pickupItemModifiers(mods: unknown): { name: string }[] {
+  // Already a flat array (older / Grab-style) → pass through unchanged.
+  if (Array.isArray(mods)) return mods as { name: string }[];
+  if (mods && typeof mods === "object") {
+    const sels = (mods as { selections?: unknown }).selections;
+    if (Array.isArray(sels)) {
+      return sels
+        .map((s: any) => ({ name: String(s?.label ?? s?.name ?? "") }))
+        .filter((s) => s.name);
+    }
+  }
+  return [];
+}
 
 export function usePickupPrinter(
   outletId: string | null | undefined,
@@ -102,7 +139,6 @@ export function usePickupPrinter(
 
     const tryPrintOrder = async (orderId: string) => {
       if (inFlightRef.current.has(orderId)) return;
-      inFlightRef.current.add(orderId);
       try {
         // Re-read so we have the latest status + don't fire if another
         // terminal already claimed the docket in the small Realtime →
@@ -110,7 +146,7 @@ export function usePickupPrinter(
         const { data: order } = await supabase
           .from("orders")
           .select(
-            "id, order_number, store_id, status, order_type, table_number, pickup_at, notes, customer_name, customer_phone, created_at, kitchen_docket_printed_at",
+            "id, order_number, store_id, status, order_type, table_number, pickup_at, notes, customer_name, customer_phone, created_at, kitchen_docket_printed_at, subtotal, sst_amount, discount_amount, total, payment_method, loyalty_phone",
           )
           .eq("id", orderId)
           .maybeSingle();
@@ -120,21 +156,57 @@ export function usePickupPrinter(
         if (row.kitchen_docket_printed_at) return;
         if (!PRINTABLE_STATUSES.has(row.status)) return;
 
-        const { data: items } = await supabase
-          .from("order_items")
-          .select("product_id, product_name, variant_name, quantity, modifiers")
-          .eq("order_id", orderId);
-        const rows = (items ?? []) as PickupOrderItemRow[];
-        if (rows.length === 0) return;
+        // Claim the in-flight guard ONLY now — after confirming this order is
+        // actually printable. Claiming it earlier (before the status check)
+        // meant a still-pending card order's INSERT locked the id for 5s, so
+        // the pending→preparing UPDATE ~2s later was skipped and the docket
+        // never printed (root cause of pickup orders silently not printing).
+        if (inFlightRef.current.has(orderId)) return;
+        inFlightRef.current.add(orderId);
+
+        // Items can arrive a beat after the order row when the writer
+        // commits them in separate statements. The Realtime INSERT
+        // delivers on the `orders` commit, so a single fetch sometimes
+        // returns zero rows. Retry once after a short delay before
+        // giving up — beats letting a real order print blank.
+        let rows: PickupOrderItemRow[] = [];
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const { data: items } = await supabase
+            .from("order_items")
+            .select("product_id, product_name, variant_name, quantity, unit_price, item_total, modifiers")
+            .eq("order_id", orderId);
+          rows = (items ?? []) as PickupOrderItemRow[];
+          if (rows.length > 0) break;
+          if (attempt < 2) {
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((r) => setTimeout(r, 400));
+          }
+        }
+        if (rows.length === 0) {
+          console.warn(`[pickup-printer] no items for order ${orderId} after 3 attempts; skipping`);
+          return;
+        }
 
         const products = productsRef.current;
-        const pos_order_items = rows.map((r) => ({
+        // Kitchen docket items — no prices needed.
+        const docketItems = rows.map((r) => ({
           product_name: r.product_name,
           variant_name: r.variant_name,
           quantity: r.quantity,
           kitchen_station: products.get(r.product_id)?.kitchen_station ?? null,
-          modifiers: r.modifiers,
-          notes: null,
+          modifiers: pickupItemModifiers(r.modifiers),
+          notes: pickupItemNote(r.modifiers),
+        }));
+        // Receipt items — prices needed for the customer slip.
+        const receiptItems = rows.map((r) => ({
+          product_name: r.product_name,
+          variant_name: r.variant_name,
+          quantity: r.quantity,
+          unit_price: r.unit_price ?? 0,
+          modifier_total: 0,
+          item_total: r.item_total ?? (r.unit_price ?? 0) * r.quantity,
+          modifiers: pickupItemModifiers(r.modifiers),
+          notes: pickupItemNote(r.modifiers),
         }));
 
         // For QR-dine-in we surface "DINE-IN" + the table number so the
@@ -142,19 +214,40 @@ export function usePickupPrinter(
         // (parity with PR #216). For pickup/takeaway we keep
         // order_number as the queue label.
         const isDineIn = row.order_type === "dine_in";
-        const orderForPrint = {
+        const outletLabel = isDineIn ? "Celsius Coffee Dine-in" : "Celsius Coffee Pickup";
+        const docketOrder = {
           order_number: row.order_number,
           order_type: isDineIn ? "dine_in" : "takeaway",
           table_number: isDineIn ? row.table_number ?? null : null,
           queue_number: row.order_number,
           created_at: row.created_at,
-          pos_order_items,
+          pos_order_items: docketItems,
+        };
+        // Customer-facing receipt — same shape as the register's receipt.
+        // Pickup orders don't carry a service charge in the orders table
+        // (web/native pickup app applies SST + discounts upstream), so
+        // we pass 0 here and trust subtotal/discount/total from the row.
+        const receiptOrder = {
+          order_number: row.order_number,
+          order_type: isDineIn ? "dine_in" : "takeaway",
+          table_number: isDineIn ? row.table_number ?? null : null,
+          queue_number: row.order_number,
+          created_at: row.created_at,
+          subtotal: row.subtotal ?? 0,
+          service_charge: 0,
+          discount_amount: row.discount_amount ?? 0,
+          total: row.total ?? row.subtotal ?? 0,
+          pos_order_items: receiptItems,
+          pos_order_payments: [{
+            payment_method: row.payment_method || "qr",
+            amount: row.total ?? row.subtotal ?? 0,
+          }],
         };
 
-        await printKitchenDocket80mm(
-          orderForPrint,
-          isDineIn ? "Celsius Coffee Dine-in" : "Celsius Coffee Pickup",
-        );
+        // Kitchen docket first (station-routed), then customer receipt
+        // (handed over with the food / kept by dine-in customer).
+        await printKitchenDocket80mm(docketOrder, outletLabel, outletId);
+        await printReceipt80mm(receiptOrder, outletLabel, undefined, outletId);
 
         // Atomic claim: only mark printed if still NULL. If another
         // terminal beat us, the UPDATE matches zero rows and we
@@ -166,6 +259,12 @@ export function usePickupPrinter(
           .is("kitchen_docket_printed_at", null);
       } catch (e) {
         console.error("[pickup-printer]", e);
+        // Printer faulted (paper out / cover open / offline): the docket
+        // was NOT claimed, so it reprints on the next foreground once the
+        // head is fixed. Surface it so staff know to check the printer.
+        if (isPrinterFault(e) && shouldAlertPrinterFault()) {
+          Alert.alert("Printer needs attention", "A kitchen docket couldn't print — check the paper roll and cover, then it'll reprint automatically.");
+        }
       } finally {
         // Free the local guard after 5s — a manual reprint feature
         // (future) can re-trigger without an app reload.
@@ -175,6 +274,47 @@ export function usePickupPrinter(
 
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let cancelled = false;
+
+    // Catch-up pass — anything printable + unprinted in the last 6h.
+    // Runs (a) once on mount and (b) every time the POS app returns to
+    // the foreground. (b) is the fix for card/pickup orders that flip
+    // pending → preparing server-side (gateway/Maybank-QR confirm) while
+    // the register was backgrounded or the device was asleep: the live
+    // UPDATE is missed because the socket is suspended, so we reconcile
+    // on resume. The atomic printed_at claim + inFlight guard make
+    // re-running idempotent (already-printed rows are skipped).
+    const runCatchUp = async () => {
+      const storeId = storeIdRef.current;
+      if (!storeId || cancelled) return;
+      const { data } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("store_id", storeId)
+        .is("kitchen_docket_printed_at", null)
+        .in("status", Array.from(PRINTABLE_STATUSES))
+        .gte("created_at", new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString())
+        .order("created_at", { ascending: true })
+        .limit(20);
+      if (cancelled) return;
+      for (const r of (data ?? []) as { id: string }[]) {
+        if (cancelled) break;
+        // Sequential — back-to-back prints can starve the SUNMI bridge
+        // if fired in parallel.
+        // eslint-disable-next-line no-await-in-loop
+        await tryPrintOrder(r.id);
+      }
+    };
+
+    // Re-reconcile whenever the app comes back to the foreground.
+    let lastAppState = AppState.currentState;
+    const appStateSub = AppState.addEventListener("change", (next) => {
+      const resumed = lastAppState.match(/inactive|background/) && next === "active";
+      lastAppState = next;
+      if (resumed) {
+        console.log("[pickup-printer] app resumed → catch-up rescan");
+        void runCatchUp();
+      }
+    });
 
     (async () => {
       // 0. Map POS outletId → pickup store_id via outlet_settings (the
@@ -196,31 +336,14 @@ export function usePickupPrinter(
       }
       storeIdRef.current = storeId;
 
-      // 1. Catch-up pass — anything paid + unprinted in the last 6h.
-      //    Limit prevents dumping a backfill onto the SUNMI head if RLS
-      //    was just flipped or the flag was reset.
-      const { data } = await supabase
-        .from("orders")
-        .select("id, status")
-        .eq("store_id", storeId)
-        .is("kitchen_docket_printed_at", null)
-        .in("status", Array.from(PRINTABLE_STATUSES))
-        .gte("created_at", new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString())
-        .order("created_at", { ascending: true })
-        .limit(20);
-      if (cancelled) return;
-      for (const r of (data ?? []) as { id: string }[]) {
-        if (cancelled) break;
-        // Sequential — back-to-back prints can starve the SUNMI bridge
-        // if fired in parallel.
-        // eslint-disable-next-line no-await-in-loop
-        await tryPrintOrder(r.id);
-      }
+      // 1. Catch-up pass on mount.
+      await runCatchUp();
       if (cancelled) return;
 
       // 2. Live: INSERT covers new orders; UPDATE covers webhook-flipped
       //    status (pending → preparing on gateway confirm, or
       //    pending → preparing on Maybank-QR staff release).
+      console.log(`[pickup-printer] subscribing channel=pickup-printer-${outletId} filter=store_id=eq.${storeId}`);
       channel = supabase
         .channel(`pickup-printer-${outletId}`)
         .on(
@@ -233,6 +356,7 @@ export function usePickupPrinter(
           },
           (payload) => {
             const id = (payload.new as PickupOrderRow | null)?.id;
+            console.log(`[pickup-printer] INSERT event id=${id} store=${(payload.new as PickupOrderRow | null)?.store_id}`);
             if (id) void tryPrintOrder(id);
           },
         )
@@ -257,11 +381,14 @@ export function usePickupPrinter(
             if (becamePrintable) void tryPrintOrder(next.id);
           },
         )
-        .subscribe();
+        .subscribe((status, err) => {
+          console.log(`[pickup-printer] subscribe status=${status}${err ? " err=" + err.message : ""}`);
+        });
     })();
 
     return () => {
       cancelled = true;
+      appStateSub.remove();
       if (channel) void supabase.removeChannel(channel);
     };
   }, [outletId]);

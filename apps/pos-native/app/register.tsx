@@ -1,24 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, Pressable, FlatList, ActivityIndicator, Image, ScrollView, Modal,
-  TextInput, useWindowDimensions,
+  TextInput, useWindowDimensions, Keyboard,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Plus, Minus, LogOut, Banknote, CreditCard, QrCode, X, CheckCircle2,
-  Settings as SettingsIcon, User, Gift, LayoutGrid, Pencil, Search, Trash2, Tag,
+  Plus, Minus, LogOut, X, CheckCircle2,
+  Settings as SettingsIcon, User, Gift, LayoutGrid, Search, Trash2, Tag,
+  Grid3x3, QrCode, CreditCard, ClipboardList, Bike, ShoppingBag, ChefHat, Power,
 } from "lucide-react-native";
 import { usePos } from "@/lib/store";
 import { apiPost } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { usePickupPrinter } from "@/lib/use-pickup-printer";
+import { useGrabPrinter } from "@/lib/use-grab-printer";
+import { chargeMaybankCard, type MaybankTerminalResult } from "@/lib/maybank-terminal";
 import { fetchCategories, fetchProducts, type Product, type ModifierOption } from "@/lib/menu";
-import { useCart, cartSubtotal } from "@/lib/cart";
+import { useCart, cartSubtotal, type CartLine } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
 import { createSale, getNextQueueNumber } from "@/lib/checkout";
-import { useSettings, gridColumns, serviceChargeRate, defaultOrderType, receiptConfig } from "@/lib/settings";
+import { useSettings, gridColumns, serviceChargeRate, defaultOrderType, receiptConfig, tableCount } from "@/lib/settings";
+import { useTablesPanel, type TableSlot } from "@/lib/use-tables-panel";
+import { useOrdersPanel, type KdsOrder } from "@/lib/use-orders-panel";
+import { useShift, openShift, closeShift, shiftTotals, type Shift, type ShiftTotals } from "@/lib/shift";
 import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/printer";
 import { outletFull, outletShort } from "@/lib/outlets";
 import {
@@ -67,14 +73,38 @@ const catColor = (slug: string, i: number) =>
 
 const BRAND = "#A2492C";
 const OK = "#86efac";
+const DANGER = "#E5484D";
 
 type AppliedReward = { redemptionId: string; name: string; descriptor: RedeemDiscount } | null;
-type Panel = "none" | "customer" | "table" | "notes";
+type Panel = "none" | "customer" | "table";
 
 export default function Register() {
   const { staff, outletId, signOut } = usePos();
   const [activeCat, setActiveCat] = useState<string>("all");
+  const [showTables, setShowTables] = useState(false);
+  const [showOrders, setShowOrders] = useState(false);
+  // Which order's status update is in flight (uid) — disables its buttons.
+  const [bumpingUid, setBumpingUid] = useState<string | null>(null);
+  // Shift open/close UI.
+  const [showShift, setShowShift] = useState(false);
+  const [shiftBusy, setShiftBusy] = useState(false);
+  const [openingCash, setOpeningCash] = useState("");
+  const [closingCash, setClosingCash] = useState("");
+  const [liveTotals, setLiveTotals] = useState<ShiftTotals | null>(null);
+  const [closedSummary, setClosedSummary] = useState<ShiftTotals | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
+  // Which payment method the cashier has picked inside the checkout
+  // modal. `null` = method picker; "qr" = show Maybank QR awaiting
+  // payment; "card" = drive the Maybank terminal flow.
+  const [payMethod, setPayMethod] = useState<null | "qr" | "card">(null);
+  // Card terminal state — purely a UI proxy until the real Maybank
+  // terminal SDK is wired (see lib/maybank-terminal.ts).
+  const [cardStage, setCardStage] = useState<"idle" | "prompting" | "approved" | "declined">("idle");
+  // The terminal's approval payload — held so the cashier-verification
+  // screen can show the approval code + masked PAN before we record the
+  // sale. Card payments now require a manual confirm (mirrors QR), so the
+  // terminal "approved" result no longer auto-commits.
+  const [cardResult, setCardResult] = useState<Extract<MaybankTerminalResult, { status: "approved" }> | null>(null);
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState<{ orderNumber: string; total: number } | null>(null);
   const [modProduct, setModProduct] = useState<Product | null>(null);
@@ -86,7 +116,6 @@ export default function Register() {
   // Order context.
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("takeaway");
   const [tableNumber, setTableNumber] = useState<string>("");
-  const [notes, setNotes] = useState<string>("");
   const [panel, setPanel] = useState<Panel>("none");
 
   // Loyalty.
@@ -112,6 +141,69 @@ export default function Register() {
   const settings = useSettings((s) => s.settings);
   const outlet = useSettings((s) => s.outlet);
   const refreshSettings = useSettings((s) => s.refresh);
+  // Live dine-in tables grid for the Tables modal — pulled here so the
+  // hook is mounted persistently (catch-up + Realtime subscribe) instead
+  // of being torn down each time the modal closes.
+  const tableSlots = useTablesPanel(outletId, tableCount(settings));
+  // Live Grab + Pickup order feed for the on-register KDS (Orders modal).
+  // Mounted persistently so it keeps catching up + receiving Realtime even
+  // while the modal is closed (drives the header badge count).
+  const { orders: kdsOrders, reload: reloadOrders } = useOrdersPanel(outletId);
+
+  // Advance a Grab/Pickup order's fulfilment status via the service-role
+  // route (anon can't UPDATE printed pickup rows under RLS). Realtime
+  // flows the change back through useOrdersPanel so the card re-buckets.
+  const advanceOrderStatus = useCallback(async (order: KdsOrder, status: "preparing" | "ready" | "completed") => {
+    setBumpingUid(order.uid);
+    console.log(`[order-status] tap ${order.source} ${order.orderNumber} -> ${status}`);
+    try {
+      const res = await apiPost<{ ok?: boolean; grabPushed?: boolean }>("/api/pos/order-status", { source: order.source, id: order.id, status });
+      console.log(`[order-status] ok ${order.orderNumber} grabPushed=${res?.grabPushed ?? false}`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Force an immediate refresh rather than waiting on the Realtime
+      // round-trip — keeps the card from looking stuck right after a tap.
+      await reloadOrders();
+    } catch (e) {
+      console.error(`[order-status] FAIL ${order.orderNumber}:`, e instanceof Error ? e.message : e);
+      alert(`Couldn't mark ${order.orderNumber} ${status}.\n${e instanceof Error ? e.message : "Check the connection and try again."}`);
+    } finally {
+      setBumpingUid(null);
+    }
+  }, [reloadOrders]);
+
+  // ── Shift open/close ──
+  const { shift, reload: reloadShift } = useShift(outletId);
+  const openShiftModal = useCallback(() => {
+    Haptics.selectionAsync();
+    setClosedSummary(null);
+    setOpeningCash("");
+    setClosingCash("");
+    setLiveTotals(null);
+    setShowShift(true);
+    // Pull live sales for the open shift so the close screen shows a summary.
+    if (shift) shiftTotals(shift.id).then(setLiveTotals).catch(() => setLiveTotals(null));
+  }, [shift]);
+  const doOpenShift = useCallback(async () => {
+    if (!outletId || !staff?.staffId) return;
+    setShiftBusy(true);
+    const sen = Math.round((parseFloat(openingCash) || 0) * 100);
+    await openShift(outletId, staff.staffId, sen);
+    await reloadShift();
+    setShiftBusy(false);
+    setOpeningCash("");
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [outletId, staff?.staffId, openingCash, reloadShift]);
+  const doCloseShift = useCallback(async () => {
+    if (!shift || !staff?.staffId) return;
+    setShiftBusy(true);
+    const sen = Math.round((parseFloat(closingCash) || 0) * 100);
+    const totals = await closeShift(shift, staff.staffId, sen);
+    setClosedSummary(totals ?? { orders: 0, sales: 0 });
+    await reloadShift();
+    setShiftBusy(false);
+    setClosingCash("");
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [shift, staff?.staffId, closingCash, reloadShift]);
   // Initial load + re-read backoffice settings whenever the register regains
   // focus, so a grid / service-charge / receipt change shows without an app
   // restart (the store used to cache the first load and never refetch).
@@ -160,12 +252,22 @@ export default function Register() {
     return m;
   }, [prods.data]);
   usePickupPrinter(outletId, productsByIdForPrinter);
+  // Mirror: auto-print kitchen dockets when Grab's webhook lands a new
+  // pos_orders row (source='grabfood') for this outlet.
+  useGrabPrinter(outletId, productsByIdForPrinter);
 
   const lines = useCart((s) => s.lines);
   const add = useCart((s) => s.add);
   const inc = useCart((s) => s.inc);
   const dec = useCart((s) => s.dec);
+  const remove = useCart((s) => s.remove);
+  const setLineDiscount = useCart((s) => s.setLineDiscount);
+  const setLineNote = useCart((s) => s.setLineNote);
   const clear = useCart((s) => s.clear);
+  // Cart line editor sheet — tap any line in the cart to open. From
+  // here the cashier can adjust qty, apply a per-line discount, or
+  // remove the line.
+  const [editLineKey, setEditLineKey] = useState<string | null>(null);
 
   const liveCats = useMemo(() => {
     const present = new Set((prods.data ?? []).map((p) => p.category));
@@ -394,8 +496,10 @@ export default function Register() {
     setReward(null);
     setAutoPromotions([]);
     setManualDiscount(0);
+    setPayMethod(null);
+    setCardStage("idle");
+    setCardResult(null);
     setTableNumber("");
-    setNotes("");
     setMember(null);
     setUsual([]);
     setActiveCat("all");
@@ -440,7 +544,6 @@ export default function Register() {
         promoDiscount,
         promoName,
         manualDiscount: effManualDiscount,
-        notes: notes || null,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setDisplayOrderNumber(sale.orderNumber);
@@ -460,15 +563,21 @@ export default function Register() {
         service_charge: sale.serviceCharge,
         discount_amount: sale.discount,
         total: sale.total,
-        pos_order_items: printLines.map((l) => ({
-          product_name: l.product.name,
-          quantity: l.qty,
-          unit_price: l.unit_sen,
-          modifier_total: l.modifiers.reduce((s, m) => s + m.price_sen, 0),
-          item_total: l.unit_sen * l.qty,
-          modifiers: l.modifiers.map((m) => ({ name: m.name })),
-          kitchen_station: l.product.kitchen_station ?? null,
-        })),
+        pos_order_items: printLines.map((l) => {
+          const lineDisc = l.line_discount_sen ?? 0;
+          const gross = l.unit_sen * l.qty;
+          return {
+            product_name: l.product.name,
+            quantity: l.qty,
+            unit_price: l.unit_sen,
+            modifier_total: l.modifiers.reduce((s, m) => s + m.price_sen, 0),
+            discount_amount: lineDisc,
+            item_total: Math.max(0, gross - lineDisc),
+            modifiers: l.modifiers.map((m) => ({ name: m.name })),
+            kitchen_station: l.product.kitchen_station ?? null,
+            notes: l.note ?? null,
+          };
+        }),
         pos_order_payments: [{ payment_method: method, amount: sale.total }],
       };
       const outletInfo = {
@@ -479,8 +588,8 @@ export default function Register() {
         phone: outlet?.phone ?? null,
       };
       setTimeout(() => {
-        printKitchenDocket80mm(printOrder, outletInfo).catch((e) => console.error("[print] docket:", e?.message ?? e));
-        printReceipt80mm(printOrder, outletInfo, receiptConfig(settings)).catch((e) => console.error("[print] receipt:", e?.message ?? e));
+        printKitchenDocket80mm(printOrder, outletInfo, outletId).catch((e) => console.error("[print] docket:", e?.message ?? e));
+        printReceipt80mm(printOrder, outletInfo, receiptConfig(settings), outletId).catch((e) => console.error("[print] receipt:", e?.message ?? e));
       }, 250);
     } catch (e: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -518,6 +627,47 @@ export default function Register() {
             </View>
           </View>
           <View className="flex-row items-center gap-2">
+            {/* Shift — open/close the register's cashier shift. Green dot
+                = open, amber = none. Tap to open (with a cash float) or
+                close (with an end-of-shift summary). */}
+            <Pressable onPress={openShiftModal} className="flex-row items-center gap-2 px-3 py-2 rounded-xl border border-cream/15 active:opacity-60">
+              <Power size={16} color={shift ? "#22C55E" : "#FBBF24"} />
+              <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Shift</Text>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: shift ? "#22C55E" : "#FBBF24" }} />
+            </Pressable>
+            {/* Orders — live Grab + Pickup queue (on-register KDS). Badge
+                shows how many delivery/pickup orders are still in the
+                kitchen so staff don't miss an incoming order. */}
+            <Pressable onPress={() => { Haptics.selectionAsync(); setShowOrders(true); }} className="flex-row items-center gap-2 px-3 py-2 rounded-xl border border-cream/15 active:opacity-60">
+              <ChefHat size={16} color="rgba(245,243,240,0.7)" />
+              <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Orders</Text>
+              {(() => {
+                // Highlight orders not yet marked ready (need action).
+                const live = kdsOrders.filter((o) => o.status !== "ready").length;
+                if (kdsOrders.length === 0) return null;
+                return (
+                  <View className="rounded-full px-1.5" style={{ backgroundColor: live > 0 ? "#22C55E" : "rgba(245,243,240,0.25)" }}>
+                    <Text className="text-espresso text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{kdsOrders.length}</Text>
+                  </View>
+                );
+              })()}
+            </Pressable>
+            {/* Tables — live dine-in occupancy grid driven by the orders
+                feed. Shows a count of active tables as a badge so staff
+                can tell at a glance how many are in use. */}
+            <Pressable onPress={() => { Haptics.selectionAsync(); setShowTables(true); }} className="flex-row items-center gap-2 px-3 py-2 rounded-xl border border-cream/15 active:opacity-60">
+              <Grid3x3 size={16} color="rgba(245,243,240,0.7)" />
+              <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Tables</Text>
+              {(() => {
+                const active = tableSlots.filter((t) => t.state !== "free").length;
+                if (active === 0) return null;
+                return (
+                  <View className="rounded-full px-1.5" style={{ backgroundColor: "#FBBF24" }}>
+                    <Text className="text-espresso text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{active}</Text>
+                  </View>
+                );
+              })()}
+            </Pressable>
             <Pressable onPress={() => { Haptics.selectionAsync(); router.push("/settings"); }} className="h-10 w-10 items-center justify-center rounded-xl border border-cream/15 active:opacity-60">
               <SettingsIcon size={18} color="rgba(245,243,240,0.7)" />
             </Pressable>
@@ -557,8 +707,12 @@ export default function Register() {
           })()}
         </View>
 
-        {/* Product grid */}
-        {prods.isLoading ? (
+        {/* Product grid — wait for settings AND products to load before
+            mounting the FlatList. Without this gate, gridColumns(null) ran
+            with its 4-column default on first paint, then the BO setting
+            (5) arrived and the FlatList re-mounted via key change, making
+            the tiles visibly snap from 4-wide to 5-wide. */}
+        {prods.isLoading || !settings ? (
           <View className="flex-1 items-center justify-center"><ActivityIndicator color="#FBBF24" /></View>
         ) : (
           <FlatList
@@ -600,7 +754,6 @@ export default function Register() {
           {orderType === "dine_in" && (
             <ActionTab icon={<LayoutGrid size={15} color="#F5F3F0" />} label="Table" active={panel === "table"} onPress={() => setPanel(panel === "table" ? "none" : "table")} />
           )}
-          <ActionTab icon={<Pencil size={15} color="#F5F3F0" />} label="Notes" active={panel === "notes"} onPress={() => setPanel(panel === "notes" ? "none" : "notes")} />
           <ActionTab icon={<Tag size={15} color="#F5F3F0" />} label="Discount" active={manualDiscount > 0} onPress={() => { Haptics.selectionAsync(); setShowDiscount(true); }} />
         </View>
 
@@ -639,19 +792,6 @@ export default function Register() {
                 );
               })}
             </View>
-          </View>
-        )}
-        {panel === "notes" && (
-          <View className="px-4 pb-3">
-            <TextInput
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Order notes (e.g. less sugar)"
-              placeholderTextColor="rgba(245,243,240,0.35)"
-              multiline
-              className="px-3 py-2.5 rounded-xl border border-cream/15 text-cream"
-              style={{ backgroundColor: "rgba(245,243,240,0.06)", fontFamily: "SpaceGrotesk_500Medium", fontSize: 14, minHeight: 64, textAlignVertical: "top" }}
-            />
           </View>
         )}
 
@@ -706,23 +846,45 @@ export default function Register() {
             keyExtractor={(l) => l.key}
             className="flex-1"
             contentContainerStyle={{ paddingHorizontal: 12 }}
-            renderItem={({ item }) => (
-              <View className="flex-row items-center py-3 border-b border-border">
-                <View className="flex-1 pr-2">
-                  <Text className="text-cream text-[13px]" style={{ fontFamily: "Peachi-Medium" }} numberOfLines={1}>{item.product.name}</Text>
-                  {item.modifiers.length > 0 && (
-                    <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_400Regular" }} numberOfLines={1}>{item.modifiers.map((m) => m.name).join(", ")}</Text>
-                  )}
-                  <Text className="text-cream/55 text-[11px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{rm(item.unit_sen)}</Text>
-                </View>
-                <View className="flex-row items-center gap-2">
-                  <Stepper icon={<Minus size={14} color="#F5F3F0" />} onPress={() => { Haptics.selectionAsync(); dec(item.key); }} />
-                  <Text className="text-cream w-6 text-center" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{item.qty}</Text>
-                  <Stepper icon={<Plus size={14} color="#F5F3F0" />} onPress={() => { Haptics.selectionAsync(); inc(item.key); }} />
-                </View>
-                <Text className="text-cream w-[72px] text-right text-[13px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(item.unit_sen * item.qty)}</Text>
-              </View>
-            )}
+            renderItem={({ item }) => {
+              const gross = item.unit_sen * item.qty;
+              const lineDisc = item.line_discount_sen ?? 0;
+              const net = Math.max(0, gross - lineDisc);
+              return (
+                // Tap anywhere on the line (except the +/- steppers) to
+                // open the line editor — qty, discount, remove.
+                <Pressable
+                  onPress={() => { Haptics.selectionAsync(); setEditLineKey(item.key); }}
+                  className="flex-row items-center py-3 border-b border-border active:opacity-70"
+                >
+                  <View className="flex-1 pr-2">
+                    <Text className="text-cream text-[13px]" style={{ fontFamily: "Peachi-Medium" }} numberOfLines={1}>{item.product.name}</Text>
+                    {item.modifiers.length > 0 && (
+                      <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_400Regular" }} numberOfLines={1}>{item.modifiers.map((m) => m.name).join(", ")}</Text>
+                    )}
+                    <View className="flex-row items-center" style={{ gap: 6 }}>
+                      <Text className="text-cream/55 text-[11px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{rm(item.unit_sen)}</Text>
+                      {lineDisc > 0 && (
+                        <View className="rounded-full mt-0.5 px-2 py-0.5" style={{ backgroundColor: "rgba(134,239,172,0.14)", borderWidth: 1, borderColor: "rgba(134,239,172,0.4)" }}>
+                          <Text className="text-[9.5px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: OK, letterSpacing: 0.4 }}>−{rm(lineDisc)} OFF</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  <View className="flex-row items-center gap-2">
+                    <Stepper icon={<Minus size={14} color="#F5F3F0" />} onPress={() => { Haptics.selectionAsync(); dec(item.key); }} />
+                    <Text className="text-cream w-6 text-center" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{item.qty}</Text>
+                    <Stepper icon={<Plus size={14} color="#F5F3F0" />} onPress={() => { Haptics.selectionAsync(); inc(item.key); }} />
+                  </View>
+                  <View className="w-[72px] items-end">
+                    {lineDisc > 0 && (
+                      <Text className="text-cream/35 text-[10px]" style={{ fontFamily: "SpaceGrotesk_500Medium", textDecorationLine: "line-through" }}>{rm(gross)}</Text>
+                    )}
+                    <Text className="text-cream text-[13px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(net)}</Text>
+                  </View>
+                </Pressable>
+              );
+            }}
           />
         )}
 
@@ -782,7 +944,12 @@ export default function Register() {
                 onPress={() => {
                   Haptics.selectionAsync();
                   if (needsTable) { setPanel("table"); return; }
+                  // Push the amount + flip the customer display to the QR
+                  // payment screen BEFORE opening the modal — the customer
+                  // should see "Scan to Pay" the instant the cashier hits
+                  // Charge, not after a tap-through.
                   useDisplay.getState().setPayTotal(total);
+                  setDisplayStatus("payment");
                   setShowCheckout(true);
                 }}
                 className={`h-14 rounded-2xl items-center justify-center ${empty ? "bg-primary/30" : "bg-primary active:opacity-80"}`}
@@ -796,22 +963,414 @@ export default function Register() {
         </View>
       </View>
 
-      {/* ── Checkout: payment method sheet ── */}
-      <Modal visible={showCheckout} transparent animationType="fade" onRequestClose={() => setShowCheckout(false)}>
-        <View className="flex-1 bg-black/70 items-center justify-center px-8">
-          <View className="w-[480px] rounded-3xl bg-surface border border-border p-7">
-            <View className="flex-row items-center justify-between mb-1">
-              <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>Payment</Text>
-              <Pressable onPress={() => setShowCheckout(false)} className="active:opacity-60"><X size={22} color="rgba(245,243,240,0.7)" /></Pressable>
+      {/* ── Checkout: QR-only flow ─────────────────────────────────────
+          We decided cash + card are off the table at the counter — every
+          customer pays via Maybank DuitNow QR (or another QR/e-wallet that
+          scans the same payload). Flow:
+
+          1. Cashier hits "Charge" → opens this modal, customer-display
+             switches to status="payment" (renders the QR + amount).
+          2. Customer scans + pays. Maybank has no callback to our POS, so
+             confirmation is a manual visual check on the cashier's phone
+             /Maybank app.
+          3. Cashier taps "Payment Received" → we call pay("qr") which
+             records the sale + fires the receipt + kitchen docket.
+
+          The modal opens already in the payment-display state — we set
+          displayStatus="payment" the moment showCheckout becomes true
+          (see effect below) so the customer sees the QR immediately. */}
+      {/* ── Tables panel — live dine-in occupancy ─────────────────────
+          Grid of T1..Tn, colour-coded by status. Tapping a busy tile
+          shows the current order summary (read-only — tabs/cart edits
+          live in the customer's own QR session on their phone). When the
+          cashier taps a FREE tile in dine_in mode, we pre-fill the cart
+          flow's tableNumber and close so the next checkout points to
+          that table. */}
+      <Modal visible={showTables} transparent animationType="fade" onRequestClose={() => setShowTables(false)}>
+        <View className="flex-1 bg-black/80 items-center justify-center px-6">
+          <View className="rounded-3xl bg-surface border border-border p-6" style={{ width: "92%", maxWidth: 1100, maxHeight: "92%" }}>
+            <View className="flex-row items-center justify-between mb-4">
+              <View>
+                <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>Tables · {outletShort(outletId)}</Text>
+                <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                  {tableSlots.filter((t) => t.state !== "free").length} of {tableSlots.length} in use · live
+                </Text>
+              </View>
+              <View className="flex-row items-center gap-4">
+                <TableLegendDot color="rgba(245,243,240,0.18)" label="Free" />
+                <TableLegendDot color="#FBBF24" label="Pending" />
+                <TableLegendDot color="#3B82F6" label="Active" />
+                <TableLegendDot color="#22C55E" label="Ready" />
+                <Pressable onPress={() => setShowTables(false)} className="active:opacity-60 ml-4">
+                  <X size={22} color="rgba(245,243,240,0.7)" />
+                </Pressable>
+              </View>
             </View>
-            <Text className="text-amber-400 text-4xl mb-6" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(total)}</Text>
-            {paying ? (
-              <View className="h-40 items-center justify-center"><ActivityIndicator color="#FBBF24" size="large" /></View>
-            ) : (
+            <ScrollView style={{ maxHeight: 620 }} showsVerticalScrollIndicator={false}>
+              <View className="flex-row flex-wrap" style={{ gap: 12 }}>
+                {tableSlots.map((slot) => (
+                  <TableTile
+                    key={slot.label}
+                    slot={slot}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      if (slot.state === "free" && orderType === "dine_in") {
+                        // Tap a free dine-in table → pre-fill the table
+                        // number so the cashier can ring up an in-store
+                        // order at that table without typing.
+                        setTableNumber(slot.label.replace(/^T/, ""));
+                        setShowTables(false);
+                      }
+                      // For occupied tiles we just leave the panel open;
+                      // tap-through to the active order is a future
+                      // enhancement (would need a read-only order view).
+                    }}
+                  />
+                ))}
+                {tableSlots.length === 0 && (
+                  <View className="py-12 items-center w-full">
+                    <Text className="text-cream/40 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                      No tables configured. Set table_count in BackOffice → POS Settings.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Orders panel — on-register KDS for Grab + Pickup ───────────
+          A live queue of incoming delivery/pickup orders the cashier can
+          bump preparing → ready → collected, mirroring the kitchen
+          display. Status writes go through the service-role API (RLS
+          blocks anon updates on already-printed pickup orders). */}
+      <Modal visible={showOrders} transparent animationType="fade" onRequestClose={() => setShowOrders(false)}>
+        <View className="flex-1 bg-black/80 items-center justify-center px-6">
+          <View className="rounded-3xl bg-surface border border-border p-6" style={{ width: "92%", maxWidth: 1180, maxHeight: "92%" }}>
+            <View className="flex-row items-center justify-between mb-4">
+              <View>
+                <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>Orders · {outletShort(outletId)}</Text>
+                <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                  {kdsOrders.length === 0 ? "No live delivery or pickup orders" : `${kdsOrders.length} in the kitchen · Grab + Pickup · live`}
+                </Text>
+              </View>
+              <View className="flex-row items-center gap-4">
+                <View className="flex-row items-center gap-1.5">
+                  <Bike size={14} color="#22C55E" />
+                  <Text className="text-cream/55 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Grab</Text>
+                </View>
+                <View className="flex-row items-center gap-1.5">
+                  <ShoppingBag size={14} color="#3B82F6" />
+                  <Text className="text-cream/55 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Pickup</Text>
+                </View>
+                <Pressable onPress={() => setShowOrders(false)} className="active:opacity-60 ml-2">
+                  <X size={22} color="rgba(245,243,240,0.7)" />
+                </Pressable>
+              </View>
+            </View>
+            <ScrollView style={{ maxHeight: 640 }} showsVerticalScrollIndicator={false}>
+              <View className="flex-row flex-wrap" style={{ gap: 12 }}>
+                {kdsOrders.map((order) => (
+                  <KdsCard
+                    key={order.uid}
+                    order={order}
+                    busy={bumpingUid === order.uid}
+                    onAdvance={(status) => advanceOrderStatus(order, status)}
+                  />
+                ))}
+                {kdsOrders.length === 0 && (
+                  <View className="py-16 items-center w-full">
+                    <ChefHat size={40} color="rgba(245,243,240,0.18)" />
+                    <Text className="text-cream/40 text-sm mt-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                      Grab and pickup orders will appear here as they come in.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Shift open / close ─────────────────────────────────────────
+          Explicit cashier-shift control. Open a shift (optional cash
+          float) at the start; close it at the end to stamp closed_at +
+          roll up the shift's sales for the Z-report. The checkout still
+          auto-attaches whatever shift is open, so selling is never
+          blocked — this just gives staff the bookend actions. */}
+      <Modal visible={showShift} transparent animationType="fade" onRequestClose={() => setShowShift(false)}>
+        <View className="flex-1 bg-black/70 items-center justify-center px-8">
+          <View className="w-[460px] rounded-3xl bg-surface border border-border p-7">
+            <View className="flex-row items-center justify-between mb-1">
+              <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>
+                {closedSummary ? "Shift Closed" : shift ? "Close Shift" : "Open Shift"}
+              </Text>
+              <Pressable onPress={() => setShowShift(false)} className="active:opacity-60" disabled={shiftBusy}>
+                <X size={22} color="rgba(245,243,240,0.7)" />
+              </Pressable>
+            </View>
+            <Text className="text-cream/55 text-xs mb-5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+              {outletShort(outletId)} · {staff?.staffName ?? "Cashier"}
+            </Text>
+
+            {closedSummary ? (
+              // ── Closed summary ──
               <View className="gap-3">
-                <PayMethod icon={<Banknote size={22} color="#F5F3F0" />} label="Cash" onPress={() => pay("cash")} />
-                <PayMethod icon={<CreditCard size={22} color="#F5F3F0" />} label="Card" onPress={() => pay("card")} />
-                <PayMethod icon={<QrCode size={22} color="#F5F3F0" />} label="QR / E-wallet" onPress={() => pay("qr")} />
+                <View className="rounded-2xl px-5 py-5 items-center" style={{ backgroundColor: "rgba(34,197,94,0.10)", borderWidth: 1, borderColor: "rgba(34,197,94,0.4)" }}>
+                  <CheckCircle2 size={34} color="#22C55E" />
+                  <Text className="text-cream text-base mt-2" style={{ fontFamily: "Peachi-Bold" }}>Shift closed</Text>
+                  <View className="flex-row gap-8 mt-4">
+                    <View className="items-center">
+                      <Text className="text-amber-400 text-2xl" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{closedSummary.orders}</Text>
+                      <Text className="text-cream/50 text-[11px] tracking-widest" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>ORDERS</Text>
+                    </View>
+                    <View className="items-center">
+                      <Text className="text-amber-400 text-2xl" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(closedSummary.sales)}</Text>
+                      <Text className="text-cream/50 text-[11px] tracking-widest" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>SALES</Text>
+                    </View>
+                  </View>
+                </View>
+                <Pressable onPress={() => setShowShift(false)} className="h-14 rounded-2xl items-center justify-center bg-primary active:opacity-80">
+                  <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Done</Text>
+                </Pressable>
+              </View>
+            ) : shift ? (
+              // ── Close an open shift ──
+              <View className="gap-4">
+                <View className="rounded-2xl px-4 py-3 flex-row justify-between" style={{ backgroundColor: "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: "rgba(245,243,240,0.1)" }}>
+                  <View>
+                    <Text className="text-cream/50 text-[11px] tracking-widest" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>OPENED</Text>
+                    <Text className="text-cream text-sm mt-0.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                      {new Date(shift.opened_at).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                    </Text>
+                  </View>
+                  <View className="items-end">
+                    <Text className="text-cream/50 text-[11px] tracking-widest" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>THIS SHIFT</Text>
+                    <Text className="text-cream text-sm mt-0.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                      {liveTotals ? `${liveTotals.orders} orders · ${rm(liveTotals.sales)}` : "…"}
+                    </Text>
+                  </View>
+                </View>
+                <View>
+                  <Text className="text-cream/55 text-xs mb-1.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Closing cash count (optional)</Text>
+                  <TextInput
+                    value={closingCash}
+                    onChangeText={setClosingCash}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor="rgba(245,243,240,0.3)"
+                    className="h-14 rounded-2xl px-4 text-cream text-lg"
+                    style={{ backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)", fontFamily: "SpaceGrotesk_600SemiBold" }}
+                  />
+                </View>
+                <Pressable onPress={doCloseShift} disabled={shiftBusy} className={`h-14 rounded-2xl items-center justify-center ${shiftBusy ? "bg-primary/40" : "bg-primary active:opacity-80"}`}>
+                  {shiftBusy ? <ActivityIndicator color="#F5F3F0" /> : <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Close Shift</Text>}
+                </Pressable>
+              </View>
+            ) : (
+              // ── Open a new shift ──
+              <View className="gap-4">
+                <View>
+                  <Text className="text-cream/55 text-xs mb-1.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Opening cash float (optional)</Text>
+                  <TextInput
+                    value={openingCash}
+                    onChangeText={setOpeningCash}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor="rgba(245,243,240,0.3)"
+                    className="h-14 rounded-2xl px-4 text-cream text-lg"
+                    style={{ backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)", fontFamily: "SpaceGrotesk_600SemiBold" }}
+                  />
+                  <Text className="text-cream/40 text-[11px] mt-2" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                    Cash in the drawer at the start of the shift. Leave blank for a cashless (QR/card) register.
+                  </Text>
+                </View>
+                <Pressable onPress={doOpenShift} disabled={shiftBusy} className={`h-14 rounded-2xl items-center justify-center flex-row gap-2 ${shiftBusy ? "bg-primary/40" : "bg-primary active:opacity-80"}`}>
+                  {shiftBusy ? <ActivityIndicator color="#F5F3F0" /> : <><Power size={20} color="#F5F3F0" /><Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Open Shift</Text></>}
+                </Pressable>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showCheckout} transparent animationType="fade" onRequestClose={() => { setShowCheckout(false); setPayMethod(null); setCardStage("idle"); setCardResult(null); if (!paying && !paid) setDisplayStatus(lines.length > 0 ? "ordering" : "idle"); }}>
+        <View className="flex-1 bg-black/70 items-center justify-center px-8">
+          <View className="w-[560px] rounded-3xl bg-surface border border-border p-7">
+            <View className="flex-row items-center justify-between mb-1">
+              <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>
+                {payMethod === "qr" ? "Scan to Pay" : payMethod === "card" ? "Card Payment" : "Payment"}
+              </Text>
+              <Pressable
+                onPress={() => { setShowCheckout(false); setPayMethod(null); setCardStage("idle"); setCardResult(null); if (!paying && !paid) setDisplayStatus(lines.length > 0 ? "ordering" : "idle"); }}
+                className="active:opacity-60"
+                disabled={paying || cardStage === "prompting"}
+              >
+                <X size={22} color={(paying || cardStage === "prompting") ? "rgba(245,243,240,0.3)" : "rgba(245,243,240,0.7)"} />
+              </Pressable>
+            </View>
+            <Text className="text-amber-400 text-5xl mb-4" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(total)}</Text>
+
+            {/* ── METHOD PICKER ── */}
+            {!payMethod && !paying && (
+              <View className="gap-3 mt-2">
+                <Text className="text-cream/55 text-xs uppercase tracking-widest mb-1" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Choose payment method</Text>
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setPayMethod("qr");
+                    // Customer display already in payment status from
+                    // Charge press → QR is rendered there.
+                  }}
+                  className="h-20 rounded-2xl flex-row items-center px-5 active:opacity-80"
+                  style={{ backgroundColor: "rgba(251,191,36,0.10)", borderWidth: 1, borderColor: "rgba(251,191,36,0.45)", gap: 14 }}
+                >
+                  <View className="h-12 w-12 rounded-xl items-center justify-center" style={{ backgroundColor: "#FBBF24" }}>
+                    <QrCode size={24} color="#160800" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-cream text-base" style={{ fontFamily: "Peachi-Bold" }}>QR Payment</Text>
+                    <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Maybank DuitNow QR on customer display</Text>
+                  </View>
+                </Pressable>
+                <Pressable
+                  onPress={async () => {
+                    Haptics.selectionAsync();
+                    setPayMethod("card");
+                    setCardStage("prompting");
+                    setCardResult(null);
+                    try {
+                      const result = await chargeMaybankCard(total);
+                      if (result.status === "approved") {
+                        // Don't auto-commit. Park on a verify screen so the
+                        // cashier confirms the approval on the physical
+                        // terminal before we record + print (mirrors QR).
+                        setCardResult(result);
+                        setCardStage("approved");
+                      } else if (result.status === "declined") {
+                        setCardStage("declined");
+                      } else {
+                        // Cancelled → return to method picker.
+                        setCardStage("idle");
+                        setPayMethod(null);
+                      }
+                    } catch (e) {
+                      console.error("[card]", e);
+                      setCardStage("declined");
+                    }
+                  }}
+                  className="h-20 rounded-2xl flex-row items-center px-5 active:opacity-80"
+                  style={{ backgroundColor: "rgba(59,130,246,0.10)", borderWidth: 1, borderColor: "rgba(59,130,246,0.45)", gap: 14 }}
+                >
+                  <View className="h-12 w-12 rounded-xl items-center justify-center" style={{ backgroundColor: "#3B82F6" }}>
+                    <CreditCard size={24} color="#F5F3F0" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-cream text-base" style={{ fontFamily: "Peachi-Bold" }}>Card Payment</Text>
+                    <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Tap or insert on Maybank terminal</Text>
+                  </View>
+                </Pressable>
+              </View>
+            )}
+
+            {/* ── QR PAYMENT ── */}
+            {payMethod === "qr" && !paying && (
+              <>
+                <Text className="text-cream/55 text-sm mb-6" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                  QR is on the customer display. Confirm receipt in your Maybank app before tapping below.
+                </Text>
+                <View className="gap-3">
+                  <Pressable
+                    onPress={() => pay("qr")}
+                    className="h-16 rounded-2xl items-center justify-center flex-row gap-3 bg-primary active:opacity-80"
+                  >
+                    <CheckCircle2 size={24} color="#F5F3F0" />
+                    <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>PAYMENT RECEIVED</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => { setPayMethod(null); }}
+                    className="h-11 rounded-xl items-center justify-center active:opacity-60"
+                  >
+                    <Text className="text-cream/55 text-xs tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>‹ Back to methods</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+
+            {/* ── CARD PAYMENT ── */}
+            {payMethod === "card" && !paying && (
+              <View className="gap-3">
+                {cardStage === "prompting" && (
+                  <View className="h-44 items-center justify-center gap-3">
+                    <ActivityIndicator color="#3B82F6" size="large" />
+                    <Text className="text-cream text-base" style={{ fontFamily: "Peachi-Bold" }}>Tap or insert card</Text>
+                    <Text className="text-cream/55 text-xs text-center" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                      Hand the terminal to your customer. Verify the approval before recording.
+                    </Text>
+                  </View>
+                )}
+                {cardStage === "approved" && (
+                  <View className="gap-3">
+                    {/* Terminal said approved — cashier must eyeball the
+                        physical terminal slip + tap to record the sale.
+                        Nothing is persisted until they confirm. */}
+                    <View className="rounded-2xl px-5 py-4" style={{ backgroundColor: "rgba(34,197,94,0.10)", borderWidth: 1, borderColor: "rgba(34,197,94,0.45)" }}>
+                      <View className="flex-row items-center gap-2 mb-2">
+                        <CheckCircle2 size={20} color="#22C55E" />
+                        <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: "#22C55E" }}>Terminal Approved</Text>
+                      </View>
+                      {!!cardResult && (
+                        <View className="gap-0.5">
+                          <Text className="text-cream/80 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                            {cardResult.cardBrand} · {cardResult.maskedPan}
+                          </Text>
+                          <Text className="text-cream/55 text-xs" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                            Approval {cardResult.approvalCode} · {cardResult.txnRef}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text className="text-cream/55 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                      Confirm the approval on the Maybank terminal, then record the sale to print the receipt + kitchen docket.
+                    </Text>
+                    <Pressable
+                      onPress={() => pay("card")}
+                      className="h-16 rounded-2xl items-center justify-center flex-row gap-3 bg-primary active:opacity-80"
+                    >
+                      <CheckCircle2 size={24} color="#F5F3F0" />
+                      <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>PAYMENT VERIFIED</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => { setCardStage("idle"); setCardResult(null); setPayMethod(null); }}
+                      className="h-11 rounded-xl items-center justify-center active:opacity-60"
+                    >
+                      <Text className="text-cream/55 text-xs tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>‹ Back to methods</Text>
+                    </Pressable>
+                  </View>
+                )}
+                {cardStage === "declined" && (
+                  <View className="gap-3">
+                    <View className="rounded-2xl px-5 py-4 items-center" style={{ backgroundColor: DANGER + "14", borderWidth: 1, borderColor: DANGER + "55" }}>
+                      <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: DANGER }}>Card Declined</Text>
+                      <Text className="text-cream/60 text-xs mt-1 text-center" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Ask customer to try another card or switch to QR.</Text>
+                    </View>
+                    <Pressable
+                      onPress={() => { setCardStage("idle"); setPayMethod(null); }}
+                      className="h-12 rounded-xl items-center justify-center bg-primary active:opacity-80"
+                    >
+                      <Text className="text-cream text-sm" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.4 }}>BACK TO METHODS</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* ── PAYING (shared loading state for both methods) ── */}
+            {paying && (
+              <View className="h-44 items-center justify-center gap-3">
+                <ActivityIndicator color="#FBBF24" size="large" />
+                <Text className="text-cream/60 text-xs tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>RECORDING SALE…</Text>
               </View>
             )}
           </View>
@@ -863,6 +1422,25 @@ export default function Register() {
           onClose={() => setShowDiscount(false)}
           onApply={(sen) => { setManualDiscount(sen); setShowDiscount(false); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }}
         />
+      </Modal>
+
+      {/* ── Cart line editor — qty, per-line discount, remove ── */}
+      <Modal visible={!!editLineKey} transparent animationType="fade" onRequestClose={() => setEditLineKey(null)}>
+        {(() => {
+          const line = lines.find((l) => l.key === editLineKey);
+          if (!line) return null;
+          return (
+            <LineEditorSheet
+              line={line}
+              onClose={() => setEditLineKey(null)}
+              onInc={() => inc(line.key)}
+              onDec={() => dec(line.key)}
+              onRemove={() => { remove(line.key); setEditLineKey(null); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); }}
+              onSetDiscount={(sen) => { setLineDiscount(line.key, sen); }}
+              onSetNote={(note) => { setLineNote(line.key, note); }}
+            />
+          );
+        })()}
       </Modal>
 
       {/* ── Paid confirmation ── */}
@@ -980,11 +1558,281 @@ function ModifierSheet({ product, onClose, onConfirm }: { product: Product; onCl
   );
 }
 
-function PayMethod({ icon, label, onPress }: { icon: React.ReactNode; label: string; onPress: () => void }) {
+// ── Tables panel tile + legend ────────────────────────────────────
+/** Single table tile in the live Tables panel. Colour scheme:
+ *  free=neutral, pending=gold (awaiting QR payment), active=blue
+ *  (paid/preparing), ready=green (out to customer). Total appears as RM
+ *  on busy tiles so staff can match Maybank payment confirmations
+ *  against the right table at a glance. */
+function TableTile({ slot, onPress }: { slot: TableSlot; onPress: () => void }) {
+  const palette = {
+    free:    { bg: "rgba(245,243,240,0.04)", border: "rgba(245,243,240,0.10)", fg: "rgba(245,243,240,0.55)", accent: "rgba(245,243,240,0.25)" },
+    pending: { bg: "rgba(251,191,36,0.10)",  border: "rgba(251,191,36,0.45)",  fg: "#FBBF24",               accent: "#FBBF24" },
+    active:  { bg: "rgba(59,130,246,0.12)",  border: "rgba(59,130,246,0.5)",   fg: "#93C5FD",               accent: "#3B82F6" },
+    ready:   { bg: "rgba(34,197,94,0.12)",   border: "rgba(34,197,94,0.5)",    fg: "#86EFAC",               accent: "#22C55E" },
+  }[slot.state];
+  const stateLabel = slot.state === "free" ? "FREE" : slot.state === "pending" ? "AWAITING PAY" : slot.state === "active" ? "ACTIVE" : "READY";
+  const rmText = slot.total > 0 ? `RM ${(slot.total / 100).toFixed(2)}` : "";
   return (
-    <Pressable onPress={onPress} className="flex-row items-center gap-4 h-16 px-5 rounded-2xl border border-border active:opacity-70" style={{ backgroundColor: "rgba(245,243,240,0.05)" }}>
-      {icon}
-      <Text className="text-cream text-lg" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{label}</Text>
+    <Pressable onPress={onPress} className="active:opacity-80" style={{ width: 140, padding: 14, borderRadius: 16, borderWidth: 1, backgroundColor: palette.bg, borderColor: palette.border }}>
+      <View style={{ height: 3, borderRadius: 2, backgroundColor: palette.accent, marginBottom: 10 }} />
+      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: palette.fg }}>{slot.label}</Text>
+      <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 1.2, color: palette.fg, marginTop: 4 }} numberOfLines={1}>{stateLabel}</Text>
+      {!!rmText && (
+        <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12, color: palette.fg, marginTop: 6 }}>{rmText}</Text>
+      )}
+      {!!slot.orderNumber && (
+        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10, color: "rgba(245,243,240,0.45)", marginTop: 2 }} numberOfLines={1}>{slot.orderNumber}</Text>
+      )}
+    </Pressable>
+  );
+}
+
+function TableLegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <View className="flex-row items-center" style={{ gap: 5 }}>
+      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+      <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 10, letterSpacing: 0.8, color: "rgba(245,243,240,0.6)" }}>{label}</Text>
+    </View>
+  );
+}
+
+// ── On-register KDS card ──────────────────────────────────────────
+/** One Grab/Pickup order in the Orders panel. Shows what to make + a
+ *  single bump button that advances the order to its next state. */
+function KdsCard({
+  order, busy, onAdvance,
+}: {
+  order: KdsOrder;
+  busy: boolean;
+  onAdvance: (status: "preparing" | "ready" | "completed") => void;
+}) {
+  const isGrab = order.source === "grab";
+  const accent = isGrab ? "#22C55E" : "#3B82F6";
+  const mins = Math.max(0, Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000));
+  const ago = mins < 1 ? "just now" : `${mins} min ago`;
+  // Status → pill + the next bump action.
+  const pill =
+    order.status === "ready" ? { text: "READY", color: "#22C55E" }
+    : { text: "NEW", color: accent };
+  // Two-tap lifecycle: a new order goes straight to Ready (no separate
+  // "preparing" step), then Ready → Collected clears it off the queue.
+  const next =
+    order.status === "ready"
+      ? { label: "Mark Collected", status: "completed" as const, color: "#22C55E" }
+      : { label: "Mark Ready", status: "ready" as const, color: "#22C55E" };
+
+  return (
+    <View style={{ width: 272, borderRadius: 18, borderWidth: 1, borderColor: "rgba(245,243,240,0.10)", backgroundColor: "rgba(245,243,240,0.03)", overflow: "hidden" }}>
+      <View style={{ height: 4, backgroundColor: accent }} />
+      <View style={{ padding: 14 }}>
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center" style={{ gap: 7 }}>
+            {isGrab ? <Bike size={16} color={accent} /> : <ShoppingBag size={16} color={accent} />}
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: "#F5F3F0" }}>{order.orderNumber}</Text>
+          </View>
+          <View style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: pill.color + "22" }}>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 1, color: pill.color }}>{pill.text}</Text>
+          </View>
+        </View>
+        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(245,243,240,0.45)", marginTop: 3 }}>
+          {isGrab ? "GrabFood" : "Pickup"} · {ago}
+        </Text>
+
+        <View style={{ marginTop: 10, gap: 4 }}>
+          {order.items.length === 0 && (
+            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12, color: "rgba(245,243,240,0.4)" }}>Loading items…</Text>
+          )}
+          {order.items.slice(0, 6).map((it, i) => (
+            <View key={i} className="flex-row" style={{ gap: 8 }}>
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 13, color: accent, minWidth: 22 }}>{it.qty}×</Text>
+              <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, color: "#F5F3F0", flex: 1 }} numberOfLines={1}>
+                {it.name}{it.variant ? ` · ${it.variant}` : ""}
+              </Text>
+            </View>
+          ))}
+          {order.items.length > 6 && (
+            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(245,243,240,0.4)" }}>+{order.items.length - 6} more</Text>
+          )}
+        </View>
+
+        <View className="flex-row items-center justify-between" style={{ marginTop: 12 }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12, color: "rgba(245,243,240,0.55)" }}>{rm(order.total)}</Text>
+          <Pressable
+            disabled={busy}
+            onPress={() => onAdvance(next.status)}
+            style={{ borderRadius: 12, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: busy ? "rgba(245,243,240,0.12)" : next.color }}
+            className="active:opacity-80"
+          >
+            {busy
+              ? <ActivityIndicator size="small" color="#F5F3F0" />
+              : <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, color: "#fff", letterSpacing: 0.4 }}>{next.label}</Text>}
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ── Cart line editor ──────────────────────────────────────────────
+/** Tap-a-line sheet. Lets the cashier change the qty, apply a per-line
+ *  discount (% off line subtotal OR fixed RM off), or remove the line.
+ *  Discount is fixed-amount in storage; the % toggle just computes the
+ *  RM equivalent at set time so reporting always sees the actual sen
+ *  taken off. Order-level manual discount is unchanged — that still
+ *  lives behind the Discount tab in the cart panel. */
+function LineEditorSheet({
+  line,
+  onClose,
+  onInc,
+  onDec,
+  onRemove,
+  onSetDiscount,
+  onSetNote,
+}: {
+  line: CartLine;
+  onClose: () => void;
+  onInc: () => void;
+  onDec: () => void;
+  onRemove: () => void;
+  onSetDiscount: (sen: number) => void;
+  onSetNote: (note: string) => void;
+}) {
+  const lineGross = line.unit_sen * line.qty;
+  const currentDisc = line.line_discount_sen ?? 0;
+  const [mode, setMode] = useState<"percent" | "fixed">("fixed");
+  const [value, setValue] = useState(currentDisc > 0 ? (currentDisc / 100).toFixed(2) : "");
+  const [noteVal, setNoteVal] = useState(line.note ?? "");
+  // Keyboard-avoidance: when the soft keyboard opens (Item note focused) the
+  // bottom of this centered sheet gets covered. Track the keyboard height and
+  // anchor the card just above it, with a scrollable body so nothing clips.
+  // (RN <KeyboardAvoidingView> is unreliable inside a <Modal> on Android.)
+  const { height: winH } = useWindowDimensions();
+  const [kb, setKb] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", (e) => setKb(e.endCoordinates?.height ?? 0));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKb(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  const cardMaxH = kb > 0 ? Math.max(240, winH - kb - 28) : Math.round(winH * 0.92);
+  const parsed = Number(value) || 0;
+  const computedDiscSen =
+    mode === "percent"
+      ? Math.round((lineGross * Math.min(100, Math.max(0, parsed))) / 100)
+      : Math.round(parsed * 100);
+  const clampedDisc = Math.max(0, Math.min(computedDiscSen, lineGross));
+  const net = Math.max(0, lineGross - clampedDisc);
+
+  return (
+    <Pressable
+      onPress={onClose}
+      className="flex-1 bg-black/75 items-center px-8"
+      style={{ justifyContent: kb > 0 ? "flex-end" : "center", paddingBottom: kb > 0 ? kb + 16 : 0 }}
+    >
+      <Pressable onPress={() => {}} className="w-[520px] rounded-3xl bg-surface border border-border p-6" style={{ maxHeight: cardMaxH }}>
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 14 }}>
+        <View className="flex-row items-center justify-between">
+          <View className="flex-1 pr-3">
+            <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }} numberOfLines={1}>{line.product.name}</Text>
+            {line.modifiers.length > 0 && (
+              <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }} numberOfLines={2}>
+                {line.modifiers.map((m) => m.name).join(", ")}
+              </Text>
+            )}
+            <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{rm(line.unit_sen)} each</Text>
+          </View>
+          <Pressable onPress={onClose} className="active:opacity-60"><X size={22} color="rgba(245,243,240,0.7)" /></Pressable>
+        </View>
+
+        {/* Quantity stepper */}
+        <View className="flex-row items-center justify-between rounded-2xl px-4 py-3" style={{ backgroundColor: "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: "rgba(245,243,240,0.10)" }}>
+          <Text className="text-cream/60 text-xs uppercase tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Quantity</Text>
+          <View className="flex-row items-center" style={{ gap: 10 }}>
+            <Stepper icon={<Minus size={18} color="#F5F3F0" />} onPress={() => { Haptics.selectionAsync(); onDec(); }} />
+            <Text className="text-cream w-10 text-center text-lg" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{line.qty}</Text>
+            <Stepper icon={<Plus size={18} color="#F5F3F0" />} onPress={() => { Haptics.selectionAsync(); onInc(); }} />
+          </View>
+        </View>
+
+        {/* Discount editor */}
+        <View className="rounded-2xl px-4 py-3" style={{ backgroundColor: "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: "rgba(245,243,240,0.10)", gap: 10 }}>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-cream/60 text-xs uppercase tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Discount</Text>
+            <View className="flex-row rounded-xl overflow-hidden" style={{ borderWidth: 1, borderColor: "rgba(245,243,240,0.14)" }}>
+              {(["percent", "fixed"] as const).map((m) => (
+                <Pressable
+                  key={m}
+                  onPress={() => { Haptics.selectionAsync(); setMode(m); setValue(""); }}
+                  className="px-3 py-1.5"
+                  style={{ backgroundColor: mode === m ? "#A2492C" : "transparent" }}
+                >
+                  <Text className="text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold", color: mode === m ? "#F5F3F0" : "rgba(245,243,240,0.55)", letterSpacing: 0.8 }}>{m === "percent" ? "%" : "RM"}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          <View className="flex-row items-center" style={{ gap: 10 }}>
+            <TextInput
+              value={value}
+              onChangeText={setValue}
+              placeholder={mode === "percent" ? "0" : "0.00"}
+              placeholderTextColor="rgba(245,243,240,0.3)"
+              keyboardType="decimal-pad"
+              className="flex-1 rounded-xl px-3 py-2.5 text-cream text-base"
+              style={{ backgroundColor: "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: "rgba(245,243,240,0.14)", fontFamily: "SpaceGrotesk_700Bold" }}
+            />
+            <Text className="text-cream/45 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+              {mode === "percent" ? "% off line" : "RM off line"}
+            </Text>
+          </View>
+          {currentDisc > 0 && (
+            <Pressable onPress={() => { onSetDiscount(0); setValue(""); Haptics.selectionAsync(); }} className="active:opacity-60">
+              <Text className="text-xs text-primary" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1 }}>CLEAR DISCOUNT</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {/* Item note — prints under this item on the kitchen docket */}
+        <View className="rounded-2xl px-4 py-3" style={{ backgroundColor: "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: "rgba(245,243,240,0.10)", gap: 8 }}>
+          <Text className="text-cream/60 text-xs uppercase tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Item note</Text>
+          <TextInput
+            value={noteVal}
+            onChangeText={setNoteVal}
+            placeholder="e.g. no sugar, extra hot"
+            placeholderTextColor="rgba(245,243,240,0.3)"
+            multiline
+            className="rounded-xl px-3 py-2.5 text-cream text-base"
+            style={{ backgroundColor: "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: "rgba(245,243,240,0.14)", fontFamily: "SpaceGrotesk_500Medium", minHeight: 44 }}
+          />
+          <Text className="text-cream/40 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Prints under this item on the kitchen docket.</Text>
+        </View>
+
+        {/* Net preview */}
+        <View className="flex-row items-baseline justify-between px-1">
+          <Text className="text-cream/55 text-xs uppercase tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Line total</Text>
+          <View className="flex-row items-baseline" style={{ gap: 8 }}>
+            {clampedDisc > 0 && (
+              <Text className="text-cream/35 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium", textDecorationLine: "line-through" }}>{rm(lineGross)}</Text>
+            )}
+            <Text className="text-amber-400 text-xl" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(net)}</Text>
+          </View>
+        </View>
+
+        {/* Actions */}
+        <View className="flex-row" style={{ gap: 10 }}>
+          <Pressable onPress={onRemove} className="flex-1 h-12 rounded-2xl items-center justify-center flex-row active:opacity-80" style={{ borderWidth: 1, borderColor: DANGER + "55", backgroundColor: DANGER + "14", gap: 6 }}>
+            <Trash2 size={15} color={DANGER} />
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 1.4, color: DANGER }}>REMOVE</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => { onSetDiscount(clampedDisc); onSetNote(noteVal); onClose(); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }}
+            className="flex-1 h-12 rounded-2xl items-center justify-center bg-primary active:opacity-80"
+          >
+            <Text className="text-cream" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 1.6 }}>APPLY</Text>
+          </Pressable>
+        </View>
+        </ScrollView>
+      </Pressable>
     </Pressable>
   );
 }

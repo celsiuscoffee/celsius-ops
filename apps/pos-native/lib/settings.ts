@@ -29,6 +29,9 @@ export type BranchSettings = {
   ghl_terminal_id: string | null;
   grid_columns: number | null;
   layout_mode: string | null;
+  // How many dine-in tables this outlet has. Drives the live Tables
+  // panel on the POS-native register + the BO Table QR generator.
+  table_count: number | null;
   default_tax_rate: number | null;
   default_tax_inclusive: boolean | null;
   einvoice_tin: string | null;
@@ -106,6 +109,14 @@ export function serviceChargeRate(s: BranchSettings | null): number {
 
 export function defaultOrderType(s: BranchSettings | null): "dine_in" | "takeaway" {
   return s?.default_order_type === "dine_in" ? "dine_in" : "takeaway";
+}
+
+/** How many dine-in tables this outlet has. Drives the live Tables panel
+ *  on the register + matches the BO Table QR generator. Clamped to a
+ *  sane range so a misconfigured row can't render 10,000 tiles. */
+export function tableCount(s: BranchSettings | null): number {
+  const n = s?.table_count ?? 10;
+  return n >= 1 && n <= 100 ? n : 10;
 }
 
 /** Receipt config shape consumed by lib/printer.ts → the native module. */

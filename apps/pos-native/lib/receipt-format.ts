@@ -51,7 +51,12 @@ export type ReceiptItem = {
   quantity: number;
   unit_price: number;
   modifier_total: number;
+  /** Net line total in sen (post line-discount). */
   item_total: number;
+  /** Sen taken off this line (per-line manual discount). Optional —
+   *  when present we print a "-RM x.xx" line under the item so the
+   *  customer sees the deal. Stays absent for older orders. */
+  discount_amount?: number;
   modifiers?: unknown;
   notes?: string | null;
 };
@@ -137,14 +142,25 @@ export function formatReceipt(
 
   for (const item of items) {
     const left = `${item.quantity}x ${item.product_name}`;
-    bodyLines.push(twoColumn(left, rm(item.item_total)));
+    // Show the GROSS line total + a discount line beneath it when a
+    // per-line discount was applied, so the customer can see both the
+    // original price and the deal. item_total is already the net.
+    const lineDisc = item.discount_amount ?? 0;
+    const lineGross = lineDisc > 0 ? item.item_total + lineDisc : item.item_total;
+    bodyLines.push(twoColumn(left, rm(lineGross)));
     if (item.variant_name) bodyLines.push(`   ${item.variant_name}`);
     const mods = item.modifiers;
     if (Array.isArray(mods) && mods.length > 0) {
       const modNames = mods.map((m: any) => m.option?.name ?? m.name ?? m.group_name ?? "").filter(Boolean);
       if (modNames.length > 0) bodyLines.push(`   ${modNames.join(", ")}`);
     }
-    if (item.notes) bodyLines.push(`   ** ${item.notes} **`);
+    if (lineDisc > 0) {
+      bodyLines.push(twoColumn(`   Discount`, `-${rm(lineDisc)}`));
+    }
+    // Customer note as a small indented line (matches modifier lines). NOT
+    // "** .. **" — that pattern is the native module's 48pt queue-number
+    // renderer, which printed the note huge on the receipt.
+    if (item.notes) bodyLines.push(`   ${item.notes}`);
   }
 
   bodyLines.push(divider());

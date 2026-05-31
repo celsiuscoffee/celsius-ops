@@ -43,12 +43,25 @@ export type Product = {
 const toSen = (rm: number | string | null | undefined) =>
   Math.round(Number(rm ?? 0) * 100);
 
+/** A modifier group/option carries an optional `channels` list. Empty or
+ *  missing = visible everywhere (backward-compatible). A non-empty list
+ *  restricts it to those channels. The SUNMI register is the "pos" channel,
+ *  so a grab-only group (e.g. the GrabFood "Packaging" fee) is hidden here.
+ *  Mirrors @celsius/shared visibleOnChannel so POS / pickup / Grab agree. */
+function visibleOnPos(channels: unknown): boolean {
+  if (!Array.isArray(channels) || channels.length === 0) return true;
+  return channels.includes("pos");
+}
+
 /** Normalize the products.modifiers JSONB (shape varies across the
  *  catalog's history) into a consistent ModifierGroup[]. Defensive —
- *  returns [] for anything unparseable so the grid never crashes. */
+ *  returns [] for anything unparseable so the grid never crashes.
+ *  Channel-filtered to the POS register so other channels' modifiers
+ *  (e.g. Grab-only Packaging) never appear on the cashier screen. */
 function parseModifiers(raw: unknown): ModifierGroup[] {
   if (!Array.isArray(raw)) return [];
   return raw
+    .filter((g: any) => visibleOnPos(g?.channels))
     .map((g: any, gi: number) => ({
       id: String(g?.id ?? g?.name ?? `g${gi}`),
       name: String(g?.name ?? "Options"),
@@ -56,14 +69,16 @@ function parseModifiers(raw: unknown): ModifierGroup[] {
       // Live catalog uses `multiSelect`; keep the older aliases as fallbacks.
       multi: Boolean(g?.multiSelect ?? g?.multi ?? g?.multiple ?? g?.allow_multiple ?? false),
       options: Array.isArray(g?.options)
-        ? g.options.map((o: any, oi: number) => ({
-            // Option label is stored under `label` (price under `priceDelta`,
-            // in RM). Earlier `name`/`price` were wrong fields → blank rows
-            // with no add-on price. Keep both as fallbacks.
-            id: String(o?.id ?? o?.label ?? o?.name ?? `o${oi}`),
-            name: String(o?.label ?? o?.name ?? ""),
-            price_sen: toSen(o?.priceDelta ?? o?.price ?? o?.price_rm ?? 0),
-          }))
+        ? g.options
+            .filter((o: any) => visibleOnPos(o?.channels))
+            .map((o: any, oi: number) => ({
+              // Option label is stored under `label` (price under `priceDelta`,
+              // in RM). Earlier `name`/`price` were wrong fields → blank rows
+              // with no add-on price. Keep both as fallbacks.
+              id: String(o?.id ?? o?.label ?? o?.name ?? `o${oi}`),
+              name: String(o?.label ?? o?.name ?? ""),
+              price_sen: toSen(o?.priceDelta ?? o?.price ?? o?.price_rm ?? 0),
+            }))
         : [],
     }))
     .filter((g) => g.options.length > 0);

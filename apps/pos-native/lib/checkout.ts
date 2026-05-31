@@ -173,18 +173,29 @@ export async function createSale(params: SaleParams): Promise<Sale> {
   if (orderErr) throw orderErr;
 
   // ── Line items ──
-  const items = lines.map((l) => ({
-    order_id: order.id,
-    product_id: l.product.id,
-    product_name: l.product.name,
-    quantity: l.qty,
-    unit_price: l.unit_sen,
-    modifiers: l.modifiers.map((m) => ({ id: m.id, name: m.name, price: m.price_sen })),
-    modifier_total: l.modifiers.reduce((s, m) => s + m.price_sen, 0),
-    item_total: l.unit_sen * l.qty,
-    kitchen_station: l.product.kitchen_station ?? null,
-    kitchen_status: "pending",
-  }));
+  // line_discount_sen (per-cart-line manual discount) is persisted as
+  // pos_order_items.discount_amount so reporting can split line-level
+  // vs order-level promos. item_total is the net (post-discount) value.
+  const items = lines.map((l) => {
+    const lineDiscount = l.line_discount_sen ?? 0;
+    const lineGross = l.unit_sen * l.qty;
+    return {
+      order_id: order.id,
+      product_id: l.product.id,
+      product_name: l.product.name,
+      quantity: l.qty,
+      unit_price: l.unit_sen,
+      modifiers: l.modifiers.map((m) => ({ id: m.id, name: m.name, price: m.price_sen })),
+      modifier_total: l.modifiers.reduce((s, m) => s + m.price_sen, 0),
+      discount_amount: lineDiscount,
+      item_total: Math.max(0, lineGross - lineDiscount),
+      kitchen_station: l.product.kitchen_station ?? null,
+      kitchen_status: "pending",
+      // Per-item kitchen note — printed under the item on the docket and
+      // kept on the order line (same column Grab/Pickup dockets read).
+      notes: l.note ?? null,
+    };
+  });
   const { error: itemsErr } = await supabase.from("pos_order_items").insert(items);
   if (itemsErr) throw itemsErr;
 
