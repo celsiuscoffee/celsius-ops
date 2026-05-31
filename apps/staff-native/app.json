@@ -16,7 +16,7 @@
     "ios": {
       "bundleIdentifier": "com.celsiuscoffee.staff",
       "supportsTablet": false,
-      "buildNumber": "2",
+      "buildNumber": "3",
       "entitlements": {
         "aps-environment": "production"
       },
@@ -38,10 +38,10 @@
     },
     "android": {
       "package": "com.celsiuscoffee.staff",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1A0200"
+        "backgroundColor": "#A2492C"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": true,
