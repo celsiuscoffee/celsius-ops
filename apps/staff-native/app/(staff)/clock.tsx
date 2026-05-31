@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
   Pressable,
   Text,
   View,
@@ -10,6 +11,7 @@ import {
 import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
 import { Screen } from "../../components/Screen";
+import { SelfieCapture } from "../../components/SelfieCapture";
 import { ApiError } from "../../lib/api";
 import {
   getClockStatus,
@@ -43,6 +45,12 @@ export default function ClockScreen() {
   const [gps, setGps] = useState<GpsState>({ kind: "idle" });
   const [busy, setBusy] = useState(false);
   const [permsReady, setPermsReady] = useState(false);
+  // Pending action — set when the user taps Clock In/Out and we open
+  // the SelfieCapture modal. After the photo is captured we hand it
+  // (plus the pending action) to submitClockAction.
+  const [pendingAction, setPendingAction] = useState<
+    "clock_in" | "clock_out" | null
+  >(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -124,17 +132,35 @@ export default function ClockScreen() {
     refreshGps();
   }
 
-  async function clockAction(action: "clock_in" | "clock_out") {
-    if (busy) return;
+  // Two-step flow:
+  //  1. startClockAction — biometric gate (if enabled), then open the
+  //     SelfieCapture modal. Defers the API call until we have a photo.
+  //  2. submitClockAction — fires once the selfie comes back; sends the
+  //     base64 photo + coords to /api/hr/clock. Server uploads to
+  //     hr-photos and stamps clock_in_photo_url on the log.
+  //
+  //  Selfie is a HARD requirement now — there's no "skip" path. Audit
+  //  trail relies on every clock-in/out having a photo.
+  async function startClockAction(action: "clock_in" | "clock_out") {
+    if (busy || pendingAction) return;
     if (await getBiometricRequired()) {
-      const reason = action === "clock_in" ? "Confirm clock-in" : "Confirm clock-out";
+      const reason =
+        action === "clock_in" ? "Confirm clock-in" : "Confirm clock-out";
       const ok = await biometricAuth(reason);
       if (!ok) return;
     }
+    setPendingAction(action);
+  }
+
+  async function submitClockAction(
+    action: "clock_in" | "clock_out",
+    photoBase64: string,
+  ) {
+    setPendingAction(null);
     setBusy(true);
     try {
       const coords = gps.kind === "ok" ? gps.coords : null;
-      await postClockAction(action, coords);
+      await postClockAction(action, coords, photoBase64);
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       ).catch(() => {});
@@ -253,7 +279,7 @@ export default function ClockScreen() {
       <View className="mt-auto pb-4">
         {clockedIn ? (
           <Pressable
-            onPress={() => clockAction("clock_out")}
+            onPress={() => startClockAction("clock_out")}
             disabled={busy}
             className={`h-16 items-center justify-center rounded-2xl ${
               busy ? "bg-espresso/50" : "bg-espresso"
@@ -269,7 +295,7 @@ export default function ClockScreen() {
           </Pressable>
         ) : (
           <Pressable
-            onPress={() => clockAction("clock_in")}
+            onPress={() => startClockAction("clock_in")}
             disabled={busy || !canClockIn || gps.kind !== "ok"}
             className={`h-16 items-center justify-center rounded-2xl ${
               busy || !canClockIn || gps.kind !== "ok"
@@ -291,6 +317,28 @@ export default function ClockScreen() {
           outlet boundary.
         </Text>
       </View>
+
+      {/* Selfie capture — full-screen modal. Cancel returns to the
+          clock screen without firing the API call; capture sends the
+          base64 photo through submitClockAction. */}
+      <Modal
+        visible={pendingAction !== null}
+        animationType="slide"
+        onRequestClose={() => setPendingAction(null)}
+        statusBarTranslucent
+      >
+        {pendingAction ? (
+          <SelfieCapture
+            prompt={
+              pendingAction === "clock_in"
+                ? "Take a selfie to clock in"
+                : "Take a selfie to clock out"
+            }
+            onCancel={() => setPendingAction(null)}
+            onCapture={(p) => submitClockAction(pendingAction, p.base64)}
+          />
+        ) : null}
+      </Modal>
     </Screen>
   );
 }
