@@ -231,13 +231,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Pool drop% — denominator is the sum of all active pool weights.
+  // Surfacing drop% on the trigger chip is more meaningful than raw
+  // weight ("12% drop" beats "weight 10" for understanding pool design).
+  const mysteryTotal = mystery.reduce((s, m) => s + (m.weight || 0), 0);
   for (const my of mystery) {
     if (!my.voucher_template_id) continue;
+    const dropPct = mysteryTotal > 0 ? (my.weight / mysteryTotal) * 100 : 0;
     const tierBit = my.min_tier && my.min_tier !== "any" ? `, min ${my.min_tier}` : "";
     pushTrig(my.voucher_template_id, {
       type: "mystery",
-      label: `Mystery · weight ${my.weight}${tierBit}`,
-      config: { pool_id: my.id, weight: my.weight, min_tier: my.min_tier },
+      label: `Mystery · ${dropPct.toFixed(1)}% drop${tierBit}`,
+      config: { pool_id: my.id, weight: my.weight, drop_pct: dropPct, min_tier: my.min_tier },
     });
   }
 
@@ -398,7 +403,7 @@ type CreateBody = {
   is_active?: boolean;
   // triggers — config per channel
   triggers?: {
-    mystery?:      { weight: number; min_tier?: string | null; birthday_month_boost?: boolean; outcome_type?: string };
+    mystery?:      { weight: number; min_tier?: string | null; birthday_month_boost?: boolean; outcome_type?: string; flat_beans_value?: number; multiplier_value?: number };
     mission?:      { title: string; description: string; difficulty: string; goal: { type: string; value: number; period?: string }; cooldown_weeks?: number };
     admin_push?:   { title: string; description: string; audience_label?: string; min_tier?: string | null; max_claims?: number | null; member_ids?: string[]; starts_at?: string | null; ends_at?: string | null };
   };
@@ -452,15 +457,21 @@ export async function POST(request: NextRequest) {
   // ── Fan out triggers ──
   if (body.triggers?.mystery) {
     const m = body.triggers.mystery;
+    const outcomeType = m.outcome_type ?? "voucher";
+    // outcome-specific values: voucher uses the template_id we just
+    // minted; flat_beans uses flat_beans_value; multiplier uses
+    // multiplier_value; no_bonus uses none of the above.
     const { error } = await supabaseAdmin.from("mystery_pool").insert({
       brand_id:               brandId,
       label:                  body.title,
       icon:                   body.icon ?? "gift",
-      voucher_template_id:    tpl.id,
+      voucher_template_id:    outcomeType === "voucher" ? tpl.id : null,
+      flat_beans_value:       outcomeType === "flat_beans" ? (m.flat_beans_value ?? 100) : null,
+      multiplier_value:       outcomeType === "multiplier" ? (m.multiplier_value ?? 2) : null,
       weight:                 m.weight,
       min_tier:               m.min_tier ?? null,
       birthday_month_boost:   m.birthday_month_boost ?? false,
-      outcome_type:           m.outcome_type ?? "voucher",
+      outcome_type:           outcomeType,
       is_active:              true,
     });
     if (error) triggerErrors.push(`mystery: ${error.message}`);

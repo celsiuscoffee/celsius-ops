@@ -115,12 +115,21 @@ type Props = {
   initial?: Partial<FormValue>;
 };
 
+export type MysteryPoolEntry = {
+  id: string;
+  label: string;
+  weight: number;
+  outcome_type: string;
+  is_active: boolean;
+};
+
 export default function RewardForm({ mode, initial }: Props) {
   const router = useRouter();
   const [val, setVal]     = useState<FormValue>({ ...EMPTY, ...initial });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState<string | null>(null);
   const [products, setProducts] = useState<ProductOpt[]>([]);
+  const [mysteryPool, setMysteryPool] = useState<MysteryPoolEntry[]>([]);
 
   // Fetch products once so the Specific Products picker can typeahead.
   // Backoffice already exposes /api/pickup/products with the catalog.
@@ -131,6 +140,16 @@ export default function RewardForm({ mode, initial }: Props) {
         setProducts(rows.map((p) => ({ id: p.id, name: p.name, category: p.category_id ?? "" })));
       })
       .catch(() => setProducts([]));
+  }, []);
+
+  // Fetch the live mystery pool so the Mystery trigger config can
+  // show drop-% in real time as the admin types a weight. Also drives
+  // the "Current pool" overview that contextualises the new entry.
+  useEffect(() => {
+    fetch(`/api/loyalty/mystery?brand_id=${BRAND_ID}`, { credentials: "include" })
+      .then((res) => res.json())
+      .then((rows: MysteryPoolEntry[]) => setMysteryPool(Array.isArray(rows) ? rows : []))
+      .catch(() => setMysteryPool([]));
   }, []);
 
   function update<K extends keyof FormValue>(k: K, v: FormValue[K]) {
@@ -457,7 +476,7 @@ export default function RewardForm({ mode, initial }: Props) {
                 </button>
                 {on && isSupported && mode === "create" && (
                   <div className="px-3 pb-3 pl-14 space-y-2">
-                    <TriggerConfig type={t} value={val.triggers[t] ?? {}} onChange={(k, v) => updateTrigger(t, k, v)} />
+                    <TriggerConfig type={t} value={val.triggers[t] ?? {}} onChange={(k, v) => updateTrigger(t, k, v)} mysteryPool={mysteryPool} />
                   </div>
                 )}
                 {on && !isSupported && (
@@ -511,7 +530,7 @@ export default function RewardForm({ mode, initial }: Props) {
 // ─── Default per-trigger config ─────────────────────────────────
 function defaultTriggerConfig(t: TriggerType): Record<string, unknown> {
   switch (t) {
-    case "mystery":    return { weight: 5, min_tier: null, birthday_month_boost: false, outcome_type: "voucher" };
+    case "mystery":    return { weight: 5, min_tier: null, birthday_month_boost: false, outcome_type: "voucher", flat_beans_value: 100, multiplier_value: 2 };
     case "mission":    return { title: "", description: "", difficulty: "medium", goal: { type: "spend_rm", value: 30, period: "weekly" }, cooldown_weeks: 2 };
     case "admin_push": return { title: "", description: "", audience_label: "", min_tier: null, max_claims: null, member_ids: [] };
     default:           return {};
@@ -519,13 +538,44 @@ function defaultTriggerConfig(t: TriggerType): Record<string, unknown> {
 }
 
 // ─── Trigger config sub-forms ───────────────────────────────────
-function TriggerConfig({ type, value, onChange }: { type: TriggerType; value: Record<string, unknown>; onChange: (key: string, v: unknown) => void }) {
+function TriggerConfig({ type, value, onChange, mysteryPool }: { type: TriggerType; value: Record<string, unknown>; onChange: (key: string, v: unknown) => void; mysteryPool: MysteryPoolEntry[] }) {
   if (type === "mystery") {
-    const v = value as { weight?: number; min_tier?: string | null; birthday_month_boost?: boolean };
+    const v = value as { weight?: number; min_tier?: string | null; birthday_month_boost?: boolean; outcome_type?: string; flat_beans_value?: number; multiplier_value?: number };
+    const newWeight = v.weight ?? 5;
+    // Live drop-% computation. The new entry adds to the existing
+    // active pool's weight, so drop% = newWeight / (existing + newWeight).
+    const activePool = mysteryPool.filter((p) => p.is_active);
+    const existingTotal = activePool.reduce((s, p) => s + p.weight, 0);
+    const newTotal = existingTotal + newWeight;
+    const newDropPct = newTotal > 0 ? (newWeight / newTotal) * 100 : 0;
     return (
       <>
-        <TriggerRow label="Weight" help="Higher = more likely to drop. Most pools use 1–20.">
-          <input type="number" value={v.weight ?? 5} onChange={(e) => onChange("weight", Number(e.target.value))} className="w-24 px-2.5 py-1.5 text-sm border border-slate-200 rounded" />
+        <TriggerRow label="Outcome type" help="What the customer actually gets when this entry rolls.">
+          <select value={v.outcome_type ?? "voucher"} onChange={(e) => onChange("outcome_type", e.target.value)} className="px-2.5 py-1.5 text-sm border border-slate-200 rounded bg-white">
+            <option value="voucher">Voucher — uses the template above</option>
+            <option value="flat_beans">Flat bonus beans</option>
+            <option value="multiplier">Beans multiplier</option>
+            <option value="no_bonus">No bonus — placebo entry</option>
+          </select>
+        </TriggerRow>
+        {v.outcome_type === "flat_beans" && (
+          <TriggerRow label="Bonus beans" help="Flat bean award on top of normal earn.">
+            <input type="number" value={v.flat_beans_value ?? 100} onChange={(e) => onChange("flat_beans_value", Number(e.target.value))} className="w-24 px-2.5 py-1.5 text-sm border border-slate-200 rounded" />
+          </TriggerRow>
+        )}
+        {v.outcome_type === "multiplier" && (
+          <TriggerRow label="Multiplier" help="e.g. 2.0 = 2× beans on the customer's next order.">
+            <input type="number" step={0.1} value={v.multiplier_value ?? 2} onChange={(e) => onChange("multiplier_value", Number(e.target.value))} className="w-24 px-2.5 py-1.5 text-sm border border-slate-200 rounded" />
+          </TriggerRow>
+        )}
+        <TriggerRow label="Weight" help="Higher = more likely to drop. Existing pool weights show below.">
+          <div className="flex items-center gap-3">
+            <input type="number" min={0} value={newWeight} onChange={(e) => onChange("weight", Number(e.target.value))} className="w-24 px-2.5 py-1.5 text-sm border border-slate-200 rounded" />
+            <div className="text-xs text-slate-600">
+              <span className="font-semibold text-emerald-700">{newDropPct.toFixed(1)}%</span> drop chance
+              <span className="text-slate-400"> · weight {newWeight} of {newTotal} total</span>
+            </div>
+          </div>
         </TriggerRow>
         <TriggerRow label="Min tier">
           <select value={v.min_tier ?? ""} onChange={(e) => onChange("min_tier", e.target.value || null)} className="px-2.5 py-1.5 text-sm border border-slate-200 rounded bg-white">
@@ -539,6 +589,37 @@ function TriggerConfig({ type, value, onChange }: { type: TriggerType; value: Re
         <TriggerRow label="Birthday boost">
           <Switch checked={!!v.birthday_month_boost} onChange={(b) => onChange("birthday_month_boost", b)} label="Higher weight during member's birthday week" small />
         </TriggerRow>
+        {activePool.length > 0 && (
+          <div className="mt-2 ml-32 border border-slate-200 rounded-lg bg-slate-50 p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
+              Current pool · {activePool.length} entries · weight {existingTotal}
+            </div>
+            <div className="space-y-1">
+              {activePool
+                .slice()
+                .sort((a, b) => b.weight - a.weight)
+                .map((p) => {
+                  const futurePct = newTotal > 0 ? (p.weight / newTotal) * 100 : 0;
+                  return (
+                    <div key={p.id} className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-700 flex-1 truncate">{p.label}</span>
+                      <span className="text-[10px] text-slate-500 uppercase tracking-wider w-20 text-right">{p.outcome_type}</span>
+                      <span className="tabular-nums text-slate-500 w-12 text-right">w {p.weight}</span>
+                      <span className="tabular-nums font-semibold text-slate-700 w-12 text-right">{futurePct.toFixed(1)}%</span>
+                    </div>
+                  );
+                })}
+              <div className="border-t border-slate-200 pt-1 mt-1.5">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-emerald-700 flex-1 font-semibold truncate">+ {value && (value as { _previewTitle?: string })._previewTitle ? (value as { _previewTitle: string })._previewTitle : "This new entry"}</span>
+                  <span className="text-[10px] text-emerald-700 uppercase tracking-wider w-20 text-right">{v.outcome_type ?? "voucher"}</span>
+                  <span className="tabular-nums text-emerald-700 w-12 text-right">w {newWeight}</span>
+                  <span className="tabular-nums font-semibold text-emerald-700 w-12 text-right">{newDropPct.toFixed(1)}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </>
     );
   }
