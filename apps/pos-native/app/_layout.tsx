@@ -1,6 +1,7 @@
 import "../global.css";
 import "@/lib/register-customer-display";
 import CustomerDisplayNative from "@/modules/customer-display";
+import { PickupPrinterMount } from "@/lib/pickup-printer";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -85,6 +86,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StatusBar hidden style="light" />
+          <PickupPrinterMount />
           <Stack
             screenOptions={{
               headerShown: false,
