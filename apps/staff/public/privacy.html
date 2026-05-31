@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy — Celsius Staff</title>
+    <meta name="robots" content="index, follow" />
+    <style>
+      :root {
+        --espresso: #1a0200;
+        --primary: #c2452d;
+        --muted: #6b6b6b;
+        --border: rgba(26, 2, 0, 0.1);
+        --bg: #fafafa;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--espresso);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 48px 24px 96px;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 24px;
+        margin-bottom: 32px;
+      }
+      h1 {
+        font-size: 28px;
+        margin: 0 0 8px;
+      }
+      h2 {
+        font-size: 20px;
+        margin-top: 36px;
+        margin-bottom: 8px;
+        color: var(--espresso);
+      }
+      h3 {
+        font-size: 16px;
+        margin-top: 24px;
+        margin-bottom: 6px;
+      }
+      p,
+      li {
+        font-size: 15px;
+        color: #333;
+      }
+      ul {
+        padding-left: 22px;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      a {
+        color: var(--primary);
+      }
+      code {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Privacy Policy</h1>
+        <p class="muted">
+          Celsius Staff app · operated by Celsius Coffee Sdn Bhd ·
+          Last updated 26 May 2026
+        </p>
+      </header>
+
+      <p>
+        The Celsius Staff app (the "App") is an internal workforce
+        tool for employees of Celsius Coffee Sdn Bhd ("we", "us",
+        "Celsius"). The App is not available to the public and access
+        is provisioned only for current employees. This policy
+        explains what personal data the App collects, why we collect
+        it, and how we handle it.
+      </p>
+
+      <h2>1. Who can use the App</h2>
+      <p>
+        The App is restricted to active Celsius Coffee staff. You can
+        only sign in with a PIN issued to you by Celsius. There is no
+        public sign-up. We do not knowingly collect data from anyone
+        under the age of 16.
+      </p>
+
+      <h2>2. Data we collect</h2>
+
+      <h3>2.1 Account &amp; HR data</h3>
+      <ul>
+        <li>
+          Your full name, staff number, role, assigned outlet(s) and
+          permissions — pulled from your Celsius employee record.
+        </li>
+        <li>
+          IC number, address, emergency contact, bank details and
+          dependants — only the fields you choose to fill in for
+          payroll, EPF, SOCSO and EIS submissions.
+        </li>
+      </ul>
+
+      <h3>2.2 Attendance</h3>
+      <ul>
+        <li>
+          Clock-in / clock-out timestamps, the GPS coordinates
+          recorded at each clock event, and a selfie taken at clock-in
+          and clock-out for identity verification.
+        </li>
+        <li>
+          When you opt in to background location, the App checks
+          whether you are inside or outside your outlet's geofence at
+          regular intervals. We record only whether you crossed a
+          boundary — not your continuous location.
+        </li>
+      </ul>
+
+      <h3>2.3 Operational data you create</h3>
+      <ul>
+        <li>
+          Checklist completions, audit ratings + photos, stock counts,
+          wastage entries, transfers, receivings, expense claims,
+          purchase orders and invoices that you submit through the App
+          — all tied to your user ID for accountability.
+        </li>
+      </ul>
+
+      <h3>2.4 Device data</h3>
+      <ul>
+        <li>
+          A push notification token (issued by Apple or Google) so we
+          can deliver shift reminders and approval alerts.
+        </li>
+        <li>
+          Basic crash and performance telemetry (Sentry) to help us
+          fix bugs. This does not include the contents of your
+          screens.
+        </li>
+      </ul>
+
+      <h2>3. Permissions we ask for</h2>
+      <ul>
+        <li>
+          <strong>Location</strong> (foreground &amp; optional
+          background): to detect which outlet you are at for
+          attendance.
+        </li>
+        <li>
+          <strong>Camera</strong>: to take attendance selfies, audit
+          photos and receipt photos for expense claims.
+        </li>
+        <li>
+          <strong>Photo library</strong>: to attach existing photos
+          (e.g. invoices) to claims.
+        </li>
+        <li>
+          <strong>Face ID / Touch ID</strong>: optional second factor
+          for clock-in. The biometric check happens entirely on your
+          device; Apple/Google never share the biometric data with us
+          and we never see it.
+        </li>
+        <li>
+          <strong>Notifications</strong>: for shift reminders and
+          approval requests.
+        </li>
+      </ul>
+
+      <h2>4. How we use the data</h2>
+      <ul>
+        <li>To roster shifts, calculate hours worked and run payroll.</li>
+        <li>
+          To verify that staff are physically present at the outlet at
+          clock-in.
+        </li>
+        <li>
+          To deliver SOPs, audits and operational tasks to the right
+          person at the right time.
+        </li>
+        <li>To process expense claims and supplier invoices.</li>
+        <li>
+          To improve the App — bug reports, performance, crash
+          diagnostics.
+        </li>
+      </ul>
+      <p>
+        We do <strong>not</strong> sell your data, share it with
+        advertisers, or use it for marketing.
+      </p>
+
+      <h2>5. Where the data is stored</h2>
+      <p>
+        Your data is stored in our own Postgres database (hosted on
+        Supabase, Singapore region) and in object storage for photos
+        (Supabase Storage and Cloudinary). Backups are encrypted at
+        rest.
+      </p>
+
+      <h2>6. Who can see your data</h2>
+      <ul>
+        <li>
+          You can see your own data anytime in the App (Profile,
+          Personal info, Payslips, etc.).
+        </li>
+        <li>
+          Your managers and outlet leads can see the operational data
+          (attendance, checklists, audits, claims) tied to outlets
+          they manage.
+        </li>
+        <li>
+          Celsius HR and Finance can see the data needed for payroll,
+          EPF/SOCSO/EIS submissions and statutory reporting.
+        </li>
+        <li>
+          We share data with regulators (LHDN, KWSP, PERKESO) only
+          where required by Malaysian law.
+        </li>
+        <li>
+          Third-party processors we use: Supabase (database +
+          storage), Cloudinary (image hosting), Sentry (crash
+          reporting), Expo (push delivery and OTA updates), Apple
+          (APNs) and Google (FCM). Each is bound by their own data
+          processing terms.
+        </li>
+      </ul>
+
+      <h2>7. How long we keep data</h2>
+      <ul>
+        <li>
+          Attendance and payroll data: 7 years after the end of
+          employment, as required by Malaysian tax and labour law.
+        </li>
+        <li>
+          Operational data (checklists, audits, wastage, claims,
+          invoices): 7 years for audit purposes.
+        </li>
+        <li>
+          Crash telemetry: 90 days, then auto-deleted.
+        </li>
+        <li>Push tokens: deleted within 30 days of you signing out.</li>
+      </ul>
+
+      <h2>8. Your rights</h2>
+      <p>
+        Under the Malaysian Personal Data Protection Act 2010 you can
+        ask Celsius to:
+      </p>
+      <ul>
+        <li>see a copy of the data we hold about you;</li>
+        <li>correct anything that's wrong;</li>
+        <li>
+          stop processing your data for non-statutory purposes (you
+          can always sign out and stop using the App);
+        </li>
+        <li>
+          delete your data when your employment ends, subject to the
+          retention periods above.
+        </li>
+      </ul>
+      <p>
+        Submit any request to
+        <a href="mailto:hr@celsiuscoffee.com">hr@celsiuscoffee.com</a>.
+        We will respond within 21 days.
+      </p>
+
+      <h2>9. Security</h2>
+      <p>
+        All traffic between the App and our servers is over HTTPS.
+        Your session is authenticated with a signed JWT and revoked
+        immediately when you sign out, change your PIN or are removed
+        from Celsius. Photos are uploaded directly to signed-URL
+        endpoints; we never bounce them through an intermediate
+        server.
+      </p>
+
+      <h2>10. Children</h2>
+      <p>
+        The App is not intended for and is not offered to children
+        under 16. If you believe a minor has been given access to the
+        App, contact us and we will revoke it.
+      </p>
+
+      <h2>11. Changes to this policy</h2>
+      <p>
+        If we make material changes, the in-app login screen will show
+        a notice the next time you sign in. The updated date is shown
+        at the top of this page.
+      </p>
+
+      <h2>12. Contact</h2>
+      <p>
+        Celsius Coffee Sdn Bhd<br />
+        Email:
+        <a href="mailto:hr@celsiuscoffee.com">hr@celsiuscoffee.com</a><br />
+        For technical issues:
+        <a href="mailto:support@celsiuscoffee.com"
+          >support@celsiuscoffee.com</a
+        >
+      </p>
+    </main>
+  </body>
+</html>
