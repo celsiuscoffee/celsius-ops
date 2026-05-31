@@ -24,16 +24,21 @@ const LAST_OUTLET_KEY = "celsius_staff_last_outlet_v1";
 // on both apps see the same lock-screen vibe. Always dark regardless of
 // system/user color-scheme preference, since the brand mark reads
 // better on espresso.
+// Tuned contrast: previous surface (#2A1411) was only ~5 lumin steps
+// above the espresso bg, so the keypad buttons rendered invisibly on
+// device — only the digits appeared, "all over the place". Bumped
+// surface ≈ 3× brighter so buttons read as distinct rounded cards on
+// the dark background.
 const COLORS = {
   bg: "#1A0200", // espresso
-  surface: "#2A1411", // raised cards on dark bg
-  surfaceHi: "#3A1F1A", // hover/active
+  surface: "#5C3A30", // keypad button + outlet picker bg (visible on espresso)
+  surfaceHi: "#7A4D40", // pressed/hover
   text: "#FAFAFA",
-  textMuted: "#A8A19F",
+  textMuted: "#C8B8B3",
   brand: "#C2452D", // primary
   brandSoft: "#F6E8E2", // primary-50, used as accent
   danger: "#EF4444",
-  dotEmpty: "#4A3431",
+  dotEmpty: "#5C3A30",
 };
 
 export default function Login() {
@@ -123,19 +128,14 @@ export default function Login() {
             gap: 24,
           }}
         >
-          {/* Brand mark — icon + wordmark + role tag. Matches the POS
-              login layout 1:1 so the two lock screens feel like one
-              system. */}
+          {/* Brand mark — icon + role tag. The wordmark.png is black and
+              renders invisibly on the dark login bg; until a white
+              variant is provided, just show the icon + subtitle. */}
           <View style={{ alignItems: "center", gap: 14 }}>
             <Image
               source={require("../../assets/icon.png")}
               style={{ width: 88, height: 88, borderRadius: 20 }}
               resizeMode="cover"
-            />
-            <Image
-              source={require("../../assets/wordmark.png")}
-              style={{ width: 200, height: 36, opacity: 0.95 }}
-              resizeMode="contain"
             />
             <Text
               style={{
