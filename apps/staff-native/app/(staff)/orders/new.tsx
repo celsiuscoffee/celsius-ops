@@ -782,7 +782,7 @@ export default function NewPO() {
       >
         <View className="flex-1 bg-background">
           <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Text className="text-base font-peachi text-espresso">
+            <Text className="text-base font-display text-espresso">
               Pick supplier
             </Text>
             <Pressable

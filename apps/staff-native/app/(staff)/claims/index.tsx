@@ -31,7 +31,7 @@ export default function ClaimsList() {
     <Screen>
       <View className="flex-row items-center justify-between pt-8">
         <View>
-          <Text className="text-3xl font-display text-espresso">Claims</Text>
+          <Text className="text-2xl font-display text-espresso">Claims</Text>
           <Text className="mt-1 text-sm font-body text-muted-fg">
             Out-of-pocket purchases
           </Text>

@@ -506,7 +506,7 @@ function AttachSheet({
       >
         <View className="flex-1 bg-background">
           <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Text className="text-base font-peachi text-espresso">
+            <Text className="text-base font-display text-espresso">
               Attach invoice
             </Text>
             <Pressable onPress={onClose} className="px-2 py-1">

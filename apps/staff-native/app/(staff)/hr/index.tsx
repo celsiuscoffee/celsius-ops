@@ -150,7 +150,7 @@ export default function HrIndex() {
           />
         }
       >
-        <Text className="text-3xl font-display text-espresso">HR</Text>
+        <Text className="text-2xl font-display text-espresso">HR</Text>
 
         {/* Clock card */}
         <Pressable

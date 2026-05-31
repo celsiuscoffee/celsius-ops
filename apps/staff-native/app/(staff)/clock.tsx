@@ -199,7 +199,7 @@ export default function ClockScreen() {
   return (
     <Screen>
       <View className="pt-8">
-        <Text className="text-3xl font-display text-espresso">Clock</Text>
+        <Text className="text-2xl font-display text-espresso">Clock</Text>
         {status?.activeLog ? (
           <Text className="mt-1 text-sm text-success">
             Clocked in at {formatTime(status.activeLog.clock_in)}
