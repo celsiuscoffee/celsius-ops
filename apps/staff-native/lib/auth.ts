@@ -30,6 +30,9 @@ export async function loginWithPin(pin: string, outletId: string | null) {
     outletId: res.user.outletId,
     outletName: res.user.outletName,
     token: res.token,
+    // Capture moduleAccess at login so tile-gating works on first
+    // app launch (before /api/auth/me refresh kicks in).
+    moduleAccess: res.user.moduleAccess,
   };
   await saveSession(session);
   useStaff.getState().setSession(session);

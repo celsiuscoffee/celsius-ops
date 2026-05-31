@@ -10,6 +10,10 @@ export type StaffSession = {
   outletId: string | null;
   outletName: string | null;
   token: string;
+  // Per-module access rights. Mirrors the JSONB column on User. Used by
+  // hasAccess() to gate tiles. Refreshed from /api/auth/me on every
+  // app launch so role/outlet changes propagate without a sign-out.
+  moduleAccess?: Record<string, unknown>;
 };
 
 export async function loadSession(): Promise<StaffSession | null> {

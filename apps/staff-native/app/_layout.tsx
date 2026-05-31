@@ -18,7 +18,13 @@ import {
   SpaceGrotesk_700Bold,
 } from "@expo-google-fonts/space-grotesk";
 import { initSentry, Sentry } from "../lib/sentry";
-import { loadSession } from "../lib/session";
+import {
+  clearSession,
+  loadSession,
+  saveSession,
+  type StaffSession,
+} from "../lib/session";
+import { API_BASE_URL } from "../lib/env";
 import { useStaff } from "../lib/store";
 import { registerForPush } from "../lib/push";
 
@@ -67,8 +73,58 @@ function RootLayout() {
   }, []);
 
   useEffect(() => {
+    // Two-phase session boot:
+    //   1) Load the cached session from disk so the UI can render
+    //      immediately without a network round-trip blocking the
+    //      splash screen.
+    //   2) In the background, hit /api/auth/me to re-fetch the
+    //      authoritative role, outletId, outletName, and moduleAccess
+    //      from the DB and merge them in. Token stays the same.
+    //
+    //   Without (2), stale local sessions would persist forever:
+    //   role/outlet/moduleAccess changes made in backoffice wouldn't
+    //   reach the staff app until the user manually signed out and
+    //   back in. That manifests as "wrong data, restart fixes it"
+    //   from the user's POV.
+    //
+    //   401 here means the cached token is dead — clear everything
+    //   and let the layout route to /login on next render.
     loadSession()
-      .then((s) => setSession(s))
+      .then(async (cached) => {
+        setSession(cached);
+        if (!cached?.token) return;
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${cached.token}` },
+          });
+          if (res.status === 401) {
+            await clearSession();
+            setSession(null);
+            return;
+          }
+          if (!res.ok) return;
+          const me = (await res.json()) as {
+            id?: string;
+            role?: string;
+            outletId?: string | null;
+            outletName?: string | null;
+            moduleAccess?: Record<string, unknown>;
+          };
+          const merged: StaffSession = {
+            ...cached,
+            role: me.role ?? cached.role,
+            outletId: me.outletId ?? cached.outletId,
+            outletName: me.outletName ?? cached.outletName,
+            moduleAccess: me.moduleAccess ?? cached.moduleAccess,
+          };
+          await saveSession(merged);
+          setSession(merged);
+        } catch {
+          // Network down → keep the cached session; UI still works
+          // against cached state, and the next successful request
+          // will re-trigger this on the next launch.
+        }
+      })
       .finally(() => setSessionHydrated(true));
   }, [setSession]);
 
