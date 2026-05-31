@@ -3,7 +3,7 @@
     "name": "Celsius Staff",
     "slug": "celsius-staff-native",
     "scheme": "celsiuscoffeestaff",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
     "ios": {
       "bundleIdentifier": "com.celsiuscoffee.staff",
       "supportsTablet": false,
-      "buildNumber": "1",
+      "buildNumber": "2",
       "entitlements": {
         "aps-environment": "production"
       },
@@ -38,7 +38,7 @@
     },
     "android": {
       "package": "com.celsiuscoffee.staff",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1A0200"
