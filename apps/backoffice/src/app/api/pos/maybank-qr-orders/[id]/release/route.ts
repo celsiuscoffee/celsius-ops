@@ -1,27 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/pickup/supabase";
 import { requireAuth } from "@/lib/auth";
+
+const ORDER_APP_BASE = (
+  process.env.ORDER_APP_BASE_URL ?? "https://order.celsiuscoffee.com"
+).replace(/\/$/, "");
 
 /**
  * POST /api/pos/maybank-qr-orders/[id]/release
  *
  * Staff confirms the Maybank transfer landed and releases the order
- * to the kitchen. Flips `orders.status` from `pending` → `preparing`
- * which:
- *   - Is the canonical "accepted / sent-to-kitchen" marker.
- *   - Triggers the existing realtime kitchen-docket print on the POS
- *     register (apps/pos/src/lib/use-pickup-printer.ts).
- *   - Stamps `paid_at` so reconciliation can split Maybank takings
- *     from gateway takings later.
+ * to the kitchen. The actual side-effects (atomic status flip + loyalty
+ * earn/deduct + V2 hooks + brewing-now push) live in apps/order at
+ * /api/orders/[id]/confirm-maybank-qr so Maybank-QR customers earn
+ * points on parity with gateway-paid customers — see
+ * apps/order/src/app/api/orders/[orderId]/confirm-stripe for the
+ * matching reference path.
  *
- * Guarded so it only releases orders that are actually `pending` AND
- * `payment_method=maybank_qr` — no accidental "release" of a gateway
- * order that's mid-confirmation.
- *
- * Customer push notification is deliberately skipped here — the
- * customer is at the counter when paying via static QR, so they're
- * already aware. Loyalty earning hooks live in apps/order and can be
- * folded in later by routing through that app's confirm path.
+ * This route just authenticates the staff click in backoffice and
+ * forwards to the order app with the shared service-role key (both
+ * apps already have it as SUPABASE_SERVICE_ROLE_KEY).
  */
 export async function POST(
   request: NextRequest,
@@ -33,29 +30,50 @@ export async function POST(
   const { id } = await params;
   if (!id) return NextResponse.json({ error: "Missing order id" }, { status: 400 });
 
-  const supabase = getSupabaseAdmin();
-
-  // Atomic transition: only flips if the order is still pending +
-  // maybank_qr. Returns the updated row so the UI can confirm.
-  const { data, error } = await supabase
-    .from("orders")
-    .update({
-      status: "preparing",
-      paid_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .eq("status", "pending")
-    .eq("payment_method", "maybank_qr")
-    .select("id, order_number, status")
-    .maybeSingle();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data) {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!serviceKey) {
     return NextResponse.json(
-      { error: "Order not found, not pending, or not a Maybank QR order" },
-      { status: 409 },
+      { error: "SUPABASE_SERVICE_ROLE_KEY not configured on backoffice" },
+      { status: 500 },
     );
   }
 
-  return NextResponse.json({ ok: true, order: data });
+  try {
+    const res = await fetch(
+      `${ORDER_APP_BASE}/api/orders/${encodeURIComponent(id)}/confirm-maybank-qr`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-service-key": serviceKey,
+          Origin: ORDER_APP_BASE,
+          Referer: ORDER_APP_BASE + "/",
+        },
+        body: "{}",
+      },
+    );
+    const text = await res.text();
+    const json = (text ? safeJson(text) : {}) as Record<string, unknown>;
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: (json.error as string | undefined) ?? `HTTP ${res.status}` },
+        { status: res.status },
+      );
+    }
+    return NextResponse.json({ ok: true, ...json });
+  } catch (e) {
+    console.error("[maybank-qr release] forward failed", e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Forward to order app failed" },
+      { status: 502 },
+    );
+  }
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
 }

@@ -1,0 +1,150 @@
+import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
+import { applyOrderV2Hooks } from "@/lib/loyalty/v2";
+import { notifyOrderPreparing } from "@/lib/push/templates";
+import { shouldHoldForScheduled } from "@/lib/revenue-monster/order-status";
+
+/**
+ * POST /api/orders/[orderId]/confirm-maybank-qr
+ *
+ * Server-to-server release for a Maybank static QR order. Called by the
+ * backoffice "Mark paid & release" action (apps/backoffice → /pos/maybank-qr)
+ * after a staff member visually verifies the Maybank transfer.
+ *
+ * Mirrors confirm-stripe's post-payment side-effects so a Maybank-QR
+ * customer earns loyalty points, redeems wallet vouchers, etc. on parity
+ * with gateway-paid customers — the only difference is the upstream
+ * trust check (Stripe's PaymentIntent ↔ a staff member's eyes).
+ *
+ * Auth: requires the Supabase service-role key in `x-service-key` since
+ * the backoffice route already has it, the customer never sees this
+ * endpoint, and there's no other natural shared secret between the apps.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ orderId: string }> },
+) {
+  const { orderId } = await params;
+  if (!orderId) {
+    return NextResponse.json({ error: "Missing orderId" }, { status: 400 });
+  }
+
+  const expected = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const provided = request.headers.get("x-service-key")?.trim() ?? "";
+  if (!expected || !provided || expected !== provided) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const supabase = getSupabaseAdmin();
+
+    // Peek for scheduled-pickup hold logic — same as confirm-stripe.
+    const { data: peek } = await supabase
+      .from("orders")
+      .select("store_id, pickup_at, payment_method, status")
+      .eq("id", orderId)
+      .maybeSingle();
+    const peekRow = peek as
+      | { store_id?: string | null; pickup_at?: string | null; payment_method?: string | null; status?: string | null }
+      | null;
+    if (!peekRow) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+    if (peekRow.payment_method !== "maybank_qr") {
+      return NextResponse.json({ error: "Not a Maybank QR order" }, { status: 409 });
+    }
+    if (peekRow.status !== "pending") {
+      // Idempotent — already released, nothing to do.
+      return NextResponse.json({ confirmed: true, alreadyReleased: true });
+    }
+
+    let prepTimeMins = 10;
+    if (peekRow.store_id) {
+      const { data: outlet } = await supabase
+        .from("outlet_settings")
+        .select("pickup_time_mins")
+        .eq("store_id", peekRow.store_id)
+        .maybeSingle();
+      const ptm = (outlet as { pickup_time_mins?: number } | null)?.pickup_time_mins;
+      if (typeof ptm === "number" && ptm > 0) prepTimeMins = ptm;
+    }
+    const scheduled = shouldHoldForScheduled(peekRow.pickup_at ?? null, prepTimeMins);
+    const nextStatus = scheduled ? "paid" : "preparing";
+
+    // Idempotent update: only flips if the order is still pending +
+    // payment_method=maybank_qr. Same select shape confirm-stripe uses
+    // so the loyalty handoff below matches its parity.
+    const { data: updated } = await supabase
+      .from("orders")
+      .update({
+        status: nextStatus,
+        paid_at: new Date().toISOString(),
+      } as Record<string, unknown>)
+      .eq("id", orderId)
+      .eq("status", "pending")
+      .eq("payment_method", "maybank_qr")
+      .select("loyalty_id, loyalty_points_earned, reward_id, wallet_voucher_id, store_id, order_number, customer_phone, created_at")
+      .maybeSingle();
+
+    if (!updated) {
+      // Raced with another release; nothing to do.
+      return NextResponse.json({ confirmed: true, alreadyReleased: true });
+    }
+
+    // ── Loyalty earn / deduct (parity with confirm-stripe) ────────
+    if (updated.loyalty_id) {
+      const outletId = updated.store_id as string;
+      const pointsEarned = (updated.loyalty_points_earned as number) ?? 0;
+      if (pointsEarned > 0) {
+        earnLoyaltyPoints(
+          updated.loyalty_id as string,
+          orderId,
+          pointsEarned,
+          outletId,
+        );
+      }
+      if (updated.reward_id) {
+        deductLoyaltyPoints(
+          updated.loyalty_id as string,
+          updated.reward_id as string,
+          outletId,
+        );
+      }
+
+      // V2 hooks (wallet voucher, missions, mystery, referral) — fire
+      // after the response so the staff release UI doesn't wait.
+      const loyaltyId = updated.loyalty_id as string;
+      const orderCreatedAt = (updated.created_at as string) ?? new Date().toISOString();
+      const walletVoucherId = (updated.wallet_voucher_id as string | null) ?? null;
+      after(async () => {
+        await applyOrderV2Hooks({
+          memberId: loyaltyId,
+          orderId,
+          outletId,
+          orderCreatedAt,
+          walletVoucherId,
+        });
+      });
+    }
+
+    // ── "Brewing now" push (skip for scheduled — promote-scheduled
+    //     cron handles those at brew-window-open time). ────────────
+    if (!scheduled) {
+      const orderRow = updated as { order_number: string; customer_phone: string | null };
+      after(async () => {
+        await notifyOrderPreparing({
+          orderId,
+          orderNumber: orderRow.order_number,
+          customerPhone: orderRow.customer_phone,
+        }).catch((e) => console.warn("[push] order_preparing confirm-maybank-qr", e));
+      });
+    }
+
+    return NextResponse.json({ confirmed: true, status: nextStatus });
+  } catch (err) {
+    console.error("confirm-maybank-qr error:", err);
+    return NextResponse.json({ error: "Failed to confirm" }, { status: 500 });
+  }
+}
