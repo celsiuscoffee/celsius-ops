@@ -1,23 +1,40 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Pressable,
   ScrollView,
+  StatusBar,
   Text,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Check, ChevronDown } from "lucide-react-native";
-import { Screen } from "../../components/Screen";
-import { Logo } from "../../components/Logo";
+import { Check, ChevronDown, Delete } from "lucide-react-native";
 import { fetchOutlets, type Outlet } from "../../lib/outlets";
 import { loginWithPin } from "../../lib/auth";
 import { ApiError } from "../../lib/api";
 
 const LAST_OUTLET_KEY = "celsius_staff_last_outlet_v1";
+
+// Dark-themed login screen — matches the POS dark aesthetic so cashiers
+// on both apps see the same lock-screen vibe. Always dark regardless of
+// system/user color-scheme preference, since the brand mark reads
+// better on espresso.
+const COLORS = {
+  bg: "#1A0200", // espresso
+  surface: "#2A1411", // raised cards on dark bg
+  surfaceHi: "#3A1F1A", // hover/active
+  text: "#FAFAFA",
+  textMuted: "#A8A19F",
+  brand: "#C2452D", // primary
+  brandSoft: "#F6E8E2", // primary-50, used as accent
+  danger: "#EF4444",
+  dotEmpty: "#4A3431",
+};
 
 export default function Login() {
   const router = useRouter();
@@ -44,27 +61,29 @@ export default function Login() {
     })();
   }, []);
 
-  async function handleSubmit() {
+  // Auto-submit when the user hits 6 digits — same as POS. The Sign in
+  // button is gone; entering the 6th digit IS the submit.
+  async function submit(code: string) {
     if (busy) return;
-    if (pin.length < 6) {
-      setError("PIN must be 6 digits");
-      return;
-    }
     setBusy(true);
     setError(null);
     try {
-      await loginWithPin(pin, outletId);
+      await loginWithPin(code, outletId);
       if (outletId) await AsyncStorage.setItem(LAST_OUTLET_KEY, outletId);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-        () => {},
-      );
+      Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      ).catch(() => {});
       router.replace("/(staff)/home");
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(
         () => {},
       );
-      setError(e instanceof ApiError ? e.message : "Login failed");
-      setPin("");
+      setError(e instanceof ApiError ? e.message : "Wrong PIN");
+      // Clear after a brief flash so the user can retype.
+      setTimeout(() => {
+        setPin("");
+        setError(null);
+      }, 900);
     } finally {
       setBusy(false);
     }
@@ -72,65 +91,113 @@ export default function Login() {
 
   function press(d: string) {
     Haptics.selectionAsync().catch(() => {});
-    setError(null);
+    if (error) setError(null);
     if (d === "del") {
       setPin((p) => p.slice(0, -1));
       return;
     }
-    setPin((p) => (p.length >= 6 ? p : p + d));
+    if (d === "clear") {
+      setPin("");
+      return;
+    }
+    setPin((p) => {
+      if (p.length >= 6) return p;
+      const next = p + d;
+      if (next.length === 6) {
+        // Defer submit so the 6th dot paints before the round-trip.
+        setTimeout(() => submit(next), 60);
+      }
+      return next;
+    });
   }
 
   return (
-    <Screen>
-      <View className="flex-1 justify-center">
-        <View className="items-center mb-8">
-          <Logo size="lg" />
-        </View>
-
-        <OutletPicker
-          outlets={outlets}
-          selectedId={outletId}
-          onSelect={setOutletId}
-          error={outletsError}
-        />
-
-        <View className="mt-8 mb-3 items-center">
-          <View className="flex-row gap-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <View
-                key={i}
-                className={`h-4 w-4 rounded-full border-2 border-espresso ${
-                  i < pin.length ? "bg-espresso" : "bg-transparent"
-                }`}
-              />
-            ))}
-          </View>
-          {error ? (
-            <Text className="mt-3 text-sm text-danger">{error}</Text>
-          ) : (
-            <Text className="mt-3 text-sm text-muted">
-              Enter your PIN
-            </Text>
-          )}
-        </View>
-
-        <NumPad onPress={press} disabled={busy} />
-
-        <Pressable
-          onPress={handleSubmit}
-          disabled={busy || pin.length < 6}
-          className={`mt-6 h-14 items-center justify-center rounded-2xl ${
-            busy || pin.length < 6 ? "bg-primary/40" : "bg-primary"
-          }`}
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
+      <SafeAreaView style={{ flex: 1 }}>
+        <View
+          style={{
+            flex: 1,
+            paddingHorizontal: 24,
+            justifyContent: "center",
+            gap: 24,
+          }}
         >
-          {busy ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text className="text-base font-body-bold text-white">Sign in</Text>
-          )}
-        </Pressable>
-      </View>
-    </Screen>
+          {/* Brand mark — icon + wordmark + role tag. Matches the POS
+              login layout 1:1 so the two lock screens feel like one
+              system. */}
+          <View style={{ alignItems: "center", gap: 14 }}>
+            <Image
+              source={require("../../assets/icon.png")}
+              style={{ width: 88, height: 88, borderRadius: 20 }}
+              resizeMode="cover"
+            />
+            <Image
+              source={require("../../assets/wordmark.png")}
+              style={{ width: 200, height: 36, opacity: 0.95 }}
+              resizeMode="contain"
+            />
+            <Text
+              style={{
+                color: COLORS.textMuted,
+                fontSize: 14,
+                letterSpacing: 0.5,
+              }}
+            >
+              Staff Login
+            </Text>
+          </View>
+
+          <OutletPicker
+            outlets={outlets}
+            selectedId={outletId}
+            onSelect={setOutletId}
+            error={outletsError}
+          />
+
+          {/* PIN dots — grow + colour-shift when filled, flash danger
+              on error, brand colour otherwise. */}
+          <View style={{ alignItems: "center", gap: 12 }}>
+            <View style={{ flexDirection: "row", gap: 16 }}>
+              {Array.from({ length: 6 }).map((_, i) => {
+                const filled = i < pin.length;
+                const bg = error
+                  ? COLORS.danger
+                  : filled
+                    ? COLORS.brand
+                    : COLORS.dotEmpty;
+                return (
+                  <View
+                    key={i}
+                    style={{
+                      width: filled ? 18 : 14,
+                      height: filled ? 18 : 14,
+                      borderRadius: 12,
+                      backgroundColor: bg,
+                    }}
+                  />
+                );
+              })}
+            </View>
+            <Text
+              style={{
+                color: error ? COLORS.danger : COLORS.textMuted,
+                fontSize: 14,
+                minHeight: 18,
+              }}
+            >
+              {error
+                ? error
+                : busy
+                  ? "Verifying…"
+                  : "Enter your PIN"}
+            </Text>
+          </View>
+
+          <NumPad onPress={press} disabled={busy} />
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -148,10 +215,14 @@ function OutletPicker({
   const [open, setOpen] = useState(false);
 
   if (error) {
-    return <Text className="text-center text-sm text-danger">{error}</Text>;
+    return (
+      <Text style={{ textAlign: "center", color: COLORS.danger, fontSize: 14 }}>
+        {error}
+      </Text>
+    );
   }
   if (!outlets) {
-    return <ActivityIndicator />;
+    return <ActivityIndicator color={COLORS.brandSoft} />;
   }
 
   const selected = outlets.find((o) => o.id === selectedId) ?? null;
@@ -160,17 +231,27 @@ function OutletPicker({
     <View>
       <Pressable
         onPress={() => setOpen(true)}
-        className="h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 active:bg-primary-50"
+        style={({ pressed }) => ({
+          height: 56,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: 18,
+          borderRadius: 16,
+          backgroundColor: pressed ? COLORS.surfaceHi : COLORS.surface,
+        })}
       >
         <Text
-          className={`flex-1 text-base font-body-semi ${
-            selected ? "text-espresso" : "text-muted"
-          }`}
+          style={{
+            flex: 1,
+            color: selected ? COLORS.text : COLORS.textMuted,
+            fontSize: 16,
+          }}
           numberOfLines={1}
         >
           {selected ? selected.name : "Select outlet"}
         </Text>
-        <ChevronDown color="#6B6B6B" size={20} />
+        <ChevronDown color={COLORS.textMuted} size={20} />
       </Pressable>
 
       <Modal
@@ -179,14 +260,31 @@ function OutletPicker({
         presentationStyle="pageSheet"
         onRequestClose={() => setOpen(false)}
       >
-        <View className="flex-1 bg-background">
-          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Text className="text-xl font-display text-espresso">Outlet</Text>
-            <Pressable onPress={() => setOpen(false)} className="px-2 py-1">
-              <Text className="text-sm font-body-bold text-primary">Close</Text>
+        <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingHorizontal: 20,
+              paddingVertical: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: COLORS.surface,
+            }}
+          >
+            <Text style={{ color: COLORS.text, fontSize: 18, fontWeight: "600" }}>
+              Outlet
+            </Text>
+            <Pressable
+              onPress={() => setOpen(false)}
+              style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+            >
+              <Text style={{ color: COLORS.brandSoft, fontSize: 14, fontWeight: "700" }}>
+                Close
+              </Text>
             </Pressable>
           </View>
-          <ScrollView className="flex-1" contentContainerClassName="px-5 py-4">
+          <ScrollView contentContainerStyle={{ padding: 20, gap: 8 }}>
             {outlets.map((o) => {
               const active = o.id === selectedId;
               return (
@@ -196,19 +294,29 @@ function OutletPicker({
                     onSelect(o.id);
                     setOpen(false);
                   }}
-                  className={`mb-2 h-14 flex-row items-center justify-between rounded-2xl border px-4 active:bg-primary-50 ${
-                    active
-                      ? "border-primary bg-primary-50"
-                      : "border-border bg-surface"
-                  }`}
+                  style={({ pressed }) => ({
+                    height: 56,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingHorizontal: 18,
+                    borderRadius: 16,
+                    backgroundColor: pressed
+                      ? COLORS.surfaceHi
+                      : active
+                        ? COLORS.brand + "22"
+                        : COLORS.surface,
+                    borderWidth: active ? 1 : 0,
+                    borderColor: COLORS.brand,
+                  })}
                 >
                   <Text
-                    className="flex-1 text-base font-body-semi text-espresso"
+                    style={{ flex: 1, color: COLORS.text, fontSize: 16 }}
                     numberOfLines={1}
                   >
                     {o.name}
                   </Text>
-                  {active ? <Check color="#A2492C" size={20} /> : null}
+                  {active ? <Check color={COLORS.brand} size={20} /> : null}
                 </Pressable>
               );
             })}
@@ -219,6 +327,9 @@ function OutletPicker({
   );
 }
 
+// POS-style 4x3 keypad. Bottom row is Clear (red tint) · 0 · Delete
+// (backspace icon). Clear wipes all 6 digits in one tap; Delete pops
+// the last digit. Auto-submit on 6 digits means no Sign in button.
 function NumPad({
   onPress,
   disabled,
@@ -226,32 +337,72 @@ function NumPad({
   onPress: (d: string) => void;
   disabled: boolean;
 }) {
-  const keys: (string | null)[] = [
-    "1", "2", "3",
-    "4", "5", "6",
-    "7", "8", "9",
-    null, "0", "del",
+  const rows: Array<Array<{ key: string; label: string; tone?: "digit" | "danger" | "icon" }>> = [
+    [
+      { key: "1", label: "1" },
+      { key: "2", label: "2" },
+      { key: "3", label: "3" },
+    ],
+    [
+      { key: "4", label: "4" },
+      { key: "5", label: "5" },
+      { key: "6", label: "6" },
+    ],
+    [
+      { key: "7", label: "7" },
+      { key: "8", label: "8" },
+      { key: "9", label: "9" },
+    ],
+    [
+      { key: "clear", label: "Clear", tone: "danger" },
+      { key: "0", label: "0" },
+      { key: "del", label: "del", tone: "icon" },
+    ],
   ];
   return (
-    <View className="flex-row flex-wrap justify-center">
-      {keys.map((k, i) => {
-        if (k === null) {
-          return <View key={i} className="basis-1/3 p-1" />;
-        }
-        return (
-          <View key={i} className="basis-1/3 p-1">
-            <Pressable
-              onPress={() => onPress(k)}
-              disabled={disabled}
-              className="h-16 items-center justify-center rounded-2xl bg-primary-50 active:bg-primary-100"
-            >
-              <Text className="text-2xl font-display-medium text-espresso">
-                {k === "del" ? "⌫" : k}
-              </Text>
-            </Pressable>
-          </View>
-        );
-      })}
+    <View style={{ gap: 12 }}>
+      {rows.map((row, ri) => (
+        <View key={ri} style={{ flexDirection: "row", gap: 12 }}>
+          {row.map((k) => {
+            const isDanger = k.tone === "danger";
+            const isIcon = k.tone === "icon";
+            return (
+              <Pressable
+                key={k.key}
+                onPress={() => onPress(k.key)}
+                disabled={disabled}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  height: 64,
+                  borderRadius: 16,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: pressed
+                    ? COLORS.surfaceHi
+                    : isDanger
+                      ? COLORS.danger + "22"
+                      : COLORS.surface,
+                  opacity: disabled ? 0.5 : 1,
+                })}
+              >
+                {isIcon ? (
+                  <Delete color={COLORS.text} size={26} />
+                ) : (
+                  <Text
+                    style={{
+                      color: isDanger ? COLORS.danger : COLORS.text,
+                      fontSize: isDanger ? 16 : 28,
+                      fontWeight: isDanger ? "700" : "500",
+                    }}
+                  >
+                    {k.label}
+                  </Text>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
     </View>
   );
 }
