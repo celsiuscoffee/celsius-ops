@@ -10,6 +10,13 @@ import {
 } from "@/lib/loyalty/promotions";
 import type { OrderRow } from "@/lib/supabase/types";
 import { defaultMethodSets } from "@/lib/payments/gateway-methods";
+import { computeVoucherDiscount } from "@celsius/shared";
+import {
+  DISCOUNT_SPEC_COLUMNS,
+  type DiscountSpecRow,
+  rowToDiscountSpec,
+  buildEngineCart,
+} from "@/lib/loyalty/discount-spec";
 
 function generateOrderNumber(): string {
   return `C-${Date.now().toString(36).slice(-4).toUpperCase()}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`;
@@ -35,7 +42,8 @@ export async function POST(request: NextRequest) {
       discountSen,
       voucherCode,
       voucherId,
-      rewardDiscountSen,
+      // rewardDiscountSen (client-claimed) intentionally ignored — the
+      // reward discount is recomputed server-side via the shared engine.
       rewardId,
       rewardName,
       rewardPointsCost,
@@ -250,35 +258,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── Server-side reward discount validation ────────────────────────────
+    // ── Server-side reward discount (AUTHORITATIVE via shared engine) ─────
+    // Resolve the canonical voucher_templates spec by legacy_reward_id and
+    // recompute through @celsius/shared computeVoucherDiscount — the SAME
+    // path as /api/orders, covering all 9 discount types. Replaces the old
+    // reward_configs flat/percent-inline + trust-client logic, so this
+    // web / QR-table PWA checkout matches every other channel and a stale
+    // or malicious client can't claim a discount the reward doesn't grant.
     let rewardDiscountSenAmt = 0;
     if (rewardId) {
-      const { data: rewardConfig } = await supabase
-        .from("reward_configs")
-        .select("discount_type, discount_value")
-        .eq("reward_id", rewardId)
-        .single();
-
-      // Reject unknown rewards up front — silently dropping the discount
-      // would cause the customer to be charged the pre-reward amount while
-      // the UI showed "free".
-      if (!rewardConfig) {
-        return NextResponse.json(
-          { error: "Reward is no longer valid" },
-          { status: 400 }
-        );
+      const { data: tmpl } = await supabase
+        .from("voucher_templates")
+        .select(DISCOUNT_SPEC_COLUMNS)
+        .eq("legacy_reward_id", rewardId)
+        .eq("is_active", true)
+        .maybeSingle<DiscountSpecRow>();
+      // Reject unknown/inactive rewards — silently dropping the discount
+      // would charge the pre-reward amount while the UI showed it applied.
+      if (!tmpl) {
+        return NextResponse.json({ error: "Reward is no longer valid" }, { status: 400 });
       }
-
-      const { discount_type, discount_value } = rewardConfig;
-      if (discount_type === "flat" && discount_value != null) {
-        rewardDiscountSenAmt = Math.round(discount_value); // already in sen
-      } else if (discount_type === "percent" && discount_value != null) {
-        rewardDiscountSenAmt = Math.round(serverSubtotalSen * (discount_value / 100));
-      } else if (discount_type === "free_item" || discount_type === "bogo") {
-        // For free_item/bogo, the discount is the value of the free item(s)
-        // Trust the client value as it depends on which items were selected
-        rewardDiscountSenAmt = Math.round(rewardDiscountSen ?? 0);
-      }
+      const spec = rowToDiscountSpec(tmpl);
+      const cart = await buildEngineCart(
+        supabase,
+        items,
+        !!(spec.applicable_categories && spec.applicable_categories.length),
+      );
+      const result = computeVoucherDiscount({ spec, cart });
+      rewardDiscountSenAmt = Math.max(0, Math.min(serverSubtotalSen, result.discount_sen));
     }
 
     // ── Server-side SST calculation ───────────────────────────────────────
