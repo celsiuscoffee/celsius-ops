@@ -24,6 +24,21 @@ type RawFloor = { name?: string; tables?: unknown };
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+/** 16-cell grid: drags snap to these lines so tables auto-align into neat rows /
+ *  columns instead of landing freeform. The faint canvas gridlines match this. */
+const GRID = 1 / 16;
+const snap = (v: number) => Math.round(v / GRID) * GRID;
+
+/** Tile size (px) scaled to seat count — a 6-top reads bigger than a 2-top, so
+ *  the floor plan shows table CAPACITY at a glance. Mirrors the register. */
+function tileSize(seats: number | null): number {
+  const s = seats ?? 4;
+  if (s <= 2) return 46;
+  if (s <= 4) return 60;
+  if (s <= 6) return 76;
+  return 92;
+}
+
 /** Accept the stored value (positioned objects OR a legacy comma string) and
  *  return clean Floors. Legacy strings get auto-arranged into a grid. */
 export function normalizeFloors(value: unknown): Floor[] {
@@ -82,11 +97,17 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
     const nums = floors.flatMap((f) => f.tables.map((t) => parseInt(t.label, 10)).filter((n) => !isNaN(n)));
     return String((nums.length ? Math.max(...nums) : 0) + 1);
   }
-  function addTable() {
+  /** Add a table of a given capacity. New tiles auto-place on the next free grid
+   *  cell (rows of 8) so they start aligned; pass a smart default shape. */
+  function addTable(seats: number | null, shape: TableShape = "square") {
     if (!floor) return;
-    const t: TableItem = { label: nextLabel(), seats: null, x: 0.5, y: 0.5, shape: "square" };
+    const n = floor.tables.length;
+    const cols = 8;
+    const x = clamp(snap(0.1 + (n % cols) * 0.1), 0.04, 0.96);
+    const y = clamp(snap(0.16 + Math.floor(n / cols) * 0.16), 0.06, 0.94);
+    const t: TableItem = { label: nextLabel(), seats, x, y, shape };
     patchFloor({ tables: [...floor.tables, t] });
-    setSelected(floor.tables.length);
+    setSelected(n);
   }
   function deleteTable(idx: number) {
     if (!floor) return;
@@ -118,8 +139,8 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
     const c = canvasRef.current?.getBoundingClientRect();
     if (!c) return;
     drag.current.moved = true;
-    const x = clamp((e.clientX - c.left) / c.width, 0.04, 0.96);
-    const y = clamp((e.clientY - c.top) / c.height, 0.06, 0.94);
+    const x = clamp(snap((e.clientX - c.left) / c.width), 0.04, 0.96);
+    const y = clamp(snap((e.clientY - c.top) / c.height), 0.06, 0.94);
     patchTable(idx, { x, y });
   }
   function onTilePointerUp(e: React.PointerEvent) {
@@ -157,8 +178,15 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
               placeholder="Floor name"
               className="h-9 w-44 rounded-lg border border-gray-200 px-3 text-sm text-[#160800] outline-none focus:border-[#160800]"
             />
-            <button onClick={addTable} className="flex items-center gap-1.5 rounded-lg bg-[#160800] px-3 py-2 text-xs font-semibold text-white hover:bg-[#2d1100]">
-              <Plus className="h-3.5 w-3.5" /> Add table
+            <span className="text-xs font-medium text-gray-500">Add table:</span>
+            <button onClick={() => addTable(2, "round")} title="2-seater (round bistro)" className="flex items-center gap-1 rounded-lg bg-[#160800] px-2.5 py-2 text-xs font-semibold text-white hover:bg-[#2d1100]">
+              <Plus className="h-3.5 w-3.5" /> 2 pax
+            </button>
+            <button onClick={() => addTable(4, "square")} title="4-seater" className="flex items-center gap-1 rounded-lg bg-[#160800] px-2.5 py-2 text-xs font-semibold text-white hover:bg-[#2d1100]">
+              <Plus className="h-3.5 w-3.5" /> 4 pax
+            </button>
+            <button onClick={() => addTable(6, "square")} title="6-seater (large)" className="flex items-center gap-1 rounded-lg bg-[#160800] px-2.5 py-2 text-xs font-semibold text-white hover:bg-[#2d1100]">
+              <Plus className="h-3.5 w-3.5" /> 6 pax
             </button>
             {floors.length > 1 && (
               <button onClick={removeFloor} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-medium text-red-500 hover:text-red-700">
@@ -170,8 +198,15 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
           {/* Canvas */}
           <div
             ref={canvasRef}
-            className="relative w-full overflow-hidden rounded-xl border border-gray-200 bg-[repeating-linear-gradient(45deg,#fafafa,#fafafa_11px,#f3f4f6_11px,#f3f4f6_12px)]"
-            style={{ height: 460, touchAction: "none" }}
+            className="relative w-full overflow-hidden rounded-xl border border-gray-200 bg-white"
+            style={{
+              height: 460,
+              touchAction: "none",
+              // 16×16 alignment grid (matches the drag snap) so the room reads tidy.
+              backgroundImage:
+                "linear-gradient(to right, rgba(22,8,0,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(22,8,0,0.05) 1px, transparent 1px)",
+              backgroundSize: "6.25% 6.25%",
+            }}
             onPointerDown={(e) => { if (e.target === e.currentTarget) setSelected(null); }}
           >
             {floor.tables.length === 0 && (
@@ -179,7 +214,9 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
                 Tap &ldquo;Add table&rdquo;, then drag tables to match your floor.
               </div>
             )}
-            {floor.tables.map((t, idx) => (
+            {floor.tables.map((t, idx) => {
+              const sz = tileSize(t.seats);
+              return (
               <div
                 key={idx}
                 onPointerDown={(e) => onTilePointerDown(e, idx)}
@@ -190,13 +227,14 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
                 } ${selected === idx ? "border-[#A2492C] ring-2 ring-[#A2492C]/30" : "border-[#160800]/30"}`}
                 style={{
                   left: `${t.x * 100}%`, top: `${t.y * 100}%`, transform: "translate(-50%, -50%)",
-                  width: 58, height: 58, backgroundColor: "#fff",
+                  width: sz, height: sz, backgroundColor: "#fff",
                 }}
               >
                 <span className="text-sm font-bold text-[#160800]">{t.label}</span>
                 {t.seats != null && <span className="text-[9px] text-gray-500">{t.seats}p</span>}
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Selected table editor */}

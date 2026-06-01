@@ -75,6 +75,16 @@ const BRAND = "#A2492C";
 const OK = "#86efac";
 const DANGER = "#E5484D";
 
+/** Floor-plan tile size (px) scaled to seat count — a 6-top reads bigger than a
+ *  2-top, matching the BO editor. Buckets: ≤2 small · ≤4 medium · ≤6 large · 8+ XL. */
+function tableTileSize(seats: number | null | undefined): number {
+  const s = seats ?? 4;
+  if (s <= 2) return 58;
+  if (s <= 4) return 74;
+  if (s <= 6) return 92;
+  return 110;
+}
+
 type AppliedReward = { redemptionId: string; name: string; descriptor: RedeemDiscount } | null;
 type Panel = "none" | "customer" | "table";
 
@@ -1043,7 +1053,7 @@ export default function Register() {
                     <View style={{ position: "relative", width: "100%", height: 440, backgroundColor: "rgba(245,243,240,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(245,243,240,0.08)" }}>
                       {g.slots.map((slot) => {
                         const has = slot.orders.length > 0;
-                        const TILE = 72;
+                        const TILE = tableTileSize(slot.seats);
                         return (
                           <Pressable
                             key={slot.label}
