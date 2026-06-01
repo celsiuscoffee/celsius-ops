@@ -22,9 +22,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-// Statuses the register is allowed to set. Keeps a stray/forged call
-// from flipping an order into an arbitrary state.
-const ALLOWED = new Set(["preparing", "ready", "completed"]);
+// Statuses the register is allowed to set. The on-register KDS only ever
+// sends "ready" (Mark Ready) or "completed" (Mark Collected) — "preparing"
+// was never sent AND isn't in the pos_orders status CHECK, so a stray
+// "preparing" would 500 on the grab path. Keep the set tight.
+const ALLOWED = new Set(["ready", "completed"]);
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,14 +47,19 @@ export async function POST(req: NextRequest) {
     // don't have that column, so only ask for it on the grab path.
     const selectCols = source === "grab" ? "id, order_number, status, external_id" : "id, order_number, status";
 
+    // maybeSingle (not single): a non-matching id returns data=null with NO
+    // error. .single() instead throws PGRST116 → a misleading 500 for what is
+    // really "order not found". Map the null case to a clean 404 so the
+    // register can tell "gone" from "server broke".
     const { data, error } = await supabase
       .from(table)
       .update(patch)
       .eq("id", id)
       .select(selectCols)
-      .single();
+      .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: "order not found" }, { status: 404 });
 
     // Propagate "ready" to Grab so the merchant order on Grab's side
     // (and the driver) advances too — the local pos_orders flip alone

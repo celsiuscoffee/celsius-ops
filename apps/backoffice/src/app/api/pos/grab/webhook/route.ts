@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID, createHmac } from "crypto";
+import { randomUUID } from "crypto";
 import { verifyWebhookSignature } from "@/lib/grab";
 import { verifyGrabPartnerToken } from "@/lib/grab-partner";
 import { createClient } from "@/lib/supabase-server";
@@ -67,10 +67,6 @@ function mapGrabStatusToPOS(state: GrabWebhookPayload["orderState"]): string {
   }
 }
 
-function hmac(algo: "sha256" | "sha1" | "sha512", secret: string, body: string, enc: "hex" | "base64") {
-  return createHmac(algo, secret).update(body).digest(enc);
-}
-
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
@@ -82,39 +78,11 @@ export async function POST(request: NextRequest) {
     const bearerOk = await verifyGrabPartnerToken(request);
     const hmacOk = !!signature && verifyWebhookSignature(rawBody, signature);
     if (!bearerOk && !hmacOk) {
-      // DIAGNOSTIC: one short console.error per field (avoid Vercel log truncation)
-      // AND echo into the 401 response so we can read it without log access.
-      const interestingHeaders: Record<string, string> = {};
-      request.headers.forEach((v, k) => {
-        if (/sign|grab|auth|time|nonce|date|version/i.test(k)) interestingHeaders[k] = v;
-      });
-      const secA = process.env.GRAB_HMAC_SECRET || "";
-      const secB = process.env.GRAB_CLIENT_SECRET || "";
-      const candidates = {
-        hmac_secret_len: secA.length,
-        client_secret_len: secB.length,
-        sha256_hex_HMAC:    hmac("sha256", secA, rawBody, "hex"),
-        sha256_b64_HMAC:    hmac("sha256", secA, rawBody, "base64"),
-        sha1_hex_HMAC:      hmac("sha1",   secA, rawBody, "hex"),
-        sha512_hex_HMAC:    hmac("sha512", secA, rawBody, "hex"),
-        sha256_hex_CLIENT:  hmac("sha256", secB, rawBody, "hex"),
-        sha256_b64_CLIENT:  hmac("sha256", secB, rawBody, "base64"),
-      };
-      // emit each as its own log line
-      console.error(`[grab:DBG] incoming_sig=${signature}`);
-      console.error(`[grab:DBG] incoming_sig_len=${signature.length}`);
-      console.error(`[grab:DBG] body_len=${rawBody.length}`);
-      console.error(`[grab:DBG] body_head=${rawBody.slice(0, 300)}`);
-      for (const [k, v] of Object.entries(interestingHeaders)) {
-        console.error(`[grab:DBG] hdr:${k}=${v}`);
-      }
-      for (const [k, v] of Object.entries(candidates)) {
-        console.error(`[grab:DBG] cand:${k}=${v}`);
-      }
-      return NextResponse.json(
-        { error: "Invalid signature", debug: { incoming_sig: signature, sig_len: signature.length, body_len: rawBody.length, body_head: rawBody.slice(0, 300), headers: interestingHeaders, candidates } },
-        { status: 401 },
-      );
+      // Reject silently. NEVER echo computed HMAC candidates — doing so leaks
+      // the expected signature and lets an attacker forge webhooks the moment a
+      // real GRAB_HMAC_SECRET is set. Minimal, non-sensitive server log only.
+      console.warn(`[grab:webhook] unauthorized bearer=${bearerOk} hmac=${hmacOk} sig_present=${!!signature}`);
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
     const payload: GrabWebhookPayload = JSON.parse(rawBody);
@@ -195,6 +163,15 @@ export async function POST(request: NextRequest) {
       })
       .select("id").single();
     if (orderErr || !order) {
+      // Duplicate-delivery race: a concurrent Submit Order for the same orderID
+      // won the unique(external_id) insert. Treat as success so Grab stops
+      // retrying the (already-created) order forever.
+      if ((orderErr as { code?: string } | null)?.code === "23505") {
+        const { data: dup } = await supabase
+          .from("pos_orders").select("id").eq("external_id", orderID).maybeSingle();
+        console.log(`[grab:webhook] duplicate submit orderID=${orderID} → existing id=${dup?.id ?? "?"}`);
+        return NextResponse.json({ success: true, action: "duplicate", orderId: dup?.id ?? null });
+      }
       console.error("[grab:webhook] insert pos_orders failed:", orderErr);
       return NextResponse.json(
         { error: `Failed to create order: ${orderErr?.message || "unknown"}` },
