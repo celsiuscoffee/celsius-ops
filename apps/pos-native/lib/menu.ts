@@ -109,7 +109,7 @@ export async function fetchProducts(storeId?: string | null): Promise<Product[]>
     supabase
       .from("products")
       .select(
-        "id, name, category, price, image_url, is_available, kitchen_station, tax_rate, tax_inclusive, modifiers, position",
+        "id, name, category, price, image_url, is_available, kitchen_station, tax_rate, tax_inclusive, modifiers, visible_channels, position",
       )
       .eq("brand_id", BRAND_ID)
       .eq("is_available", true)
@@ -128,7 +128,9 @@ export async function fetchProducts(storeId?: string | null): Promise<Product[]>
   const oos = new Set(
     ((oosRes as { data: { product_id: string }[] | null }).data ?? []).map((r) => r.product_id),
   );
-  return (data ?? []).map((p: any) => ({
+  // "Show on" placement: only products visible on the POS channel reach the
+  // register (empty visible_channels = everywhere — see visibleOnPos).
+  return (data ?? []).filter((p: any) => visibleOnPos(p.visible_channels)).map((p: any) => ({
     id: p.id,
     name: p.name,
     category: p.category ?? "",
@@ -168,7 +170,7 @@ export async function fetchBites(limit = 8, outletId?: string | null): Promise<D
   }
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, category, price, image_url, position")
+    .select("id, name, category, price, image_url, visible_channels, position")
     .eq("brand_id", BRAND_ID)
     .eq("is_available", true)
     .in("category", BITE_CATEGORIES)
@@ -177,7 +179,7 @@ export async function fetchBites(limit = 8, outletId?: string | null): Promise<D
     .limit(limit + 6);
   if (error) return [];
   return (data ?? [])
-    .filter((p: any) => !oos.has(p.id))
+    .filter((p: any) => !oos.has(p.id) && visibleOnPos(p.visible_channels))
     .slice(0, limit)
     .map((p: any) => ({
       id: p.id,

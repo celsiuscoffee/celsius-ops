@@ -40,6 +40,7 @@ export interface DbProduct {
   price_dinein: number | null;
   tax_rate: number;
   tax_inclusive: boolean;
+  visible_channels: string[] | null;
 }
 
 export interface Category { id: string; name: string; slug: string; position?: number }
@@ -71,6 +72,7 @@ function emptyForm(categories: Category[]) {
     tax_rate:                       0,
     tax_inclusive:                  true,
     modifiers:                      [] as ModifierGroup[],
+    visible_channels:               [] as string[],
   };
 }
 
@@ -112,6 +114,7 @@ export function ProductForm({ product, categories }: Props) {
       tax_rate:                       product.tax_rate ?? 0,
       tax_inclusive:                  product.tax_inclusive ?? true,
       modifiers:                      product.modifiers ?? [],
+      visible_channels:               product.visible_channels ?? [],
     };
   });
 
@@ -281,6 +284,54 @@ export function ProductForm({ product, categories }: Props) {
                 />
               </Field>
             ))}
+          </div>
+        </div>
+
+        {/* Show on — which selling channels this product appears on. Empty
+            visible_channels = everywhere (the default). Each app's menu loader
+            filters to its own channel (register→pos, pickup→pickup, Grab→grab). */}
+        <div className="border rounded-2xl p-4 bg-muted/10 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Show on</p>
+          <p className="text-[11px] text-muted-foreground -mt-2">
+            Which channels sell this product. All on (the default) = shows everywhere. Uncheck a channel to hide it there. To stop selling it entirely, switch off &ldquo;Available&rdquo; instead.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {([
+              ["pos", "POS"],
+              ["pickup", "Pickup"],
+              ["grab", "Grab"],
+              ["foodpanda", "FoodPanda"],
+              ["dinein", "Dine-in"],
+            ] as const).map(([ch, label]) => {
+              // Empty = everywhere → render every box checked.
+              const checked = form.visible_channels.length === 0 || form.visible_channels.includes(ch);
+              return (
+                <label
+                  key={ch}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer text-sm select-none ${checked ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const ALL = ["pos", "pickup", "grab", "foodpanda", "dinein"];
+                        // Expand empty (=all) to the full set, then toggle this one.
+                        const cur = f.visible_channels.length === 0 ? [...ALL] : [...f.visible_channels];
+                        const next = e.target.checked
+                          ? Array.from(new Set([...cur, ch]))
+                          : cur.filter((c) => c !== ch);
+                        // Must sell somewhere — block unchecking the last channel.
+                        if (next.length === 0) return f;
+                        // All five → store empty (canonical "everywhere").
+                        return { ...f, visible_channels: next.length === ALL.length ? [] : next };
+                      })
+                    }
+                  />
+                  {label}
+                </label>
+              );
+            })}
           </div>
         </div>
 

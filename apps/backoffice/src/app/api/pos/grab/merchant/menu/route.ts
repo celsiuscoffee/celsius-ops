@@ -93,7 +93,13 @@ export async function GET(request: NextRequest) {
     if (c.id && c.name) categoryNames[c.id] = c.name; // products.category might store id too
   }
 
-  const menu = buildGrabMenuPayload(productsRes.data as RawProduct[], merchantId, {
+  // "Show on" placement: only products visible on the Grab channel ship (empty
+  // visible_channels = everywhere — same allow-list rule as modifiers).
+  const grabProducts = (productsRes.data as RawProduct[]).filter((p) => {
+    const vc = (p as { visible_channels?: string[] }).visible_channels;
+    return !Array.isArray(vc) || vc.length === 0 || vc.includes("grab");
+  });
+  const menu = buildGrabMenuPayload(grabProducts, merchantId, {
     ...grabMenuOptionsFromEnv(),
     categoryNames,
     serviceHours,
@@ -101,7 +107,7 @@ export async function GET(request: NextRequest) {
   });
   const catCount = menu.sections.reduce((n, s) => n + s.categories.length, 0);
   console.log(
-    `[grab:get-menu] served menu merchant=${merchantId} sections=${menu.sections.length} categories=${catCount} items=${productsRes.data.length}`,
+    `[grab:get-menu] served menu merchant=${merchantId} sections=${menu.sections.length} categories=${catCount} items=${grabProducts.length}`,
   );
   return NextResponse.json(menu);
 }

@@ -104,6 +104,15 @@ export async function PATCH(
     update.tax_inclusive = body.tax_inclusive;
   }
 
+  // "Show on" placement — allow-list of selling channels (empty = everywhere).
+  // Validated against the canonical channel set; unknown values are dropped.
+  if (Array.isArray(body.visible_channels)) {
+    const VALID = ["pos", "pickup", "grab", "foodpanda", "dinein"];
+    update.visible_channels = body.visible_channels.filter(
+      (c): c is string => typeof c === "string" && VALID.includes(c),
+    );
+  }
+
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ ok: true });
   }

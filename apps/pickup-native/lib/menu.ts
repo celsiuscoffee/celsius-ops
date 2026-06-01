@@ -34,14 +34,21 @@ export type Product = {
   featured_position?: number;
 };
 
-type RawProduct = Product & { hidden_modifier_ids?: string[] };
+type RawProduct = Product & { hidden_modifier_ids?: string[]; visible_channels?: string[] };
+
+/** "Show on" placement: empty/missing visible_channels = everywhere; otherwise
+ *  the product must list "pickup" to appear in the customer pickup app. */
+function visibleOnPickup(channels: string[] | undefined): boolean {
+  if (!Array.isArray(channels) || channels.length === 0) return true;
+  return channels.includes("pickup");
+}
 
 export async function fetchMenu(
   outletId?: string | null,
 ): Promise<{ categories: Category[]; products: Product[] }> {
   const productsQuery = supabase
     .from("products")
-    .select("id,name,category,description,price,image_url,is_available,is_featured,modifiers,hidden_modifier_ids,featured_position")
+    .select("id,name,category,description,price,image_url,is_available,is_featured,modifiers,hidden_modifier_ids,visible_channels,featured_position")
     .eq("brand_id", "brand-celsius")
     .order("position")
     .order("name");
@@ -78,7 +85,7 @@ export async function fetchMenu(
     // (think "ice level: cold", "cup type", etc) without losing the StoreHub
     // source data. Customers shouldn't see them — strip both at read time.
     products: ((prods ?? []) as RawProduct[])
-      .filter((p) => !oosAtOutlet.has(p.id))
+      .filter((p) => !oosAtOutlet.has(p.id) && visibleOnPickup(p.visible_channels))
       .map((p) => {
         const hidden = new Set(Array.isArray(p.hidden_modifier_ids) ? p.hidden_modifier_ids : []);
         const modifiers = Array.isArray(p.modifiers) ? p.modifiers : [];

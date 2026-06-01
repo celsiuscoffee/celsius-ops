@@ -34,6 +34,30 @@ function visibleOnChannel(channels: ModifierChannel[] | undefined, channel: Modi
   return channels.includes(channel);
 }
 
+/** The canonical selling channels a product (or modifier) can be shown on. */
+export const CHANNELS: ModifierChannel[] = ["pos", "pickup", "grab", "foodpanda", "dinein"];
+
+/** Human labels for the channels — for the backoffice "Show on" UI. */
+export const CHANNEL_LABELS: Record<ModifierChannel, string> = {
+  pos: "POS",
+  pickup: "Pickup",
+  grab: "Grab",
+  foodpanda: "FoodPanda",
+  dinein: "Dine-in",
+};
+
+/** Whether a PRODUCT is visible on a channel given its `visible_channels`
+ *  allow-list. Empty / missing = visible everywhere (backward-compatible); a
+ *  non-empty list restricts to the listed channels. Same rule as modifiers,
+ *  one level up. To hide a product everywhere use products.is_available. */
+export function productVisibleOnChannel(
+  visibleChannels: string[] | null | undefined,
+  channel: ModifierChannel,
+): boolean {
+  if (!Array.isArray(visibleChannels) || visibleChannels.length === 0) return true;
+  return visibleChannels.includes(channel);
+}
+
 // Filter a product's modifier groups to those visible on the given channel.
 // Also drops any options that opt out of the channel (option-level
 // `channels`), but options without `channels` always remain.
