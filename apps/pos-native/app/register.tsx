@@ -21,7 +21,7 @@ import { fetchCategories, fetchProducts, type Product, type ModifierOption } fro
 import { useCart, cartSubtotal, type CartLine } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
 import { createSale, getNextQueueNumber } from "@/lib/checkout";
-import { useSettings, gridColumns, serviceChargeRate, defaultOrderType, receiptConfig, tableCount } from "@/lib/settings";
+import { useSettings, gridColumns, serviceChargeRate, defaultOrderType, receiptConfig, tableZones } from "@/lib/settings";
 import { useTablesPanel, type TableSlot } from "@/lib/use-tables-panel";
 import { useOrdersPanel, type KdsOrder } from "@/lib/use-orders-panel";
 import { useShift, openShift, closeShift, shiftTotals, type Shift, type ShiftTotals } from "@/lib/shift";
@@ -144,7 +144,8 @@ export default function Register() {
   // Live dine-in tables grid for the Tables modal — pulled here so the
   // hook is mounted persistently (catch-up + Realtime subscribe) instead
   // of being torn down each time the modal closes.
-  const tableSlots = useTablesPanel(outletId, tableCount(settings));
+  const tableZonesInput = useMemo(() => tableZones(settings), [settings]);
+  const tableSlots = useTablesPanel(outletId, tableZonesInput);
   // Live Grab + Pickup order feed for the on-register KDS (Orders modal).
   // Mounted persistently so it keeps catching up + receiving Realtime even
   // while the modal is closed (drives the header badge count).
@@ -1016,31 +1017,49 @@ export default function Register() {
               </View>
             </View>
             <ScrollView style={{ maxHeight: 620 }} showsVerticalScrollIndicator={false}>
-              <View className="flex-row flex-wrap" style={{ gap: 12 }}>
-                {tableSlots.map((slot) => (
-                  <TableTile
-                    key={slot.label}
-                    slot={slot}
-                    onPress={() => {
-                      Haptics.selectionAsync();
-                      // Tap a table → assign the next register dine-in order to
-                      // it (pre-fill table_number + close). It's a read-only
-                      // mapping otherwise; we don't track occupancy/flow.
-                      if (orderType === "dine_in") {
-                        setTableNumber(slot.label.replace(/^T/, ""));
-                        setShowTables(false);
-                      }
-                    }}
-                  />
-                ))}
-                {tableSlots.length === 0 && (
-                  <View className="py-12 items-center w-full">
-                    <Text className="text-cream/40 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                      No tables configured. Set table_count in BackOffice → POS Settings.
+              {(() => {
+                // Group the flat slots back into their zones for display.
+                const groups: { name: string; slots: TableSlot[] }[] = [];
+                for (const slot of tableSlots) {
+                  let g = groups.find((x) => x.name === slot.zone);
+                  if (!g) { g = { name: slot.zone, slots: [] }; groups.push(g); }
+                  g.slots.push(slot);
+                }
+                if (groups.length === 0) {
+                  return (
+                    <View className="py-12 items-center w-full">
+                      <Text className="text-cream/40 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                        No tables configured. Add a Table Layout in BackOffice → POS Settings.
+                      </Text>
+                    </View>
+                  );
+                }
+                return groups.map((g) => (
+                  <View key={g.name} style={{ width: "100%", marginBottom: 16 }}>
+                    <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 1.2, color: "rgba(245,243,240,0.5)", marginBottom: 8 }}>
+                      {g.name.toUpperCase()}
                     </Text>
+                    <View className="flex-row flex-wrap" style={{ gap: 12 }}>
+                      {g.slots.map((slot) => (
+                        <TableTile
+                          key={slot.label}
+                          slot={slot}
+                          onPress={() => {
+                            Haptics.selectionAsync();
+                            // Tap a table → assign the next register dine-in order
+                            // to it (pre-fill table_number + close). Read-only
+                            // mapping otherwise; no occupancy/flow tracking.
+                            if (orderType === "dine_in") {
+                              setTableNumber(slot.label.replace(/^T/, ""));
+                              setShowTables(false);
+                            }
+                          }}
+                        />
+                      ))}
+                    </View>
                   </View>
-                )}
-              </View>
+                ));
+              })()}
             </ScrollView>
           </View>
         </View>

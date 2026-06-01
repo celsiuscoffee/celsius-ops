@@ -32,6 +32,9 @@ export type BranchSettings = {
   // How many dine-in tables this outlet has. Drives the live Tables
   // panel on the POS-native register + the BO Table QR generator.
   table_count: number | null;
+  // Named-zone table layout (set in BO POS Settings). Each zone carries a
+  // comma-separated string of table labels. Empty → fall back to table_count.
+  table_layout: { name: string; tables: string }[] | null;
   default_tax_rate: number | null;
   default_tax_inclusive: boolean | null;
   einvoice_tin: string | null;
@@ -117,6 +120,26 @@ export function defaultOrderType(s: BranchSettings | null): "dine_in" | "takeawa
 export function tableCount(s: BranchSettings | null): number {
   const n = s?.table_count ?? 10;
   return n >= 1 && n <= 100 ? n : 10;
+}
+
+export type TableZoneInput = { name: string; labels: string[] };
+
+/** Resolve the outlet's table layout into named zones for the register Tables
+ *  panel. Uses table_layout when set (parse each zone's comma-separated
+ *  labels), else a single "Tables" zone of T1..table_count. */
+export function tableZones(s: BranchSettings | null): TableZoneInput[] {
+  const layout = s?.table_layout;
+  if (Array.isArray(layout) && layout.length > 0) {
+    const zones = layout
+      .map((z) => ({
+        name: (z?.name || "").trim() || "Tables",
+        labels: String(z?.tables ?? "").split(",").map((t) => t.trim()).filter(Boolean),
+      }))
+      .filter((z) => z.labels.length > 0);
+    if (zones.length > 0) return zones;
+  }
+  const count = tableCount(s);
+  return [{ name: "Tables", labels: Array.from({ length: count }, (_, i) => `T${i + 1}`) }];
 }
 
 /** Receipt config shape consumed by lib/printer.ts → the native module. */

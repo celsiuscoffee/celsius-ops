@@ -30,7 +30,8 @@ export type TableOrderRef = {
 };
 
 export type TableSlot = {
-  label: string;            // "T5"
+  label: string;            // "T5" / user label
+  zone: string;             // named zone this table belongs to
   orders: TableOrderRef[];  // most recent first
 };
 
@@ -72,7 +73,7 @@ function toRefs(rows: Row[] | null, source: "qr" | "pos"): TableOrderRef[] {
 /** Pass the cashier's POS outletId ("outlet-sa") + how many tables the outlet
  *  has (settings.table_count). Returns T1..Tn (plus any extra table that has
  *  orders), each with the live list of orders mapped to it. */
-export function useTablesPanel(outletId: string | null | undefined, count: number) {
+export function useTablesPanel(outletId: string | null | undefined, zones: { name: string; labels: string[] }[]) {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [qr, setQr] = useState<TableOrderRef[]>([]);
   const [pos, setPos] = useState<TableOrderRef[]>([]);
@@ -130,7 +131,9 @@ export function useTablesPanel(outletId: string | null | undefined, count: numbe
     return () => { if (t) clearTimeout(t); void supabase.removeChannel(ch); };
   }, [outletId, storeId, reload]);
 
-  // 4. Compose slots: T1..count UNION any table that has orders, numeric sort.
+  // 4. Compose flat slots from the configured zones (each slot tagged with its
+  //    zone), orders matched by normalised table key. Any order whose table
+  //    isn't in a zone is surfaced under "Other" so it's never lost.
   return useMemo<TableSlot[]>(() => {
     const byKey = new Map<string, TableOrderRef[]>();
     for (const o of [...qr, ...pos]) {
@@ -139,14 +142,18 @@ export function useTablesPanel(outletId: string | null | undefined, count: numbe
       byKey.set(o.tableKey, arr);
     }
     for (const arr of byKey.values()) arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    const keys = new Set<string>();
-    for (let i = 1; i <= count; i++) keys.add(String(i));
-    for (const k of byKey.keys()) keys.add(k);
-    const sorted = [...keys].sort((a, b) => {
-      const na = parseInt(a, 10), nb = parseInt(b, 10);
-      if (!isNaN(na) && !isNaN(nb)) return na - nb;
-      return a.localeCompare(b);
-    });
-    return sorted.map((k) => ({ label: `T${k}`, orders: byKey.get(k) ?? [] }));
-  }, [qr, pos, count]);
+    const covered = new Set<string>();
+    const slots: TableSlot[] = [];
+    for (const z of zones) {
+      for (const label of z.labels) {
+        const k = tableKey(label) ?? "";
+        covered.add(k);
+        slots.push({ label, zone: z.name, orders: byKey.get(k) ?? [] });
+      }
+    }
+    for (const [k, orders] of byKey) {
+      if (k && !covered.has(k)) slots.push({ label: k, zone: "Other", orders });
+    }
+    return slots;
+  }, [qr, pos, zones]);
 }

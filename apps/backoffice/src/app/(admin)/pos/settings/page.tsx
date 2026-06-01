@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Save, Store, Receipt, QrCode, Megaphone, CreditCard, LayoutGrid, FileText, Clock } from "lucide-react";
+import { Loader2, Save, Store, Receipt, QrCode, Megaphone, CreditCard, LayoutGrid, FileText, Clock, Grid3x3 } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
 
@@ -40,6 +40,9 @@ type Settings = {
   grab_open_time:          string | null;
   grab_close_time:         string | null;
   grab_open_24h:           boolean | null;
+  // Table layout: named zones, each a comma-separated list of table labels.
+  // The POS register renders tables grouped by zone so staff can find them.
+  table_layout:            { name: string; tables: string }[] | null;
 };
 
 // Labels come from the shared registry so every app reads the same
@@ -110,6 +113,22 @@ export default function POSSettingsPage() {
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
     setEditing((cur) => (cur ? { ...cur, [key]: value } : cur));
+  }
+
+  // ── Table-layout zone editors ──
+  function addZone() {
+    setEditing((cur) => (cur ? { ...cur, table_layout: [...(cur.table_layout ?? []), { name: "", tables: "" }] } : cur));
+  }
+  function updateZone(i: number, patch: Partial<{ name: string; tables: string }>) {
+    setEditing((cur) => {
+      if (!cur) return cur;
+      const layout = [...(cur.table_layout ?? [])];
+      layout[i] = { ...layout[i], ...patch };
+      return { ...cur, table_layout: layout };
+    });
+  }
+  function removeZone(i: number) {
+    setEditing((cur) => (cur ? { ...cur, table_layout: (cur.table_layout ?? []).filter((_, j) => j !== i) } : cur));
   }
 
   if (loading) {
@@ -405,6 +424,40 @@ export default function POSSettingsPage() {
             Outlet master data (name, address, phone) is managed in Settings → Outlets.
           </p>
         </Section>
+      </div>
+
+      {/* Table Layout — named zones; the POS register renders this so staff can
+          locate tables, with live orders mapped onto each table. */}
+      <div className="bg-white rounded-2xl p-5 space-y-3">
+        <div className="flex items-center gap-2 pb-1 border-b border-gray-100">
+          <Grid3x3 className="h-4 w-4 text-[#A2492C]" />
+          <h3 className="text-sm font-bold text-[#160800]">Table Layout</h3>
+        </div>
+        <p className="text-[11px] text-gray-500 -mt-1">
+          Group tables into named zones (e.g. Indoor, Outdoor, Level 2). The POS
+          register shows tables by zone so staff can find them, with live orders
+          mapped onto each. Leave empty to show a plain grid.
+        </p>
+        {(editing.table_layout ?? []).map((zone, zi) => (
+          <div key={zi} className="flex flex-col gap-2 rounded-xl border border-gray-100 p-3 sm:flex-row sm:items-end">
+            <div className="w-full sm:w-44">
+              <label className="mb-1 block text-xs font-medium text-gray-600">Zone</label>
+              <input className="input" placeholder="Indoor" value={zone.name}
+                onChange={(e) => updateZone(zi, { name: e.target.value })} />
+            </div>
+            <div className="flex-1">
+              <label className="mb-1 block text-xs font-medium text-gray-600">Tables (comma-separated)</label>
+              <input className="input" placeholder="1, 2, 3, 4" value={zone.tables}
+                onChange={(e) => updateZone(zi, { tables: e.target.value })} />
+            </div>
+            <button onClick={() => removeZone(zi)} className="self-start rounded-lg px-2 py-2 text-xs font-medium text-red-500 hover:text-red-700 sm:self-auto">
+              Remove
+            </button>
+          </div>
+        ))}
+        <button onClick={addZone} className="text-xs font-semibold text-[#A2492C] hover:underline">
+          + Add zone
+        </button>
       </div>
 
       {/* Helper styles for inputs */}
