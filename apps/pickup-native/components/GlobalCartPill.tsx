@@ -15,8 +15,14 @@ import * as Haptics from "@/lib/haptics";
  * changes — so the pill stayed visible on /cart even when the parent
  * screen was no longer "current".)
  *
- * Renders the pill only on routes where it adds value (home + menu +
- * product detail) AND only when the cart has items.
+ * Renders the pill only on browse routes where it adds value (home +
+ * menu) AND only when the cart has items.
+ *
+ * NOT on /product: the product detail screen is a focused single-item
+ * configurator that already owns the bottom CTA ("Add to cart" /
+ * "Update cart"). A second floating "View cart" bar stacked above that
+ * button is redundant — and in edit mode both bars showed the same
+ * total. (#161 originally included /product here; that's the regression.)
  *
  * On web the pill portals to <body> via createPortal so it pins to
  * the visual viewport regardless of the surrounding flex layout.
@@ -24,8 +30,7 @@ import * as Haptics from "@/lib/haptics";
  */
 const PILL_ROUTES = (pathname: string) =>
   pathname === "/" ||
-  pathname.startsWith("/menu") ||
-  pathname.startsWith("/product");
+  pathname.startsWith("/menu");
 
 export function GlobalCartPill() {
   const pathname = usePathname();
