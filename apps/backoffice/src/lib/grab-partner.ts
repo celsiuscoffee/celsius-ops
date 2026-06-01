@@ -9,9 +9,14 @@
  * This is the reverse of lib/grab.ts getAccessToken() (token FROM Grab for our
  * outbound calls). Env:
  *   GRAB_PARTNER_CLIENT_ID, GRAB_PARTNER_CLIENT_SECRET  — set the SAME values in
- *     the portal's Partner client ID/secret fields.
- *   GRAB_PARTNER_JWT_SECRET (optional) — HS256 key for the issued token; falls
- *     back to GRAB_PARTNER_CLIENT_SECRET.
+ *     the portal's Partner client ID/secret fields (staging / primary).
+ *   GRAB_PARTNER_CLIENT_ID_PROD, GRAB_PARTNER_CLIENT_SECRET_PROD (optional) — the
+ *     production project's pair. When set, the OAuth endpoint accepts EITHER pair,
+ *     so ONE backoffice serves staging + production at once (no go-live swap —
+ *     just add these, remove the staging pair later if you want).
+ *   GRAB_PARTNER_JWT_SECRET (recommended) — fixed HS256 key for the issued token;
+ *     falls back to GRAB_PARTNER_CLIENT_SECRET. Set a dedicated value so the token
+ *     signing key never changes when creds rotate.
  */
 
 import { SignJWT, jwtVerify } from "jose";
@@ -22,19 +27,34 @@ const ISSUER = "celsius-pos";
 const AUDIENCE = "grabfood";
 
 function signingKey(): Uint8Array {
-  const s = process.env.GRAB_PARTNER_JWT_SECRET || process.env.GRAB_PARTNER_CLIENT_SECRET || "";
+  const s = process.env.GRAB_PARTNER_JWT_SECRET
+    || process.env.GRAB_PARTNER_CLIENT_SECRET
+    || process.env.GRAB_PARTNER_CLIENT_SECRET_PROD
+    || "";
   return new TextEncoder().encode(s);
 }
 
-/** True if the supplied client credentials match the configured partner creds. */
+/** Configured partner client/secret pairs: the primary
+ *  (GRAB_PARTNER_CLIENT_ID/SECRET, used for staging) plus an optional production
+ *  pair (…_PROD). Accepting both lets ONE backoffice serve the staging AND
+ *  production Grab projects at the same time — go-live becomes "add the _PROD
+ *  vars", with nothing to remove or flip. */
+function partnerPairs(): Array<{ id: string; secret: string }> {
+  const pairs: Array<{ id: string; secret: string }> = [];
+  const add = (id?: string, secret?: string) => { if (id && secret) pairs.push({ id, secret }); };
+  add(process.env.GRAB_PARTNER_CLIENT_ID, process.env.GRAB_PARTNER_CLIENT_SECRET);
+  add(process.env.GRAB_PARTNER_CLIENT_ID_PROD, process.env.GRAB_PARTNER_CLIENT_SECRET_PROD);
+  return pairs;
+}
+
+/** True if the supplied client credentials match ANY configured partner pair. */
 export function partnerCredsMatch(clientId: unknown, clientSecret: unknown): boolean {
-  const id = process.env.GRAB_PARTNER_CLIENT_ID;
-  const secret = process.env.GRAB_PARTNER_CLIENT_SECRET;
-  return !!id && !!secret && clientId === id && clientSecret === secret;
+  if (typeof clientId !== "string" || typeof clientSecret !== "string") return false;
+  return partnerPairs().some((p) => p.id === clientId && p.secret === clientSecret);
 }
 
 export function partnerConfigured(): boolean {
-  return !!process.env.GRAB_PARTNER_CLIENT_ID && !!process.env.GRAB_PARTNER_CLIENT_SECRET;
+  return partnerPairs().length > 0;
 }
 
 /** Mint the Bearer token Grab will present on our inbound webhooks. */

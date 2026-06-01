@@ -387,8 +387,20 @@ export function verifyWebhookSignature(
   payload: string,
   signature: string,
 ): boolean {
-  const secret = process.env.GRAB_CLIENT_SECRET;
-  if (!secret) return false;
-  const expected = createHmac("sha256", secret).update(payload).digest("hex");
-  return expected === signature;
+  if (!signature) return false;
+  // Accept a signature computed with ANY configured HMAC secret: the primary
+  // GRAB_HMAC_SECRET (falling back to the legacy GRAB_CLIENT_SECRET) plus an
+  // optional production secret (…_PROD). One backoffice then verifies BOTH the
+  // staging and production Grab projects — the go-live swap is additive.
+  const secrets = [
+    process.env.GRAB_HMAC_SECRET,
+    process.env.GRAB_HMAC_SECRET_PROD,
+    process.env.GRAB_CLIENT_SECRET,
+    process.env.GRAB_CLIENT_SECRET_PROD,
+  ].filter((s): s is string => !!s);
+  for (const secret of secrets) {
+    const expected = createHmac("sha256", secret).update(payload).digest("hex");
+    if (expected === signature) return true;
+  }
+  return false;
 }
