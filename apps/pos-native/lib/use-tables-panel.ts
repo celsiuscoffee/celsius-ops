@@ -31,8 +31,11 @@ export type TableOrderRef = {
 
 export type TableSlot = {
   label: string;            // "T5" / user label
-  zone: string;             // named zone this table belongs to
+  zone: string;             // named floor/zone this table belongs to
   seats: number | null;     // pax / seat count, if configured
+  x: number;                // normalised 0..1 position (centre)
+  y: number;
+  shape: "square" | "round";
   orders: TableOrderRef[];  // most recent first
 };
 
@@ -74,7 +77,7 @@ function toRefs(rows: Row[] | null, source: "qr" | "pos"): TableOrderRef[] {
 /** Pass the cashier's POS outletId ("outlet-sa") + how many tables the outlet
  *  has (settings.table_count). Returns T1..Tn (plus any extra table that has
  *  orders), each with the live list of orders mapped to it. */
-export function useTablesPanel(outletId: string | null | undefined, zones: { name: string; tables: { label: string; seats: number | null }[] }[]) {
+export function useTablesPanel(outletId: string | null | undefined, zones: { name: string; tables: { label: string; seats: number | null; x: number; y: number; shape: "square" | "round" }[] }[]) {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [qr, setQr] = useState<TableOrderRef[]>([]);
   const [pos, setPos] = useState<TableOrderRef[]>([]);
@@ -149,12 +152,20 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
       for (const t of z.tables) {
         const k = tableKey(t.label) ?? "";
         covered.add(k);
-        slots.push({ label: t.label, zone: z.name, seats: t.seats, orders: byKey.get(k) ?? [] });
+        slots.push({ label: t.label, zone: z.name, seats: t.seats, x: t.x, y: t.y, shape: t.shape, orders: byKey.get(k) ?? [] });
       }
     }
-    for (const [k, orders] of byKey) {
-      if (k && !covered.has(k)) slots.push({ label: k, zone: "Other", seats: null, orders });
-    }
+    // Orders whose table isn't in any floor → an auto-gridded "Other" floor.
+    const others = [...byKey].filter(([k]) => k && !covered.has(k));
+    const oc = Math.max(1, Math.ceil(Math.sqrt(others.length)));
+    others.forEach(([k, orders], i) => {
+      slots.push({
+        label: k, zone: "Other", seats: null,
+        x: oc <= 1 ? 0.5 : 0.1 + ((i % oc) * 0.8) / (oc - 1),
+        y: 0.15 + Math.floor(i / oc) * 0.2,
+        shape: "square", orders,
+      });
+    });
     return slots;
   }, [qr, pos, zones]);
 }

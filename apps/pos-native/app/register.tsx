@@ -1035,27 +1035,50 @@ export default function Register() {
                   );
                 }
                 return groups.map((g) => (
-                  <View key={g.name} style={{ width: "100%", marginBottom: 16 }}>
+                  <View key={g.name} style={{ width: "100%", marginBottom: 18 }}>
                     <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 1.2, color: "rgba(245,243,240,0.5)", marginBottom: 8 }}>
                       {g.name.toUpperCase()}
                     </Text>
-                    <View className="flex-row flex-wrap" style={{ gap: 12 }}>
-                      {g.slots.map((slot) => (
-                        <TableTile
-                          key={slot.label}
-                          slot={slot}
-                          onPress={() => {
-                            Haptics.selectionAsync();
-                            // Tap a table → assign the next register dine-in order
-                            // to it (pre-fill table_number + close). Read-only
-                            // mapping otherwise; no occupancy/flow tracking.
-                            if (orderType === "dine_in") {
-                              setTableNumber(slot.label.replace(/^T/, ""));
-                              setShowTables(false);
-                            }
-                          }}
-                        />
-                      ))}
+                    {/* Floor-plan canvas: tables at their saved (normalised) positions. */}
+                    <View style={{ position: "relative", width: "100%", height: 440, backgroundColor: "rgba(245,243,240,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(245,243,240,0.08)" }}>
+                      {g.slots.map((slot) => {
+                        const has = slot.orders.length > 0;
+                        const TILE = 72;
+                        return (
+                          <Pressable
+                            key={slot.label}
+                            onPress={() => {
+                              Haptics.selectionAsync();
+                              // Tap a table → assign the next register dine-in order
+                              // to it (pre-fill table_number + close).
+                              if (orderType === "dine_in") {
+                                setTableNumber(slot.label.replace(/^T/, ""));
+                                setShowTables(false);
+                              }
+                            }}
+                            className="active:opacity-80 items-center justify-center"
+                            style={{
+                              position: "absolute",
+                              left: `${slot.x * 100}%`, top: `${slot.y * 100}%`,
+                              marginLeft: -TILE / 2, marginTop: -TILE / 2,
+                              width: TILE, height: TILE,
+                              borderRadius: slot.shape === "round" ? TILE / 2 : 14, borderWidth: 1,
+                              backgroundColor: has ? "rgba(194,69,45,0.18)" : "rgba(245,243,240,0.06)",
+                              borderColor: has ? "rgba(194,69,45,0.6)" : "rgba(245,243,240,0.14)",
+                            }}
+                          >
+                            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 18, color: has ? "#F5F3F0" : "rgba(245,243,240,0.6)" }} numberOfLines={1}>{slot.label}</Text>
+                            {slot.seats != null && (
+                              <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 9, color: "rgba(245,243,240,0.4)" }}>{slot.seats}p</Text>
+                            )}
+                            {has && (
+                              <View style={{ position: "absolute", top: -7, right: -7, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: "#C2452D", alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
+                                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, color: "#F5F3F0" }}>{slot.orders.length}</Text>
+                              </View>
+                            )}
+                          </Pressable>
+                        );
+                      })}
                     </View>
                   </View>
                 ));

@@ -32,9 +32,10 @@ export type BranchSettings = {
   // How many dine-in tables this outlet has. Drives the live Tables
   // panel on the POS-native register + the BO Table QR generator.
   table_count: number | null;
-  // Named-zone table layout (set in BO POS Settings). Each zone carries a
-  // comma-separated string of table labels. Empty → fall back to table_count.
-  table_layout: { name: string; tables: string }[] | null;
+  // Visual floor-plan table layout (set in BO POS Settings). Each floor carries
+  // positioned tables ([{label,seats,x,y,shape}]); a legacy comma-separated
+  // string is still accepted. Empty → fall back to table_count.
+  table_layout: { name?: string; tables?: unknown }[] | null;
   default_tax_rate: number | null;
   default_tax_inclusive: boolean | null;
   einvoice_tin: string | null;
@@ -122,37 +123,59 @@ export function tableCount(s: BranchSettings | null): number {
   return n >= 1 && n <= 100 ? n : 10;
 }
 
-export type TableDef = { label: string; seats: number | null };
+export type TableShape = "square" | "round";
+export type TableDef = { label: string; seats: number | null; x: number; y: number; shape: TableShape };
 export type TableZoneInput = { name: string; tables: TableDef[] };
 
-/** Parse one "label" or "label:seats" token (e.g. "5" or "5:4"). */
-function parseTableToken(tok: string): TableDef | null {
-  const t = tok.trim();
-  if (!t) return null;
-  const [labelRaw, seatsRaw] = t.split(":");
-  const label = (labelRaw ?? "").trim();
-  if (!label) return null;
-  const n = seatsRaw != null ? parseInt(seatsRaw.trim(), 10) : NaN;
-  return { label, seats: Number.isFinite(n) && n > 0 ? n : null };
+const clamp01 = (v: number, def: number) => (Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : def);
+const posInt = (v: unknown): number | null => {
+  const n = parseInt(String(v ?? "").trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+/** Auto grid position for tables without an explicit x/y (legacy / fallback). */
+function gridPos(i: number, n: number): { x: number; y: number } {
+  const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const col = i % cols, row = Math.floor(i / cols);
+  return {
+    x: cols <= 1 ? 0.5 : 0.1 + (col * 0.8) / (cols - 1),
+    y: rows <= 1 ? 0.5 : 0.12 + (row * 0.76) / (rows - 1),
+  };
 }
 
-/** Resolve the outlet's table layout into named zones for the register Tables
- *  panel. Uses table_layout when set (parse each zone's comma-separated tables,
- *  each "label" or "label:seats"), else a single "Tables" zone of
- *  T1..table_count. */
+/** Resolve the outlet's table layout into floors of positioned tables for the
+ *  register floor-plan. Accepts positioned objects OR a legacy comma string
+ *  ("1:2, 2:4", auto-gridded); empty → a single "Tables" floor of
+ *  T1..table_count, auto-gridded. */
 export function tableZones(s: BranchSettings | null): TableZoneInput[] {
   const layout = s?.table_layout;
   if (Array.isArray(layout) && layout.length > 0) {
     const zones = layout
-      .map((z) => ({
-        name: (z?.name || "").trim() || "Tables",
-        tables: String(z?.tables ?? "").split(",").map(parseTableToken).filter((t): t is TableDef => !!t),
-      }))
+      .map((z) => {
+        const name = (typeof z?.name === "string" && z.name.trim()) || "Tables";
+        if (Array.isArray(z?.tables)) {
+          const tables: TableDef[] = (z.tables as Record<string, unknown>[]).map((t, i) => ({
+            label: String(t?.label ?? i + 1),
+            seats: posInt(t?.seats),
+            x: clamp01(Number(t?.x), 0.5),
+            y: clamp01(Number(t?.y), 0.5),
+            shape: t?.shape === "round" ? "round" : "square",
+          }));
+          return { name, tables };
+        }
+        const toks = String(z?.tables ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+        const tables: TableDef[] = toks.map((tok, i) => {
+          const [label, seatsRaw] = tok.split(":");
+          return { label: (label ?? "").trim() || String(i + 1), seats: posInt(seatsRaw), ...gridPos(i, toks.length), shape: "square" as TableShape };
+        });
+        return { name, tables };
+      })
       .filter((z) => z.tables.length > 0);
     if (zones.length > 0) return zones;
   }
   const count = tableCount(s);
-  return [{ name: "Tables", tables: Array.from({ length: count }, (_, i) => ({ label: `T${i + 1}`, seats: null })) }];
+  const tables: TableDef[] = Array.from({ length: count }, (_, i) => ({ label: `T${i + 1}`, seats: null, ...gridPos(i, count), shape: "square" as TableShape }));
+  return [{ name: "Tables", tables }];
 }
 
 /** Receipt config shape consumed by lib/printer.ts → the native module. */
