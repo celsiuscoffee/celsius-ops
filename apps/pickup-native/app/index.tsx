@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { Platform, View, Text, Pressable, ScrollView, Image, RefreshControl } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
@@ -48,6 +48,50 @@ async function fetchOutlets(): Promise<Outlet[]> {
     .order("store_id", { ascending: true });
   if (error) throw error;
   return data ?? [];
+}
+
+/**
+ * Home's scroll topology differs by platform — and deliberately so.
+ *
+ * NATIVE (the iOS/Android app): the hero poster + outlet picker are
+ * FROZEN. They sit OUTSIDE the scroll view and never move; only the
+ * content beneath them scrolls. This is the long-standing native feel.
+ *
+ * WEB (the order.celsiuscoffee.com PWA): the whole page scrolls as one,
+ * hero included. A mobile browser's viewport is shorter (iOS Safari's
+ * URL bar eats ~120px) and a frozen hero left too little scrollable
+ * strip — the page felt un-scrollable (#152).
+ *
+ * #152 unified both onto the web behaviour, which leaked the scrolling
+ * hero onto native. To keep both behaviours from ONE markup tree without
+ * duplicating ~840 lines, the scroll boundary is expressed as two
+ * wrappers. Exactly one is a real ScrollView per platform; the other is
+ * a transparent passthrough:
+ *
+ *   web    → HomeScrollFrame = ScrollView (hero + body) | HomeBodyScroll = passthrough
+ *   native → HomeScrollFrame = passthrough             | HomeBodyScroll = ScrollView (body only)
+ *
+ * Both receive the same `scrollProps` (refreshControl + bottom padding);
+ * the passthrough ignores them. Defined at module scope so their identity
+ * is stable across renders (no remount / lost scroll position).
+ */
+type HomeScrollProps = {
+  scrollProps: ComponentProps<typeof ScrollView>;
+  children: ReactNode;
+};
+
+/** Outer frame — ScrollView on web (hero scrolls with the page), a
+ *  passthrough on native (hero stays frozen above the scroll). */
+function HomeScrollFrame({ scrollProps, children }: HomeScrollProps) {
+  if (Platform.OS === "web") return <ScrollView {...scrollProps}>{children}</ScrollView>;
+  return <>{children}</>;
+}
+
+/** Body scroller — a passthrough on web (the outer frame already scrolls),
+ *  a ScrollView on native (only the content below the frozen hero moves). */
+function HomeBodyScroll({ scrollProps, children }: HomeScrollProps) {
+  if (Platform.OS === "web") return <>{children}</>;
+  return <ScrollView {...scrollProps}>{children}</ScrollView>;
 }
 
 export default function Home() {
@@ -302,6 +346,23 @@ export default function Home() {
   // with the bottom-nav badge (owned-only there too).
   const voucherCount = walletVouchers.length;
 
+  // Shared scroll config handed to whichever wrapper owns the real
+  // ScrollView on this platform (see HomeScrollFrame / HomeBodyScroll).
+  // Native keeps the spacious pb-40; web trims to pb-32 (shorter
+  // browser viewport — the floating cart bar + bottom nav clear 128px).
+  const isWeb = Platform.OS === "web";
+  const scrollProps: ComponentProps<typeof ScrollView> = {
+    contentContainerClassName: isWeb ? "pb-32" : "pb-40",
+    refreshControl: (
+      <RefreshControl
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        tintColor="#A2492C"
+        colors={["#A2492C"]}
+      />
+    ),
+  };
+
   return (
     <View className="flex-1 bg-background">
       {/* One scrollable container for the whole home screen — hero,
@@ -312,17 +373,7 @@ export default function Home() {
           + cart icon is `position: absolute` and now scrolls with the
           page content (its containing block moved from this outer View
           to the ScrollView's content). */}
-      <ScrollView
-        contentContainerClassName={Platform.OS === "web" ? "pb-32" : "pb-40"}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#A2492C"
-            colors={["#A2492C"]}
-          />
-        }
-      >
+      <HomeScrollFrame scrollProps={scrollProps}>
       {/* Top bar — small wordmark + cart, sits over the poster top edge.
           Espresso ink against the cream backdrop on the carousel
           (posters generally have darker bottoms; the top is fine).
@@ -582,6 +633,10 @@ export default function Home() {
         <ChevronRight size={13} color="#8E8E93" />
       </Pressable>
 
+      {/* Everything below the frozen hero + outlet row. On native this
+          is the ONLY scrolling region (hero stays put); on web it's a
+          passthrough — the outer frame already scrolls. */}
+      <HomeBodyScroll scrollProps={scrollProps}>
         {/* Guest sign-in CTA — surfaces FIRST for logged-out users so the
             membership ask lands the moment the app opens. Espresso panel
             with terracotta gift icon mirrors brand promo styling, so it
@@ -1160,7 +1215,8 @@ export default function Home() {
           </View>
         )}
 
-      </ScrollView>
+      </HomeBodyScroll>
+      </HomeScrollFrame>
 
       {/* The "View cart" pill that used to render here moved to
           _layout.tsx as <GlobalCartPill /> so it can react to path
