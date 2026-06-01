@@ -184,18 +184,33 @@ export function useGrabPrinter(
         };
 
         // Kitchen docket first (routes to station printers / falls through
-        // to one combined KITCHEN docket if no stations are set). Then the
-        // customer receipt that the rider hands over with the food.
+        // to one combined KITCHEN docket if no stations are set). If THIS
+        // throws we fall to the outer catch with printed_at still NULL → it
+        // reprints next foreground once the head is fixed.
         await printKitchenDocket80mm(docketOrder, "Celsius Coffee GrabFood", outletId);
-        await printReceipt80mm(receiptOrder, "Celsius Coffee GrabFood", undefined, outletId);
 
-        // Atomic claim: only mark printed if still NULL. If another
-        // terminal beat us, the UPDATE matches zero rows.
+        // Claim the docket the instant it prints — BEFORE the receipt.
+        // Atomic: only mark printed if still NULL. Claiming HERE (not after
+        // the receipt) is the docket-reprint fix: a receipt-only fault used
+        // to skip this claim, so the next catch-up pass reprinted the docket
+        // the kitchen was already making.
         await supabase
           .from("pos_orders")
           .update({ kitchen_docket_printed_at: new Date().toISOString() })
           .eq("id", orderId)
           .is("kitchen_docket_printed_at", null);
+
+        // Customer receipt (rider hands it over with the food) is best-effort
+        // + isolated: a receipt fault must NOT bubble to the outer catch and
+        // trigger a docket reprint — the docket is already printed + claimed.
+        try {
+          await printReceipt80mm(receiptOrder, "Celsius Coffee GrabFood", undefined, outletId);
+        } catch (re) {
+          console.error("[grab-printer] receipt print failed (docket already printed):", re);
+          if (isPrinterFault(re) && shouldAlertPrinterFault()) {
+            Alert.alert("Printer needs attention", "The customer receipt couldn't print — the kitchen docket already printed. Check the paper roll, then reprint the receipt if needed.");
+          }
+        }
       } catch (e) {
         console.error("[grab-printer]", e);
         if (isPrinterFault(e) && shouldAlertPrinterFault()) {
