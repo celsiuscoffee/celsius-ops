@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, Pressable, FlatList, ActivityIndicator, Image, ScrollView, Modal,
-  TextInput, useWindowDimensions, Keyboard,
+  TextInput, useWindowDimensions, Keyboard, Alert,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Minus, LogOut, X, CheckCircle2,
   Settings as SettingsIcon, User, Gift, LayoutGrid, Search, Trash2, Tag,
@@ -22,7 +22,7 @@ import { useCart, cartSubtotal, type CartLine } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
 import { createSale, getNextQueueNumber } from "@/lib/checkout";
 import { useSettings, gridColumns, serviceChargeRate, defaultOrderType, receiptConfig, tableZones } from "@/lib/settings";
-import { useTablesPanel, type TableSlot } from "@/lib/use-tables-panel";
+import { useTablesPanel, type TableSlot, type TableOrderRef } from "@/lib/use-tables-panel";
 import { useOrdersPanel, type KdsOrder } from "@/lib/use-orders-panel";
 import { useShift, openShift, closeShift, shiftTotals, type Shift, type ShiftTotals } from "@/lib/shift";
 import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/printer";
@@ -91,8 +91,10 @@ type Panel = "none" | "customer" | "table";
 export default function Register() {
   const { staff, outletId, signOut } = usePos();
   const [activeCat, setActiveCat] = useState<string>("all");
-  const [showTables, setShowTables] = useState(false);
-  const [showOrders, setShowOrders] = useState(false);
+  // One "Orders" command center — a single panel with three tabs: Tables
+  // (dine-in floor) · QR self-orders · Pickup & Grab. `hub` is the active
+  // tab, or null when the panel is closed.
+  const [hub, setHub] = useState<"tables" | "qr" | "online" | null>(null);
   // Which order's status update is in flight (uid) — disables its buttons.
   const [bumpingUid, setBumpingUid] = useState<string | null>(null);
   // Shift open/close UI.
@@ -156,6 +158,18 @@ export default function Register() {
   // of being torn down each time the modal closes.
   const tableZonesInput = useMemo(() => tableZones(settings), [settings]);
   const tableSlots = useTablesPanel(outletId, tableZonesInput);
+  // QR self-orders (guests who scanned the table QR) flattened off the table
+  // map into a flat queue for the Orders hub's "QR self-orders" tab.
+  const qrOrders = useMemo<TableOrderRef[]>(() => {
+    const seen = new Set<string>();
+    const out: TableOrderRef[] = [];
+    for (const slot of tableSlots) {
+      for (const o of slot.orders) {
+        if (o.source === "qr" && !seen.has(o.id)) { seen.add(o.id); out.push(o); }
+      }
+    }
+    return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }, [tableSlots]);
   // Live Grab + Pickup order feed for the on-register KDS (Orders modal).
   // Mounted persistently so it keeps catching up + receiving Realtime even
   // while the modal is closed (drives the header badge count).
@@ -247,8 +261,38 @@ export default function Register() {
     }
   }, [settings]);
 
+  // Resolve the POS outlet → its pickup STORE slug (e.g. "shah-alam"). The
+  // per-outlet availability ("86") table is keyed by that slug — the same key
+  // the pickup app reads and the backoffice Availability matrix writes.
+  const queryClient = useQueryClient();
+  const [storeId, setStoreId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setStoreId(null);
+    if (!outletId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("outlet_settings").select("store_id")
+        .eq("loyalty_outlet_id", outletId).maybeSingle();
+      if (!cancelled) setStoreId((data as { store_id?: string } | null)?.store_id ?? null);
+    })();
+    return () => { cancelled = true; };
+  }, [outletId]);
+  // Live availability: a 86 toggle anywhere (this register, another register,
+  // or the backoffice matrix) refetches the catalog so the grid greys /
+  // un-greys instantly.
+  useEffect(() => {
+    if (!storeId) return;
+    const ch = supabase
+      .channel(`pos-availability-${storeId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "outlet_product_availability", filter: `outlet_id=eq.${storeId}` },
+        () => void queryClient.invalidateQueries({ queryKey: ["pos-products"] }))
+      .subscribe();
+    return () => { void supabase.removeChannel(ch); };
+  }, [storeId, queryClient]);
+
   const cats = useQuery({ queryKey: ["pos-categories"], queryFn: fetchCategories });
-  const prods = useQuery({ queryKey: ["pos-products"], queryFn: fetchProducts });
+  const prods = useQuery({ queryKey: ["pos-products", storeId], queryFn: () => fetchProducts(storeId) });
 
   // Pickup-order auto-printer — subscribes to the `orders` table and
   // fires a kitchen docket on the native SUNMI head when a paid pickup
@@ -411,9 +455,52 @@ export default function Register() {
   }, [effManualDiscount]);
 
   function onAdd(p: Product) {
+    if (p.available === false) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert(p.name, `Out of stock at ${outletShort(outletId)}. Long-press the item to mark it back in stock.`);
+      return;
+    }
     Haptics.selectionAsync();
     if (p.modifiers.length > 0) setModProduct(p);
     else add(p);
+  }
+
+  // Long-press a product tile → 86 it (or un-86 it) at THIS outlet. Writes the
+  // per-outlet override through the service-role API, which also live-pushes
+  // the status to GrabFood. Optimistic cache flip + the realtime subscription
+  // keep every register, the customer display, the pickup app and Grab in sync.
+  function promptAvailability(p: Product) {
+    Haptics.selectionAsync();
+    const makeOos = p.available !== false;
+    Alert.alert(
+      p.name,
+      makeOos
+        ? `Mark out of stock at ${outletShort(outletId)}? It greys out here and drops off pickup + GrabFood.`
+        : `Mark back in stock at ${outletShort(outletId)}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: makeOos ? "Mark out of stock" : "Mark in stock",
+          style: makeOos ? "destructive" : "default",
+          onPress: () => void setAvailability(p, !makeOos),
+        },
+      ],
+    );
+  }
+
+  async function setAvailability(p: Product, isAvailable: boolean) {
+    // Optimistic: flip it in the cached catalog so the grid updates instantly.
+    queryClient.setQueryData<Product[]>(["pos-products", storeId], (old) =>
+      (old ?? []).map((x) => (x.id === p.id ? { ...x, available: isAvailable } : x)),
+    );
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      await apiPost("/api/pos/availability", { outlet_id: outletId, product_id: p.id, is_available: isAvailable });
+    } catch (e) {
+      // Revert from the source of truth + surface the failure.
+      void queryClient.invalidateQueries({ queryKey: ["pos-products"] });
+      Alert.alert("Couldn't update availability", e instanceof Error ? e.message : String(e));
+    }
   }
 
   // ── Loyalty: lookup / rewards ──
@@ -646,35 +733,19 @@ export default function Register() {
               <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Shift</Text>
               <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: shift ? "#22C55E" : "#FBBF24" }} />
             </Pressable>
-            {/* Orders — live Grab + Pickup queue (on-register KDS). Badge
-                shows how many delivery/pickup orders are still in the
-                kitchen so staff don't miss an incoming order. */}
-            <Pressable onPress={() => { Haptics.selectionAsync(); setShowOrders((v) => !v); }} className={`flex-row items-center gap-2 px-3 py-2 rounded-xl border active:opacity-60 ${showOrders ? "border-primary bg-primary/10" : "border-cream/15"}`}>
-              <ChefHat size={16} color="rgba(245,243,240,0.7)" />
+            {/* Orders command center — one button opens a tabbed panel for
+                every order channel: dine-in Tables, QR self-orders, and
+                Pickup + Grab. Badge = live incoming orders (QR + delivery). */}
+            <Pressable onPress={() => { Haptics.selectionAsync(); setHub((v) => (v ? null : "tables")); }} className={`flex-row items-center gap-2 px-3 py-2 rounded-xl border active:opacity-60 ${hub ? "border-primary bg-primary/10" : "border-cream/15"}`}>
+              <ClipboardList size={16} color="rgba(245,243,240,0.7)" />
               <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Orders</Text>
               {(() => {
-                // Highlight orders not yet marked ready (need action).
-                const live = kdsOrders.filter((o) => o.status !== "ready").length;
-                if (kdsOrders.length === 0) return null;
+                const liveKds = kdsOrders.filter((o) => o.status !== "ready").length;
+                const incoming = kdsOrders.length + qrOrders.length;
+                if (incoming === 0) return null;
                 return (
-                  <View className="rounded-full px-1.5" style={{ backgroundColor: live > 0 ? "#22C55E" : "rgba(245,243,240,0.25)" }}>
-                    <Text className="text-espresso text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{kdsOrders.length}</Text>
-                  </View>
-                );
-              })()}
-            </Pressable>
-            {/* Tables — live dine-in occupancy grid driven by the orders
-                feed. Shows a count of active tables as a badge so staff
-                can tell at a glance how many are in use. */}
-            <Pressable onPress={() => { Haptics.selectionAsync(); setShowTables((v) => !v); }} className={`flex-row items-center gap-2 px-3 py-2 rounded-xl border active:opacity-60 ${showTables ? "border-primary bg-primary/10" : "border-cream/15"}`}>
-              <Grid3x3 size={16} color="rgba(245,243,240,0.7)" />
-              <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Tables</Text>
-              {(() => {
-                const active = tableSlots.filter((t) => t.orders.length > 0).length;
-                if (active === 0) return null;
-                return (
-                  <View className="rounded-full px-1.5" style={{ backgroundColor: "#FBBF24" }}>
-                    <Text className="text-espresso text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{active}</Text>
+                  <View className="rounded-full px-1.5" style={{ backgroundColor: liveKds > 0 ? "#22C55E" : "rgba(245,243,240,0.25)" }}>
+                    <Text className="text-espresso text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{incoming}</Text>
                   </View>
                 );
               })()}
@@ -734,7 +805,7 @@ export default function Register() {
             contentContainerStyle={{ padding: GRID_PAD, paddingBottom: 32 }}
             columnWrapperStyle={{ gap: GRID_GAP, justifyContent: "flex-start" }}
             ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
-            renderItem={({ item }) => <ProductTile product={item} width={tileW} onPress={() => onAdd(item)} />}
+            renderItem={({ item }) => <ProductTile product={item} width={tileW} onPress={() => onAdd(item)} onLongPress={() => promptAvailability(item)} />}
             ListEmptyComponent={<Text className="text-cream/30 text-center mt-10" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>No items here yet.</Text>}
             removeClippedSubviews
             initialNumToRender={16}
@@ -1005,29 +1076,57 @@ export default function Register() {
           cashier taps a FREE tile in dine_in mode, we pre-fill the cart
           flow's tableNumber and close so the next checkout points to
           that table. */}
-      <Modal visible={showTables} transparent animationType="fade" onRequestClose={() => setShowTables(false)}>
+      <Modal visible={hub !== null} transparent animationType="fade" onRequestClose={() => setHub(null)}>
         <View className="flex-1 bg-black/80 items-center justify-center px-6">
-          {/* Tap the dark backdrop (outside the card) to close — same dismiss
-              affordance as pressing the Tables button again. */}
-          <Pressable onPress={() => setShowTables(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-          <View className="rounded-3xl bg-surface border border-border p-6" style={{ width: "92%", maxWidth: 1100, maxHeight: "92%" }}>
+          {/* Tap the dark backdrop to close — same as pressing Orders again. */}
+          <Pressable onPress={() => setHub(null)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+          <View className="rounded-3xl bg-surface border border-border p-6" style={{ width: "92%", maxWidth: 1180, height: "84%" }}>
             <View className="flex-row items-center justify-between mb-4">
-              <View>
-                <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>Tables · {outletShort(outletId)}</Text>
+              <View className="flex-1">
+                <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>Orders · {outletShort(outletId)}</Text>
                 <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                  {tableSlots.filter((t) => t.orders.length > 0).length} of {tableSlots.length} tables have orders · live
+                  {hub === "tables"
+                    ? `${tableSlots.filter((t) => t.orders.length > 0).length} of ${tableSlots.length} tables have orders · live`
+                    : hub === "qr"
+                    ? (qrOrders.length === 0 ? "No live QR table orders" : `${qrOrders.length} QR table order${qrOrders.length === 1 ? "" : "s"} · self-ordered · live`)
+                    : (kdsOrders.length === 0 ? "No live delivery or pickup orders" : `${kdsOrders.length} in the kitchen · Grab + Pickup · live`)}
                 </Text>
               </View>
               <View className="flex-row items-center gap-4">
-                <TableLegendDot color="#3B82F6" label="QR table" />
-                <TableLegendDot color="#FBBF24" label="Register" />
-                <Pressable onPress={() => setShowTables(false)} className="active:opacity-60 ml-4">
+                {hub === "tables" && (<><TableLegendDot color="#3B82F6" label="QR table" /><TableLegendDot color="#FBBF24" label="Register" /></>)}
+                {hub === "online" && (<>
+                  <View className="flex-row items-center gap-1.5"><Bike size={14} color="#22C55E" /><Text className="text-cream/55 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Grab</Text></View>
+                  <View className="flex-row items-center gap-1.5"><ShoppingBag size={14} color="#3B82F6" /><Text className="text-cream/55 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Pickup</Text></View>
+                </>)}
+                <Pressable onPress={() => setHub(null)} className="active:opacity-60 ml-2">
                   <X size={22} color="rgba(245,243,240,0.7)" />
                 </Pressable>
               </View>
             </View>
-            <ScrollView style={{ maxHeight: 620 }} showsVerticalScrollIndicator={false}>
+            {/* Tab switcher — one command center for every order channel. */}
+            <View className="flex-row gap-2 mb-4">
               {(() => {
+                const tabs: { key: "tables" | "qr" | "online"; label: string; Icon: typeof Grid3x3; count: number }[] = [
+                  { key: "tables", label: "Tables", Icon: Grid3x3, count: tableSlots.filter((t) => t.orders.length > 0).length },
+                  { key: "qr", label: "QR self-orders", Icon: QrCode, count: qrOrders.length },
+                  { key: "online", label: "Pickup & Grab", Icon: Bike, count: kdsOrders.length },
+                ];
+                return tabs.map(({ key, label, Icon, count }) => (
+                  <Pressable key={key} onPress={() => { Haptics.selectionAsync(); setHub(key); }}
+                    className={`flex-row items-center gap-2 px-4 py-2.5 rounded-xl border active:opacity-70 ${hub === key ? "border-primary bg-primary/15" : "border-cream/12"}`}>
+                    <Icon size={15} color={hub === key ? "#C2452D" : "rgba(245,243,240,0.6)"} />
+                    <Text className={hub === key ? "text-cream text-xs" : "text-cream/60 text-xs"} style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{label}</Text>
+                    {count > 0 && (
+                      <View className="rounded-full px-1.5" style={{ backgroundColor: hub === key ? "#C2452D" : "rgba(245,243,240,0.18)" }}>
+                        <Text className="text-cream text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{count}</Text>
+                      </View>
+                    )}
+                  </Pressable>
+                ));
+              })()}
+            </View>
+            <ScrollView style={{ maxHeight: 600 }} showsVerticalScrollIndicator={false}>
+              {hub === "tables" && (() => {
                 // Group the flat slots back into their zones for display.
                 const groups: { name: string; slots: TableSlot[] }[] = [];
                 for (const slot of tableSlots) {
@@ -1063,7 +1162,7 @@ export default function Register() {
                               // to it (pre-fill table_number + close).
                               if (orderType === "dine_in") {
                                 setTableNumber(slot.label.replace(/^T/, ""));
-                                setShowTables(false);
+                                setHub(null);
                               }
                             }}
                             className="active:opacity-80 items-center justify-center"
@@ -1093,62 +1192,62 @@ export default function Register() {
                   </View>
                 ));
               })()}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+              {/* ── QR self-orders tab — guests who scanned the table QR. ── */}
+              {hub === "qr" && (
+                <View className="flex-row flex-wrap" style={{ gap: 12 }}>
+                  {qrOrders.map((o) => (
+                    <View key={o.id} className="rounded-2xl border border-border p-4" style={{ width: 264, backgroundColor: "rgba(245,243,240,0.03)" }}>
+                      <View className="flex-row items-center justify-between mb-2">
+                        <View className="flex-row items-center gap-2">
+                          <QrCode size={15} color="#3B82F6" />
+                          <Text className="text-cream text-sm" style={{ fontFamily: "Peachi-Bold" }}>{o.orderNumber}</Text>
+                        </View>
+                        <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: "rgba(245,243,240,0.08)" }}>
+                          <Text className="text-cream/70 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{o.status}</Text>
+                        </View>
+                      </View>
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-cream/60 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Table {o.tableKey}</Text>
+                        <Text className="text-cream text-sm" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(o.total)}</Text>
+                      </View>
+                      <Text className="text-cream/40 text-[11px] mt-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                        {new Date(o.createdAt).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                      </Text>
+                    </View>
+                  ))}
+                  {qrOrders.length === 0 && (
+                    <View className="py-16 items-center w-full">
+                      <QrCode size={40} color="rgba(245,243,240,0.18)" />
+                      <Text className="text-cream/40 text-sm mt-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                        Orders guests place by scanning the table QR will appear here.
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
 
-      {/* ── Orders panel — on-register KDS for Grab + Pickup ───────────
-          A live queue of incoming delivery/pickup orders the cashier can
-          bump preparing → ready → collected, mirroring the kitchen
-          display. Status writes go through the service-role API (RLS
-          blocks anon updates on already-printed pickup orders). */}
-      <Modal visible={showOrders} transparent animationType="fade" onRequestClose={() => setShowOrders(false)}>
-        <View className="flex-1 bg-black/80 items-center justify-center px-6">
-          {/* Tap the dark backdrop (outside the card) to close — same dismiss
-              affordance as pressing the Orders button again. */}
-          <Pressable onPress={() => setShowOrders(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-          <View className="rounded-3xl bg-surface border border-border p-6" style={{ width: "92%", maxWidth: 1180, maxHeight: "92%" }}>
-            <View className="flex-row items-center justify-between mb-4">
-              <View>
-                <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>Orders · {outletShort(outletId)}</Text>
-                <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                  {kdsOrders.length === 0 ? "No live delivery or pickup orders" : `${kdsOrders.length} in the kitchen · Grab + Pickup · live`}
-                </Text>
-              </View>
-              <View className="flex-row items-center gap-4">
-                <View className="flex-row items-center gap-1.5">
-                  <Bike size={14} color="#22C55E" />
-                  <Text className="text-cream/55 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Grab</Text>
+              {/* ── Pickup & Grab tab — on-register KDS. Status writes go through
+                  the service-role API (RLS blocks anon updates on printed rows). */}
+              {hub === "online" && (
+                <View className="flex-row flex-wrap" style={{ gap: 12 }}>
+                  {kdsOrders.map((order) => (
+                    <KdsCard
+                      key={order.uid}
+                      order={order}
+                      busy={bumpingUid === order.uid}
+                      onAdvance={(status) => advanceOrderStatus(order, status)}
+                    />
+                  ))}
+                  {kdsOrders.length === 0 && (
+                    <View className="py-16 items-center w-full">
+                      <ChefHat size={40} color="rgba(245,243,240,0.18)" />
+                      <Text className="text-cream/40 text-sm mt-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                        Grab and pickup orders will appear here as they come in.
+                      </Text>
+                    </View>
+                  )}
                 </View>
-                <View className="flex-row items-center gap-1.5">
-                  <ShoppingBag size={14} color="#3B82F6" />
-                  <Text className="text-cream/55 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Pickup</Text>
-                </View>
-                <Pressable onPress={() => setShowOrders(false)} className="active:opacity-60 ml-2">
-                  <X size={22} color="rgba(245,243,240,0.7)" />
-                </Pressable>
-              </View>
-            </View>
-            <ScrollView style={{ maxHeight: 640 }} showsVerticalScrollIndicator={false}>
-              <View className="flex-row flex-wrap" style={{ gap: 12 }}>
-                {kdsOrders.map((order) => (
-                  <KdsCard
-                    key={order.uid}
-                    order={order}
-                    busy={bumpingUid === order.uid}
-                    onAdvance={(status) => advanceOrderStatus(order, status)}
-                  />
-                ))}
-                {kdsOrders.length === 0 && (
-                  <View className="py-16 items-center w-full">
-                    <ChefHat size={40} color="rgba(245,243,240,0.18)" />
-                    <Text className="text-cream/40 text-sm mt-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                      Grab and pickup orders will appear here as they come in.
-                    </Text>
-                  </View>
-                )}
-              </View>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -2060,15 +2159,23 @@ function ColorTab({ label, color, width, active, onPress }: { label: string; col
   );
 }
 
-function ProductTile({ product, width, onPress }: { product: Product; width: number; onPress: () => void }) {
+function ProductTile({ product, width, onPress, onLongPress }: { product: Product; width: number; onPress: () => void; onLongPress?: () => void }) {
+  const oos = product.available === false;
   return (
-    <Pressable onPress={onPress} className="rounded-2xl overflow-hidden border border-border active:opacity-70" style={{ width, backgroundColor: "rgba(245,243,240,0.04)" }}>
+    <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={350} className="rounded-2xl overflow-hidden border border-border active:opacity-70" style={{ width, backgroundColor: "rgba(245,243,240,0.04)" }}>
       <View className="aspect-square w-full bg-cream/5">
-        {product.image_url ? <Image source={{ uri: product.image_url }} className="w-full h-full" resizeMode="cover" /> : null}
+        {product.image_url ? <Image source={{ uri: product.image_url }} className="w-full h-full" resizeMode="cover" style={oos ? { opacity: 0.35 } : undefined} /> : null}
+        {oos && (
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(22,8,0,0.5)" }}>
+            <View style={{ backgroundColor: "#E5484D", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: "#fff", letterSpacing: 0.4 }}>OUT OF STOCK</Text>
+            </View>
+          </View>
+        )}
       </View>
       <View className="px-2 py-2">
-        <Text className="text-cream text-[12px]" style={{ fontFamily: "Peachi-Medium" }} numberOfLines={2}>{product.name}</Text>
-        <Text className="text-amber-400 text-[12px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(product.price_sen)}</Text>
+        <Text className="text-cream text-[12px]" style={{ fontFamily: "Peachi-Medium", opacity: oos ? 0.5 : 1 }} numberOfLines={2}>{product.name}</Text>
+        <Text className="text-amber-400 text-[12px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_700Bold", opacity: oos ? 0.5 : 1 }}>{rm(product.price_sen)}</Text>
       </View>
     </Pressable>
   );

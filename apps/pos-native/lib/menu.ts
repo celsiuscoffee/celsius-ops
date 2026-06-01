@@ -38,6 +38,10 @@ export type Product = {
   tax_rate: number;
   tax_inclusive: boolean;
   modifiers: ModifierGroup[];
+  /** Per-outlet availability: false = "86'd" at THIS outlet (grey out, can't
+   *  add). Globally-discontinued items (products.is_available=false) aren't
+   *  loaded at all, so this only ever reflects the per-outlet override. */
+  available: boolean;
 };
 
 const toSen = (rm: number | string | null | undefined) =>
@@ -94,18 +98,36 @@ export async function fetchCategories(): Promise<Category[]> {
   return (data ?? []) as Category[];
 }
 
-export async function fetchProducts(): Promise<Product[]> {
-  const { data, error } = await supabase
-    .from("products")
-    .select(
-      "id, name, category, price, image_url, is_available, kitchen_station, tax_rate, tax_inclusive, modifiers, position",
-    )
-    .eq("brand_id", BRAND_ID)
-    .eq("is_available", true)
-    .order("category", { ascending: true })
-    .order("position", { ascending: true })
-    .order("name", { ascending: true });
+/** Load the register catalog. Globally-discontinued items
+ *  (products.is_available=false) are excluded entirely. Per-outlet "86"
+ *  overrides — `outlet_product_availability` rows for the outlet's STORE slug
+ *  (e.g. "shah-alam") — are overlaid as `available=false` so the register can
+ *  GREY them out instead of hiding, matching StoreHub + the pickup app + Grab.
+ *  Pass the resolved store_id; omit it and everything reads as available. */
+export async function fetchProducts(storeId?: string | null): Promise<Product[]> {
+  const [{ data, error }, oosRes] = await Promise.all([
+    supabase
+      .from("products")
+      .select(
+        "id, name, category, price, image_url, is_available, kitchen_station, tax_rate, tax_inclusive, modifiers, position",
+      )
+      .eq("brand_id", BRAND_ID)
+      .eq("is_available", true)
+      .order("category", { ascending: true })
+      .order("position", { ascending: true })
+      .order("name", { ascending: true }),
+    storeId
+      ? supabase
+          .from("outlet_product_availability")
+          .select("product_id")
+          .eq("outlet_id", storeId)
+          .eq("is_available", false)
+      : Promise.resolve({ data: [] as { product_id: string }[] }),
+  ]);
   if (error) throw error;
+  const oos = new Set(
+    ((oosRes as { data: { product_id: string }[] | null }).data ?? []).map((r) => r.product_id),
+  );
   return (data ?? []).map((p: any) => ({
     id: p.id,
     name: p.name,
@@ -116,6 +138,7 @@ export async function fetchProducts(): Promise<Product[]> {
     tax_rate: Number(p.tax_rate ?? 0),
     tax_inclusive: p.tax_inclusive ?? true,
     modifiers: parseModifiers(p.modifiers),
+    available: !oos.has(p.id),
   }));
 }
 
