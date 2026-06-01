@@ -26,6 +26,25 @@ function twoColumn(left: string, right: string): string {
   const maxLeft = CHARS_PER_LINE - right.length - 1;
   return padRight(left, maxLeft) + " " + right;
 }
+/** Greedy word-wrap to a max width; hard-breaks any single token longer than
+ *  the width so a long street name can never overflow the receipt line. */
+function wrapText(text: string, width: number): string[] {
+  const out: string[] = [];
+  let cur = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    let w = word;
+    while (w.length > width) {
+      if (cur) { out.push(cur); cur = ""; }
+      out.push(w.slice(0, width));
+      w = w.slice(width);
+    }
+    if (!cur) cur = w;
+    else if (cur.length + 1 + w.length <= width) cur += ` ${w}`;
+    else { out.push(cur); cur = w; }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
 
 export interface OutletInfo {
   name: string;
@@ -88,17 +107,11 @@ function formatOutletHeader(outlet: OutletInfo): string[] {
   if (outlet.city) addressParts.push(outlet.city);
   if (outlet.state) addressParts.push(outlet.state);
   if (addressParts.length > 0) {
-    const fullAddr = addressParts.join(", ");
-    if (fullAddr.length > CHARS_PER_LINE) {
-      const mid = fullAddr.lastIndexOf(",", CHARS_PER_LINE - 1);
-      if (mid > 0) {
-        lines.push(centerText(fullAddr.substring(0, mid + 1).trim()));
-        lines.push(centerText(fullAddr.substring(mid + 1).trim()));
-      } else {
-        lines.push(centerText(fullAddr));
-      }
-    } else {
-      lines.push(centerText(fullAddr));
+    // Word-wrap so the address never overflows the line (break on spaces;
+    // hard-break an over-long token). The old code split at a single comma and
+    // let any leftover long line run off the edge of the paper.
+    for (const ln of wrapText(addressParts.join(", "), CHARS_PER_LINE)) {
+      lines.push(centerText(ln));
     }
   }
   if (outlet.phone) lines.push(centerText(`Tel: ${outlet.phone}`));
