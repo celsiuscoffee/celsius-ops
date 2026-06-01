@@ -158,9 +158,17 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Resolve outlet (grab_merchant_id primary, storehub_store_id fallback).
+    // Resolve outlet: (1) Grab store ID → grab_merchant_id, else fall back to
+    // the Partner store ID → storehub_store_id OR our outlet id itself. The deck
+    // convention is "Partner store ID = POS outlet ID", so at go-live we can set
+    // each store's Partner store ID to our outlet id (e.g. "outlet-sa") and it
+    // resolves without needing grab_merchant_id pre-populated.
+    const pmid = (payload.partnerMerchantID || "").trim();
+    const orParts = [`grab_merchant_id.eq.${merchantID}`];
+    if (pmid) orParts.push(`storehub_store_id.eq.${pmid}`, `id.eq.${pmid}`);
     const { data: outlet } = await supabase
       .from("outlets").select("id")
-      .or(`grab_merchant_id.eq.${merchantID},storehub_store_id.eq.${payload.partnerMerchantID || ""}`)
+      .or(orParts.join(","))
       .maybeSingle();
     const outletId = outlet?.id || process.env.DEFAULT_OUTLET_ID || "";
     if (!outletId) {
