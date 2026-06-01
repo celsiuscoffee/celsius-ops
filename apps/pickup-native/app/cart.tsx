@@ -1,9 +1,9 @@
-import { View, Text, Pressable, ScrollView, Image } from "react-native";
+import { Platform, View, Text, Pressable, ScrollView, Image } from "react-native";
 import { Stack, router } from "expo-router";
 import { Trash2, Gift, X, Coffee, ChevronRight } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "@/lib/haptics";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useApp, cartTotal } from "../lib/store";
 import { formatPrice } from "../lib/api";
@@ -18,6 +18,44 @@ import { getSetting } from "../lib/settings";
 import { supabase, type Outlet } from "../lib/supabase";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { ProductImage } from "../components/ProductImage";
+
+/**
+ * Cart scroll topology — platform-split, same rationale as Home's hero.
+ *
+ * NATIVE (the app): the header and the summary / checkout footer are
+ * FIXED; only the list of items scrolls between them. Long-standing
+ * native cart feel.
+ *
+ * WEB (the order.celsiuscoffee.com PWA): the whole screen scrolls as one
+ * (#155/#156) — a mobile browser's short viewport plus the pinned footer
+ * intercepting touches made the cart feel un-scrollable.
+ *
+ * #155/#156 unified both onto the web behaviour, which leaked the
+ * scrolling header + un-pinned footer onto native. Expressed as two
+ * wrappers so one markup tree serves both; exactly one is a real
+ * ScrollView per platform, the other a transparent passthrough:
+ *
+ *   web    → CartScrollFrame = ScrollView (header+items+summary) | CartItemsScroll = passthrough
+ *   native → CartScrollFrame = passthrough                        | CartItemsScroll = ScrollView (flex-1, items only)
+ *
+ * On native the flex-1 items ScrollView naturally fills the space between
+ * the frozen header and the footer (column layout) — no absolute
+ * positioning or height measurement needed. Module-scoped so their
+ * identity is stable across renders (no remount / lost scroll position).
+ */
+function CartScrollFrame({ children }: { children: ReactNode }) {
+  if (Platform.OS === "web") return <ScrollView>{children}</ScrollView>;
+  return <>{children}</>;
+}
+
+function CartItemsScroll({ children }: { children: ReactNode }) {
+  if (Platform.OS === "web") return <>{children}</>;
+  return (
+    <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      {children}
+    </ScrollView>
+  );
+}
 
 export default function Cart() {
   const insets = useSafeAreaInsets();
@@ -245,8 +283,9 @@ export default function Cart() {
         </ScrollView>
       ) : (
         <>
-          <ScrollView>
+          <CartScrollFrame>
             <EspressoHeader title="Your cart" subtitle={outletName ? `Pickup from ${outletName}` : undefined} showBack showCart={false} />
+            <CartItemsScroll>
             <View className="px-4 py-4" style={{ gap: 12 }}>
             {cart.map((item) => (
               // Whole row tappable → opens the product page in edit
@@ -382,15 +421,16 @@ export default function Cart() {
               </Pressable>
             ))}
             </View>
+            </CartItemsScroll>
 
-          {/* Summary + slide-to-confirm — flows at the end of the
-              ScrollView instead of pinning to the viewport. Pinning
-              made the panel sit on top of the scroll surface and
-              intercept touch gestures across the bottom half of the
-              screen, which made the cart feel un-scrollable on mobile
-              browsers. Letting it scroll with the rest of the content
-              matches the home flow (#152) and guarantees the user's
-              swipe lands on the scroll surface, not on dead buttons. */}
+          {/* Summary + checkout footer. NATIVE: sits OUTSIDE the items
+              ScrollView (see CartItemsScroll) so it's pinned at the
+              bottom — the column layout reserves its height and the
+              items scroll above it. WEB: rendered inside the single
+              CartScrollFrame ScrollView so it flows at the end and the
+              whole screen scrolls as one (#156 — a pinned footer
+              intercepted touches and made the mobile-browser cart feel
+              un-scrollable). */}
           <View
             className="px-4 pt-3 border-t border-border"
             style={{ paddingBottom: insets.bottom + 12 }}
@@ -602,7 +642,7 @@ export default function Cart() {
               </Text>
             </Pressable>
           </View>
-          </ScrollView>
+          </CartScrollFrame>
         </>
       )}
     </View>
