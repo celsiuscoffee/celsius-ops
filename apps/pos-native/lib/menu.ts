@@ -150,7 +150,22 @@ export type DisplayBite = { id: string; name: string; category: string; price_se
 
 /** Available bite/snack products (with images, anon read) to upsell
  *  alongside a drink order. Used by the customer-display hero. */
-export async function fetchBites(limit = 8): Promise<DisplayBite[]> {
+export async function fetchBites(limit = 8, outletId?: string | null): Promise<DisplayBite[]> {
+  // Per-outlet 86 overlay: resolve outlet → store slug and drop any bite that's
+  // out of stock at this outlet, so the customer-display never upsells a 86'd
+  // item. (Fetch a few extra, then slice, so stock-outs don't shrink the row.)
+  let oos = new Set<string>();
+  if (outletId) {
+    const { data: os } = await supabase
+      .from("outlet_settings").select("store_id").eq("loyalty_outlet_id", outletId).maybeSingle();
+    const storeId = (os as { store_id?: string } | null)?.store_id;
+    if (storeId) {
+      const { data: o } = await supabase
+        .from("outlet_product_availability").select("product_id")
+        .eq("outlet_id", storeId).eq("is_available", false);
+      oos = new Set((o ?? []).map((r: { product_id: string }) => r.product_id));
+    }
+  }
   const { data, error } = await supabase
     .from("products")
     .select("id, name, category, price, image_url, position")
@@ -159,13 +174,16 @@ export async function fetchBites(limit = 8): Promise<DisplayBite[]> {
     .in("category", BITE_CATEGORIES)
     .not("image_url", "is", null)
     .order("position", { ascending: true })
-    .limit(limit);
+    .limit(limit + 6);
   if (error) return [];
-  return (data ?? []).map((p: any) => ({
-    id: p.id,
-    name: p.name,
-    category: p.category ?? "",
-    price_sen: toSen(p.price),
-    image_url: p.image_url ?? null,
-  }));
+  return (data ?? [])
+    .filter((p: any) => !oos.has(p.id))
+    .slice(0, limit)
+    .map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      category: p.category ?? "",
+      price_sen: toSen(p.price),
+      image_url: p.image_url ?? null,
+    }));
 }

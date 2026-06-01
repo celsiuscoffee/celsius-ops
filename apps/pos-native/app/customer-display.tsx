@@ -95,7 +95,7 @@ export default function CustomerDisplay() {
   const setRedeemRequest = useDisplay((s) => s.setRedeemRequest);
 
   useEffect(() => { fetchPosters().then(setPosters).catch(() => {}); }, []);
-  useEffect(() => { fetchBites(9).then(setHeroBites).catch(() => {}); }, []);
+  useEffect(() => { fetchBites(9, outletId).then(setHeroBites).catch(() => {}); }, [outletId]);
   useEffect(() => { fetchActivePromos().then(setGuestPromos).catch(() => {}); }, []);
   // Close the pop-up once a member is identified.
   useEffect(() => { if (member) setSignInOpen(false); }, [member]);

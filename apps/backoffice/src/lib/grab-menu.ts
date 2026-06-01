@@ -151,6 +151,10 @@ export interface GrabMenuOptions {
   categoryNames?: Record<string, string>;
   /** Per-outlet open hours (from pos_branch_settings). Defaults to 08:00–22:00. */
   serviceHours?: ReturnType<typeof buildGrabServiceHours>;
+  /** Product ids "86'd" (out of stock) at THIS merchant's outlet — from
+   *  outlet_product_availability. Forced to UNAVAILABLE in the payload so a full
+   *  menu re-sync honours per-outlet stock-outs, not just the global flag. */
+  unavailableProductIds?: Set<string>;
 }
 
 /** Read menu options (partner store ID + currency override) from env. */
@@ -181,7 +185,12 @@ export function buildGrabMenuPayload(
       name: opts.categoryNames?.[slug] || slug || "Uncategorized",
       sequence: cIdx + 1,
       availableStatus: "AVAILABLE" as const,
-      items: prods.map((product, iIdx) => convertProductToGrabItem(product, iIdx + 1)),
+      items: prods.map((product, iIdx) => {
+        const item = convertProductToGrabItem(product, iIdx + 1);
+        // Per-outlet 86 overrides the global flag → out of stock on Grab too.
+        if (opts.unavailableProductIds?.has(product.id)) item.availableStatus = "UNAVAILABLE";
+        return item;
+      }),
     }),
   );
   const section: GrabMenuSection = {

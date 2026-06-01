@@ -54,6 +54,10 @@ export async function GET(request: NextRequest) {
   // Per-outlet open hours: merchantID → outlets.grab_merchant_id → outlet id →
   // pos_branch_settings.grab_open_time/close/24h. Falls back to 08:00–22:00.
   let serviceHours: ReturnType<typeof buildGrabServiceHours> | undefined;
+  // Product ids 86'd at this merchant's outlet (per-outlet stock-outs) → forced
+  // UNAVAILABLE in the payload so a full re-sync respects the same overrides
+  // the live availability push sends.
+  let unavailableIds: Set<string> | undefined;
   if (merchantId) {
     const { data: outlet } = await supabase
       .from("outlets").select("id").eq("grab_merchant_id", merchantId).maybeSingle();
@@ -69,6 +73,16 @@ export async function GET(request: NextRequest) {
         });
         console.log(`[grab:get-menu] hours outlet=${outlet.id} 24h=${bs.grab_open_24h} ${bs.grab_open_time}-${bs.grab_close_time}`);
       }
+      // Per-outlet 86 list (outlet_product_availability keyed by store slug).
+      const { data: os } = await supabase
+        .from("outlet_settings").select("store_id").eq("loyalty_outlet_id", outlet.id).maybeSingle();
+      const storeId = (os as { store_id?: string } | null)?.store_id;
+      if (storeId) {
+        const { data: oos } = await supabase
+          .from("outlet_product_availability").select("product_id")
+          .eq("outlet_id", storeId).eq("is_available", false);
+        unavailableIds = new Set((oos ?? []).map((r: { product_id: string }) => r.product_id));
+      }
     }
   }
 
@@ -83,6 +97,7 @@ export async function GET(request: NextRequest) {
     ...grabMenuOptionsFromEnv(),
     categoryNames,
     serviceHours,
+    unavailableProductIds: unavailableIds,
   });
   const catCount = menu.sections.reduce((n, s) => n + s.categories.length, 0);
   console.log(
