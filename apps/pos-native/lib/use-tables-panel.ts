@@ -1,173 +1,152 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
 
 /**
- * Live dine-in table state for the POS-native Tables panel.
+ * Live table → orders MAPPING for the POS-native Tables panel.
  *
- * Subscribes to `orders` for the outlet (via outlet_settings → store_id)
- * and groups any active dine-in orders by table_number. Each grouping
- * returns the current order id, status, total, item count, and the time
- * it was placed — enough to colour a tile and let staff drill in.
- *
- * Buckets:
- *   - pending  → status='pending' (Maybank QR awaiting payment, etc.)
- *   - active   → status='paid' / 'sent_to_kitchen' / 'preparing'
- *   - ready    → status='ready' (out at the counter / on the way)
- *   - free     → table has no active dine-in order
- *
- * `completed`, `cancelled`, `failed`, `refunded` are ignored so a
- * cleared table goes back to free immediately.
+ * This is intentionally NOT an occupancy state machine. Register dine-in
+ * orders (pos_orders) are marked completed the instant they're rung up, so a
+ * free/occupied/ready "flow" is meaningless for them — and the old panel only
+ * read the QR `orders` table, so every register dine-in order was invisible and
+ * tables looked permanently free. The cashier just wants to see WHICH ORDERS
+ * CAME FROM WHICH TABLE, so this hook is a pure mapping over BOTH sources:
+ *   - orders     → QR-table self-order (keyed by store_id)
+ *   - pos_orders → register dine-in    (keyed by outlet_id)
+ * grouped by a normalised table number (bare "5" or "T5" both map to "5").
  */
 
-const ACTIVE_STATUSES = new Set(["paid", "sent_to_kitchen", "preparing"]);
-const PENDING_STATUSES = new Set(["pending"]);
-const READY_STATUSES = new Set(["ready"]);
-const LIVE_STATUSES = new Set<string>([
-  ...ACTIVE_STATUSES,
-  ...PENDING_STATUSES,
-  ...READY_STATUSES,
-]);
+const WINDOW_MS = 6 * 60 * 60 * 1000; // map the last 6h of table activity
+// Drop dead orders so a cancelled/failed attempt doesn't linger on a table.
+const DEAD = new Set(["cancelled", "failed", "refunded", "voided"]);
 
-export type TableState = "free" | "pending" | "active" | "ready";
-
-export type TableSlot = {
-  label: string;            // "T1", "T2", ...
-  state: TableState;
-  orderId: string | null;
-  orderNumber: string | null;
-  total: number;            // sen
-  itemCount: number;        // best-effort; 0 until items load
-  createdAt: string | null;
+export type TableOrderRef = {
+  id: string;
+  orderNumber: string;
+  source: "qr" | "pos"; // QR-table self-order vs register dine-in
+  total: number;        // sen
+  status: string;
+  createdAt: string;
+  tableKey: string;     // normalised, e.g. "5"
 };
 
-type LiveOrderRow = {
+export type TableSlot = {
+  label: string;            // "T5"
+  orders: TableOrderRef[];  // most recent first
+};
+
+/** "T5" / "t5" / " 5 " → "5"; "" / null → null (un-mappable, skipped). */
+function tableKey(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const k = String(raw).trim().replace(/^[Tt]/, "").trim();
+  return k.length ? k : null;
+}
+
+type Row = {
   id: string;
   order_number: string;
-  store_id: string;
   status: string;
-  order_type: string | null;
   table_number: string | null;
   total: number | null;
   created_at: string;
 };
 
-function bucketFor(status: string): TableState {
-  if (PENDING_STATUSES.has(status)) return "pending";
-  if (READY_STATUSES.has(status)) return "ready";
-  if (ACTIVE_STATUSES.has(status)) return "active";
-  return "free";
+function toRefs(rows: Row[] | null, source: "qr" | "pos"): TableOrderRef[] {
+  const out: TableOrderRef[] = [];
+  for (const r of rows ?? []) {
+    if (DEAD.has(r.status)) continue;
+    const k = tableKey(r.table_number);
+    if (!k) continue;
+    out.push({
+      id: r.id,
+      orderNumber: r.order_number,
+      source,
+      total: r.total ?? 0,
+      status: r.status,
+      createdAt: r.created_at,
+      tableKey: k,
+    });
+  }
+  return out;
 }
 
-/** Live table grid driven by the orders feed. Pass the cashier's POS
- *  outletId (e.g. "outlet-sa") + how many tables the outlet has
- *  (from settings.table_count). */
+/** Pass the cashier's POS outletId ("outlet-sa") + how many tables the outlet
+ *  has (settings.table_count). Returns T1..Tn (plus any extra table that has
+ *  orders), each with the live list of orders mapped to it. */
 export function useTablesPanel(outletId: string | null | undefined, count: number) {
   const [storeId, setStoreId] = useState<string | null>(null);
-  // Map<table_number, LiveOrderRow> — only one active order per table
-  // at a time (the most recent live one).
-  const [activeByTable, setActiveByTable] = useState<Map<string, LiveOrderRow>>(new Map());
+  const [qr, setQr] = useState<TableOrderRef[]>([]);
+  const [pos, setPos] = useState<TableOrderRef[]>([]);
+  const outletRef = useRef(outletId);
+  useEffect(() => { outletRef.current = outletId; }, [outletId]);
 
-  // 1. Resolve POS outlet → pickup store_id (same mapping the pickup
-  //    printer hook uses).
+  // 1. Resolve POS outlet → pickup store_id (for the QR `orders` table).
   useEffect(() => {
     let cancelled = false;
     setStoreId(null);
     if (!outletId) return;
     (async () => {
       const { data } = await supabase
-        .from("outlet_settings")
-        .select("store_id")
-        .eq("loyalty_outlet_id", outletId)
-        .maybeSingle();
-      const sid = (data as { store_id?: string } | null)?.store_id ?? null;
-      if (!cancelled) setStoreId(sid);
+        .from("outlet_settings").select("store_id")
+        .eq("loyalty_outlet_id", outletId).maybeSingle();
+      if (!cancelled) setStoreId((data as { store_id?: string } | null)?.store_id ?? null);
     })();
     return () => { cancelled = true; };
   }, [outletId]);
 
-  // 2. Initial catch-up + Realtime subscribe for this store_id.
-  useEffect(() => {
-    if (!storeId) return;
-    let cancelled = false;
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-
-    function upsertRow(row: LiveOrderRow | null) {
-      if (!row) return;
-      if (row.order_type !== "dine_in") return;
-      if (!row.table_number) return;
-      setActiveByTable((prev) => {
-        const next = new Map(prev);
-        if (LIVE_STATUSES.has(row.status)) {
-          next.set(row.table_number!, row);
-        } else {
-          // Status flipped to completed/cancelled — clear the table.
-          const cur = next.get(row.table_number!);
-          if (cur?.id === row.id) next.delete(row.table_number!);
-        }
-        return next;
-      });
-    }
-
-    (async () => {
-      // Catch-up: any live dine-in order for this store in the last 24h.
+  // 2. Fetch both sources (last 6h, dine-in).
+  const reload = useCallback(async () => {
+    const oid = outletRef.current;
+    const since = new Date(Date.now() - WINDOW_MS).toISOString();
+    if (storeId) {
       const { data } = await supabase
         .from("orders")
-        .select("id, order_number, store_id, status, order_type, table_number, total, created_at")
-        .eq("store_id", storeId)
-        .eq("order_type", "dine_in")
-        .in("status", Array.from(LIVE_STATUSES))
-        .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-        .order("created_at", { ascending: false });
-      if (cancelled) return;
-      const seen = new Map<string, LiveOrderRow>();
-      for (const r of (data ?? []) as LiveOrderRow[]) {
-        if (!r.table_number) continue;
-        if (!seen.has(r.table_number)) seen.set(r.table_number, r);
-      }
-      setActiveByTable(seen);
-
-      // Live: INSERT (new dine-in) + UPDATE (status flips).
-      channel = supabase
-        .channel(`tables-panel-${storeId}`)
-        .on("postgres_changes", {
-          event: "INSERT",
-          schema: "public",
-          table: "orders",
-          filter: `store_id=eq.${storeId}`,
-        }, (payload) => upsertRow(payload.new as LiveOrderRow))
-        .on("postgres_changes", {
-          event: "UPDATE",
-          schema: "public",
-          table: "orders",
-          filter: `store_id=eq.${storeId}`,
-        }, (payload) => upsertRow(payload.new as LiveOrderRow))
-        .subscribe();
-    })();
-
-    return () => {
-      cancelled = true;
-      if (channel) void supabase.removeChannel(channel);
-    };
+        .select("id, order_number, status, order_type, table_number, total, created_at")
+        .eq("store_id", storeId).eq("order_type", "dine_in")
+        .gte("created_at", since).order("created_at", { ascending: false });
+      setQr(toRefs(data as Row[] | null, "qr"));
+    } else setQr([]);
+    if (oid) {
+      const { data } = await supabase
+        .from("pos_orders")
+        .select("id, order_number, status, order_type, table_number, total, created_at")
+        .eq("outlet_id", oid).eq("order_type", "dine_in")
+        .gte("created_at", since).order("created_at", { ascending: false });
+      setPos(toRefs(data as Row[] | null, "pos"));
+    } else setPos([]);
   }, [storeId]);
 
-  // 3. Compose the slot list T1..Tn with active order overlay.
-  const slots: TableSlot[] = [];
-  for (let i = 1; i <= count; i++) {
-    const label = `T${i}`;
-    // Tables QR generator uses "T1", "T2"... but customer-facing URL is
-    // /table/{outlet}/{tableId} where tableId is also "T1". Some legacy
-    // pickup-web orders may save table_number as just the number "1".
-    // Match either form so we don't show as free when an order exists.
-    const order = activeByTable.get(label) ?? activeByTable.get(String(i));
-    slots.push({
-      label,
-      state: order ? bucketFor(order.status) : "free",
-      orderId: order?.id ?? null,
-      orderNumber: order?.order_number ?? null,
-      total: order?.total ?? 0,
-      itemCount: 0,
-      createdAt: order?.created_at ?? null,
+  // 3. Initial load + keep live (any change to either feed → debounced refetch).
+  useEffect(() => {
+    if (!outletId) return;
+    void reload();
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const bump = () => { if (t) clearTimeout(t); t = setTimeout(() => void reload(), 350); };
+    const ch = supabase.channel(`tables-map-${outletId}`);
+    if (storeId) {
+      ch.on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `store_id=eq.${storeId}` }, bump);
+    }
+    ch.on("postgres_changes", { event: "*", schema: "public", table: "pos_orders", filter: `outlet_id=eq.${outletId}` }, bump)
+      .subscribe();
+    return () => { if (t) clearTimeout(t); void supabase.removeChannel(ch); };
+  }, [outletId, storeId, reload]);
+
+  // 4. Compose slots: T1..count UNION any table that has orders, numeric sort.
+  return useMemo<TableSlot[]>(() => {
+    const byKey = new Map<string, TableOrderRef[]>();
+    for (const o of [...qr, ...pos]) {
+      const arr = byKey.get(o.tableKey) ?? [];
+      arr.push(o);
+      byKey.set(o.tableKey, arr);
+    }
+    for (const arr of byKey.values()) arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const keys = new Set<string>();
+    for (let i = 1; i <= count; i++) keys.add(String(i));
+    for (const k of byKey.keys()) keys.add(k);
+    const sorted = [...keys].sort((a, b) => {
+      const na = parseInt(a, 10), nb = parseInt(b, 10);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return a.localeCompare(b);
     });
-  }
-  return slots;
+    return sorted.map((k) => ({ label: `T${k}`, orders: byKey.get(k) ?? [] }));
+  }, [qr, pos, count]);
 }

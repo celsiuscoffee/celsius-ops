@@ -638,7 +638,7 @@ export default function Register() {
             {/* Orders — live Grab + Pickup queue (on-register KDS). Badge
                 shows how many delivery/pickup orders are still in the
                 kitchen so staff don't miss an incoming order. */}
-            <Pressable onPress={() => { Haptics.selectionAsync(); setShowOrders(true); }} className="flex-row items-center gap-2 px-3 py-2 rounded-xl border border-cream/15 active:opacity-60">
+            <Pressable onPress={() => { Haptics.selectionAsync(); setShowOrders((v) => !v); }} className={`flex-row items-center gap-2 px-3 py-2 rounded-xl border active:opacity-60 ${showOrders ? "border-primary bg-primary/10" : "border-cream/15"}`}>
               <ChefHat size={16} color="rgba(245,243,240,0.7)" />
               <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Orders</Text>
               {(() => {
@@ -655,11 +655,11 @@ export default function Register() {
             {/* Tables — live dine-in occupancy grid driven by the orders
                 feed. Shows a count of active tables as a badge so staff
                 can tell at a glance how many are in use. */}
-            <Pressable onPress={() => { Haptics.selectionAsync(); setShowTables(true); }} className="flex-row items-center gap-2 px-3 py-2 rounded-xl border border-cream/15 active:opacity-60">
+            <Pressable onPress={() => { Haptics.selectionAsync(); setShowTables((v) => !v); }} className={`flex-row items-center gap-2 px-3 py-2 rounded-xl border active:opacity-60 ${showTables ? "border-primary bg-primary/10" : "border-cream/15"}`}>
               <Grid3x3 size={16} color="rgba(245,243,240,0.7)" />
               <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Tables</Text>
               {(() => {
-                const active = tableSlots.filter((t) => t.state !== "free").length;
+                const active = tableSlots.filter((t) => t.orders.length > 0).length;
                 if (active === 0) return null;
                 return (
                   <View className="rounded-full px-1.5" style={{ backgroundColor: "#FBBF24" }}>
@@ -754,7 +754,6 @@ export default function Register() {
           {orderType === "dine_in" && (
             <ActionTab icon={<LayoutGrid size={15} color="#F5F3F0" />} label="Table" active={panel === "table"} onPress={() => setPanel(panel === "table" ? "none" : "table")} />
           )}
-          <ActionTab icon={<Tag size={15} color="#F5F3F0" />} label="Discount" active={manualDiscount > 0} onPress={() => { Haptics.selectionAsync(); setShowDiscount(true); }} />
         </View>
 
         {/* Inline panels */}
@@ -890,10 +889,19 @@ export default function Register() {
 
         {/* Totals + charge */}
         <View className="px-5 pt-3 pb-6 border-t border-border">
-          <View className="flex-row justify-between mb-1">
-            <Text className="text-cream/55 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Subtotal</Text>
+          {/* Subtotal row doubles as the manual-discount entry: tap it to
+              open the DiscountSheet (discount applies to the total). The
+              standalone Discount tab was removed in favour of this. */}
+          <Pressable
+            onPress={() => { if (lines.length === 0) return; Haptics.selectionAsync(); setShowDiscount(true); }}
+            className="flex-row justify-between items-center mb-1 active:opacity-60"
+          >
+            <View className="flex-row items-center gap-1.5">
+              <Text className="text-cream/55 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Subtotal</Text>
+              <Tag size={11} color="rgba(245,243,240,0.32)" />
+            </View>
             <Text className="text-cream/80 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{rm(subtotal)}</Text>
-          </View>
+          </Pressable>
           {serviceCharge > 0 && (
             <View className="flex-row justify-between mb-1">
               <Text className="text-cream/55 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Service Charge ({scRate}%)</Text>
@@ -988,19 +996,20 @@ export default function Register() {
           that table. */}
       <Modal visible={showTables} transparent animationType="fade" onRequestClose={() => setShowTables(false)}>
         <View className="flex-1 bg-black/80 items-center justify-center px-6">
+          {/* Tap the dark backdrop (outside the card) to close — same dismiss
+              affordance as pressing the Tables button again. */}
+          <Pressable onPress={() => setShowTables(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
           <View className="rounded-3xl bg-surface border border-border p-6" style={{ width: "92%", maxWidth: 1100, maxHeight: "92%" }}>
             <View className="flex-row items-center justify-between mb-4">
               <View>
                 <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>Tables · {outletShort(outletId)}</Text>
                 <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                  {tableSlots.filter((t) => t.state !== "free").length} of {tableSlots.length} in use · live
+                  {tableSlots.filter((t) => t.orders.length > 0).length} of {tableSlots.length} tables have orders · live
                 </Text>
               </View>
               <View className="flex-row items-center gap-4">
-                <TableLegendDot color="rgba(245,243,240,0.18)" label="Free" />
-                <TableLegendDot color="#FBBF24" label="Pending" />
-                <TableLegendDot color="#3B82F6" label="Active" />
-                <TableLegendDot color="#22C55E" label="Ready" />
+                <TableLegendDot color="#3B82F6" label="QR table" />
+                <TableLegendDot color="#FBBF24" label="Register" />
                 <Pressable onPress={() => setShowTables(false)} className="active:opacity-60 ml-4">
                   <X size={22} color="rgba(245,243,240,0.7)" />
                 </Pressable>
@@ -1014,16 +1023,13 @@ export default function Register() {
                     slot={slot}
                     onPress={() => {
                       Haptics.selectionAsync();
-                      if (slot.state === "free" && orderType === "dine_in") {
-                        // Tap a free dine-in table → pre-fill the table
-                        // number so the cashier can ring up an in-store
-                        // order at that table without typing.
+                      // Tap a table → assign the next register dine-in order to
+                      // it (pre-fill table_number + close). It's a read-only
+                      // mapping otherwise; we don't track occupancy/flow.
+                      if (orderType === "dine_in") {
                         setTableNumber(slot.label.replace(/^T/, ""));
                         setShowTables(false);
                       }
-                      // For occupied tiles we just leave the panel open;
-                      // tap-through to the active order is a future
-                      // enhancement (would need a read-only order view).
                     }}
                   />
                 ))}
@@ -1047,6 +1053,9 @@ export default function Register() {
           blocks anon updates on already-printed pickup orders). */}
       <Modal visible={showOrders} transparent animationType="fade" onRequestClose={() => setShowOrders(false)}>
         <View className="flex-1 bg-black/80 items-center justify-center px-6">
+          {/* Tap the dark backdrop (outside the card) to close — same dismiss
+              affordance as pressing the Orders button again. */}
+          <Pressable onPress={() => setShowOrders(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
           <View className="rounded-3xl bg-surface border border-border p-6" style={{ width: "92%", maxWidth: 1180, maxHeight: "92%" }}>
             <View className="flex-row items-center justify-between mb-4">
               <View>
@@ -1565,24 +1574,46 @@ function ModifierSheet({ product, onClose, onConfirm }: { product: Product; onCl
  *  on busy tiles so staff can match Maybank payment confirmations
  *  against the right table at a glance. */
 function TableTile({ slot, onPress }: { slot: TableSlot; onPress: () => void }) {
-  const palette = {
-    free:    { bg: "rgba(245,243,240,0.04)", border: "rgba(245,243,240,0.10)", fg: "rgba(245,243,240,0.55)", accent: "rgba(245,243,240,0.25)" },
-    pending: { bg: "rgba(251,191,36,0.10)",  border: "rgba(251,191,36,0.45)",  fg: "#FBBF24",               accent: "#FBBF24" },
-    active:  { bg: "rgba(59,130,246,0.12)",  border: "rgba(59,130,246,0.5)",   fg: "#93C5FD",               accent: "#3B82F6" },
-    ready:   { bg: "rgba(34,197,94,0.12)",   border: "rgba(34,197,94,0.5)",    fg: "#86EFAC",               accent: "#22C55E" },
-  }[slot.state];
-  const stateLabel = slot.state === "free" ? "FREE" : slot.state === "pending" ? "AWAITING PAY" : slot.state === "active" ? "ACTIVE" : "READY";
-  const rmText = slot.total > 0 ? `RM ${(slot.total / 100).toFixed(2)}` : "";
+  // Pure mapping tile: terracotta when the table has orders mapped to it,
+  // muted when it has none. Lists each order (source dot + number + total);
+  // no free/occupied flow. Source dot: blue = QR self-order, amber = register.
+  const has = slot.orders.length > 0;
+  const SHOWN = 4;
   return (
-    <Pressable onPress={onPress} className="active:opacity-80" style={{ width: 140, padding: 14, borderRadius: 16, borderWidth: 1, backgroundColor: palette.bg, borderColor: palette.border }}>
-      <View style={{ height: 3, borderRadius: 2, backgroundColor: palette.accent, marginBottom: 10 }} />
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: palette.fg }}>{slot.label}</Text>
-      <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 1.2, color: palette.fg, marginTop: 4 }} numberOfLines={1}>{stateLabel}</Text>
-      {!!rmText && (
-        <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12, color: palette.fg, marginTop: 6 }}>{rmText}</Text>
-      )}
-      {!!slot.orderNumber && (
-        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10, color: "rgba(245,243,240,0.45)", marginTop: 2 }} numberOfLines={1}>{slot.orderNumber}</Text>
+    <Pressable
+      onPress={onPress}
+      className="active:opacity-80"
+      style={{
+        width: 160, minHeight: 96, padding: 12, borderRadius: 16, borderWidth: 1,
+        backgroundColor: has ? "rgba(194,69,45,0.10)" : "rgba(245,243,240,0.04)",
+        borderColor: has ? "rgba(194,69,45,0.45)" : "rgba(245,243,240,0.10)",
+      }}
+    >
+      <View className="flex-row items-center justify-between">
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: has ? "#F5F3F0" : "rgba(245,243,240,0.5)" }}>{slot.label}</Text>
+        {has && (
+          <View className="rounded-full" style={{ minWidth: 22, paddingHorizontal: 6, paddingVertical: 1, backgroundColor: "#C2452D", alignItems: "center" }}>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, color: "#F5F3F0" }}>{slot.orders.length}</Text>
+          </View>
+        )}
+      </View>
+      {!has ? (
+        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10, color: "rgba(245,243,240,0.30)", marginTop: 10 }}>No orders</Text>
+      ) : (
+        <View style={{ marginTop: 8, gap: 5 }}>
+          {slot.orders.slice(0, SHOWN).map((o) => (
+            <View key={o.id} className="flex-row items-center justify-between" style={{ gap: 6 }}>
+              <View className="flex-row items-center" style={{ gap: 5, flexShrink: 1 }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: o.source === "qr" ? "#3B82F6" : "#FBBF24" }} />
+                <Text numberOfLines={1} style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 11, color: "rgba(245,243,240,0.82)" }}>{o.orderNumber}</Text>
+              </View>
+              <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 11, color: "rgba(245,243,240,0.55)" }}>RM {(o.total / 100).toFixed(2)}</Text>
+            </View>
+          ))}
+          {slot.orders.length > SHOWN && (
+            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10, color: "rgba(245,243,240,0.4)" }}>+{slot.orders.length - SHOWN} more</Text>
+          )}
+        </View>
       )}
     </Pressable>
   );
