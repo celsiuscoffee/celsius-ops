@@ -6,7 +6,7 @@ import * as Haptics from "@/lib/haptics";
 import { useQuery } from "@tanstack/react-query";
 import { CelsiusCup } from "./brand/CelsiusCup";
 import { useApp } from "../lib/store";
-import { fetchMyVouchers, fetchClaimableVouchers } from "../lib/rewards-v2";
+import { fetchMyVouchers } from "../lib/rewards-v2";
 
 type Tab = {
   key: string;
@@ -34,18 +34,15 @@ export function BottomNav() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
 
-  // Live count of REWARDS THE CUSTOMER OWNS — drives the badge
-  // over the Gift icon. Same definition as the home-hero "Rewards"
-  // KPI so the two numbers always match. Reads through React
-  // Query so each fetch is cached across the app (no duplicate
-  // network).
-  //   1. Active wallet vouchers (already owned)
-  //   2. Claimables (welcome / promo / mystery_pending — one-tap
-  //                  to mint into the wallet)
-  // Affordable catalog redemptions are deliberately NOT counted —
-  // those are "rewards you could buy with beans", not "rewards
-  // you have". Including them caused a confusing mismatch between
-  // the badge number and the visible wallet list.
+  // Live count of REWARDS THE CUSTOMER OWNS — drives the badge over the
+  // Gift icon. Counts active wallet vouchers only (bean-redemptions
+  // excluded — the exact set VoucherWallet lists), so it matches both the
+  // home-hero "Rewards" KPI and the wallet list the badge taps into.
+  // Claimables (unrevealed mystery / welcome / admin pushes) are NOT
+  // counted — they're surfaced by the dedicated "rewards waiting" banner
+  // on home; counting them here read higher than the visible wallet list
+  // (e.g. badge "9" vs wallet "7"). Reads through React Query (cached
+  // app-wide, shared with the home + rewards screens).
   const phone = useApp((s) => s.phone);
   const walletQ = useQuery({
     queryKey: ["my-vouchers", phone ?? "anon"],
@@ -53,21 +50,9 @@ export function BottomNav() {
     enabled: !!phone,
     staleTime: 60_000,
   });
-  const claimableQ = useQuery({
-    queryKey: ["claimable-vouchers", phone ?? "anon"],
-    queryFn: fetchClaimableVouchers,
-    enabled: !!phone,
-    staleTime: 60_000,
-  });
-  // Bean-points redemptions are excluded here too — the badge has to
-  // match the wallet list it points to, and VoucherWallet filters
-  // them out. See lib/loyalty-snapshot (POS) + VoucherWallet for the
-  // same rule applied to the customer-display and the on-screen wallet.
-  const activeWalletCount = (walletQ.data ?? []).filter(
+  const rewardsCount = (walletQ.data ?? []).filter(
     (v) => v.status === "active" && v.source_type !== "points_redemption",
   ).length;
-  const claimableCount = (claimableQ.data ?? []).length;
-  const rewardsCount = activeWalletCount + claimableCount;
 
   // Web: nav pins to viewport bottom via position:fixed so it
   // follows the user as they scroll. Body owns the scroll (so iOS

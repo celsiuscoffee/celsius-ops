@@ -288,20 +288,19 @@ export default function Home() {
   const posters: HomePoster[] = postersQ.data ?? [];
 
   const heroBalance = rewardsQ.data?.pointsBalance ?? 0;
-  // Rewards KPI on the home hero — counts what the customer OWNS
-  // right now. Same definition as the bottom-nav badge so the two
-  // counts always match.
-  //   1. Active wallet vouchers (already owned)
-  //   2. Claimables (welcome / promo / mystery_pending — one-tap to
-  //                 mint into the wallet)
-  // Affordable points-shop catalog entries are NOT counted —
-  // they're "things you could buy with beans", not "things you have".
-  // Lumping them in inflated the number vs what the customer can
-  // visibly count in the wallet list and caused real confusion
-  // ("home says 13 rewards but I only see 10").
-  const activeVoucherCount = walletVouchers.filter((v) => v.status === "active").length;
-  const claimableCount = claimables.length;
-  const voucherCount = activeVoucherCount + claimableCount;
+  // Rewards KPI on the home hero — counts the vouchers the customer
+  // OWNS (active wallet vouchers; bean-redemptions excluded — the exact
+  // set VoucherWallet lists), so the number matches the wallet list it
+  // taps into ("/rewards?tab=vouchers").
+  //
+  // Claimables (unrevealed mystery / welcome / admin pushes) are NOT
+  // added here: they're surfaced by the dedicated "rewards waiting"
+  // banner below, so adding them too made the hero read higher than the
+  // wallet — e.g. 7 owned + 2 unrevealed mystery drops showed "9" while
+  // the wallet listed 7. Affordable points-shop catalog is likewise
+  // excluded (things you could buy, not things you have). Kept in sync
+  // with the bottom-nav badge (owned-only there too).
+  const voucherCount = walletVouchers.length;
 
   return (
     <View className="flex-1 bg-background">
