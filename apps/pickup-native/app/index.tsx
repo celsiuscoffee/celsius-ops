@@ -743,7 +743,7 @@ export default function Home() {
               >
                 {claimables.length === 1
                   ? `${claimables[0].title} ready to claim`
-                  : `${claimables.length} rewards waiting`}
+                  : `${claimables.length} ready to claim`}
               </Text>
               <Text
                 style={{
