@@ -233,6 +233,7 @@ export function usePickupPrinter(
           table_number: isDineIn ? row.table_number ?? null : null,
           queue_number: row.order_number,
           created_at: row.created_at,
+          notes: row.notes,                           // order-level note → receipt
           subtotal: row.subtotal ?? 0,
           service_charge: 0,
           discount_amount: row.discount_amount ?? 0,

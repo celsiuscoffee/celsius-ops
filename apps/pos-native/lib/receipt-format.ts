@@ -71,6 +71,8 @@ export type ReceiptOrder = {
   discount_amount: number;
   total: number;
   created_at: string;
+  /** Order-level note (Grab delivery instruction / order comment, pickup note). */
+  notes?: string | null;
   pos_order_items?: ReceiptItem[];
   pos_order_payments?: { payment_method: string; amount: number }[];
 };
@@ -161,6 +163,14 @@ export function formatReceipt(
     // "** .. **" — that pattern is the native module's 48pt queue-number
     // renderer, which printed the note huge on the receipt.
     if (item.notes) bodyLines.push(`   ${item.notes}`);
+  }
+
+  // Order-level note (Grab delivery instruction / order comment, or a pickup
+  // order note). Printed once for the whole order, left-aligned under "Note:".
+  if (order.notes && order.notes.trim()) {
+    bodyLines.push(divider());
+    bodyLines.push("Note:");
+    bodyLines.push(`   ${order.notes.trim()}`);
   }
 
   bodyLines.push(divider());
