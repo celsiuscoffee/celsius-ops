@@ -79,7 +79,10 @@ export type ReceiptOrder = {
 
 function formatOutletHeader(outlet: OutletInfo): string[] {
   const lines: string[] = [];
-  lines.push(centerText(outlet.name));
+  // The logo already renders "Celsius Coffee", so show just the branch/location
+  // here (strip the brand prefix) — avoids printing the name twice.
+  const branch = outlet.name.replace(/^\s*celsius\s+coffee\s*/i, "").trim() || outlet.name;
+  lines.push(centerText(branch));
   const addressParts: string[] = [];
   if (outlet.address) addressParts.push(outlet.address);
   if (outlet.city) addressParts.push(outlet.city);
@@ -123,6 +126,7 @@ export function formatReceipt(
   const headerLines = formatOutletHeader(outlet);
 
   const bodyLines: string[] = [];
+  bodyLines.push("");            // breathing room below the logo + branch
   bodyLines.push(divider("="));
   bodyLines.push(twoColumn("Order:", order.order_number));
   bodyLines.push(
@@ -134,7 +138,7 @@ export function formatReceipt(
   bodyLines.push(twoColumn("Type:", order.order_type === "dine_in" ? "Dine-in" : "Takeaway"));
 
   if (order.queue_number) {
-    bodyLines.push(divider());
+    bodyLines.push("");
     bodyLines.push(centerText("QUEUE NUMBER"));
     bodyLines.push(centerText(`** ${order.queue_number} **`));
   }
@@ -173,6 +177,7 @@ export function formatReceipt(
     bodyLines.push(`   ${order.notes.trim()}`);
   }
 
+  bodyLines.push("");           // gap before the totals block
   bodyLines.push(divider());
   bodyLines.push(twoColumn("Subtotal", rm(order.subtotal)));
   if (order.service_charge > 0) bodyLines.push(twoColumn("Service Charge", rm(order.service_charge)));

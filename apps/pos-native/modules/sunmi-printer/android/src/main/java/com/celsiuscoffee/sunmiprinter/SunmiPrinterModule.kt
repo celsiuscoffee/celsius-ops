@@ -104,7 +104,7 @@ class SunmiPrinterModule : Module() {
     val assets = context.assets
     assets.open("celsius-logo.png").use { input ->
       val original = BitmapFactory.decodeStream(input) ?: return
-      val targetWidth = 200
+      val targetWidth = 384 // wide wordmark logo — ~2/3 of the 80mm print width
       val targetHeight = (targetWidth.toFloat() / original.width * original.height).toInt()
       val scaled = Bitmap.createScaledBitmap(original, targetWidth, targetHeight, true)
       // Flatten alpha onto white — thermal heads render transparency as black.
@@ -223,6 +223,10 @@ class SunmiPrinterModule : Module() {
         for (bl in o.body.split("\n")) {
           val t = bl.trim()
           when {
+            // Blank line → a small vertical gap. The receipt redesign emits
+            // these for breathing room between sections.
+            t.isEmpty() ->
+              line.printText(" ", TextStyle.getStyle().setTextSize(14))
             t.startsWith("===") || t.startsWith("---") ->
               line.printDividingLine(DividingLine.DOTTED, 1)
             t == "QUEUE NUMBER" -> {
