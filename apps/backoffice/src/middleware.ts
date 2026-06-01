@@ -34,6 +34,9 @@ export async function middleware(request: NextRequest) {
       "/api/pos/grab/status",
       "/api/pos/grab/menu-sync",
       "/api/pos/grab/merchant/menu",
+      // Compat alias: Grab's portal has this store's webhook at the non-/pos
+      // path. Same handler (api/grab/webhook/route re-exports the /pos one).
+      "/api/grab/webhook",
     ],
   });
   if (csrfFail) {
