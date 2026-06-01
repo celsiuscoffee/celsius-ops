@@ -121,6 +121,13 @@ export async function POST(request: NextRequest) {
     const { orderID, orderState, merchantID } = payload;
     const supabase = await createClient();
 
+    // Trace every authenticated webhook hit (otherwise "skipped" looks
+    // identical to "ok" in the Vercel log table).
+    const itemCount = Array.isArray(payload.items) ? payload.items.length : 0;
+    console.log(
+      `[grab:webhook] hit method=${request.method} orderID=${orderID} state=${orderState ?? "<none>"} items=${itemCount} merchant=${merchantID}`,
+    );
+
     // 1. Existing order → status update path.
     const { data: existing } = await supabase
       .from("pos_orders").select("id, status").eq("external_id", orderID).maybeSingle();
@@ -131,12 +138,17 @@ export async function POST(request: NextRequest) {
           .update({ status: newStatus, updated_at: new Date().toISOString() })
           .eq("id", existing.id);
       }
-      return NextResponse.json({ success: true, action: "updated", orderId: existing.id });
+      return NextResponse.json({ success: true, action: "updated", orderId: existing.id, state: orderState });
     }
 
-    // 2. New order — only create for states that mean "Grab is sending this to us".
-    if (orderState !== "PENDING" && orderState !== "DRIVER_ALLOCATED" && orderState !== "ACCEPTED") {
-      return NextResponse.json({ success: true, action: "skipped" });
+    // 2. Create whenever the payload carries items (Submit Order). Push
+    //    Order State payloads carry no items — those legitimately fall
+    //    through here when the matching order hasn't been created yet
+    //    (race). The old strict allow-list dropped real Submit Orders
+    //    whose orderState the simulator omitted.
+    if (itemCount === 0) {
+      console.log(`[grab:webhook] skipped — no items, state=${orderState ?? "<none>"} orderID=${orderID}`);
+      return NextResponse.json({ success: true, action: "skipped", reason: "state-push-no-items", state: orderState });
     }
 
     // 3. Resolve outlet (grab_merchant_id primary, storehub_store_id fallback).
@@ -153,21 +165,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Totals (already in sen from Grab).
-    const subtotal = payload.orderPrice.subtotal;
-    const sst = payload.orderPrice.tax || 0;
-    const total = payload.orderPrice.eaterPayment;
-    const discount = (payload.orderPrice.grabFundPromo || 0) + (payload.orderPrice.merchantFundPromo || 0);
+    // 4. Totals (already in sen from Grab). Defensive — the simulator's
+    //    Submit Order can omit orderPrice; un-guarded access was 500'ing.
+    const price = payload.orderPrice ?? ({} as GrabWebhookPayload["orderPrice"]);
+    const subtotal = price.subtotal ?? 0;
+    const sst = price.tax ?? 0;
+    const total = price.eaterPayment ?? subtotal;
+    const discount = (price.grabFundPromo ?? 0) + (price.merchantFundPromo ?? 0);
     const orderType =
       payload.orderType === "DINE_IN" ? "dine_in" :
       payload.orderType === "PICKUP" ? "pickup" : "takeaway";
 
-    // 5. Insert order (schema-matched).
+    // 5. Insert order. shortOrderNumber sometimes arrives already prefixed
+    //    with "GF-", so strip any existing prefix to avoid "GF-GF-6782".
+    const shortNo = (payload.shortOrderNumber ?? "").replace(/^GF-/i, "");
     const { data: order, error: orderErr } = await supabase
       .from("pos_orders")
       .insert({
         external_id: orderID,
-        order_number: `GF-${payload.shortOrderNumber}`,
+        order_number: `GF-${shortNo || orderID.slice(0, 6)}`,
         outlet_id: outletId,
         source: "grabfood",
         order_type: orderType,
@@ -186,18 +202,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. Items.
-    const orderItems = payload.items.map((item) => {
-      const modTotal = (item.modifiers || []).reduce((n, m) => n + (m.price || 0) * (m.quantity || 1), 0);
-      const itemTotal = (item.price + modTotal) * item.quantity;
+    // 6. Items. Defensive defaults + products-table lookup so the docket
+    //    prints a real product name (not "Item") when Grab omits names.
+    const itemsArr = Array.isArray(payload.items) ? payload.items : [];
+    const productIds = Array.from(
+      new Set(itemsArr.map((i) => i.grabItemID || i.id).filter(Boolean) as string[]),
+    );
+    type ProductLookupRow = { id: string; name: string };
+    let products: Map<string, ProductLookupRow> = new Map();
+    if (productIds.length > 0) {
+      const { data: prods } = await supabase
+        .from("products")
+        .select("id, name")
+        .in("id", productIds);
+      products = new Map(((prods ?? []) as ProductLookupRow[]).map((p) => [p.id, p]));
+    }
+    const orderItems = itemsArr.map((item) => {
+      const productId = item.grabItemID || item.id || "";
+      const product = productId ? products.get(productId) : undefined;
+      const qty = item.quantity ?? 1;
+      const unitPrice = item.price ?? 0;
+      const modTotal = (item.modifiers ?? []).reduce((n, m) => n + ((m.price ?? 0) * (m.quantity ?? 1)), 0);
+      const itemTotal = (unitPrice + modTotal) * qty;
+      // Real Grab orders carry our synced names + IDs. The simulator
+      // sends empty names + random IDs — render price + ID hint so the
+      // kitchen can still act.
+      const grabIdHint = productId ? ` [${productId.slice(0, 8)}]` : "";
+      const priceHint = unitPrice > 0 ? `Item @ RM ${(unitPrice / 100).toFixed(2)}${grabIdHint}` : `Item${grabIdHint}`;
       return {
         id: randomUUID(),
         order_id: order.id,
-        product_id: item.grabItemID || item.id || randomUUID(),
-        product_name: item.name,
-        quantity: item.quantity,
-        unit_price: item.price,
-        modifiers: (item.modifiers || []).map((m) => ({ name: m.name, price: m.price, qty: m.quantity })),
+        product_id: productId || randomUUID(),
+        product_name: item.name || product?.name || priceHint,
+        quantity: qty,
+        unit_price: unitPrice,
+        modifiers: (item.modifiers ?? []).map((m) => ({
+          name: m.name || (m.price ? `Add-on @ RM ${((m.price ?? 0) / 100).toFixed(2)}` : "Add-on"),
+          price: m.price,
+          qty: m.quantity,
+        })),
         modifier_total: modTotal,
         discount_amount: 0,
         tax_amount: 0,
@@ -207,8 +250,10 @@ export async function POST(request: NextRequest) {
         created_at: new Date().toISOString(),
       };
     });
-    const { error: itemsErr } = await supabase.from("pos_order_items").insert(orderItems);
-    if (itemsErr) console.error("[grab:webhook] items insert failed:", itemsErr);
+    if (orderItems.length > 0) {
+      const { error: itemsErr } = await supabase.from("pos_order_items").insert(orderItems);
+      if (itemsErr) console.error("[grab:webhook] items insert failed:", itemsErr);
+    }
 
     // 7. Payment.
     const { error: payErr } = await supabase.from("pos_order_payments").insert({
@@ -232,8 +277,13 @@ export async function POST(request: NextRequest) {
       orderNumber: `GF-${payload.shortOrderNumber}`,
     });
   } catch (err) {
-    console.error("Grab webhook error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error && err.stack ? err.stack.split("\n").slice(0, 4).join(" | ") : "";
+    console.error(`[grab:webhook] EXCEPTION msg=${msg} stack=${stack}`);
+    return NextResponse.json(
+      { error: "Internal server error", debug: { msg, stack } },
+      { status: 500 },
+    );
   }
 }
 

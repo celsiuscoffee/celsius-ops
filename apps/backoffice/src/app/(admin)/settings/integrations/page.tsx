@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import {
   Loader2, CheckCircle2, RefreshCw, QrCode,
   Wallet, Store, ChevronDown, ChevronRight,
   ShieldCheck, Eye, EyeOff, Save, Zap,
   CreditCard, FileText, Link2, Info,
-  BookOpen, Receipt,
+  BookOpen, Receipt, UtensilsCrossed,
 } from "lucide-react";
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
@@ -33,7 +34,14 @@ interface PaymentGatewayConfig {
   provider: string;
 }
 
-type MaybankQrOutlet = { payload: string; enabled: boolean };
+type MaybankQrOutlet = {
+  payload: string;
+  enabled: boolean;
+  /** Data URL or https URL of the actual Maybank QR poster image. When
+   *  set, the POS customer-display renders the real pink poster instead
+   *  of generating a QR from `payload`. */
+  image_url?: string | null;
+};
 type MaybankQrConfig = { enabled: boolean; outlets: Record<string, MaybankQrOutlet> };
 
 /* ─── Static data ───────────────────────────────────────────────────────── */
@@ -340,6 +348,46 @@ export default function IntegrationsPage() {
     setQrSaving(false);
   }
 
+  /** Read a File as a data: URL. We store the Maybank poster image
+   *  directly inside the app_settings JSON blob (rather than spinning
+   *  up a storage bucket): only 3 images, ~150-200KB each, and the
+   *  Realtime subscription on app_settings already wires updates
+   *  straight through to the POS customer-display. */
+  function fileToDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error ?? new Error("read failed"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadQrImage(storeId: string, file: File) {
+    if (!file.type.startsWith("image/")) {
+      setQrMsg("Please pick an image file (PNG / JPG).");
+      return;
+    }
+    // Hard cap — keeps the JSON blob small enough for Realtime delivery.
+    if (file.size > 1_500_000) {
+      setQrMsg("Image is too large — keep it under 1.5 MB.");
+      return;
+    }
+    const dataUrl = await fileToDataUrl(file);
+    const oc = qr.outlets[storeId] ?? { payload: "", enabled: false };
+    await saveQr({
+      ...qr,
+      outlets: { ...qr.outlets, [storeId]: { ...oc, image_url: dataUrl, enabled: true } },
+    });
+  }
+
+  async function clearQrImage(storeId: string) {
+    const oc = qr.outlets[storeId] ?? { payload: "", enabled: false };
+    await saveQr({
+      ...qr,
+      outlets: { ...qr.outlets, [storeId]: { ...oc, image_url: null } },
+    });
+  }
+
   async function syncConfig() {
     setSyncing(true);
     setSyncMsg(null);
@@ -614,18 +662,27 @@ export default function IntegrationsPage() {
             <Toggle checked={qr.enabled} onChange={(v) => saveQr({ ...qr, enabled: v })} disabled={qrSaving} />
           </div>
 
-          {/* Per-outlet QR payloads */}
+          {/* Per-outlet QR images + payloads.
+              The IMAGE (uploaded Maybank poster) is the preferred path —
+              the customer-display renders the exact pink poster the
+              customer would see at the counter. The merchant-id payload
+              is a legacy fallback for outlets without an uploaded image. */}
           <div className="rounded-lg border border-gray-200 divide-y divide-gray-100 overflow-hidden">
             {outlets.map((o) => {
               const sid = o.store_id;
-              const oc = qr.outlets[sid] ?? { payload: "", enabled: false };
+              const oc = qr.outlets[sid] ?? { payload: "", enabled: false, image_url: null };
+              const hasImage = !!oc.image_url;
+              const hasAny = hasImage || !!oc.payload;
               return (
-                <div key={sid} className="px-4 py-3">
-                  <div className="flex items-center justify-between mb-2">
+                <div key={sid} className="px-4 py-4 space-y-3">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
                       <Store className="h-4 w-4 text-gray-400 shrink-0" />
                       <span className="text-sm font-medium text-gray-900 truncate">{STORE_NAMES[sid] ?? sid}</span>
-                      <StatusPill ok={!!oc.payload} label={oc.payload ? "QR set" : "No QR"} />
+                      <StatusPill
+                        ok={hasAny}
+                        label={hasImage ? "Image set" : oc.payload ? "Payload set" : "No QR"}
+                      />
                     </div>
                     <Toggle
                       checked={oc.enabled}
@@ -633,14 +690,69 @@ export default function IntegrationsPage() {
                       disabled={qrSaving}
                     />
                   </div>
-                  <input
-                    type="text"
-                    value={oc.payload}
-                    onChange={(e) => setQr({ ...qr, outlets: { ...qr.outlets, [sid]: { ...oc, payload: e.target.value } } })}
-                    onBlur={() => saveQr(qr)}
-                    placeholder="Maybank QR payload (e.g. MBBQR1671618)"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono text-gray-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                  />
+
+                  <div className="flex items-start gap-3">
+                    {/* Preview tile — shows the live image (or placeholder). */}
+                    <div className="shrink-0 w-20 h-28 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
+                      {hasImage ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={oc.image_url ?? ""}
+                          alt={`${STORE_NAMES[sid] ?? sid} Maybank QR`}
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <QrCode className="h-6 w-6 text-gray-300" />
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <label className="block">
+                        <span className="block text-[11px] font-medium text-gray-600 mb-1">
+                          Poster image (preferred)
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 cursor-pointer rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">
+                            <Save className="h-3 w-3" />
+                            {hasImage ? "Replace" : "Upload"}
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const f = e.target.files?.[0];
+                                if (f) await uploadQrImage(sid, f);
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                          {hasImage && (
+                            <button
+                              type="button"
+                              onClick={() => clearQrImage(sid)}
+                              className="text-[11px] text-gray-500 hover:text-rose-600"
+                            >
+                              Remove
+                            </button>
+                          )}
+                          <span className="text-[10px] text-gray-400">PNG / JPG, ≤1.5 MB</span>
+                        </div>
+                      </label>
+                      <label className="block">
+                        <span className="block text-[11px] font-medium text-gray-600 mb-1">
+                          Merchant ID fallback (optional)
+                        </span>
+                        <input
+                          type="text"
+                          value={oc.payload}
+                          onChange={(e) => setQr({ ...qr, outlets: { ...qr.outlets, [sid]: { ...oc, payload: e.target.value } } })}
+                          onBlur={() => saveQr(qr)}
+                          placeholder="e.g. MBBQR1671618"
+                          className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-mono text-gray-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </label>
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -816,6 +928,56 @@ export default function IntegrationsPage() {
           </div>
         </div>
       </section>
+
+      {/* ── GrabFood (delivery partner) ──────────────────────────────────── */}
+      <GrabFoodCard />
     </div>
+  );
+}
+
+/* ─── GrabFood card ─────────────────────────────────────────────────────── */
+/** Hub entry for the GrabFood integration. The real config (outlet ↔ Grab
+ *  merchantID linkage, recent orders, env/cred status) lives at
+ *  /settings/integrations/grab. Here we just probe /api/integrations/grab to
+ *  show a configured/not-connected pill and link through. */
+function GrabFoodCard() {
+  const [state, setState] = useState<{ loaded: boolean; configured: boolean; linkedOutlets: number }>({
+    loaded: false, configured: false, linkedOutlets: 0,
+  });
+  useEffect(() => {
+    fetch("/api/integrations/grab", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) { setState({ loaded: true, configured: false, linkedOutlets: 0 }); return; }
+        const linked = Array.isArray(d.outlets) ? d.outlets.filter((o: { grabMerchantId?: string | null }) => !!o.grabMerchantId).length : 0;
+        setState({ loaded: true, configured: !!d.configured, linkedOutlets: linked });
+      })
+      .catch(() => setState({ loaded: true, configured: false, linkedOutlets: 0 }));
+  }, []);
+  return (
+    <Link
+      href="/settings/integrations/grab"
+      className="block rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden px-5 py-4 hover:bg-gray-50/50 transition-colors"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center shrink-0">
+          <UtensilsCrossed className="h-5 w-5 text-green-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className="font-semibold text-gray-900 text-sm">GrabFood</h2>
+            {state.loaded && (
+              state.configured
+                ? <StatusPill ok={true} label={state.linkedOutlets > 0 ? `${state.linkedOutlets} outlet${state.linkedOutlets === 1 ? "" : "s"} linked` : "Configured · no outlet linked"} />
+                : <StatusPill ok={false} label="Not configured" />
+            )}
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Inbound orders + outbound menu sync via Grab Partner API. Manage outlet linkage, view recent Grab orders, and run integration health checks.
+          </p>
+        </div>
+        <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
+      </div>
+    </Link>
   );
 }

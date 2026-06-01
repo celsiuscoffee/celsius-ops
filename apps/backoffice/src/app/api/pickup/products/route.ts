@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, category, price, image_url, is_available, is_featured, modifiers, hidden_modifier_ids, track_stock, synced_at, position, featured_position, print_additional_docket, e_invoice_classification_code, schedule_start_date, schedule_end_date, schedule_days_of_week, schedule_time_from, schedule_time_to, price_pickup, price_grab, price_foodpanda, price_dinein, tax_rate, tax_inclusive")
+    .select("id, name, category, price, image_url, is_available, is_featured, modifiers, hidden_modifier_ids, track_stock, synced_at, position, featured_position, print_additional_docket, kitchen_station, e_invoice_classification_code, schedule_start_date, schedule_end_date, schedule_days_of_week, schedule_time_from, schedule_time_to, price_pickup, price_grab, price_foodpanda, price_dinein, tax_rate, tax_inclusive")
     .eq("brand_id", "brand-celsius")
     .order("category")
     .order("position")
@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
     featured_position: (p.featured_position as number) ?? 9999,
     // StoreHub-parity fields.
     print_additional_docket:        p.print_additional_docket ?? false,
+    kitchen_station:                p.kitchen_station ?? null,
     e_invoice_classification_code:  p.e_invoice_classification_code ?? "",
     schedule_start_date:            p.schedule_start_date ?? null,
     schedule_end_date:              p.schedule_end_date ?? null,
@@ -89,6 +90,9 @@ export async function POST(request: NextRequest) {
     price_dinein?: number | null;
     tax_rate?: number | null;
     tax_inclusive?: boolean | null;
+    // Kitchen station routing for SUNMI POS-native docket split.
+    kitchen_station?: string | null;
+    print_additional_docket?: boolean;
   };
 
   const supabase = getSupabaseAdmin();
@@ -117,6 +121,14 @@ export async function POST(request: NextRequest) {
     channelTaxInsert.tax_rate = body.tax_rate;
   }
   if (typeof body.tax_inclusive === "boolean") channelTaxInsert.tax_inclusive = body.tax_inclusive;
+  // Kitchen station — empty string from form = null (no kitchen docket).
+  if (typeof body.kitchen_station === "string") {
+    const s = body.kitchen_station.trim();
+    channelTaxInsert.kitchen_station = s === "" ? null : s;
+  }
+  if (typeof body.print_additional_docket === "boolean") {
+    channelTaxInsert.print_additional_docket = body.print_additional_docket;
+  }
 
   const { data, error } = await supabase
     .from("products")

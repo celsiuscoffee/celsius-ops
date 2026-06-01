@@ -49,6 +49,12 @@ export async function PATCH(
   if (typeof body.print_additional_docket === "boolean") {
     update.print_additional_docket = body.print_additional_docket;
   }
+  // Kitchen station — empty string from the form means "no kitchen
+  // docket"; store NULL so the printer router knows to skip.
+  if (typeof body.kitchen_station === "string" || body.kitchen_station === null) {
+    const s = (body.kitchen_station ?? "").toString().trim();
+    update.kitchen_station = s === "" ? null : s;
+  }
   if (typeof body.e_invoice_classification_code === "string" || body.e_invoice_classification_code === null) {
     update.e_invoice_classification_code = body.e_invoice_classification_code || null;
   }

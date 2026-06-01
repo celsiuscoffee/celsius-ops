@@ -18,7 +18,24 @@ export async function middleware(request: NextRequest) {
   // CSRF protection — runs FIRST so state-changing API requests are
   // checked even when we'd otherwise bypass middleware for /api/*.
   // GET/HEAD/OPTIONS, /api/webhooks/*, and /api/cron/* are exempt.
-  const csrfFail = checkCsrf(request, { allowedOrigins: ALLOWED_ORIGINS });
+  //
+  // Grab inbound partner-to-server endpoints don't carry browser Origin
+  // headers — they're called by Grab's backend with OAuth client creds
+  // (/oauth/token), partner Bearer JWT (menus / status / menu-sync), or
+  // HMAC signature (webhook). The /webhook regex in checkCsrf already
+  // exempts /api/pos/grab/webhook, but /oauth/token must be listed
+  // explicitly. Listing all six prefixes keeps the surface obvious.
+  const csrfFail = checkCsrf(request, {
+    allowedOrigins: ALLOWED_ORIGINS,
+    exemptPrefixes: [
+      "/api/pos/grab/oauth/token",
+      "/api/pos/grab/webhook",
+      "/api/pos/grab/menus",
+      "/api/pos/grab/status",
+      "/api/pos/grab/menu-sync",
+      "/api/pos/grab/merchant/menu",
+    ],
+  });
   if (csrfFail) {
     return NextResponse.json(
       { error: `CSRF check failed: ${csrfFail.reason}` },

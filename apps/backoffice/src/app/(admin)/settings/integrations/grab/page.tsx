@@ -286,10 +286,10 @@ export default function GrabIntegrationPage() {
       <section className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 text-sm text-neutral-700">
         <h2 className="mb-2 text-base font-medium text-neutral-900">How this fits together</h2>
         <ul className="list-inside list-disc space-y-1">
-          <li>OAuth, HMAC, and Partner client credentials live as Vercel env vars on the <code>celsius-pos</code> project (not editable here).</li>
+          <li>OAuth, HMAC, and Partner client credentials live as Vercel env vars on the <code>celsius-backoffice</code> project (not editable here). The legacy <code>celsius-pos</code> project is no longer the source of truth.</li>
           <li>To rotate or swap to production, run <code>scripts/grab-go-live.sh</code> from the repo root.</li>
           <li>To run the full integration test suite, run <code>scripts/grab-e2e.sh</code> after every deploy.</li>
-          <li>Inbound Grab webhooks: <code>/api/grab/webhook</code> (orders), <code>/api/grab/merchant/menu</code> (menu), <code>/api/grab/menus</code>, <code>/api/grab/status</code>, <code>/api/grab/menu-sync</code>, <code>/api/grab/oauth/token</code>.</li>
+          <li>Inbound Grab endpoints (configure these in the Grab Partner Portal): <code>/api/pos/grab/oauth/token</code> (OAuth), <code>/api/pos/grab/webhook</code> (orders + state push), <code>/api/pos/grab/merchant/menu</code> (get menu), <code>/api/pos/grab/menus</code>, <code>/api/pos/grab/status</code>, <code>/api/pos/grab/menu-sync</code>. All under <code>https://backoffice.celsiuscoffee.com</code>.</li>
         </ul>
       </section>
     </div>

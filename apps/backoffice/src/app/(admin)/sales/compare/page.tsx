@@ -285,6 +285,10 @@ function getWeekLabel(mondayStr: string): string {
 
 function subtractMonths(dateStr: string, months: number): string {
   const d = new Date(dateStr + "T12:00:00+08:00");
+  // Anchor to the 1st before shifting months. Keeping the original day (e.g. 31)
+  // makes setMonth overflow into the wrong month when the target has fewer days
+  // (Apr 31 → May 1), which duplicated/skipped months in the multi-month presets.
+  d.setDate(1);
   d.setMonth(d.getMonth() - months);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
