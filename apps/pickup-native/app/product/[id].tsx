@@ -63,6 +63,20 @@ export default function ProductScreen() {
       hideSub.remove();
     };
   }, []);
+  // When the notes field is focused and the keyboard comes up, scroll the
+  // whole field clear of it so the customer can see everything they type.
+  // Deferred ~300ms: keyboardOpen flips on `keyboardWillShow` (iOS), but
+  // iOS only applies its keyboard content-inset (automaticallyAdjust-
+  // KeyboardInsets) as the keyboard finishes animating. Scrolling sooner
+  // computes a pre-inset (too-short) target and the box stays half-hidden
+  // behind the keyboard + Done bar — exactly the bug this fixes.
+  useEffect(() => {
+    if (!keyboardOpen || !noteFocused) return;
+    const t = setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [keyboardOpen, noteFocused]);
   const outletId = useApp((s) => s.outletId);
   const { data, isLoading } = useQuery({
     queryKey: ["menu", outletId],
@@ -390,7 +404,7 @@ export default function ProductScreen() {
         // scrolling into a giant empty zone past the actual content,
         // matching the bounded-scroll feel of Grab/Foodpanda's
         // product modal.
-        contentContainerStyle={{ paddingBottom: keyboardOpen ? 16 : 120 }}
+        contentContainerStyle={{ paddingBottom: keyboardOpen ? 40 : 120 }}
         stickyHeaderIndices={[]}
         automaticallyAdjustKeyboardInsets
         automaticallyAdjustsScrollIndicatorInsets
@@ -523,20 +537,11 @@ export default function ProductScreen() {
                 fontFamily: "SpaceGrotesk_400Regular",
                 minHeight: 92,
               }}
-              onFocus={() => {
-                setNoteFocused(true);
-                // The bottom Add-to-Cart bar hides while the
-                // keyboard is up, so the auto-adjust on iOS already
-                // clears the input. Scroll a touch more so the
-                // section header stays visible above the input —
-                // orients the customer when they glance back up.
-                if (noteY.current != null) {
-                  scrollRef.current?.scrollTo({
-                    y: Math.max(0, noteY.current - 24),
-                    animated: true,
-                  });
-                }
-              }}
+              // Scroll-into-view is handled by the keyboard effect above
+              // (fires once the keyboard inset has settled), not here —
+              // an inline scroll runs before the inset applies and clamps
+              // short, leaving the box half-hidden.
+              onFocus={() => setNoteFocused(true)}
               onBlur={() => setNoteFocused(false)}
             />
             {/* iOS keyboard toolbar — a "Done" button so the customer can
