@@ -5,6 +5,7 @@ import {
   Text,
   Pressable,
   ScrollView,
+  RefreshControl,
   Image,
   TextInput,
   useWindowDimensions,
@@ -107,7 +108,7 @@ export default function Menu() {
   // Menu is keyed by outlet so per-outlet OOS overrides land — switching
   // outlets (or signing in to an outlet for the first time) refetches
   // and applies that outlet's OOS list.
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch: refetchMenu } = useQuery({
     queryKey: ["menu", outletId],
     queryFn: () => fetchMenu(outletId),
   });
@@ -134,6 +135,19 @@ export default function Menu() {
     staleTime: 60_000,
   });
   const hasUsual = !!phone && (recent.data?.length ?? 0) > 0;
+
+  // Pull-to-refresh on the product list so customers can pull the latest
+  // availability (per-outlet out-of-stock changes) without restarting the
+  // app — the menu is otherwise only refetched on outlet switch / remount.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([refetchMenu(), recent.refetch()]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Customer-driven section selection (set by scroll-spy or pill tap).
   // null = "follow the natural top-of-list" — the derived `active`
@@ -575,6 +589,14 @@ export default function Menu() {
           showsVerticalScrollIndicator={false}
           onScroll={onProductScroll}
           scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#A2492C"
+              colors={["#A2492C"]}
+            />
+          }
         >
           {query ? (
             <>
