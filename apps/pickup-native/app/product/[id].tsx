@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
   Keyboard,
   Platform,
+  InputAccessoryView,
 } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -76,6 +77,12 @@ export default function ProductScreen() {
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
+  // iOS keyboard toolbar id. A multiline TextInput can't dismiss via the
+  // return key (return inserts a newline), so without a "Done" button the
+  // customer is stuck with the keyboard up. An InputAccessoryView gives
+  // them an explicit way off the field. iOS-only — Android dismisses via
+  // the system back gesture, web by tapping elsewhere.
+  const notesAccessoryId = "product-notes-accessory";
   // Staged "pair with" pickings — committed alongside the main
   // product when the customer taps Add to cart. Stays on this screen
   // (never persisted) so backing out of the screen drops them.
@@ -501,6 +508,7 @@ export default function ProductScreen() {
               multiline
               textAlignVertical="top"
               maxLength={140}
+              inputAccessoryViewID={Platform.OS === "ios" ? notesAccessoryId : undefined}
               style={{
                 marginTop: 8,
                 backgroundColor: "#FAF7F2",
@@ -531,6 +539,43 @@ export default function ProductScreen() {
               }}
               onBlur={() => setNoteFocused(false)}
             />
+            {/* iOS keyboard toolbar — a "Done" button so the customer can
+                dismiss the keyboard from a multiline field (return inserts
+                a newline here, so it can't double as Done). */}
+            {Platform.OS === "ios" && (
+              <InputAccessoryView nativeID={notesAccessoryId}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "flex-end",
+                    alignItems: "center",
+                    backgroundColor: "#F7F4EF",
+                    borderTopWidth: 1,
+                    borderTopColor: "rgba(26,8,0,0.10)",
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                  }}
+                >
+                  <Pressable
+                    onPress={() => Keyboard.dismiss()}
+                    hitSlop={10}
+                    className="active:opacity-60"
+                    accessibilityRole="button"
+                    accessibilityLabel="Done editing instructions"
+                  >
+                    <Text
+                      style={{
+                        color: "#A2492C",
+                        fontFamily: "SpaceGrotesk_700Bold",
+                        fontSize: 16,
+                      }}
+                    >
+                      Done
+                    </Text>
+                  </Pressable>
+                </View>
+              </InputAccessoryView>
+            )}
           </View>
 
           <View className="mt-6 flex-row items-center justify-between">
