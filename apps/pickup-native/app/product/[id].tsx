@@ -42,7 +42,11 @@ export default function ProductScreen() {
   const insets = useSafeAreaInsets();
   const { height: screenH, width: screenW } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
-  const noteY = useRef<number | null>(null);
+  const scrollViewH = useRef(0); // ScrollView frame height — for keyboard-clear math
+  const noteY = useRef<number | null>(null); // notes section top, in scroll-content coords
+  const noteH = useRef(0); // notes section height
+  const keyboardH = useRef(0); // current keyboard height (incl. the Done accessory on iOS)
+  const bodyY = useRef(0); // white body card's top offset within the scroll content (noteY is relative to the card)
   const [noteFocused, setNoteFocused] = useState(false);
   // Track keyboard visibility so we can collapse the bottom Add to
   // Cart bar while the customer is typing notes — frees the screen
@@ -52,7 +56,10 @@ export default function ProductScreen() {
   useEffect(() => {
     const showSub = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      () => setKeyboardOpen(true),
+      (e) => {
+        keyboardH.current = e.endCoordinates?.height ?? 0;
+        setKeyboardOpen(true);
+      },
     );
     const hideSub = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
@@ -63,17 +70,35 @@ export default function ProductScreen() {
       hideSub.remove();
     };
   }, []);
-  // When the notes field is focused and the keyboard comes up, scroll the
-  // whole field clear of it so the customer can see everything they type.
-  // Deferred ~300ms: keyboardOpen flips on `keyboardWillShow` (iOS), but
-  // iOS only applies its keyboard content-inset (automaticallyAdjust-
-  // KeyboardInsets) as the keyboard finishes animating. Scrolling sooner
-  // computes a pre-inset (too-short) target and the box stays half-hidden
-  // behind the keyboard + Done bar — exactly the bug this fixes.
+  // When the notes field is focused and the keyboard comes up, scroll JUST
+  // enough that the whole notes box sits a hair above the keyboard — no
+  // more. scrollToEnd over-shoots and drags the "Pair with a bite" rail
+  // (which lives below the box) into view; we want the box to be the
+  // lowest thing on screen, with Quantity + Pair-with-a-bite tucked behind
+  // the keyboard.
+  //
+  // Deferred ~300ms: keyboardOpen flips on `keyboardWillShow` (iOS) but the
+  // keyboard height + content-inset only settle as it finishes animating,
+  // so an earlier scroll computes a too-short target and clamps half-way.
   useEffect(() => {
     if (!keyboardOpen || !noteFocused) return;
     const t = setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
+      const sv = scrollViewH.current;
+      const kb = keyboardH.current;
+      // Without measurements, fall back to scroll-to-end (still visible).
+      if (noteY.current == null || sv === 0 || kb === 0) {
+        scrollRef.current?.scrollToEnd({ animated: true });
+        return;
+      }
+      // Land the box bottom ~16px above the keyboard's top edge. noteY is
+      // relative to the body card, so add the card's own offset to get the
+      // box bottom in scroll-content coords.
+      const noteBottom = bodyY.current + noteY.current + noteH.current;
+      const visibleBottom = sv - kb - 16;
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, noteBottom - visibleBottom),
+        animated: true,
+      });
     }, 300);
     return () => clearTimeout(t);
   }, [keyboardOpen, noteFocused]);
@@ -397,6 +422,7 @@ export default function ProductScreen() {
 
       <ScrollView
         ref={scrollRef}
+        onLayout={(e) => { scrollViewH.current = e.nativeEvent.layout.height; }}
         // Dynamic bottom padding — big enough to clear the absolute
         // Add-to-Cart bar when the keyboard is closed (~120px), then
         // collapses to a small breathing space when the keyboard is
@@ -444,7 +470,10 @@ export default function ProductScreen() {
         {/* rounded-t-2xl per the brand corner-radius rule (no 3xl
             anywhere). The bg curves up over the image so the
             transition reads as a card sliding over a poster. */}
-        <View className="bg-background -mt-6 rounded-t-2xl pt-6 px-5">
+        <View
+          className="bg-background -mt-6 rounded-t-2xl pt-6 px-5"
+          onLayout={(e) => { bodyY.current = e.nativeEvent.layout.y; }}
+        >
           <Text
             className="text-espresso text-2xl"
             style={{ fontFamily: "Peachi-Bold" }}
@@ -504,7 +533,7 @@ export default function ProductScreen() {
 
           <View
             className="mt-6"
-            onLayout={(e) => { noteY.current = e.nativeEvent.layout.y; }}
+            onLayout={(e) => { noteY.current = e.nativeEvent.layout.y; noteH.current = e.nativeEvent.layout.height; }}
           >
             <View className="flex-row items-center justify-between">
               <Text className="text-espresso text-xs font-bold uppercase tracking-wider">
