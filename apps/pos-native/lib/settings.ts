@@ -122,24 +122,37 @@ export function tableCount(s: BranchSettings | null): number {
   return n >= 1 && n <= 100 ? n : 10;
 }
 
-export type TableZoneInput = { name: string; labels: string[] };
+export type TableDef = { label: string; seats: number | null };
+export type TableZoneInput = { name: string; tables: TableDef[] };
+
+/** Parse one "label" or "label:seats" token (e.g. "5" or "5:4"). */
+function parseTableToken(tok: string): TableDef | null {
+  const t = tok.trim();
+  if (!t) return null;
+  const [labelRaw, seatsRaw] = t.split(":");
+  const label = (labelRaw ?? "").trim();
+  if (!label) return null;
+  const n = seatsRaw != null ? parseInt(seatsRaw.trim(), 10) : NaN;
+  return { label, seats: Number.isFinite(n) && n > 0 ? n : null };
+}
 
 /** Resolve the outlet's table layout into named zones for the register Tables
- *  panel. Uses table_layout when set (parse each zone's comma-separated
- *  labels), else a single "Tables" zone of T1..table_count. */
+ *  panel. Uses table_layout when set (parse each zone's comma-separated tables,
+ *  each "label" or "label:seats"), else a single "Tables" zone of
+ *  T1..table_count. */
 export function tableZones(s: BranchSettings | null): TableZoneInput[] {
   const layout = s?.table_layout;
   if (Array.isArray(layout) && layout.length > 0) {
     const zones = layout
       .map((z) => ({
         name: (z?.name || "").trim() || "Tables",
-        labels: String(z?.tables ?? "").split(",").map((t) => t.trim()).filter(Boolean),
+        tables: String(z?.tables ?? "").split(",").map(parseTableToken).filter((t): t is TableDef => !!t),
       }))
-      .filter((z) => z.labels.length > 0);
+      .filter((z) => z.tables.length > 0);
     if (zones.length > 0) return zones;
   }
   const count = tableCount(s);
-  return [{ name: "Tables", labels: Array.from({ length: count }, (_, i) => `T${i + 1}`) }];
+  return [{ name: "Tables", tables: Array.from({ length: count }, (_, i) => ({ label: `T${i + 1}`, seats: null })) }];
 }
 
 /** Receipt config shape consumed by lib/printer.ts → the native module. */

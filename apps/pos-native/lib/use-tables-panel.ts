@@ -32,6 +32,7 @@ export type TableOrderRef = {
 export type TableSlot = {
   label: string;            // "T5" / user label
   zone: string;             // named zone this table belongs to
+  seats: number | null;     // pax / seat count, if configured
   orders: TableOrderRef[];  // most recent first
 };
 
@@ -73,7 +74,7 @@ function toRefs(rows: Row[] | null, source: "qr" | "pos"): TableOrderRef[] {
 /** Pass the cashier's POS outletId ("outlet-sa") + how many tables the outlet
  *  has (settings.table_count). Returns T1..Tn (plus any extra table that has
  *  orders), each with the live list of orders mapped to it. */
-export function useTablesPanel(outletId: string | null | undefined, zones: { name: string; labels: string[] }[]) {
+export function useTablesPanel(outletId: string | null | undefined, zones: { name: string; tables: { label: string; seats: number | null }[] }[]) {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [qr, setQr] = useState<TableOrderRef[]>([]);
   const [pos, setPos] = useState<TableOrderRef[]>([]);
@@ -145,14 +146,14 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
     const covered = new Set<string>();
     const slots: TableSlot[] = [];
     for (const z of zones) {
-      for (const label of z.labels) {
-        const k = tableKey(label) ?? "";
+      for (const t of z.tables) {
+        const k = tableKey(t.label) ?? "";
         covered.add(k);
-        slots.push({ label, zone: z.name, orders: byKey.get(k) ?? [] });
+        slots.push({ label: t.label, zone: z.name, seats: t.seats, orders: byKey.get(k) ?? [] });
       }
     }
     for (const [k, orders] of byKey) {
-      if (k && !covered.has(k)) slots.push({ label: k, zone: "Other", orders });
+      if (k && !covered.has(k)) slots.push({ label: k, zone: "Other", seats: null, orders });
     }
     return slots;
   }, [qr, pos, zones]);

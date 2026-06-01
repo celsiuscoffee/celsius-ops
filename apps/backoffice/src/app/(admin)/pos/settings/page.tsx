@@ -434,9 +434,10 @@ export default function POSSettingsPage() {
           <h3 className="text-sm font-bold text-[#160800]">Table Layout</h3>
         </div>
         <p className="text-[11px] text-gray-500 -mt-1">
-          Group tables into named zones (e.g. Indoor, Outdoor, Level 2). The POS
-          register shows tables by zone so staff can find them, with live orders
-          mapped onto each. Leave empty to show a plain grid.
+          Group tables into named zones (e.g. Indoor, Outdoor, Level 2). List each
+          zone&rsquo;s tables comma-separated, with an optional seat count after a
+          colon &mdash; e.g. &ldquo;1:2, 2:4, 3:6&rdquo;. The register shows tables by
+          zone with live orders mapped onto each; leave empty for a plain grid.
         </p>
         {(editing.table_layout ?? []).map((zone, zi) => (
           <div key={zi} className="flex flex-col gap-2 rounded-xl border border-gray-100 p-3 sm:flex-row sm:items-end">
@@ -446,8 +447,8 @@ export default function POSSettingsPage() {
                 onChange={(e) => updateZone(zi, { name: e.target.value })} />
             </div>
             <div className="flex-1">
-              <label className="mb-1 block text-xs font-medium text-gray-600">Tables (comma-separated)</label>
-              <input className="input" placeholder="1, 2, 3, 4" value={zone.tables}
+              <label className="mb-1 block text-xs font-medium text-gray-600">Tables &mdash; comma-separated, optional :seats</label>
+              <input className="input" placeholder="1:2, 2:2, 3:4, 4:6" value={zone.tables}
                 onChange={(e) => updateZone(zi, { tables: e.target.value })} />
             </div>
             <button onClick={() => removeZone(zi)} className="self-start rounded-lg px-2 py-2 text-xs font-medium text-red-500 hover:text-red-700 sm:self-auto">

@@ -1609,7 +1609,12 @@ function TableTile({ slot, onPress }: { slot: TableSlot; onPress: () => void }) 
       }}
     >
       <View className="flex-row items-center justify-between">
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: has ? "#F5F3F0" : "rgba(245,243,240,0.5)" }}>{slot.label}</Text>
+        <View className="flex-row items-baseline" style={{ gap: 5, flexShrink: 1 }}>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: has ? "#F5F3F0" : "rgba(245,243,240,0.5)" }}>{slot.label}</Text>
+          {slot.seats != null && (
+            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10, color: "rgba(245,243,240,0.4)" }}>{slot.seats} pax</Text>
+          )}
+        </View>
         {has && (
           <View className="rounded-full" style={{ minWidth: 22, paddingHorizontal: 6, paddingVertical: 1, backgroundColor: "#C2452D", alignItems: "center" }}>
             <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, color: "#F5F3F0" }}>{slot.orders.length}</Text>
