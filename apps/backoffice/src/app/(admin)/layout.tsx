@@ -701,18 +701,22 @@ function AppSidebar({
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-1.5 py-1">
+        <div className="flex items-center gap-2 px-1.5 py-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <Image
             src="/images/celsius-logo-sm.jpg"
             alt="Celsius"
             width={32}
             height={32}
-            className="rounded-lg shrink-0"
+            className="rounded-lg shrink-0 group-data-[collapsible=icon]:hidden"
           />
-          <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+          <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
             <p className="font-heading text-sm font-bold leading-tight text-sidebar-foreground">Celsius Ops</p>
             <p className="text-[10px] text-sidebar-foreground/50">Backoffice</p>
           </div>
+          {/* Collapse/expand toggle lives in the sidebar (desktop only). When
+              collapsed it's the lone centered control; mobile uses the top-bar
+              trigger instead, so hide this below md. */}
+          <SidebarTrigger className="shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground max-md:hidden" />
         </div>
       </SidebarHeader>
 
@@ -1011,17 +1015,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         onLogout={handleLogout}
       />
       <SidebarInset className="min-w-0 bg-brand-offwhite">
-        {/* Top bar — sidebar toggle (⌘B / tap to open on mobile), brand on mobile */}
-        <header className="flex items-center gap-3 border-b border-border bg-white dark:bg-card px-4 py-3">
+        {/* Mobile-only top bar — tap the trigger to open the sidebar sheet.
+            Desktop has no top chrome: the toggle lives in the sidebar header,
+            plus the drag rail and ⌘B. */}
+        <header className="flex items-center gap-3 border-b border-border bg-white px-4 py-3 dark:bg-card md:hidden">
           <SidebarTrigger className="text-foreground" />
           <Image
             src="/images/celsius-logo-sm.jpg"
             alt="Celsius"
             width={24}
             height={24}
-            className="rounded-md md:hidden"
+            className="rounded-md"
           />
-          <span className="font-heading text-sm font-bold md:hidden">Celsius Ops</span>
+          <span className="font-heading text-sm font-bold">Celsius Ops</span>
         </header>
 
         {/* Page content */}
