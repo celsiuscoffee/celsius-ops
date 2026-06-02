@@ -161,6 +161,7 @@ export default function Register() {
   // Backoffice-managed per-outlet settings (pos_branch_settings).
   const settings = useSettings((s) => s.settings);
   const outlet = useSettings((s) => s.outlet);
+  const sstCfg = useSettings((s) => s.sst);
   const refreshSettings = useSettings((s) => s.refresh);
   // Live dine-in tables grid for the Tables modal — pulled here so the
   // hook is mounted persistently (catch-up + Realtime subscribe) instead
@@ -371,7 +372,12 @@ export default function Register() {
   // after it was applied.
   const beforeManual = Math.max(0, subtotal + serviceCharge - effRewardDiscount - promoDiscount);
   const effManualDiscount = Math.min(manualDiscount, beforeManual);
-  const total = beforeManual - effManualDiscount;
+  const afterDiscount = beforeManual - effManualDiscount;
+  // SST mirrors createSale exactly so the displayed amount, the card/cash
+  // charge, and the recorded order all agree. Single source: the global
+  // app_settings.sst the pickup app also reads.
+  const sstAmount = sstCfg.enabled ? Math.round(afterDiscount * sstCfg.rate) : 0;
+  const total = afterDiscount + sstAmount;
   const cols = gridColumns(settings);
 
   const { width: screenW } = useWindowDimensions();
@@ -671,6 +677,7 @@ export default function Register() {
         subtotal: sale.subtotal,
         service_charge: sale.serviceCharge,
         discount_amount: sale.discount,
+        sst_amount: sale.sst,
         total: sale.total,
         pos_order_items: printLines.map((l) => {
           const lineDisc = l.line_discount_sen ?? 0;
@@ -831,17 +838,18 @@ export default function Register() {
               before the first item goes in. Resets per order (newOrder / Clear). */}
           {shift && !member && !memberAsked && (
             <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(22,8,0,0.96)" }} className="items-center justify-center px-10">
-              <View className="items-center" style={{ maxWidth: 480 }}>
-                <View className="h-16 w-16 rounded-2xl items-center justify-center mb-4" style={{ backgroundColor: "rgba(251,191,36,0.14)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)" }}>
-                  <User size={30} color="#FBBF24" />
+              <View className="rounded-3xl items-center" style={{ width: 540, paddingVertical: 44, paddingHorizontal: 40, backgroundColor: "rgba(245,243,240,0.045)", borderWidth: 1, borderColor: "rgba(245,243,240,0.1)" }}>
+                <View className="h-20 w-20 rounded-3xl items-center justify-center" style={{ marginBottom: 22, backgroundColor: "rgba(251,191,36,0.14)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)" }}>
+                  <User size={38} color="#FBBF24" />
                 </View>
-                <Text className="text-cream text-2xl text-center" style={{ fontFamily: "Peachi-Bold" }}>Is the customer a member?</Text>
-                <Text className="text-cream/55 text-sm text-center mt-2 mb-6" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Ask before starting the order — members earn Beans and get member pricing on the whole bill.</Text>
-                <Pressable onPress={() => { Haptics.selectionAsync(); setPanel("customer"); }} className="w-full h-14 rounded-2xl items-center justify-center active:opacity-80" style={{ backgroundColor: "#FBBF24" }}>
-                  <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 16, color: "#160800" }}>Yes — enter phone</Text>
+                <Text className="text-cream text-center w-full" style={{ fontFamily: "Peachi-Bold", fontSize: 30, lineHeight: 36 }}>Is the customer a member?</Text>
+                <Text className="text-cream/55 text-center w-full" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, lineHeight: 22, marginTop: 12, marginBottom: 32 }}>Ask before starting the order — members earn Beans and member pricing on the whole bill.</Text>
+                <Pressable onPress={() => { Haptics.selectionAsync(); setPanel("customer"); }} className="w-full rounded-2xl flex-row items-center justify-center active:opacity-80" style={{ height: 64, gap: 10, backgroundColor: "#FBBF24" }}>
+                  <User size={20} color="#160800" />
+                  <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 18, color: "#160800" }}>Yes — enter phone</Text>
                 </Pressable>
-                <Pressable onPress={() => { Haptics.selectionAsync(); setMemberAsked(true); }} className="w-full h-12 mt-3 rounded-2xl items-center justify-center border border-cream/20 active:opacity-70" style={{ backgroundColor: "rgba(245,243,240,0.04)" }}>
-                  <Text className="text-cream/80" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 15 }}>No — guest order</Text>
+                <Pressable onPress={() => { Haptics.selectionAsync(); setMemberAsked(true); }} className="w-full rounded-2xl items-center justify-center border active:opacity-70" style={{ height: 58, marginTop: 14, borderColor: "rgba(245,243,240,0.2)", backgroundColor: "rgba(245,243,240,0.05)" }}>
+                  <Text className="text-cream/80" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 16 }}>No — guest order</Text>
                 </Pressable>
               </View>
             </View>
@@ -1066,6 +1074,12 @@ export default function Register() {
                 <Text className="text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: OK }}>−{rm(effManualDiscount)}</Text>
                 <Pressable onPress={() => { Haptics.selectionAsync(); setManualDiscount(0); }} className="active:opacity-60"><X size={14} color="rgba(245,243,240,0.6)" /></Pressable>
               </View>
+            </View>
+          )}
+          {sstAmount > 0 && (
+            <View className="flex-row justify-between mb-1">
+              <Text className="text-cream/55 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>SST ({Math.round(sstCfg.rate * 100)}%)</Text>
+              <Text className="text-cream/80 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{rm(sstAmount)}</Text>
             </View>
           )}
           <View className="flex-row justify-between items-baseline mb-4">
