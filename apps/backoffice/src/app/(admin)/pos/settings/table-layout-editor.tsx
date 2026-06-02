@@ -27,12 +27,19 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 
 /** 16-cell grid: drags snap to these lines so tables auto-align into neat rows /
  *  columns instead of landing freeform. The faint canvas gridlines match this. */
-const GRID = 1 / 16;
-const snap = (v: number) => Math.round(v / GRID) * GRID;
+/** Fine, SQUARE alignment grid (px). A cell is half a 2-top tile (unit 44 → 22),
+ *  so a square table centred on an intersection lands its EDGES on grid lines too
+ *  — everything lines up like graph paper. Both the drag-snap and the faint canvas
+ *  gridlines use this. (The old grid was 1/16 of each axis = wide rectangles
+ *  ~53×29px, which is why tables never aligned cleanly.) */
+const CELL = 22;
+/** Snap a normalised coord to the px grid for the given canvas span (px). */
+const snapNorm = (norm: number, span: number) =>
+  span ? (Math.round((norm * span) / CELL) * CELL) / span : norm;
 /** Magnetic alignment: while dragging, a table's centre OR an edge snaps to a
  *  sibling's centre / matching edge when within this many px, and a guide line is
  *  drawn. This is what actually makes rows + columns line up across mixed table
- *  sizes — the coordinate grid alone can't, since it only snaps centres. */
+ *  sizes — the grid alone can't, since it only snaps to fixed cells. */
 const SNAP_PX = 10;
 
 /** Tile size (px) scaled to seat count — a 6-top reads bigger than a 2-top, so
@@ -118,10 +125,12 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
   function addTable(seats: number | null, shape: TableShape = "square") {
     if (!floor) return;
     const n = floor.tables.length;
+    const c = canvasRef.current?.getBoundingClientRect();
     const cols = 8;
-    const x = clamp(snap(0.1 + (n % cols) * 0.1), 0.04, 0.96);
-    const y = clamp(snap(0.16 + Math.floor(n / cols) * 0.16), 0.06, 0.94);
-    const t: TableItem = { label: nextLabel(), seats, x, y, shape, orientation: "h" };
+    let x = 0.1 + (n % cols) * 0.1;
+    let y = 0.16 + Math.floor(n / cols) * 0.16;
+    if (c) { x = snapNorm(x, c.width); y = snapNorm(y, c.height); }
+    const t: TableItem = { label: nextLabel(), seats, x: clamp(x, 0.04, 0.96), y: clamp(y, 0.06, 0.94), shape, orientation: "h" };
     patchFloor({ tables: [...floor.tables, t] });
     setSelected(n);
   }
@@ -187,10 +196,10 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
       }
     });
 
-    // No sibling magnet on an axis → fall back to the grid so free placement
-    // still lands tidy instead of pixel-freeform.
-    if (gx === null) nx = snap(nx);
-    if (gy === null) ny = snap(ny);
+    // No sibling magnet on an axis → fall back to the square grid so free
+    // placement still lands tidy instead of pixel-freeform.
+    if (gx === null) nx = snapNorm(nx, c.width);
+    if (gy === null) ny = snapNorm(ny, c.height);
 
     setGuide({ x: gx, y: gy });
     patchTable(idx, { x: clamp(nx, 0.04, 0.96), y: clamp(ny, 0.06, 0.94) });
@@ -255,10 +264,11 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
             style={{
               height: 460,
               touchAction: "none",
-              // 16×16 alignment grid (matches the drag snap) so the room reads tidy.
+              // Fine SQUARE alignment grid (matches the drag snap) so the room
+              // reads like graph paper and tables line up cleanly.
               backgroundImage:
-                "linear-gradient(to right, rgba(22,8,0,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(22,8,0,0.05) 1px, transparent 1px)",
-              backgroundSize: "6.25% 6.25%",
+                "linear-gradient(to right, rgba(22,8,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(22,8,0,0.06) 1px, transparent 1px)",
+              backgroundSize: `${CELL}px ${CELL}px`,
             }}
             onPointerDown={(e) => { if (e.target === e.currentTarget) setSelected(null); }}
           >
