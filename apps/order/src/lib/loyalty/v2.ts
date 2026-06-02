@@ -129,7 +129,7 @@ export async function issueVoucher(args: {
 }
 
 /** Redeem a legacy points-shop reward INTO the wallet. Deducts the
- *  member's Beans atomically and inserts an issued_rewards row with all
+ *  member's Points atomically and inserts an issued_rewards row with all
  *  display + discount fields copied off the reward. The voucher then
  *  shows up on the Rewards tab and can be applied at checkout the same
  *  way every other voucher does.
@@ -138,7 +138,7 @@ export async function issueVoucher(args: {
  *  reward / inactive reward — caller turns those into 4xx responses.
  *
  *  Idempotency is NOT enforced here (a customer may legitimately claim
- *  the same reward twice if they have the Beans). max_redemptions
+ *  the same reward twice if they have the Points). max_redemptions
  *  enforcement is a TODO. */
 export async function redeemPointsShopReward(args: {
   memberId: string;
@@ -599,8 +599,8 @@ async function evalDedupedGoal(
  *  path that flips a mission_assignment to 'completed' so the side
  *  effects stay in one place.
  *
- *  Bonus-Beans award was dropped: challenges grant vouchers only now
- *  ("focus on rewards only, no need +beans"). Beans-multiplier vouchers
+ *  Bonus-Points award was dropped: challenges grant vouchers only now
+ *  ("focus on rewards only, no need +beans"). Points-multiplier vouchers
  *  in the catalogue still work the same way at order time. */
 async function fulfilCompletedAssignment(args: {
   memberId: string;
@@ -701,7 +701,7 @@ export async function applyOrderToMission(args: {
 // ─── Mystery Bean drop ───────────────────────────────────────────────
 
 // Per-member cap on mystery voucher wins. Mystery still spawns on
-// every paid order — the pool's "Just your Beans" entry is what the
+// every paid order — the pool's "Just your Points" entry is what the
 // customer scratches to when they're at-or-over cap, so the drop
 // event still happens (no UX regression) but the wallet doesn't
 // snowball. Counts mystery_drops with outcome_type='voucher' in the
@@ -788,7 +788,7 @@ export async function generateMysteryDrop(args: {
   // MYSTERY_VOUCHER_WINDOW_DAYS days, swap the pick to the
   // no_bonus entry — the drop event still happens, the customer
   // still gets a card to scratch, they just land on "Just your
-  // Beans" instead. Light users see full pool odds; heavy users
+  // Points" instead. Light users see full pool odds; heavy users
   // (or testers) get throttled.
   if (pick.outcome_type === "voucher") {
     const windowStart = new Date(
@@ -955,7 +955,7 @@ export async function applyOrderV2Hooks(args: {
   const supabase = getSupabaseAdmin();
   const { memberId, orderId, outletId, orderCreatedAt, walletVoucherId } = args;
 
-  // Wallet voucher → consumed. Doesn't deduct Beans (wallet vouchers
+  // Wallet voucher → consumed. Doesn't deduct Points (wallet vouchers
   // cost nothing to claim). Idempotent: a second call no-ops because
   // status='used' is sticky.
   //
@@ -967,10 +967,10 @@ export async function applyOrderV2Hooks(args: {
   // enum.
   //
   // ALSO: if the voucher was a multiplier (beans_multiplier with
-  // multiplier_value > 1), credit the bonus Beans NOW — the cart-side
+  // multiplier_value > 1), credit the bonus Points NOW — the cart-side
   // discount engine returns 0 for multiplier vouchers because the
   // multiplier is a post-payment boost, not a price reduction. Without
-  // this branch a "2× Beans Boost" voucher would be consumed at
+  // this branch a "2× Points Boost" voucher would be consumed at
   // checkout without ever doubling the customer's earned points.
   if (walletVoucherId) {
     try {

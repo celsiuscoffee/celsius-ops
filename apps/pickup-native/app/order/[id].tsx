@@ -989,7 +989,7 @@ export default function OrderStatus() {
                 // in via prerevealed makes the child a pure presenter
                 // and removes the unmount risk entirely.
                 setMysteryRevealed(payload);
-                // Refresh the order so newly-credited Beans show up in
+                // Refresh the order so newly-credited Points show up in
                 // the summary, and the voucher wallet so a voucher win
                 // is already in the list when the customer opens it.
                 // NOT invalidating ["mystery-drop", id] — that refetch

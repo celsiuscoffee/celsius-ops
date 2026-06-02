@@ -344,10 +344,10 @@ async function runMissYou(): Promise<SweepCounters & { matched: number }> {
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
-/* Sitting on Beans — Phase 1 new trigger                                     */
+/* Sitting on Points — Phase 1 new trigger                                     */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-/** Members with N+ Beans who haven't ordered in M+ days. The "concrete
+/** Members with N+ Points who haven't ordered in M+ days. The "concrete
  *  value sitting unused" angle converts higher than novel offers because
  *  the customer already feels they own the value (endowment effect).
  *  Reuses notifyVoucherGifted's loyalty channel + copy shape but with

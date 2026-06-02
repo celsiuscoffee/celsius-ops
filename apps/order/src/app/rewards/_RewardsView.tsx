@@ -107,7 +107,7 @@ export function RewardsView() {
         </h1>
       </header>
 
-      {/* Beans hero — compact themed card with the customer's bean
+      {/* Points hero — compact themed card with the customer's bean
           balance + progress-to-next-tier line. Mirrors the BeansHero
           on apps/pickup-native/app/rewards.tsx (rewards page uses the
           compact hero; the larger TierCard lives on /account). */}

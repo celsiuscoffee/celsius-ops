@@ -17,7 +17,7 @@ import { ActiveOrderTracker } from "./_ActiveOrderTracker";
  * Customer home — Next.js Server Component. Plain HTML so iOS Safari
  * can collapse its URL bar on body scroll. Mirrors the SPA's home
  * structure: floating top bar over the hero, PosterCarousel,
- * dark info card overlay (Hi-name + Beans + Rewards), outlet picker,
+ * dark info card overlay (Hi-name + Points + Rewards), outlet picker,
  * Best Sellers, "Open the menu" CTA, BottomNav.
  *
  * Inner SPA routes (/product/[id], /checkout, /order/[id], /store)

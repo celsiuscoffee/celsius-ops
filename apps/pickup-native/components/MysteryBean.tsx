@@ -348,13 +348,13 @@ function MysteryReveal({
             className="text-white/70 text-[13px] text-center"
             style={{ fontFamily: "SpaceGrotesk_500Medium" }}
           >
-            Your {baseBeansEarned} Beans became
+            Your {baseBeansEarned} Points became
           </Text>
           <Text
             className="text-white text-[22px] mt-0.5"
             style={{ fontFamily: "Peachi-Bold" }}
           >
-            {drop.total_beans_awarded} Beans
+            {drop.total_beans_awarded} Points
           </Text>
         </>
       )}
@@ -392,7 +392,7 @@ function MysteryReveal({
               color: "rgba(251,191,36,0.85)",
             }}
           >
-            Bonus Beans
+            Bonus Points
           </Text>
         </>
       )}

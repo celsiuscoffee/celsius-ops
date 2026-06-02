@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 /**
- * Beans hero card for /rewards — port of the BeansHero in
+ * Points hero card for /rewards — port of the BeansHero in
  * apps/pickup-native/app/rewards.tsx. Tier-themed gradient card (same
  * gradient + brand "°c" watermark as the Account tier cards) with the
  * bean balance as the protagonist and a "Spend RMx in N days to unlock
@@ -155,7 +155,7 @@ export function BeansHero() {
             className="uppercase"
             style={{ color: theme.subtle, fontSize: 9.5, fontWeight: 700, letterSpacing: 1.4 }}
           >
-            Beans
+            Points
           </p>
           <p
             className="font-peachi font-bold"

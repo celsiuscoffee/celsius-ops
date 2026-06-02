@@ -505,7 +505,7 @@ export default function Home() {
               Haptics.selectionAsync();
               // Single Rewards tab now hosts everything — Points and
               // Vouchers stats both land there; the customer scrolls
-              // to "Spend your Beans" or "Yours" depending on intent.
+              // to "Spend your Points" or "Yours" depending on intent.
               router.push("/rewards?tab=rewards" as never);
             }}
             hitSlop={6}
@@ -530,7 +530,7 @@ export default function Home() {
                 textTransform: "uppercase",
               }}
             >
-              Beans
+              Points
             </Text>
           </Pressable>
           <Pressable
@@ -1594,7 +1594,7 @@ function describeVoucherTicket(v: Voucher): TicketDescriptor {
     eyebrow = "Add-on";
     headline = "Free add-on";
   } else if (v.discount_type === "beans_multiplier") {
-    // "2× Beans" rather than "2× Beans Boost" — the second word wraps
+    // "2× Points" rather than "2× Points Boost" — the second word wraps
     // a 144-wide top stub at 19pt Peachi and tips the card taller than
     // its neighbours. Multiplier source is voucher.multiplier_value
     // when present, falling back to whatever the title looks like.
@@ -1602,7 +1602,7 @@ function describeVoucherTicket(v: Voucher): TicketDescriptor {
     const mul = Number((v as { multiplier_value?: number | string | null }).multiplier_value ?? 0);
     if (mul > 1) {
       const pretty = mul % 1 === 0 ? `${mul}` : mul.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-      headline = `${pretty}× Beans`;
+      headline = `${pretty}× Points`;
     } else {
       headline = v.title;
     }
@@ -1628,7 +1628,7 @@ function HomeCatalogTicket({
   reward: Reward;
   onPress?: () => void;
 }) {
-  // Catalog rewards (Spend Beans) all land in the BEAN bucket — same
+  // Catalog rewards (Spend Points) all land in the BEAN bucket — same
   // mapping the Rewards tab's CatalogCard uses.
   const { topBg, topAccent, topMuted } = ticketColorsFromTheme(THEME_BEAN);
   // Pick a friendly headline based on what the reward actually does.
@@ -1667,7 +1667,7 @@ function HomeCatalogTicket({
         shadowOffset: { width: 0, height: 2 },
       }}
       accessibilityRole="button"
-      accessibilityLabel={`${headline}. ${reward.name}. ${reward.points_required} Beans.`}
+      accessibilityLabel={`${headline}. ${reward.name}. ${reward.points_required} Points.`}
     >
       <View style={{ backgroundColor: topBg, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 14, minHeight: 92 }}>
         <View style={{ position: "absolute", right: 6, bottom: 6, opacity: 0.85 }} pointerEvents="none">
@@ -1731,7 +1731,7 @@ function HomeCatalogTicket({
           }}
           numberOfLines={1}
         >
-          {reward.points_required.toLocaleString()} Beans
+          {reward.points_required.toLocaleString()} Points
         </Text>
       </View>
     </Pressable>

@@ -42,7 +42,7 @@ export async function getTierMultiplier(loyaltyId: string): Promise<number> {
 }
 
 /**
- * Credit a one-off bonus Beans grant outside the order earn flow.
+ * Credit a one-off bonus Points grant outside the order earn flow.
  * Used by Mystery Bean reveals (multiplier delta, flat bonus) and
  * elsewhere bonuses need to land in the ledger without bumping
  * total_visits or last_visit_at.

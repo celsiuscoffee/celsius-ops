@@ -142,7 +142,7 @@ export type OrderDetail = {
   /** ISO timestamp the customer wants pickup. Null = ASAP (brew now). */
   pickup_at?:     string | null;
   payment_method: string | null;
-  /** Base Beans earned on this order (before any Mystery Bean
+  /** Base Points earned on this order (before any Mystery Bean
    *  multiplier). Used by the MysteryBean reveal card to compute the
    *  post-multiplier total. May be 0 for guest orders. */
   loyalty_points_earned?: number;

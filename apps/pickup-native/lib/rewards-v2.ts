@@ -52,7 +52,7 @@ export type Mission = {
   // unknown values as a plain "X/Y" count.
   goal_type: string;
   goal_threshold: number;
-  reward_summary: string;        // pre-formatted, e.g. "🥐 Free Pastry + 50 Beans"
+  reward_summary: string;        // pre-formatted, e.g. "🥐 Free Pastry + 50 Points"
 };
 
 export type ActiveMission = Mission & {
@@ -212,7 +212,7 @@ export async function claimVoucher(claimableId: string): Promise<Voucher> {
   return post<Voucher>(`/api/loyalty/me/claimable/${claimableId}/claim`);
 }
 
-/** Spend Beans to add a points-shop reward to the wallet. Atomic on the
+/** Spend Points to add a points-shop reward to the wallet. Atomic on the
  *  server — either both the deduction and the voucher row happen, or
  *  nothing does. Returns the new balance so the home screen can update
  *  without an extra round-trip. */

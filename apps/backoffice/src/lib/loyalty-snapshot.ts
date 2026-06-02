@@ -345,7 +345,7 @@ function resolveBenefitLabels(
         case "points_multiplier": {
           const v = Number(r?.value ?? 1);
           if (v === 1) return null; // 1× isn't worth surfacing
-          return `${v}× Beans on all orders`;
+          return `${v}× Points on all orders`;
         }
         case "tier_discount": {
           const pct = Number(r?.percent ?? 0);

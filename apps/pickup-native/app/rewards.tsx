@@ -78,7 +78,7 @@ function catalogToVoucherCategory(r: Reward): Voucher["category"] {
   return "special";
 }
 
-// Catalogue rewards (Spend Beans) all live in the BEAN bucket — they
+// Catalogue rewards (Spend Points) all live in the BEAN bucket — they
 // share a single colourway so the customer reads "this is the bean-shop
 // rail" at a glance. Different from the source-bucket logic of wallet
 // vouchers / mystery / gift, which are typed by where they CAME FROM;
@@ -308,7 +308,7 @@ export default function RewardsTab() {
     Haptics.selectionAsync();
     Alert.alert(
       "Apply this reward?",
-      `Use on your next order — ${r.points_required.toLocaleString()} Beans deducted only when you check out.`,
+      `Use on your next order — ${r.points_required.toLocaleString()} Points deducted only when you check out.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -398,7 +398,7 @@ export default function RewardsTab() {
           // One continuous list, no section headers. Order: challenges
           // first (the active "work-for-it" bucket — most engagement),
           // then claim-now urgencies, then earned wallet vouchers, then
-          // Spend Beans catalog. Customer reads every card as the same
+          // Spend Points catalog. Customer reads every card as the same
           // kind of thing — a reward they can use at checkout.
           <View style={{ gap: 8 }}>
             {sortedMissions.map((m) => (
@@ -445,7 +445,7 @@ export default function RewardsTab() {
   );
 }
 
-// ─── Beans hero ────────────────────────────────────────────────────────
+// ─── Points hero ────────────────────────────────────────────────────────
 
 function BeansHero({
   balance,
@@ -496,7 +496,7 @@ function BeansHero({
               textTransform: "uppercase",
             }}
           >
-            Beans
+            Points
           </Text>
           <Text
             style={{
@@ -519,7 +519,7 @@ function BeansHero({
   }
   // Tier-themed hero — same gradient + brand wordmark + pattern as the
   // membership tier cards on the Account screen, but stripped down to
-  // the BEANS AVAILABLE number + progress line. Size unchanged from
+  // the POINTS AVAILABLE number + progress line. Size unchanged from
   // the previous flat espresso card so this slots in without affecting
   // surrounding layout. Falls back to the Member (bronze) theme when
   // there's no tier yet so the card never renders bare.
@@ -617,7 +617,7 @@ function BeansHero({
               textTransform: "uppercase",
             }}
           >
-            Beans
+            Points
           </Text>
           <Text
             style={{
@@ -951,7 +951,7 @@ function ChallengeCard({
   );
 }
 
-// ─── Catalogue card (Spend Beans) ──────────────────────────────────────
+// ─── Catalogue card (Spend Points) ──────────────────────────────────────
 // Mirror image of VoucherRow but for points-shop catalogue entries.
 // Same single-row shape, themed colours per discount type — RM5/RM10
 // (terracotta) read as the same card family as a wallet RM5 voucher,
@@ -986,7 +986,7 @@ function CatalogCard({
       disabled={!canUse}
       // Whole card pressable — mirrors VoucherRow so customers can tap
       // anywhere on the row to redeem, not just the small pill. When
-      // the customer hasn't earned enough Beans yet the card is inert
+      // the customer hasn't earned enough Points yet the card is inert
       // (disabled) so a stray tap doesn't trigger a haptic / nothing.
       className={canUse ? "active:opacity-90" : ""}
       style={{
@@ -1110,7 +1110,7 @@ function CatalogCard({
           >
             {canUse
               ? formatRewardValue(reward)
-              : `${(required - balance).toLocaleString()} Beans to go`}
+              : `${(required - balance).toLocaleString()} Points to go`}
           </Text>
         </View>
 

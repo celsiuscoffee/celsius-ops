@@ -1,6 +1,6 @@
 // react-native-web's Alert is a no-op stub — `Alert.alert(title, msg,
 // buttons)` returns silently, so confirmation flows like the Spend
-// Beans redeem prompt never invoke the "Apply" onPress. This shim
+// Points redeem prompt never invoke the "Apply" onPress. This shim
 // matches the surface React Native exposes and routes through window's
 // confirm/alert primitives so existing call-sites work unmodified.
 //

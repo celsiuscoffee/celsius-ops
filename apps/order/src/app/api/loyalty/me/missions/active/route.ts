@@ -70,7 +70,7 @@ type AssignmentJoinRow = {
 };
 
 // Builds the human-readable reward line shown on the Challenge card.
-// Vouchers are the only reward type here — Beans bonuses were dropped
+// Vouchers are the only reward type here — Points bonuses were dropped
 // after the "challenges rewards, focus on rewards only" call. Shows the
 // actual voucher title when exactly one is attached so the customer
 // reads "Free Drink" instead of a vague "1 voucher".

@@ -1,13 +1,13 @@
 // POST /api/loyalty/me/rewards/[rewardId]/redeem
 //
-// Spend Beans to add a points-shop reward to the customer's wallet.
+// Spend Points to add a points-shop reward to the customer's wallet.
 // Atomically deducts points_required from the member's balance and
 // inserts an issued_rewards row with all the display + discount metadata
 // copied off the reward, so the new voucher behaves identically to one
 // issued by a mission completion or admin claim.
 //
 // 200 → { voucher, newBalance, pointsSpent }
-// 402 → { error } when the member doesn't have enough Beans
+// 402 → { error } when the member doesn't have enough Points
 // 404 → { error } when the reward doesn't exist / isn't active
 // 401 → standard auth failure from resolveMember
 
@@ -37,7 +37,7 @@ export async function POST(
       return NextResponse.json({ error: "Reward not available" }, { status: 404 });
     }
     if (result.reason === "insufficient_beans") {
-      return NextResponse.json({ error: "Not enough Beans" }, { status: 402 });
+      return NextResponse.json({ error: "Not enough Points" }, { status: 402 });
     }
     return NextResponse.json({ error: "Could not redeem" }, { status: 500 });
   }

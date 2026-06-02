@@ -36,7 +36,7 @@ export function pickRewardIcon(title: string, iconKey?: string | null) {
   if (k === "croissant" || t.includes("croissant"))   return Croissant;
   if (k === "cookie" || t.includes("cookie"))         return Cookie;
   if (k === "coffee" || t.includes("drink") || t.includes("coffee")) return Coffee;
-  // 2× Beans Boost / Beans Multiplier / Sparkle-coded mystery rewards.
+  // 2× Points Boost / Points Multiplier / Sparkle-coded mystery rewards.
   if (k === "sparkle" || t.includes("boost") || t.includes("beans") || t.includes("multiplier"))
     return Sparkles;
   if (t.includes("birthday"))                          return Cake;
@@ -383,7 +383,7 @@ export function VoucherRow({ voucher }: { voucher: Voucher }) {
     setAppliedReward({
       id: voucher.id,
       name: voucher.title,
-      points_required: 0,         // wallet vouchers cost no Beans
+      points_required: 0,         // wallet vouchers cost no Points
       discount_type: voucher.discount_type
         ? mapDiscountType(voucher.discount_type)
         : null,

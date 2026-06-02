@@ -7,7 +7,7 @@ import { ChevronRight } from "lucide-react";
 /**
  * The dark espresso info card that overlays the bottom of the hero
  * poster. Mirrors the SPA's home info-card design — "Hi, [name]." up
- * top, KPI strip (Beans | Rewards) below with the gold accent when
+ * top, KPI strip (Points | Rewards) below with the gold accent when
  * vouchers > 0. Tap anywhere on the card → /rewards.
  */
 type Persisted = {
@@ -76,7 +76,7 @@ export function HeroInfoCard({ voucherCount = 0 }: { voucherCount?: number }) {
             className="text-[10px] uppercase mt-0.5 text-white/55"
             style={{ letterSpacing: 1.2, fontWeight: 500 }}
           >
-            Beans
+            Points
           </p>
         </div>
         <div

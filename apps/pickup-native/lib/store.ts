@@ -56,7 +56,7 @@ export type AppliedReward = {
   /** When set, this AppliedReward originated from a wallet voucher
    *  (issued_rewards row) rather than a points-shop redemption.
    *  Checkout uses this to mark the voucher redeemed instead of
-   *  deducting Beans. Always omitted for points-shop rewards. */
+   *  deducting Points. Always omitted for points-shop rewards. */
   voucher_id?: string;
 };
 
