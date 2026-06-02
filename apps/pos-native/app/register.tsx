@@ -778,9 +778,10 @@ export default function Register() {
 
   const eyebrow = [
     // Order type only shows once confirmed at checkout (not pre-claimed).
+    // Member name/phone is NOT shown here — the member card below already
+    // carries it, so repeating it in the eyebrow just reads as two names.
     orderConfirmed ? (orderType === "dine_in" ? "Dine-in" : "Takeaway") : null,
     orderConfirmed && orderType === "dine_in" && tableNumber ? `Stand #${tableNumber}` : null,
-    member?.name || (member ? member.phone : null),
   ].filter(Boolean).join("  ·  ");
 
   return (
@@ -930,10 +931,14 @@ export default function Register() {
           )}
         </View>
 
-        {/* Action bar — Stand moved into the checkout step (dine-in only). */}
-        <View className="flex-row px-4 gap-2 pb-2">
-          <ActionTab icon={<User size={15} color="#F5F3F0" />} label="Customer" active={panel === "customer"} onPress={() => setPanel(panel === "customer" ? "none" : "customer")} />
-        </View>
+        {/* Action bar — only the "Customer" lookup, and only before a member is
+            identified (after login it does nothing; the member card below owns
+            the member, and its trash icon clears them to re-identify). */}
+        {!member && (
+          <View className="flex-row px-4 gap-2 pb-2">
+            <ActionTab icon={<User size={15} color="#F5F3F0" />} label="Customer" active={panel === "customer"} onPress={() => setPanel(panel === "customer" ? "none" : "customer")} />
+          </View>
+        )}
 
         {/* Inline panels */}
         {panel === "customer" && !member && (

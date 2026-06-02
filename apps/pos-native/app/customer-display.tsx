@@ -293,16 +293,16 @@ export default function CustomerDisplay() {
     const mystery = snapshot?.claimables.find((c) => c.source_type === "mystery_pending");
     const thankYou = (
       <>
-        <View className="h-24 w-24 rounded-full items-center justify-center mb-6" style={{ backgroundColor: "rgba(34,197,94,0.18)" }}>
-          <Text style={{ fontSize: 52, color: GREEN, fontFamily: "Peachi-Bold" }}>✓</Text>
+        <View className="h-16 w-16 rounded-full items-center justify-center mb-4" style={{ backgroundColor: "rgba(34,197,94,0.18)" }}>
+          <Text style={{ fontSize: 34, color: GREEN, fontFamily: "Peachi-Bold" }}>✓</Text>
         </View>
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 52, color: CREAM }}>Thank You</Text>
-        {!!orderNumber && <Eyebrow color="rgba(245,243,240,0.55)" style={{ marginTop: 12 }}>{orderNumber}</Eyebrow>}
-        <Text style={{ fontFamily: "Peachi-Medium", fontSize: 22, color: "rgba(245,243,240,0.7)", marginTop: 16, textAlign: "center" }}>Your order is being prepared</Text>
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 38, color: CREAM }}>Thank You</Text>
+        {!!orderNumber && <Eyebrow color="rgba(245,243,240,0.55)" style={{ marginTop: 8 }}>{orderNumber}</Eyebrow>}
+        <Text style={{ fontFamily: "Peachi-Medium", fontSize: 15, color: "rgba(245,243,240,0.7)", marginTop: 10, textAlign: "center" }}>Your order is being prepared</Text>
         {beansEarned > 0 && (
-          <View className="flex-row items-center" style={{ gap: 10, marginTop: 22, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 999, backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)" }}>
-            <Sparkles size={22} color={GOLD} />
-            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: GOLD }}>+{beansEarned} Beans earned</Text>
+          <View className="flex-row items-center" style={{ gap: 7, marginTop: 16, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999, backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)" }}>
+            <Sparkles size={16} color={GOLD} />
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: GOLD }}>+{beansEarned} Beans earned</Text>
           </View>
         )}
       </>
