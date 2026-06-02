@@ -509,7 +509,7 @@ export function TierHeroCard({
           >
             {Number(tier.discount_percent ?? 0) > 0
               ? `${tier.discount_percent}% off every order`
-              : "Earn beans on every visit"}
+              : "Earn points on every visit"}
           </Text>
 
           {/* Stack rule — only on invitation tiers (where it changes

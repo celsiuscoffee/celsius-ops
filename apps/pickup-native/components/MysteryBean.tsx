@@ -167,7 +167,7 @@ export function MysteryBean({ dropId, baseBeansEarned, prerevealed, onRevealed, 
             className="text-[26px] mt-1"
             style={{ fontFamily: "Peachi-Bold", letterSpacing: -0.3, color: "#1A0200" }}
           >
-            Mystery Bean
+            Mystery Reward
           </Text>
           <Text
             className="text-[13px] mt-1.5 text-center"
@@ -333,7 +333,7 @@ function MysteryReveal({
               color: "rgba(251,191,36,0.85)",
             }}
           >
-            Bean Multiplier
+            Point Multiplier
           </Text>
           <View
             style={{

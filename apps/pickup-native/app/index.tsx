@@ -1642,7 +1642,7 @@ function HomeCatalogTicket({
   } else if (reward.discount_type === "free_item") {
     headline = reward.name;
   }
-  const eyebrow = "Bean Points";
+  const eyebrow = "Points";
   // Brand icon per discount type (mirrors RewardTicket's family).
   let BrandIcon: typeof CelsiusGift = CelsiusGift;
   if (reward.discount_type === "free_item")                                                    BrandIcon = CelsiusCup;

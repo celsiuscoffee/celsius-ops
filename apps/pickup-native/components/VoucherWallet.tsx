@@ -351,7 +351,7 @@ function voucherSourceLabel(v: Voucher): string {
     case "birthday":           return "Birthday Gift";
     case "referral":           return "Referral Gift";
     case "manual":             return "Promo";
-    case "points_redemption":  return "Bean Points";
+    case "points_redemption":  return "Points";
     case "mission":            return "Challenge";
     default:                    return "Reward";
   }
