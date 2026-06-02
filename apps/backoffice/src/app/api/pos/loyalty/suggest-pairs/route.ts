@@ -138,20 +138,25 @@ export async function POST(req: NextRequest) {
       .filter((c) => (c.prodIds.length > 0 || c.catIds.length > 0) && (c.outletIds.length === 0 || !outletId || c.outletIds.includes(outletId)));
 
     function comboFor(candidate: Product): { savingsSen: number; label: string; id: string } | null {
+      const candCat = candidate.category ?? "";
+      const other = cartIds.filter((id) => id !== candidate.id);
+      const cartCats = new Set(other.map((id) => byId.get(id)?.category).filter(Boolean) as string[]);
       for (const c of combos) {
-        const matches = (p?: Product) => !!p && (c.prodIds.includes(p.id) || (p.category != null && c.catIds.includes(p.category)));
-        if (!matches(candidate)) continue;
-        // Need at least one DIFFERENT cart item to also be part of this combo.
-        const cartMatch = cartIds.some((id) => id !== candidate.id && matches(byId.get(id)));
-        if (!cartMatch) continue;
-        // Estimate the saving for the badge.
-        let savings = 0;
-        if (c.discount_type === "percentage_off" && c.discount_value) savings = Math.round((candidate.price_sen * c.discount_value) / 100);
-        else if (c.discount_type === "fixed_amount_off" && c.discount_value) savings = Math.round(c.discount_value * 100);
-        else if (c.combo_price) savings = Math.max(0, candidate.price_sen - Math.round(c.combo_price * 100) % candidate.price_sen);
+        // The candidate must COMPLETE the combo — fill a component (category or
+        // product) the cart doesn't already cover, while the cart covers a
+        // DIFFERENT component. So a "drink + roti bakar" combo suggests the
+        // roti bakar when the cart holds the drink — never another drink.
+        const candCatHit = !!candCat && c.catIds.includes(candCat);
+        const candProdHit = c.prodIds.includes(candidate.id);
+        const addsCat = candCatHit && !cartCats.has(candCat) && c.catIds.some((cat) => cat !== candCat && cartCats.has(cat));
+        const addsProd = candProdHit && other.some((id) => c.prodIds.includes(id));
+        if (!addsCat && !addsProd) continue;
         const label = c.discount_type === "percentage_off" && c.discount_value ? `${c.discount_value}% OFF`
           : c.discount_type === "fixed_amount_off" && c.discount_value ? `RM${c.discount_value} OFF`
-          : "COMBO";
+          : c.combo_price ? "COMBO PRICE" : "COMBO";
+        const savings = c.discount_type === "fixed_amount_off" && c.discount_value ? Math.round(c.discount_value * 100)
+          : c.discount_type === "percentage_off" && c.discount_value ? Math.round((candidate.price_sen * c.discount_value) / 100)
+          : 0;
         return { savingsSen: savings, label, id: c.id };
       }
       return null;
