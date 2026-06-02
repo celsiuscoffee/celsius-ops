@@ -843,16 +843,15 @@ export default function Register() {
         {panel === "customer" && !member && (
           <View className="px-4 pb-3">
             <View className="flex-row gap-2">
-              <TextInput
+              <NumpadField
                 value={phoneInput}
                 onChangeText={(t) => { setPhoneInput(t); setLookupError(null); }}
                 placeholder="Customer phone"
-                placeholderTextColor="rgba(245,243,240,0.35)"
-                keyboardType="number-pad"
-                returnKeyType="search"
-                onSubmitEditing={lookup}
-                className="flex-1 h-11 px-3 rounded-xl border border-cream/15 text-cream"
-                style={{ backgroundColor: "rgba(245,243,240,0.06)", fontFamily: "SpaceGrotesk_500Medium", fontSize: 15 }}
+                mode="integer"
+                title="Customer phone"
+                onDone={lookup}
+                className="flex-1 h-11 px-3 rounded-xl border border-cream/15"
+                style={{ backgroundColor: "rgba(245,243,240,0.06)" }}
               />
               <Pressable onPress={lookup} disabled={lookingUp} className="h-11 px-4 rounded-xl items-center justify-center flex-row gap-1.5" style={{ backgroundColor: BRAND, opacity: lookingUp ? 0.6 : 1 }}>
                 {lookingUp ? <ActivityIndicator color="#fff" size="small" /> : <Search size={15} color="#fff" />}
@@ -1315,14 +1314,15 @@ export default function Register() {
                 </View>
                 <View>
                   <Text className="text-cream/55 text-xs mb-1.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Closing cash count (optional)</Text>
-                  <TextInput
+                  <NumpadField
                     value={closingCash}
                     onChangeText={setClosingCash}
-                    keyboardType="decimal-pad"
                     placeholder="0.00"
-                    placeholderTextColor="rgba(245,243,240,0.3)"
-                    className="h-14 rounded-2xl px-4 text-cream text-lg"
-                    style={{ backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)", fontFamily: "SpaceGrotesk_600SemiBold" }}
+                    mode="decimal"
+                    prefix="RM "
+                    title="Closing cash count"
+                    className="h-14 rounded-2xl px-4"
+                    style={{ backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}
                   />
                 </View>
                 <Pressable onPress={doCloseShift} disabled={shiftBusy} className={`h-14 rounded-2xl items-center justify-center ${shiftBusy ? "bg-primary/40" : "bg-primary active:opacity-80"}`}>
@@ -1334,14 +1334,15 @@ export default function Register() {
               <View className="gap-4">
                 <View>
                   <Text className="text-cream/55 text-xs mb-1.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Opening cash float (optional)</Text>
-                  <TextInput
+                  <NumpadField
                     value={openingCash}
                     onChangeText={setOpeningCash}
-                    keyboardType="decimal-pad"
                     placeholder="0.00"
-                    placeholderTextColor="rgba(245,243,240,0.3)"
-                    className="h-14 rounded-2xl px-4 text-cream text-lg"
-                    style={{ backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)", fontFamily: "SpaceGrotesk_600SemiBold" }}
+                    mode="decimal"
+                    prefix="RM "
+                    title="Opening cash float"
+                    className="h-14 rounded-2xl px-4"
+                    style={{ backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}
                   />
                   <Text className="text-cream/40 text-[11px] mt-2" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
                     Cash in the drawer at the start of the shift. Leave blank for a cashless (QR/card) register.
@@ -1965,14 +1966,14 @@ function LineEditorSheet({
             </View>
           </View>
           <View className="flex-row items-center" style={{ gap: 10 }}>
-            <TextInput
+            <NumpadField
               value={value}
               onChangeText={setValue}
               placeholder={mode === "percent" ? "0" : "0.00"}
-              placeholderTextColor="rgba(245,243,240,0.3)"
-              keyboardType="decimal-pad"
-              className="flex-1 rounded-xl px-3 py-2.5 text-cream text-base"
-              style={{ backgroundColor: "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: "rgba(245,243,240,0.14)", fontFamily: "SpaceGrotesk_700Bold" }}
+              mode={mode === "percent" ? "integer" : "decimal"}
+              title="Line discount"
+              className="flex-1 rounded-xl px-3 py-2.5"
+              style={{ backgroundColor: "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: "rgba(245,243,240,0.14)" }}
             />
             <Text className="text-cream/45 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
               {mode === "percent" ? "% off line" : "RM off line"}
@@ -2093,14 +2094,14 @@ function DiscountSheet({ subtotal, staffRole, onClose, onApply }: { subtotal: nu
         )}
 
         {/* Value input */}
-        <TextInput
+        <NumpadField
           value={value}
           onChangeText={setValue}
-          keyboardType={type === "percent" ? "number-pad" : "decimal-pad"}
+          mode={type === "percent" ? "integer" : "decimal"}
           placeholder={type === "percent" ? "e.g. 10" : "e.g. 5.00"}
-          placeholderTextColor="rgba(245,243,240,0.35)"
-          className="h-12 px-3 rounded-xl border border-cream/15 text-cream mb-3"
-          style={{ backgroundColor: "rgba(245,243,240,0.06)", fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 16 }}
+          title="Discount"
+          className="h-12 px-3 rounded-xl border border-cream/15 mb-3"
+          style={{ backgroundColor: "rgba(245,243,240,0.06)" }}
         />
 
         {/* Preview */}
@@ -2125,16 +2126,16 @@ function DiscountSheet({ subtotal, staffRole, onClose, onApply }: { subtotal: nu
         {needsManagerOverride && (
           <View className="mb-3">
             <Text className="text-[#D4A843] text-xs mb-1.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Manager PIN required</Text>
-            <TextInput
+            <NumpadField
               value={managerPin}
               onChangeText={(t) => { setManagerPin(t); setPinError(""); }}
-              keyboardType="number-pad"
-              secureTextEntry
+              mode="integer"
+              secure
               maxLength={6}
               placeholder="Enter manager PIN"
-              placeholderTextColor="rgba(245,243,240,0.35)"
-              className="h-12 px-3 rounded-xl border text-cream"
-              style={{ backgroundColor: "rgba(245,243,240,0.06)", borderColor: pinError ? "#E5484D" : "rgba(245,243,240,0.15)", fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 16 }}
+              title="Manager PIN"
+              className="h-12 px-3 rounded-xl border"
+              style={{ backgroundColor: "rgba(245,243,240,0.06)", borderColor: pinError ? "#E5484D" : "rgba(245,243,240,0.15)" }}
             />
             {!!pinError && <Text className="text-[#E5484D] text-xs mt-1.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{pinError}</Text>}
           </View>
@@ -2193,5 +2194,69 @@ function Stepper({ icon, onPress }: { icon: React.ReactNode; onPress: () => void
     <Pressable onPress={onPress} className="h-7 w-7 rounded-full items-center justify-center active:opacity-60" style={{ backgroundColor: "rgba(245,243,240,0.08)" }}>
       {icon}
     </Pressable>
+  );
+}
+
+/** Drop-in replacement for a numeric <TextInput>: shows the value styled like a
+ *  field, but tapping opens an in-app keypad (big targets, decimal/integer,
+ *  backspace + clear) instead of the OS keyboard — far better on the SUNMI. */
+function NumpadField({
+  value, onChangeText, placeholder, mode = "decimal", title, prefix = "",
+  secure = false, maxLength, className, style, onDone,
+}: {
+  value: string;
+  onChangeText: (v: string) => void;
+  placeholder?: string;
+  mode?: "integer" | "decimal";
+  title?: string;
+  prefix?: string;
+  secure?: boolean;
+  maxLength?: number;
+  className?: string;
+  style?: any;
+  onDone?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const display = value ? (secure ? "•".repeat(value.length) : `${prefix}${value}`) : "";
+  function press(k: string) {
+    Haptics.selectionAsync();
+    if (k === "←") return onChangeText(value.slice(0, -1));
+    if (k === "C") return onChangeText("");
+    if (k === ".") { if (mode !== "decimal" || value.includes(".")) return; return onChangeText((value || "0") + "."); }
+    if (maxLength && value.replace(".", "").length >= maxLength) return;
+    onChangeText(value === "0" ? k : value + k);
+  }
+  return (
+    <>
+      <Pressable onPress={() => setOpen(true)} className={className} style={[{ justifyContent: "center" }, style]}>
+        <Text numberOfLines={1} style={{ color: value ? "#F5F3F0" : "rgba(245,243,240,0.35)", fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 15 }}>
+          {display || placeholder || ""}
+        </Text>
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <View className="flex-1 bg-black/70 items-center justify-center px-8">
+          <Pressable onPress={() => setOpen(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+          <View className="w-[340px] rounded-3xl bg-surface border border-border p-5">
+            {!!title && <Text className="text-cream/55 text-xs mb-2" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.6 }}>{title.toUpperCase()}</Text>}
+            <View className="h-16 rounded-2xl mb-3 px-4 justify-center" style={{ backgroundColor: "rgba(245,243,240,0.06)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}>
+              <Text className="text-3xl" style={{ fontFamily: "SpaceGrotesk_700Bold", color: value ? "#F5F3F0" : "rgba(245,243,240,0.3)" }} numberOfLines={1}>
+                {value ? display : (prefix || "0")}
+              </Text>
+            </View>
+            <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+              {(["1", "2", "3", "4", "5", "6", "7", "8", "9", mode === "decimal" ? "." : "C", "0", "←"]).map((k) => (
+                <Pressable key={k} onPress={() => press(k)} className="items-center justify-center rounded-2xl active:opacity-70"
+                  style={{ width: 92, height: 58, backgroundColor: k === "←" || k === "C" ? "rgba(245,243,240,0.06)" : "rgba(245,243,240,0.1)" }}>
+                  <Text className="text-cream" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 24 }}>{k}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable onPress={() => { setOpen(false); onDone?.(); }} className="h-14 rounded-2xl items-center justify-center bg-primary active:opacity-80 mt-3">
+              <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Done</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
