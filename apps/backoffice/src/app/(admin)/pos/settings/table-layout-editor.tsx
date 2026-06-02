@@ -27,12 +27,11 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 
 /** 16-cell grid: drags snap to these lines so tables auto-align into neat rows /
  *  columns instead of landing freeform. The faint canvas gridlines match this. */
-/** Fine, SQUARE alignment grid (px). A cell is half a 2-top tile (unit 44 → 22),
- *  so a square table centred on an intersection lands its EDGES on grid lines too
- *  — everything lines up like graph paper. Both the drag-snap and the faint canvas
- *  gridlines use this. (The old grid was 1/16 of each axis = wide rectangles
- *  ~53×29px, which is why tables never aligned cleanly.) */
-const CELL = 22;
+/** Fine, SQUARE alignment grid (px) — graph-paper cells. Both the drag-snap and
+ *  the faint canvas gridlines use this exact size, so what you see is what you
+ *  snap to. Square (equal px on both axes), unlike the old 1/16-per-axis grid
+ *  that drew wide ~53×29px rectangles and never let tables line up cleanly. */
+const CELL = 14;
 /** Snap a normalised coord to the px grid for the given canvas span (px). */
 const snapNorm = (norm: number, span: number) =>
   span ? (Math.round((norm * span) / CELL) * CELL) / span : norm;
