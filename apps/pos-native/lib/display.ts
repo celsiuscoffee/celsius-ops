@@ -32,6 +32,9 @@ export type DisplayReward = { name: string; discountSen: number } | null;
 /** Auto tier% + promotions, combined, mirrored to the customer screen. */
 export type DisplayExtraDiscount = { label: string; sen: number } | null;
 export type DisplayOrderType = "dine_in" | "takeaway";
+/** Which tender the cashier chose — drives the pay screen: QR scan-to-pay vs a
+ *  distinct "pay by card on the terminal" prompt. null until a method is picked. */
+export type DisplayPayMethod = "qr" | "card" | null;
 /** Reverse channel: a reward the customer tapped to redeem on the 2nd screen.
  *  The register watches this, applies it to the cart, then clears it. */
 export type DisplayRedeemRequest = { rewardId: string | null; issuedRewardId: string | null; name: string } | null;
@@ -49,6 +52,8 @@ type DisplayState = {
   manualDiscount: DisplayExtraDiscount;
   /** Amount payable on the pay screen (sen). */
   payTotal: number;
+  /** Tender the cashier chose (qr/card) — null until picked. */
+  payMethod: DisplayPayMethod;
   redeemRequest: DisplayRedeemRequest;
   setStatus: (s: DisplayStatus) => void;
   setMember: (m: DisplayMember) => void;
@@ -59,6 +64,7 @@ type DisplayState = {
   setExtraDiscount: (d: DisplayExtraDiscount) => void;
   setManualDiscount: (d: DisplayExtraDiscount) => void;
   setPayTotal: (n: number) => void;
+  setPayMethod: (m: DisplayPayMethod) => void;
   setRedeemRequest: (r: DisplayRedeemRequest) => void;
   reset: () => void;
 };
@@ -73,6 +79,7 @@ export const useDisplay = create<DisplayState>((set) => ({
   extraDiscount: null,
   manualDiscount: null,
   payTotal: 0,
+  payMethod: null,
   redeemRequest: null,
   setStatus: (status) => set({ status }),
   setMember: (member) => set({ member }),
@@ -83,8 +90,9 @@ export const useDisplay = create<DisplayState>((set) => ({
   setExtraDiscount: (extraDiscount) => set({ extraDiscount }),
   setManualDiscount: (manualDiscount) => set({ manualDiscount }),
   setPayTotal: (payTotal) => set({ payTotal }),
+  setPayMethod: (payMethod) => set({ payMethod }),
   setRedeemRequest: (redeemRequest) => set({ redeemRequest }),
   // Keep member identified across orders (a returning regular stays
   // logged in for the next basket); only clear cart-scoped context.
-  reset: () => set({ status: "idle", orderNumber: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, payTotal: 0, redeemRequest: null }),
+  reset: () => set({ status: "idle", orderNumber: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, payTotal: 0, payMethod: null, redeemRequest: null }),
 }));

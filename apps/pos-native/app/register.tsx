@@ -8,8 +8,8 @@ import * as Haptics from "expo-haptics";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Minus, LogOut, X, CheckCircle2,
-  Settings as SettingsIcon, User, Gift, LayoutGrid, Trash2, Tag,
-  Grid3x3, QrCode, CreditCard, ClipboardList, Bike, ShoppingBag, ChefHat, Power,
+  Settings as SettingsIcon, User, Gift, Trash2, Tag,
+  Grid3x3, QrCode, CreditCard, ClipboardList, Bike, ShoppingBag, ChefHat, Coffee, Power,
 } from "lucide-react-native";
 import { usePos } from "@/lib/store";
 import { apiPost } from "@/lib/api";
@@ -21,7 +21,7 @@ import { fetchCategories, fetchProducts, type Product, type ModifierOption } fro
 import { useCart, cartSubtotal, type CartLine } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
 import { createSale, getNextQueueNumber } from "@/lib/checkout";
-import { useSettings, gridColumns, serviceChargeRate, defaultOrderType, receiptConfig, tableZones } from "@/lib/settings";
+import { useSettings, gridColumns, serviceChargeRate, receiptConfig, tableZones } from "@/lib/settings";
 import { useTablesPanel, type TableSlot, type TableOrderRef } from "@/lib/use-tables-panel";
 import { useOrdersPanel, type KdsOrder } from "@/lib/use-orders-panel";
 import { useShift, openShift, closeShift, shiftTotals, type Shift, type ShiftTotals } from "@/lib/shift";
@@ -105,8 +105,6 @@ export default function Register() {
   // Shift open/close UI.
   const [showShift, setShowShift] = useState(false);
   const [shiftBusy, setShiftBusy] = useState(false);
-  const [openingCash, setOpeningCash] = useState("");
-  const [closingCash, setClosingCash] = useState("");
   const [liveTotals, setLiveTotals] = useState<ShiftTotals | null>(null);
   const [closedSummary, setClosedSummary] = useState<ShiftTotals | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -132,6 +130,11 @@ export default function Register() {
 
   // Order context.
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("takeaway");
+  // Order type + stand are now chosen at CHECKOUT (a compulsory step) rather than
+  // via an upfront toggle. orderConfirmed gates the checkout modal (order-details
+  // → payment); coTouched = the cashier explicitly tapped a type this checkout.
+  const [orderConfirmed, setOrderConfirmed] = useState(false);
+  const [coTouched, setCoTouched] = useState(false);
   const [tableNumber, setTableNumber] = useState<string>("");
   const [panel, setPanel] = useState<Panel>("none");
   // "Ask first": until the cashier identifies a member OR taps Guest, a prompt
@@ -211,8 +214,6 @@ export default function Register() {
   const openShiftModal = useCallback(() => {
     Haptics.selectionAsync();
     setClosedSummary(null);
-    setOpeningCash("");
-    setClosingCash("");
     setLiveTotals(null);
     setShowShift(true);
     // Pull live sales for the open shift so the close screen shows a summary.
@@ -221,24 +222,20 @@ export default function Register() {
   const doOpenShift = useCallback(async () => {
     if (!outletId || !staff?.staffId) return;
     setShiftBusy(true);
-    const sen = Math.round((parseFloat(openingCash) || 0) * 100);
-    await openShift(outletId, staff.staffId, sen);
+    await openShift(outletId, staff.staffId);
     await reloadShift();
     setShiftBusy(false);
-    setOpeningCash("");
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [outletId, staff?.staffId, openingCash, reloadShift]);
+  }, [outletId, staff?.staffId, reloadShift]);
   const doCloseShift = useCallback(async () => {
     if (!shift || !staff?.staffId) return;
     setShiftBusy(true);
-    const sen = Math.round((parseFloat(closingCash) || 0) * 100);
-    const totals = await closeShift(shift, staff.staffId, sen);
+    const totals = await closeShift(shift, staff.staffId);
     setClosedSummary(totals ?? { orders: 0, sales: 0 });
     await reloadShift();
     setShiftBusy(false);
-    setClosingCash("");
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [shift, staff?.staffId, closingCash, reloadShift]);
+  }, [shift, staff?.staffId, reloadShift]);
   // Initial load + re-read backoffice settings whenever the register regains
   // focus, so a grid / service-charge / receipt change shows without an app
   // restart (the store used to cache the first load and never refetch).
@@ -262,14 +259,9 @@ export default function Register() {
     return () => { supabase.removeChannel(ch); };
   }, [outletId, refreshSettings]);
 
-  // Default order type from settings, once.
-  const didInitType = useRef(false);
-  useEffect(() => {
-    if (settings && !didInitType.current) {
-      didInitType.current = true;
-      setOrderType(defaultOrderType(settings));
-    }
-  }, [settings]);
+  // Order type is chosen at CHECKOUT now (compulsory step), so it is NOT pre-set
+  // from settings here — every order starts neutral (takeaway, no service charge)
+  // and the cashier confirms Dine-in/Takeaway (+ stand) in the checkout modal.
 
   // Resolve the POS outlet → its pickup STORE slug (e.g. "shah-alam"). The
   // per-outlet availability ("86") table is keyed by that slug — the same key
@@ -391,6 +383,9 @@ export default function Register() {
     setDisplayStatus(lines.length > 0 ? "ordering" : "idle");
   }, [lines.length, paid]);
   useEffect(() => { useDisplay.getState().setOrderType(orderType); }, [orderType]);
+  // Mirror the chosen tender to the customer screen so card payments show a
+  // "pay by card on the terminal" prompt instead of the QR.
+  useEffect(() => { useDisplay.getState().setPayMethod(payMethod); }, [payMethod]);
   useEffect(() => {
     useDisplay.getState().setTableNumber(orderType === "dine_in" ? (tableNumber || null) : null);
   }, [orderType, tableNumber]);
@@ -618,6 +613,9 @@ export default function Register() {
     setActiveCat("all");
     setPanel("none");
     setMemberAsked(false);
+    setOrderType("takeaway");
+    setOrderConfirmed(false);
+    setCoTouched(false);
     setDisplayStatus("idle");
     useDisplay.getState().setMember(null);
     useDisplay.getState().setExtraDiscount(null);
@@ -717,8 +715,9 @@ export default function Register() {
   }
 
   const eyebrow = [
-    orderType === "dine_in" ? "Dine-in" : "Takeaway",
-    orderType === "dine_in" && tableNumber ? `Stand #${tableNumber}` : null,
+    // Order type only shows once confirmed at checkout (not pre-claimed).
+    orderConfirmed ? (orderType === "dine_in" ? "Dine-in" : "Takeaway") : null,
+    orderConfirmed && orderType === "dine_in" && tableNumber ? `Stand #${tableNumber}` : null,
     member?.name || (member ? member.phone : null),
   ].filter(Boolean).join("  ·  ");
 
@@ -736,11 +735,7 @@ export default function Register() {
                 {staff?.staffName ?? ""} · {outletShort(outletId)}
               </Text>
             </View>
-            {/* Order-type toggle */}
-            <View className="flex-row ml-3 rounded-xl overflow-hidden border border-cream/15">
-              <TypeToggle label="Dine-in" active={orderType === "dine_in"} onPress={() => { Haptics.selectionAsync(); setOrderType("dine_in"); }} />
-              <TypeToggle label="Takeaway" active={orderType === "takeaway"} onPress={() => { Haptics.selectionAsync(); setOrderType("takeaway"); }} />
-            </View>
+            {/* Order type is chosen at checkout now — no upfront toggle here. */}
           </View>
           <View className="flex-row items-center gap-2">
             {/* Shift — open/close the register's cashier shift. Green dot
@@ -863,7 +858,7 @@ export default function Register() {
           <View className="flex-row items-center justify-between">
             <Text className="text-cream text-lg" style={{ fontFamily: "Peachi-Bold" }}>Current Order</Text>
             {lines.length > 0 && (
-              <Pressable onPress={() => { Haptics.selectionAsync(); clear(); setReward(null); setManualDiscount(0); setMemberAsked(false); }} className="active:opacity-60">
+              <Pressable onPress={() => { Haptics.selectionAsync(); clear(); setReward(null); setManualDiscount(0); setMemberAsked(false); setOrderType("takeaway"); setTableNumber(""); setOrderConfirmed(false); setCoTouched(false); }} className="active:opacity-60">
                 <Text className="text-primary text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>CLEAR</Text>
               </Pressable>
             )}
@@ -873,12 +868,9 @@ export default function Register() {
           )}
         </View>
 
-        {/* Action bar */}
+        {/* Action bar — Stand moved into the checkout step (dine-in only). */}
         <View className="flex-row px-4 gap-2 pb-2">
           <ActionTab icon={<User size={15} color="#F5F3F0" />} label="Customer" active={panel === "customer"} onPress={() => setPanel(panel === "customer" ? "none" : "customer")} />
-          {orderType === "dine_in" && (
-            <ActionTab icon={<LayoutGrid size={15} color="#F5F3F0" />} label="Stand" active={panel === "table"} onPress={() => setPanel(panel === "table" ? "none" : "table")} />
-          )}
         </View>
 
         {/* Inline panels */}
@@ -905,31 +897,6 @@ export default function Register() {
               </View>
             )}
             {!!lookupError && <Text className="text-[#E5484D] text-xs mt-1.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{lookupError}</Text>}
-          </View>
-        )}
-        {panel === "table" && orderType === "dine_in" && (
-          <View className="px-4 pb-3">
-            <Text className="text-cream/50 text-[11px] mb-1.5" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.8 }}>TABLE STAND NO. — the numbered stand you hand the guest</Text>
-            <View className="flex-row items-center" style={{ gap: 8 }}>
-              <NumpadField
-                value={tableNumber}
-                onChangeText={setTableNumber}
-                placeholder="Tap to enter stand #"
-                mode="integer"
-                prefix="#"
-                title="Table Stand No."
-                autoOpen
-                onDone={() => { if (tableNumber) setPanel("none"); }}
-                onClose={() => setPanel("none")}
-                className="flex-1 h-11 px-3 rounded-xl border border-cream/15"
-                style={{ backgroundColor: "rgba(245,243,240,0.06)" }}
-              />
-              {!!tableNumber && (
-                <Pressable onPress={() => { Haptics.selectionAsync(); setTableNumber(""); }} className="h-11 px-3 rounded-xl items-center justify-center" style={{ backgroundColor: "rgba(245,243,240,0.06)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}>
-                  <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Clear</Text>
-                </Pressable>
-              )}
-            </View>
           </View>
         )}
 
@@ -1086,29 +1053,29 @@ export default function Register() {
             <Text className="text-cream text-lg" style={{ fontFamily: "Peachi-Bold" }}>Total</Text>
             <Text className="text-amber-400 text-2xl" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(total)}</Text>
           </View>
-          {/* Charge — when dine-in needs a table, the button stays active and
-              tapping it OPENS the table picker (instead of being a dead state). */}
+          {/* Charge — opens checkout. Order type + stand are chosen there
+              (compulsory) before payment. If already confirmed (re-opened after a
+              back-out), go straight to payment + flip the display to Scan-to-Pay. */}
           {(() => {
-            const needsTable = orderType === "dine_in" && !tableNumber;
             const empty = lines.length === 0;
             return (
               <Pressable
                 disabled={empty}
                 onPress={() => {
+                  if (empty) return;
                   Haptics.selectionAsync();
-                  if (needsTable) { setPanel("table"); return; }
-                  // Push the amount + flip the customer display to the QR
-                  // payment screen BEFORE opening the modal — the customer
-                  // should see "Scan to Pay" the instant the cashier hits
-                  // Charge, not after a tap-through.
-                  useDisplay.getState().setPayTotal(total);
-                  setDisplayStatus("payment");
+                  if (orderConfirmed) {
+                    useDisplay.getState().setPayTotal(total);
+                    setDisplayStatus("payment");
+                  } else {
+                    setCoTouched(false); // force a fresh type pick this checkout
+                  }
                   setShowCheckout(true);
                 }}
                 className={`h-14 rounded-2xl items-center justify-center ${empty ? "bg-primary/30" : "bg-primary active:opacity-80"}`}
               >
                 <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
-                  {empty ? "Add items" : needsTable ? "Give a stand #" : `Charge ${rm(total)}`}
+                  {empty ? "Add items" : `Charge ${rm(total)}`}
                 </Text>
               </Pressable>
             );
@@ -1319,11 +1286,11 @@ export default function Register() {
       </Modal>
 
       {/* ── Shift open / close ─────────────────────────────────────────
-          Explicit cashier-shift control. Open a shift (optional cash
-          float) at the start; close it at the end to stamp closed_at +
-          roll up the shift's sales for the Z-report. The checkout still
-          auto-attaches whatever shift is open, so selling is never
-          blocked — this just gives staff the bookend actions. */}
+          Explicit cashier-shift control. Open a shift at the start; close
+          it at the end to stamp closed_at + roll up the shift's sales for
+          the Z-report. Cashless register — no cash float / drawer count.
+          The checkout still auto-attaches whatever shift is open, so
+          selling is never blocked — this just gives staff the bookends. */}
       <Modal visible={showShift} transparent animationType="fade" onRequestClose={() => setShowShift(false)}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
           {/* Tap the dark backdrop to close (unless a shift op is in flight). */}
@@ -1379,19 +1346,6 @@ export default function Register() {
                     </Text>
                   </View>
                 </View>
-                <View>
-                  <Text className="text-cream/55 text-xs mb-1.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Closing cash count (optional)</Text>
-                  <NumpadField
-                    value={closingCash}
-                    onChangeText={setClosingCash}
-                    placeholder="0.00"
-                    mode="decimal"
-                    prefix="RM "
-                    title="Closing cash count"
-                    className="h-14 rounded-2xl px-4"
-                    style={{ backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}
-                  />
-                </View>
                 <Pressable onPress={doCloseShift} disabled={shiftBusy} className={`h-14 rounded-2xl items-center justify-center ${shiftBusy ? "bg-primary/40" : "bg-primary active:opacity-80"}`}>
                   {shiftBusy ? <ActivityIndicator color="#F5F3F0" /> : <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Close Shift</Text>}
                 </Pressable>
@@ -1399,22 +1353,9 @@ export default function Register() {
             ) : (
               // ── Open a new shift ──
               <View className="gap-4">
-                <View>
-                  <Text className="text-cream/55 text-xs mb-1.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Opening cash float (optional)</Text>
-                  <NumpadField
-                    value={openingCash}
-                    onChangeText={setOpeningCash}
-                    placeholder="0.00"
-                    mode="decimal"
-                    prefix="RM "
-                    title="Opening cash float"
-                    className="h-14 rounded-2xl px-4"
-                    style={{ backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}
-                  />
-                  <Text className="text-cream/40 text-[11px] mt-2" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                    Cash in the drawer at the start of the shift. Leave blank for a cashless (QR/card) register.
-                  </Text>
-                </View>
+                <Text className="text-cream/50 text-[12px]" style={{ fontFamily: "SpaceGrotesk_500Medium", lineHeight: 18 }}>
+                  Cashless register (QR / card only) — opening a shift just ties this run of orders to you, so sales roll up correctly on the Z-Report.
+                </Text>
                 <Pressable onPress={doOpenShift} disabled={shiftBusy} className={`h-14 rounded-2xl items-center justify-center flex-row gap-2 ${shiftBusy ? "bg-primary/40" : "bg-primary active:opacity-80"}`}>
                   {shiftBusy ? <ActivityIndicator color="#F5F3F0" /> : <><Power size={20} color="#F5F3F0" /><Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Open Shift</Text></>}
                 </Pressable>
@@ -1431,7 +1372,7 @@ export default function Register() {
           <View className="w-[560px] rounded-3xl bg-surface border border-border p-7">
             <View className="flex-row items-center justify-between mb-1">
               <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>
-                {payMethod === "qr" ? "Scan to Pay" : payMethod === "card" ? "Card Payment" : "Payment"}
+                {!orderConfirmed ? "Order details" : payMethod === "qr" ? "Scan to Pay" : payMethod === "card" ? "Card Payment" : "Payment"}
               </Text>
               <Pressable
                 onPress={() => { setShowCheckout(false); setPayMethod(null); setCardStage("idle"); setCardResult(null); if (!paying && !paid) setDisplayStatus(lines.length > 0 ? "ordering" : "idle"); }}
@@ -1443,8 +1384,78 @@ export default function Register() {
             </View>
             <Text className="text-amber-400 text-5xl mb-4" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(total)}</Text>
 
-            {/* ── METHOD PICKER ── */}
-            {!payMethod && !paying && (
+            {/* Confirmed order type + stand, with a tap back to change it. */}
+            {orderConfirmed && (
+              <Pressable onPress={() => { Haptics.selectionAsync(); setOrderConfirmed(false); setPayMethod(null); setDisplayStatus("ordering"); }} className="flex-row items-center gap-2 -mt-2 mb-5 active:opacity-70">
+                <Text className="text-cream/65 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                  {orderType === "dine_in" ? `Dine-in · Stand #${tableNumber}` : "Takeaway"}
+                </Text>
+                <View className="px-2 py-0.5 rounded-md" style={{ backgroundColor: "rgba(245,243,240,0.08)" }}>
+                  <Text className="text-cream/70 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.5 }}>EDIT</Text>
+                </View>
+              </Pressable>
+            )}
+
+            {/* ── STEP 1: ORDER DETAILS (compulsory) — Dine-in/Takeaway + stand ── */}
+            {!orderConfirmed && !paying && (
+              <View className="mt-1">
+                <Text className="text-cream/55 text-xs uppercase tracking-widest mb-2" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>How is this order?</Text>
+                <View className="flex-row gap-3">
+                  {([
+                    { t: "dine_in" as const, label: "Dine-in", Icon: Coffee },
+                    { t: "takeaway" as const, label: "Takeaway", Icon: ShoppingBag },
+                  ]).map(({ t, label, Icon }) => {
+                    const on = coTouched && orderType === t;
+                    return (
+                      <Pressable
+                        key={t}
+                        onPress={() => { Haptics.selectionAsync(); setOrderType(t); setCoTouched(true); if (t === "takeaway") setTableNumber(""); }}
+                        className="flex-1 rounded-2xl items-center justify-center"
+                        style={{ height: 96, gap: 8, backgroundColor: on ? "rgba(251,191,36,0.12)" : "rgba(245,243,240,0.04)", borderWidth: on ? 2 : 1, borderColor: on ? "#FBBF24" : "rgba(245,243,240,0.12)" }}
+                      >
+                        <Icon size={26} color={on ? "#FBBF24" : "rgba(245,243,240,0.7)"} />
+                        <Text className="text-base" style={{ fontFamily: "Peachi-Bold", color: on ? "#F5F3F0" : "rgba(245,243,240,0.8)" }}>{label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {coTouched && orderType === "dine_in" && (
+                  <View className="mt-4">
+                    <Text className="text-cream/50 text-[11px] mb-1.5" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.8 }}>STAND NUMBER — the placard you hand the guest</Text>
+                    <View className="h-12 rounded-xl mb-2 px-4 justify-center" style={{ borderWidth: 1.5, borderColor: "rgba(245,243,240,0.18)", backgroundColor: "rgba(245,243,240,0.04)" }}>
+                      <Text className="text-2xl" style={{ fontFamily: "SpaceGrotesk_700Bold", color: tableNumber ? "#F5F3F0" : "rgba(245,243,240,0.3)" }}>{tableNumber ? `#${tableNumber}` : "#"}</Text>
+                    </View>
+                    <View className="flex-row flex-wrap" style={{ gap: 7, justifyContent: "space-between" }}>
+                      {(["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "←"]).map((k) => (
+                        <Pressable key={k} onPress={() => { Haptics.selectionAsync(); if (k === "C") setTableNumber(""); else if (k === "←") setTableNumber(tableNumber.slice(0, -1)); else if (tableNumber.length < 4) setTableNumber(tableNumber === "0" ? k : tableNumber + k); }}
+                          className="items-center justify-center rounded-xl active:opacity-70" style={{ width: "31.5%", height: 48, backgroundColor: k === "C" || k === "←" ? "rgba(245,243,240,0.06)" : "rgba(245,243,240,0.1)" }}>
+                          <Text className="text-cream text-xl" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{k}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {(() => {
+                  const ready = coTouched && (orderType === "takeaway" || !!tableNumber);
+                  return (
+                    <Pressable
+                      disabled={!ready}
+                      onPress={() => { Haptics.selectionAsync(); setOrderConfirmed(true); useDisplay.getState().setPayTotal(total); setDisplayStatus("payment"); }}
+                      className={`h-14 rounded-2xl items-center justify-center mt-5 ${ready ? "bg-primary active:opacity-80" : "bg-primary/30"}`}
+                    >
+                      <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
+                        {!coTouched ? "Select Dine-in or Takeaway" : orderType === "dine_in" && !tableNumber ? "Enter stand number" : "Continue to payment"}
+                      </Text>
+                    </Pressable>
+                  );
+                })()}
+              </View>
+            )}
+
+            {/* ── STEP 2: METHOD PICKER ── */}
+            {orderConfirmed && !payMethod && !paying && (
               <View className="gap-3 mt-2">
                 <Text className="text-cream/55 text-xs uppercase tracking-widest mb-1" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Choose payment method</Text>
                 <Pressable
@@ -1699,14 +1710,6 @@ function discountSummary(v: { discount_type: string | null; discount_value: numb
   if (v.discount_type === "flat") return `${rm(Math.round(v.discount_value ?? 0))} off`;
   if (v.discount_type === "free_item" || v.discount_type === "free_upgrade") return v.free_product_name ? `Free ${v.free_product_name}` : "Free item";
   return "Reward";
-}
-
-function TypeToggle({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} className="px-3.5 py-2 active:opacity-80" style={{ backgroundColor: active ? BRAND : "transparent" }}>
-      <Text className={active ? "text-white" : "text-cream/55"} style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 13 }}>{label}</Text>
-    </Pressable>
-  );
 }
 
 function ActionTab({ icon, label, active, onPress }: { icon: React.ReactNode; label: string; active: boolean; onPress: () => void }) {
@@ -2296,7 +2299,9 @@ function NumpadField({
     if (k === "C") return onChangeText("");
     if (k === ".") { if (mode !== "decimal" || value.includes(".")) return; return onChangeText((value || "0") + "."); }
     if (maxLength && value.replace(".", "").length >= maxLength) return;
-    onChangeText(value === "0" ? k : value + k);
+    // Integer mode (phone, stand) keeps leading zeros — "0123…" is a real phone
+    // number. Decimal mode (amounts) still collapses a lone leading 0.
+    onChangeText(mode === "integer" ? value + k : value === "0" ? k : value + k);
   }
   return (
     <>

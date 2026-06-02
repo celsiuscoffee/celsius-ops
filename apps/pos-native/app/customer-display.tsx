@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View, Text, Image, FlatList, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import QRCode from "react-native-qrcode-svg";
-import { Gift, Tag, Coffee, Sparkles, Delete } from "lucide-react-native";
+import { Gift, Tag, Coffee, Sparkles, Delete, CreditCard } from "lucide-react-native";
 import { useCart, cartSubtotal } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
 import { usePos } from "@/lib/store";
@@ -52,6 +52,8 @@ export default function CustomerDisplay() {
   const payTotal = useDisplay((s) => s.payTotal);
   const outletId = usePos((s) => s.outletId);
   const settings = useSettings((s) => s.settings);
+  const sst = useSettings((s) => s.sst);
+  const displayPayMethod = useDisplay((s) => s.payMethod);
   // Backoffice-managed Maybank QR (live via realtime on app_settings).
   // Returns { payload, image_url }: image_url is the uploaded Maybank
   // poster (preferred — actual pink poster customers know), payload is
@@ -127,12 +129,31 @@ export default function CustomerDisplay() {
   const rewardDisc = reward?.discountSen ?? 0;
   const extraDisc = extraDiscount?.sen ?? 0;
   const manualDisc = manualDiscount?.sen ?? 0;
-  const total = Math.max(0, subtotal + serviceCharge - rewardDisc - extraDisc - manualDisc);
+  const afterDiscount = Math.max(0, subtotal + serviceCharge - rewardDisc - extraDisc - manualDisc);
+  // SST mirrors the register (global app_settings.sst) — added on top, so the
+  // customer-display total matches what they actually pay.
+  const sstAmount = sst.enabled ? Math.round(afterDiscount * sst.rate) : 0;
+  const total = afterDiscount + sstAmount;
   const outletName = outletShort(outletId) || "Celsius Coffee";
   const hasCart = lines.length > 0;
 
   // ── 1. Payment ──
   if (status === "payment") {
+    // Card payment → a distinct "pay on the terminal" prompt (NOT the QR).
+    if (displayPayMethod === "card") {
+      return (
+        <View className="flex-1 items-center justify-center px-12" style={{ backgroundColor: PAGE }}>
+          <View className="items-center justify-center mb-6" style={{ height: 104, width: 104, borderRadius: 28, backgroundColor: "rgba(59,130,246,0.14)", borderWidth: 1, borderColor: "rgba(59,130,246,0.5)" }}>
+            <CreditCard size={46} color="#3B82F6" />
+          </View>
+          <Eyebrow color={GOLD}>PAY BY CARD</Eyebrow>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 56, lineHeight: 60, color: GOLD, marginTop: 6 }}>{rm(payTotal || total)}</Text>
+          <Text style={{ fontFamily: "Peachi-Medium", fontSize: 24, color: CREAM, marginTop: 22, textAlign: "center" }}>Please tap or insert your card</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 16, color: "rgba(245,243,240,0.55)", marginTop: 8, textAlign: "center" }}>on the payment terminal</Text>
+          {!!orderNumber && <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12, letterSpacing: 2, color: "rgba(245,243,240,0.35)", marginTop: 26 }}>{orderNumber}</Text>}
+        </View>
+      );
+    }
     const imageUrl = maybankQr?.image_url ?? null;
     const merchantId = maybankQr?.payload ?? "";
     const hasAny = !!imageUrl || !!merchantId;
@@ -433,6 +454,7 @@ export default function CustomerDisplay() {
             {rewardDisc > 0 && <Row label={reward?.name ?? "Reward"} value={`−${rm(rewardDisc)}`} green />}
             {extraDisc > 0 && <Row label={extraDiscount?.label || "Discount"} value={`−${rm(extraDisc)}`} green />}
             {manualDisc > 0 && <Row label={manualDiscount?.label || "Discount"} value={`−${rm(manualDisc)}`} green />}
+            {sstAmount > 0 && <Row label={`SST (${Math.round(sst.rate * 100)}%)`} value={rm(sstAmount)} />}
             <View className="flex-row justify-between items-baseline" style={{ marginTop: 2 }}>
               <Text style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: CREAM }}>Total</Text>
               <Text style={{ fontFamily: "Peachi-Bold", fontSize: 22, color: GOLD }}>{rm(total)}</Text>
