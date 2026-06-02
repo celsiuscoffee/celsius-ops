@@ -837,7 +837,7 @@ export default function Register() {
                 <View className="h-20 w-20 rounded-3xl items-center justify-center" style={{ marginBottom: 22, backgroundColor: "rgba(251,191,36,0.14)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)" }}>
                   <User size={38} color="#FBBF24" />
                 </View>
-                <Text className="text-cream text-center w-full" style={{ fontFamily: "Peachi-Bold", fontSize: 30, lineHeight: 36 }}>Does the customer want to check rewards?</Text>
+                <Text className="text-cream text-center w-full" style={{ fontFamily: "Peachi-Bold", fontSize: 30, lineHeight: 36 }}>Check Customer's Rewards</Text>
                 <Text className="text-cream/55 text-center w-full" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, lineHeight: 22, marginTop: 12, marginBottom: 32 }}>Ask before starting the order — checking earns Beans and unlocks member pricing on the whole bill.</Text>
                 <Pressable onPress={() => { Haptics.selectionAsync(); setPanel("customer"); }} className="w-full rounded-2xl flex-row items-center justify-center active:opacity-80" style={{ height: 64, gap: 10, backgroundColor: "#FBBF24" }}>
                   <User size={20} color="#160800" />
