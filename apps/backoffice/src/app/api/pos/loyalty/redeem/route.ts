@@ -27,7 +27,7 @@ function generateCode(): string {
  */
 export async function POST(req: NextRequest) {
   try {
-    const { member_id, reward_id, outlet_id, issued_reward_id } = await req.json();
+    const { member_id, reward_id, outlet_id, issued_reward_id, preview } = await req.json();
 
     if (!member_id || !reward_id) {
       return NextResponse.json({ error: "member_id and reward_id required" }, { status: 400 });
@@ -53,6 +53,35 @@ export async function POST(req: NextRequest) {
     // Check stock
     if (reward.stock !== null && reward.stock <= 0) {
       return NextResponse.json({ error: "Reward out of stock" }, { status: 400 });
+    }
+
+    // ── Preview (POS deferred burn) ──────────────────────────────────
+    // The register RESERVES a catalog reward on the cart and the actual
+    // Beans burn + redemption record happen at payment confirmation
+    // (/api/pos/loyalty/complete), pickup-style. Here we only validate
+    // affordability and hand back the discount descriptor — no deduction,
+    // no redemption row. Issued vouchers (issued_reward_id) still commit
+    // immediately; they don't cost Beans.
+    if (preview && !issued_reward_id) {
+      const { data: mb } = await supabase
+        .from("member_brands")
+        .select("points_balance")
+        .eq("member_id", member_id)
+        .eq("brand_id", BRAND_ID)
+        .maybeSingle();
+      const balance = mb?.points_balance ?? 0;
+      if (balance < (reward.points_required ?? 0)) {
+        return NextResponse.json({ error: "Insufficient points" }, { status: 400 });
+      }
+      return NextResponse.json({
+        success: true,
+        redemption_id: null,  // not redeemed yet — committed at payment
+        code: null,
+        new_balance: balance, // unchanged until the burn at /complete
+        reward_name: reward.name,
+        discount: buildDiscountInfo(reward),
+        preview: true,
+      });
     }
 
     let newBalance: number;

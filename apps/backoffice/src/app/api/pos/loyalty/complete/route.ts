@@ -42,6 +42,67 @@ function getAdmin() {
 
 type Admin = ReturnType<typeof getAdmin>;
 
+function genCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let c = "";
+  for (let i = 0; i < 8; i++) c += chars.charAt(Math.floor(Math.random() * chars.length));
+  return c;
+}
+
+/**
+ * Commit a catalog reward the register RESERVED at apply time (it called
+ * /redeem in preview mode → no burn). This is where the Beans are actually
+ * spent: once, only after payment confirmed. Idempotent on order_id (skips if
+ * a 'redeem' txn already references it). A no-op when the order carried no
+ * reward, or carried a reward_id that doesn't resolve to a catalog template
+ * (e.g. an issued-voucher redemption already committed at apply time).
+ */
+async function commitReservedRedemption(
+  supabase: Admin,
+  args: { memberId: string; orderId: string; rewardId: string | null; outletId: string | null },
+): Promise<number> {
+  if (!args.rewardId) return 0;
+  const { data: already } = await supabase
+    .from("point_transactions")
+    .select("id")
+    .eq("reference_id", args.orderId)
+    .eq("type", "redeem")
+    .limit(1)
+    .maybeSingle();
+  if (already) return 0;
+
+  const { data: reward } = await supabase
+    .from("voucher_templates")
+    .select("title, points_cost")
+    .eq("legacy_reward_id", args.rewardId)
+    .eq("brand_id", BRAND_ID)
+    .eq("is_active", true)
+    .maybeSingle();
+  const pointsCost = Number((reward as { points_cost?: number } | null)?.points_cost ?? 0);
+  if (!reward || pointsCost <= 0) return 0; // not a points-cost catalog reward → skip
+
+  const { data: newBal, error: deductErr } = await supabase.rpc("deduct_points", {
+    p_member_id: args.memberId, p_brand_id: BRAND_ID, p_points: pointsCost,
+  });
+  if (deductErr || typeof newBal !== "number" || newBal < 0) return 0;
+
+  await supabase.from("point_transactions").insert({
+    id: `txn-pos-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`,
+    member_id: args.memberId, brand_id: BRAND_ID, outlet_id: args.outletId,
+    type: "redeem", points: -pointsCost, balance_after: newBal,
+    description: `POS Redeemed: ${(reward as { title?: string }).title ?? "reward"}`,
+    reference_id: args.orderId, multiplier: 1,
+  });
+  await supabase.from("redemptions").insert({
+    id: `rdm-pos-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`,
+    member_id: args.memberId, reward_id: args.rewardId, brand_id: BRAND_ID,
+    outlet_id: args.outletId, points_spent: pointsCost, status: "confirmed",
+    code: genCode(), redemption_type: "in_store", source: "pos",
+    confirmed_at: new Date().toISOString(),
+  });
+  return pointsCost;
+}
+
 type MysteryPoolEntry = {
   id: string;
   outcome_type: "beans_multiplier" | "flat_beans" | "voucher" | "no_bonus" | "surprise_in_store";
@@ -140,7 +201,7 @@ export async function POST(req: NextRequest) {
     // Server-authoritative spend + outlet from the order row itself.
     const { data: order } = await supabase
       .from("pos_orders")
-      .select("id, total, sst_amount, outlet_id, status")
+      .select("id, total, sst_amount, outlet_id, status, reward_id")
       .eq("id", order_id)
       .maybeSingle();
     if (!order) {
@@ -168,6 +229,21 @@ export async function POST(req: NextRequest) {
 
     let pointsAwarded = 0;
     let mysterySpawned = false;
+    let rewardBurned = 0;
+
+    // ── Reward redemption commit — burn the Beans for a reward the register
+    //    RESERVED at apply time, now that payment is confirmed. One per order,
+    //    idempotent; no-op if the order carried no (catalog) reward. ────────
+    try {
+      rewardBurned = await commitReservedRedemption(supabase, {
+        memberId: member_id,
+        orderId: order_id,
+        rewardId: (order as { reward_id?: string | null }).reward_id ?? null,
+        outletId: order.outlet_id ?? null,
+      });
+    } catch (e) {
+      console.warn("[pos/loyalty/complete] reward-commit step failed", e);
+    }
 
     // ── Beans (idempotent on order_id) ───────────────────────────────
     try {
@@ -241,7 +317,7 @@ export async function POST(req: NextRequest) {
       console.warn("[pos/loyalty/complete] mystery step failed", e);
     }
 
-    return NextResponse.json({ ok: true, points_awarded: pointsAwarded, mystery_spawned: mysterySpawned });
+    return NextResponse.json({ ok: true, points_awarded: pointsAwarded, mystery_spawned: mysterySpawned, reward_burned: rewardBurned });
   } catch (err) {
     console.error("[pos/loyalty/complete] error:", err);
     return NextResponse.json({ error: "complete hooks failed" }, { status: 500 });
