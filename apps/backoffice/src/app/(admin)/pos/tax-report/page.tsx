@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Download, Filter } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
+import { ReportsTabs } from "../_ReportsTabs";
 
 /**
  * POS → Tax Report
@@ -144,6 +145,7 @@ export default function TaxReportPage() {
 
   return (
     <div className="p-3 sm:p-6 space-y-5 max-w-6xl">
+      <ReportsTabs />
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-[#160800]">Tax Report</h1>

@@ -177,9 +177,9 @@ const NAV_SECTIONS: NavSection[] = [
       {
         label: "Reports & cash-up",
         items: [
-          { label: "Sales Reports", href: "/pos/reports",    icon: <BarChart3 className={ICON_SIZE} />,     moduleKey: "pickup:settings" },
-          { label: "Z-Report",      href: "/pos/z-report",   icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:settings" },
-          { label: "Tax Report",    href: "/pos/tax-report", icon: <Receipt className={ICON_SIZE} />,       moduleKey: "pickup:settings" },
+          // One "Reports" entry — Sales / Z-Report / Tax (SST) are tabs
+          // within the page now (see pos/_ReportsTabs).
+          { label: "Reports", href: "/pos/reports", icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "pickup:settings" },
         ],
       },
     ],

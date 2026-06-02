@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, TrendingUp, ShoppingBag, Wallet, Trophy } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
+import { ReportsTabs } from "../_ReportsTabs";
 
 /**
  * POS Reports — analytics over pos_orders + pos_order_items +
@@ -66,6 +67,7 @@ export default function POSReportsPage() {
 
   return (
     <div className="p-3 sm:p-6 space-y-5 max-w-6xl">
+      <ReportsTabs />
       <div>
         <h1 className="text-2xl font-bold text-[#160800]">POS Reports</h1>
         <p className="text-sm text-muted-foreground mt-0.5">

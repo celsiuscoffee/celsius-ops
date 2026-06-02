@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Printer, ChevronLeft } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
+import { ReportsTabs } from "../_ReportsTabs";
 
 /**
  * POS → Z-Report
@@ -159,6 +160,7 @@ export default function ZReportPage() {
 
   return (
     <div className="p-3 sm:p-6 space-y-5 max-w-7xl">
+      <ReportsTabs />
       <div>
         <h1 className="text-2xl font-bold text-[#160800]">Z-Report (Shift Close)</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
