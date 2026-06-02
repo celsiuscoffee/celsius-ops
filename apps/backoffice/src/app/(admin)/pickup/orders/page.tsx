@@ -17,10 +17,11 @@ const STATUS_COLOUR: Record<string, string> = {
 
 const STORES = ["all", "shah-alam", "conezion", "tamarind"];
 const STATUSES = ["all", "pending", "paid", "preparing", "ready", "completed", "failed"];
-const CHANNELS = ["all", "pickup", "pos", "grab"];
-const CHANNEL_LABEL: Record<string, string> = { all: "All channels", pickup: "Pickup", pos: "In-store", grab: "Grab" };
+const CHANNELS = ["all", "pickup", "qr", "pos", "grab"];
+const CHANNEL_LABEL: Record<string, string> = { all: "All channels", pickup: "Pickup", qr: "Table QR", pos: "In-store", grab: "Grab" };
 const CHANNEL_BADGE: Record<string, string> = {
   pickup: "bg-blue-100 text-blue-700",
+  qr:     "bg-teal-100 text-teal-700",
   pos:    "bg-purple-100 text-purple-700",
   grab:   "bg-green-100 text-green-700",
 };

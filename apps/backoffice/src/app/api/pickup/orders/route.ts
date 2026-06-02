@@ -31,9 +31,11 @@ const OUTLET_ID_TO_SLUG: Record<string, string> = Object.fromEntries(
 //   status     Single status filter (legacy). "all" = no filter.
 //   statuses   Comma-separated status list (preferred).
 //   phone      Customer phone (normalised to +60...).
-//   channel    "all" (default) | "pickup" (customer app/web/QR — the
-//              `orders` table) | "pos" (in-store register) | "grab"
-//              (GrabFood). pos/grab read `pos_orders`.
+//   channel    "all" | "pickup" (order-ahead: pickup/takeaway from the
+//              `orders` table, excluding dine-in) | "qr" (table-QR dine-in
+//              self-orders, also from `orders`) | "pos" (in-store register)
+//              | "grab" (GrabFood). pos/grab read `pos_orders`. Omitting the
+//              param returns every `orders`-table row (back-compat default).
 //   limit      Cap on rows returned. Default 200, hard ceiling 2000.
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -46,10 +48,13 @@ export async function GET(request: NextRequest) {
     const status   = searchParams.get("status");
     const statuses = searchParams.get("statuses");
     const phone    = searchParams.get("phone");
-    // Default to pickup-only so existing callers that don't ask for a
-    // channel (e.g. the customer-retention analytics page) keep their
-    // original scope. The unified Orders list + Dashboard opt into "all".
-    const channel  = (searchParams.get("channel") || "pickup").toLowerCase();
+    // channelParam is the *raw* requested channel ("" when omitted). Only an
+    // explicit "pickup"/"qr" applies the dine-in split below, so callers that
+    // don't ask for a channel (e.g. the customer-retention analytics page) keep
+    // their original scope — every order_type, no register rows. The unified
+    // Orders list + Dashboard opt into "all".
+    const channelParam = (searchParams.get("channel") || "").toLowerCase();
+    const channel  = channelParam || "pickup";
     const limitRaw = Number(searchParams.get("limit"));
     const limit    = Math.min(2000, Math.max(1, Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 200));
 
@@ -65,7 +70,7 @@ export async function GET(request: NextRequest) {
           : [];
     const phoneNorm = phone && phone !== "" ? normalisePhone(phone) : null;
 
-    const wantPickup = channel === "all" || channel === "pickup";
+    const wantPickup = channel === "all" || channel === "pickup" || channel === "qr";
     const wantPos    = channel === "all" || channel === "pos" || channel === "grab";
 
     // ── Customer-app orders (pickup / web / QR-table) ──
@@ -81,9 +86,17 @@ export async function GET(request: NextRequest) {
           if (store && store !== "all") q = q.eq("store_id", store);
           if (statusList.length) q = q.in("status", statusList);
           if (phoneNorm) q = q.eq("customer_phone", phoneNorm);
+          // Split customer-app orders: "pickup" = order-ahead (pickup/takeaway),
+          // "qr" = dine-in table-QR self-orders. Only filter when a caller asks
+          // for one of those explicitly; an unscoped/default call returns all.
+          if (channelParam === "pickup") q = q.neq("order_type", "dine_in");
+          if (channelParam === "qr")     q = q.eq("order_type", "dine_in");
           const { data, error } = await q;
           if (error) throw error;
-          return (data ?? []).map((o) => ({ ...o, channel: "pickup" }));
+          return (data ?? []).map((o) => ({
+            ...o,
+            channel: o.order_type === "dine_in" ? "qr" : "pickup",
+          }));
         })()
       : Promise.resolve([] as Record<string, unknown>[]);
 

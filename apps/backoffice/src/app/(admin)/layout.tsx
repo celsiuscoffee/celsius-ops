@@ -186,11 +186,8 @@ const NAV_SECTIONS: NavSection[] = [
       {
         label: "Orders & Customers",
         items: [
-          { label: "Orders",       href: "/pickup/orders",    icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
-          { label: "Customers",    href: "/pickup/customers", icon: <Users className={ICON_SIZE} />,         moduleKey: "pickup:customers" },
-          // Maybank QR table-payment feed (live). Gated like Orders so order
-          // staff can monitor/confirm QR payments at the table.
-          { label: "QR Table Pay", href: "/pos/maybank-qr",   icon: <QrCode className={ICON_SIZE} />,        moduleKey: "pickup:orders" },
+          { label: "Orders",    href: "/pickup/orders",    icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
+          { label: "Customers", href: "/pickup/customers", icon: <Users className={ICON_SIZE} />,         moduleKey: "pickup:customers" },
         ],
       },
       {
