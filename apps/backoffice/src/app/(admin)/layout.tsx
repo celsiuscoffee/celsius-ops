@@ -159,6 +159,9 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Products", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
       { label: "Splash Posters", href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />, moduleKey: "pickup:menu" },
+      // Menu & BOM (recipe/BOM editor) lives with the catalog/menu definition,
+      // not under Procurement. Gate stays inventory:menus so access is unchanged.
+      { label: "Menu & BOM", href: "/inventory/menus", icon: <BookOpen className={ICON_SIZE} />, moduleKey: "inventory:menus" },
     ],
   },
   // POS — every order channel in one section. The customer app (pickup /
@@ -183,8 +186,11 @@ const NAV_SECTIONS: NavSection[] = [
       {
         label: "Orders & Customers",
         items: [
-          { label: "Orders",    href: "/pickup/orders",    icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
-          { label: "Customers", href: "/pickup/customers", icon: <Users className={ICON_SIZE} />,         moduleKey: "pickup:customers" },
+          { label: "Orders",       href: "/pickup/orders",    icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
+          { label: "Customers",    href: "/pickup/customers", icon: <Users className={ICON_SIZE} />,         moduleKey: "pickup:customers" },
+          // Maybank QR table-payment feed (live). Gated like Orders so order
+          // staff can monitor/confirm QR payments at the table.
+          { label: "QR Table Pay", href: "/pos/maybank-qr",   icon: <QrCode className={ICON_SIZE} />,        moduleKey: "pickup:orders" },
         ],
       },
       {
@@ -215,7 +221,6 @@ const NAV_SECTIONS: NavSection[] = [
           { label: "Perishables", href: "/inventory/perishables", icon: <Box className={ICON_SIZE} />, moduleKey: "inventory:perishables" },
           { label: "Suppliers", href: "/inventory/suppliers", icon: <Truck className={ICON_SIZE} />, moduleKey: "inventory:suppliers" },
           { label: "Groups & Storage", href: "/inventory/groups", icon: <Tags className={ICON_SIZE} />, moduleKey: "inventory:categories" },
-          { label: "Menu & BOM", href: "/inventory/menus", icon: <BookOpen className={ICON_SIZE} />, moduleKey: "inventory:menus" },
         ],
       },
       {
