@@ -134,6 +134,10 @@ export default function Register() {
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("takeaway");
   const [tableNumber, setTableNumber] = useState<string>("");
   const [panel, setPanel] = useState<Panel>("none");
+  // "Ask first": until the cashier identifies a member OR taps Guest, a prompt
+  // sits at the top of the cart so membership is asked before ringing up.
+  // Reset per order (newOrder / cart clear).
+  const [memberAsked, setMemberAsked] = useState(false);
 
   // Loyalty.
   const [member, setMember] = useState<Member | null>(null);
@@ -607,6 +611,7 @@ export default function Register() {
     setUsual([]);
     setActiveCat("all");
     setPanel("none");
+    setMemberAsked(false);
     setDisplayStatus("idle");
     useDisplay.getState().setMember(null);
     useDisplay.getState().setExtraDiscount(null);
@@ -826,7 +831,7 @@ export default function Register() {
           <View className="flex-row items-center justify-between">
             <Text className="text-cream text-lg" style={{ fontFamily: "Peachi-Bold" }}>Current Order</Text>
             {lines.length > 0 && (
-              <Pressable onPress={() => { Haptics.selectionAsync(); clear(); setReward(null); setManualDiscount(0); }} className="active:opacity-60">
+              <Pressable onPress={() => { Haptics.selectionAsync(); clear(); setReward(null); setManualDiscount(0); setMemberAsked(false); }} className="active:opacity-60">
                 <Text className="text-primary text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>CLEAR</Text>
               </Pressable>
             )}
@@ -843,6 +848,27 @@ export default function Register() {
             <ActionTab icon={<LayoutGrid size={15} color="#F5F3F0" />} label="Stand" active={panel === "table"} onPress={() => setPanel(panel === "table" ? "none" : "table")} />
           )}
         </View>
+
+        {/* "Ask first" member check — sits at the top of every new order until the
+            cashier identifies a member or taps Guest, so staff always ask up front
+            (member then earns Beans + tier pricing for the whole order). */}
+        {!member && !memberAsked && panel === "none" && (
+          <View className="mx-4 mb-2 rounded-2xl p-3 border" style={{ backgroundColor: "rgba(251,191,36,0.10)", borderColor: "rgba(251,191,36,0.45)" }}>
+            <View className="flex-row items-center gap-2">
+              <User size={16} color="#FBBF24" />
+              <Text className="text-cream text-sm" style={{ fontFamily: "Peachi-Bold" }}>Is the customer a member?</Text>
+            </View>
+            <Text className="text-cream/50 text-[11px] mt-0.5 mb-2.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Ask before ringing up — earn + redeem Beans</Text>
+            <View className="flex-row gap-2">
+              <Pressable onPress={() => { Haptics.selectionAsync(); setPanel("customer"); }} className="flex-1 h-11 rounded-xl items-center justify-center" style={{ backgroundColor: "#FBBF24" }}>
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 13, color: "#160800" }}>Yes — enter phone</Text>
+              </Pressable>
+              <Pressable onPress={() => { Haptics.selectionAsync(); setMemberAsked(true); }} className="h-11 px-5 rounded-xl items-center justify-center border border-cream/15" style={{ backgroundColor: "rgba(245,243,240,0.04)" }}>
+                <Text className="text-cream/70" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 13 }}>Guest</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         {/* Inline panels */}
         {panel === "customer" && !member && (
