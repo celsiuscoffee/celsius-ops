@@ -54,6 +54,7 @@ export default function CustomerDisplay() {
   const settings = useSettings((s) => s.settings);
   const sst = useSettings((s) => s.sst);
   const displayPayMethod = useDisplay((s) => s.payMethod);
+  const beansEarned = useDisplay((s) => s.beansEarned);
   // Backoffice-managed Maybank QR (live via realtime on app_settings).
   // Returns { payload, image_url }: image_url is the uploaded Maybank
   // poster (preferred — actual pink poster customers know), payload is
@@ -287,6 +288,12 @@ export default function CustomerDisplay() {
         <Text style={{ fontFamily: "Peachi-Bold", fontSize: 52, color: CREAM }}>Thank You</Text>
         {!!orderNumber && <Eyebrow color="rgba(245,243,240,0.55)" style={{ marginTop: 12 }}>{orderNumber}</Eyebrow>}
         <Text style={{ fontFamily: "Peachi-Medium", fontSize: 22, color: "rgba(245,243,240,0.7)", marginTop: 16 }}>Your order is being prepared</Text>
+        {beansEarned > 0 && (
+          <View className="flex-row items-center" style={{ gap: 10, marginTop: 22, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 999, backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)" }}>
+            <Sparkles size={22} color={GOLD} />
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: GOLD }}>+{beansEarned} Beans earned</Text>
+          </View>
+        )}
       </>
     );
     // When a mystery drop was awarded, show it BESIDE the thank-you (its own

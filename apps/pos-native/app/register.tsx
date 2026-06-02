@@ -9,7 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Minus, LogOut, X, CheckCircle2,
   Settings as SettingsIcon, User, Gift, Trash2, Tag,
-  Grid3x3, QrCode, CreditCard, ClipboardList, Bike, ShoppingBag, ChefHat, Coffee, Power,
+  Grid3x3, QrCode, CreditCard, ClipboardList, Bike, ShoppingBag, ChefHat, Coffee, Power, Sparkles,
 } from "lucide-react-native";
 import { usePos } from "@/lib/store";
 import { apiPost } from "@/lib/api";
@@ -121,7 +121,7 @@ export default function Register() {
   // terminal "approved" result no longer auto-commits.
   const [cardResult, setCardResult] = useState<Extract<MaybankTerminalResult, { status: "approved" }> | null>(null);
   const [paying, setPaying] = useState(false);
-  const [paid, setPaid] = useState<{ orderNumber: string; total: number } | null>(null);
+  const [paid, setPaid] = useState<{ orderNumber: string; total: number; beansEarned: number; beansBalance: number } | null>(null);
   const [modProduct, setModProduct] = useState<Product | null>(null);
 
   // Cashier-applied manual discount (sen) — stacks on top of loyalty/promo.
@@ -658,9 +658,16 @@ export default function Register() {
         manualDiscount: effManualDiscount,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Beans this member earns — mirror the server formula in
+      // /api/pos/loyalty/complete (floor of the pre-SST net, tier-multiplied)
+      // so the thank-you summary + printed receipt match what's credited.
+      const tierMul = member?.tier?.multiplier ?? 1;
+      const beansEarned = member?.id ? Math.round(Math.floor((sale.total - sale.sst) / 100) * tierMul) : 0;
+      const beansBalance = member?.id ? (member.points_balance ?? 0) + beansEarned : 0;
       setDisplayOrderNumber(sale.orderNumber);
+      useDisplay.getState().setBeansEarned(beansEarned);
       setDisplayStatus("complete");
-      setPaid({ orderNumber: sale.orderNumber, total: sale.total });
+      setPaid({ orderNumber: sale.orderNumber, total: sale.total, beansEarned, beansBalance });
       // Loyalty order-hooks for this in-store sale: award Beans, re-eval tier,
       // and spawn the Mystery Bean. Fire-and-forget + server-idempotent so it
       // never blocks checkout; the customer display polls the snapshot and
@@ -677,6 +684,8 @@ export default function Register() {
         table_number: tableNum,
         table_label: "Stand", // counter dine-in → "Stand #" (vs QR self-order "Table")
         created_at: sale.createdAt,
+        beans_earned: beansEarned,
+        beans_balance: beansBalance,
         subtotal: sale.subtotal,
         service_charge: sale.serviceCharge,
         discount_amount: sale.discount,
@@ -1699,7 +1708,14 @@ export default function Register() {
             <CheckCircle2 size={64} color={OK} />
             <Text className="text-cream text-2xl mt-4" style={{ fontFamily: "Peachi-Bold" }}>Paid</Text>
             <Text className="text-cream/55 mt-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{paid?.orderNumber}</Text>
-            <Text className="text-amber-400 text-4xl mt-3 mb-6" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{paid ? rm(paid.total) : ""}</Text>
+            <Text className="text-amber-400 text-4xl mt-3 mb-4" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{paid ? rm(paid.total) : ""}</Text>
+            {!!paid && paid.beansEarned > 0 && (
+              <View className="flex-row items-center mb-6 px-4 py-2 rounded-full" style={{ gap: 8, backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.35)" }}>
+                <Sparkles size={16} color="#FBBF24" />
+                <Text className="text-amber-300" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 15 }}>+{paid.beansEarned} Beans earned</Text>
+                <Text className="text-cream/45" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13 }}>· {paid.beansBalance} total</Text>
+              </View>
+            )}
             <Pressable onPress={newOrder} className="h-13 px-8 py-3.5 rounded-2xl bg-primary active:opacity-80">
               <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>New Order</Text>
             </Pressable>

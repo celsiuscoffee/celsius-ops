@@ -97,6 +97,11 @@ export type ReceiptOrder = {
   notes?: string | null;
   pos_order_items?: ReceiptItem[];
   pos_order_payments?: { payment_method: string; amount: number }[];
+  /** Loyalty Beans earned on this order (members only) + the resulting
+   *  balance, printed in a small block under the payment so the customer
+   *  has a record of what they earned. */
+  beans_earned?: number | null;
+  beans_balance?: number | null;
 };
 
 function formatOutletHeader(outlet: OutletInfo): string[] {
@@ -219,6 +224,15 @@ export function formatReceipt(
       : p.payment_method === "qr" || p.payment_method === "ewallet" ? "E-Wallet"
       : p.payment_method;
     bodyLines.push(twoColumn(method, rm(p.amount)));
+  }
+
+  // Loyalty Beans earned (members only) — a small record under the payment.
+  if (order.beans_earned && order.beans_earned > 0) {
+    bodyLines.push(divider());
+    bodyLines.push(twoColumn("Beans earned", `+${order.beans_earned}`));
+    if (order.beans_balance != null && order.beans_balance > 0) {
+      bodyLines.push(twoColumn("Beans balance", String(order.beans_balance)));
+    }
   }
 
   const footerLines: string[] = [];

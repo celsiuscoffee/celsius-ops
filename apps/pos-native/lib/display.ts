@@ -54,6 +54,8 @@ type DisplayState = {
   payTotal: number;
   /** Tender the cashier chose (qr/card) — null until picked. */
   payMethod: DisplayPayMethod;
+  /** Beans the member earned on the just-completed order (thank-you summary). */
+  beansEarned: number;
   redeemRequest: DisplayRedeemRequest;
   setStatus: (s: DisplayStatus) => void;
   setMember: (m: DisplayMember) => void;
@@ -65,6 +67,7 @@ type DisplayState = {
   setManualDiscount: (d: DisplayExtraDiscount) => void;
   setPayTotal: (n: number) => void;
   setPayMethod: (m: DisplayPayMethod) => void;
+  setBeansEarned: (n: number) => void;
   setRedeemRequest: (r: DisplayRedeemRequest) => void;
   reset: () => void;
 };
@@ -80,6 +83,7 @@ export const useDisplay = create<DisplayState>((set) => ({
   manualDiscount: null,
   payTotal: 0,
   payMethod: null,
+  beansEarned: 0,
   redeemRequest: null,
   setStatus: (status) => set({ status }),
   setMember: (member) => set({ member }),
@@ -91,8 +95,9 @@ export const useDisplay = create<DisplayState>((set) => ({
   setManualDiscount: (manualDiscount) => set({ manualDiscount }),
   setPayTotal: (payTotal) => set({ payTotal }),
   setPayMethod: (payMethod) => set({ payMethod }),
+  setBeansEarned: (beansEarned) => set({ beansEarned }),
   setRedeemRequest: (redeemRequest) => set({ redeemRequest }),
   // Keep member identified across orders (a returning regular stays
   // logged in for the next basket); only clear cart-scoped context.
-  reset: () => set({ status: "idle", orderNumber: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, payTotal: 0, payMethod: null, redeemRequest: null }),
+  reset: () => set({ status: "idle", orderNumber: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, payTotal: 0, payMethod: null, beansEarned: 0, redeemRequest: null }),
 }));
