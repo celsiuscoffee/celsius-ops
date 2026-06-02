@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
         new_balance: balance, // unchanged until the burn at /complete
         reward_name: reward.name,
         discount: buildDiscountInfo(reward),
+        points_spent: reward.points_required ?? 0, // burned at /complete; shown on receipt
         preview: true,
       });
     }
@@ -216,6 +217,7 @@ export async function POST(req: NextRequest) {
       new_balance: newBalance,
       reward_name: reward.name,
       discount,
+      points_spent: issued_reward_id ? 0 : (reward.points_required ?? 0),
     });
   } catch (err) {
     console.error("[LOYALTY] Redeem error:", err);

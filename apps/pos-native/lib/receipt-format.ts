@@ -102,6 +102,8 @@ export type ReceiptOrder = {
    *  has a record of what they earned. */
   beans_earned?: number | null;
   beans_balance?: number | null;
+  /** Points spent on a redeemed reward this order — printed as "Points redeemed". */
+  points_spent?: number | null;
 };
 
 function formatOutletHeader(outlet: OutletInfo): string[] {
@@ -227,9 +229,12 @@ export function formatReceipt(
   }
 
   // Loyalty Beans earned (members only) — a small record under the payment.
-  if (order.beans_earned && order.beans_earned > 0) {
+  const ptsEarned = order.beans_earned ?? 0;
+  const ptsSpent = order.points_spent ?? 0;
+  if (ptsEarned > 0 || ptsSpent > 0) {
     bodyLines.push(divider());
-    bodyLines.push(twoColumn("Points earned", `+${order.beans_earned}`));
+    if (ptsEarned > 0) bodyLines.push(twoColumn("Points earned", `+${ptsEarned}`));
+    if (ptsSpent > 0) bodyLines.push(twoColumn("Points redeemed", `-${ptsSpent}`));
     if (order.beans_balance != null && order.beans_balance > 0) {
       bodyLines.push(twoColumn("Points balance", String(order.beans_balance)));
     }

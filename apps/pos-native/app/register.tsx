@@ -110,7 +110,7 @@ function tableDims(seats: number | null | undefined, shape: "square" | "round", 
 // /api/pos/loyalty/complete. For an issued voucher it's the other way round
 // (committed immediately, `redemptionId` set). pay() records whichever is
 // present on pos_orders.reward_id.
-type AppliedReward = { redemptionId: string | null; rewardId: string | null; name: string; descriptor: RedeemDiscount } | null;
+type AppliedReward = { redemptionId: string | null; rewardId: string | null; name: string; descriptor: RedeemDiscount; pointsCost: number } | null;
 type Panel = "none" | "customer" | "table";
 
 export default function Register() {
@@ -745,6 +745,7 @@ export default function Register() {
         rewardId: deferred ? rewardId : null,
         name: res.reward_name,
         descriptor: res.discount,
+        pointsCost: res.points_spent ?? 0, // points this reward costs — shown on the receipt
       });
       // Only drop the displayed balance when Beans were ACTUALLY spent now (an
       // immediate issued-voucher commit). A reserved catalog reward keeps the
@@ -858,7 +859,11 @@ export default function Register() {
       // mirror the order's worth (not 0) to the display either way.
       const orderBeans = Math.round(Math.floor((sale.total - sale.sst) / 100) * tierMul);
       const beansEarned = member?.id ? orderBeans : 0; // only an identified member actually earned (register chip + receipt)
-      const beansBalance = member?.id ? (member.points_balance ?? 0) + beansEarned : 0;
+      // Points spent on a redeemed catalog reward burn at /complete (deferred), so
+      // member.points_balance here is still pre-burn — subtract them for the true
+      // post-order balance on the receipt + chip.
+      const pointsSpent = member?.id ? (reward?.pointsCost ?? 0) : 0;
+      const beansBalance = member?.id ? (member.points_balance ?? 0) + beansEarned - pointsSpent : 0;
       setDisplayOrderNumber(sale.orderNumber);
       useDisplay.getState().setOrderId(sale.id);          // for the guest claim-Beans keypad
       useDisplay.getState().setBeansEarned(orderBeans);   // member's earned, or a guest's claimable potential
@@ -882,6 +887,7 @@ export default function Register() {
         created_at: sale.createdAt,
         beans_earned: beansEarned,
         beans_balance: beansBalance,
+        points_spent: pointsSpent,
         subtotal: sale.subtotal,
         service_charge: sale.serviceCharge,
         discount_amount: sale.discount,
