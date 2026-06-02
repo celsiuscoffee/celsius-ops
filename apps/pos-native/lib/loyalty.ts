@@ -82,11 +82,14 @@ export type RedeemDiscount = {
 
 export type RedeemResponse = {
   success: boolean;
-  redemption_id: string;
-  points_spent: number;
+  // null in preview mode (catalog reward reserved on the cart; the actual
+  // burn + redemption record happen at payment via /api/pos/loyalty/complete).
+  redemption_id: string | null;
+  points_spent?: number;
   new_balance: number;
   reward_name: string;
   discount: RedeemDiscount;
+  preview?: boolean;
 };
 
 // ─── API calls ─────────────────────────────────────────────
@@ -133,12 +136,17 @@ export async function redeemReward(args: {
   rewardId: string | null;
   outletId: string;
   issuedRewardId?: string | null;
+  /** Reserve the reward (validate + return the discount) WITHOUT burning Beans
+   *  — the burn is deferred to payment (/complete). Catalog rewards honour this;
+   *  issued vouchers always commit immediately (they cost no Beans). */
+  preview?: boolean;
 }): Promise<RedeemResponse> {
   return apiPost<RedeemResponse>("/api/pos/loyalty/redeem", {
     member_id: args.memberId,
     reward_id: args.rewardId,
     outlet_id: args.outletId,
     issued_reward_id: args.issuedRewardId ?? null,
+    preview: args.preview ?? false,
   });
 }
 

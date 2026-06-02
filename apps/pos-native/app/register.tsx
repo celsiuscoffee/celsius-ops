@@ -92,7 +92,13 @@ function tableDims(seats: number | null | undefined, shape: "square" | "round", 
   return { w: vertical ? unit : unit * cells, h: vertical ? unit * cells : unit, cells, vertical };
 }
 
-type AppliedReward = { redemptionId: string; name: string; descriptor: RedeemDiscount } | null;
+// A reward applied to the cart. For a DEFERRED catalog redemption (the normal
+// case now), `redemptionId` is null and `rewardId` carries the catalog reward
+// id — the Beans burn + redemption record are committed at payment by
+// /api/pos/loyalty/complete. For an issued voucher it's the other way round
+// (committed immediately, `redemptionId` set). pay() records whichever is
+// present on pos_orders.reward_id.
+type AppliedReward = { redemptionId: string | null; rewardId: string | null; name: string; descriptor: RedeemDiscount } | null;
 type Panel = "none" | "customer" | "table";
 
 export default function Register() {
@@ -629,14 +635,17 @@ export default function Register() {
   // 2nd-screen redeem (reverse channel). Returns false if it couldn't apply.
   async function applyRewardArgs(rewardId: string | null, issuedRewardId: string | null): Promise<boolean> {
     if (!member || !outletId) return false;
-    // In-flight guard. Each redeem burns Beans + writes a confirmed redemption
-    // server-side, so a concurrent double-tap would spend twice. Strictly one
-    // redeem at a time. (The single-reward-per-order limit is enforced at the
-    // card/reverse-channel call sites so the Rewards modal can still SWITCH.)
+    // In-flight guard — strictly one redeem call at a time so a concurrent
+    // double-tap can't reserve/commit twice. (The single-reward-per-order limit
+    // is enforced at the card/reverse-channel call sites so the Rewards modal
+    // can still SWITCH.)
     if (redeemBusyRef.current) return false;
     redeemBusyRef.current = true;
     try {
-      const res = await redeemReward({ memberId: member.id, rewardId, outletId, issuedRewardId });
+      // preview=true RESERVES a catalog reward on the cart without burning
+      // Beans — the burn happens at payment (/complete). Issued vouchers ignore
+      // it and commit immediately (they cost no Beans).
+      const res = await redeemReward({ memberId: member.id, rewardId, outletId, issuedRewardId, preview: true });
       const disc = computeRewardDiscount(res.discount, lines);
       if (disc <= 0 && (res.discount.type === "free_item" || res.discount.type === "free_upgrade")) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -653,9 +662,19 @@ export default function Register() {
         }
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setReward({ redemptionId: res.redemption_id, name: res.reward_name, descriptor: res.discount });
-      // Reflect new Beans balance after a points redemption.
-      setMember((m) => (m ? { ...m, points_balance: res.new_balance ?? m.points_balance } : m));
+      // Deferred (catalog) redemption → no redemption_id yet; carry the reward
+      // id so pay() records it on the order for the burn at /complete.
+      const deferred = !res.redemption_id;
+      setReward({
+        redemptionId: res.redemption_id ?? null,
+        rewardId: deferred ? rewardId : null,
+        name: res.reward_name,
+        descriptor: res.discount,
+      });
+      // Only drop the displayed balance when Beans were ACTUALLY spent now (an
+      // immediate issued-voucher commit). A reserved catalog reward keeps the
+      // member's full balance until it burns at payment.
+      if (!deferred) setMember((m) => (m ? { ...m, points_balance: res.new_balance ?? m.points_balance } : m));
       return true;
     } catch {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -743,7 +762,11 @@ export default function Register() {
         queueNumber,
         customerPhone: member?.phone ?? null,
         loyaltyPhone: member?.phone ?? null,
-        rewardId: reward?.redemptionId ?? null,
+        // For a deferred catalog reward this is the catalog reward id, which
+        // /api/pos/loyalty/complete looks up to burn the Beans now that payment
+        // is confirmed. For an issued voucher it's the (already-committed)
+        // redemption id, which /complete won't match → no double-burn.
+        rewardId: reward?.rewardId ?? reward?.redemptionId ?? null,
         rewardName: reward?.name ?? null,
         rewardDiscount: effRewardDiscount,
         promoDiscount,
