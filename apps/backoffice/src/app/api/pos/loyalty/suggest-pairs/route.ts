@@ -37,9 +37,12 @@ const FOOD_CATEGORIES = new Set([
 type Weights = { combo: number; co: number; usual: number; round: number; complement: number };
 const DEFAULT_WEIGHTS: Weights = { combo: 3.0, co: 2.0, usual: 1.5, round: 1.0, complement: 1.0 };
 
+// Canonical day-part bands — must match storehub-helpers ROUNDS (and the
+// refresh_pos_pairing_signals() bucketing that writes pair_round_scores), so
+// the "current round" we look up is the same band the scores were keyed under.
 const ROUNDS: { key: string; startH: number; endH: number }[] = [
   { key: "breakfast", startH: 8, endH: 10 }, { key: "brunch", startH: 10, endH: 12 },
-  { key: "lunch", startH: 12, endH: 14 }, { key: "midday", startH: 14, endH: 17 },
+  { key: "lunch", startH: 12, endH: 15 }, { key: "midday", startH: 15, endH: 17 },
   { key: "evening", startH: 17, endH: 19 }, { key: "dinner", startH: 19, endH: 21 },
   { key: "supper", startH: 21, endH: 23 },
 ];
