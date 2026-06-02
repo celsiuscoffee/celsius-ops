@@ -431,14 +431,17 @@ export default function Register() {
     fetchSuggestedPairs(outletId, ids, usualP).then((p) => { if (!cancelled) setPairs(p); }).catch(() => {});
     return () => { cancelled = true; };
   }, [cartKeyForPairs, usualKeyForPairs, outletId]);
-  // 2) CLAIMABLES — pending mystery bags / promos the member can open. Pulled
-  //    from the same snapshot the display reads; member-driven (not cart).
+  // 2) CLAIMABLES — promos / welcome gifts the member can claim. Pulled from the
+  //    same snapshot the display reads; member-driven (not cart). Mystery bags
+  //    are excluded: they reveal on the customer display's thank-you screen and
+  //    any missed one is silently auto-granted there — so the till never shows a
+  //    mystery "open" button.
   useEffect(() => {
     if (!member?.id) { setClaimables([]); setShop([]); return; }
     let cancelled = false;
     fetchSnapshot(member.id).then((s) => {
       if (cancelled) return;
-      setClaimables(s?.claimables ?? []);
+      setClaimables((s?.claimables ?? []).filter((c) => c.source_type !== "mystery_pending"));
       setShop(s?.shop ?? []);
     }).catch(() => {});
     return () => { cancelled = true; };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, Image, FlatList, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { Gift, Tag, Coffee, Sparkles, Delete, CreditCard, ChevronRight } from "lucide-react-native";
@@ -81,6 +81,8 @@ export default function CustomerDisplay() {
 
   const [snapshot, setSnapshot] = useState<LoyaltySnapshot | null>(null);
   const [snapLoading, setSnapLoading] = useState(false);
+  // Mystery bags already silently auto-granted (so we don't re-claim mid-flight).
+  const silentClaimedRef = useRef<Set<string>>(new Set());
   // True once the post-payment mystery poll has finished WITHOUT finding a drop
   // (the member didn't earn one this time). Lets the complete screen show the
   // mystery/thank-you split straight away and only fall back to a plain
@@ -151,6 +153,32 @@ export default function CustomerDisplay() {
     void tick();
     return () => { cancelled = true; };
   }, [status, member?.id]);
+
+  // Silent auto-grant of a missed Mystery Bean. The reveal is a tappable moment
+  // on the thank-you screen (status === "complete"); if the customer doesn't
+  // open it there, we don't nag them with a claim button on the idle / ordering
+  // screens — instead, once we've left thank-you we quietly claim any pending
+  // mystery so its prize just lands in their rewards / Beans. Refresh the
+  // snapshot afterwards so the granted voucher shows in the rewards list.
+  useEffect(() => {
+    if (status === "complete") return; // thank-you keeps the tappable reveal
+    if (!member?.id || !snapshot) return;
+    const mid = member.id;
+    const pendings = snapshot.claimables.filter(
+      (c) => c.source_type === "mystery_pending" && !silentClaimedRef.current.has(c.id),
+    );
+    if (pendings.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const p of pendings) {
+        silentClaimedRef.current.add(p.id);
+        await claimMystery(mid, p.id).catch(() => {});
+      }
+      const fresh = await fetchSnapshot(mid).catch(() => null);
+      if (!cancelled && fresh) setSnapshot(fresh);
+    })();
+    return () => { cancelled = true; };
+  }, [status, member?.id, snapshot]);
 
   function openRedeem() {
     if (!member) return;
@@ -783,13 +811,19 @@ function ClaimableRewards({ snapshot, memberId }: { snapshot: LoyaltySnapshot; m
   type Item =
     | { kind: "claim"; id: string; title: string; sub: string; mystery: boolean }
     | { kind: "voucher"; id: string; title: string; sub: string };
-  const claims: Item[] = snapshot.claimables.map((c) => ({
-    kind: "claim",
-    id: c.id,
-    title: c.title,
-    sub: c.source_type === "mystery_pending" ? "Tap to open your bag" : (c.cta_label || "Tap to claim"),
-    mystery: c.source_type === "mystery_pending",
-  }));
+  // Mystery bags are NOT shown as a claim button here — they reveal on the
+  // thank-you screen, and any missed one is silently auto-granted (see the
+  // silent-claim effect). Only non-mystery claimables (promos / welcome gifts)
+  // surface as tap-to-claim cards.
+  const claims: Item[] = snapshot.claimables
+    .filter((c) => c.source_type !== "mystery_pending")
+    .map((c) => ({
+      kind: "claim",
+      id: c.id,
+      title: c.title,
+      sub: c.cta_label || "Tap to claim",
+      mystery: false,
+    }));
   const vouchers: Item[] = snapshot.vouchers
     .filter((v) => v.source_type !== "mission")
     .map((v) => ({ kind: "voucher", id: v.id, title: v.title, sub: voucherSummary(v) }));
