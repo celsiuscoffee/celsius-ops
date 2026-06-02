@@ -165,6 +165,12 @@ export default function Register() {
   // customer display's "Redeem your Beans"). Tapping a card applies it to the
   // cart, so the cashier can redeem on request.
   const [shop, setShop] = useState<ShopCard[]>([]);
+  // In-flight guard for redemption. /api/pos/loyalty/redeem burns Beans +
+  // writes a CONFIRMED redemption on every call, so a double-tap or a rapid
+  // reverse-channel burst would spend the member's Beans several times over.
+  // This ref makes a redeem strictly one-at-a-time (the cards also disable
+  // once a reward is applied, so it's one-per-order).
+  const redeemBusyRef = useRef(false);
 
   const setDisplayStatus = useDisplay((s) => s.setStatus);
   const setDisplayOrderNumber = useDisplay((s) => s.setOrderNumber);
@@ -470,11 +476,14 @@ export default function Register() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayMember?.id]);
 
-  // Apply a reward the customer redeemed on the 2nd screen, then clear the request.
+  // Apply a reward the customer redeemed on the 2nd screen, then clear the
+  // request. Drop it if a reward is already applied — one per order — so a
+  // burst of taps on the 2nd screen can't redeem (and burn Beans) repeatedly.
   useEffect(() => {
     if (!redeemRequest) return;
-    applyRewardArgs(redeemRequest.rewardId, redeemRequest.issuedRewardId);
     useDisplay.getState().setRedeemRequest(null);
+    if (reward) return;
+    applyRewardArgs(redeemRequest.rewardId, redeemRequest.issuedRewardId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [redeemRequest]);
 
@@ -620,6 +629,12 @@ export default function Register() {
   // 2nd-screen redeem (reverse channel). Returns false if it couldn't apply.
   async function applyRewardArgs(rewardId: string | null, issuedRewardId: string | null): Promise<boolean> {
     if (!member || !outletId) return false;
+    // In-flight guard. Each redeem burns Beans + writes a confirmed redemption
+    // server-side, so a concurrent double-tap would spend twice. Strictly one
+    // redeem at a time. (The single-reward-per-order limit is enforced at the
+    // card/reverse-channel call sites so the Rewards modal can still SWITCH.)
+    if (redeemBusyRef.current) return false;
+    redeemBusyRef.current = true;
     try {
       const res = await redeemReward({ memberId: member.id, rewardId, outletId, issuedRewardId });
       const disc = computeRewardDiscount(res.discount, lines);
@@ -645,6 +660,8 @@ export default function Register() {
     } catch {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return false;
+    } finally {
+      redeemBusyRef.current = false;
     }
   }
 
@@ -655,10 +672,16 @@ export default function Register() {
   }
 
   // Redeem a points-shop reward on the member's behalf (cashier taps when the
-  // customer asks). Applies to the cart via the same path as the Rewards modal
-  // — Beans burn is deferred to checkout, so the reward chip's X cleanly undoes
-  // it before payment.
+  // customer asks). This BURNS the member's Beans immediately and applies the
+  // reward to the cart. One reward per order — if one's already applied, the
+  // cashier removes it (the chip's X) before redeeming a different one. That
+  // single-reward gate is what stops a tap-storm from draining Beans.
   async function redeemBeans(s: ShopCard) {
+    if (reward) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert("Reward already applied", "Remove the current reward before redeeming a different one.");
+      return;
+    }
     if (!s.affordable) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Alert.alert(s.name, `Needs ${s.points_required} Beans — not enough yet.`);
@@ -956,7 +979,7 @@ export default function Register() {
                   </View>
                 </View>
               )}
-              {member && shop.length > 0 && (
+              {member && shop.length > 0 && !reward && (
                 <View style={{ flex: 1 }}>
                   <View className="flex-row items-center pb-1.5" style={{ gap: 5 }}>
                     <Sparkles size={12} color="#FBBF24" />

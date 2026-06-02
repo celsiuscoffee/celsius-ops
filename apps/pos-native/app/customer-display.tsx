@@ -422,8 +422,9 @@ export default function CustomerDisplay() {
         </View>
 
         {/* Redeem your Beans — the points shop, right under the pairs. Tap a card
-            and the register applies it to the bill (Beans burn at checkout). */}
-        {member && snapshot && snapshot.shop.length > 0 && (
+            and the register redeems it onto the bill. Hidden once a reward is
+            applied (one per order) so a tap can't burn Beans again. */}
+        {member && snapshot && snapshot.shop.length > 0 && !reward && (
           <View style={{ marginTop: 18 }}>
             <Eyebrow color="rgba(251,191,36,0.85)" style={{ marginBottom: 8, letterSpacing: 1.6 }}>REDEEM YOUR BEANS</Eyebrow>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -930,16 +931,11 @@ function BeansHero({
             )}
           </View>
         )}
-        {(t?.benefits?.length ?? 0) > 0 && (
-          <View style={{ marginTop: 7, paddingTop: 6, borderTopWidth: 1, borderColor: fg + "22", gap: 2 }}>
-            {t!.benefits.slice(0, 2).map((b, i) => (
-              <View key={i} className="flex-row items-center" style={{ gap: 6 }}>
-                <View style={{ width: 2.5, height: 2.5, borderRadius: 2, backgroundColor: fg }} />
-                <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 8.5, color: fg + "C7" }}>{b}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+        {/* Tier-benefit bullets (e.g. "Free birthday drink") were removed — they
+            read as redeemable rewards sitting next to the REDEEM button, but
+            they're automatic tier perks the button can't surface, so they
+            misled customers. The progress motivator above carries the tier
+            value without implying a redemption. */}
       </View>
     </View>
   );
