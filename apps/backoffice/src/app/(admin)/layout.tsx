@@ -159,7 +159,6 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Dashboard", href: "/pickup", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "pickup:orders" },
       { label: "Orders", href: "/pickup/orders", icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
       { label: "Customers", href: "/pickup/customers", icon: <Users className={ICON_SIZE} />, moduleKey: "pickup:customers" },
-      { label: "Settings", href: "/pickup/settings", icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "pickup:settings" },
     ],
   },
   // POS — the in-store register. Main BO is the canonical owner of all
@@ -185,14 +184,6 @@ const NAV_SECTIONS: NavSection[] = [
           { label: "Sales Reports", href: "/pos/reports",    icon: <BarChart3 className={ICON_SIZE} />,     moduleKey: "pickup:settings" },
           { label: "Z-Report",      href: "/pos/z-report",   icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:settings" },
           { label: "Tax Report",    href: "/pos/tax-report", icon: <Receipt className={ICON_SIZE} />,       moduleKey: "pickup:settings" },
-        ],
-      },
-      {
-        label: "Register setup",
-        items: [
-          { label: "Settings",       href: "/pos/settings", icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "pickup:settings" },
-          { label: "Printers",       href: "/pos/printers", icon: <Printer className={ICON_SIZE} />,           moduleKey: "pickup:settings" },
-          { label: "Table QR Codes", href: "/pos/table-qr", icon: <QrCode className={ICON_SIZE} />,            moduleKey: "pickup:settings" },
         ],
       },
     ],
@@ -367,7 +358,6 @@ const NAV_SECTIONS: NavSection[] = [
     railIcon: <MessageCircle className={RAIL_ICON_SIZE} />,
     items: [
       { label: "All Reviews", href: "/reviews", icon: <Star className={ICON_SIZE} />, moduleKey: "reviews:list" },
-      { label: "Settings", href: "/reviews/settings", icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "reviews:settings" },
     ],
   },
   {
@@ -381,7 +371,6 @@ const NAV_SECTIONS: NavSection[] = [
           { label: "Overview",  href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />,   moduleKey: "ads:overview" },
           { label: "Campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,         moduleKey: "ads:campaigns" },
           { label: "Invoices",  href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,           moduleKey: "ads:invoices" },
-          { label: "Settings",  href: "/ads/settings",  icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "ads:settings" },
         ],
       },
       {
@@ -390,7 +379,6 @@ const NAV_SECTIONS: NavSection[] = [
           { label: "Overview", href: "/ads/recruitment",          icon: <LayoutDashboard className={ICON_SIZE} />,   moduleKey: "ads:recruitment" },
           { label: "Postings", href: "/ads/recruitment/jobs",     icon: <Briefcase className={ICON_SIZE} />,         moduleKey: "ads:recruitment" },
           { label: "Invoices", href: "/ads/recruitment/invoices", icon: <Receipt className={ICON_SIZE} />,           moduleKey: "ads:recruitment" },
-          { label: "Settings", href: "/ads/recruitment/settings", icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "ads:recruitment" },
         ],
       },
     ],
@@ -456,31 +444,65 @@ const NAV_SECTIONS: NavSection[] = [
           { label: "Memos", href: "/hr/memos", icon: <FileText className={ICON_SIZE} />, moduleKey: "hr:memos" },
         ],
       },
-      {
-        label: "Admin",
-        items: [
-          { label: "Settings", href: "/hr/settings", icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "hr:settings" },
-        ],
-      },
     ],
   },
-  // ── Settings (global). Per-module settings (POS, Pickup, Reviews,
-  // Ads, HR) stay under their own modules. The "Hub" at /settings is
-  // the consolidated landing — discoverable cross-link to every
-  // settings surface in the platform.
+  // ── Settings (consolidated). Every configurable surface across the
+  // platform lives here, grouped by domain — the per-module "Settings"
+  // sidebar entries (POS, Pickup, Reviews, Ads, HR) were folded in so
+  // there's one home for config. Page URLs are unchanged (deep links +
+  // the /settings hub tiles still work); only the nav was unified. RBAC
+  // is per-item, and empty groups auto-hide for users without access.
   {
     label: "Settings",
     icon: <SlidersHorizontal className={ICON_SIZE} />,
     railIcon: <SlidersHorizontal className={RAIL_ICON_SIZE} />,
     dividerBefore: true,
-    items: [
-      { label: "Hub",            href: "/settings",              icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "settings:outlets" },
-      { label: "Outlets",        href: "/settings/outlets",      icon: <Building2 className={ICON_SIZE} />,       moduleKey: "settings:outlets" },
-      { label: "Staff & Access", href: "/settings/staff",        icon: <UserCog className={ICON_SIZE} />,         moduleKey: "settings:staff" },
-      { label: "Approval Rules", href: "/settings/rules",        icon: <ShieldCheck className={ICON_SIZE} />,     moduleKey: "settings:rules" },
-      { label: "Integrations",   href: "/settings/integrations", icon: <Plug className={ICON_SIZE} />,            moduleKey: "settings:integrations" },
-      { label: "Stock Count",    href: "/settings/stock-count",  icon: <ClipboardCheck className={ICON_SIZE} />,  moduleKey: "settings:stock-count" },
-      { label: "System",         href: "/settings/system",       icon: <Wrench className={ICON_SIZE} />,          moduleKey: "settings:system" },
+    subgroups: [
+      {
+        label: "Business",
+        items: [
+          { label: "Hub",            href: "/settings",         icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "settings:outlets" },
+          { label: "Outlets",        href: "/settings/outlets", icon: <Building2 className={ICON_SIZE} />,       moduleKey: "settings:outlets" },
+          { label: "Staff & Access", href: "/settings/staff",   icon: <UserCog className={ICON_SIZE} />,         moduleKey: "settings:staff" },
+          { label: "Approval Rules", href: "/settings/rules",   icon: <ShieldCheck className={ICON_SIZE} />,     moduleKey: "settings:rules" },
+        ],
+      },
+      {
+        label: "POS — In-store",
+        items: [
+          { label: "POS Settings",   href: "/pos/settings", icon: <CreditCard className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+          { label: "Printers",       href: "/pos/printers", icon: <Printer className={ICON_SIZE} />,    moduleKey: "pickup:settings" },
+          { label: "Table QR Codes", href: "/pos/table-qr", icon: <QrCode className={ICON_SIZE} />,     moduleKey: "pickup:settings" },
+        ],
+      },
+      {
+        label: "Pickup App",
+        items: [
+          { label: "Pickup Settings", href: "/pickup/settings", icon: <ShoppingBag className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+        ],
+      },
+      {
+        label: "Marketing",
+        items: [
+          { label: "Reviews",         href: "/reviews/settings",         icon: <MessageCircle className={ICON_SIZE} />, moduleKey: "reviews:settings" },
+          { label: "Google Ads",      href: "/ads/settings",             icon: <Megaphone className={ICON_SIZE} />,     moduleKey: "ads:settings" },
+          { label: "Recruitment Ads", href: "/ads/recruitment/settings", icon: <Briefcase className={ICON_SIZE} />,     moduleKey: "ads:recruitment" },
+        ],
+      },
+      {
+        label: "People",
+        items: [
+          { label: "HR Settings", href: "/hr/settings", icon: <UserCog className={ICON_SIZE} />, moduleKey: "hr:settings" },
+        ],
+      },
+      {
+        label: "System",
+        items: [
+          { label: "Stock Count",  href: "/settings/stock-count",  icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "settings:stock-count" },
+          { label: "Integrations", href: "/settings/integrations", icon: <Plug className={ICON_SIZE} />,           moduleKey: "settings:integrations" },
+          { label: "System",       href: "/settings/system",       icon: <Wrench className={ICON_SIZE} />,         moduleKey: "settings:system" },
+        ],
+      },
     ],
   },
 ];
