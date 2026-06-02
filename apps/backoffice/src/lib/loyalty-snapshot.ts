@@ -698,8 +698,13 @@ export async function fetchLoyaltySnapshot(
       .eq("status", "active")
       .order("issued_at", { ascending: false }),
     supabase
+      // No FK constraint mystery_drops.pool_entry_id → mystery_pool.id, so a
+      // PostgREST `mystery_pool!inner(...)` embed silently returns nothing
+      // (claimables came back empty → the Mystery Bean never surfaced on the
+      // 2nd screen). Pull the raw drop rows here and resolve the pool labels
+      // via a separate batched lookup below.
       .from("mystery_drops")
-      .select("id, mystery_pool!inner(label, icon, reveal_emoji)")
+      .select("id, pool_entry_id")
       .eq("member_id", memberId)
       .is("revealed_at", null)
       .order("created_at", { ascending: false })
@@ -839,15 +844,32 @@ export async function fetchLoyaltySnapshot(
     }));
 
   // ── Claimables: mystery (always shown) + admin (filtered by audience + idempotency) ─
-  const mysteryClaimables: ClaimableCard[] = ((dropsRes.data ?? []) as any[]).map((d) => ({
-    id: d.id,
-    title: d.mystery_pool?.label ?? "Mystery reward",
-    description: "Tap to reveal your reward",
-    icon: d.mystery_pool?.icon ?? "sparkle",
-    source_type: "mystery_pending",
-    expires_at: null,
-    cta_label: "Reveal",
-  }));
+  // Resolve the pool label/icon per drop via a batched lookup (no FK → no
+  // PostgREST embed; see the dropsRes query note above).
+  const dropRows = (dropsRes.data ?? []) as { id: string; pool_entry_id: string | null }[];
+  const poolIds = [...new Set(dropRows.map((d) => d.pool_entry_id).filter(Boolean))] as string[];
+  const poolById = new Map<string, { label?: string | null; icon?: string | null }>();
+  if (poolIds.length) {
+    const { data: poolRows } = await supabase
+      .from("mystery_pool")
+      .select("id, label, icon")
+      .in("id", poolIds);
+    for (const p of (poolRows ?? []) as { id: string; label?: string | null; icon?: string | null }[]) {
+      poolById.set(p.id, { label: p.label, icon: p.icon });
+    }
+  }
+  const mysteryClaimables: ClaimableCard[] = dropRows.map((d) => {
+    const pool = d.pool_entry_id ? poolById.get(d.pool_entry_id) : undefined;
+    return {
+      id: d.id,
+      title: pool?.label ?? "Mystery reward",
+      description: "Tap to reveal your reward",
+      icon: pool?.icon ?? "sparkle",
+      source_type: "mystery_pending",
+      expires_at: null,
+      cta_label: "Reveal",
+    };
+  });
 
   const adminCandidates = ((pushedRes.data ?? []) as any[]).filter((c) => {
     if (c.ends_at && new Date(c.ends_at).getTime() < now) return false;
