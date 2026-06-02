@@ -304,7 +304,6 @@ export default function CustomerDisplay() {
         <View className="flex-1 flex-row" style={{ backgroundColor: PAGE }}>
           <View className="flex-1 items-center justify-center px-8">{thankYou}</View>
           <View className="flex-1 items-center justify-center px-10" style={{ borderLeftWidth: 1, borderColor: "rgba(245,243,240,0.08)", backgroundColor: SUB }}>
-            <Eyebrow color="rgba(251,191,36,0.78)" style={{ marginBottom: 6, letterSpacing: 2 }}>A LITTLE SOMETHING FOR YOU</Eyebrow>
             <MysteryBox memberId={member.id} claimable={mystery} baseBeans={beansEarned} />
           </View>
         </View>
