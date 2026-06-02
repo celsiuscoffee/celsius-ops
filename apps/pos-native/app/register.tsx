@@ -11,7 +11,7 @@ import {
   Settings as SettingsIcon, User, Gift, Trash2, Tag,
   Grid3x3, QrCode, CreditCard, ClipboardList, Bike, ShoppingBag, ChefHat, Coffee, Power, Sparkles,
 } from "lucide-react-native";
-import { usePos, sessionExpired } from "@/lib/store";
+import { usePos, shiftSessionExpired } from "@/lib/store";
 import { apiPost } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { usePickupPrinter } from "@/lib/use-pickup-printer";
@@ -102,7 +102,7 @@ type AppliedReward = { redemptionId: string | null; rewardId: string | null; nam
 type Panel = "none" | "customer" | "table";
 
 export default function Register() {
-  const { staff, outletId, signOut, loggedInAt } = usePos();
+  const { staff, outletId, signOut, loggedInAt, shiftEndsAt } = usePos();
   const [activeCat, setActiveCat] = useState<string>("all");
   // One "Orders" command center — a single panel with three tabs: Tables
   // (dine-in floor) · QR self-orders · Pickup & Grab. `hub` is the active
@@ -212,10 +212,20 @@ export default function Register() {
   // while the modal is closed (drives the header badge count).
   const { orders: kdsOrders, reload: reloadOrders } = useOrdersPanel(outletId);
 
+  // ── Open Store (cashier shift) ──────────────────────────────────────
+  // Resolved up here (ahead of the order handlers) so the ring-up + Orders
+  // gates can read whether the store is open. `shift` non-null = store open.
+  const { shift, loading: shiftLoading, reload: reloadShift } = useShift(outletId);
+  // One-shot guard so a scheduled login auto-opens the store exactly once.
+  const autoOpenedRef = useRef(false);
+
   // Advance a Grab/Pickup order's fulfilment status via the service-role
   // route (anon can't UPDATE printed pickup rows under RLS). Realtime
   // flows the change back through useOrdersPanel so the card re-buckets.
   const advanceOrderStatus = useCallback(async (order: KdsOrder, status: "preparing" | "ready" | "completed") => {
+    // Register-side channel gate: can't accept/advance Grab/Pickup orders
+    // until the store is open on this till.
+    if (!shift) { promptOpenStore(); return; }
     setBumpingUid(order.uid);
     console.log(`[order-status] tap ${order.source} ${order.orderNumber} -> ${status}`);
     try {
@@ -231,10 +241,10 @@ export default function Register() {
     } finally {
       setBumpingUid(null);
     }
-  }, [reloadOrders]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadOrders, shift]);
 
-  // ── Shift open/close ──
-  const { shift, reload: reloadShift } = useShift(outletId);
+  // ── Open Store (cashier shift) open/close ──
   const openShiftModal = useCallback(() => {
     Haptics.selectionAsync();
     setClosedSummary(null);
@@ -358,16 +368,17 @@ export default function Register() {
   // remove the line.
   const [editLineKey, setEditLineKey] = useState<string | null>(null);
 
-  // ── 2-hour auto-logout ──────────────────────────────────────────────
-  // The staff session expires 2h after sign-in. We don't yank it out mid-sale,
-  // though — once expired, the till signs out at the next safe gap (empty cart,
-  // no checkout/paid screen up), so it lands between customers. Re-check on
-  // every cart change (fires the moment the basket clears) plus a slow poll for
-  // the sit-idle case.
+  // ── Auto-logout at end of shift ──────────────────────────────────────
+  // A rostered ("Open Store") session ends at its scheduled shift end; an
+  // off-schedule / manager session falls back to a 2h TTL. Either way we don't
+  // yank it out mid-sale — the till signs out at the next safe gap (empty cart,
+  // no checkout/paid screen). A rostered end also closes the store (Z-roll-up)
+  // on the way out. Re-checked on every cart change plus a slow idle poll.
   useEffect(() => {
     if (!staff) return;
     const maybeLogout = () => {
-      if (sessionExpired(loggedInAt) && lines.length === 0 && !showCheckout && !paid) {
+      if (shiftSessionExpired(loggedInAt, shiftEndsAt) && lines.length === 0 && !showCheckout && !paid) {
+        if (shiftEndsAt != null && shift) { void closeShift(shift, staff.staffId); }
         signOut();
         router.replace("/");
       }
@@ -376,7 +387,21 @@ export default function Register() {
     const id = setInterval(maybeLogout, 20000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staff, loggedInAt, lines.length, showCheckout, paid]);
+  }, [staff, loggedInAt, shiftEndsAt, lines.length, showCheckout, paid, shift]);
+
+  // ── Open Store on scheduled login ────────────────────────────────────
+  // A rostered session (shiftEndsAt set) auto-opens the store the first time
+  // the register mounts with no shift yet — no extra "Open Store" tap. Off-
+  // schedule / manager sessions (shiftEndsAt null) open it manually instead.
+  useEffect(() => {
+    if (shiftEndsAt == null) return;
+    if (!outletId || !staff?.staffId) return;
+    if (shiftLoading || shift) return;
+    if (autoOpenedRef.current) return;
+    autoOpenedRef.current = true;
+    void (async () => { await openShift(outletId, staff.staffId); await reloadShift(); })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shiftEndsAt, outletId, staff?.staffId, shiftLoading, shift, reloadShift]);
 
   const liveCats = useMemo(() => {
     const present = new Set((prods.data ?? []).map((p) => p.category));
@@ -555,7 +580,18 @@ export default function Register() {
     useDisplay.getState().setManualDiscount(effManualDiscount > 0 ? { label: "Discount", sen: effManualDiscount } : null);
   }, [effManualDiscount]);
 
+  // Block ringing up until the store is open. Scheduled staff auto-open on
+  // login; off-schedule / manager sessions open it here first.
+  function promptOpenStore() {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Alert.alert("Store closed", "Open the store before starting an order.", [
+      { text: "Not now", style: "cancel" },
+      { text: "Open Store", onPress: openShiftModal },
+    ]);
+  }
+
   function onAdd(p: Product) {
+    if (!shift) { promptOpenStore(); return; }
     if (p.available === false) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Alert.alert(p.name, `Out of stock at ${outletShort(outletId)}. Long-press the item to mark it back in stock.`);
@@ -894,12 +930,12 @@ export default function Register() {
             {/* Order type is chosen at checkout now — no upfront toggle here. */}
           </View>
           <View className="flex-row items-center gap-2">
-            {/* Shift — open/close the register's cashier shift. Green dot
-                = open, amber = none. Tap to open (with a cash float) or
-                close (with an end-of-shift summary). */}
+            {/* Open Store — the cashier shift. Green dot = store open, amber =
+                closed. Scheduled staff auto-open on login; tap to open manually
+                (manager / off-schedule) or to close with an end-of-shift summary. */}
             <Pressable onPress={openShiftModal} className="flex-row items-center gap-2 px-3 py-2 rounded-xl border border-cream/15 active:opacity-60">
               <Power size={16} color={shift ? "#22C55E" : "#FBBF24"} />
-              <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Shift</Text>
+              <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{shift ? "Store Open" : "Open Store"}</Text>
               <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: shift ? "#22C55E" : "#FBBF24" }} />
             </Pressable>
             {/* Orders command center — one button opens a tabbed panel for
@@ -1499,12 +1535,11 @@ export default function Register() {
         </View>
       </Modal>
 
-      {/* ── Shift open / close ─────────────────────────────────────────
-          Explicit cashier-shift control. Open a shift at the start; close
-          it at the end to stamp closed_at + roll up the shift's sales for
-          the Z-report. Cashless register — no cash float / drawer count.
-          The checkout still auto-attaches whatever shift is open, so
-          selling is never blocked — this just gives staff the bookends. */}
+      {/* ── Open Store (cashier shift) open / close ─────────────────────
+          The store must be open to ring up an order or accept Grab/Pickup
+          orders (the till gates on it). Scheduled staff auto-open on login;
+          otherwise open it here. Closing stamps closed_at + rolls up the
+          shift's sales for the Z-report. Cashless — no cash float / drawer. */}
       <Modal visible={showShift} transparent animationType="fade" onRequestClose={() => setShowShift(false)}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
           {/* Tap the dark backdrop to close (unless a shift op is in flight). */}
@@ -1512,7 +1547,7 @@ export default function Register() {
           <View className="w-[460px] rounded-3xl bg-surface border border-border p-7">
             <View className="flex-row items-center justify-between mb-1">
               <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>
-                {closedSummary ? "Shift Closed" : shift ? "Close Shift" : "Open Shift"}
+                {closedSummary ? "Store Closed" : shift ? "Close Store" : "Open Store"}
               </Text>
               <Pressable onPress={() => setShowShift(false)} className="active:opacity-60" disabled={shiftBusy}>
                 <X size={22} color="rgba(245,243,240,0.7)" />
@@ -1527,7 +1562,7 @@ export default function Register() {
               <View className="gap-3">
                 <View className="rounded-2xl px-5 py-5 items-center" style={{ backgroundColor: "rgba(34,197,94,0.10)", borderWidth: 1, borderColor: "rgba(34,197,94,0.4)" }}>
                   <CheckCircle2 size={34} color="#22C55E" />
-                  <Text className="text-cream text-base mt-2" style={{ fontFamily: "Peachi-Bold" }}>Shift closed</Text>
+                  <Text className="text-cream text-base mt-2" style={{ fontFamily: "Peachi-Bold" }}>Store closed</Text>
                   <View className="flex-row gap-8 mt-4">
                     <View className="items-center">
                       <Text className="text-amber-400 text-2xl" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{closedSummary.orders}</Text>
@@ -1561,17 +1596,17 @@ export default function Register() {
                   </View>
                 </View>
                 <Pressable onPress={doCloseShift} disabled={shiftBusy} className={`h-14 rounded-2xl items-center justify-center ${shiftBusy ? "bg-primary/40" : "bg-primary active:opacity-80"}`}>
-                  {shiftBusy ? <ActivityIndicator color="#F5F3F0" /> : <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Close Shift</Text>}
+                  {shiftBusy ? <ActivityIndicator color="#F5F3F0" /> : <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Close Store</Text>}
                 </Pressable>
               </View>
             ) : (
               // ── Open a new shift ──
               <View className="gap-4">
                 <Text className="text-cream/50 text-[12px]" style={{ fontFamily: "SpaceGrotesk_500Medium", lineHeight: 18 }}>
-                  Cashless register (QR / card only) — opening a shift just ties this run of orders to you, so sales roll up correctly on the Z-Report.
+                  Open the store to start taking orders. This ties the run of orders to you (cashless — QR / card only), so sales roll up correctly on the Z-Report.
                 </Text>
                 <Pressable onPress={doOpenShift} disabled={shiftBusy} className={`h-14 rounded-2xl items-center justify-center flex-row gap-2 ${shiftBusy ? "bg-primary/40" : "bg-primary active:opacity-80"}`}>
-                  {shiftBusy ? <ActivityIndicator color="#F5F3F0" /> : <><Power size={20} color="#F5F3F0" /><Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Open Shift</Text></>}
+                  {shiftBusy ? <ActivityIndicator color="#F5F3F0" /> : <><Power size={20} color="#F5F3F0" /><Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Open Store</Text></>}
                 </Pressable>
               </View>
             )}

@@ -25,13 +25,26 @@ export function sessionExpired(loggedInAt: number | null): boolean {
   return loggedInAt != null && Date.now() - loggedInAt >= SESSION_TTL_MS;
 }
 
+/** Has the current staff session ended? A rostered ("Open Store") session
+ *  ends at its scheduled shift end (`shiftEndsAt`, returned by the auth
+ *  endpoint, already incl. a wind-down grace); an off-schedule / manager
+ *  override session falls back to the fixed 2-hour TTL. */
+export function shiftSessionExpired(loggedInAt: number | null, shiftEndsAt: number | null): boolean {
+  if (shiftEndsAt != null) return Date.now() >= shiftEndsAt;
+  return sessionExpired(loggedInAt);
+}
+
 type PosState = {
   outletId: string | null;
   staff: StaffSession | null;
-  /** Epoch ms the current staff signed in — drives the 2h auto-logout. */
+  /** Epoch ms the current staff signed in — drives the 2h fallback auto-logout. */
   loggedInAt: number | null;
+  /** Epoch ms the rostered shift ends — drives the "Open Store" auto-logout.
+   *  null when the login wasn't schedule-bound (manager / override / no roster),
+   *  in which case the 2h TTL applies instead. */
+  shiftEndsAt: number | null;
   setOutlet: (id: string) => void;
-  setStaff: (s: StaffSession) => void;
+  setStaff: (s: StaffSession, shiftEndsAt?: number | null) => void;
   signOut: () => void;
 };
 
@@ -41,10 +54,12 @@ export const usePos = create<PosState>()(
       outletId: null,
       staff: null,
       loggedInAt: null,
+      shiftEndsAt: null,
       setOutlet: (id) => set({ outletId: id }),
-      // Stamp the sign-in time so the session can auto-expire after SESSION_TTL_MS.
-      setStaff: (s) => set({ staff: s, loggedInAt: Date.now() }),
-      signOut: () => set({ staff: null, loggedInAt: null }),
+      // Stamp the sign-in time + (optional) rostered shift end so the session
+      // can auto-expire at shift end, or after SESSION_TTL_MS as a fallback.
+      setStaff: (s, shiftEndsAt = null) => set({ staff: s, loggedInAt: Date.now(), shiftEndsAt }),
+      signOut: () => set({ staff: null, loggedInAt: null, shiftEndsAt: null }),
     }),
     {
       name: "celsius-pos-session",
@@ -53,7 +68,7 @@ export const usePos = create<PosState>()(
       // cashier logged in mid-shift — but a session older than 2h is treated
       // as expired on the next launch / tick. Cart is NOT persisted (it lives
       // in the register screen; never survive a relaunch).
-      partialize: (s) => ({ outletId: s.outletId, staff: s.staff, loggedInAt: s.loggedInAt }),
+      partialize: (s) => ({ outletId: s.outletId, staff: s.staff, loggedInAt: s.loggedInAt, shiftEndsAt: s.shiftEndsAt }),
     },
   ),
 );

@@ -5,7 +5,7 @@ import * as Haptics from "expo-haptics";
 import { Delete, ChevronDown, Check } from "lucide-react-native";
 import { supabase } from "@/lib/supabase";
 import { apiPost } from "@/lib/api";
-import { usePos, sessionExpired } from "@/lib/store";
+import { usePos, shiftSessionExpired } from "@/lib/store";
 
 type Outlet = { id: string; name: string };
 
@@ -25,19 +25,23 @@ const BRAND = "#A2492C";
 const DANGER = "#E5484D";
 
 export default function Login() {
-  const { outletId, setOutlet, setStaff, staff, loggedInAt, signOut } = usePos();
+  const { outletId, setOutlet, setStaff, staff, loggedInAt, shiftEndsAt, signOut } = usePos();
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Manager-override mode: when rostered staff sign in outside their shift the
+  // server returns 403 NOT_SCHEDULED; the keypad then collects a MANAGER pin to
+  // authorise the captured staff login. `null` = normal staff PIN entry.
+  const [override, setOverride] = useState<{ staffPin: string } | null>(null);
 
   useEffect(() => {
     // A persisted session older than 2h is expired — clear it so the till
     // re-prompts for a PIN on launch instead of waltzing back into the register.
-    if (staff && sessionExpired(loggedInAt)) { signOut(); return; }
+    if (staff && shiftSessionExpired(loggedInAt, shiftEndsAt)) { signOut(); return; }
     if (staff && outletId) router.replace("/register");
-  }, [staff, outletId, loggedInAt]);
+  }, [staff, outletId, loggedInAt, shiftEndsAt]);
 
   useEffect(() => {
     supabase.from("outlets").select("id, name").order("id").then(({ data }) => {
@@ -52,27 +56,48 @@ export default function Login() {
       if (!outletId) { setError("Select outlet first"); return; }
       setBusy(true);
       setError(null);
+      // In override mode the keypad collects a MANAGER pin to authorise the
+      // not-scheduled staff captured in `override.staffPin`.
+      const isOverride = !!override;
+      const payload = isOverride
+        ? { pin: override!.staffPin, outletId, overridePin: fullPin }
+        : { pin: fullPin, outletId };
       try {
-        const u = await apiPost<{ id: string; name: string; role: string }>("/api/pos/auth/pin", {
-          pin: fullPin, outletId,
-        });
-        setStaff({ staffId: u.id, staffName: u.name, role: u.role });
+        const u = await apiPost<{ id: string; name: string; role: string; shiftEnd?: string | null }>(
+          "/api/pos/auth/pin", payload,
+        );
+        // Rostered login → auto-logout at the scheduled shift end; otherwise null
+        // (manager / override / no roster) falls back to the till's 2h TTL.
+        const shiftEndsAt = u.shiftEnd ? Date.parse(u.shiftEnd) : null;
+        setStaff({ staffId: u.id, staffName: u.name, role: u.role }, shiftEndsAt);
+        setOverride(null);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace("/register");
       } catch (e: any) {
         const msg = String(e?.message ?? "");
+        // Not scheduled now → drop into manager-override mode (manager taps their
+        // PIN to authorise). Only on the first (staff) pass, never while already
+        // collecting an override PIN.
+        if (!isOverride && msg.includes("NOT_SCHEDULED")) {
+          setOverride({ staffPin: fullPin });
+          setPin("");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          return;
+        }
         setError(
+          msg.includes("OVERRIDE_FAILED") ? "Manager PIN not recognised" :
+          msg.includes("NOT_SCHEDULED") ? "Not scheduled — ask a manager" :
           msg.includes("401") ? "Invalid PIN" :
           msg.includes("409") ? "Duplicate PIN — see manager" :
           "Login error",
         );
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        setTimeout(() => { setPin(""); setError(null); }, 1000);
+        setTimeout(() => { setPin(""); setError(null); }, 1100);
       } finally {
         setBusy(false);
       }
     },
-    [outletId],
+    [outletId, override],
   );
 
   function digit(d: string) {
@@ -84,7 +109,8 @@ export default function Login() {
     if (next.length === 6) submit(next);
   }
   const del = () => { if (!busy) { Haptics.selectionAsync(); setPin((p) => p.slice(0, -1)); setError(null); } };
-  const clear = () => { if (!busy) { Haptics.selectionAsync(); setPin(""); setError(null); } };
+  // Clear also cancels manager-override mode (back to staff PIN entry).
+  const clear = () => { if (!busy) { Haptics.selectionAsync(); setPin(""); setError(null); setOverride(null); } };
 
   const selected = outlets.find((o) => o.id === outletId);
 
@@ -111,7 +137,9 @@ export default function Login() {
           />
           <View className="items-center" style={{ gap: 4 }}>
             <Text className="text-cream text-3xl" style={{ fontFamily: "Peachi-Bold" }}>Celsius Coffee</Text>
-            <Text className="text-cream/55 text-base" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Staff Login</Text>
+            <Text className="text-base" style={{ fontFamily: "SpaceGrotesk_500Medium", color: override ? "#FBBF24" : "rgba(245,243,240,0.55)" }}>
+              {override ? "Manager PIN to authorise" : "Staff Login"}
+            </Text>
           </View>
 
           {/* Outlet dropdown */}
@@ -149,6 +177,8 @@ export default function Login() {
               <Text className="text-cream/55 text-lg" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Verifying…</Text>
             ) : error ? (
               <Text className="text-lg" style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: DANGER }}>{error}</Text>
+            ) : override ? (
+              <Text className="text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium", color: "#FBBF24" }}>Not scheduled — manager PIN, or Clear to cancel</Text>
             ) : null}
           </View>
         </View>
