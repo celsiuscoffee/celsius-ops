@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { isPromoLiveNow } from "@celsius/shared";
 
 /**
  * POST /api/pos/loyalty/suggest-pairs
@@ -50,30 +51,6 @@ function currentRoundKey(): string | null {
   // KL time (UTC+8) so the round matches the floor, not the server clock.
   const h = (new Date().getUTCHours() + 8) % 24;
   return ROUNDS.find((r) => h >= r.startH && h < r.endH)?.key ?? null;
-}
-
-// Is a promotion live right now? Mirrors the central engine's date/day/time
-// gates (apps/loyalty promotions.ts isPromoEligible) so the combo badge we
-// show matches the discount the engine will actually apply. Window comparisons
-// are in MYT (UTC+8) since promos like "Breakfast combo 8–10am" are authored
-// in local time; we shift `now` by +8h and read it with UTC accessors (same as
-// the engine) to avoid a double timezone offset on a UTC server.
-type PromoWindow = {
-  valid_from?: string | null; valid_until?: string | null;
-  day_of_week?: number[] | null; time_start?: string | null; time_end?: string | null;
-};
-function promoActiveNow(p: PromoWindow): boolean {
-  const now = new Date();
-  if (p.valid_from && new Date(p.valid_from) > now) return false;
-  if (p.valid_until && new Date(p.valid_until) < now) return false;
-  const myt = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  const dow = p.day_of_week ?? [];
-  if (dow.length > 0 && !dow.includes(myt.getUTCDay())) return false;
-  if (p.time_start && p.time_end) {
-    const hhmm = `${String(myt.getUTCHours()).padStart(2, "0")}:${String(myt.getUTCMinutes()).padStart(2, "0")}:00`;
-    if (hhmm < p.time_start || hhmm > p.time_end) return false;
-  }
-  return true;
 }
 
 function getAdmin() {
@@ -155,11 +132,11 @@ export async function POST(req: NextRequest) {
       .eq("is_active", true);
     type Combo = { id: string; name: string; discount_type: string | null; discount_value: number | null; combo_price: number | null; override_price: number | null; prodIds: string[]; catIds: string[]; outletIds: string[] };
     const combos: Combo[] = ((promoRows ?? []) as any[])
-      // Only combos that are LIVE right now (same date/day/time gates the
-      // central engine enforces) — otherwise we'd badge "RM2 OFF" for a deal
-      // the engine won't actually apply (e.g. an 8–10am combo shown at noon),
-      // and the discount never lands on the bill.
-      .filter((p) => promoActiveNow(p))
+      // Only combos that are LIVE right now — using the SAME canonical schedule
+      // gate the rewards engine enforces (@celsius/shared isPromoLiveNow) so we
+      // never badge "RM2 OFF" for a deal the engine won't apply (e.g. an 8–10am
+      // combo shown at noon), which would leave the discount off the bill.
+      .filter((p) => isPromoLiveNow(p))
       .map((p) => ({
         id: p.id, name: p.name, discount_type: p.discount_type, discount_value: p.discount_value,
         combo_price: p.combo_price, override_price: p.override_price,

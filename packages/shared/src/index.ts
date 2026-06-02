@@ -76,6 +76,8 @@ export type {
   DiscountResult,
   DiscountReason,
 } from "./loyalty/discount-engine";
+export { isPromoLiveNow } from "./loyalty/promo-eligibility";
+export type { PromoSchedule } from "./loyalty/promo-eligibility";
 
 // Order number format: CC-{OUTLET_CODE}-{SEQUENCE}
 export function generateOrderNumber(outletCode: string, sequence: number): string {

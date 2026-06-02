@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { randomInt } from 'crypto';
+import { isPromoLiveNow } from '@celsius/shared';
 
 // ─── Types ─────────────────────────────────────────
 
@@ -159,27 +160,12 @@ function isPromoEligible(promo: Promotion, ctx: CartContext, subtotal: number): 
 
   const now = ctx.now ?? new Date();
 
-  if (promo.valid_from && new Date(promo.valid_from) > now) return { ok: false, reason: 'before_valid_from' };
-  if (promo.valid_until && new Date(promo.valid_until) < now) return { ok: false, reason: 'after_valid_until' };
-
-  // Day-of-week + time-of-day comparisons need to happen in MYT
-  // (Malaysia Time, UTC+8, no DST) since promos like "Breakfast combo
-  // 8-10am" are authored in local time. The evaluator runs on Vercel
-  // which is UTC; without this offset a 10am MYT promo would be
-  // checked against 02:00 UTC and never trigger.
-  const mytNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  // Use UTC accessors on the offset-shifted Date so we don't get
-  // double-shifted by the local timezone.
-  if (promo.day_of_week.length > 0 && !promo.day_of_week.includes(mytNow.getUTCDay())) {
-    return { ok: false, reason: 'wrong_day_of_week' };
-  }
-
-  if (promo.time_start && promo.time_end) {
-    const hhmm = `${String(mytNow.getUTCHours()).padStart(2, '0')}:${String(mytNow.getUTCMinutes()).padStart(2, '0')}:00`;
-    if (hhmm < promo.time_start || hhmm > promo.time_end) {
-      return { ok: false, reason: 'outside_time_window' };
-    }
-  }
+  // Date window / day-of-week / time-of-day schedule gate. This is the
+  // canonical "is this promo live right now?" check, shared with the POS
+  // pairing-suggestions endpoint via @celsius/shared `isPromoLiveNow`, so a
+  // combo is never *suggested with a savings badge* at a time this engine
+  // wouldn't actually honour it. (MYT/UTC+8 handling lives in that helper.)
+  if (!isPromoLiveNow(promo, now)) return { ok: false, reason: 'outside_schedule' };
 
   if (promo.outlet_ids.length > 0 && ctx.outlet_id && !promo.outlet_ids.includes(ctx.outlet_id)) {
     return { ok: false, reason: 'outlet_not_eligible' };
