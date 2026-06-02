@@ -17,6 +17,13 @@ const STATUS_COLOUR: Record<string, string> = {
 
 const STORES = ["all", "shah-alam", "conezion", "tamarind"];
 const STATUSES = ["all", "pending", "paid", "preparing", "ready", "completed", "failed"];
+const CHANNELS = ["all", "pickup", "pos", "grab"];
+const CHANNEL_LABEL: Record<string, string> = { all: "All channels", pickup: "Pickup", pos: "In-store", grab: "Grab" };
+const CHANNEL_BADGE: Record<string, string> = {
+  pickup: "bg-blue-100 text-blue-700",
+  pos:    "bg-purple-100 text-purple-700",
+  grab:   "bg-green-100 text-green-700",
+};
 
 function todayString() {
   return new Date().toISOString().slice(0, 10);
@@ -28,6 +35,7 @@ export default function PickupOrders() {
   const [search,      setSearch]      = useState("");
   const [store,       setStore]       = useState("all");
   const [status,      setStatus]      = useState("all");
+  const [channel,     setChannel]     = useState("all");
   const [dateFrom,    setDateFrom]    = useState("");
   const [dateTo,      setDateTo]      = useState("");
   const [showExport,  setShowExport]  = useState(false);
@@ -41,10 +49,11 @@ export default function PickupOrders() {
     // Service-role-backed list endpoint — anon SELECT on orders was
     // revoked by security lockdown A3.
     const params = new URLSearchParams({ limit: "200" });
-    if (store    !== "all") params.set("store",  store);
-    if (status   !== "all") params.set("status", status);
-    if (dateFrom)           params.set("from",   new Date(dateFrom).toISOString());
-    if (dateTo)             params.set("to",     dateTo);
+    if (store    !== "all") params.set("store",   store);
+    if (status   !== "all") params.set("status",  status);
+    if (channel  !== "all") params.set("channel", channel);
+    if (dateFrom)           params.set("from",    new Date(dateFrom).toISOString());
+    if (dateTo)             params.set("to",      dateTo);
     try {
       const res  = await fetch(`/api/pickup/orders?${params.toString()}`, { cache: "no-store" });
       const data = res.ok ? await res.json() : [];
@@ -54,7 +63,7 @@ export default function PickupOrders() {
     } finally {
       setLoading(false);
     }
-  }, [store, status, dateFrom, dateTo]);
+  }, [store, status, channel, dateFrom, dateTo]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -100,7 +109,7 @@ export default function PickupOrders() {
     <div className="p-3 sm:p-6 space-y-5 max-w-6xl">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#160800]">Pickup Orders</h1>
+          <h1 className="text-2xl font-bold text-[#160800]">Orders</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {filtered.length} {filtered.length === 1 ? 'order' : 'orders'} · RM {(totalRevenue / 100).toFixed(2)} total
           </p>
@@ -161,6 +170,17 @@ export default function PickupOrders() {
             ))}
           </select>
 
+          {/* Channel filter */}
+          <select
+            value={channel}
+            onChange={(e) => setChannel(e.target.value)}
+            className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            {CHANNELS.map((c) => (
+              <option key={c} value={c}>{CHANNEL_LABEL[c]}</option>
+            ))}
+          </select>
+
           {/* Date range */}
           <input
             type="date"
@@ -176,9 +196,9 @@ export default function PickupOrders() {
             className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
 
-          {(store !== "all" || status !== "all" || dateFrom || dateTo) && (
+          {(store !== "all" || status !== "all" || channel !== "all" || dateFrom || dateTo) && (
             <button
-              onClick={() => { setStore("all"); setStatus("all"); setDateFrom(""); setDateTo(""); }}
+              onClick={() => { setStore("all"); setStatus("all"); setChannel("all"); setDateFrom(""); setDateTo(""); }}
               className="text-sm text-primary font-medium"
             >
               Clear
@@ -196,10 +216,11 @@ export default function PickupOrders() {
         ) : (
           <>
             {/* Header */}
-            <div className="hidden md:grid grid-cols-[1fr_1.2fr_1fr_1fr_0.8fr_0.8fr_40px] gap-3 px-5 py-3 border-b bg-muted/30 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            <div className="hidden md:grid grid-cols-[1fr_1.1fr_0.9fr_0.7fr_0.9fr_0.7fr_0.8fr_40px] gap-3 px-5 py-3 border-b bg-muted/30 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               <span>Order</span>
               <span>Customer</span>
               <span>Outlet</span>
+              <span>Channel</span>
               <span>Date / Time</span>
               <span>Total</span>
               <span>Status</span>
@@ -207,29 +228,45 @@ export default function PickupOrders() {
             </div>
 
             <div className="divide-y">
-              {filtered.map((order) => (
-                <Link
-                  key={order.id}
-                  href={`/pickup/orders/${order.id}`}
-                  className="flex flex-col md:grid md:grid-cols-[1fr_1.2fr_1fr_1fr_0.8fr_0.8fr_40px] gap-1 md:gap-3 items-start md:items-center px-5 py-3.5 hover:bg-muted/20 transition-colors"
-                >
-                  <span className="font-semibold text-sm">#{order.order_number}</span>
-                  <span className="text-sm text-muted-foreground truncate">
-                    {order.customer_name ?? "—"}{order.customer_phone ? ` · ${order.customer_phone}` : ""}
-                  </span>
-                  <span className="text-sm capitalize">{order.store_id.replace(/-/g, " ")}</span>
-                  <span className="text-sm text-muted-foreground">
-                    {new Date(order.created_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}
-                    {" "}
-                    {new Date(order.created_at).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                  <span className="text-sm font-semibold">RM {(order.total / 100).toFixed(2)}</span>
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit ${STATUS_COLOUR[order.status]}`}>
-                    {order.status}
-                  </span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground hidden md:block" />
-                </Link>
-              ))}
+              {filtered.map((order) => {
+                const ch = order.channel ?? "pickup";
+                // Only customer-app (pickup) orders have a detail page;
+                // pos/grab rows render inert (no /pickup/orders/[id]).
+                const isPickup = ch === "pickup";
+                const rowClass =
+                  "flex flex-col md:grid md:grid-cols-[1fr_1.1fr_0.9fr_0.7fr_0.9fr_0.7fr_0.8fr_40px] gap-1 md:gap-3 items-start md:items-center px-5 py-3.5 transition-colors";
+                const content = (
+                  <>
+                    <span className="font-semibold text-sm">#{order.order_number}</span>
+                    <span className="text-sm text-muted-foreground truncate">
+                      {order.customer_name ?? "—"}{order.customer_phone ? ` · ${order.customer_phone}` : ""}
+                    </span>
+                    <span className="text-sm capitalize">{order.store_id.replace(/-/g, " ")}</span>
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit ${CHANNEL_BADGE[ch] ?? "bg-gray-100 text-gray-600"}`}>
+                      {CHANNEL_LABEL[ch] ?? ch}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {new Date(order.created_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}
+                      {" "}
+                      {new Date(order.created_at).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    <span className="text-sm font-semibold">RM {(order.total / 100).toFixed(2)}</span>
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit ${STATUS_COLOUR[order.status] ?? "bg-gray-100 text-gray-600"}`}>
+                      {order.status}
+                    </span>
+                    {isPickup
+                      ? <ChevronRight className="h-4 w-4 text-muted-foreground hidden md:block" />
+                      : <span className="hidden md:block" />}
+                  </>
+                );
+                return isPickup ? (
+                  <Link key={order.id} href={`/pickup/orders/${order.id}`} className={`${rowClass} hover:bg-muted/20`}>
+                    {content}
+                  </Link>
+                ) : (
+                  <div key={order.id} className={rowClass}>{content}</div>
+                );
+              })}
             </div>
           </>
         )}

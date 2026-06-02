@@ -32,6 +32,10 @@ export interface OrderRow {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  /** Sales channel the order came through — set by the unified orders
+   *  endpoint: "pickup" (customer app / web / QR), "pos" (in-store
+   *  register), "grab" (GrabFood). Optional so single-source reads stay valid. */
+  channel?: string;
 }
 
 export interface OrderItemRow {
