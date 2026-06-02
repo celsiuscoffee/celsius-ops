@@ -8,7 +8,7 @@ import * as Haptics from "expo-haptics";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Minus, LogOut, X, CheckCircle2,
-  Settings as SettingsIcon, User, Gift, LayoutGrid, Search, Trash2, Tag,
+  Settings as SettingsIcon, User, Gift, LayoutGrid, Trash2, Tag,
   Grid3x3, QrCode, CreditCard, ClipboardList, Bike, ShoppingBag, ChefHat, Power,
 } from "lucide-react-native";
 import { usePos } from "@/lib/store";
@@ -847,22 +847,26 @@ export default function Register() {
         {/* Inline panels */}
         {panel === "customer" && !member && (
           <View className="px-4 pb-3">
-            <View className="flex-row gap-2">
-              <NumpadField
-                value={phoneInput}
-                onChangeText={(t) => { setPhoneInput(t); setLookupError(null); }}
-                placeholder="Customer phone"
-                mode="integer"
-                title="Customer phone"
-                onDone={lookup}
-                className="flex-1 h-11 px-3 rounded-xl border border-cream/15"
-                style={{ backgroundColor: "rgba(245,243,240,0.06)" }}
-              />
-              <Pressable onPress={lookup} disabled={lookingUp} className="h-11 px-4 rounded-xl items-center justify-center flex-row gap-1.5" style={{ backgroundColor: BRAND, opacity: lookingUp ? 0.6 : 1 }}>
-                {lookingUp ? <ActivityIndicator color="#fff" size="small" /> : <Search size={15} color="#fff" />}
-                <Text className="text-white text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Look up</Text>
-              </Pressable>
-            </View>
+            {/* Pressing "Customer" pops the keypad straight away (autoOpen) and
+                Done looks the member up — no separate search bar / button. */}
+            <NumpadField
+              value={phoneInput}
+              onChangeText={(t) => { setPhoneInput(t); setLookupError(null); }}
+              placeholder="Tap to enter customer phone"
+              mode="integer"
+              title="Customer phone"
+              autoOpen
+              onDone={lookup}
+              onClose={() => setPanel("none")}
+              className="h-11 px-3 rounded-xl border border-cream/15"
+              style={{ backgroundColor: "rgba(245,243,240,0.06)" }}
+            />
+            {lookingUp && (
+              <View className="flex-row items-center gap-2 mt-1.5">
+                <ActivityIndicator color="#fff" size="small" />
+                <Text className="text-cream/50 text-xs" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Looking up…</Text>
+              </View>
+            )}
             {!!lookupError && <Text className="text-[#E5484D] text-xs mt-1.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{lookupError}</Text>}
           </View>
         )}
@@ -877,7 +881,9 @@ export default function Register() {
                 mode="integer"
                 prefix="#"
                 title="Table Stand No."
+                autoOpen
                 onDone={() => { if (tableNumber) setPanel("none"); }}
+                onClose={() => setPanel("none")}
                 className="flex-1 h-11 px-3 rounded-xl border border-cream/15"
                 style={{ backgroundColor: "rgba(245,243,240,0.06)" }}
               />
@@ -2220,7 +2226,7 @@ function Stepper({ icon, onPress }: { icon: React.ReactNode; onPress: () => void
  *  backspace + clear) instead of the OS keyboard — far better on the SUNMI. */
 function NumpadField({
   value, onChangeText, placeholder, mode = "decimal", title, prefix = "",
-  secure = false, maxLength, className, style, onDone,
+  secure = false, maxLength, className, style, onDone, autoOpen = false, onClose,
 }: {
   value: string;
   onChangeText: (v: string) => void;
@@ -2233,8 +2239,13 @@ function NumpadField({
   className?: string;
   style?: any;
   onDone?: () => void;
+  autoOpen?: boolean;
+  onClose?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Auto-pop the keypad the instant the field mounts — pressing "Stand" /
+  // "Customer" opens straight onto the numpad, no extra tap on the field.
+  useEffect(() => { if (autoOpen) setOpen(true); }, [autoOpen]);
   const display = value ? (secure ? "•".repeat(value.length) : `${prefix}${value}`) : "";
   function press(k: string) {
     Haptics.selectionAsync();
@@ -2251,9 +2262,9 @@ function NumpadField({
           {display || placeholder || ""}
         </Text>
       </Pressable>
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => { setOpen(false); onClose?.(); }}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
-          <Pressable onPress={() => setOpen(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+          <Pressable onPress={() => { setOpen(false); onClose?.(); }} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
           <View className="w-[340px] rounded-3xl bg-surface border border-border p-5">
             {!!title && <Text className="text-cream/55 text-xs mb-2" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.6 }}>{title.toUpperCase()}</Text>}
             <View className="h-16 rounded-2xl mb-3 px-4 justify-center" style={{ backgroundColor: "rgba(245,243,240,0.06)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}>
