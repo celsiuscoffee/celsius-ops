@@ -805,24 +805,48 @@ export default function Register() {
             with its 4-column default on first paint, then the BO setting
             (5) arrived and the FlatList re-mounted via key change, making
             the tiles visibly snap from 4-wide to 5-wide. */}
-        {prods.isLoading || !settings ? (
-          <View className="flex-1 items-center justify-center"><ActivityIndicator color="#FBBF24" /></View>
-        ) : (
-          <FlatList
-            key={`grid-${cols}`}
-            data={visible}
-            keyExtractor={(p) => p.id}
-            numColumns={cols}
-            contentContainerStyle={{ padding: GRID_PAD, paddingBottom: 32 }}
-            columnWrapperStyle={{ gap: GRID_GAP, justifyContent: "flex-start" }}
-            ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
-            renderItem={({ item }) => <ProductTile product={item} width={tileW} onPress={() => onAdd(item)} onLongPress={() => promptAvailability(item)} />}
-            ListEmptyComponent={<Text className="text-cream/30 text-center mt-10" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>No items here yet.</Text>}
-            removeClippedSubviews
-            initialNumToRender={16}
-            windowSize={5}
-          />
-        )}
+        <View className="flex-1">
+          {prods.isLoading || !settings ? (
+            <View className="flex-1 items-center justify-center"><ActivityIndicator color="#FBBF24" /></View>
+          ) : (
+            <FlatList
+              key={`grid-${cols}`}
+              style={{ flex: 1 }}
+              data={visible}
+              keyExtractor={(p) => p.id}
+              numColumns={cols}
+              contentContainerStyle={{ padding: GRID_PAD, paddingBottom: 32 }}
+              columnWrapperStyle={{ gap: GRID_GAP, justifyContent: "flex-start" }}
+              ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
+              renderItem={({ item }) => <ProductTile product={item} width={tileW} onPress={() => onAdd(item)} onLongPress={() => promptAvailability(item)} />}
+              ListEmptyComponent={<Text className="text-cream/30 text-center mt-10" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>No items here yet.</Text>}
+              removeClippedSubviews
+              initialNumToRender={16}
+              windowSize={5}
+            />
+          )}
+
+          {/* "Ask first" GATE — covers the menu so nothing can be added until the
+              cashier identifies a member or chooses Guest. Membership is settled
+              before the first item goes in. Resets per order (newOrder / Clear). */}
+          {shift && !member && !memberAsked && (
+            <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(22,8,0,0.96)" }} className="items-center justify-center px-10">
+              <View className="items-center" style={{ maxWidth: 480 }}>
+                <View className="h-16 w-16 rounded-2xl items-center justify-center mb-4" style={{ backgroundColor: "rgba(251,191,36,0.14)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)" }}>
+                  <User size={30} color="#FBBF24" />
+                </View>
+                <Text className="text-cream text-2xl text-center" style={{ fontFamily: "Peachi-Bold" }}>Is the customer a member?</Text>
+                <Text className="text-cream/55 text-sm text-center mt-2 mb-6" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Ask before starting the order — members earn Beans and get member pricing on the whole bill.</Text>
+                <Pressable onPress={() => { Haptics.selectionAsync(); setPanel("customer"); }} className="w-full h-14 rounded-2xl items-center justify-center active:opacity-80" style={{ backgroundColor: "#FBBF24" }}>
+                  <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 16, color: "#160800" }}>Yes — enter phone</Text>
+                </Pressable>
+                <Pressable onPress={() => { Haptics.selectionAsync(); setMemberAsked(true); }} className="w-full h-12 mt-3 rounded-2xl items-center justify-center border border-cream/20 active:opacity-70" style={{ backgroundColor: "rgba(245,243,240,0.04)" }}>
+                  <Text className="text-cream/80" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 15 }}>No — guest order</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* ── Cart panel ──────────────────────────────── */}
@@ -848,27 +872,6 @@ export default function Register() {
             <ActionTab icon={<LayoutGrid size={15} color="#F5F3F0" />} label="Stand" active={panel === "table"} onPress={() => setPanel(panel === "table" ? "none" : "table")} />
           )}
         </View>
-
-        {/* "Ask first" member check — sits at the top of every new order until the
-            cashier identifies a member or taps Guest, so staff always ask up front
-            (member then earns Beans + tier pricing for the whole order). */}
-        {!member && !memberAsked && panel === "none" && (
-          <View className="mx-4 mb-2 rounded-2xl p-3 border" style={{ backgroundColor: "rgba(251,191,36,0.10)", borderColor: "rgba(251,191,36,0.45)" }}>
-            <View className="flex-row items-center gap-2">
-              <User size={16} color="#FBBF24" />
-              <Text className="text-cream text-sm" style={{ fontFamily: "Peachi-Bold" }}>Is the customer a member?</Text>
-            </View>
-            <Text className="text-cream/50 text-[11px] mt-0.5 mb-2.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Ask before ringing up — earn + redeem Beans</Text>
-            <View className="flex-row gap-2">
-              <Pressable onPress={() => { Haptics.selectionAsync(); setPanel("customer"); }} className="flex-1 h-11 rounded-xl items-center justify-center" style={{ backgroundColor: "#FBBF24" }}>
-                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 13, color: "#160800" }}>Yes — enter phone</Text>
-              </Pressable>
-              <Pressable onPress={() => { Haptics.selectionAsync(); setMemberAsked(true); }} className="h-11 px-5 rounded-xl items-center justify-center border border-cream/15" style={{ backgroundColor: "rgba(245,243,240,0.04)" }}>
-                <Text className="text-cream/70" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 13 }}>Guest</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
 
         {/* Inline panels */}
         {panel === "customer" && !member && (
