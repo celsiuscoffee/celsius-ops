@@ -1189,7 +1189,7 @@ export default function Register() {
               <View className="flex-row items-center gap-2">
                 <Pressable onPress={openRewards} className="flex-row items-center gap-1.5 h-9 px-3 rounded-xl active:opacity-80" style={{ backgroundColor: BRAND }}>
                   <Gift size={15} color="#fff" />
-                  <Text className="text-white text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Rewards</Text>
+                  <Text className="text-white text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Redeem</Text>
                 </Pressable>
                 <Pressable onPress={removeMember} className="h-9 w-9 items-center justify-center rounded-xl border border-cream/15 active:opacity-60">
                   <Trash2 size={15} color="rgba(245,243,240,0.6)" />
@@ -1916,7 +1916,7 @@ export default function Register() {
                   <RewardRow key={v.id} title={v.title} subtitle={discountSummary(v)} onPress={() => applyReward(v, false)} />
                 ))}
                 {(rewards?.catalog ?? []).map((c) => (
-                  <RewardRow key={c.id} title={c.title} subtitle={`${discountSummary(c)} · ${c.points_required} Points`} onPress={() => applyReward(c, true)} />
+                  <RewardRow key={c.id} title={c.title} subtitle={`${discountSummary(c)} · ${c.points_required} Points`} points={c.points_required} onPress={() => applyReward(c, true)} />
                 ))}
               </ScrollView>
             )}
@@ -2002,18 +2002,38 @@ function ActionTab({ icon, label, active, onPress }: { icon: React.ReactNode; la
   );
 }
 
-function RewardRow({ title, subtitle, onPress }: { title: string; subtitle: string; onPress: () => void }) {
+// Reward row — single-row card anatomy mirroring the native pickup app's
+// rewards list: [icon tile] EYEBROW / Title / Subline … [pill]. Espresso card
+// with a gold accent + a faint brand glyph, so the register's Redeem modal
+// reads as the same card family the customer sees in the pickup app.
+function RewardRow({ title, subtitle, points, onPress }: { title: string; subtitle: string; points?: number; onPress: () => void }) {
+  const isFree = /free/i.test(title);
+  const isDiscount = /rm\s?\d|%|\boff\b/i.test(title);
+  const eyebrow = isFree ? "Free Item" : isDiscount ? "Discount" : "Voucher";
+  const Icon = isFree ? Coffee : isDiscount ? Tag : Gift;
+  const pill = points && points > 0 ? "Redeem" : "Apply";
   return (
-    <Pressable onPress={onPress} className="flex-row items-center justify-between rounded-2xl px-4 py-3.5 mb-2 active:opacity-80" style={{ backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}>
-      <View className="flex-row items-center gap-3 flex-1 pr-3">
-        <Gift size={20} color="#FBBF24" />
-        <View className="flex-1">
-          <Text className="text-cream text-[15px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }} numberOfLines={1}>{title}</Text>
-          <Text className="text-cream/45 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }} numberOfLines={1}>{subtitle}</Text>
-        </View>
+    <Pressable
+      onPress={onPress}
+      className="active:opacity-90"
+      style={{ borderRadius: 18, overflow: "hidden", backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)", marginBottom: 8 }}
+    >
+      {/* faint brand glyph bottom-right (mirrors the pickup card's CelsiusGift) */}
+      <View style={{ position: "absolute", right: -8, bottom: -16, opacity: 0.08 }}>
+        <Gift size={104} color="#FBBF24" strokeWidth={1.5} />
       </View>
-      <View className="px-3 py-1.5 rounded-lg" style={{ backgroundColor: BRAND }}>
-        <Text className="text-white text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Apply</Text>
+      <View className="flex-row items-center" style={{ paddingHorizontal: 14, paddingVertical: 12, gap: 14 }}>
+        <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(251,191,36,0.16)", alignItems: "center", justifyContent: "center" }}>
+          <Icon size={22} color="#FBBF24" strokeWidth={2} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, letterSpacing: 1.4, color: "#FBBF24", textTransform: "uppercase", marginBottom: 2 }} numberOfLines={1}>{eyebrow}</Text>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: "#F5F3F0", lineHeight: 20 }} numberOfLines={1}>{title}</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(245,243,240,0.5)", marginTop: 1 }} numberOfLines={1}>{subtitle}</Text>
+        </View>
+        <View style={{ backgroundColor: "#FBBF24", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999 }}>
+          <Text style={{ color: "#1A0A02", fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase" }}>{pill}</Text>
+        </View>
       </View>
     </Pressable>
   );
