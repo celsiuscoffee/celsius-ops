@@ -124,7 +124,8 @@ export function tableCount(s: BranchSettings | null): number {
 }
 
 export type TableShape = "square" | "round";
-export type TableDef = { label: string; seats: number | null; x: number; y: number; shape: TableShape };
+export type TableOrient = "h" | "v";
+export type TableDef = { label: string; seats: number | null; x: number; y: number; shape: TableShape; orientation: TableOrient };
 export type TableZoneInput = { name: string; tables: TableDef[] };
 
 const clamp01 = (v: number, def: number) => (Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : def);
@@ -160,13 +161,14 @@ export function tableZones(s: BranchSettings | null): TableZoneInput[] {
             x: clamp01(Number(t?.x), 0.5),
             y: clamp01(Number(t?.y), 0.5),
             shape: t?.shape === "round" ? "round" : "square",
+            orientation: (t?.orientation === "v" ? "v" : "h") as TableOrient,
           }));
           return { name, tables };
         }
         const toks = String(z?.tables ?? "").split(",").map((x) => x.trim()).filter(Boolean);
         const tables: TableDef[] = toks.map((tok, i) => {
           const [label, seatsRaw] = tok.split(":");
-          return { label: (label ?? "").trim() || String(i + 1), seats: posInt(seatsRaw), ...gridPos(i, toks.length), shape: "square" as TableShape };
+          return { label: (label ?? "").trim() || String(i + 1), seats: posInt(seatsRaw), ...gridPos(i, toks.length), shape: "square" as TableShape, orientation: "h" as TableOrient };
         });
         return { name, tables };
       })
@@ -174,7 +176,7 @@ export function tableZones(s: BranchSettings | null): TableZoneInput[] {
     if (zones.length > 0) return zones;
   }
   const count = tableCount(s);
-  const tables: TableDef[] = Array.from({ length: count }, (_, i) => ({ label: `T${i + 1}`, seats: null, ...gridPos(i, count), shape: "square" as TableShape }));
+  const tables: TableDef[] = Array.from({ length: count }, (_, i) => ({ label: `T${i + 1}`, seats: null, ...gridPos(i, count), shape: "square" as TableShape, orientation: "h" as TableOrient }));
   return [{ name: "Tables", tables }];
 }
 

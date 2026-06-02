@@ -36,6 +36,7 @@ export type TableSlot = {
   x: number;                // normalised 0..1 position (centre)
   y: number;
   shape: "square" | "round";
+  orientation: "h" | "v";   // attached-table layout direction
   orders: TableOrderRef[];  // most recent first
 };
 
@@ -77,7 +78,7 @@ function toRefs(rows: Row[] | null, source: "qr" | "pos"): TableOrderRef[] {
 /** Pass the cashier's POS outletId ("outlet-sa") + how many tables the outlet
  *  has (settings.table_count). Returns T1..Tn (plus any extra table that has
  *  orders), each with the live list of orders mapped to it. */
-export function useTablesPanel(outletId: string | null | undefined, zones: { name: string; tables: { label: string; seats: number | null; x: number; y: number; shape: "square" | "round" }[] }[]) {
+export function useTablesPanel(outletId: string | null | undefined, zones: { name: string; tables: { label: string; seats: number | null; x: number; y: number; shape: "square" | "round"; orientation: "h" | "v" }[] }[]) {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [qr, setQr] = useState<TableOrderRef[]>([]);
   const outletRef = useRef(outletId);
@@ -143,7 +144,7 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
       for (const t of z.tables) {
         const k = tableKey(t.label) ?? "";
         covered.add(k);
-        slots.push({ label: t.label, zone: z.name, seats: t.seats, x: t.x, y: t.y, shape: t.shape, orders: byKey.get(k) ?? [] });
+        slots.push({ label: t.label, zone: z.name, seats: t.seats, x: t.x, y: t.y, shape: t.shape, orientation: t.orientation, orders: byKey.get(k) ?? [] });
       }
     }
     // Orders whose table isn't in any floor → an auto-gridded "Other" floor.
@@ -154,7 +155,7 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
         label: k, zone: "Other", seats: null,
         x: oc <= 1 ? 0.5 : 0.1 + ((i % oc) * 0.8) / (oc - 1),
         y: 0.15 + Math.floor(i / oc) * 0.2,
-        shape: "square", orders,
+        shape: "square", orientation: "h", orders,
       });
     });
     return slots;

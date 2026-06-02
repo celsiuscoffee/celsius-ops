@@ -78,15 +78,16 @@ const DANGER = "#E5484D";
 /** Floor-plan tile dimensions, matching the BO editor. Square seats render as
  *  ATTACHED 2-tops pushed together (4-pax = two squares, 6-pax = three); round
  *  tables stay a single scaled circle. */
-function tableDims(seats: number | null | undefined, shape: "square" | "round"): { w: number; h: number; cells: number } {
+function tableDims(seats: number | null | undefined, shape: "square" | "round", orientation: "h" | "v"): { w: number; h: number; cells: number; vertical: boolean } {
   const s = seats ?? 4;
   if (shape === "round") {
     const d = s <= 2 ? 58 : s <= 4 ? 74 : s <= 6 ? 90 : 104;
-    return { w: d, h: d, cells: 1 };
+    return { w: d, h: d, cells: 1, vertical: false };
   }
   const cells = s <= 2 ? 1 : s <= 4 ? 2 : s <= 6 ? 3 : 4;
   const unit = 56;
-  return { w: unit * cells, h: unit, cells };
+  const vertical = orientation === "v";
+  return { w: vertical ? unit : unit * cells, h: vertical ? unit * cells : unit, cells, vertical };
 }
 
 type AppliedReward = { redemptionId: string; name: string; descriptor: RedeemDiscount } | null;
@@ -1165,7 +1166,7 @@ export default function Register() {
                     <View style={{ position: "relative", width: "100%", height: 440, backgroundColor: "rgba(245,243,240,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(245,243,240,0.08)" }}>
                       {g.slots.map((slot) => {
                         const has = slot.orders.length > 0;
-                        const dim = tableDims(slot.seats, slot.shape);
+                        const dim = tableDims(slot.seats, slot.shape, slot.orientation);
                         return (
                           <Pressable
                             key={slot.label}
@@ -1187,7 +1188,9 @@ export default function Register() {
                             }}
                           >
                             {slot.shape !== "round" && dim.cells > 1 && Array.from({ length: dim.cells - 1 }).map((_, i) => (
-                              <View key={`d${i}`} style={{ position: "absolute", top: 8, bottom: 8, width: 1, left: `${((i + 1) / dim.cells) * 100}%`, backgroundColor: "rgba(245,243,240,0.18)" }} />
+                              dim.vertical
+                                ? <View key={`d${i}`} style={{ position: "absolute", left: 8, right: 8, height: 1, top: `${((i + 1) / dim.cells) * 100}%`, backgroundColor: "rgba(245,243,240,0.18)" }} />
+                                : <View key={`d${i}`} style={{ position: "absolute", top: 8, bottom: 8, width: 1, left: `${((i + 1) / dim.cells) * 100}%`, backgroundColor: "rgba(245,243,240,0.18)" }} />
                             ))}
                             <Text style={{ fontFamily: "Peachi-Bold", fontSize: 18, color: has ? "#F5F3F0" : "rgba(245,243,240,0.6)" }} numberOfLines={1}>{slot.label}</Text>
                             {slot.seats != null && (

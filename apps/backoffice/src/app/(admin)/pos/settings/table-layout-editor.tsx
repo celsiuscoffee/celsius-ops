@@ -17,7 +17,8 @@ import { Plus, Trash2, Square, Circle } from "lucide-react";
  */
 
 export type TableShape = "square" | "round";
-export type TableItem = { label: string; seats: number | null; x: number; y: number; shape: TableShape };
+export type TableOrient = "h" | "v";
+export type TableItem = { label: string; seats: number | null; x: number; y: number; shape: TableShape; orientation: TableOrient };
 export type Floor = { name: string; tables: TableItem[] };
 
 type RawFloor = { name?: string; tables?: unknown };
@@ -31,17 +32,18 @@ const snap = (v: number) => Math.round(v / GRID) * GRID;
 
 /** Tile size (px) scaled to seat count — a 6-top reads bigger than a 2-top, so
  *  the floor plan shows table CAPACITY at a glance. Mirrors the register. */
-function tableDims(seats: number | null, shape: TableShape): { w: number; h: number; cells: number } {
+function tableDims(seats: number | null, shape: TableShape, orientation: TableOrient): { w: number; h: number; cells: number; vertical: boolean } {
   const s = seats ?? 4;
   if (shape === "round") {
     const d = s <= 2 ? 46 : s <= 4 ? 60 : s <= 6 ? 76 : 92;
-    return { w: d, h: d, cells: 1 };
+    return { w: d, h: d, cells: 1, vertical: false };
   }
   // Square seats render as ATTACHED 2-tops pushed together: a 4-pax = two
-  // squares, a 6-pax = three — so the plan shows real combined-table shapes.
+  // squares, a 6-pax = three — laid out horizontally or vertically.
   const cells = s <= 2 ? 1 : s <= 4 ? 2 : s <= 6 ? 3 : 4;
   const unit = 44;
-  return { w: unit * cells, h: unit, cells };
+  const vertical = orientation === "v";
+  return { w: vertical ? unit : unit * cells, h: vertical ? unit * cells : unit, cells, vertical };
 }
 
 /** Accept the stored value (positioned objects OR a legacy comma string) and
@@ -58,6 +60,7 @@ export function normalizeFloors(value: unknown): Floor[] {
         x: clamp(Number(t?.x), 0.04, 0.96) || 0.5,
         y: clamp(Number(t?.y), 0.06, 0.94) || 0.5,
         shape: t?.shape === "round" ? "round" : "square",
+        orientation: t?.orientation === "v" ? "v" : "h",
       }));
     } else if (typeof f?.tables === "string") {
       // Legacy "1:2, 2:4" → grid them out.
@@ -72,6 +75,7 @@ export function normalizeFloors(value: unknown): Floor[] {
           x: clamp(0.12 + (i % cols) * (0.76 / Math.max(1, cols - 1 || 1)), 0.08, 0.92),
           y: clamp(0.15 + Math.floor(i / cols) * 0.22, 0.1, 0.9),
           shape: "square" as TableShape,
+          orientation: "h" as TableOrient,
         };
       });
     }
@@ -110,7 +114,7 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
     const cols = 8;
     const x = clamp(snap(0.1 + (n % cols) * 0.1), 0.04, 0.96);
     const y = clamp(snap(0.16 + Math.floor(n / cols) * 0.16), 0.06, 0.94);
-    const t: TableItem = { label: nextLabel(), seats, x, y, shape };
+    const t: TableItem = { label: nextLabel(), seats, x, y, shape, orientation: "h" };
     patchFloor({ tables: [...floor.tables, t] });
     setSelected(n);
   }
@@ -220,7 +224,7 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
               </div>
             )}
             {floor.tables.map((t, idx) => {
-              const dim = tableDims(t.seats, t.shape);
+              const dim = tableDims(t.seats, t.shape, t.orientation);
               return (
               <div
                 key={idx}
@@ -236,9 +240,11 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
                 }}
               >
                 {/* Divider lines between the attached 2-tops (square tables only). */}
-                {t.shape !== "round" && dim.cells > 1 && Array.from({ length: dim.cells - 1 }).map((_, i) => (
-                  <div key={i} className="absolute top-1 bottom-1 w-px bg-[#160800]/15" style={{ left: `${((i + 1) / dim.cells) * 100}%` }} />
-                ))}
+                {t.shape !== "round" && dim.cells > 1 && Array.from({ length: dim.cells - 1 }).map((_, i) =>
+                  dim.vertical
+                    ? <div key={i} className="absolute left-1 right-1 h-px bg-[#160800]/15" style={{ top: `${((i + 1) / dim.cells) * 100}%` }} />
+                    : <div key={i} className="absolute top-1 bottom-1 w-px bg-[#160800]/15" style={{ left: `${((i + 1) / dim.cells) * 100}%` }} />
+                )}
                 <div className="relative z-10 flex flex-col items-center leading-none">
                   <span className="text-sm font-bold text-[#160800]">{t.label}</span>
                   {t.seats != null && <span className="text-[9px] text-gray-500">{t.seats}p</span>}
@@ -280,6 +286,15 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
                     className={`flex h-9 w-9 items-center justify-center rounded-lg border ${floor.tables[selected].shape === "round" ? "border-[#160800] bg-[#160800] text-white" : "border-gray-200 text-gray-500"}`}>
                     <Circle className="h-4 w-4" />
                   </button>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Orient</label>
+                <div className="flex gap-1">
+                  <button onClick={() => patchTable(selected, { orientation: "h" })} title="Horizontal — join left to right"
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg ${floor.tables[selected].orientation === "h" ? "border-[#160800] bg-[#160800] text-white" : "border-gray-200 text-gray-500"}`}>↔</button>
+                  <button onClick={() => patchTable(selected, { orientation: "v" })} title="Vertical — stack top to bottom"
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg ${floor.tables[selected].orientation === "v" ? "border-[#160800] bg-[#160800] text-white" : "border-gray-200 text-gray-500"}`}>↕</button>
                 </div>
               </div>
               <button onClick={() => deleteTable(selected)} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-medium text-red-500 hover:text-red-700">
