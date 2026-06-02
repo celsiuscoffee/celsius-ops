@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useConfirm, toast } from "@celsius/ui";
 import { Plus, Loader2, Eye, EyeOff, Key, Lock, Hash, Check, X, Search, Trash2, RotateCcw } from "lucide-react";
-import { APP_MODULES, MODULE_GROUPS, BACKOFFICE_SUB_APPS } from "@/lib/modules";
+import { APP_MODULES, MODULE_GROUPS, BACKOFFICE_SUB_APPS, APP_ORDER, APP_SECTION_LABELS } from "@/lib/modules";
 
 type ModuleAccess = Record<string, string[]>;
 
@@ -218,7 +218,7 @@ export default function StaffPage() {
   // Each entry MUST be toggleable here, otherwise admins can't grant what an
   // app actually requires. kds/staff_app/order belong to the order/KDS app
   // (apps/order/src/app/api/staff/auth/route.ts).
-  const availableApps = ["backoffice", "inventory", "sales", "loyalty", "pickup", "ops", "kds", "staff_app", "order"] as const;
+  const availableApps = ["backoffice", "pickup", "inventory", "loyalty", "sales", "ops", "kds", "staff_app", "order"] as const;
   const appLabel: Record<string, string> = { backoffice: "BO", inventory: "INV", sales: "SALES", loyalty: "LOY", pickup: "PU", ops: "OPS", kds: "KDS", staff_app: "STAFF", order: "ORDER" };
   const appColor: Record<string, string> = {
     backoffice: "bg-slate-100 text-slate-600",
@@ -536,7 +536,8 @@ export default function StaffPage() {
                   <h3 className="text-sm font-semibold text-gray-900 mb-1">Module Access</h3>
                   <p className="text-xs text-gray-400 mb-3">Control which modules this user can see within each app. Empty = full access.</p>
                   <div className="space-y-4">
-                    {[...form.appAccess.filter((app) => APP_MODULES[app]), ...(form.appAccess.includes("backoffice") ? BACKOFFICE_SUB_APPS.filter((a) => APP_MODULES[a]) : [])]
+                    {Array.from(new Set([...form.appAccess.filter((app) => APP_MODULES[app]), ...(form.appAccess.includes("backoffice") ? BACKOFFICE_SUB_APPS.filter((a) => APP_MODULES[a]) : [])]))
+                      .sort((a, b) => (APP_ORDER.indexOf(a) + 1 || 99) - (APP_ORDER.indexOf(b) + 1 || 99))
                       .filter((app) => APP_MODULES[app].some((m) => canGrantModule(app, m.key)))
                       .map((app) => {
                       const modules = APP_MODULES[app].filter((m) => canGrantModule(app, m.key));
@@ -568,7 +569,7 @@ export default function StaffPage() {
                       return (
                         <div key={app} className="rounded-lg border border-gray-200 p-3">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{app}</span>
+                            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{APP_SECTION_LABELS[app] ?? app}</span>
                             <button
                               type="button"
                               onClick={() => toggleAllModules(app)}

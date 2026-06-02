@@ -86,19 +86,80 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
   ],
 };
 
-// Optional visual groupings for the module picker. Keys map to APP_MODULES
-// keys; an app with an entry here renders grouped sections instead of a flat
-// grid.
+// Visual sub-groupings for the Staff & Access module picker. Keys map to
+// APP_MODULES keys; an app listed here renders grouped sections (with these
+// labels, in this order) instead of a flat grid — mirroring the backoffice
+// sidebar's information architecture so granting access reads the same way the
+// nav does.
+//
+// INVARIANT: every APP_MODULES[app] key MUST appear in exactly one group below,
+// otherwise the editor silently drops the ungrouped toggle (admins could no
+// longer grant that module). When you add a module key above, slot it into a
+// group here too.
 export const MODULE_GROUPS: Record<string, { label: string; keys: string[] }[]> = {
+  // Catalog + POS (the customer/register channel app)
+  pickup: [
+    { label: "Catalog", keys: ["menu"] },
+    { label: "Orders & Customers", keys: ["orders", "customers"] },
+    { label: "Settings", keys: ["settings"] },
+  ],
+  // Procurement
+  inventory: [
+    { label: "Master Data", keys: ["products", "perishables", "suppliers", "categories", "menus"] },
+    { label: "Ordering", keys: ["orders", "transfers", "receivings", "invoices", "pay-and-claim"] },
+    { label: "Operations", keys: ["stock-count", "wastage", "par-levels"] },
+    { label: "Analytics", keys: ["reports"] },
+  ],
+  // Marketing → Loyalty
+  loyalty: [
+    { label: "Overview", keys: ["dashboard"] },
+    { label: "Members", keys: ["members"] },
+    { label: "Rewards & Promotions", keys: ["rewards"] },
+    { label: "History", keys: ["redemptions"] },
+    { label: "Campaigns", keys: ["campaigns", "engage"] },
+  ],
   hr: [
-    { label: "People", keys: ["dashboard", "employees"] },
-    { label: "Time & Attendance", keys: ["attendance", "schedules", "overtime"] },
-    { label: "Leave", keys: ["leave"] },
+    { label: "Overview", keys: ["dashboard"] },
+    { label: "People", keys: ["employees", "performance", "review-penalties"] },
+    { label: "Scheduling", keys: ["schedules"] },
+    { label: "Time & Attendance", keys: ["attendance", "overtime", "leave"] },
     { label: "Payroll & Compensation", keys: ["payroll", "allowances"] },
-    { label: "Performance", keys: ["performance", "review-penalties"] },
     { label: "Communication", keys: ["memos"] },
     { label: "Admin", keys: ["settings"] },
   ],
+  settings: [
+    { label: "Business", keys: ["outlets", "staff", "rules"] },
+    { label: "System", keys: ["integrations", "stock-count", "system"] },
+  ],
+};
+
+// Order the module-access sections follow in the Staff & Access editor, mirroring
+// the sidebar top-to-bottom: Catalog/POS → Procurement → Marketing (Loyalty,
+// Reviews, Ads) → Sales → Ops → HR → Settings. Apps not listed sort to the end.
+export const APP_ORDER: readonly string[] = [
+  "pickup",
+  "inventory",
+  "loyalty",
+  "reviews",
+  "ads",
+  "sales",
+  "ops",
+  "hr",
+  "settings",
+];
+
+// Display label for each app's module-access section header — the sidebar's
+// vocabulary instead of the raw app key (e.g. inventory → Procurement).
+export const APP_SECTION_LABELS: Record<string, string> = {
+  pickup: "POS & Pickup",
+  inventory: "Procurement",
+  loyalty: "Marketing",
+  reviews: "Reviews",
+  ads: "Google Ads",
+  sales: "Sales",
+  ops: "Ops",
+  hr: "HR",
+  settings: "Settings",
 };
 
 // Apps that live INSIDE the backoffice app (gated by their own modules, not a
