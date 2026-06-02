@@ -9,8 +9,8 @@ import { useSettings, serviceChargeRate } from "@/lib/settings";
 import { useMaybankQr } from "@/lib/maybank-qr";
 import { outletShort } from "@/lib/outlets";
 import {
-  lookupMember, fetchSnapshot, claimMystery, fetchRewards, fetchActivePromos,
-  type LoyaltySnapshot, type VoucherCard, type ClaimableCard, type ShopCard, type MissionCard, type BiteItem, type IssuedVoucher, type ActivePromo, type MysteryReveal,
+  lookupMember, fetchSnapshot, claimMystery, fetchRewards, fetchActivePromos, fetchSuggestedPairs,
+  type LoyaltySnapshot, type VoucherCard, type ClaimableCard, type ShopCard, type MissionCard, type BiteItem, type IssuedVoucher, type ActivePromo, type MysteryReveal, type SuggestedPair,
 } from "@/lib/loyalty";
 import { fetchPosters, type DisplayPoster } from "@/lib/posters";
 import { fetchBites, type DisplayBite } from "@/lib/menu";
@@ -87,6 +87,8 @@ export default function CustomerDisplay() {
   // independently from the public promotions table so the deals
   // surface for every customer, member or not.
   const [guestPromos, setGuestPromos] = useState<ActivePromo[]>([]);
+  // Smart pairings for the live cart (the shared scoring endpoint).
+  const [pairs, setPairs] = useState<SuggestedPair[]>([]);
   // Pop-up sign-in keypad for the ORDERING screen (its right column is too
   // narrow for an inline keypad; idle keeps the keypad always visible).
   const [signInOpen, setSignInOpen] = useState(false);
@@ -100,6 +102,15 @@ export default function CustomerDisplay() {
   useEffect(() => { fetchPosters().then(setPosters).catch(() => {}); }, []);
   useEffect(() => { fetchBites(9, outletId).then(setHeroBites).catch(() => {}); }, [outletId]);
   useEffect(() => { fetchActivePromos().then(setGuestPromos).catch(() => {}); }, []);
+  // Re-score the pairings whenever the cart contents change (keyed on the
+  // sorted product-id list so a qty bump or re-render doesn't refetch).
+  const cartKey = lines.map((l) => l.product.id).sort().join(",");
+  const usualKey = (snapshot?.usual ?? []).map((u) => u.id).join(",");
+  useEffect(() => {
+    const ids = cartKey ? cartKey.split(",") : [];
+    const usual = usualKey ? usualKey.split(",") : [];
+    fetchSuggestedPairs(outletId, ids, usual).then(setPairs).catch(() => {});
+  }, [cartKey, usualKey, outletId]);
   // Close the pop-up once a member is identified.
   useEffect(() => { if (member) setSignInOpen(false); }, [member]);
 
@@ -372,21 +383,6 @@ export default function CustomerDisplay() {
   }
 
   // ── 4. Ordering — 60/20/20: upsell hero (main) | order | rewards ──
-  // Guest-friendly bites (general fetch) drive the hero; fall back to the
-  // member's popular bites if the general list hasn't loaded. 8 items =
-  // two rows of 4 — gives customers more choice without scrolling.
-  const bites = (heroBites.length > 0 ? heroBites : pickBites(snapshot)).slice(0, 8);
-  // Combo/promo offers are badged ONTO the matching bite card (matched by
-  // category/name). Anything that doesn't map to a shown bite surfaces as a
-  // slim chip row so no live offer is lost. Snapshot is member-only;
-  // fall through to the guest promos so non-members still see deals.
-  const liveOffers = (snapshot?.active_promos && snapshot.active_promos.length > 0
-    ? snapshot.active_promos
-    : guestPromos
-  ).filter((p) => p.live);
-  const biteOffers = bites.map((b) => matchOffer(b, liveOffers));
-  const matchedIds = new Set(biteOffers.filter(Boolean).map((p) => p!.id));
-  const unmatchedOffers = liveOffers.filter((p) => !matchedIds.has(p.id)).slice(0, 3);
   return (
     <View
       className="flex-1 flex-row"
@@ -396,37 +392,29 @@ export default function CustomerDisplay() {
         if (w > 0 && Math.abs(w - rowW) > 0.5) setRowW(w);
       }}
     >
-      {/* ═══ MAIN UPSELL — 60% (explicit px from measured width; flex until measured) ═══
-          Designed to fit on display 1 (1280×800) with NO vertical scroll.
-          Header (~50px) + chips row (~28px when shown) + 2 tile rows
-          (~620px) = ~700px, leaves room within the column's height. */}
+      {/* ═══ MAIN UPSELL — 60%: 3 smart pairings (top) + claimable rewards ═══ */}
       <View style={rowW > 0 ? { width: heroW } : { flex: 3 }} className="px-5 pt-4 pb-3">
-        <View className="flex-row items-center" style={{ gap: 8, marginBottom: 1 }}>
-          <Image source={require("@/assets/icon.png")} style={{ width: 28, height: 28, borderRadius: 7 }} resizeMode="contain" />
+        <View className="flex-row items-center" style={{ gap: 8 }}>
+          <Image source={require("@/assets/icon.png")} style={{ width: 26, height: 26, borderRadius: 7 }} resizeMode="contain" />
           <Text style={{ fontFamily: "Peachi-Bold", fontSize: 22, color: CREAM }}>Pair with a bite</Text>
         </View>
-        <Eyebrow color="rgba(251,191,36,0.85)" style={{ letterSpacing: 2, fontSize: 10 }}>ADD A LITTLE SOMETHING TO YOUR ORDER</Eyebrow>
+        <Eyebrow color="rgba(251,191,36,0.85)" style={{ letterSpacing: 2, fontSize: 10, marginTop: 2 }}>HAND-PICKED FOR YOUR ORDER</Eyebrow>
 
-        {/* No ScrollView — content sizes to fit the column. flex:1 lets
-            the bite grid take the remaining vertical room evenly. */}
-        <View style={{ flex: 1, marginTop: 10 }}>
-          {unmatchedOffers.length > 0 && (
-            <View className="flex-row flex-wrap" style={{ gap: 6, marginBottom: 8 }}>
-              {unmatchedOffers.map((p) => (
-                <View key={p.id} className="flex-row items-center rounded-full px-2.5 py-1" style={{ backgroundColor: TERRA + "22", borderWidth: 1, borderColor: TERRA + "55", gap: 5 }}>
-                  <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: GOLD }}>{offerPill(p.discount_label)}</Text>
-                  <Text style={{ fontFamily: "Peachi-Medium", fontSize: 11, color: CREAM }} numberOfLines={1}>{offerHook(p)}</Text>
-                </View>
-              ))}
-            </View>
+        <View className="flex-row" style={{ gap: 12, marginTop: 12 }}>
+          {pairs.slice(0, 3).map((p) => <PairCard key={p.product_id} pair={p} />)}
+          {pairs.length === 0 && (
+            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", color: "rgba(245,243,240,0.4)", fontSize: 14 }}>Ask our barista about today&apos;s treats.</Text>
           )}
-          <View className="flex-row flex-wrap" style={{ justifyContent: "space-between", rowGap: 10 }}>
-            {bites.map((b, i) => <BiteCard key={b.id} bite={b} offer={biteOffers[i]} />)}
-            {bites.length === 0 && (
-              <Text style={{ fontFamily: "SpaceGrotesk_500Medium", color: "rgba(245,243,240,0.4)", fontSize: 14 }}>Ask our barista about today's treats.</Text>
-            )}
-          </View>
         </View>
+
+        {member && snapshot && snapshot.claimables.length > 0 && (
+          <View style={{ flex: 1, marginTop: 22 }}>
+            <Eyebrow color="rgba(245,243,240,0.5)" style={{ marginBottom: 8 }}>REWARDS YOU CAN CLAIM</Eyebrow>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 4 }}>
+              <ClaimableRewards snapshot={snapshot} memberId={member.id} />
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       {/* ═══ RIGHT 40% = MEMBER/TIER (top) + CART (below) ═══ */}
@@ -987,6 +975,32 @@ function MissionRow({ m }: { m: MissionCard }) {
         <View style={{ height: 6, width: `${pct}%`, backgroundColor: GOLD }} />
       </View>
       <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10, color: "rgba(245,243,240,0.5)", marginTop: 4 }}>{fmt(m.progress_current)} / {fmt(m.progress_target)}</Text>
+    </View>
+  );
+}
+
+// ─── Smart pairing card (customer-display ordering hero) ───
+/** One suggested pairing from the scoring endpoint — image, name, price, the
+ *  reason it was picked, and a gold discount banner when adding it lands a
+ *  combo deal. Display-only here (the cashier adds it on the register). */
+function PairCard({ pair }: { pair: SuggestedPair }) {
+  return (
+    <View className="rounded-2xl overflow-hidden" style={{ flex: 1, backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: pair.discount_label ? "rgba(251,191,36,0.5)" : "rgba(245,243,240,0.12)" }}>
+      {!!pair.discount_label && (
+        <View style={{ backgroundColor: GOLD, paddingVertical: 4, alignItems: "center" }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, letterSpacing: 0.8, color: DARKFG }}>{pair.discount_label}</Text>
+        </View>
+      )}
+      {pair.image_url ? (
+        <Image source={{ uri: pair.image_url }} style={{ width: "100%", height: 124 }} resizeMode="cover" />
+      ) : (
+        <View style={{ width: "100%", height: 124, backgroundColor: SUB, alignItems: "center", justifyContent: "center" }}><Coffee size={38} color="rgba(245,243,240,0.3)" /></View>
+      )}
+      <View className="px-3 py-2.5">
+        <Eyebrow color="rgba(251,191,36,0.75)" style={{ fontSize: 9, marginBottom: 3 }}>{pair.reason.toUpperCase()}</Eyebrow>
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, color: CREAM }} numberOfLines={1}>{pair.name}</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 14, color: GOLD, marginTop: 2 }}>{rm(pair.price_sen)}</Text>
+      </View>
     </View>
   );
 }

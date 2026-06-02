@@ -415,6 +415,39 @@ export async function fetchSnapshot(memberId: string): Promise<LoyaltySnapshot |
   }
 }
 
+/** A suggested pairing for the current cart — from the shared scoring
+ *  endpoint that both POS screens use, so the customer display and the
+ *  register show the same 3 suggestions. */
+export type SuggestedPair = {
+  product_id: string;
+  name: string;
+  price_sen: number;
+  image_url: string | null;
+  reason: string;            // "Combo deal" | "Your usual" | "Often paired together" | …
+  discount_label: string | null;
+  combo_id: string | null;
+};
+
+/** Ask the pairing "agent" for the best 3 items to suggest alongside the
+ *  current cart. Pass the member's usual ids (already in the snapshot) so the
+ *  server can weight personalisation without re-querying. Best-effort → []. */
+export async function fetchSuggestedPairs(
+  outletId: string | null,
+  cartProductIds: string[],
+  usualProductIds: string[],
+): Promise<SuggestedPair[]> {
+  try {
+    const res = await apiPost<{ pairs?: SuggestedPair[] }>("/api/pos/loyalty/suggest-pairs", {
+      outlet_id: outletId,
+      cart_product_ids: cartProductIds,
+      usual_product_ids: usualProductIds,
+    });
+    return res?.pairs ?? [];
+  } catch {
+    return [];
+  }
+}
+
 /** Lightweight read of currently-active combo + category promos for the
  *  customer-display ordering screen. Snapshot-style `active_promos` is
  *  member-gated; this is the guest fallback so the "Pair with a bite"
