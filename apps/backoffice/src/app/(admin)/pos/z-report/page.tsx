@@ -162,7 +162,7 @@ export default function ZReportPage() {
       <div>
         <h1 className="text-2xl font-bold text-[#160800]">Z-Report (Shift Close)</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Per-shift cash-up and reconciliation. Click any row to view detail and print the Z-slip.
+          Per-shift sales totals. Click any row to view detail and print the Z-slip.
         </p>
       </div>
 
@@ -224,16 +224,14 @@ export default function ZReportPage() {
                   <th className="px-4 py-3 text-right">Net</th>
                   <th className="px-4 py-3 text-right">Discounts</th>
                   <th className="px-4 py-3 text-right">Tax</th>
-                  <th className="px-4 py-3 text-right">Cash</th>
                   <th className="px-4 py-3 text-right">Card</th>
                   <th className="px-4 py-3 text-right">E-wallet</th>
-                  <th className="px-4 py-3 text-right">Variance</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {shifts.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="px-4 py-10 text-center text-sm text-gray-500">
+                    <td colSpan={11} className="px-4 py-10 text-center text-sm text-gray-500">
                       No shifts in this range.
                     </td>
                   </tr>
@@ -262,10 +260,8 @@ export default function ZReportPage() {
                       <td className="px-4 py-3 text-sm text-right font-medium">{formatRM(s.net_sales)}</td>
                       <td className="px-4 py-3 text-sm text-right text-gray-500">{formatRM(s.discounts)}</td>
                       <td className="px-4 py-3 text-sm text-right text-gray-500">{formatRM(s.tax)}</td>
-                      <td className="px-4 py-3 text-sm text-right">{formatRM(s.tendered_cash)}</td>
                       <td className="px-4 py-3 text-sm text-right">{formatRM(s.tendered_card)}</td>
                       <td className="px-4 py-3 text-sm text-right">{formatRM(s.tendered_ewallet)}</td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-500">{formatRM(s.variance)}</td>
                     </tr>
                   ))
                 )}
@@ -363,14 +359,6 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
           <Field label="Cashier">{shift.opened_by_name}</Field>
           <Field label="Opened">{klDateTime(shift.opened_at)}</Field>
           <Field label="Closed">{shift.closed_at ? klDateTime(shift.closed_at) : "—"}</Field>
-          <Field label="Opening Cash">{formatRM(shift.opening_cash)}</Field>
-          <Field label="Closing Cash">{formatRM(shift.closing_cash)}</Field>
-          <Field label="Expected Close">{formatRM(shift.expected_close)}</Field>
-          <Field label="Variance">
-            <span className={shift.variance != null && shift.variance < 0 ? "text-red-600" : ""}>
-              {formatRM(shift.variance)}
-            </span>
-          </Field>
         </Grid>
       </Section>
 
@@ -417,26 +405,7 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
         )}
       </Section>
 
-      {/* Cash drawer math */}
-      <Section title="Cash Drawer">
-        <div className="rounded-xl border border-gray-100 p-4 text-sm space-y-1.5">
-          <Line label="Opening cash"            value={formatRM(shift.opening_cash)} />
-          <Line label="+ Cash sales"            value={formatRM(summary.cash_total)} />
-          <Line label="+ Paid in"               value={formatRM(shift.paid_in)} />
-          <Line label="− Paid out"              value={formatRM(shift.paid_out)} />
-          <Line label="− Cash refunds"          value={formatRM(-shift.cash_refunds)} />
-          <div className="my-2 border-t border-dashed border-gray-200" />
-          <Line label="Expected close"          value={formatRM(shift.expected_close)} bold />
-          <Line label="Closing cash (counted)"  value={formatRM(shift.closing_cash)} bold />
-          <div className="my-2 border-t border-dashed border-gray-200" />
-          <Line
-            label="Variance"
-            value={formatRM(shift.variance)}
-            bold
-            tone={shift.variance != null && shift.variance !== 0 ? "warn" : undefined}
-          />
-        </div>
-      </Section>
+      {/* Cashless register — no cash drawer / variance section. */}
 
       {/* Sales by category */}
       <Section title="By Category">
@@ -607,16 +576,6 @@ function buildZSlipHtml(d: ShiftDetail): string {
     ${hr}
     ${center("PAYMENTS")}
     ${payments.map((p) => line(`${p.method} x${p.count}`, rm(p.total))).join("")}
-    ${hr}
-    ${center("CASH DRAWER")}
-    ${line("Opening", rm(shift.opening_cash))}
-    ${line("+ Cash sales", rm(summary.cash_total))}
-    ${line("+ Paid in", rm(shift.paid_in))}
-    ${line("- Paid out", rm(shift.paid_out))}
-    ${line("- Cash refunds", `-${rm(shift.cash_refunds)}`)}
-    ${line("Expected", rm(shift.expected_close))}
-    ${line("Counted", rm(shift.closing_cash))}
-    ${line("Variance", rm(shift.variance))}
     ${hr}
     ${center("TOP PRODUCTS")}
     ${top_products.map((p) => line(`${p.name} x${p.qty}`, rm(p.revenue))).join("")}
