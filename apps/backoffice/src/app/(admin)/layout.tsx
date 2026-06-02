@@ -148,34 +148,30 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Splash Posters", href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />, moduleKey: "pickup:menu" },
     ],
   },
+  // Sales — every order channel in one section. The customer app
+  // (pickup / web / QR-table) and the in-store register + Grab/delivery
+  // used to be two separate sidebar sections ("Pickup App" + "POS");
+  // they're all just sales channels, so they're folded into one. The two
+  // dashboards + the orders list collapse into channel-filtered unified
+  // views in a follow-up; for now each existing page lives here under one
+  // roof (URLs unchanged).
   {
-    label: "Pickup App",
-    icon: <ShoppingBag className={ICON_SIZE} />,
-    railIcon: <ShoppingBag className={RAIL_ICON_SIZE} />,
-    items: [
-      // Dashboard hosts an in-page tab strip linking to /pickup/analytics
-      // for deeper retention/cohort views, so Analytics no longer needs its
-      // own sidebar entry.
-      { label: "Dashboard", href: "/pickup", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "pickup:orders" },
-      { label: "Orders", href: "/pickup/orders", icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
-      { label: "Customers", href: "/pickup/customers", icon: <Users className={ICON_SIZE} />, moduleKey: "pickup:customers" },
-    ],
-  },
-  // POS — the in-store register. Main BO is the canonical owner of all
-  // POS admin surfaces (settings, reports, table QR). The POS app itself
-  // is register / KDS / customer-display only; it reads pos_branch_settings
-  // at runtime from the same Supabase row Settings here writes to.
-  {
-    label: "POS",
+    label: "Sales",
     icon: <CreditCard className={ICON_SIZE} />,
     railIcon: <CreditCard className={RAIL_ICON_SIZE} />,
-    // Subgroups mirror the /pos landing page so the nav and the page read the
-    // same: Overview, then Reports & cash-up, then Register setup.
     subgroups: [
       {
         label: "Overview",
         items: [
-          { label: "Overview", href: "/pos", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+          { label: "Pickup Dashboard", href: "/pickup", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "pickup:orders" },
+          { label: "POS Overview",     href: "/pos",     icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+        ],
+      },
+      {
+        label: "Orders & Customers",
+        items: [
+          { label: "Orders",    href: "/pickup/orders",    icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
+          { label: "Customers", href: "/pickup/customers", icon: <Users className={ICON_SIZE} />,         moduleKey: "pickup:customers" },
         ],
       },
       {
