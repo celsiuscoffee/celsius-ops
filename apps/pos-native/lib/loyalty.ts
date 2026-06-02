@@ -458,6 +458,19 @@ export async function fetchActivePromos(): Promise<ActivePromo[]> {
   }
 }
 
+/** Run the loyalty order-hooks for a completed POS sale (award Beans, re-eval
+ *  tier, spawn the Mystery Bean). The counter-sale equivalent of what the
+ *  pickup flow does on payment confirmation. Fire-and-forget + idempotent
+ *  server-side, so a missed/duplicate call never double-awards or blocks the
+ *  sale. */
+export async function posOrderComplete(memberId: string, orderId: string): Promise<void> {
+  try {
+    await apiPost("/api/pos/loyalty/complete", { member_id: memberId, order_id: orderId });
+  } catch {
+    /* best-effort — never block checkout on loyalty */
+  }
+}
+
 /** Reveal a pending mystery drop. Best-effort — returns a human label. */
 export async function claimMystery(memberId: string, claimableId: string): Promise<{ label: string; emoji: string } | null> {
   try {

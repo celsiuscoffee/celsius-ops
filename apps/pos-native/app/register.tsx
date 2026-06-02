@@ -29,7 +29,7 @@ import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/printer";
 import { outletFull, outletShort } from "@/lib/outlets";
 import {
   lookupMember, fetchRewards, fetchUsual, redeemReward, computeRewardDiscount,
-  computeTierDiscount, evaluatePromotions,
+  computeTierDiscount, evaluatePromotions, posOrderComplete,
   type Member, type RewardsResponse, type IssuedVoucher, type CatalogReward, type RedeemDiscount, type UsualItem, type AppliedPromo,
 } from "@/lib/loyalty";
 
@@ -661,6 +661,11 @@ export default function Register() {
       setDisplayOrderNumber(sale.orderNumber);
       setDisplayStatus("complete");
       setPaid({ orderNumber: sale.orderNumber, total: sale.total });
+      // Loyalty order-hooks for this in-store sale: award Beans, re-eval tier,
+      // and spawn the Mystery Bean. Fire-and-forget + server-idempotent so it
+      // never blocks checkout; the customer display polls the snapshot and
+      // reveals the freshly-spawned drop beside the thank-you.
+      if (member?.id) void posOrderComplete(member.id, sale.id);
       clear();
       setShowCheckout(false);
 
