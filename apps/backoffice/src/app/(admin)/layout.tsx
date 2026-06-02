@@ -232,9 +232,10 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: "Rewards",
-    icon: <Gift className={ICON_SIZE} />,
-    railIcon: <Gift className={RAIL_ICON_SIZE} />,
+    label: "Marketing",
+    icon: <Megaphone className={ICON_SIZE} />,
+    railIcon: <Megaphone className={RAIL_ICON_SIZE} />,
+    dividerBefore: true,
     subgroups: [
       {
         // Single Overview entry — was three (Dashboard, v2 Analytics,
@@ -246,26 +247,6 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Overview",
         items: [
           { label: "Overview", href: "/loyalty/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "loyalty:dashboard" },
-        ],
-      },
-      {
-        // Setup = "configure once". Everything an admin defines before
-        // customers start earning: who qualifies (Tiers), what discounts
-        // exist (Discount Engine), what vouchers exist (Voucher Library),
-        // and the 5 outcome shapes used by Mission + Mystery pickers.
-        // Tier qualification is here; tier-perk DISCOUNT mechanics move
-        // into the Discount Engine in a follow-up so there's one place
-        // to think about all discount math.
-        label: "Setup",
-        items: [
-          { label: "Tiers",           href: "/loyalty/tiers",            icon: <Crown className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
-          { label: "Discount Engine", href: "/loyalty/promotions",       icon: <Tag className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
-          // All Rewards is the single template registry — the manager for
-          // WHAT every reward is. Replaces the old "Voucher Library" (which
-          // edited the same voucher_templates table) and absorbs the
-          // Bean-Points Shop catalog (templates with points_cost set).
-          { label: "All Rewards",     href: "/loyalty/all-rewards",      icon: <Ticket className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
-          { label: "Outcome Types",   href: "/loyalty/reward-kinds",     icon: <Layers className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
         ],
       },
       {
@@ -282,7 +263,6 @@ const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "Challenges",       href: "/loyalty/missions",         icon: <Target className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
           { label: "Mystery Pool",     href: "/loyalty/mystery",          icon: <Sparkles className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
-          { label: "Birthday Treats",  href: "/loyalty/birthday",         icon: <Cake className={ICON_SIZE} />,     moduleKey: "loyalty:rewards" },
           { label: "Admin Claimables", href: "/loyalty/admin-claimables", icon: <Gift className={ICON_SIZE} />,     moduleKey: "loyalty:rewards" },
         ],
       },
@@ -308,13 +288,37 @@ const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        label: "Marketing",
+        label: "Loyalty Campaigns",
         items: [
           { label: "Campaigns", href: "/loyalty/campaigns", icon: <Megaphone className={ICON_SIZE} />,     moduleKey: "loyalty:campaigns" },
           // Engage = unified surface for "how we reach customers".
           // Push reminders (auto, triggered) + SMS broadcasts (manual)
           // live as tabs inside this page; no separate nav entries.
           { label: "Engage",    href: "/loyalty/engage",    icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
+        ],
+      },
+      // Reviews + paid/recruitment ads — folded into Marketing (each was its
+      // own top-level sidebar section before the consolidation).
+      {
+        label: "Reviews",
+        items: [
+          { label: "All Reviews", href: "/reviews", icon: <Star className={ICON_SIZE} />, moduleKey: "reviews:list" },
+        ],
+      },
+      {
+        label: "Google Ads",
+        items: [
+          { label: "Overview",  href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ads:overview" },
+          { label: "Campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,        moduleKey: "ads:campaigns" },
+          { label: "Invoices",  href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,          moduleKey: "ads:invoices" },
+        ],
+      },
+      {
+        label: "Recruitment (Indeed)",
+        items: [
+          { label: "Overview", href: "/ads/recruitment",          icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ads:recruitment" },
+          { label: "Postings", href: "/ads/recruitment/jobs",     icon: <Briefcase className={ICON_SIZE} />,       moduleKey: "ads:recruitment" },
+          { label: "Invoices", href: "/ads/recruitment/invoices", icon: <Receipt className={ICON_SIZE} />,         moduleKey: "ads:recruitment" },
         ],
       },
     ],
@@ -346,37 +350,6 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Cash Tracking", href: "/finance/cash-tracking", icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
       { label: "Bank Statements", href: "/finance/bank-statements", icon: <Banknote className={ICON_SIZE} />, moduleKey: "finance:bank-statements" },
       { label: "Recurring Expenses", href: "/finance/recurring-expenses", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "finance:recurring-expenses" },
-    ],
-  },
-  {
-    label: "Reviews",
-    icon: <MessageCircle className={ICON_SIZE} />,
-    railIcon: <MessageCircle className={RAIL_ICON_SIZE} />,
-    items: [
-      { label: "All Reviews", href: "/reviews", icon: <Star className={ICON_SIZE} />, moduleKey: "reviews:list" },
-    ],
-  },
-  {
-    label: "Ads",
-    icon: <Megaphone className={ICON_SIZE} />,
-    railIcon: <Megaphone className={RAIL_ICON_SIZE} />,
-    subgroups: [
-      {
-        label: "Marketing (Google)",
-        items: [
-          { label: "Overview",  href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />,   moduleKey: "ads:overview" },
-          { label: "Campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,         moduleKey: "ads:campaigns" },
-          { label: "Invoices",  href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,           moduleKey: "ads:invoices" },
-        ],
-      },
-      {
-        label: "Recruitment (Indeed)",
-        items: [
-          { label: "Overview", href: "/ads/recruitment",          icon: <LayoutDashboard className={ICON_SIZE} />,   moduleKey: "ads:recruitment" },
-          { label: "Postings", href: "/ads/recruitment/jobs",     icon: <Briefcase className={ICON_SIZE} />,         moduleKey: "ads:recruitment" },
-          { label: "Invoices", href: "/ads/recruitment/invoices", icon: <Receipt className={ICON_SIZE} />,           moduleKey: "ads:recruitment" },
-        ],
-      },
     ],
   },
   {
@@ -475,6 +448,20 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Pickup App",
         items: [
           { label: "Pickup Settings", href: "/pickup/settings", icon: <ShoppingBag className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+        ],
+      },
+      {
+        // Loyalty config — the "set it up once" rewards machinery (was the
+        // Rewards › Setup subgroup) plus Birthday Treats, moved here so all
+        // configuration lives under Settings. The operational loyalty pages
+        // (members, history, campaigns, channels) live under Marketing.
+        label: "Loyalty",
+        items: [
+          { label: "Tiers",           href: "/loyalty/tiers",       icon: <Crown className={ICON_SIZE} />,  moduleKey: "loyalty:rewards" },
+          { label: "Discount Engine", href: "/loyalty/promotions",  icon: <Tag className={ICON_SIZE} />,    moduleKey: "loyalty:rewards" },
+          { label: "All Rewards",     href: "/loyalty/all-rewards",  icon: <Ticket className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
+          { label: "Outcome Types",   href: "/loyalty/reward-kinds", icon: <Layers className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
+          { label: "Birthday Treats", href: "/loyalty/birthday",     icon: <Cake className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
         ],
       },
       {
