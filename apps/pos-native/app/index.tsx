@@ -5,7 +5,7 @@ import * as Haptics from "expo-haptics";
 import { Delete, ChevronDown, Check } from "lucide-react-native";
 import { supabase } from "@/lib/supabase";
 import { apiPost } from "@/lib/api";
-import { usePos } from "@/lib/store";
+import { usePos, sessionExpired } from "@/lib/store";
 
 type Outlet = { id: string; name: string };
 
@@ -25,7 +25,7 @@ const BRAND = "#A2492C";
 const DANGER = "#E5484D";
 
 export default function Login() {
-  const { outletId, setOutlet, setStaff, staff } = usePos();
+  const { outletId, setOutlet, setStaff, staff, loggedInAt, signOut } = usePos();
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pin, setPin] = useState("");
@@ -33,8 +33,11 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    // A persisted session older than 2h is expired — clear it so the till
+    // re-prompts for a PIN on launch instead of waltzing back into the register.
+    if (staff && sessionExpired(loggedInAt)) { signOut(); return; }
     if (staff && outletId) router.replace("/register");
-  }, [staff, outletId]);
+  }, [staff, outletId, loggedInAt]);
 
   useEffect(() => {
     supabase.from("outlets").select("id, name").order("id").then(({ data }) => {

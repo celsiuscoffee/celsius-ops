@@ -11,7 +11,7 @@ import {
   Settings as SettingsIcon, User, Gift, Trash2, Tag,
   Grid3x3, QrCode, CreditCard, ClipboardList, Bike, ShoppingBag, ChefHat, Coffee, Power, Sparkles,
 } from "lucide-react-native";
-import { usePos } from "@/lib/store";
+import { usePos, sessionExpired } from "@/lib/store";
 import { apiPost } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { usePickupPrinter } from "@/lib/use-pickup-printer";
@@ -102,7 +102,7 @@ type AppliedReward = { redemptionId: string | null; rewardId: string | null; nam
 type Panel = "none" | "customer" | "table";
 
 export default function Register() {
-  const { staff, outletId, signOut } = usePos();
+  const { staff, outletId, signOut, loggedInAt } = usePos();
   const [activeCat, setActiveCat] = useState<string>("all");
   // One "Orders" command center — a single panel with three tabs: Tables
   // (dine-in floor) · QR self-orders · Pickup & Grab. `hub` is the active
@@ -357,6 +357,26 @@ export default function Register() {
   // here the cashier can adjust qty, apply a per-line discount, or
   // remove the line.
   const [editLineKey, setEditLineKey] = useState<string | null>(null);
+
+  // ── 2-hour auto-logout ──────────────────────────────────────────────
+  // The staff session expires 2h after sign-in. We don't yank it out mid-sale,
+  // though — once expired, the till signs out at the next safe gap (empty cart,
+  // no checkout/paid screen up), so it lands between customers. Re-check on
+  // every cart change (fires the moment the basket clears) plus a slow poll for
+  // the sit-idle case.
+  useEffect(() => {
+    if (!staff) return;
+    const maybeLogout = () => {
+      if (sessionExpired(loggedInAt) && lines.length === 0 && !showCheckout && !paid) {
+        signOut();
+        router.replace("/");
+      }
+    };
+    maybeLogout();
+    const id = setInterval(maybeLogout, 20000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staff, loggedInAt, lines.length, showCheckout, paid]);
 
   const liveCats = useMemo(() => {
     const present = new Set((prods.data ?? []).map((p) => p.category));
