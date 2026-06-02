@@ -105,7 +105,7 @@ export default function SystemSettingsPage() {
         {/* SST */}
         <Card icon={<Percent className="h-4.5 w-4.5 text-amber-600" />} bg="bg-amber-50"
               title="SST (Sales & Service Tax)"
-              sub="Applied at checkout after rewards/voucher discounts">
+              sub="Single setting for ALL channels — pickup, web & in-store POS. Applied at checkout after rewards/voucher discounts.">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Rate (e.g. 0.06 = 6%)">
               <input type="number" step="0.01" min={0} max={0.5}

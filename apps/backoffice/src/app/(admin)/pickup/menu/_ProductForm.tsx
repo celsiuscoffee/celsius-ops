@@ -506,41 +506,9 @@ export function ProductForm({ product, categories }: Props) {
           </p>
         </Field>
 
-        {/* Tax */}
-        <div className="border rounded-2xl p-4 bg-muted/10 space-y-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Tax &amp; e-Invoice</p>
-          <p className="text-[11px] text-muted-foreground -mt-2">
-            Per-product SST + LHDN classification override. Leave at defaults to inherit the outlet-level settings.
-          </p>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Tax Rate (%)">
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step={0.01}
-                value={form.tax_rate}
-                onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value === "" ? 0 : Number(e.target.value) }))}
-                placeholder="0"
-                className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </Field>
-            <Field label="Tax Inclusive">
-              <label className="flex items-center gap-2 cursor-pointer text-sm h-10 px-3 border rounded-xl bg-white">
-                <input
-                  type="checkbox"
-                  checked={form.tax_inclusive}
-                  onChange={(e) => setForm((f) => ({ ...f, tax_inclusive: e.target.checked }))}
-                  className="h-4 w-4 accent-[#160800]"
-                />
-                <span className="text-muted-foreground">
-                  {form.tax_inclusive ? "Tax is in the price" : "Tax added on top"}
-                </span>
-              </label>
-            </Field>
-          </div>
-        </div>
+        {/* Per-product tax removed — SST is now a single org-wide setting
+            (Settings → System → "SST"), applied to every channel, so there
+            is nothing to set per product. */}
 
         {/* Online schedule */}
         <div className="border rounded-2xl p-4 bg-muted/10 space-y-3">

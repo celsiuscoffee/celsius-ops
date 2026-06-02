@@ -351,26 +351,14 @@ export default function POSSettingsPage() {
           </p>
         </Section>
 
-        {/* Tax + LHDN e-Invoice — outlet-level defaults. Products can override
-            via the menu editor; everything else inherits from here. */}
+        {/* e-Invoice identity (TIN / BRN / SST-No). The SST *rate* is no
+            longer set here — it's a single org-wide setting (Settings →
+            System → "SST") applied to BOTH pickup and POS, so there's one
+            source of truth. */}
         <Section title="Tax & e-Invoice" Icon={FileText}>
-          <Field label="Default Tax Rate (%)">
-            <input
-              type="number"
-              min={0}
-              max={100}
-              step={0.01}
-              value={editing.default_tax_rate ?? 0}
-              onChange={(e) => update("default_tax_rate", e.target.value === "" ? 0 : Number(e.target.value))}
-              className="input"
-              placeholder="0"
-            />
-          </Field>
-          <Toggle
-            checked={editing.default_tax_inclusive !== false}
-            onChange={(v) => update("default_tax_inclusive", v)}
-            label="Prices are tax-inclusive by default"
-          />
+          <p className="text-xs text-muted-foreground">
+            SST rate is set once under <span className="font-semibold">Settings → System → SST</span> and applies to every channel (pickup + POS).
+          </p>
           <Field label="TIN (Tax Identification Number)">
             <input
               type="text"
