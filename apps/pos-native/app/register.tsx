@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, Pressable, FlatList, ActivityIndicator, Image, ScrollView, Modal,
   TextInput, useWindowDimensions, Keyboard, Alert,
+  LayoutAnimation, Platform, UIManager,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -36,6 +37,17 @@ import {
 } from "@/lib/loyalty";
 
 const rm = (sen: number) => `RM ${(sen / 100).toFixed(2)}`;
+
+// Smooth the layout reflow when a member is identified / cleared — the member
+// card, Usual tab and bottom upsell bar all appear at once, which snapped in
+// abruptly. LayoutAnimation eases that next reflow instead.
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+const smoothNext = () =>
+  LayoutAnimation.configureNext(
+    LayoutAnimation.create(220, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity),
+  );
 
 // Wider order panel for the big landscape till (was 360 — too cramped).
 const CART_W = 460;
@@ -523,8 +535,9 @@ export default function Register() {
     let cancelled = false;
     lookupMember(dm.phone).then((m) => {
       if (cancelled || !m) return;
+      smoothNext();
       setMember(m);
-      fetchUsual(m.id).then((u) => { setUsual(u); if (u.length > 0) setActiveCat("usual"); }).catch(() => {});
+      fetchUsual(m.id).then((u) => { smoothNext(); setUsual(u); if (u.length > 0) setActiveCat("usual"); }).catch(() => {});
     }).catch(() => {});
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -653,10 +666,12 @@ export default function Register() {
       const m = await lookupMember(phone);
       if (!m) { setLookupError("No member found"); return; }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      smoothNext();
       setMember(m);
       setPhoneInput("");
       setPanel("none");
       fetchUsual(m.id).then((u) => {
+        smoothNext();
         setUsual(u);
         if (u.length > 0) setActiveCat("usual");
       }).catch(() => {});
@@ -669,6 +684,7 @@ export default function Register() {
 
   function removeMember() {
     Haptics.selectionAsync();
+    smoothNext();
     setMember(null);
     setUsual([]);
     setReward(null);
@@ -762,7 +778,7 @@ export default function Register() {
     }
     if (!s.affordable) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      Alert.alert(s.name, `Needs ${s.points_required} Beans — not enough yet.`);
+      Alert.alert(s.name, `Needs ${s.points_required} Points — not enough yet.`);
       return;
     }
     const ok = await applyRewardArgs(s.id, null);
@@ -1033,7 +1049,7 @@ export default function Register() {
                   <User size={38} color="#FBBF24" />
                 </View>
                 <Text className="text-cream text-center w-full" style={{ fontFamily: "Peachi-Bold", fontSize: 30, lineHeight: 36 }}>Check Customer's Rewards</Text>
-                <Text className="text-cream/55 text-center w-full" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, lineHeight: 22, marginTop: 12, marginBottom: 32 }}>Ask before starting the order — checking earns Beans and unlocks member pricing on the whole bill.</Text>
+                <Text className="text-cream/55 text-center w-full" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, lineHeight: 22, marginTop: 12, marginBottom: 32 }}>Ask before starting the order — checking earns Points and unlocks member pricing on the whole bill.</Text>
                 <Pressable onPress={() => { Haptics.selectionAsync(); setPanel("customer"); }} className="w-full rounded-2xl flex-row items-center justify-center active:opacity-80" style={{ height: 64, gap: 10, backgroundColor: "#FBBF24" }}>
                   <User size={20} color="#160800" />
                   <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 18, color: "#160800" }}>Yes — enter phone</Text>
@@ -1070,7 +1086,7 @@ export default function Register() {
                 <View style={{ flex: 1 }}>
                   <View className="flex-row items-center pb-1.5" style={{ gap: 5 }}>
                     <Sparkles size={12} color="#FBBF24" />
-                    <Text className="text-cream/55 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.2 }}>REDEEM BEANS</Text>
+                    <Text className="text-cream/55 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.2 }}>REDEEM POINTS</Text>
                   </View>
                   <View className="flex-row" style={{ gap: 8 }}>
                     {shop.slice(0, 3).map((s) => (
@@ -1162,7 +1178,7 @@ export default function Register() {
                     </View>
                   )}
                 </View>
-                <Text className="text-amber-400 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{member.points_balance} Beans · {member.total_visits} visits</Text>
+                <Text className="text-amber-400 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{member.points_balance} Points · {member.total_visits} visits</Text>
               </View>
               <View className="flex-row items-center gap-2">
                 <Pressable onPress={openRewards} className="flex-row items-center gap-1.5 h-9 px-3 rounded-xl active:opacity-80" style={{ backgroundColor: BRAND }}>
@@ -1879,7 +1895,7 @@ export default function Register() {
             <View className="flex-row items-center justify-between mb-3">
               <View>
                 <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>Rewards</Text>
-                {!!member && <Text className="text-amber-400 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{rewards?.balance ?? member.points_balance} Beans available</Text>}
+                {!!member && <Text className="text-amber-400 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{rewards?.balance ?? member.points_balance} Points available</Text>}
               </View>
               <Pressable onPress={() => setShowRewards(false)} className="active:opacity-60"><X size={22} color="rgba(245,243,240,0.7)" /></Pressable>
             </View>
@@ -1894,7 +1910,7 @@ export default function Register() {
                   <RewardRow key={v.id} title={v.title} subtitle={discountSummary(v)} onPress={() => applyReward(v, false)} />
                 ))}
                 {(rewards?.catalog ?? []).map((c) => (
-                  <RewardRow key={c.id} title={c.title} subtitle={`${discountSummary(c)} · ${c.points_required} Beans`} onPress={() => applyReward(c, true)} />
+                  <RewardRow key={c.id} title={c.title} subtitle={`${discountSummary(c)} · ${c.points_required} Points`} onPress={() => applyReward(c, true)} />
                 ))}
               </ScrollView>
             )}
@@ -1950,7 +1966,7 @@ export default function Register() {
             {!!paid && paid.beansEarned > 0 && (
               <View className="flex-row items-center mb-6 px-4 py-2 rounded-full" style={{ gap: 8, backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.35)" }}>
                 <Sparkles size={16} color="#FBBF24" />
-                <Text className="text-amber-300" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 15 }}>+{paid.beansEarned} Beans earned</Text>
+                <Text className="text-amber-300" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 15 }}>+{paid.beansEarned} Points earned</Text>
                 <Text className="text-cream/45" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13 }}>· {paid.beansBalance} total</Text>
               </View>
             )}
@@ -2046,8 +2062,8 @@ function RegisterClaimCard({ memberId, claimable }: { memberId: string; claimabl
   }
   if (revealed) {
     const rlabel =
-      revealed.outcome_type === "flat_beans" ? `+${revealed.flat_beans_value ?? 0} Beans`
-      : revealed.outcome_type === "beans_multiplier" ? `${revealed.multiplier_value ?? 2}× Beans`
+      revealed.outcome_type === "flat_beans" ? `+${revealed.flat_beans_value ?? 0} Points`
+      : revealed.outcome_type === "beans_multiplier" ? `${revealed.multiplier_value ?? 2}× Points`
       : revealed.outcome_type === "voucher" ? (revealed.voucher_title ?? revealed.label)
       : revealed.label;
     const rsub = revealed.outcome_type === "no_bonus" ? "Better luck next time" : "Added to their rewards";
@@ -2094,7 +2110,7 @@ function RegisterRedeemCard({ shop, onRedeem }: { shop: ShopCard; onRedeem: () =
       <View className="px-2.5 py-2">
         <View className="flex-row items-center" style={{ gap: 4 }}>
           <Sparkles size={10} color="#FBBF24" />
-          <Text className="text-amber-400 text-[9px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.4 }}>{shop.points_required} BEANS</Text>
+          <Text className="text-amber-400 text-[9px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.4 }}>{shop.points_required} POINTS</Text>
         </View>
         <Text className="text-cream text-[12px] mt-1" style={{ fontFamily: "Peachi-Medium" }} numberOfLines={2}>{shop.name}</Text>
         <View className="self-start rounded-full mt-1.5 px-2.5 py-1" style={{ backgroundColor: aff ? "#FBBF24" : "rgba(245,243,240,0.12)" }}>

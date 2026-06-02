@@ -229,9 +229,9 @@ export function formatReceipt(
   // Loyalty Beans earned (members only) — a small record under the payment.
   if (order.beans_earned && order.beans_earned > 0) {
     bodyLines.push(divider());
-    bodyLines.push(twoColumn("Beans earned", `+${order.beans_earned}`));
+    bodyLines.push(twoColumn("Points earned", `+${order.beans_earned}`));
     if (order.beans_balance != null && order.beans_balance > 0) {
-      bodyLines.push(twoColumn("Beans balance", String(order.beans_balance)));
+      bodyLines.push(twoColumn("Points balance", String(order.beans_balance)));
     }
   }
 

@@ -158,7 +158,7 @@ export default function CustomerDisplay() {
   // on the thank-you screen (status === "complete"); if the customer doesn't
   // open it there, we don't nag them with a claim button on the idle / ordering
   // screens — instead, once we've left thank-you we quietly claim any pending
-  // mystery so its prize just lands in their rewards / Beans. Refresh the
+  // mystery so its prize just lands in their rewards / Points. Refresh the
   // snapshot afterwards so the granted voucher shows in the rewards list.
   useEffect(() => {
     if (status === "complete") return; // thank-you keeps the tappable reveal
@@ -224,7 +224,7 @@ export default function CustomerDisplay() {
     const imageUrl = maybankQr?.image_url ?? null;
     const merchantId = maybankQr?.payload ?? "";
     const hasAny = !!imageUrl || !!merchantId;
-    // Beans this order earns. 1 Bean per RM (points_per_rm default) on the
+    // Points this order earns. 1 Bean per RM (points_per_rm default) on the
     // post-discount total — members bank it; guests see what they're
     // missing as a sign-up nudge. (Matches the order app's basePoints =
     // floor(afterDiscount/100 * pointsPerRm), members only.)
@@ -254,7 +254,7 @@ export default function CustomerDisplay() {
         className="flex-1 items-center"
         style={{ backgroundColor: PAGE, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14 }}
       >
-        {/* Fixed header — amount + Beans (always visible) */}
+        {/* Fixed header — amount + Points (always visible) */}
         <View className="items-center">
           <Eyebrow color={GOLD}>SCAN TO PAY</Eyebrow>
           <Text style={{ fontFamily: "Peachi-Bold", fontSize: amt, lineHeight: Math.round(amt * 1.05), color: GOLD, marginTop: 2 }}>{rm(payTotal || total)}</Text>
@@ -270,7 +270,7 @@ export default function CustomerDisplay() {
             >
               <Sparkles size={14} color={member ? GOLD : GREEN} />
               <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 13, color: member ? GOLD : GREEN }}>
-                {member ? `You'll earn ${beans} Beans` : `Sign up & earn ${beans} Beans`}
+                {member ? `You'll earn ${beans} Points` : `Sign up & earn ${beans} Points`}
               </Text>
             </View>
           )}
@@ -338,7 +338,7 @@ export default function CustomerDisplay() {
         {beansEarned > 0 && (
           <View className="flex-row items-center" style={{ gap: 7, marginTop: 16, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999, backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)" }}>
             <Sparkles size={16} color={GOLD} />
-            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: GOLD }}>+{beansEarned} Beans earned</Text>
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: GOLD }}>+{beansEarned} Points earned</Text>
           </View>
         )}
       </>
@@ -357,31 +357,31 @@ export default function CustomerDisplay() {
           <View className="flex-1 items-center justify-center px-10" style={{ minWidth: 0 }}>{thankYou}</View>
           <View className="flex-1 items-center justify-center px-10" style={{ minWidth: 0, borderLeftWidth: 1, borderColor: "rgba(245,243,240,0.08)", backgroundColor: SUB }}>
             {mystery && member?.id
-              ? <MysteryBox memberId={member.id} claimable={mystery} baseBeans={beansEarned} />
+              ? <MysteryBox memberId={member.id} claimable={mystery} basePoints={beansEarned} />
               : <MysteryPending />}
           </View>
         </View>
       );
     }
     // ── Guest capture — convert a walk-in into a member at the thank-you ──
-    // A guest who just paid sees their order's Beans dangled with a keypad:
+    // A guest who just paid sees their order's Points dangled with a keypad:
     // entering their phone auto-enrols them (Bronze) AND awards this order's
-    // Beans + spawns their Mystery Bean. Once `member` is set, the member
-    // split above takes over — so they immediately see "+N Beans earned" and
+    // Points + spawns their Mystery Bean. Once `member` is set, the member
+    // split above takes over — so they immediately see "+N Points earned" and
     // can reveal their bean. The whole point: get the phone number.
     if (!member?.id && orderId && beansEarned > 0) {
       return (
         <View className="flex-1 flex-row" style={{ backgroundColor: PAGE }}>
           <View className="flex-1 items-center justify-center px-10" style={{ minWidth: 0 }}>{thankYou}</View>
           <View className="flex-1 items-center justify-center px-8" style={{ minWidth: 0, borderLeftWidth: 1, borderColor: "rgba(245,243,240,0.08)", backgroundColor: SUB }}>
-            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 25, color: CREAM, textAlign: "center" }}>Don&apos;t miss your Beans</Text>
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 25, color: CREAM, textAlign: "center" }}>Don&apos;t miss your Points</Text>
             <View className="flex-row items-center" style={{ gap: 9, marginTop: 10 }}>
               <Sparkles size={24} color={GOLD} />
               <Text style={{ fontFamily: "Peachi-Bold", fontSize: 34, color: GOLD }}>+{beansEarned}</Text>
-              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 19, color: GOLD, marginTop: 6 }}>Beans</Text>
+              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 19, color: GOLD, marginTop: 6 }}>Points</Text>
             </View>
-            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13.5, color: "rgba(245,243,240,0.6)", textAlign: "center", marginTop: 8, maxWidth: 330 }}>Enter your phone to claim them — then earn Beans + unlock rewards on every visit.</Text>
-            <Numpad outletId={outletId} ctaLabel="CLAIM MY BEANS" onSignedIn={(m) => { if (orderId) void posOrderComplete(m.id, orderId); }} />
+            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13.5, color: "rgba(245,243,240,0.6)", textAlign: "center", marginTop: 8, maxWidth: 330 }}>Enter your phone to claim them — then earn Points + unlock rewards on every visit.</Text>
+            <Numpad outletId={outletId} ctaLabel="CLAIM MY POINTS" onSignedIn={(m) => { if (orderId) void posOrderComplete(m.id, orderId); }} />
           </View>
         </View>
       );
@@ -474,12 +474,12 @@ export default function CustomerDisplay() {
           )}
         </View>
 
-        {/* Redeem your Beans — the points shop, right under the pairs. Tap a card
+        {/* Redeem your Points — the points shop, right under the pairs. Tap a card
             and the register redeems it onto the bill. Hidden once a reward is
-            applied (one per order) so a tap can't burn Beans again. */}
+            applied (one per order) so a tap can't burn Points again. */}
         {member && snapshot && snapshot.shop.length > 0 && !reward && (
           <View style={{ marginTop: 18 }}>
-            <Eyebrow color="rgba(251,191,36,0.85)" style={{ marginBottom: 8, letterSpacing: 1.6 }}>REDEEM YOUR BEANS</Eyebrow>
+            <Eyebrow color="rgba(251,191,36,0.85)" style={{ marginBottom: 8, letterSpacing: 1.6 }}>REDEEM YOUR POINTS</Eyebrow>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
               {snapshot.shop.slice(0, 6).map((s) => (
                 <ShopRedeemCard key={s.id} shop={s} onRedeem={() => setRedeemRequest({ rewardId: s.id, issuedRewardId: null, name: s.name })} />
@@ -505,7 +505,7 @@ export default function CustomerDisplay() {
         <View style={{ borderBottomWidth: 1, borderColor: "rgba(245,243,240,0.1)" }} className="px-4 py-4">
           {member ? (
             snapshot ? (
-              <BeansHero
+              <PointsHero
                 snapshot={snapshot}
                 memberName={member.name}
                 redeemedReward={reward ? { name: reward.name } : null}
@@ -558,7 +558,7 @@ export default function CustomerDisplay() {
               );
             }}
           />
-          {/* Redeem button moved onto the BeansHero tier card above to
+          {/* Redeem button moved onto the PointsHero tier card above to
               free vertical room in the cart for more order lines. */}
           <View style={{ borderTopWidth: 1, borderColor: "rgba(245,243,240,0.12)", paddingTop: 8, gap: 3 }}>
             <Row label="Subtotal" value={rm(subtotal)} />
@@ -662,7 +662,7 @@ function PendingOrMemberHeader({ member }: { member: NonNullable<ReturnType<type
       {/* Compact beans chip (about half the previous card) */}
       <View className="mt-3 flex-row items-baseline rounded-2xl px-5 py-2" style={{ backgroundColor: "rgba(251,191,36,0.1)", borderWidth: 1, borderColor: "rgba(251,191,36,0.3)", gap: 6 }}>
         <Text style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: GOLD }}>{(member?.pointsBalance ?? 0).toLocaleString()}</Text>
-        <Eyebrow color="rgba(251,191,36,0.7)">BEANS</Eyebrow>
+        <Eyebrow color="rgba(251,191,36,0.7)">POINTS</Eyebrow>
       </View>
     </View>
   );
@@ -700,7 +700,7 @@ function SignInButton({ onPress }: { onPress: () => void }) {
     <View className="items-center" style={{ gap: 10 }}>
       {/* The yellow button IS the "Get Rewards" call to action (no separate
           "Sign in" step in the wording) — a short explainer sits above it. */}
-      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.6)", textAlign: "center" }}>Earn Beans + redeem rewards with your phone number</Text>
+      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.6)", textAlign: "center" }}>Earn Points + redeem rewards with your phone number</Text>
       <Pressable onPress={onPress} className="rounded-2xl px-10 py-3.5 mt-1 active:opacity-80" style={{ backgroundColor: GOLD }}>
         <Text style={{ fontFamily: "Peachi-Bold", fontSize: 18, color: DARKFG }}>Get Rewards</Text>
       </Pressable>
@@ -765,7 +765,7 @@ function PendingMemberPanel({ member }: { member: any }) {
       <Eyebrow color="rgba(251,191,36,0.85)">WELCOME BACK</Eyebrow>
       <Text style={{ fontFamily: "Peachi-Bold", fontSize: 22, color: CREAM, marginTop: 4 }} numberOfLines={1}>Hi, {member.name ?? "friend"}</Text>
       <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: GOLD, marginTop: 6 }}>{(member.pointsBalance ?? 0).toLocaleString()}</Text>
-      <Eyebrow color="rgba(245,243,240,0.55)">BEANS</Eyebrow>
+      <Eyebrow color="rgba(245,243,240,0.55)">POINTS</Eyebrow>
     </View>
   );
 }
@@ -773,7 +773,7 @@ function PendingMemberPanel({ member }: { member: any }) {
 function RewardsPanel({ snapshot, member }: { snapshot: LoyaltySnapshot; member: any }) {
   return (
     <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 14 }} showsVerticalScrollIndicator={false}>
-      <BeansHero snapshot={snapshot} memberName={member.name} />
+      <PointsHero snapshot={snapshot} memberName={member.name} />
 
       <Eyebrow color="rgba(245,243,240,0.45)" style={{ marginTop: 12, marginBottom: 6, paddingHorizontal: 4 }}>AVAILABLE REWARDS</Eyebrow>
       <RewardsList snapshot={snapshot} />
@@ -867,8 +867,8 @@ function ClaimCard({ memberId, claimId, title, sub, mystery }: { memberId: strin
   }
   if (revealed) {
     const rlabel =
-      revealed.outcome_type === "flat_beans" ? `+${revealed.flat_beans_value ?? 0} Beans`
-      : revealed.outcome_type === "beans_multiplier" ? `${revealed.multiplier_value ?? 2}× Beans`
+      revealed.outcome_type === "flat_beans" ? `+${revealed.flat_beans_value ?? 0} Points`
+      : revealed.outcome_type === "beans_multiplier" ? `${revealed.multiplier_value ?? 2}× Points`
       : revealed.outcome_type === "voucher" ? (revealed.voucher_title ?? revealed.label)
       : revealed.label;
     const rsub = revealed.outcome_type === "no_bonus" ? "Better luck next time" : "Added to your rewards";
@@ -912,7 +912,7 @@ function RewardCardStatic({ title, sub }: { title: string; sub: string }) {
   );
 }
 
-function BeansHero({
+function PointsHero({
   snapshot,
   memberName,
   redeemedReward,
@@ -938,7 +938,7 @@ function BeansHero({
   const nextPerks = next
     ? [
         (next.discount_percent ?? 0) > (t?.discount_percent ?? 0) ? `${next.discount_percent}% off` : null,
-        (next.multiplier ?? 1) > (t?.multiplier ?? 1) ? `${next.multiplier}× Beans` : null,
+        (next.multiplier ?? 1) > (t?.multiplier ?? 1) ? `${next.multiplier}× Points` : null,
       ].filter(Boolean).join(" + ")
     : "";
   const spendLabel = prog?.metric === "spend" ? `RM ${(moreNeeded / 100).toFixed(0)}` : `${moreNeeded} visit${moreNeeded === 1 ? "" : "s"}`;
@@ -957,7 +957,7 @@ function BeansHero({
           </View>
           <View className="items-end">
             <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: GOLD, lineHeight: 22 }}>{snapshot.balance.toLocaleString()}</Text>
-            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 8.5, letterSpacing: 1.5, color: fg + "8C" }}>BEANS</Text>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 8.5, letterSpacing: 1.5, color: fg + "8C" }}>POINTS</Text>
           </View>
         </View>
         {prog && nextName && (
@@ -977,7 +977,7 @@ function BeansHero({
           </View>
         )}
         {/* Redeem / applied-reward pill — inline at the bottom (right-aligned) so
-            it never overlaps the BEANS column. It used to be absolutely
+            it never overlaps the POINTS column. It used to be absolutely
             positioned and collided on short top-tier cards with no progress bar
             (e.g. Black Card + an applied "Free Drink"). */}
         {onRedeem && (
@@ -1051,7 +1051,7 @@ function MissionRow({ m }: { m: MissionCard }) {
   const fmt = (n: number) => (m.unit === "sen" ? `RM ${(n / 100).toFixed(0)}` : `${n}`);
   return (
     <View className="rounded-2xl p-3" style={{ backgroundColor: "rgba(251,191,36,0.06)", borderWidth: 1, borderColor: "rgba(251,191,36,0.22)" }}>
-      <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, letterSpacing: 1.4, color: GOLD }}>CHALLENGE · +{m.reward_bonus_beans} BEANS</Text>
+      <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, letterSpacing: 1.4, color: GOLD }}>CHALLENGE · +{m.reward_bonus_beans} POINTS</Text>
       <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: CREAM, marginTop: 2 }} numberOfLines={1}>{m.title}</Text>
       <View style={{ height: 6, borderRadius: 3, backgroundColor: "rgba(251,191,36,0.15)", marginTop: 8, overflow: "hidden" }}>
         <View style={{ height: 6, width: `${pct}%`, backgroundColor: GOLD }} />
@@ -1090,7 +1090,7 @@ function PairCard({ pair }: { pair: SuggestedPair }) {
   );
 }
 
-/** Points-shop card for the ordering screen's "Redeem your Beans" row. Tapping
+/** Points-shop card for the ordering screen's "Redeem your Points" row. Tapping
  *  sends a redeem request to the register (which applies it to the bill). Dimmed
  *  + non-tappable when the member can't afford it yet. */
 function ShopRedeemCard({ shop, onRedeem }: { shop: ShopCard; onRedeem: () => void }) {
@@ -1104,7 +1104,7 @@ function ShopRedeemCard({ shop, onRedeem }: { shop: ShopCard; onRedeem: () => vo
     >
       <View className="flex-row items-center" style={{ gap: 5 }}>
         <Coffee size={13} color={GOLD} />
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 0.5, color: GOLD }}>{shop.points_required} BEANS</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 0.5, color: GOLD }}>{shop.points_required} POINTS</Text>
       </View>
       <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: CREAM, marginTop: 6 }} numberOfLines={2}>{shop.name}</Text>
       <View className="self-start rounded-full" style={{ marginTop: 8, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: aff ? GOLD : "rgba(245,243,240,0.12)" }}>
@@ -1217,7 +1217,7 @@ function MysteryPending() {
 /** Tap-to-reveal scratch card — matches the native app's MysteryBean:
  *  a saffron "Tap to Reveal" tile that flips to an espresso win card (or a
  *  quiet "no bonus" card), with a per-outcome layout. */
-function MysteryBox({ memberId, claimable, baseBeans }: { memberId: string; claimable: ClaimableCard; baseBeans: number }) {
+function MysteryBox({ memberId, claimable, basePoints }: { memberId: string; claimable: ClaimableCard; basePoints: number }) {
   const [revealed, setRevealed] = useState<MysteryReveal | null>(null);
   const [busy, setBusy] = useState(false);
   async function reveal() {
@@ -1278,14 +1278,14 @@ function MysteryBox({ memberId, claimable, baseBeans }: { memberId: string; clai
           <Text style={{ fontFamily: "Peachi-Bold", fontSize: 66, lineHeight: 68, color: GOLD, marginTop: 10, letterSpacing: -2 }}>{mult}×</Text>
           <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2, color: "rgba(251,191,36,0.85)", marginTop: 6 }}>BEAN MULTIPLIER</Text>
           <View style={{ height: 1, backgroundColor: "rgba(251,191,36,0.18)", alignSelf: "stretch", marginVertical: 18 }} />
-          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(245,243,240,0.7)", textAlign: "center" }}>Your {baseBeans} Beans became</Text>
-          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: CREAM, marginTop: 2 }}>{Math.round(baseBeans * mult)} Beans</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(245,243,240,0.7)", textAlign: "center" }}>Your {basePoints} Points became</Text>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: CREAM, marginTop: 2 }}>{Math.round(basePoints * mult)} Points</Text>
         </>
       )}
       {isFlat && (
         <>
           <Text style={{ fontFamily: "Peachi-Bold", fontSize: 58, color: GOLD, marginTop: 10, letterSpacing: -2 }}>+{revealed.flat_beans_value}</Text>
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2, color: "rgba(251,191,36,0.85)", marginTop: 4 }}>BONUS BEANS</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2, color: "rgba(251,191,36,0.85)", marginTop: 4 }}>BONUS POINTS</Text>
         </>
       )}
       {isVoucher && (
