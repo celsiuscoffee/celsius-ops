@@ -50,7 +50,33 @@ export async function GET(req: NextRequest) {
       .select("id, phone, name, tags")
       .in("phone", variants)
       .limit(1);
-    const member = members?.[0];
+    let member = members?.[0] ?? null;
+
+    // Auto-enrol: when the POS passes create=1 and no member exists for this
+    // phone yet, create the members + member_brands pair right here so every
+    // new walk-in (cashier-entered or customer-entered on the 2nd screen)
+    // becomes a Bronze member. Same row shape as pickup/backoffice signups
+    // (apps/order findOrCreateMember). Without this the POS got "no member
+    // found" and the customer was never captured.
+    if (!member && req.nextUrl.searchParams.get("create") === "1") {
+      const digits = phone.replace(/\D/g, "");
+      const canonicalPhone = digits.startsWith("60") ? `+${digits}` : digits.startsWith("0") ? `+6${digits}` : `+60${digits}`;
+      const newId = `member-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const { data: inserted, error: insErr } = await supabase
+        .from("members")
+        .insert({ id: newId, phone: canonicalPhone, name: null, email: null, birthday: null, sms_opt_out: false, consent_at: new Date().toISOString() })
+        .select("id, phone, name, tags")
+        .single();
+      if (!insErr && inserted) {
+        member = inserted;
+        await supabase.from("member_brands").insert({
+          id: `mb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          member_id: newId, brand_id: BRAND_ID,
+          points_balance: 0, total_points_earned: 0, total_points_redeemed: 0, total_visits: 0, total_spent: 0,
+        });
+      }
+    }
+
     if (!member) {
       return NextResponse.json({ member: null });
     }
