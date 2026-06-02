@@ -104,7 +104,7 @@ class SunmiPrinterModule : Module() {
     val assets = context.assets
     assets.open("celsius-logo.png").use { input ->
       val original = BitmapFactory.decodeStream(input) ?: return
-      val targetWidth = 384 // wide wordmark logo — ~2/3 of the 80mm print width
+      val targetWidth = 512 // wide wordmark logo — large, ~89% of the 80mm head
       val targetHeight = (targetWidth.toFloat() / original.width * original.height).toInt()
       val scaled = Bitmap.createScaledBitmap(original, targetWidth, targetHeight, true)
       // Flatten alpha onto white — thermal heads render transparency as black.
@@ -244,7 +244,7 @@ class SunmiPrinterModule : Module() {
               line.printText(bl, TextStyle.getStyle().setAlign(Align.LEFT).setTextSize(24))
             t.matches(Regex("^\\d+x .+")) ->
               line.printText(bl, TextStyle.getStyle().setAlign(Align.LEFT).enableBold(true).setTextSize(24))
-            t.startsWith("Order:") || t.startsWith("Date:") || t.startsWith("Time:") || t.startsWith("Type:") || t.startsWith("Table:") ->
+            t.startsWith("Order:") || t.startsWith("Date:") || t.startsWith("Time:") || t.startsWith("Type:") || t.startsWith("Table:") || t.startsWith("Stand:") ->
               line.printText(bl, TextStyle.getStyle().setAlign(Align.LEFT).setTextSize(24))
             t.startsWith("Card") || t.startsWith("Cash") || t.startsWith("E-Wallet") ->
               line.printText(bl, TextStyle.getStyle().setAlign(Align.LEFT).setTextSize(24))
@@ -314,7 +314,7 @@ class SunmiPrinterModule : Module() {
       // 2. Order info
       line.printText("Order #${o.orderNumber}", TextStyle.getStyle().setAlign(Align.CENTER).enableBold(true).setTextSize(32))
       var typeLine = o.orderType
-      if (o.tableNumber.isNotEmpty()) typeLine += "  |  Table ${o.tableNumber}"
+      if (o.tableNumber.isNotEmpty()) typeLine += "  |  ${o.tableLabel} ${o.tableNumber}"
       else if (o.queueNumber.isNotEmpty()) typeLine += "  |  Q: ${o.queueNumber}"
       line.printText(typeLine, TextStyle.getStyle().setAlign(Align.CENTER).enableBold(true).setTextSize(28))
       if (o.time.isNotEmpty()) line.printText(o.time, TextStyle.getStyle().setAlign(Align.CENTER).setTextSize(24))
@@ -405,6 +405,7 @@ class DocketOptions : Record {
   @Field var orderNumber: String = ""
   @Field var orderType: String = ""
   @Field var tableNumber: String = ""
+  @Field var tableLabel: String = "Table"
   @Field var queueNumber: String = ""
   @Field var time: String = ""
   @Field var items: String = ""
