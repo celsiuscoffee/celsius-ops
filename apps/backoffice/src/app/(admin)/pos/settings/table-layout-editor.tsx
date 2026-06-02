@@ -29,6 +29,11 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
  *  columns instead of landing freeform. The faint canvas gridlines match this. */
 const GRID = 1 / 16;
 const snap = (v: number) => Math.round(v / GRID) * GRID;
+/** Magnetic alignment: while dragging, a table's centre OR an edge snaps to a
+ *  sibling's centre / matching edge when within this many px, and a guide line is
+ *  drawn. This is what actually makes rows + columns line up across mixed table
+ *  sizes — the coordinate grid alone can't, since it only snaps centres. */
+const SNAP_PX = 10;
 
 /** Tile size (px) scaled to seat count — a 6-top reads bigger than a 2-top, so
  *  the floor plan shows table CAPACITY at a glance. Mirrors the register. */
@@ -89,6 +94,8 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
   const [selected, setSelected] = useState<number | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ idx: number; moved: boolean } | null>(null);
+  // Alignment guide lines drawn while dragging (normalised 0..1, or null = none).
+  const [guide, setGuide] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
 
   const floor = floors[active];
 
@@ -146,15 +153,52 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
   function onTilePointerMove(e: React.PointerEvent, idx: number) {
     if (!drag.current || drag.current.idx !== idx) return;
     const c = canvasRef.current?.getBoundingClientRect();
-    if (!c) return;
+    if (!c || !floor) return;
     drag.current.moved = true;
-    const x = clamp(snap((e.clientX - c.left) / c.width), 0.04, 0.96);
-    const y = clamp(snap((e.clientY - c.top) / c.height), 0.06, 0.94);
-    patchTable(idx, { x, y });
+
+    // Raw pointer position (normalised), then magnetically align to siblings.
+    const px = clamp((e.clientX - c.left) / c.width, 0.04, 0.96);
+    const py = clamp((e.clientY - c.top) / c.height, 0.06, 0.94);
+
+    // The dragged tile's half-extents (so we can align its edges, not just centre).
+    const me = floor.tables[idx];
+    const dd = tableDims(me.seats, me.shape, me.orientation);
+    const hwD = dd.w / 2 / c.width, hhD = dd.h / 2 / c.height;
+    const offX = [0, -hwD, hwD], offY = [0, -hhD, hhD]; // centre, near edge, far edge
+
+    let nx = px, ny = py;
+    let gx: number | null = null, gy: number | null = null;
+    let bestX = SNAP_PX / c.width, bestY = SNAP_PX / c.height;
+
+    // Compare every (my ref point × sibling ref point) pair; keep the closest
+    // within threshold per axis. cand = the centre that makes the two meet.
+    floor.tables.forEach((t, i) => {
+      if (i === idx) return;
+      const sd = tableDims(t.seats, t.shape, t.orientation);
+      const hwS = sd.w / 2 / c.width, hhS = sd.h / 2 / c.height;
+      const sX = [t.x, t.x - hwS, t.x + hwS], sY = [t.y, t.y - hhS, t.y + hhS];
+      for (const dr of offX) for (const sr of sX) {
+        const cand = sr - dr, err = Math.abs(px - cand);
+        if (err < bestX) { bestX = err; nx = cand; gx = sr; }
+      }
+      for (const dr of offY) for (const sr of sY) {
+        const cand = sr - dr, err = Math.abs(py - cand);
+        if (err < bestY) { bestY = err; ny = cand; gy = sr; }
+      }
+    });
+
+    // No sibling magnet on an axis → fall back to the grid so free placement
+    // still lands tidy instead of pixel-freeform.
+    if (gx === null) nx = snap(nx);
+    if (gy === null) ny = snap(ny);
+
+    setGuide({ x: gx, y: gy });
+    patchTable(idx, { x: clamp(nx, 0.04, 0.96), y: clamp(ny, 0.06, 0.94) });
   }
   function onTilePointerUp(e: React.PointerEvent) {
     (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
     drag.current = null;
+    setGuide({ x: null, y: null });
   }
 
   return (
@@ -223,6 +267,9 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
                 Tap &ldquo;Add table&rdquo;, then drag tables to match your floor.
               </div>
             )}
+            {/* Live alignment guides — show the line a dragged table snapped to. */}
+            {guide.x != null && <div className="pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-[#A2492C]" style={{ left: `${guide.x * 100}%` }} />}
+            {guide.y != null && <div className="pointer-events-none absolute left-0 right-0 z-20 h-px bg-[#A2492C]" style={{ top: `${guide.y * 100}%` }} />}
             {floor.tables.map((t, idx) => {
               const dim = tableDims(t.seats, t.shape, t.orientation);
               return (
