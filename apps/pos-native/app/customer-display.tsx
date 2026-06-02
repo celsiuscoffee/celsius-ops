@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View, Text, Image, FlatList, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import QRCode from "react-native-qrcode-svg";
-import { Gift, Tag, Coffee, Sparkles, Delete, CreditCard } from "lucide-react-native";
+import { Gift, Tag, Coffee, Sparkles, Delete, CreditCard, ChevronRight } from "lucide-react-native";
 import { useCart, cartSubtotal } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
 import { usePos } from "@/lib/store";
@@ -10,7 +10,7 @@ import { useMaybankQr } from "@/lib/maybank-qr";
 import { outletShort } from "@/lib/outlets";
 import {
   lookupMember, fetchSnapshot, claimMystery, fetchRewards, fetchActivePromos,
-  type LoyaltySnapshot, type VoucherCard, type ClaimableCard, type ShopCard, type MissionCard, type BiteItem, type IssuedVoucher, type ActivePromo,
+  type LoyaltySnapshot, type VoucherCard, type ClaimableCard, type ShopCard, type MissionCard, type BiteItem, type IssuedVoucher, type ActivePromo, type MysteryReveal,
 } from "@/lib/loyalty";
 import { fetchPosters, type DisplayPoster } from "@/lib/posters";
 import { fetchBites, type DisplayBite } from "@/lib/menu";
@@ -305,7 +305,7 @@ export default function CustomerDisplay() {
           <View className="flex-1 items-center justify-center px-8">{thankYou}</View>
           <View className="flex-1 items-center justify-center px-10" style={{ borderLeftWidth: 1, borderColor: "rgba(245,243,240,0.08)", backgroundColor: SUB }}>
             <Eyebrow color="rgba(251,191,36,0.78)" style={{ marginBottom: 6, letterSpacing: 2 }}>A LITTLE SOMETHING FOR YOU</Eyebrow>
-            <MysteryBox memberId={member.id} claimable={mystery} />
+            <MysteryBox memberId={member.id} claimable={mystery} baseBeans={beansEarned} />
           </View>
         </View>
       );
@@ -781,21 +781,27 @@ function ClaimableRewards({ snapshot, memberId }: { snapshot: LoyaltySnapshot; m
 /** Tappable claim card (mystery bag / promo). Reveals inline on claim. */
 function ClaimCard({ memberId, claimId, title, sub, mystery }: { memberId: string; claimId: string; title: string; sub: string; mystery: boolean }) {
   const [busy, setBusy] = useState(false);
-  const [revealed, setRevealed] = useState<{ label: string; emoji: string; sub?: string } | null>(null);
+  const [revealed, setRevealed] = useState<MysteryReveal | null>(null);
   async function onPress() {
     if (busy || revealed) return;
     setBusy(true);
     const out = mystery ? await claimMystery(memberId, claimId) : null;
-    setRevealed(out ?? { label: "Reward unlocked", emoji: "🎁", sub: "Added to your rewards" });
+    setRevealed(out ?? { outcome_type: "no_bonus", multiplier_value: null, flat_beans_value: null, label: "Reward unlocked", voucher_title: null, emoji: "🎁" });
     setBusy(false);
   }
   if (revealed) {
+    const rlabel =
+      revealed.outcome_type === "flat_beans" ? `+${revealed.flat_beans_value ?? 0} Beans`
+      : revealed.outcome_type === "beans_multiplier" ? `${revealed.multiplier_value ?? 2}× Beans`
+      : revealed.outcome_type === "voucher" ? (revealed.voucher_title ?? revealed.label)
+      : revealed.label;
+    const rsub = revealed.outcome_type === "no_bonus" ? "Better luck next time" : "Added to your rewards";
     return (
       <View className="flex-row items-center rounded-2xl px-3.5 py-3" style={{ backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.45)", gap: 11 }}>
         <Text style={{ fontSize: 26 }}>{revealed.emoji}</Text>
         <View className="flex-1">
-          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, color: GOLD }} numberOfLines={1}>{revealed.label}</Text>
-          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(245,243,240,0.6)" }}>{revealed.sub ?? "Added to your rewards"}</Text>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, color: GOLD }} numberOfLines={1}>{rlabel}</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(245,243,240,0.6)" }}>{rsub}</Text>
         </View>
       </View>
     );
@@ -1067,31 +1073,93 @@ function BiteCard({ bite, offer }: { bite: { id: string; name: string; price_sen
 }
 
 // ─── Mystery box ───────────────────────────────────────────
-function MysteryBox({ memberId, claimable }: { memberId: string; claimable: ClaimableCard }) {
-  const [revealed, setRevealed] = useState<{ label: string; emoji: string; sub?: string } | null>(null);
+/** Tap-to-reveal scratch card — matches the native app's MysteryBean:
+ *  a saffron "Tap to Reveal" tile that flips to an espresso win card (or a
+ *  quiet "no bonus" card), with a per-outcome layout. */
+function MysteryBox({ memberId, claimable, baseBeans }: { memberId: string; claimable: ClaimableCard; baseBeans: number }) {
+  const [revealed, setRevealed] = useState<MysteryReveal | null>(null);
   const [busy, setBusy] = useState(false);
   async function reveal() {
     if (busy || revealed) return;
     setBusy(true);
     const out = await claimMystery(memberId, claimable.id);
-    setRevealed(out ?? { label: "Reward unlocked", emoji: "🎁", sub: "Added to your rewards" });
+    setRevealed(out ?? { outcome_type: "no_bonus", multiplier_value: null, flat_beans_value: null, label: "Reward unlocked", voucher_title: null, emoji: "🎁" });
     setBusy(false);
   }
-  if (revealed) {
+
+  // ── Unrevealed: saffron tile with Gift + "Reveal" pill ──
+  if (!revealed) {
     return (
-      <View className="mt-8 rounded-3xl p-6 items-center" style={{ width: 384, backgroundColor: "rgba(251,191,36,0.10)", borderWidth: 1, borderColor: "rgba(251,191,36,0.40)" }}>
-        <Text style={{ fontSize: 56 }}>{revealed.emoji}</Text>
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: GOLD, marginTop: 4 }}>{revealed.label}</Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 14, color: "rgba(245,243,240,0.65)", marginTop: 4 }}>{revealed.sub ?? "Added to your rewards"}</Text>
+      <Pressable onPress={reveal} disabled={busy} className="rounded-3xl items-center active:opacity-90" style={{ width: 392, paddingHorizontal: 28, paddingVertical: 34, backgroundColor: "#FBBF24", borderWidth: 1, borderColor: "rgba(26,2,0,0.25)" }}>
+        <Gift size={54} color="#1A0200" strokeWidth={1.8} />
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2.4, color: "rgba(26,2,0,0.7)", marginTop: 16 }}>TAP TO REVEAL</Text>
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 36, color: "#1A0200", marginTop: 4 }}>Mystery Bean</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 16, color: "rgba(26,2,0,0.72)", marginTop: 6, textAlign: "center" }}>You&apos;ve got something. One tap.</Text>
+        <View className="flex-row items-center" style={{ gap: 8, marginTop: 22, paddingHorizontal: 30, paddingVertical: 14, borderRadius: 999, backgroundColor: "#1A0200" }}>
+          {busy ? (
+            <>
+              <ActivityIndicator size="small" color="#FBBF24" />
+              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 17, color: "#FBBF24" }}>Revealing…</Text>
+            </>
+          ) : (
+            <>
+              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 17, color: "#FBBF24" }}>Reveal</Text>
+              <ChevronRight size={18} color="#FBBF24" strokeWidth={2.4} />
+            </>
+          )}
+        </View>
+      </Pressable>
+    );
+  }
+
+  // ── No bonus: quiet card (never punishing) ──
+  if (revealed.outcome_type === "no_bonus") {
+    return (
+      <View className="rounded-3xl items-center" style={{ width: 392, paddingHorizontal: 28, paddingVertical: 32, backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.14)" }}>
+        <Sparkles size={42} color="rgba(245,243,240,0.5)" strokeWidth={1.6} />
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 26, color: CREAM, marginTop: 12 }}>{revealed.label}</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(245,243,240,0.6)", marginTop: 6, textAlign: "center" }}>Better luck on your next order ☕</Text>
       </View>
     );
   }
+
+  // ── Win: espresso card, amber prize (per outcome) ──
+  const mult = revealed.multiplier_value ?? 0;
+  const isMultiplier = revealed.outcome_type === "beans_multiplier" && mult > 1;
+  const isFlat = revealed.outcome_type === "flat_beans" && !!revealed.flat_beans_value;
+  const isVoucher = revealed.outcome_type === "voucher";
+  const isSurprise = revealed.outcome_type === "surprise_in_store";
   return (
-    <Pressable onPress={reveal} className="mt-8 rounded-3xl p-6 items-center active:opacity-80" style={{ width: 384, backgroundColor: "rgba(162,73,44,0.14)", borderWidth: 1, borderColor: "rgba(162,73,44,0.45)" }}>
-      <View className="h-20 w-20 rounded-2xl items-center justify-center" style={{ backgroundColor: TERRA }}><Gift size={40} color="#FBEBE8" /></View>
-      <Eyebrow color="rgba(251,191,36,0.85)" style={{ marginTop: 12, letterSpacing: 2.2 }}>MYSTERY BEAN</Eyebrow>
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: CREAM, marginTop: 4 }}>{busy ? "Opening…" : "Tap to reveal"}</Text>
-    </Pressable>
+    <View className="rounded-3xl items-center" style={{ width: 392, paddingHorizontal: 28, paddingVertical: 34, backgroundColor: "#160800", borderWidth: 1, borderColor: "rgba(251,191,36,0.3)" }}>
+      <Sparkles size={46} color={GOLD} strokeWidth={1.6} />
+      {isMultiplier && (
+        <>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 66, lineHeight: 68, color: GOLD, marginTop: 10, letterSpacing: -2 }}>{mult}×</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2, color: "rgba(251,191,36,0.85)", marginTop: 6 }}>BEAN MULTIPLIER</Text>
+          <View style={{ height: 1, backgroundColor: "rgba(251,191,36,0.18)", alignSelf: "stretch", marginVertical: 18 }} />
+          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(245,243,240,0.7)", textAlign: "center" }}>Your {baseBeans} Beans became</Text>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: CREAM, marginTop: 2 }}>{Math.round(baseBeans * mult)} Beans</Text>
+        </>
+      )}
+      {isFlat && (
+        <>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 58, color: GOLD, marginTop: 10, letterSpacing: -2 }}>+{revealed.flat_beans_value}</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2, color: "rgba(251,191,36,0.85)", marginTop: 4 }}>BONUS BEANS</Text>
+        </>
+      )}
+      {isVoucher && (
+        <>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: GOLD, marginTop: 12, textAlign: "center" }}>{revealed.voucher_title ?? revealed.label}</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(245,243,240,0.75)", marginTop: 8, textAlign: "center" }}>Added to your rewards</Text>
+        </>
+      )}
+      {isSurprise && (
+        <>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 26, color: GOLD, marginTop: 12, textAlign: "center" }}>{revealed.label}</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(245,243,240,0.75)", marginTop: 8, textAlign: "center" }}>Show this to our barista</Text>
+        </>
+      )}
+    </View>
   );
 }
 
