@@ -30,7 +30,9 @@ import { outletFull, outletShort } from "@/lib/outlets";
 import {
   lookupMember, fetchRewards, fetchUsual, redeemReward, computeRewardDiscount,
   computeTierDiscount, evaluatePromotions, posOrderComplete,
+  fetchSuggestedPairs, fetchSnapshot, claimMystery,
   type Member, type RewardsResponse, type IssuedVoucher, type CatalogReward, type RedeemDiscount, type UsualItem, type AppliedPromo,
+  type SuggestedPair, type ClaimableCard, type MysteryReveal,
 } from "@/lib/loyalty";
 
 const rm = (sen: number) => `RM ${(sen / 100).toFixed(2)}`;
@@ -153,6 +155,12 @@ export default function Register() {
   const [rewards, setRewards] = useState<RewardsResponse | null>(null);
   const [rewardsLoading, setRewardsLoading] = useState(false);
   const [showRewards, setShowRewards] = useState(false);
+  // ── Upsell mirror — the SAME 3 pairs + claimable rewards the customer
+  //    sees on their display (shared scoring endpoint + snapshot), so the
+  //    cashier can add a suggestion or open a reward the moment the customer
+  //    asks. `pairs` is cart-driven; `claimables` is member-driven. ──
+  const [pairs, setPairs] = useState<SuggestedPair[]>([]);
+  const [claimables, setClaimables] = useState<ClaimableCard[]>([]);
 
   const setDisplayStatus = useDisplay((s) => s.setStatus);
   const setDisplayOrderNumber = useDisplay((s) => s.setOrderNumber);
@@ -313,6 +321,14 @@ export default function Register() {
   // pos_orders row (source='grabfood') for this outlet.
   useGrabPrinter(outletId, productsByIdForPrinter);
 
+  // Full catalog lookup — resolve a suggested-pair product_id back to its
+  // Product so a tap can route through onAdd (86 check + modifier sheet + add).
+  const productById = useMemo(() => {
+    const m = new Map<string, Product>();
+    for (const p of prods.data ?? []) m.set(p.id, p);
+    return m;
+  }, [prods.data]);
+
   const lines = useCart((s) => s.lines);
   const add = useCart((s) => s.add);
   const inc = useCart((s) => s.inc);
@@ -339,6 +355,38 @@ export default function Register() {
     if (activeCat === "all") return all;
     return all.filter((p) => p.category === activeCat);
   }, [prods.data, activeCat, usualIds]);
+
+  // ── Upsell mirror fetches ───────────────────────────────────────────
+  // 1) PAIRS — the exact 3 suggestions the customer display shows, from the
+  //    shared scoring endpoint (cart + usual signals). Keyed on the cart's
+  //    product ids so it re-asks as the order changes; cleared on empty cart.
+  const cartKeyForPairs = useMemo(() => lines.map((l) => l.product.id).sort().join(","), [lines]);
+  const usualKeyForPairs = useMemo(() => usual.map((u) => u.id).join(","), [usual]);
+  useEffect(() => {
+    if (cartKeyForPairs === "") { setPairs([]); return; }
+    let cancelled = false;
+    const ids = cartKeyForPairs.split(",");
+    const usualP = usualKeyForPairs ? usualKeyForPairs.split(",") : [];
+    fetchSuggestedPairs(outletId, ids, usualP).then((p) => { if (!cancelled) setPairs(p); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [cartKeyForPairs, usualKeyForPairs, outletId]);
+  // 2) CLAIMABLES — pending mystery bags / promos the member can open. Pulled
+  //    from the same snapshot the display reads; member-driven (not cart).
+  useEffect(() => {
+    if (!member?.id) { setClaimables([]); return; }
+    let cancelled = false;
+    fetchSnapshot(member.id).then((s) => { if (!cancelled) setClaimables(s?.claimables ?? []); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [member?.id]);
+
+  // Resolve a suggested pair → its catalog Product, then route through onAdd
+  // (so an 86'd item is blocked + a modifier item opens its sheet, exactly
+  // like tapping the grid). No-op if the product isn't in this outlet's menu.
+  const addPair = useCallback((pair: SuggestedPair) => {
+    const p = productById.get(pair.product_id);
+    if (p) onAdd(p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productById]);
 
   const subtotal = cartSubtotal(lines);
   const scRate = serviceChargeRate(settings);
@@ -1005,6 +1053,34 @@ export default function Register() {
               );
             }}
           />
+        )}
+
+        {/* ── Upsell mirror — the SAME 3 pairs + claimable rewards the customer
+            sees on their display. Cashier-assist: a customer asks for the bite
+            on screen, the cashier taps it in here (one tap → cart, with the 86
+            check + modifier sheet); a customer asks about a reward badge, the
+            cashier opens it here. Pairs are cart-driven, claimables member-driven. ── */}
+        {(claimables.length > 0 || pairs.length > 0) && (
+          <View className="px-4 pt-2.5 pb-1 border-t border-border" style={{ gap: 9 }}>
+            {member && claimables.length > 0 && (
+              <View style={{ gap: 6 }}>
+                <Text className="text-cream/45 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.2 }}>REWARDS TO CLAIM</Text>
+                {claimables.slice(0, 2).map((c) => (
+                  <RegisterClaimCard key={c.id} memberId={member.id} claimable={c} />
+                ))}
+              </View>
+            )}
+            {pairs.length > 0 && (
+              <View style={{ gap: 6 }}>
+                <Text className="text-cream/45 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.2 }}>PAIR WITH A BITE</Text>
+                <View className="flex-row" style={{ gap: 6 }}>
+                  {pairs.slice(0, 3).map((p) => (
+                    <PairChip key={p.product_id} pair={p} onAdd={() => addPair(p)} />
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
         )}
 
         {/* Totals + charge */}
@@ -1754,6 +1830,88 @@ function RewardRow({ title, subtitle, onPress }: { title: string; subtitle: stri
       </View>
       <View className="px-3 py-1.5 rounded-lg" style={{ backgroundColor: BRAND }}>
         <Text className="text-white text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Apply</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/** Compact suggested-pair chip for the cashier's upsell strip — mirrors a card
+ *  on the customer display. A discount badge (when the bite completes a combo),
+ *  the reason it's suggested, name, price, and a + to drop it straight into the
+ *  cart (tap routes through onAdd → 86 check + modifier sheet). */
+function PairChip({ pair, onAdd }: { pair: SuggestedPair; onAdd: () => void }) {
+  return (
+    <Pressable
+      onPress={() => { Haptics.selectionAsync(); onAdd(); }}
+      className="flex-1 rounded-xl overflow-hidden active:opacity-80"
+      style={{ backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: pair.discount_label ? "rgba(251,191,36,0.55)" : "rgba(245,243,240,0.12)" }}
+    >
+      {!!pair.discount_label && (
+        <View style={{ backgroundColor: "#FBBF24", paddingVertical: 2, alignItems: "center" }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 8.5, letterSpacing: 0.4, color: "#160800" }} numberOfLines={1}>{pair.discount_label}</Text>
+        </View>
+      )}
+      <View className="px-2 py-2">
+        <Text className="text-cream/40 text-[8px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.5 }} numberOfLines={1}>{pair.reason.toUpperCase()}</Text>
+        <Text className="text-cream text-[12px] mt-0.5" style={{ fontFamily: "Peachi-Medium" }} numberOfLines={1}>{pair.name}</Text>
+        <View className="flex-row items-center justify-between mt-1.5">
+          <Text className="text-amber-400 text-[12px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(pair.price_sen)}</Text>
+          <View className="h-6 w-6 items-center justify-center rounded-lg" style={{ backgroundColor: BRAND }}>
+            <Plus size={13} color="#fff" />
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+/** Cashier-side claim card — the register mirror of the customer display's
+ *  ClaimCard. Tapping opens a pending Mystery Bag (or claims a promo) on the
+ *  member's behalf and reveals the real outcome inline. Single source of truth:
+ *  the same drop the customer display would have revealed. */
+function RegisterClaimCard({ memberId, claimable }: { memberId: string; claimable: ClaimableCard }) {
+  const [busy, setBusy] = useState(false);
+  const [revealed, setRevealed] = useState<MysteryReveal | null>(null);
+  const mystery = claimable.source_type === "mystery_pending";
+  async function onPress() {
+    if (busy || revealed) return;
+    Haptics.selectionAsync();
+    setBusy(true);
+    const out = mystery ? await claimMystery(memberId, claimable.id) : null;
+    setRevealed(out ?? { outcome_type: "no_bonus", multiplier_value: null, flat_beans_value: null, label: "Reward unlocked", voucher_title: null, emoji: "🎁" });
+    setBusy(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
+  if (revealed) {
+    const rlabel =
+      revealed.outcome_type === "flat_beans" ? `+${revealed.flat_beans_value ?? 0} Beans`
+      : revealed.outcome_type === "beans_multiplier" ? `${revealed.multiplier_value ?? 2}× Beans`
+      : revealed.outcome_type === "voucher" ? (revealed.voucher_title ?? revealed.label)
+      : revealed.label;
+    const rsub = revealed.outcome_type === "no_bonus" ? "Better luck next time" : "Added to their rewards";
+    return (
+      <View className="flex-row items-center rounded-xl px-3 py-2" style={{ backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.45)", gap: 9 }}>
+        <Text style={{ fontSize: 20 }}>{revealed.emoji}</Text>
+        <View className="flex-1">
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 13, color: "#FBBF24" }} numberOfLines={1}>{rlabel}</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10, color: "rgba(245,243,240,0.6)" }} numberOfLines={1}>{rsub}</Text>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <Pressable onPress={onPress} className="flex-row items-center rounded-xl px-3 py-2 active:opacity-80" style={{ backgroundColor: "rgba(251,191,36,0.10)", borderWidth: 1, borderColor: "rgba(251,191,36,0.40)", gap: 9 }}>
+      <View className="h-8 w-8 rounded-lg items-center justify-center" style={{ backgroundColor: "#FBBF24" }}>
+        {mystery ? <Sparkles size={15} color="#160800" /> : <Gift size={15} color="#160800" />}
+      </View>
+      <View className="flex-1">
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 13, color: "#F5F3F0" }} numberOfLines={1}>{claimable.title}</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 10, color: "#FBBF24" }} numberOfLines={1}>
+          {busy ? "Opening…" : mystery ? "Tap to open the bag" : (claimable.cta_label || "Tap to claim")}
+        </Text>
+      </View>
+      <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: "#FBBF24" }}>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 0.4, color: "#160800" }}>{mystery ? "OPEN" : "CLAIM"}</Text>
       </View>
     </Pressable>
   );
