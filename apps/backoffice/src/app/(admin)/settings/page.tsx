@@ -17,7 +17,6 @@ import {
   Target,
   Star,
   Megaphone,
-  Briefcase,
   FileText,
   ClipboardCheck,
   ExternalLink,
@@ -152,7 +151,7 @@ const GROUPS: Group[] = [
   },
   {
     label: "Marketing",
-    blurb: "Customer-facing review prompts, paid ads, recruitment ads.",
+    blurb: "Customer-facing review prompts and paid ads.",
     tiles: [
       {
         href: "/reviews/settings",
@@ -165,12 +164,6 @@ const GROUPS: Group[] = [
         Icon: Megaphone,
         title: "Google Ads",
         blurb: "Campaign defaults, budget guards, per-outlet location targeting.",
-      },
-      {
-        href: "/ads/recruitment/settings",
-        Icon: Briefcase,
-        title: "Recruitment Ads (Indeed)",
-        blurb: "Indeed Sponsored Jobs spend, per-outlet recruitment.",
       },
     ],
   },

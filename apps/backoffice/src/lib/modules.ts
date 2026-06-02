@@ -83,7 +83,6 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
     { label: "Campaigns", key: "campaigns" },
     { label: "Invoices", key: "invoices" },
     { label: "Ad Settings", key: "settings" },
-    { label: "Recruitment (Indeed)", key: "recruitment" },
   ],
 };
 

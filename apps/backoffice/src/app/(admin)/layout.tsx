@@ -74,7 +74,6 @@ import {
   Trophy,
   Cake,
   Ticket,
-  Briefcase,
   CreditCard,
   QrCode,
   Printer,
@@ -313,14 +312,6 @@ const NAV_SECTIONS: NavSection[] = [
           { label: "Invoices",  href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,          moduleKey: "ads:invoices" },
         ],
       },
-      {
-        label: "Recruitment (Indeed)",
-        items: [
-          { label: "Overview", href: "/ads/recruitment",          icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ads:recruitment" },
-          { label: "Postings", href: "/ads/recruitment/jobs",     icon: <Briefcase className={ICON_SIZE} />,       moduleKey: "ads:recruitment" },
-          { label: "Invoices", href: "/ads/recruitment/invoices", icon: <Receipt className={ICON_SIZE} />,         moduleKey: "ads:recruitment" },
-        ],
-      },
     ],
   },
   {
@@ -469,7 +460,6 @@ const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "Reviews",         href: "/reviews/settings",         icon: <MessageCircle className={ICON_SIZE} />, moduleKey: "reviews:settings" },
           { label: "Google Ads",      href: "/ads/settings",             icon: <Megaphone className={ICON_SIZE} />,     moduleKey: "ads:settings" },
-          { label: "Recruitment Ads", href: "/ads/recruitment/settings", icon: <Briefcase className={ICON_SIZE} />,     moduleKey: "ads:recruitment" },
         ],
       },
       {
