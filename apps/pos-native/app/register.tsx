@@ -656,6 +656,7 @@ export default function Register() {
         order_type: orderType,
         queue_number: queueNumber,
         table_number: tableNum,
+        table_label: "Stand", // counter dine-in → "Stand #" (vs QR self-order "Table")
         created_at: sale.createdAt,
         subtotal: sale.subtotal,
         service_charge: sale.serviceCharge,
@@ -700,7 +701,7 @@ export default function Register() {
 
   const eyebrow = [
     orderType === "dine_in" ? "Dine-in" : "Takeaway",
-    orderType === "dine_in" && tableNumber ? `Table ${tableNumber}` : null,
+    orderType === "dine_in" && tableNumber ? `Stand #${tableNumber}` : null,
     member?.name || (member ? member.phone : null),
   ].filter(Boolean).join("  ·  ");
 
@@ -834,7 +835,7 @@ export default function Register() {
         <View className="flex-row px-4 gap-2 pb-2">
           <ActionTab icon={<User size={15} color="#F5F3F0" />} label="Customer" active={panel === "customer"} onPress={() => setPanel(panel === "customer" ? "none" : "customer")} />
           {orderType === "dine_in" && (
-            <ActionTab icon={<LayoutGrid size={15} color="#F5F3F0" />} label="Table" active={panel === "table"} onPress={() => setPanel(panel === "table" ? "none" : "table")} />
+            <ActionTab icon={<LayoutGrid size={15} color="#F5F3F0" />} label="Stand" active={panel === "table"} onPress={() => setPanel(panel === "table" ? "none" : "table")} />
           )}
         </View>
 
@@ -863,6 +864,7 @@ export default function Register() {
         )}
         {panel === "table" && orderType === "dine_in" && (
           <View className="px-4 pb-3">
+            <Text className="text-cream/50 text-[11px] mb-1.5" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.8 }}>TABLE STAND NO. — the numbered stand you hand the guest</Text>
             <View className="flex-row flex-wrap" style={{ gap: 6 }}>
               {Array.from({ length: 15 }, (_, i) => String(i + 1)).map((n) => {
                 const on = tableNumber === n;
@@ -1045,7 +1047,7 @@ export default function Register() {
                 className={`h-14 rounded-2xl items-center justify-center ${empty ? "bg-primary/30" : "bg-primary active:opacity-80"}`}
               >
                 <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
-                  {empty ? "Add items" : needsTable ? "Select a table" : `Charge ${rm(total)}`}
+                  {empty ? "Add items" : needsTable ? "Give a stand #" : `Charge ${rm(total)}`}
                 </Text>
               </Pressable>
             );
@@ -1157,13 +1159,10 @@ export default function Register() {
                           <Pressable
                             key={slot.label}
                             onPress={() => {
+                              // QR floor plan is view-only: it shows which physical
+                              // tables have QR self-orders. Counter orders use a
+                              // Table Stand # (not a floor-plan table), so no assign.
                               Haptics.selectionAsync();
-                              // Tap a table → assign the next register dine-in order
-                              // to it (pre-fill table_number + close).
-                              if (orderType === "dine_in") {
-                                setTableNumber(slot.label.replace(/^T/, ""));
-                                setHub(null);
-                              }
                             }}
                             className="active:opacity-80 items-center justify-center"
                             style={{
@@ -1261,6 +1260,8 @@ export default function Register() {
           blocked — this just gives staff the bookend actions. */}
       <Modal visible={showShift} transparent animationType="fade" onRequestClose={() => setShowShift(false)}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
+          {/* Tap the dark backdrop to close (unless a shift op is in flight). */}
+          <Pressable onPress={() => { if (!shiftBusy) setShowShift(false); }} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
           <View className="w-[460px] rounded-3xl bg-surface border border-border p-7">
             <View className="flex-row items-center justify-between mb-1">
               <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>
@@ -1357,6 +1358,8 @@ export default function Register() {
 
       <Modal visible={showCheckout} transparent animationType="fade" onRequestClose={() => { setShowCheckout(false); setPayMethod(null); setCardStage("idle"); setCardResult(null); if (!paying && !paid) setDisplayStatus(lines.length > 0 ? "ordering" : "idle"); }}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
+          {/* Tap the dark backdrop to close — but not mid-payment. */}
+          <Pressable onPress={() => { if (paying || cardStage === "prompting") return; setShowCheckout(false); setPayMethod(null); setCardStage("idle"); setCardResult(null); if (!paid) setDisplayStatus(lines.length > 0 ? "ordering" : "idle"); }} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
           <View className="w-[560px] rounded-3xl bg-surface border border-border p-7">
             <View className="flex-row items-center justify-between mb-1">
               <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>
@@ -1540,6 +1543,7 @@ export default function Register() {
       {/* ── Rewards picker ── */}
       <Modal visible={showRewards} transparent animationType="fade" onRequestClose={() => setShowRewards(false)}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
+          <Pressable onPress={() => setShowRewards(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
           <View className="w-[560px] max-h-[86%] rounded-3xl bg-surface border border-border p-6">
             <View className="flex-row items-center justify-between mb-3">
               <View>
@@ -1606,6 +1610,7 @@ export default function Register() {
       {/* ── Paid confirmation ── */}
       <Modal visible={!!paid} transparent animationType="fade" onRequestClose={newOrder}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
+          <Pressable onPress={newOrder} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
           <View className="w-[460px] rounded-3xl bg-surface border border-border p-8 items-center">
             <CheckCircle2 size={64} color={OK} />
             <Text className="text-cream text-2xl mt-4" style={{ fontFamily: "Peachi-Bold" }}>Paid</Text>
@@ -1682,6 +1687,7 @@ function ModifierSheet({ product, onClose, onConfirm }: { product: Product; onCl
 
   return (
     <View className="flex-1 bg-black/70 items-center justify-center px-8">
+      <Pressable onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
       <View className="w-[560px] max-h-[88%] rounded-3xl bg-surface border border-border p-6">
         <View className="flex-row items-center justify-between mb-4">
           <View>
@@ -2059,6 +2065,7 @@ function DiscountSheet({ subtotal, staffRole, onClose, onApply }: { subtotal: nu
 
   return (
     <View className="flex-1 bg-black/70 items-center justify-center px-8">
+      <Pressable onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
       <View className="w-[480px] rounded-3xl bg-surface border border-border p-6">
         <View className="flex-row items-center justify-between mb-4">
           <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>Apply Discount</Text>

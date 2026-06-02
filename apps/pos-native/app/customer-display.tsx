@@ -391,7 +391,7 @@ export default function CustomerDisplay() {
           <View className="flex-row items-center justify-between mb-2">
             <Text style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: CREAM }}>Your Order</Text>
             <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 11, color: "rgba(245,243,240,0.6)" }}>
-              {orderType === "dine_in" ? (tableNumber ? `Dine-in · T${tableNumber}` : "Dine-in") : "Takeaway"}
+              {orderType === "dine_in" ? (tableNumber ? `Dine-in · Stand #${tableNumber}` : "Dine-in") : "Takeaway"}
             </Text>
           </View>
           <FlatList

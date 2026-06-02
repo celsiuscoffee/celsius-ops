@@ -80,7 +80,6 @@ function toRefs(rows: Row[] | null, source: "qr" | "pos"): TableOrderRef[] {
 export function useTablesPanel(outletId: string | null | undefined, zones: { name: string; tables: { label: string; seats: number | null; x: number; y: number; shape: "square" | "round" }[] }[]) {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [qr, setQr] = useState<TableOrderRef[]>([]);
-  const [pos, setPos] = useState<TableOrderRef[]>([]);
   const outletRef = useRef(outletId);
   useEffect(() => { outletRef.current = outletId; }, [outletId]);
 
@@ -98,9 +97,10 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
     return () => { cancelled = true; };
   }, [outletId]);
 
-  // 2. Fetch both sources (last 6h, dine-in).
+  // 2. Fetch QR self-orders only (last 6h, dine-in). Counter dine-in orders use
+  //    a "Table Stand #" (a placard), not a floor-plan table, so they are NOT
+  //    mapped here — the floor plan reflects QR-table self-orders only.
   const reload = useCallback(async () => {
-    const oid = outletRef.current;
     const since = new Date(Date.now() - WINDOW_MS).toISOString();
     if (storeId) {
       const { data } = await supabase
@@ -110,14 +110,6 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
         .gte("created_at", since).order("created_at", { ascending: false });
       setQr(toRefs(data as Row[] | null, "qr"));
     } else setQr([]);
-    if (oid) {
-      const { data } = await supabase
-        .from("pos_orders")
-        .select("id, order_number, status, order_type, table_number, total, created_at")
-        .eq("outlet_id", oid).eq("order_type", "dine_in")
-        .gte("created_at", since).order("created_at", { ascending: false });
-      setPos(toRefs(data as Row[] | null, "pos"));
-    } else setPos([]);
   }, [storeId]);
 
   // 3. Initial load + keep live (any change to either feed → debounced refetch).
@@ -130,8 +122,7 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
     if (storeId) {
       ch.on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `store_id=eq.${storeId}` }, bump);
     }
-    ch.on("postgres_changes", { event: "*", schema: "public", table: "pos_orders", filter: `outlet_id=eq.${outletId}` }, bump)
-      .subscribe();
+    ch.subscribe();
     return () => { if (t) clearTimeout(t); void supabase.removeChannel(ch); };
   }, [outletId, storeId, reload]);
 
@@ -140,7 +131,7 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
   //    isn't in a zone is surfaced under "Other" so it's never lost.
   return useMemo<TableSlot[]>(() => {
     const byKey = new Map<string, TableOrderRef[]>();
-    for (const o of [...qr, ...pos]) {
+    for (const o of qr) {
       const arr = byKey.get(o.tableKey) ?? [];
       arr.push(o);
       byKey.set(o.tableKey, arr);
@@ -167,5 +158,5 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
       });
     });
     return slots;
-  }, [qr, pos, zones]);
+  }, [qr, zones]);
 }

@@ -84,6 +84,8 @@ export type ReceiptOrder = {
   order_number: string;
   order_type: string;
   table_number?: string | null;
+  /** Label for table_number: "Table" (QR self-order) or "Stand" (counter). */
+  table_label?: string;
   queue_number?: string | null;
   subtotal: number;
   service_charge: number;
@@ -155,7 +157,10 @@ export function formatReceipt(
     bodyLines.push(centerText("QUEUE NUMBER"));
     bodyLines.push(centerText(`** ${order.queue_number} **`));
   }
-  if (order.table_number) bodyLines.push(twoColumn("Table:", order.table_number));
+  if (order.table_number) {
+    const lbl = order.table_label ?? "Table";
+    bodyLines.push(twoColumn(`${lbl}:`, lbl === "Stand" ? `#${order.table_number}` : order.table_number));
+  }
 
   bodyLines.push(divider("="));
 
@@ -232,6 +237,7 @@ export interface DocketData {
   orderNumber: string;
   orderType: string;
   tableNumber: string;
+  tableLabel: string;
   queueNumber: string;
   time: string;
   items: string; // newline-separated item lines for the native module
@@ -241,6 +247,7 @@ export type DocketOrder = {
   order_number: string;
   order_type: string;
   table_number?: string | null;
+  table_label?: string;
   queue_number?: string | null;
   created_at: string;
   pos_order_items?: {
@@ -280,6 +287,7 @@ export function formatKitchenDocket(order: DocketOrder, station: string): Docket
     orderNumber: order.order_number,
     orderType,
     tableNumber: order.table_number ?? "",
+    tableLabel: order.table_label ?? "Table",
     queueNumber: order.queue_number ?? "",
     time: timeStr,
     items: itemLines.join("\n"),

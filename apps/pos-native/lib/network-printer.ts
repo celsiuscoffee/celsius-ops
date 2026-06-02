@@ -139,7 +139,7 @@ function buildDocketBytes(d: DocketData): number[] {
   // Order info.
   e.bold(true).size(1, 2).line(`Order #${d.orderNumber}`).size(1, 1).bold(false);
   let typeLine = d.orderType || "";
-  if (d.tableNumber) typeLine += `  |  Table ${d.tableNumber}`;
+  if (d.tableNumber) typeLine += `  |  ${d.tableLabel || "Table"} ${d.tableNumber}`;
   else if (d.queueNumber) typeLine += `  |  Q: ${d.queueNumber}`;
   if (typeLine.trim()) e.bold(true).line(typeLine).bold(false);
   if (d.time) e.line(d.time);
