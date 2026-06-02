@@ -471,14 +471,47 @@ export async function posOrderComplete(memberId: string, orderId: string): Promi
   }
 }
 
-/** Reveal a pending mystery drop. Best-effort — returns a human label. */
-export async function claimMystery(memberId: string, claimableId: string): Promise<{ label: string; emoji: string } | null> {
+/** Reveal a pending mystery drop. Returns the outcome formatted for the
+ *  scratch-card: the prize headline, the pool's reveal emoji, and a sub-line.
+ *  Mirrors the mystery_pool outcome types the claim route returns
+ *  (voucher / flat_beans / beans_multiplier / no_bonus / surprise_in_store) —
+ *  the old code read fields that don't exist, so every reveal fell back to a
+ *  generic "Reward unlocked". */
+export async function claimMystery(
+  memberId: string,
+  claimableId: string,
+): Promise<{ label: string; emoji: string; sub: string } | null> {
   try {
     const res = await apiPost<any>("/api/pos/loyalty/claim", { member_id: memberId, claimable_id: claimableId });
-    return {
-      label: res?.reward_name ?? res?.title ?? (res?.beans ? `${res.beans} Beans` : "Reward unlocked"),
-      emoji: res?.emoji ?? "🎁",
-    };
+    const m = res?.mystery ?? {};
+    const emoji: string = m.reveal_emoji ?? "🎁";
+    const voucherTitle: string | null = res?.voucher?.title ?? null;
+    let label: string;
+    let sub = "Added to your rewards";
+    switch (m.outcome_type) {
+      case "voucher":
+        label = voucherTitle ?? m.label ?? "Free reward";
+        break;
+      case "flat_beans":
+        label = `+${m.flat_beans_value ?? 0} Beans`;
+        sub = "Added to your balance";
+        break;
+      case "beans_multiplier":
+        label = `${m.multiplier_value ?? 2}× Beans`;
+        sub = "Applied to this order";
+        break;
+      case "no_bonus":
+        label = m.label ?? "Just your Beans";
+        sub = "Enjoy your coffee!";
+        break;
+      case "surprise_in_store":
+        label = m.label ?? "A little surprise";
+        sub = "Ask our barista";
+        break;
+      default:
+        label = m.label ?? voucherTitle ?? "Reward unlocked";
+    }
+    return { label, emoji, sub };
   } catch {
     return null;
   }

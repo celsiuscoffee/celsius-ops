@@ -781,12 +781,12 @@ function ClaimableRewards({ snapshot, memberId }: { snapshot: LoyaltySnapshot; m
 /** Tappable claim card (mystery bag / promo). Reveals inline on claim. */
 function ClaimCard({ memberId, claimId, title, sub, mystery }: { memberId: string; claimId: string; title: string; sub: string; mystery: boolean }) {
   const [busy, setBusy] = useState(false);
-  const [revealed, setRevealed] = useState<{ label: string; emoji: string } | null>(null);
+  const [revealed, setRevealed] = useState<{ label: string; emoji: string; sub?: string } | null>(null);
   async function onPress() {
     if (busy || revealed) return;
     setBusy(true);
     const out = mystery ? await claimMystery(memberId, claimId) : null;
-    setRevealed(out ?? { label: "Added to your rewards", emoji: "🎁" });
+    setRevealed(out ?? { label: "Reward unlocked", emoji: "🎁", sub: "Added to your rewards" });
     setBusy(false);
   }
   if (revealed) {
@@ -795,7 +795,7 @@ function ClaimCard({ memberId, claimId, title, sub, mystery }: { memberId: strin
         <Text style={{ fontSize: 26 }}>{revealed.emoji}</Text>
         <View className="flex-1">
           <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, color: GOLD }} numberOfLines={1}>{revealed.label}</Text>
-          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(245,243,240,0.6)" }}>Added to your rewards</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(245,243,240,0.6)" }}>{revealed.sub ?? "Added to your rewards"}</Text>
         </View>
       </View>
     );
@@ -1068,13 +1068,13 @@ function BiteCard({ bite, offer }: { bite: { id: string; name: string; price_sen
 
 // ─── Mystery box ───────────────────────────────────────────
 function MysteryBox({ memberId, claimable }: { memberId: string; claimable: ClaimableCard }) {
-  const [revealed, setRevealed] = useState<{ label: string; emoji: string } | null>(null);
+  const [revealed, setRevealed] = useState<{ label: string; emoji: string; sub?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   async function reveal() {
     if (busy || revealed) return;
     setBusy(true);
     const out = await claimMystery(memberId, claimable.id);
-    setRevealed(out ?? { label: "Reward unlocked", emoji: "🎁" });
+    setRevealed(out ?? { label: "Reward unlocked", emoji: "🎁", sub: "Added to your rewards" });
     setBusy(false);
   }
   if (revealed) {
@@ -1082,7 +1082,7 @@ function MysteryBox({ memberId, claimable }: { memberId: string; claimable: Clai
       <View className="mt-8 rounded-3xl p-6 items-center" style={{ width: 384, backgroundColor: "rgba(251,191,36,0.10)", borderWidth: 1, borderColor: "rgba(251,191,36,0.40)" }}>
         <Text style={{ fontSize: 56 }}>{revealed.emoji}</Text>
         <Text style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: GOLD, marginTop: 4 }}>{revealed.label}</Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 14, color: "rgba(245,243,240,0.65)", marginTop: 4 }}>Added to your rewards</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 14, color: "rgba(245,243,240,0.65)", marginTop: 4 }}>{revealed.sub ?? "Added to your rewards"}</Text>
       </View>
     );
   }
