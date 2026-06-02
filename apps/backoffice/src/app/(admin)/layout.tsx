@@ -148,15 +148,13 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Splash Posters", href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />, moduleKey: "pickup:menu" },
     ],
   },
-  // Sales — every order channel in one section. The customer app
-  // (pickup / web / QR-table) and the in-store register + Grab/delivery
-  // used to be two separate sidebar sections ("Pickup App" + "POS");
-  // they're all just sales channels, so they're folded into one. The two
-  // dashboards + the orders list collapse into channel-filtered unified
-  // views in a follow-up; for now each existing page lives here under one
-  // roof (URLs unchanged).
+  // POS — every order channel in one section. The customer app (pickup /
+  // web / QR-table) and the in-store register + Grab/delivery used to be
+  // two separate sidebar sections ("Pickup App" + "POS"); they're folded
+  // into one here. Kept the name "POS" (not "Sales") — "Sales" still
+  // refers to the StoreHub sales source elsewhere. URLs unchanged.
   {
-    label: "Sales",
+    label: "POS",
     icon: <CreditCard className={ICON_SIZE} />,
     railIcon: <CreditCard className={RAIL_ICON_SIZE} />,
     subgroups: [
