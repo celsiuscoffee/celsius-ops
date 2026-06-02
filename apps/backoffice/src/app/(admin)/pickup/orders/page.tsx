@@ -230,11 +230,8 @@ export default function PickupOrders() {
             <div className="divide-y">
               {filtered.map((order) => {
                 const ch = order.channel ?? "pickup";
-                // Only customer-app (pickup) orders have a detail page;
-                // pos/grab rows render inert (no /pickup/orders/[id]).
-                const isPickup = ch === "pickup";
                 const rowClass =
-                  "flex flex-col md:grid md:grid-cols-[1fr_1.1fr_0.9fr_0.7fr_0.9fr_0.7fr_0.8fr_40px] gap-1 md:gap-3 items-start md:items-center px-5 py-3.5 transition-colors";
+                  "flex flex-col md:grid md:grid-cols-[1fr_1.1fr_0.9fr_0.7fr_0.9fr_0.7fr_0.8fr_40px] gap-1 md:gap-3 items-start md:items-center px-5 py-3.5 transition-colors hover:bg-muted/20";
                 const content = (
                   <>
                     <span className="font-semibold text-sm">#{order.order_number}</span>
@@ -254,17 +251,13 @@ export default function PickupOrders() {
                     <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit ${STATUS_COLOUR[order.status] ?? "bg-gray-100 text-gray-600"}`}>
                       {order.status}
                     </span>
-                    {isPickup
-                      ? <ChevronRight className="h-4 w-4 text-muted-foreground hidden md:block" />
-                      : <span className="hidden md:block" />}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground hidden md:block" />
                   </>
                 );
-                return isPickup ? (
-                  <Link key={order.id} href={`/pickup/orders/${order.id}`} className={`${rowClass} hover:bg-muted/20`}>
+                return (
+                  <Link key={order.id} href={`/pickup/orders/${order.id}`} className={rowClass}>
                     {content}
                   </Link>
-                ) : (
-                  <div key={order.id} className={rowClass}>{content}</div>
                 );
               })}
             </div>
