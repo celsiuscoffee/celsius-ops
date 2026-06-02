@@ -926,22 +926,6 @@ function BeansHero({
             <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 8.5, letterSpacing: 1.5, color: fg + "8C" }}>BEANS</Text>
           </View>
         </View>
-        {/* Redeem pill — absolute, overlays the empty bottom-right corner. */}
-        {onRedeem && (
-          <View style={{ position: "absolute", right: 9, bottom: 7, zIndex: 1 }}>
-            {redeemedReward ? (
-              <View className="flex-row items-center rounded-full px-2 py-0.5" style={{ backgroundColor: "rgba(134,239,172,0.18)", borderWidth: 1, borderColor: "rgba(134,239,172,0.5)", gap: 4 }}>
-                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 7.5, letterSpacing: 0.6, color: GREEN }}>✓</Text>
-                <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 8, color: GREEN, maxWidth: 90 }} numberOfLines={1}>{redeemedReward.name}</Text>
-              </View>
-            ) : (
-              <Pressable onPress={onRedeem} className="flex-row items-center rounded-full px-2 py-0.5 active:opacity-80" style={{ backgroundColor: GOLD + "26", borderWidth: 1, borderColor: GOLD + "80", gap: 3 }}>
-                <Gift size={8} color={GOLD} />
-                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 7, letterSpacing: 0.8, color: GOLD }}>REDEEM</Text>
-              </Pressable>
-            )}
-          </View>
-        )}
         {prog && nextName && (
           <View style={{ marginTop: 7 }}>
             <View style={{ height: 4, borderRadius: 2, backgroundColor: fg + "2E", overflow: "hidden" }}>
@@ -958,11 +942,25 @@ function BeansHero({
             )}
           </View>
         )}
-        {/* Tier-benefit bullets (e.g. "Free birthday drink") were removed — they
-            read as redeemable rewards sitting next to the REDEEM button, but
-            they're automatic tier perks the button can't surface, so they
-            misled customers. The progress motivator above carries the tier
-            value without implying a redemption. */}
+        {/* Redeem / applied-reward pill — inline at the bottom (right-aligned) so
+            it never overlaps the BEANS column. It used to be absolutely
+            positioned and collided on short top-tier cards with no progress bar
+            (e.g. Black Card + an applied "Free Drink"). */}
+        {onRedeem && (
+          <View style={{ marginTop: 8, alignSelf: "flex-end" }}>
+            {redeemedReward ? (
+              <View className="flex-row items-center rounded-full px-2.5 py-1" style={{ backgroundColor: "rgba(134,239,172,0.18)", borderWidth: 1, borderColor: "rgba(134,239,172,0.5)", gap: 4 }}>
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, color: GREEN }}>✓</Text>
+                <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 10, color: GREEN, maxWidth: 150 }} numberOfLines={1}>{redeemedReward.name}</Text>
+              </View>
+            ) : (
+              <Pressable onPress={onRedeem} className="flex-row items-center rounded-full px-2.5 py-1 active:opacity-80" style={{ backgroundColor: GOLD + "26", borderWidth: 1, borderColor: GOLD + "80", gap: 4 }}>
+                <Gift size={10} color={GOLD} />
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 0.8, color: GOLD }}>REDEEM</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -1048,7 +1046,10 @@ function PairCard({ pair }: { pair: SuggestedPair }) {
       )}
       <View className="px-3 py-2.5">
         <Eyebrow color="rgba(251,191,36,0.75)" style={{ fontSize: 9, marginBottom: 3 }}>{pair.reason.toUpperCase()}</Eyebrow>
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, color: CREAM }} numberOfLines={1}>{pair.name}</Text>
+        {/* Wrap to 2 lines (minHeight reserves the 2nd line) so long names like
+            "Buttercream Chocolate" aren't cut off — and the price stays aligned
+            across the row whether a name is 1 or 2 lines. */}
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, lineHeight: 18, color: CREAM, minHeight: 36 }} numberOfLines={2}>{pair.name}</Text>
         <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 14, color: GOLD, marginTop: 2 }}>{rm(pair.price_sen)}</Text>
       </View>
     </View>

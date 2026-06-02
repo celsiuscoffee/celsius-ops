@@ -14,8 +14,6 @@ const INV_ANON_KEY = process.env.LEGACY_INVENTORY_SUPABASE_ANON_KEY || "";
 const MANAGER_ROLES = new Set(["OWNER", "ADMIN", "MANAGER"]);
 const PRE_GRACE_MIN = 30; // can open the store up to 30 min before shift start
 const POST_GRACE_MIN = 30; // and stay signed in 30 min past shift end to close up
-// role_type values that are NOT a working shift (rest day / leave / off).
-const OFF_ROLE_RE = /rest|off\b|leave|cuti|\bmc\b|holiday|absent|public/i;
 
 /** "Now" in Malaysia (UTC+8, no DST): today's date + minutes-since-midnight. */
 function mytParts(now = new Date()): { date: string; minutes: number } {
@@ -82,8 +80,12 @@ async function evaluateScheduleGate(userId: string, role: string, outletId: stri
 
     for (const sh of (shifts ?? []) as { start_time: string | null; end_time: string | null; role_type: string | null }[]) {
       if (!sh.start_time || !sh.end_time) continue;
-      if (sh.start_time === sh.end_time) continue; // rest day (00:00–00:00)
-      if (sh.role_type && OFF_ROLE_RE.test(sh.role_type)) continue;
+      // HR marks a non-working day as a "Rest Day" shift (start==end==00:00,
+      // role_type "Rest Day" — see lib/hr/shift-templates REST_DAY_ID). Approved
+      // leave isn't a shift row at all (it lives in hr_leave_requests), so a
+      // staffer on leave simply has no working shift today and is gated out.
+      if (sh.start_time === sh.end_time) continue;
+      if (sh.role_type === "Rest Day") continue;
       const start = timeToMin(sh.start_time);
       const end = timeToMin(sh.end_time);
       if (minutes >= start - PRE_GRACE_MIN && minutes <= end + POST_GRACE_MIN) {
