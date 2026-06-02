@@ -108,10 +108,29 @@ export default function CustomerDisplay() {
     fetchSnapshot(member.id).then(setSnapshot).finally(() => setSnapLoading(false));
   }, [member?.id]);
 
-  // Re-pull on completion so a freshly-awarded mystery drop surfaces.
+  // Re-pull on completion so a freshly-awarded mystery drop surfaces. The
+  // backend spawns the drop asynchronously as the order commits, so a single
+  // immediate fetch usually races ahead of it (drop not written yet). Poll a
+  // few times (1s apart) until the mystery_pending claimable lands, then stop.
   useEffect(() => {
-    if (status === "complete" && member?.id) fetchSnapshot(member.id).then(setSnapshot).catch(() => {});
-  }, [status]);
+    if (status !== "complete" || !member?.id) return;
+    const mid = member.id;
+    let cancelled = false;
+    let tries = 0;
+    const tick = async () => {
+      if (cancelled) return;
+      tries += 1;
+      try {
+        const snap = await fetchSnapshot(mid);
+        if (cancelled) return;
+        setSnapshot(snap);
+        if (snap?.claimables?.some((c) => c.source_type === "mystery_pending")) return; // got it
+      } catch { /* ignore — retry below */ }
+      if (!cancelled && tries < 8) setTimeout(tick, 1000);
+    };
+    void tick();
+    return () => { cancelled = true; };
+  }, [status, member?.id]);
 
   function openRedeem() {
     if (!member) return;
@@ -260,15 +279,33 @@ export default function CustomerDisplay() {
   // ── 2. Complete / Thank-you ──
   if (status === "complete") {
     const mystery = snapshot?.claimables.find((c) => c.source_type === "mystery_pending");
-    return (
-      <View className="flex-1 items-center justify-center px-8" style={{ backgroundColor: PAGE }}>
+    const thankYou = (
+      <>
         <View className="h-24 w-24 rounded-full items-center justify-center mb-6" style={{ backgroundColor: "rgba(34,197,94,0.18)" }}>
           <Text style={{ fontSize: 52, color: GREEN, fontFamily: "Peachi-Bold" }}>✓</Text>
         </View>
         <Text style={{ fontFamily: "Peachi-Bold", fontSize: 52, color: CREAM }}>Thank You</Text>
         {!!orderNumber && <Eyebrow color="rgba(245,243,240,0.55)" style={{ marginTop: 12 }}>{orderNumber}</Eyebrow>}
         <Text style={{ fontFamily: "Peachi-Medium", fontSize: 22, color: "rgba(245,243,240,0.7)", marginTop: 16 }}>Your order is being prepared</Text>
-        {mystery && member?.id && <MysteryBox memberId={member.id} claimable={mystery} />}
+      </>
+    );
+    // When a mystery drop was awarded, show it BESIDE the thank-you (its own
+    // panel on the right) so it reads as a distinct "you earned something"
+    // moment instead of being buried under the confirmation.
+    if (mystery && member?.id) {
+      return (
+        <View className="flex-1 flex-row" style={{ backgroundColor: PAGE }}>
+          <View className="flex-1 items-center justify-center px-8">{thankYou}</View>
+          <View className="items-center justify-center px-10" style={{ width: 480, borderLeftWidth: 1, borderColor: "rgba(245,243,240,0.08)", backgroundColor: SUB }}>
+            <Eyebrow color="rgba(251,191,36,0.78)" style={{ marginBottom: 4, letterSpacing: 2 }}>A LITTLE SOMETHING FOR YOU</Eyebrow>
+            <MysteryBox memberId={member.id} claimable={mystery} />
+          </View>
+        </View>
+      );
+    }
+    return (
+      <View className="flex-1 items-center justify-center px-8" style={{ backgroundColor: PAGE }}>
+        {thankYou}
       </View>
     );
   }
@@ -318,8 +355,8 @@ export default function CustomerDisplay() {
           <Image source={require("@/assets/icon.png")} style={{ width: 72, height: 72, borderRadius: 18, marginBottom: 10 }} resizeMode="contain" />
           {member ? <PendingOrMemberHeader member={member} /> : (
             <>
-              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: CREAM }}>Welcome back</Text>
-              <Eyebrow color="rgba(245,243,240,0.55)" style={{ marginTop: 6 }}>ENTER YOUR PHONE FOR REWARDS</Eyebrow>
+              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: CREAM }}>Check Your Rewards</Text>
+              <Eyebrow color="rgba(245,243,240,0.55)" style={{ marginTop: 6 }}>ENTER YOUR PHONE NUMBER</Eyebrow>
               <Numpad outletId={outletId} />
             </>
           )}
@@ -467,7 +504,7 @@ export default function CustomerDisplay() {
       {signInOpen && (
         <Pressable onPress={() => setSignInOpen(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.78)", alignItems: "center", justifyContent: "center" }}>
           <Pressable onPress={() => {}} className="rounded-3xl px-7 py-6 items-center" style={{ backgroundColor: SUB, borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}>
-            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: CREAM }}>Sign in for rewards</Text>
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: CREAM }}>Check Your Rewards</Text>
             <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.55)", marginTop: 2 }}>Enter your phone number</Text>
             <Numpad outletId={outletId} />
             <Pressable onPress={() => setSignInOpen(false)} className="mt-3 active:opacity-60">
@@ -620,7 +657,7 @@ function Numpad({ outletId }: { outletId: string | null }) {
   return (
     <View style={{ width: 330, marginTop: 14 }}>
       <View className="h-12 rounded-2xl items-center justify-center" style={{ borderWidth: 1.5, borderColor: "rgba(245,243,240,0.18)", backgroundColor: "rgba(245,243,240,0.04)" }}>
-        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 22, letterSpacing: 2, color: val ? CREAM : "rgba(245,243,240,0.3)" }}>{val || "+60 / 01x…"}</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 22, letterSpacing: 2, color: val ? CREAM : "rgba(245,243,240,0.3)" }}>{val || "01x…"}</Text>
       </View>
       {!!err && <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 14, color: "#FCA5A5", textAlign: "center", marginTop: 8 }}>{err}</Text>}
       <View className="flex-row flex-wrap mt-3" style={{ gap: 8 }}>
