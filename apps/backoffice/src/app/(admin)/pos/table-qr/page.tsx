@@ -2,70 +2,99 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import QRCode from "qrcode";
-import { Printer, Download, Sparkles } from "lucide-react";
+import { Printer, Download, Sparkles, LayoutGrid, ArrowRight } from "lucide-react";
+import Link from "next/link";
+import { adminFetch } from "@/lib/pickup/admin-fetch";
 
 /**
- * Per-table QR generator. Each QR links the customer's phone to the
- * dine-in order page for that outlet + table. Customer scans → menu →
- * order + pay on their own phone. Print-friendly layout for bulk
- * laminating.
+ * Per-table QR generator. Each QR links the customer's phone to the dine-in
+ * order page for that outlet + table. Customer scans → menu → order + pay.
  *
- * Ported from POS-local /backoffice/table-qr as part of the BO-canonical
- * migration. Outlet IDs match the legacy string IDs (shah-alam, conezion,
- * tamarind) used by order.celsiuscoffee.com routing.
+ * Consolidated with the floor plan: the table list is pulled from the SAME
+ * source the Table Layout editor writes (pos_branch_settings.table_layout via
+ * /api/pos/table-qr), so a table created in the layout auto-appears here. Falls
+ * back to a manual count only when an outlet has no floor plan yet.
  */
 
-// Labels match the shared registry — see packages/shared/src/outlets.ts.
-// Brand prefix kept here because these names go on printed QR posters
-// where "Celsius {Outlet}" reads as a complete business name.
+// Canonical loyalty outlet ids (match pos_branch_settings.outlet_id). The store
+// slug used in the QR URL is resolved per-outlet by the API.
 const OUTLETS = [
-  { id: "shah-alam", name: "Celsius Shah Alam" },
-  { id: "conezion",  name: "Celsius Putrajaya" },
-  { id: "tamarind",  name: "Celsius Tamarind" },
-  { id: "nilai",     name: "Celsius Nilai" },
+  { id: "outlet-sa",    name: "Celsius Shah Alam" },
+  { id: "outlet-con",   name: "Celsius Putrajaya" },
+  { id: "outlet-tam",   name: "Celsius Tamarind" },
+  { id: "outlet-nilai", name: "Celsius Nilai" },
 ] as const;
 
 const BASE_URL = "https://order.celsiuscoffee.com";
+const buildTableUrl = (storeId: string, label: string) =>
+  `${BASE_URL}/table/${storeId}/${encodeURIComponent(label)}`;
 
-function buildTableUrl(outletId: string, tableId: string) {
-  return `${BASE_URL}/table/${outletId}/${tableId}`;
-}
+type LayoutTable = { label: string; floor: string };
 
 export default function POSTableQRPage() {
   const [selectedOutlet, setSelectedOutlet] = useState<string>(OUTLETS[0].id);
-  const [tableCount, setTableCount] = useState(10);
+  const [storeId, setStoreId] = useState<string>("");
+  const [layoutTables, setLayoutTables] = useState<LayoutTable[]>([]);
+  const [loadingLayout, setLoadingLayout] = useState(true);
+  const [manualCount, setManualCount] = useState(10);
   const [generated, setGenerated] = useState(false);
   const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
 
-  const tables = Array.from({ length: tableCount }, (_, i) => `T${i + 1}`);
   const outletName = OUTLETS.find((o) => o.id === selectedOutlet)?.name ?? "";
+  const fromLayout = layoutTables.length > 0;
+  // The QR list: real floor-plan tables when set, else a manual T1..Tn fallback.
+  const tables: string[] = fromLayout
+    ? layoutTables.map((t) => t.label)
+    : Array.from({ length: manualCount }, (_, i) => `T${i + 1}`);
+  const floorOf = (label: string) => layoutTables.find((t) => t.label === label)?.floor ?? "";
 
-  const generate = useCallback(() => {
-    setGenerated(true);
-  }, []);
+  // Pull this outlet's floor plan whenever the outlet changes. When it has
+  // tables we auto-generate (it's "connected" to the layout); otherwise we wait
+  // for the manual Generate.
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingLayout(true);
+    setGenerated(false);
+    (async () => {
+      try {
+        const res = await adminFetch(`/api/pos/table-qr?outlet=${selectedOutlet}`);
+        const json = (await res.json()) as { storeId?: string; tables?: LayoutTable[] };
+        if (cancelled) return;
+        setStoreId(json.storeId || selectedOutlet);
+        const t = Array.isArray(json.tables) ? json.tables : [];
+        setLayoutTables(t);
+        if (t.length > 0) setGenerated(true);
+      } catch {
+        if (!cancelled) { setStoreId(selectedOutlet); setLayoutTables([]); }
+      } finally {
+        if (!cancelled) setLoadingLayout(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedOutlet]);
 
+  const generate = useCallback(() => setGenerated(true), []);
+
+  // Paint the QR canvases once the grid is on screen.
   useEffect(() => {
     if (!generated) return;
-    tables.forEach((tableId) => {
-      const canvas = canvasRefs.current.get(tableId);
+    tables.forEach((label) => {
+      const canvas = canvasRefs.current.get(label);
       if (!canvas) return;
-      const url = buildTableUrl(selectedOutlet, tableId);
-      QRCode.toCanvas(canvas, url, {
-        width: 200,
-        margin: 2,
-        color: { dark: "#160800", light: "#ffffff" },
+      QRCode.toCanvas(canvas, buildTableUrl(storeId, label), {
+        width: 200, margin: 2, color: { dark: "#160800", light: "#ffffff" },
       });
     });
-  }, [generated, selectedOutlet, tableCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [generated, storeId, tables.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePrint = () => window.print();
-
-  const downloadSingle = async (tableId: string) => {
-    const url = buildTableUrl(selectedOutlet, tableId);
-    const dataUrl = await QRCode.toDataURL(url, { width: 400, margin: 2, color: { dark: "#160800", light: "#ffffff" } });
+  const downloadSingle = async (label: string) => {
+    const dataUrl = await QRCode.toDataURL(buildTableUrl(storeId, label), {
+      width: 400, margin: 2, color: { dark: "#160800", light: "#ffffff" },
+    });
     const a = document.createElement("a");
     a.href = dataUrl;
-    a.download = `${selectedOutlet}-${tableId}.png`;
+    a.download = `${storeId}-${label}.png`;
     a.click();
   };
 
@@ -74,7 +103,7 @@ export default function POSTableQRPage() {
       <div className="print:hidden">
         <h1 className="text-2xl font-bold text-[#160800]">Table QR Codes</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Generate per-table QR codes for dine-in ordering. Customer scans → menu → order + pay on their phone.
+          Auto-generated from each outlet&rsquo;s floor plan. Customer scans → menu → order + pay on their phone.
         </p>
       </div>
 
@@ -84,7 +113,7 @@ export default function POSTableQRPage() {
           <label className="mb-1 block text-xs font-medium text-gray-600">Outlet</label>
           <select
             value={selectedOutlet}
-            onChange={(e) => { setSelectedOutlet(e.target.value); setGenerated(false); }}
+            onChange={(e) => setSelectedOutlet(e.target.value)}
             className="rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none"
           >
             {OUTLETS.map((o) => (
@@ -92,23 +121,42 @@ export default function POSTableQRPage() {
             ))}
           </select>
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Number of tables</label>
-          <input
-            type="number"
-            min={1}
-            max={50}
-            value={tableCount}
-            onChange={(e) => { setTableCount(Math.max(1, Math.min(50, Number(e.target.value)))); setGenerated(false); }}
-            className="w-24 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none"
-          />
-        </div>
-        <button
-          onClick={generate}
-          className="flex items-center gap-2 bg-[#160800] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
-        >
-          <Sparkles className="h-4 w-4" /> Generate
-        </button>
+
+        {/* Source: floor plan (auto) vs. manual fallback */}
+        {loadingLayout ? (
+          <div className="text-sm text-gray-400">Loading floor plan…</div>
+        ) : fromLayout ? (
+          <div className="flex items-center gap-2 rounded-xl border border-[#A2492C]/20 bg-[#FBEBE8]/60 px-3 py-2">
+            <LayoutGrid className="h-4 w-4 text-[#A2492C]" />
+            <span className="text-sm font-medium text-[#160800]">
+              {layoutTables.length} table{layoutTables.length === 1 ? "" : "s"} from your floor plan
+            </span>
+            <Link href="/pos/settings" className="flex items-center gap-0.5 text-xs font-semibold text-[#A2492C] hover:underline">
+              Edit layout <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        ) : (
+          <>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Number of tables</label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={manualCount}
+                onChange={(e) => { setManualCount(Math.max(1, Math.min(50, Number(e.target.value)))); setGenerated(false); }}
+                className="w-24 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none"
+              />
+            </div>
+            <button
+              onClick={generate}
+              className="flex items-center gap-2 bg-[#160800] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
+            >
+              <Sparkles className="h-4 w-4" /> Generate
+            </button>
+          </>
+        )}
+
         {generated && (
           <button
             onClick={handlePrint}
@@ -119,25 +167,36 @@ export default function POSTableQRPage() {
         )}
       </div>
 
+      {!loadingLayout && !fromLayout && (
+        <p className="text-xs text-gray-500 print:hidden">
+          No floor plan set for this outlet yet — using a manual count.{" "}
+          <Link href="/pos/settings" className="font-semibold text-[#A2492C] hover:underline">Set up tables in POS Settings → Table Layout</Link>{" "}
+          and they&rsquo;ll appear here automatically.
+        </p>
+      )}
+
       {/* QR grid */}
       {generated && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 print:grid-cols-3 print:gap-4">
-          {tables.map((tableId) => {
-            const url = buildTableUrl(selectedOutlet, tableId);
+          {tables.map((label) => {
+            const url = buildTableUrl(storeId, label);
+            const floor = floorOf(label);
             return (
               <div
-                key={tableId}
+                key={label}
                 className="flex flex-col items-center rounded-2xl border border-gray-200 bg-white p-4 print:break-inside-avoid print:border print:shadow-none"
               >
                 <canvas
-                  ref={(el) => { if (el) canvasRefs.current.set(tableId, el); }}
+                  ref={(el) => { if (el) canvasRefs.current.set(label, el); }}
                   className="h-[200px] w-[200px]"
                 />
-                <p className="mt-3 text-xl font-bold text-[#160800]">{tableId}</p>
-                <p className="text-xs text-gray-500 text-center">{outletName}</p>
+                <p className="mt-3 text-xl font-bold text-[#160800]">{label}</p>
+                <p className="text-xs text-gray-500 text-center">
+                  {outletName}{floor ? ` · ${floor}` : ""}
+                </p>
                 <p className="mt-1 max-w-[180px] truncate text-[10px] text-gray-400">{url}</p>
                 <button
-                  onClick={() => downloadSingle(tableId)}
+                  onClick={() => downloadSingle(label)}
                   className="mt-2 flex items-center gap-1 text-xs text-[#A2492C] hover:underline print:hidden"
                 >
                   <Download className="h-3 w-3" /> PNG
