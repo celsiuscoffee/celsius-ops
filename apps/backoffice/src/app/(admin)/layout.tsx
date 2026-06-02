@@ -170,14 +170,31 @@ const NAV_SECTIONS: NavSection[] = [
     label: "POS",
     icon: <CreditCard className={ICON_SIZE} />,
     railIcon: <CreditCard className={RAIL_ICON_SIZE} />,
-    items: [
-      { label: "Overview",       href: "/pos",            icon: <LayoutDashboard className={ICON_SIZE} />,    moduleKey: "pickup:settings" },
-      { label: "Settings",       href: "/pos/settings",   icon: <SlidersHorizontal className={ICON_SIZE} />,  moduleKey: "pickup:settings" },
-      { label: "Printers",       href: "/pos/printers",   icon: <Printer className={ICON_SIZE} />,            moduleKey: "pickup:settings" },
-      { label: "Reports",        href: "/pos/reports",    icon: <BarChart3 className={ICON_SIZE} />,          moduleKey: "pickup:settings" },
-      { label: "Tax Report",     href: "/pos/tax-report", icon: <BarChart3 className={ICON_SIZE} />,          moduleKey: "pickup:settings" },
-      { label: "Z-Report",       href: "/pos/z-report",   icon: <ClipboardList className={ICON_SIZE} />,      moduleKey: "pickup:settings" },
-      { label: "Table QR Codes", href: "/pos/table-qr",   icon: <QrCode className={ICON_SIZE} />,             moduleKey: "pickup:settings" },
+    // Subgroups mirror the /pos landing page so the nav and the page read the
+    // same: Overview, then Reports & cash-up, then Register setup.
+    subgroups: [
+      {
+        label: "Overview",
+        items: [
+          { label: "Overview", href: "/pos", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+        ],
+      },
+      {
+        label: "Reports & cash-up",
+        items: [
+          { label: "Sales Reports", href: "/pos/reports",    icon: <BarChart3 className={ICON_SIZE} />,     moduleKey: "pickup:settings" },
+          { label: "Z-Report",      href: "/pos/z-report",   icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+          { label: "Tax Report",    href: "/pos/tax-report", icon: <Receipt className={ICON_SIZE} />,       moduleKey: "pickup:settings" },
+        ],
+      },
+      {
+        label: "Register setup",
+        items: [
+          { label: "Settings",       href: "/pos/settings", icon: <SlidersHorizontal className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+          { label: "Printers",       href: "/pos/printers", icon: <Printer className={ICON_SIZE} />,           moduleKey: "pickup:settings" },
+          { label: "Table QR Codes", href: "/pos/table-qr", icon: <QrCode className={ICON_SIZE} />,            moduleKey: "pickup:settings" },
+        ],
+      },
     ],
   },
   {
