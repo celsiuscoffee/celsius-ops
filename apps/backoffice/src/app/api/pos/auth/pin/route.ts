@@ -101,6 +101,24 @@ async function evaluateScheduleGate(userId: string, role: string, outletId: stri
 }
 
 /** Validate a manager-override PIN. Returns the authorising manager, or null. */
+/** The POS sends a STRING outlet id (e.g. "outlet-sa"); staff are bound to the
+ *  UUID "Outlet" id. Map string → UUID by matching name so outlet-bound staff
+ *  land in the PIN candidate set (without this, only null-outlet owners/managers
+ *  matched and outlet baristas couldn't sign in). Returns null when the input is
+ *  already a UUID / unmapped — the caller keeps the original value alongside. */
+async function resolveOutletUuid(prisma: any, outletId: string | null | undefined): Promise<string | null> {
+  if (!outletId) return null;
+  try {
+    const rows = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT o2.id FROM outlets o1 JOIN "Outlet" o2 ON o2.name = o1.name WHERE o1.id = ${outletId} LIMIT 1`;
+    const uuid: string | undefined = rows?.[0]?.id;
+    return uuid && uuid !== outletId ? uuid : null;
+  } catch (e) {
+    console.warn("[AUTH] outlet UUID resolve failed:", e);
+    return null;
+  }
+}
+
 async function resolveManagerOverride(
   overridePin: string,
   outletId: string | null,
@@ -109,10 +127,14 @@ async function resolveManagerOverride(
   let candidates: { id: string; name: string; pin: string | null }[] = [];
   try {
     const { prisma } = await import("@/lib/prisma");
+    const outletUuid = await resolveOutletUuid(prisma, outletId);
     const where: any = {
       pin: { not: null }, status: "ACTIVE", role: { in: ["OWNER", "ADMIN", "MANAGER"] },
     };
-    if (outletId) where.OR = [{ outletId: null }, { outletId }];
+    if (outletId) {
+      where.OR = [{ outletId: null }, { outletId }];
+      if (outletUuid) where.OR.push({ outletId: outletUuid });
+    }
     candidates = await prisma.user.findMany({ where, select: { id: true, name: true, pin: true } });
   } catch {
     return null;
@@ -162,12 +184,18 @@ export async function POST(req: NextRequest) {
     let candidates: any[] = [];
     try {
       const { prisma } = await import("@/lib/prisma");
-      // Scope: outlet-bound staff (outletId = selected) PLUS cross-outlet
-      // roles (outletId IS NULL — owners, managers, head office) who must
-      // be able to log in at any terminal. The duplicate-PIN guard below
-      // still catches collisions across the merged set.
+      // The POS sends a STRING outlet id ("outlet-sa"); staff are bound to the
+      // UUID "Outlet" id. Resolve string → UUID (by name) and scope by BOTH, so
+      // outlet-bound staff land in the candidate set (without this, only
+      // null-outlet owners/managers matched — baristas couldn't sign in).
+      // Cross-outlet roles (outletId IS NULL) always match; the duplicate-PIN
+      // guard below still catches collisions across the merged set.
+      const outletUuid = await resolveOutletUuid(prisma, outletId);
       const where: any = { pin: { not: null }, status: "ACTIVE" };
-      if (outletId) where.OR = [{ outletId: null }, { outletId }];
+      if (outletId) {
+        where.OR = [{ outletId: null }, { outletId }];
+        if (outletUuid) where.OR.push({ outletId: outletUuid });
+      }
       candidates = await prisma.user.findMany({
         where,
         include: { outlet: { select: { id: true, name: true } } },
