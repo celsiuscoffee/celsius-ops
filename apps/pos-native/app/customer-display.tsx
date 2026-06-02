@@ -80,6 +80,11 @@ export default function CustomerDisplay() {
 
   const [snapshot, setSnapshot] = useState<LoyaltySnapshot | null>(null);
   const [snapLoading, setSnapLoading] = useState(false);
+  // True once the post-payment mystery poll has finished WITHOUT finding a drop
+  // (the member didn't earn one this time). Lets the complete screen show the
+  // mystery/thank-you split straight away and only fall back to a plain
+  // thank-you if no bean ever lands — instead of flashing the plain one first.
+  const [mysteryPollDone, setMysteryPollDone] = useState(false);
   const [posters, setPosters] = useState<DisplayPoster[]>([]);
   const [heroBites, setHeroBites] = useState<DisplayBite[]>([]);
   // Guest fallback: snapshot.active_promos is member-gated, so when no
@@ -129,6 +134,7 @@ export default function CustomerDisplay() {
     const mid = member.id;
     let cancelled = false;
     let tries = 0;
+    setMysteryPollDone(false);
     const tick = async () => {
       if (cancelled) return;
       tries += 1;
@@ -139,6 +145,7 @@ export default function CustomerDisplay() {
         if (snap?.claimables?.some((c) => c.source_type === "mystery_pending")) return; // got it
       } catch { /* ignore — retry below */ }
       if (!cancelled && tries < 8) setTimeout(tick, 1000);
+      else if (!cancelled) setMysteryPollDone(true); // exhausted, no drop → plain thank-you
     };
     void tick();
     return () => { cancelled = true; };
@@ -307,15 +314,22 @@ export default function CustomerDisplay() {
         )}
       </>
     );
-    // When a mystery drop was awarded, show it BESIDE the thank-you (its own
-    // panel on the right) so it reads as a distinct "you earned something"
-    // moment instead of being buried under the confirmation.
-    if (mystery && member?.id) {
+    // Go STRAIGHT to the mystery/thank-you split for an identified member —
+    // thank-you on the left, the Mystery Bean on the right — instead of
+    // flashing a plain thank-you and then swapping. The drop is written a beat
+    // after payment, so while the poll catches up we hold the bean's spot with
+    // a "wrapping up" card (same saffron tile) and swap in the real, tappable
+    // MysteryBox the moment it lands. Only if the poll finishes with NO drop do
+    // we fall back to the plain centred thank-you.
+    const showSplit = !!member?.id && (!!mystery || !mysteryPollDone);
+    if (showSplit) {
       return (
         <View className="flex-1 flex-row" style={{ backgroundColor: PAGE }}>
           <View className="flex-1 items-center justify-center px-10" style={{ minWidth: 0 }}>{thankYou}</View>
           <View className="flex-1 items-center justify-center px-10" style={{ minWidth: 0, borderLeftWidth: 1, borderColor: "rgba(245,243,240,0.08)", backgroundColor: SUB }}>
-            <MysteryBox memberId={member.id} claimable={mystery} baseBeans={beansEarned} />
+            {mystery && member?.id
+              ? <MysteryBox memberId={member.id} claimable={mystery} baseBeans={beansEarned} />
+              : <MysteryPending />}
           </View>
         </View>
       );
@@ -1123,6 +1137,25 @@ function BiteCard({ bite, offer }: { bite: { id: string; name: string; price_sen
 }
 
 // ─── Mystery box ───────────────────────────────────────────
+/** Placeholder that holds the Mystery Bean's spot on the thank-you split while
+ *  the drop is still being written server-side (a beat after payment). Same
+ *  saffron tile as the unrevealed MysteryBox so it swaps in seamlessly — just a
+ *  spinner instead of the "Reveal" pill. */
+function MysteryPending() {
+  return (
+    <View className="rounded-3xl items-center" style={{ width: "100%", maxWidth: 340, paddingHorizontal: 28, paddingVertical: 34, backgroundColor: "#FBBF24", borderWidth: 1, borderColor: "rgba(26,2,0,0.25)" }}>
+      <Gift size={54} color="#1A0200" strokeWidth={1.8} />
+      <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2.4, color: "rgba(26,2,0,0.7)", marginTop: 16 }}>A LITTLE EXTRA</Text>
+      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 36, color: "#1A0200", marginTop: 4 }}>Mystery Bean</Text>
+      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 16, color: "rgba(26,2,0,0.72)", marginTop: 6, textAlign: "center" }}>Wrapping up your bean…</Text>
+      <View className="flex-row items-center" style={{ gap: 8, marginTop: 22, paddingHorizontal: 30, paddingVertical: 14, borderRadius: 999, backgroundColor: "#1A0200" }}>
+        <ActivityIndicator size="small" color="#FBBF24" />
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 17, color: "#FBBF24" }}>One moment</Text>
+      </View>
+    </View>
+  );
+}
+
 /** Tap-to-reveal scratch card — matches the native app's MysteryBean:
  *  a saffron "Tap to Reveal" tile that flips to an espresso win card (or a
  *  quiet "no bonus" card), with a per-outcome layout. */
