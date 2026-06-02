@@ -644,14 +644,12 @@ function Posters({ posters }: { posters: DisplayPoster[] }) {
  *  opens the pop-up keypad (idle keeps the keypad inline & always visible). */
 function SignInButton({ onPress }: { onPress: () => void }) {
   return (
-    <View className="items-center" style={{ gap: 9 }}>
-      {/* Headline phrased for the customer, not the staff — "Member? Earn
-          Beans" assumed customers know the loyalty currency name. "Get
-          Rewards" reads cold and still invites the action. */}
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 19, color: CREAM, textAlign: "center" }}>Get Rewards</Text>
-      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.55)", textAlign: "center" }}>Sign in with your phone to earn + redeem</Text>
-      <Pressable onPress={onPress} className="rounded-2xl px-8 py-3 mt-1 active:opacity-80" style={{ backgroundColor: GOLD }}>
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 13, letterSpacing: 1.6, color: DARKFG }}>SIGN IN</Text>
+    <View className="items-center" style={{ gap: 10 }}>
+      {/* The yellow button IS the "Get Rewards" call to action (no separate
+          "Sign in" step in the wording) — a short explainer sits above it. */}
+      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.6)", textAlign: "center" }}>Earn Beans + redeem rewards with your phone number</Text>
+      <Pressable onPress={onPress} className="rounded-2xl px-10 py-3.5 mt-1 active:opacity-80" style={{ backgroundColor: GOLD }}>
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 18, color: DARKFG }}>Get Rewards</Text>
       </Pressable>
     </View>
   );
