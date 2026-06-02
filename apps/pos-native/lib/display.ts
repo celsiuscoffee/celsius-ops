@@ -43,6 +43,9 @@ type DisplayState = {
   status: DisplayStatus;
   member: DisplayMember;
   orderNumber: string | null;
+  /** The completed order's UUID — so a guest can claim its Beans by entering
+   *  their phone on the thank-you screen (awards via /api/pos/loyalty/complete). */
+  orderId: string | null;
   // Order context mirrored to the customer screen.
   orderType: DisplayOrderType;
   tableNumber: string | null;
@@ -60,6 +63,7 @@ type DisplayState = {
   setStatus: (s: DisplayStatus) => void;
   setMember: (m: DisplayMember) => void;
   setOrderNumber: (n: string | null) => void;
+  setOrderId: (id: string | null) => void;
   setOrderType: (t: DisplayOrderType) => void;
   setTableNumber: (n: string | null) => void;
   setReward: (r: DisplayReward) => void;
@@ -76,6 +80,7 @@ export const useDisplay = create<DisplayState>((set) => ({
   status: "idle",
   member: null,
   orderNumber: null,
+  orderId: null,
   orderType: "takeaway",
   tableNumber: null,
   reward: null,
@@ -88,6 +93,7 @@ export const useDisplay = create<DisplayState>((set) => ({
   setStatus: (status) => set({ status }),
   setMember: (member) => set({ member }),
   setOrderNumber: (orderNumber) => set({ orderNumber }),
+  setOrderId: (orderId) => set({ orderId }),
   setOrderType: (orderType) => set({ orderType }),
   setTableNumber: (tableNumber) => set({ tableNumber }),
   setReward: (reward) => set({ reward }),
@@ -99,5 +105,5 @@ export const useDisplay = create<DisplayState>((set) => ({
   setRedeemRequest: (redeemRequest) => set({ redeemRequest }),
   // Keep member identified across orders (a returning regular stays
   // logged in for the next basket); only clear cart-scoped context.
-  reset: () => set({ status: "idle", orderNumber: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, payTotal: 0, payMethod: null, beansEarned: 0, redeemRequest: null }),
+  reset: () => set({ status: "idle", orderNumber: null, orderId: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, payTotal: 0, payMethod: null, beansEarned: 0, redeemRequest: null }),
 }));

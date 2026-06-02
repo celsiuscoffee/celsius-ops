@@ -778,10 +778,15 @@ export default function Register() {
       // /api/pos/loyalty/complete (floor of the pre-SST net, tier-multiplied)
       // so the thank-you summary + printed receipt match what's credited.
       const tierMul = member?.tier?.multiplier ?? 1;
-      const beansEarned = member?.id ? Math.round(Math.floor((sale.total - sale.sst) / 100) * tierMul) : 0;
+      // Beans this order is worth. A member earns them now; a GUEST can claim
+      // the same amount by entering their phone on the thank-you screen — so we
+      // mirror the order's worth (not 0) to the display either way.
+      const orderBeans = Math.round(Math.floor((sale.total - sale.sst) / 100) * tierMul);
+      const beansEarned = member?.id ? orderBeans : 0; // only an identified member actually earned (register chip + receipt)
       const beansBalance = member?.id ? (member.points_balance ?? 0) + beansEarned : 0;
       setDisplayOrderNumber(sale.orderNumber);
-      useDisplay.getState().setBeansEarned(beansEarned);
+      useDisplay.getState().setOrderId(sale.id);          // for the guest claim-Beans keypad
+      useDisplay.getState().setBeansEarned(orderBeans);   // member's earned, or a guest's claimable potential
       setDisplayStatus("complete");
       setPaid({ orderNumber: sale.orderNumber, total: sale.total, beansEarned, beansBalance });
       // Loyalty order-hooks for this in-store sale: award Beans, re-eval tier,

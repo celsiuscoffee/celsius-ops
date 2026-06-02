@@ -9,7 +9,7 @@ import { useSettings, serviceChargeRate } from "@/lib/settings";
 import { useMaybankQr } from "@/lib/maybank-qr";
 import { outletShort } from "@/lib/outlets";
 import {
-  lookupMember, fetchSnapshot, claimMystery, fetchRewards, fetchActivePromos, fetchSuggestedPairs,
+  lookupMember, fetchSnapshot, claimMystery, fetchRewards, fetchActivePromos, fetchSuggestedPairs, posOrderComplete, type Member,
   type LoyaltySnapshot, type VoucherCard, type ClaimableCard, type ShopCard, type MissionCard, type BiteItem, type IssuedVoucher, type ActivePromo, type MysteryReveal, type SuggestedPair,
 } from "@/lib/loyalty";
 import { fetchPosters, type DisplayPoster } from "@/lib/posters";
@@ -55,6 +55,7 @@ export default function CustomerDisplay() {
   const sst = useSettings((s) => s.sst);
   const displayPayMethod = useDisplay((s) => s.payMethod);
   const beansEarned = useDisplay((s) => s.beansEarned);
+  const orderId = useDisplay((s) => s.orderId);
   // Backoffice-managed Maybank QR (live via realtime on app_settings).
   // Returns { payload, image_url }: image_url is the uploaded Maybank
   // poster (preferred — actual pink poster customers know), payload is
@@ -334,6 +335,30 @@ export default function CustomerDisplay() {
         </View>
       );
     }
+    // ── Guest capture — convert a walk-in into a member at the thank-you ──
+    // A guest who just paid sees their order's Beans dangled with a keypad:
+    // entering their phone auto-enrols them (Bronze) AND awards this order's
+    // Beans + spawns their Mystery Bean. Once `member` is set, the member
+    // split above takes over — so they immediately see "+N Beans earned" and
+    // can reveal their bean. The whole point: get the phone number.
+    if (!member?.id && orderId && beansEarned > 0) {
+      return (
+        <View className="flex-1 flex-row" style={{ backgroundColor: PAGE }}>
+          <View className="flex-1 items-center justify-center px-10" style={{ minWidth: 0 }}>{thankYou}</View>
+          <View className="flex-1 items-center justify-center px-8" style={{ minWidth: 0, borderLeftWidth: 1, borderColor: "rgba(245,243,240,0.08)", backgroundColor: SUB }}>
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 25, color: CREAM, textAlign: "center" }}>Don&apos;t miss your Beans</Text>
+            <View className="flex-row items-center" style={{ gap: 9, marginTop: 10 }}>
+              <Sparkles size={24} color={GOLD} />
+              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 34, color: GOLD }}>+{beansEarned}</Text>
+              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 19, color: GOLD, marginTop: 6 }}>Beans</Text>
+            </View>
+            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13.5, color: "rgba(245,243,240,0.6)", textAlign: "center", marginTop: 8, maxWidth: 330 }}>Enter your phone to claim them — then earn Beans + unlock rewards on every visit.</Text>
+            <Numpad outletId={outletId} ctaLabel="CLAIM MY BEANS" onSignedIn={(m) => { if (orderId) void posOrderComplete(m.id, orderId); }} />
+          </View>
+        </View>
+      );
+    }
+
     return (
       <View className="flex-1 items-center justify-center px-8" style={{ backgroundColor: PAGE }}>
         {thankYou}
@@ -656,7 +681,8 @@ function SignInButton({ onPress }: { onPress: () => void }) {
 }
 
 // ─── Self-identify numpad ──────────────────────────────────
-function Numpad({ outletId }: { outletId: string | null }) {
+function Numpad({ outletId, ctaLabel, onSignedIn }: { outletId: string | null; ctaLabel?: string; onSignedIn?: (m: Member) => void }) {
+  void outletId;
   const [val, setVal] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -665,10 +691,13 @@ function Numpad({ outletId }: { outletId: string | null }) {
     if (val.length < 9 || busy) return;
     setBusy(true); setErr(null);
     try {
+      // lookupMember sends create=1, so a valid phone always comes back — a
+      // brand-new number is auto-enrolled as a Bronze member server-side.
       const m = await lookupMember(val);
-      if (!m) { setErr("No member found"); return; }
+      if (!m) { setErr("Couldn't sign you in — try again"); return; }
       useDisplay.getState().setMember({ id: m.id, name: m.name, phone: m.phone, pointsBalance: m.points_balance, tierName: m.tier?.name ?? null, tierColor: m.tier?.color ?? null });
       setVal("");
+      onSignedIn?.(m);
     } catch { setErr("Lookup failed"); }
     finally { setBusy(false); }
   }
@@ -695,7 +724,7 @@ function Numpad({ outletId }: { outletId: string | null }) {
         ))}
       </View>
       <Pressable onPress={submit} disabled={val.length < 9 || busy} className="mt-3 h-11 rounded-2xl items-center justify-center" style={{ backgroundColor: val.length >= 9 ? GOLD : "rgba(245,243,240,0.08)" }}>
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2, color: val.length >= 9 ? DARKFG : "rgba(245,243,240,0.35)" }}>{busy ? "LOADING…" : "VIEW MY REWARDS"}</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2, color: val.length >= 9 ? DARKFG : "rgba(245,243,240,0.35)" }}>{busy ? "LOADING…" : (ctaLabel ?? "VIEW MY REWARDS")}</Text>
       </Pressable>
     </View>
   );
