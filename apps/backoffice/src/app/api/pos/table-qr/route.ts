@@ -9,7 +9,8 @@ import { requireAuth } from "@/lib/auth";
  * floor-plan editor writes (pos_branch_settings.table_layout) — plus the store
  * slug used in the customer-facing QR URL. This consolidates the QR generator
  * with the table layout: a table created in the floor plan auto-appears here,
- * so the two are never out of sync.
+ * so the two are never out of sync. The page calls this via adminFetch (session
+ * cookie); reads run under service-role so RLS never blocks the lookup.
  */
 
 // outlet_settings is the canonical loyalty-id → store-slug map, but guarantee
