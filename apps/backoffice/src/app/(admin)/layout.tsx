@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -10,11 +10,8 @@ import {
   Boxes,
   Gift,
   SlidersHorizontal,
-  ChevronDown,
   ChevronRight,
   LogOut,
-  Menu,
-  X,
   LayoutDashboard,
   ClipboardList,
   UtensilsCrossed,
@@ -79,6 +76,23 @@ import {
   Printer,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { useTheme } from "@/components/theme-provider";
 import { CommandPalette } from "@/components/command-palette";
@@ -554,154 +568,77 @@ function pathMatchesSection(pathname: string, section: NavSection): boolean {
   return true;
 }
 
-// ─── NavLink ────────────────────────────────────────────────────────────
-
-function NavLink({
-  item,
-  pathname,
-  onNavigate,
-  siblingHrefs,
-}: {
-  item: NavItem;
-  pathname: string;
-  onNavigate?: () => void;
-  siblingHrefs?: string[];
-}) {
-  const exact = pathname === item.href;
-  const prefix = !exact && pathname.startsWith(item.href + "/");
-  const siblingHasBetterMatch = prefix && siblingHrefs?.some(
-    (h) => h !== item.href && h.length > item.href.length && (pathname === h || pathname.startsWith(h + "/"))
-  );
-  const isActive = exact || (prefix && !siblingHasBetterMatch);
-  return (
-    <Link
-      href={item.href}
-      onClick={onNavigate}
-      className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] transition-colors ${
-        isActive
-          ? "bg-terracotta/10 text-terracotta font-medium"
-          : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700"
-      }`}
-    >
-      {item.icon}
-      {item.label}
-    </Link>
-  );
+// ─── Leaf active-state ──────────────────────────────────────────────────
+// Same longest-match rule the old NavLink used: a link is active when it's an
+// exact match, or a prefix match with no sibling that matches more specifically.
+function leafIsActive(pathname: string, href: string, siblingHrefs: string[]): boolean {
+  const exact = pathname === href;
+  const prefix = !exact && pathname.startsWith(href + "/");
+  const siblingBetter =
+    prefix &&
+    siblingHrefs.some(
+      (h) => h !== href && h.length > href.length && (pathname === h || pathname.startsWith(h + "/")),
+    );
+  return exact || (prefix && !siblingBetter);
 }
 
-// ─── Icon Rail ──────────────────────────────────────────────────────────
-
-function IconRail({
-  user,
-  activeModule,
-  onModuleClick,
-  onDashboardClick,
-  pathname,
-  onLogout,
-}: {
-  user: UserProfile;
-  activeModule: string | null;
-  onModuleClick: (label: string) => void;
-  onDashboardClick: () => void;
-  pathname: string;
-  onLogout: () => void;
-}) {
-  const isDashboard = pathname === "/dashboard" || pathname === "/";
-  const dashboardActive = isDashboard && !activeModule;
-
-  return (
-    <div className="flex h-full w-16 flex-col items-center bg-brand-dark py-3 gap-1">
-      {/* Logo */}
-      <div className="mb-3">
-        <Image
-          src="/images/celsius-logo-sm.jpg"
-          alt="Celsius"
-          width={32}
-          height={32}
-          className="rounded-lg"
-        />
-      </div>
-
-      {/* Dashboard */}
-      <Link
-        href="/dashboard"
-        onClick={onDashboardClick}
-        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
-          dashboardActive
-            ? "bg-terracotta text-white"
-            : isDashboard
-              ? "bg-white/15 text-white ring-1 ring-white/25"
-              : "text-white/50 hover:bg-white/10 hover:text-white/80"
-        }`}
-        title="Dashboard"
-      >
-        <LayoutDashboard className={RAIL_ICON_SIZE} />
-      </Link>
-
-      {/* Module icons */}
-      <div className="mt-1 flex flex-1 flex-col items-center gap-1 overflow-y-auto overflow-x-clip scrollbar-thin">
-        {NAV_SECTIONS.map((section) => {
-          const visible = getVisibleItems(section, user);
-          if (visible.length === 0) return null;
-
-          const isActive = activeModule === section.label;
-          const hasActiveRoute = pathMatchesSection(pathname, section);
-
-          return (
-            <div key={section.label} className="flex flex-col items-center">
-              {section.dividerBefore && (
-                <div className="my-1.5 h-px w-6 bg-white/10" />
-              )}
-              <button
-                onClick={() => onModuleClick(section.label)}
-                className={`group relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
-                  isActive
-                    ? "bg-terracotta text-white"
-                    : hasActiveRoute
-                      ? "bg-white/15 text-white"
-                      : "text-white/40 hover:bg-white/10 hover:text-white/70"
-                }`}
-                title={section.label}
-              >
-                {section.railIcon}
-                {/* Tooltip */}
-                <span className="pointer-events-none absolute left-full ml-2 hidden whitespace-nowrap rounded-md bg-neutral-900 px-2.5 py-1 text-xs text-white shadow-lg group-hover:block z-50">
-                  {section.label}
-                </span>
-              </button>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Bottom actions */}
-      <div className="mt-2 flex flex-col items-center gap-2">
-        <ThemeToggle />
-        <button
-          onClick={onLogout}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-white/30 hover:bg-white/10 hover:text-white/60 transition-colors"
-          title="Logout"
-        >
-          <LogOut className="h-4 w-4" />
-        </button>
-        <Avatar size="sm">
-          <AvatarFallback className="bg-terracotta/30 text-terracotta-light text-xs">
-            {user.name?.slice(0, 2).toUpperCase() || "U"}
-          </AvatarFallback>
-        </Avatar>
-      </div>
-    </div>
-  );
+// Render a section's leaves into the collapsible sub-menu. Handles both flat
+// `items` sections and `subgroups` sections (3rd tier) — subgroups render a
+// small uppercase label header, then their items. RBAC + empty-group hiding
+// preserved exactly.
+function renderSectionLinks(
+  section: NavSection,
+  user: UserProfile | undefined,
+  pathname: string,
+): React.ReactNode {
+  if (section.items) {
+    const vis = section.items.filter((item) => canAccess(user, item.moduleKey));
+    const hrefs = vis.map((i) => i.href);
+    return vis.map((item) => (
+      <SidebarMenuSubItem key={item.href}>
+        <SidebarMenuSubButton asChild isActive={leafIsActive(pathname, item.href, hrefs)}>
+          <Link href={item.href}>
+            {item.icon}
+            <span className="truncate">{item.label}</span>
+          </Link>
+        </SidebarMenuSubButton>
+      </SidebarMenuSubItem>
+    ));
+  }
+  if (section.subgroups) {
+    return section.subgroups.map((sg) => {
+      const vis = sg.items.filter((item) => canAccess(user, item.moduleKey));
+      if (vis.length === 0) return null;
+      const hrefs = vis.map((i) => i.href);
+      return (
+        <Fragment key={sg.label}>
+          <li className="px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 first:pt-1">
+            {sg.label}
+          </li>
+          {vis.map((item) => (
+            <SidebarMenuSubItem key={item.href}>
+              <SidebarMenuSubButton asChild isActive={leafIsActive(pathname, item.href, hrefs)}>
+                <Link href={item.href}>
+                  {item.icon}
+                  <span className="truncate">{item.label}</span>
+                </Link>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </Fragment>
+      );
+    });
+  }
+  return null;
 }
 
-// ─── Theme Toggle ───────────────────────────────────────────────────────
-
-function ThemeToggle() {
+// ─── Theme toggle (sidebar footer) ──────────────────────────────────────
+function SidebarThemeToggle() {
   const { resolved, setTheme } = useTheme();
   return (
     <button
       onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
-      className="flex h-9 w-9 items-center justify-center rounded-lg text-white/30 hover:bg-white/10 hover:text-white/60 transition-colors"
+      className="flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
       title={resolved === "dark" ? "Switch to light mode" : "Switch to dark mode"}
     >
       {resolved === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -709,79 +646,123 @@ function ThemeToggle() {
   );
 }
 
-// ─── Sub-nav Panel ──────────────────────────────────────────────────────
-
-function SubNavPanel({
-  section,
-  user,
-  pathname,
-  onNavigate,
-}: {
-  section: NavSection;
-  user: UserProfile | undefined;
-  pathname: string;
-  onNavigate?: () => void;
-}) {
+// ─── User footer ────────────────────────────────────────────────────────
+function SidebarUserFooter({ user, onLogout }: { user: UserProfile; onLogout: () => void }) {
   return (
-    <div className="flex h-full w-56 flex-col border-r border-neutral-200 bg-white dark:border-border dark:bg-card">
-      {/* Module header */}
-      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-neutral-100">
-        <span className="text-terracotta">{section.icon}</span>
-        <h2 className="text-sm font-semibold text-neutral-900">{section.label}</h2>
-      </div>
-
-      {/* Nav items */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 scrollbar-thin">
-        {section.items && (() => {
-          const visible = section.items.filter((item) => canAccess(user, item.moduleKey));
-          const hrefs = visible.map((i) => i.href);
-          return (
-            <div className="space-y-0.5">
-              {visible.map((item) => (
-                <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} siblingHrefs={hrefs} />
-              ))}
-            </div>
-          );
-        })()}
-        {section.subgroups && section.subgroups.map((sg) => {
-          const visibleItems = sg.items.filter((item) => canAccess(user, item.moduleKey));
-          if (visibleItems.length === 0) return null;
-          const hrefs = visibleItems.map((i) => i.href);
-          return (
-            <div key={sg.label} className="mb-3">
-              <p className="mb-1.5 mt-4 px-3 text-[10px] font-semibold uppercase tracking-wider text-neutral-400 first:mt-0">
-                {sg.label}
-              </p>
-              <div className="space-y-0.5">
-                {visibleItems.map((item) => (
-                  <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} siblingHrefs={hrefs} />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* User footer with password change */}
-      {user && (
-        <div className="border-t border-neutral-100 p-3">
-          <div className="flex items-center gap-2.5">
-            <Avatar size="sm">
-              <AvatarFallback className="bg-terracotta/10 text-terracotta text-xs">
-                {user.name?.slice(0, 2).toUpperCase() || "U"}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="truncate text-xs font-medium text-neutral-900">{user.name}</p>
-              <p className="truncate text-[10px] text-neutral-400">{user.role}</p>
-            </div>
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <div className="flex items-center gap-2 px-1.5 py-1">
+          <Avatar size="sm">
+            <AvatarFallback className="bg-sidebar-primary/30 text-sidebar-foreground text-xs">
+              {user.name?.slice(0, 2).toUpperCase() || "U"}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+            <p className="truncate text-xs font-medium text-sidebar-foreground">{user.name}</p>
+            <p className="truncate text-[10px] text-sidebar-foreground/50">{user.role}</p>
           </div>
-          <div className="mt-2">
-            <PasswordChangeDialog hasPassword={user.hasPassword} />
+          <div className="flex items-center gap-0.5 group-data-[collapsible=icon]:hidden">
+            <SidebarThemeToggle />
+            <button
+              onClick={onLogout}
+              title="Logout"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </div>
-      )}
-    </div>
+      </SidebarMenuItem>
+      <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
+        <div className="px-0.5">
+          <PasswordChangeDialog hasPassword={user.hasPassword} />
+        </div>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+}
+
+// ─── App Sidebar (single collapsible) ───────────────────────────────────
+function AppSidebar({
+  user,
+  pathname,
+  openSection,
+  onSectionToggle,
+  onLogout,
+}: {
+  user: UserProfile;
+  pathname: string;
+  openSection: string | null;
+  onSectionToggle: (label: string) => void;
+  onLogout: () => void;
+}) {
+  const isDashboard = pathname === "/dashboard" || pathname === "/";
+
+  return (
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <div className="flex items-center gap-2 px-1.5 py-1">
+          <Image
+            src="/images/celsius-logo-sm.jpg"
+            alt="Celsius"
+            width={32}
+            height={32}
+            className="rounded-lg shrink-0"
+          />
+          <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+            <p className="font-heading text-sm font-bold leading-tight text-sidebar-foreground">Celsius Ops</p>
+            <p className="text-[10px] text-sidebar-foreground/50">Backoffice</p>
+          </div>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarMenu>
+            {/* Dashboard — always available */}
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={isDashboard} tooltip="Dashboard">
+                <Link href="/dashboard">
+                  <LayoutDashboard />
+                  <span>Dashboard</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            {NAV_SECTIONS.map((section) => {
+              const visible = getVisibleItems(section, user);
+              if (visible.length === 0) return null;
+
+              const sectionActive = pathMatchesSection(pathname, section);
+              const open = openSection === section.label;
+
+              return (
+                <SidebarMenuItem key={section.label}>
+                  <SidebarMenuButton
+                    isActive={sectionActive && !open}
+                    tooltip={section.label}
+                    aria-expanded={open}
+                    onClick={() => onSectionToggle(section.label)}
+                  >
+                    {section.icon}
+                    <span className="truncate group-data-[collapsible=icon]:hidden">{section.label}</span>
+                    <ChevronRight
+                      className={`ml-auto shrink-0 transition-transform group-data-[collapsible=icon]:hidden ${open ? "rotate-90" : ""}`}
+                    />
+                  </SidebarMenuButton>
+                  {open && <SidebarMenuSub>{renderSectionLinks(section, user, pathname)}</SidebarMenuSub>}
+                </SidebarMenuItem>
+              );
+            })}
+          </SidebarMenu>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter>
+        <SidebarUserFooter user={user} onLogout={onLogout} />
+      </SidebarFooter>
+      <SidebarRail />
+    </Sidebar>
   );
 }
 
@@ -838,7 +819,7 @@ function PasswordChangeDialog({ hasPassword }: { hasPassword?: boolean }) {
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
       <DialogTrigger
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[11px] text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 transition-colors cursor-pointer"
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[11px] text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors cursor-pointer"
       >
         <Lock className="h-3 w-3" />
         {hasPassword ? "Change Password" : "Set Password"}
@@ -908,174 +889,14 @@ function PasswordChangeDialog({ hasPassword }: { hasPassword?: boolean }) {
   );
 }
 
-// ─── Mobile Sidebar (full list, for small screens) ─────────────────────
-
-function MobileSidebar({
-  user,
-  pathname,
-  onNavigate,
-  onLogout,
-}: {
-  user: UserProfile;
-  pathname: string;
-  onNavigate: () => void;
-  onLogout: () => void;
-}) {
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
-    const initial = new Set<string>();
-    for (const section of NAV_SECTIONS) {
-      if (pathMatchesSection(pathname, section)) {
-        initial.add(section.label);
-        break;
-      }
-    }
-    return initial;
-  });
-
-  const toggleSection = (label: string) => {
-    setExpandedSections((prev) => {
-      if (prev.has(label)) {
-        const next = new Set(prev);
-        next.delete(label);
-        return next;
-      }
-      return new Set([label]);
-    });
-  };
-
-  return (
-    <div className="flex h-full flex-col bg-brand-dark">
-      {/* Header */}
-      <div className="flex items-center gap-3 border-b border-white/10 px-4 py-4">
-        <Image src="/images/celsius-logo-sm.jpg" alt="Celsius" width={32} height={32} className="rounded-lg" />
-        <div>
-          <h2 className="font-heading text-sm font-bold text-white">Celsius Ops</h2>
-          <p className="text-[10px] text-white/40">Backoffice</p>
-        </div>
-      </div>
-
-      {/* Home link */}
-      <div className="px-3 pt-3 pb-1">
-        <Link
-          href="/dashboard"
-          onClick={onNavigate}
-          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-            pathname === "/dashboard" || pathname === "/" ? "bg-white/10 text-white font-medium" : "text-white/50 hover:bg-white/5 hover:text-white/70"
-          }`}
-        >
-          <LayoutDashboard className="h-4 w-4" />
-          Dashboard
-        </Link>
-      </div>
-
-      {/* Nav sections (accordion) */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 scrollbar-thin">
-        {NAV_SECTIONS.map((section) => {
-          const visible = getVisibleItems(section, user);
-          if (visible.length === 0) return null;
-
-          const isActive = pathMatchesSection(pathname, section);
-          const expanded = expandedSections.has(section.label);
-
-          return (
-            <div key={section.label} className="mb-1">
-              <button
-                onClick={() => toggleSection(section.label)}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                  isActive ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white/80"
-                }`}
-              >
-                {section.icon}
-                <span className="flex-1 text-left">{section.label}</span>
-                {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-              </button>
-
-              {expanded && (
-                <div className="mt-1 ml-3 border-l border-white/10 pl-3">
-                  {section.items && (() => {
-                    const vis = section.items.filter((item) => canAccess(user, item.moduleKey));
-                    const hrefs = vis.map((i) => i.href);
-                    return vis.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={onNavigate}
-                        className={`flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] transition-colors ${
-                          pathname === item.href || pathname.startsWith(item.href + "/")
-                            ? "bg-terracotta/20 text-terracotta-light font-medium"
-                            : "text-white/50 hover:bg-white/5 hover:text-white/70"
-                        }`}
-                      >
-                        {item.icon}
-                        {item.label}
-                      </Link>
-                    ));
-                  })()}
-                  {section.subgroups && section.subgroups.map((sg) => {
-                    const visibleItems = sg.items.filter((item) => canAccess(user, item.moduleKey));
-                    if (visibleItems.length === 0) return null;
-                    return (
-                      <div key={sg.label} className="mb-2">
-                        <p className="mb-1 mt-3 px-3 text-[10px] font-semibold uppercase tracking-wider text-white/30">
-                          {sg.label}
-                        </p>
-                        {visibleItems.map((item) => (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            onClick={onNavigate}
-                            className={`flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] transition-colors ${
-                              pathname === item.href || pathname.startsWith(item.href + "/")
-                                ? "bg-terracotta/20 text-terracotta-light font-medium"
-                                : "text-white/50 hover:bg-white/5 hover:text-white/70"
-                            }`}
-                          >
-                            {item.icon}
-                            {item.label}
-                          </Link>
-                        ))}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* User footer */}
-      <div className="border-t border-white/10 p-3">
-        <div className="flex items-center gap-3">
-          <Avatar size="sm">
-            <AvatarFallback className="bg-terracotta/20 text-terracotta-light text-xs">
-              {user.name?.slice(0, 2).toUpperCase() || "U"}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="truncate text-xs font-medium text-white">{user.name}</p>
-            <p className="truncate text-[10px] text-white/40">{user.role}</p>
-          </div>
-          <button
-            onClick={onLogout}
-            className="rounded-md p-1.5 text-white/40 hover:bg-white/10 hover:text-white/70 transition-colors"
-            title="Logout"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Admin Layout ───────────────────────────────────────────────────────
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [activeModule, setActiveModule] = useState<string | null>(null);
+  // Which top-level section is expanded in the sidebar accordion (one at a
+  // time). Auto-follows the active route; user can toggle.
+  const [openSection, setOpenSection] = useState<string | null>(null);
 
   const { data: user, isLoading } = useFetch<UserProfile>("/api/auth/me");
 
@@ -1126,23 +947,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, [user, pathname, router]);
 
-  // Auto-select module based on current pathname
+  // Auto-open the section that matches the current route.
   useEffect(() => {
     const isDashboard = pathname === "/dashboard" || pathname === "/";
     if (isDashboard) {
-      setActiveModule(null);
+      setOpenSection(null);
       return;
     }
 
     for (const section of NAV_SECTIONS) {
       if (pathMatchesSection(pathname, section)) {
-        setActiveModule(section.label);
+        setOpenSection(section.label);
         return;
       }
     }
   }, [pathname]);
 
-  const handleModuleClick = (label: string) => {
+  const handleSectionToggle = (label: string) => {
     const section = NAV_SECTIONS.find((s) => s.label === label);
     if (!section) return;
 
@@ -1150,26 +971,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const firstHref = visible[0]?.href;
     const alreadyInModule = pathMatchesSection(pathname, section);
 
-    // Click the active module while already on one of its pages → toggle the
-    // sub-nav closed. (Power users sometimes want to collapse the panel.)
-    if (activeModule === label && alreadyInModule) {
-      setActiveModule(null);
+    // Click the open section while already on one of its pages → collapse it.
+    if (openSection === label && alreadyInModule) {
+      setOpenSection(null);
       return;
     }
 
-    // Otherwise: navigate to the first visible page of this module so the
-    // main area follows the sidebar (was: opened panel but stayed on the
-    // previous module's page, which felt like a dead click).
+    // Otherwise: expand it and navigate to its first visible page so the main
+    // area follows the sidebar.
     if (firstHref) {
       router.push(firstHref);
     }
-    setActiveModule(label);
+    setOpenSection(label);
   };
-
-  const activeSection = useMemo(
-    () => NAV_SECTIONS.find((s) => s.label === activeModule) ?? null,
-    [activeModule]
-  );
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -1188,50 +1002,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!user) return null;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-brand-offwhite">
-      {/* Desktop: Icon Rail + Sub-nav */}
-      <div className="hidden lg:flex h-full">
-        <IconRail
-          user={user}
-          activeModule={activeModule}
-          onModuleClick={handleModuleClick}
-          onDashboardClick={() => setActiveModule(null)}
-          pathname={pathname}
-          onLogout={handleLogout}
-        />
-        {activeSection && (
-          <SubNavPanel
-            section={activeSection}
-            user={user}
-            pathname={pathname}
+    <SidebarProvider className="h-svh overflow-hidden">
+      <AppSidebar
+        user={user}
+        pathname={pathname}
+        openSection={openSection}
+        onSectionToggle={handleSectionToggle}
+        onLogout={handleLogout}
+      />
+      <SidebarInset className="min-w-0 bg-brand-offwhite">
+        {/* Top bar — sidebar toggle (⌘B / tap to open on mobile), brand on mobile */}
+        <header className="flex items-center gap-3 border-b border-border bg-white dark:bg-card px-4 py-3">
+          <SidebarTrigger className="text-foreground" />
+          <Image
+            src="/images/celsius-logo-sm.jpg"
+            alt="Celsius"
+            width={24}
+            height={24}
+            className="rounded-md md:hidden"
           />
-        )}
-      </div>
-
-      {/* Mobile sidebar overlay */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
-          <aside className="relative z-10 h-full w-72">
-            <MobileSidebar
-              user={user}
-              pathname={pathname}
-              onNavigate={() => setMobileOpen(false)}
-              onLogout={handleLogout}
-            />
-          </aside>
-        </div>
-      )}
-
-      {/* Main content area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Mobile header */}
-        <header className="flex items-center gap-3 border-b border-border bg-white dark:bg-card px-4 py-3 lg:hidden">
-          <button onClick={() => setMobileOpen(true)} className="rounded-md p-1.5 hover:bg-muted">
-            <Menu className="h-5 w-5" />
-          </button>
-          <Image src="/images/celsius-logo-sm.jpg" alt="Celsius" width={24} height={24} className="rounded-md" />
-          <span className="font-heading text-sm font-bold">Celsius Ops</span>
+          <span className="font-heading text-sm font-bold md:hidden">Celsius Ops</span>
         </header>
 
         {/* Page content */}
@@ -1241,9 +1031,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         >
           {children}
         </PullToRefresh>
-      </div>
+      </SidebarInset>
       {/* Global ⌘K palette — toggles via Cmd/Ctrl+K from anywhere */}
       <CommandPalette />
-    </div>
+    </SidebarProvider>
   );
 }
