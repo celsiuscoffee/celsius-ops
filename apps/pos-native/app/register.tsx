@@ -32,7 +32,7 @@ import {
   computeTierDiscount, evaluatePromotions, posOrderComplete,
   fetchSuggestedPairs, fetchSnapshot, claimMystery,
   type Member, type RewardsResponse, type IssuedVoucher, type CatalogReward, type RedeemDiscount, type UsualItem, type AppliedPromo,
-  type SuggestedPair, type ClaimableCard, type MysteryReveal,
+  type SuggestedPair, type ClaimableCard, type MysteryReveal, type ShopCard,
 } from "@/lib/loyalty";
 
 const rm = (sen: number) => `RM ${(sen / 100).toFixed(2)}`;
@@ -161,6 +161,10 @@ export default function Register() {
   //    asks. `pairs` is cart-driven; `claimables` is member-driven. ──
   const [pairs, setPairs] = useState<SuggestedPair[]>([]);
   const [claimables, setClaimables] = useState<ClaimableCard[]>([]);
+  // Points shop — what the member can redeem with their Beans (mirrors the
+  // customer display's "Redeem your Beans"). Tapping a card applies it to the
+  // cart, so the cashier can redeem on request.
+  const [shop, setShop] = useState<ShopCard[]>([]);
 
   const setDisplayStatus = useDisplay((s) => s.setStatus);
   const setDisplayOrderNumber = useDisplay((s) => s.setOrderNumber);
@@ -373,9 +377,13 @@ export default function Register() {
   // 2) CLAIMABLES — pending mystery bags / promos the member can open. Pulled
   //    from the same snapshot the display reads; member-driven (not cart).
   useEffect(() => {
-    if (!member?.id) { setClaimables([]); return; }
+    if (!member?.id) { setClaimables([]); setShop([]); return; }
     let cancelled = false;
-    fetchSnapshot(member.id).then((s) => { if (!cancelled) setClaimables(s?.claimables ?? []); }).catch(() => {});
+    fetchSnapshot(member.id).then((s) => {
+      if (cancelled) return;
+      setClaimables(s?.claimables ?? []);
+      setShop(s?.shop ?? []);
+    }).catch(() => {});
     return () => { cancelled = true; };
   }, [member?.id]);
 
@@ -646,6 +654,20 @@ export default function Register() {
     else alert("Couldn't apply that reward. If it's a free-item reward, add a qualifying item first.");
   }
 
+  // Redeem a points-shop reward on the member's behalf (cashier taps when the
+  // customer asks). Applies to the cart via the same path as the Rewards modal
+  // — Beans burn is deferred to checkout, so the reward chip's X cleanly undoes
+  // it before payment.
+  async function redeemBeans(s: ShopCard) {
+    if (!s.affordable) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert(s.name, `Needs ${s.points_required} Beans — not enough yet.`);
+      return;
+    }
+    const ok = await applyRewardArgs(s.id, null);
+    if (!ok) Alert.alert("Couldn't redeem", "If it's a free-item reward, add a qualifying item to the cart first.");
+  }
+
   function newOrder() {
     Haptics.selectionAsync();
     setPaid(null);
@@ -913,6 +935,56 @@ export default function Register() {
             </View>
           )}
         </View>
+
+        {/* ── Upsell bar — pairs + redeem-Beans + claim, in a wide strip under
+            the product grid (where they have room) instead of crowding the
+            Current Order panel. Pairs are cart-driven; redeem + claim are
+            member-driven. Mirrors what the customer sees on their display. ── */}
+        {(pairs.length > 0 || (member && (shop.length > 0 || claimables.length > 0))) && (
+          <View className="border-t border-border px-3 py-2.5" style={{ backgroundColor: "rgba(0,0,0,0.18)" }}>
+            <View className="flex-row" style={{ gap: 16 }}>
+              {pairs.length > 0 && (
+                <View style={{ flex: 1.3 }}>
+                  <View className="flex-row items-center pb-1.5" style={{ gap: 5 }}>
+                    <Coffee size={12} color="#FBBF24" />
+                    <Text className="text-cream/55 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.2 }}>PAIR WITH A BITE</Text>
+                  </View>
+                  <View className="flex-row" style={{ gap: 8 }}>
+                    {pairs.slice(0, 3).map((p) => (
+                      <PairChip key={p.product_id} pair={p} onAdd={() => addPair(p)} />
+                    ))}
+                  </View>
+                </View>
+              )}
+              {member && shop.length > 0 && (
+                <View style={{ flex: 1 }}>
+                  <View className="flex-row items-center pb-1.5" style={{ gap: 5 }}>
+                    <Sparkles size={12} color="#FBBF24" />
+                    <Text className="text-cream/55 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.2 }}>REDEEM BEANS</Text>
+                  </View>
+                  <View className="flex-row" style={{ gap: 8 }}>
+                    {shop.slice(0, 3).map((s) => (
+                      <RegisterRedeemCard key={s.id} shop={s} onRedeem={() => redeemBeans(s)} />
+                    ))}
+                  </View>
+                </View>
+              )}
+              {member && claimables.length > 0 && (
+                <View style={{ flex: 1 }}>
+                  <View className="flex-row items-center pb-1.5" style={{ gap: 5 }}>
+                    <Gift size={12} color="#FBBF24" />
+                    <Text className="text-cream/55 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.2 }}>REWARDS TO CLAIM</Text>
+                  </View>
+                  <View style={{ gap: 6 }}>
+                    {claimables.slice(0, 2).map((c) => (
+                      <RegisterClaimCard key={c.id} memberId={member.id} claimable={c} />
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
       </View>
 
       {/* ── Cart panel ──────────────────────────────── */}
@@ -1060,33 +1132,9 @@ export default function Register() {
           />
         )}
 
-        {/* ── Upsell mirror — the SAME 3 pairs + claimable rewards the customer
-            sees on their display. Cashier-assist: a customer asks for the bite
-            on screen, the cashier taps it in here (one tap → cart, with the 86
-            check + modifier sheet); a customer asks about a reward badge, the
-            cashier opens it here. Pairs are cart-driven, claimables member-driven. ── */}
-        {(claimables.length > 0 || pairs.length > 0) && (
-          <View className="px-4 pt-2.5 pb-1 border-t border-border" style={{ gap: 9 }}>
-            {member && claimables.length > 0 && (
-              <View style={{ gap: 6 }}>
-                <Text className="text-cream/45 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.2 }}>REWARDS TO CLAIM</Text>
-                {claimables.slice(0, 2).map((c) => (
-                  <RegisterClaimCard key={c.id} memberId={member.id} claimable={c} />
-                ))}
-              </View>
-            )}
-            {pairs.length > 0 && (
-              <View style={{ gap: 6 }}>
-                <Text className="text-cream/45 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.2 }}>PAIR WITH A BITE</Text>
-                <View className="flex-row" style={{ gap: 6 }}>
-                  {pairs.slice(0, 3).map((p) => (
-                    <PairChip key={p.product_id} pair={p} onAdd={() => addPair(p)} />
-                  ))}
-                </View>
-              </View>
-            )}
-          </View>
-        )}
+        {/* The pair / redeem-Beans / claim upsell now lives in a bottom bar
+            under the product grid (see UpsellBar) so the cart panel stays clean
+            — just member + order + totals. */}
 
         {/* Totals + charge */}
         <View className="px-5 pt-3 pb-6 border-t border-border">
@@ -1917,6 +1965,32 @@ function RegisterClaimCard({ memberId, claimable }: { memberId: string; claimabl
       </View>
       <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: "#FBBF24" }}>
         <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 0.4, color: "#160800" }}>{mystery ? "OPEN" : "CLAIM"}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/** Cashier-side "redeem Beans" card — a points-shop reward the member can buy
+ *  with their Beans. Tapping applies it to the cart (cashier redeems on the
+ *  customer's request). Dimmed + non-tappable when they can't afford it yet. */
+function RegisterRedeemCard({ shop, onRedeem }: { shop: ShopCard; onRedeem: () => void }) {
+  const aff = shop.affordable;
+  return (
+    <Pressable
+      onPress={() => { if (!aff) return; Haptics.selectionAsync(); onRedeem(); }}
+      disabled={!aff}
+      className="flex-1 rounded-xl active:opacity-80"
+      style={{ backgroundColor: aff ? "rgba(251,191,36,0.10)" : "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: aff ? "rgba(251,191,36,0.4)" : "rgba(245,243,240,0.12)", opacity: aff ? 1 : 0.55 }}
+    >
+      <View className="px-2.5 py-2">
+        <View className="flex-row items-center" style={{ gap: 4 }}>
+          <Sparkles size={10} color="#FBBF24" />
+          <Text className="text-amber-400 text-[9px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.4 }}>{shop.points_required} BEANS</Text>
+        </View>
+        <Text className="text-cream text-[12px] mt-1" style={{ fontFamily: "Peachi-Medium" }} numberOfLines={2}>{shop.name}</Text>
+        <View className="self-start rounded-full mt-1.5 px-2.5 py-1" style={{ backgroundColor: aff ? "#FBBF24" : "rgba(245,243,240,0.12)" }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 0.4, color: aff ? "#160800" : "rgba(245,243,240,0.5)" }}>{aff ? "REDEEM" : "LOCKED"}</Text>
+        </View>
       </View>
     </Pressable>
   );

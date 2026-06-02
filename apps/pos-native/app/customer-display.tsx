@@ -407,6 +407,19 @@ export default function CustomerDisplay() {
           )}
         </View>
 
+        {/* Redeem your Beans — the points shop, right under the pairs. Tap a card
+            and the register applies it to the bill (Beans burn at checkout). */}
+        {member && snapshot && snapshot.shop.length > 0 && (
+          <View style={{ marginTop: 18 }}>
+            <Eyebrow color="rgba(251,191,36,0.85)" style={{ marginBottom: 8, letterSpacing: 1.6 }}>REDEEM YOUR BEANS</Eyebrow>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {snapshot.shop.slice(0, 6).map((s) => (
+                <ShopRedeemCard key={s.id} shop={s} onRedeem={() => setRedeemRequest({ rewardId: s.id, issuedRewardId: null, name: s.name })} />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {member && snapshot && snapshot.claimables.length > 0 && (
           <View style={{ flex: 1, marginTop: 22 }}>
             <Eyebrow color="rgba(245,243,240,0.5)" style={{ marginBottom: 8 }}>REWARDS YOU CAN CLAIM</Eyebrow>
@@ -1002,6 +1015,30 @@ function PairCard({ pair }: { pair: SuggestedPair }) {
         <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 14, color: GOLD, marginTop: 2 }}>{rm(pair.price_sen)}</Text>
       </View>
     </View>
+  );
+}
+
+/** Points-shop card for the ordering screen's "Redeem your Beans" row. Tapping
+ *  sends a redeem request to the register (which applies it to the bill). Dimmed
+ *  + non-tappable when the member can't afford it yet. */
+function ShopRedeemCard({ shop, onRedeem }: { shop: ShopCard; onRedeem: () => void }) {
+  const aff = shop.affordable;
+  return (
+    <Pressable
+      onPress={() => { if (aff) onRedeem(); }}
+      disabled={!aff}
+      className="rounded-2xl active:opacity-80"
+      style={{ width: 156, padding: 12, backgroundColor: aff ? "rgba(251,191,36,0.10)" : "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: aff ? "rgba(251,191,36,0.4)" : "rgba(245,243,240,0.12)", opacity: aff ? 1 : 0.55 }}
+    >
+      <View className="flex-row items-center" style={{ gap: 5 }}>
+        <Coffee size={13} color={GOLD} />
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 0.5, color: GOLD }}>{shop.points_required} BEANS</Text>
+      </View>
+      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: CREAM, marginTop: 6 }} numberOfLines={2}>{shop.name}</Text>
+      <View className="self-start rounded-full" style={{ marginTop: 8, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: aff ? GOLD : "rgba(245,243,240,0.12)" }}>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 0.5, color: aff ? DARKFG : "rgba(245,243,240,0.5)" }}>{aff ? "TAP TO REDEEM" : "KEEP EARNING"}</Text>
+      </View>
+    </Pressable>
   );
 }
 
