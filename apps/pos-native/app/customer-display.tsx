@@ -287,7 +287,7 @@ export default function CustomerDisplay() {
         </View>
         <Text style={{ fontFamily: "Peachi-Bold", fontSize: 52, color: CREAM }}>Thank You</Text>
         {!!orderNumber && <Eyebrow color="rgba(245,243,240,0.55)" style={{ marginTop: 12 }}>{orderNumber}</Eyebrow>}
-        <Text style={{ fontFamily: "Peachi-Medium", fontSize: 22, color: "rgba(245,243,240,0.7)", marginTop: 16 }}>Your order is being prepared</Text>
+        <Text style={{ fontFamily: "Peachi-Medium", fontSize: 22, color: "rgba(245,243,240,0.7)", marginTop: 16, textAlign: "center" }}>Your order is being prepared</Text>
         {beansEarned > 0 && (
           <View className="flex-row items-center" style={{ gap: 10, marginTop: 22, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 999, backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)" }}>
             <Sparkles size={22} color={GOLD} />
@@ -302,8 +302,8 @@ export default function CustomerDisplay() {
     if (mystery && member?.id) {
       return (
         <View className="flex-1 flex-row" style={{ backgroundColor: PAGE }}>
-          <View className="flex-1 items-center justify-center px-8">{thankYou}</View>
-          <View className="flex-1 items-center justify-center px-10" style={{ borderLeftWidth: 1, borderColor: "rgba(245,243,240,0.08)", backgroundColor: SUB }}>
+          <View className="flex-1 items-center justify-center px-8" style={{ minWidth: 0 }}>{thankYou}</View>
+          <View className="flex-1 items-center justify-center px-8" style={{ minWidth: 0, borderLeftWidth: 1, borderColor: "rgba(245,243,240,0.08)", backgroundColor: SUB }}>
             <MysteryBox memberId={member.id} claimable={mystery} baseBeans={beansEarned} />
           </View>
         </View>
@@ -1089,7 +1089,7 @@ function MysteryBox({ memberId, claimable, baseBeans }: { memberId: string; clai
   // ── Unrevealed: saffron tile with Gift + "Reveal" pill ──
   if (!revealed) {
     return (
-      <Pressable onPress={reveal} disabled={busy} className="rounded-3xl items-center active:opacity-90" style={{ width: 392, paddingHorizontal: 28, paddingVertical: 34, backgroundColor: "#FBBF24", borderWidth: 1, borderColor: "rgba(26,2,0,0.25)" }}>
+      <Pressable onPress={reveal} disabled={busy} className="rounded-3xl items-center active:opacity-90" style={{ width: "100%", maxWidth: 392, paddingHorizontal: 28, paddingVertical: 34, backgroundColor: "#FBBF24", borderWidth: 1, borderColor: "rgba(26,2,0,0.25)" }}>
         <Gift size={54} color="#1A0200" strokeWidth={1.8} />
         <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2.4, color: "rgba(26,2,0,0.7)", marginTop: 16 }}>TAP TO REVEAL</Text>
         <Text style={{ fontFamily: "Peachi-Bold", fontSize: 36, color: "#1A0200", marginTop: 4 }}>Mystery Bean</Text>
@@ -1114,7 +1114,7 @@ function MysteryBox({ memberId, claimable, baseBeans }: { memberId: string; clai
   // ── No bonus: quiet card (never punishing) ──
   if (revealed.outcome_type === "no_bonus") {
     return (
-      <View className="rounded-3xl items-center" style={{ width: 392, paddingHorizontal: 28, paddingVertical: 32, backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.14)" }}>
+      <View className="rounded-3xl items-center" style={{ width: "100%", maxWidth: 392, paddingHorizontal: 28, paddingVertical: 32, backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.14)" }}>
         <Sparkles size={42} color="rgba(245,243,240,0.5)" strokeWidth={1.6} />
         <Text style={{ fontFamily: "Peachi-Bold", fontSize: 26, color: CREAM, marginTop: 12 }}>{revealed.label}</Text>
         <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(245,243,240,0.6)", marginTop: 6, textAlign: "center" }}>Better luck on your next order ☕</Text>
@@ -1129,7 +1129,7 @@ function MysteryBox({ memberId, claimable, baseBeans }: { memberId: string; clai
   const isVoucher = revealed.outcome_type === "voucher";
   const isSurprise = revealed.outcome_type === "surprise_in_store";
   return (
-    <View className="rounded-3xl items-center" style={{ width: 392, paddingHorizontal: 28, paddingVertical: 34, backgroundColor: "#160800", borderWidth: 1, borderColor: "rgba(251,191,36,0.3)" }}>
+    <View className="rounded-3xl items-center" style={{ width: "100%", maxWidth: 392, paddingHorizontal: 28, paddingVertical: 34, backgroundColor: "#160800", borderWidth: 1, borderColor: "rgba(251,191,36,0.3)" }}>
       <Sparkles size={46} color={GOLD} strokeWidth={1.6} />
       {isMultiplier && (
         <>
