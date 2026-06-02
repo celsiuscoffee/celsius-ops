@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
           let q = supabase
             .from("pos_orders")
             .select(
-              "id, order_number, outlet_id, source, order_type, status, customer_name, customer_phone, subtotal, discount_amount, sst_amount, service_charge, total, notes, created_at",
+              "id, order_number, outlet_id, source, order_type, status, customer_name, customer_phone, subtotal, discount_amount, sst_amount, service_charge, total, notes, created_at, pos_order_items(product_name, quantity, item_total)",
             )
             .order("created_at", { ascending: false })
             .limit(limit);
@@ -134,10 +134,16 @@ export async function GET(request: NextRequest) {
               notes: o.notes ?? null,
               created_at: o.created_at,
               updated_at: o.created_at,
-              // pos_order_items isn't joined here, so item-level consumers
-              // (e.g. the dashboard's Top Products) safely see no items for
-              // pos/grab rows — they still contribute revenue + order counts.
-              order_items: [],
+              // Map pos_order_items → the same {product_name, quantity,
+              // item_total} shape order_items uses, so item-level consumers
+              // (e.g. the dashboard's Top Products) include pos/grab sales.
+              order_items: Array.isArray((o as { pos_order_items?: unknown }).pos_order_items)
+                ? ((o as { pos_order_items: Array<{ product_name?: string; quantity?: number; item_total?: number }> }).pos_order_items).map((it) => ({
+                    product_name: it.product_name ?? "",
+                    quantity: it.quantity ?? 0,
+                    item_total: it.item_total ?? 0,
+                  }))
+                : [],
               channel: src === "grabfood" ? "grab" : src,
             };
           });

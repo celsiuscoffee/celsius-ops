@@ -336,7 +336,7 @@ export default function PickupDashboard() {
 
       {/* App tabs */}
       <div className="flex gap-1 bg-white rounded-xl p-1 w-fit border border-border/40">
-        {([ ["pickup", "Pickup App"], ["inventory", "Inventory"], ["loyalty", "Rewards"] ] as [AppTab, string][]).map(([id, label]) => (
+        {([ ["pickup", "Orders"], ["inventory", "Inventory"], ["loyalty", "Rewards"] ] as [AppTab, string][]).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               tab === id ? "bg-[#160800] text-white shadow-sm" : "text-muted-foreground hover:text-[#160800]"
