@@ -46,7 +46,10 @@ export async function GET(request: NextRequest) {
     const status   = searchParams.get("status");
     const statuses = searchParams.get("statuses");
     const phone    = searchParams.get("phone");
-    const channel  = (searchParams.get("channel") || "all").toLowerCase();
+    // Default to pickup-only so existing callers that don't ask for a
+    // channel (e.g. the customer-retention analytics page) keep their
+    // original scope. The unified Orders list + Dashboard opt into "all".
+    const channel  = (searchParams.get("channel") || "pickup").toLowerCase();
     const limitRaw = Number(searchParams.get("limit"));
     const limit    = Math.min(2000, Math.max(1, Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 200));
 
@@ -131,6 +134,10 @@ export async function GET(request: NextRequest) {
               notes: o.notes ?? null,
               created_at: o.created_at,
               updated_at: o.created_at,
+              // pos_order_items isn't joined here, so item-level consumers
+              // (e.g. the dashboard's Top Products) safely see no items for
+              // pos/grab rows — they still contribute revenue + order counts.
+              order_items: [],
               channel: src === "grabfood" ? "grab" : src,
             };
           });

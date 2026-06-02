@@ -107,13 +107,13 @@ export default function PickupDashboard() {
     // A3, so direct Supabase reads 401 here).
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     const [todayR, activeR, recentR] = await Promise.all([
-      fetch(`/api/pickup/orders?from=${todayStart.toISOString()}&limit=500`, { cache: "no-store" })
+      fetch(`/api/pickup/orders?channel=all&from=${todayStart.toISOString()}&limit=500`, { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : []))
         .catch(() => []) as Promise<OrderRow[]>,
-      fetch("/api/pickup/orders?statuses=paid,preparing,ready&limit=200", { cache: "no-store" })
+      fetch("/api/pickup/orders?channel=all&statuses=paid,preparing,ready&limit=200", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : []))
         .catch(() => []) as Promise<OrderRow[]>,
-      fetch("/api/pickup/orders?limit=8", { cache: "no-store" })
+      fetch("/api/pickup/orders?channel=all&limit=8", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : []))
         .catch(() => []) as Promise<OrderRow[]>,
     ]);
@@ -141,7 +141,7 @@ export default function PickupDashboard() {
     // excludeStatuses (and the dataset stays small enough that the
     // filter is cheap).
     const res = await fetch(
-      `/api/pickup/orders?from=${since.toISOString()}&limit=2000`,
+      `/api/pickup/orders?channel=all&from=${since.toISOString()}&limit=2000`,
       { cache: "no-store" },
     )
       .then((rr) => (rr.ok ? rr.json() : []))
@@ -314,7 +314,7 @@ export default function PickupDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#160800]">Pickup Dashboard</h1>
+          <h1 className="text-2xl font-bold text-[#160800]">Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-0.5" suppressHydrationWarning>
             {new Date().toLocaleDateString("en-MY", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </p>

@@ -51,7 +51,7 @@ export default function PickupOrders() {
     const params = new URLSearchParams({ limit: "200" });
     if (store    !== "all") params.set("store",   store);
     if (status   !== "all") params.set("status",  status);
-    if (channel  !== "all") params.set("channel", channel);
+    params.set("channel", channel); // always explicit; endpoint defaults to pickup-only
     if (dateFrom)           params.set("from",    new Date(dateFrom).toISOString());
     if (dateTo)             params.set("to",      dateTo);
     try {

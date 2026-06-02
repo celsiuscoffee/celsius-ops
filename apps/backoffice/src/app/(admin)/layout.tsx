@@ -163,8 +163,10 @@ const NAV_SECTIONS: NavSection[] = [
       {
         label: "Overview",
         items: [
-          { label: "Pickup Dashboard", href: "/pickup", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "pickup:orders" },
-          { label: "POS Overview",     href: "/pos",     icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+          // One dashboard across all channels (the /pickup dashboard now
+          // pulls orders + pos_orders). The thin /pos landing was dropped —
+          // its links live in this Sales section + Settings.
+          { label: "Dashboard", href: "/pickup", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "pickup:orders" },
         ],
       },
       {
