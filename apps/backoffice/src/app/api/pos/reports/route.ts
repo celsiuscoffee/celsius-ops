@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
   const { data: orders, error: ordersErr } = await supabase
     .from("pos_orders")
-    .select("id, total, status, created_at, employee_id, employee_name")
+    .select("id, total, status, created_at, employee_id")
     .eq("status", "completed")
     .order("created_at", { ascending: false })
     .limit(5000);
@@ -103,10 +103,19 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Staff performance ──────────────────────────────────────
+  // pos_orders carries only employee_id (= User.id); the name lives in the User
+  // table — resolve it here (same pattern as the Z-Report). Best-effort: a
+  // lookup miss degrades to a generic label, never a 500.
+  const empIds = [...new Set(completedOrders.map((o) => o.employee_id as string | null).filter(Boolean))] as string[];
+  const nameById: Record<string, string> = {};
+  if (empIds.length > 0) {
+    const { data: users } = await supabase.from("User").select("id, name").in("id", empIds);
+    for (const u of users ?? []) nameById[u.id as string] = (u.name as string) || "";
+  }
   const byStaff: Record<string, { name: string; orders: number; revenue: number }> = {};
   for (const o of completedOrders) {
-    const id = (o.employee_id as string) ?? "unknown";
-    const name = ((o as any).employee_name as string) ?? "Unknown";
+    const id = (o.employee_id as string) || "unknown";
+    const name = nameById[id] || (id === "unknown" ? "Unassigned" : "Staff");
     if (!byStaff[id]) byStaff[id] = { name, orders: 0, revenue: 0 };
     byStaff[id].orders++;
     byStaff[id].revenue += (o.total as number) ?? 0;
