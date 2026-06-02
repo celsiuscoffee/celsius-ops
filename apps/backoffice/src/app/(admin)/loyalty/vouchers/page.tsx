@@ -47,7 +47,7 @@ export default function ActiveVouchersPage() {
           or manual grants. Includes active, used, and expired states.
           <br />
           <span className="text-xs text-muted-foreground/80">
-            Not the same as <strong>Points Redemptions</strong> (when a customer spends Beans on a Points Shop reward — separate log).
+            Not the same as <strong>Points Redemptions</strong> (when a customer spends Points on a Points Shop reward — separate log).
           </span>
         </p>
       </div>

@@ -58,7 +58,7 @@ export type FormValue = {
    *  qualifying "buy" set). Empty = free the same item that's bought. */
   free_product_ids: string[];
   /** Bean Shop cost. When set (> 0), this reward is redeemable in the
-   *  customer Bean Shop for this many Beans. Blank = not a points-shop item. */
+   *  customer Bean Shop for this many Points. Blank = not a points-shop item. */
   points_cost: number | null;
   scope: Scope;
   target_ids: string[];
@@ -312,7 +312,7 @@ export default function RewardForm({ mode, initial }: Props) {
             type="text"
             value={val.title}
             onChange={(e) => update("title", e.target.value)}
-            placeholder="e.g. Free Drink, RM5 Off, 2× Beans Boost"
+            placeholder="e.g. Free Drink, RM5 Off, 2× Points Boost"
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400"
           />
         </Field>
@@ -340,7 +340,7 @@ export default function RewardForm({ mode, initial }: Props) {
             <option value="bogo">Buy X get Y free (BOGO)</option>
             <option value="combo">Combo — required set, override total</option>
             <option value="override_price">Override price — single item, fixed price</option>
-            <option value="beans_multiplier">Beans multiplier (post-payment)</option>
+            <option value="beans_multiplier">Points multiplier (post-payment)</option>
           </select>
         </Field>
 
@@ -427,7 +427,7 @@ export default function RewardForm({ mode, initial }: Props) {
         )}
 
         {val.discount_type === "beans_multiplier" && (
-          <Field label="Multiplier" help="Beans awarded post-payment, applied to the after-discount subtotal.">
+          <Field label="Multiplier" help="Points awarded post-payment, applied to the after-discount subtotal.">
             <Prefix unit="×">
               <input
                 type="number" step={0.1}
@@ -496,7 +496,7 @@ export default function RewardForm({ mode, initial }: Props) {
           </Prefix>
         </Field>
 
-        <Field label="Bean Shop cost" help="Beans the customer spends to redeem this in the Bean Shop. Leave blank if it isn't a points-shop item. (Replaces the old Points Shop page — Bean Shop rewards are configured here now.)">
+        <Field label="Bean Shop cost" help="Points the customer spends to redeem this in the Bean Shop. Leave blank if it isn't a points-shop item. (Replaces the old Points Shop page — Bean Shop rewards are configured here now.)">
           <input
             type="number" step={1} min={0}
             value={val.points_cost ?? ""}

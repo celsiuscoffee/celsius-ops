@@ -71,7 +71,7 @@ const VARIABLE_DEFS: Record<string, { name: string; example: string | number; de
     { name: "daysLeft",   example: 2,                 description: "Days remaining (auto-pluralised via {{daysLeftPlural}})" },
   ],
   sitting_on_beans: [
-    { name: "points",    example: 250,    description: "Customer's current Beans balance" },
+    { name: "points",    example: 250,    description: "Customer's current Points balance" },
     { name: "firstName", example: "Alia", description: "Customer's first name (may be empty)" },
   ],
   lapsed_customer: [
@@ -95,7 +95,7 @@ const AUDIENCE_FIELD_DEFS: Array<{
   kind: "number" | "string" | "boolean";
   hint?: string;
 }> = [
-  { name: "points_balance",       label: "Beans balance",         kind: "number" },
+  { name: "points_balance",       label: "Points balance",         kind: "number" },
   { name: "days_since_last_order", label: "Days since last order", kind: "number" },
   { name: "total_lifetime_orders", label: "Lifetime orders",       kind: "number" },
   { name: "total_lifetime_spend",  label: "Lifetime spend (RM)",   kind: "number" },

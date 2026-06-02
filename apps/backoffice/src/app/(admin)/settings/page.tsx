@@ -121,7 +121,7 @@ const GROUPS: Group[] = [
   },
   {
     label: "Loyalty & Promotions",
-    blurb: "Member tiers, points (Beans), missions, promotion engine.",
+    blurb: "Member tiers, Points, missions, promotion engine.",
     tiles: [
       {
         href: "/loyalty/tiers",

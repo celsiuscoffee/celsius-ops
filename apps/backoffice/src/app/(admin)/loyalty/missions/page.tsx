@@ -199,7 +199,7 @@ function MissionCard({
         )}
         {mission.reward_bonus_beans > 0 && (
           <div className="flex justify-between">
-            <span>Bonus Beans</span>
+            <span>Bonus Points</span>
             <span className="text-foreground">+{mission.reward_bonus_beans}</span>
           </div>
         )}
@@ -389,7 +389,7 @@ function MissionModal({
                 </div>
               )}
             </Field>
-            <Field label="Bonus Beans (added to balance on completion)">
+            <Field label="Bonus Points (added to balance on completion)">
               <input type="number" min={0} value={bonusBeans} onChange={(e) => setBonusBeans(Number(e.target.value))} className="w-full border rounded-lg px-3 py-2 bg-background" />
             </Field>
           </div>

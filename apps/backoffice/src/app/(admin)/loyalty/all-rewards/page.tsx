@@ -41,7 +41,7 @@ const DISCOUNT_META: Record<string, { label: string; className: string }> = {
   bogo:              { label: "BOGO",                className: "bg-yellow-50  text-yellow-700  border-yellow-200" },
   combo:             { label: "Combo",               className: "bg-yellow-50  text-yellow-700  border-yellow-200" },
   override_price:    { label: "Override price",      className: "bg-rose-50    text-rose-700    border-rose-200" },
-  beans_multiplier:  { label: "Beans ×",             className: "bg-purple-50  text-purple-700  border-purple-200" },
+  beans_multiplier:  { label: "Points ×",             className: "bg-purple-50  text-purple-700  border-purple-200" },
   none:              { label: "—",                   className: "bg-slate-50   text-slate-600   border-slate-200" },
 };
 

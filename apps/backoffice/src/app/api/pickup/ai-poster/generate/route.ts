@@ -101,7 +101,7 @@ Place text in the SAFE BAND between roughly y = 0.12 and y = 0.68.`
         ? `Surface: POS customer-display second screen at the counter, 16:7 ultra-wide aspect. This is an in-store screen the customer reads while the cashier rings them up. No UI overlays — the whole 16:7 frame is yours.
 
   AUDIENCE — the customer is physically AT the counter, deciding their order. The poster's job is to:
-    (1) Drive ORDER VOLUME (e.g. "Join Beans — RM10 off first order"), and / or
+    (1) Drive ORDER VOLUME (e.g. "Join Points — RM10 off first order"), and / or
     (2) Drive AOV by suggesting an UPSELL or ADD-ON (e.g. "Add a croissant — RM6", "Make it large +RM2", "Buy 2 cookies, get one free").
   Headlines should be short, price-forward, and actionable. The customer reads at ~1m distance — type can be LARGER than the home banner equivalents.
 

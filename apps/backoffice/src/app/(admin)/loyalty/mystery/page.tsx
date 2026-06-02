@@ -43,9 +43,9 @@ const TIERS = ["Bronze", "Silver", "Gold", "Platinum"];
 // Reward Library → Reward Kinds admin page).
 const OUTCOME_LABELS: Record<OutcomeType, string> = {
   beans_multiplier: "Bean Multiplier",
-  flat_beans: "Flat Bonus Beans",
+  flat_beans: "Flat Bonus Points",
   voucher: "Voucher",
-  no_bonus: "No Bonus (just Beans)",
+  no_bonus: "No Bonus (just Points)",
   surprise_in_store: "Surprise (barista)",
 };
 
@@ -174,7 +174,7 @@ export default function MysteryPage() {
                   <td className="px-4 py-3 text-muted-foreground">{kindLabel(e.outcome_type)}</td>
                   <td className="px-4 py-3">
                     {e.outcome_type === "beans_multiplier" && <strong>{e.multiplier_value}×</strong>}
-                    {e.outcome_type === "flat_beans" && <strong>+{e.flat_beans_value} Beans</strong>}
+                    {e.outcome_type === "flat_beans" && <strong>+{e.flat_beans_value} Points</strong>}
                     {e.outcome_type === "voucher" && (
                       <strong>{templates.find((t) => t.id === e.voucher_template_id)?.title ?? "—"}</strong>
                     )}
@@ -353,7 +353,7 @@ function MysteryModal({
             </Field>
           )}
           {outcomeType === "flat_beans" && (
-            <Field label="Flat Beans amount">
+            <Field label="Flat Points amount">
               <input type="number" min={1} value={flatBeans} onChange={(e) => setFlatBeans(Number(e.target.value))} className="w-full border rounded-lg px-3 py-2 bg-background" />
             </Field>
           )}

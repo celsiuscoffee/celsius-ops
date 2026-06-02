@@ -245,7 +245,7 @@ function EditModal({
               <label className="block text-xs font-medium text-muted-foreground mb-1.5">Category</label>
               <input
                 className="w-full px-3 py-2 rounded-md border bg-background"
-                placeholder="Voucher / Beans / In-store"
+                placeholder="Voucher / Points / In-store"
                 value={draft.category ?? ""}
                 onChange={(e) => setDraft({ ...draft, category: e.target.value })}
               />
