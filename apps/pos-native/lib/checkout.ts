@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import type { CartLine } from "./cart";
+import { useSettings } from "./settings";
 
 /**
  * Order creation — native port of the web register's createPOSOrder
@@ -112,6 +113,7 @@ export type Sale = {
   orderNumber: string;
   subtotal: number;
   serviceCharge: number;
+  sst: number;
   discount: number;
   total: number;
   createdAt: string;
@@ -136,7 +138,14 @@ export async function createSale(params: SaleParams): Promise<Sale> {
   const promoDiscount = Math.max(0, params.promoDiscount ?? 0);
   const manualDiscount = Math.max(0, params.manualDiscount ?? 0);
   const discount = Math.min(rewardDiscount + promoDiscount + manualDiscount, subtotal + serviceCharge);
-  const total = Math.max(0, subtotal + serviceCharge - discount);
+  const afterDiscount = Math.max(0, subtotal + serviceCharge - discount);
+  // SST — single source of truth (app_settings.sst), the same rate the
+  // pickup/order app applies, so in-store and pickup charge identically.
+  // Added on top of the net (post-discount) amount; the service charge is
+  // part of the taxable base. Toggle off in the backoffice → sstAmount = 0.
+  const { rate: sstRate, enabled: sstEnabled } = useSettings.getState().sst;
+  const sstAmount = sstEnabled ? Math.round(afterDiscount * sstRate) : 0;
+  const total = afterDiscount + sstAmount;
 
   const registerId = await resolveRegisterId(outletId);
   const shiftId = await ensureOpenShift(outletId, registerId, staffId);
@@ -157,6 +166,7 @@ export async function createSale(params: SaleParams): Promise<Sale> {
       queue_number: params.queueNumber ?? null,
       subtotal,
       service_charge: serviceCharge,
+      sst_amount: sstAmount,
       discount_amount: discount,
       promo_discount: promoDiscount,
       promo_name: params.promoName ?? null,
@@ -213,6 +223,7 @@ export async function createSale(params: SaleParams): Promise<Sale> {
     orderNumber: order.order_number,
     subtotal,
     serviceCharge,
+    sst: sstAmount,
     discount,
     total: order.total,
     createdAt: order.created_at ?? new Date().toISOString(),

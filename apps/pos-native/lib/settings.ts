@@ -55,6 +55,9 @@ export type OutletInfo = {
 type SettingsState = {
   settings: BranchSettings | null;
   outlet: OutletInfo | null;
+  /** Global SST — the single source of truth (app_settings.sst), shared
+   *  with the pickup/order app so the POS charges the same rate. */
+  sst: { rate: number; enabled: boolean };
   outletId: string | null;
   loading: boolean;
   /** Last load error message (so a settings screen can surface it). */
@@ -68,6 +71,7 @@ type SettingsState = {
 export const useSettings = create<SettingsState>((set, get) => ({
   settings: null,
   outlet: null,
+  sst: { rate: 0.06, enabled: true },
   outletId: null,
   loading: false,
   error: null,
@@ -82,17 +86,26 @@ export const useSettings = create<SettingsState>((set, get) => ({
     set({ loading: true, error: null, outletId });
     // Pull the BO-managed settings row + the outlet master (for the
     // receipt header) together.
-    const [settingsRes, outletRes] = await Promise.all([
+    const [settingsRes, outletRes, sstRes] = await Promise.all([
       supabase.from("pos_branch_settings").select("*").eq("outlet_id", outletId).maybeSingle(),
       supabase.from("outlets").select("name, address, city, state, phone").eq("id", outletId).maybeSingle(),
+      // Single source of truth for SST — the same global app_settings.sst the
+      // pickup/order app reads, so a backoffice change lands on every channel.
+      // anon SELECT is permitted on app_settings.
+      supabase.from("app_settings").select("value").eq("key", "sst").maybeSingle(),
     ]);
     if (settingsRes.error) {
       set({ loading: false, error: settingsRes.error.message });
       return;
     }
+    const sstVal = (sstRes.data as { value?: { rate?: number; enabled?: boolean } } | null)?.value;
     set({
       settings: (settingsRes.data as BranchSettings) ?? null,
       outlet: (outletRes.data as OutletInfo) ?? null,
+      sst: {
+        rate: typeof sstVal?.rate === "number" ? sstVal.rate : 0.06,
+        enabled: sstVal?.enabled !== false,
+      },
       loading: false,
     });
   },

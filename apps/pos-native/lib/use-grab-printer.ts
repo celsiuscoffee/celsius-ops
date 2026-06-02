@@ -176,6 +176,7 @@ export function useGrabPrinter(
           subtotal: row.subtotal ?? 0,
           service_charge: 0,                          // Grab handles its own fees off-receipt
           discount_amount: row.discount_amount ?? 0,
+          sst_amount: row.sst_amount ?? 0,
           total: row.total ?? row.subtotal ?? 0,
           pos_order_items: receiptItems,
           pos_order_payments: [{

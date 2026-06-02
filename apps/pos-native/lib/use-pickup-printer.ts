@@ -237,6 +237,7 @@ export function usePickupPrinter(
           subtotal: row.subtotal ?? 0,
           service_charge: 0,
           discount_amount: row.discount_amount ?? 0,
+          sst_amount: row.sst_amount ?? 0,
           total: row.total ?? row.subtotal ?? 0,
           pos_order_items: receiptItems,
           pos_order_payments: [{

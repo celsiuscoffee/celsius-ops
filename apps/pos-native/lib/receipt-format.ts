@@ -90,6 +90,7 @@ export type ReceiptOrder = {
   subtotal: number;
   service_charge: number;
   discount_amount: number;
+  sst_amount: number;
   total: number;
   created_at: string;
   /** Order-level note (Grab delivery instruction / order comment, pickup note). */
@@ -200,6 +201,13 @@ export function formatReceipt(
   bodyLines.push(twoColumn("Subtotal", rm(order.subtotal)));
   if (order.service_charge > 0) bodyLines.push(twoColumn("Service Charge", rm(order.service_charge)));
   if (order.discount_amount > 0) bodyLines.push(twoColumn("Discount", `-${rm(order.discount_amount)}`));
+  if (order.sst_amount > 0) {
+    // Derive the rate from the amounts so the label stays correct if the
+    // backoffice SST rate ever changes (no hardcoded 6%).
+    const taxBase = order.total - order.sst_amount;
+    const pct = taxBase > 0 ? Math.round((order.sst_amount / taxBase) * 100) : 0;
+    bodyLines.push(twoColumn(`SST (${pct}%)`, rm(order.sst_amount)));
+  }
   bodyLines.push(divider("="));
   bodyLines.push(twoColumn("TOTAL", rm(order.total)));
   bodyLines.push(divider("="));
