@@ -12,6 +12,8 @@ export type ModifierOption = {
   label: string;
   priceDelta: number;
   isDefault: boolean;
+  /** Sales channels this option is offered on. Missing/empty = all. */
+  channels?: string[];
 };
 
 export type ModifierGroup = {
@@ -19,6 +21,8 @@ export type ModifierGroup = {
   name: string;
   multiSelect: boolean;
   options: ModifierOption[];
+  /** Sales channels this group is offered on. Missing/empty = all. */
+  channels?: string[];
 };
 
 export type Product = {
@@ -92,10 +96,19 @@ export async function fetchMenu(
         return {
           ...p,
           modifiers: modifiers
-            .filter((g) => !hidden.has(g.id))
+            // Honor per-channel modifier visibility: drop any group/option
+            // restricted to other channels — e.g. a Grab-only "Packaging
+            // +RM0.90" must not show or charge on pickup. Mirrors the web
+            // app's filterModifiersForChannel; the native reader had been
+            // missing this, leaking grab-only modifiers (and their default
+            // price deltas) into the pickup menu, product page, and the
+            // Pair-with-a-bite price.
+            .filter((g) => !hidden.has(g.id) && visibleOnPickup(g.channels))
             .map((g) => ({
               ...g,
-              options: g.options.filter((opt) => !hidden.has(opt.id)),
+              options: g.options.filter(
+                (opt) => !hidden.has(opt.id) && visibleOnPickup(opt.channels),
+              ),
             }))
             // Drop a group entirely if every option got hidden — empty
             // selectors confuse the product detail screen.
