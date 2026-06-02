@@ -31,12 +31,17 @@ const snap = (v: number) => Math.round(v / GRID) * GRID;
 
 /** Tile size (px) scaled to seat count — a 6-top reads bigger than a 2-top, so
  *  the floor plan shows table CAPACITY at a glance. Mirrors the register. */
-function tileSize(seats: number | null): number {
+function tableDims(seats: number | null, shape: TableShape): { w: number; h: number; cells: number } {
   const s = seats ?? 4;
-  if (s <= 2) return 46;
-  if (s <= 4) return 60;
-  if (s <= 6) return 76;
-  return 92;
+  if (shape === "round") {
+    const d = s <= 2 ? 46 : s <= 4 ? 60 : s <= 6 ? 76 : 92;
+    return { w: d, h: d, cells: 1 };
+  }
+  // Square seats render as ATTACHED 2-tops pushed together: a 4-pax = two
+  // squares, a 6-pax = three — so the plan shows real combined-table shapes.
+  const cells = s <= 2 ? 1 : s <= 4 ? 2 : s <= 6 ? 3 : 4;
+  const unit = 44;
+  return { w: unit * cells, h: unit, cells };
 }
 
 /** Accept the stored value (positioned objects OR a legacy comma string) and
@@ -215,7 +220,7 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
               </div>
             )}
             {floor.tables.map((t, idx) => {
-              const sz = tileSize(t.seats);
+              const dim = tableDims(t.seats, t.shape);
               return (
               <div
                 key={idx}
@@ -227,11 +232,17 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
                 } ${selected === idx ? "border-[#A2492C] ring-2 ring-[#A2492C]/30" : "border-[#160800]/30"}`}
                 style={{
                   left: `${t.x * 100}%`, top: `${t.y * 100}%`, transform: "translate(-50%, -50%)",
-                  width: sz, height: sz, backgroundColor: "#fff",
+                  width: dim.w, height: dim.h, backgroundColor: "#fff",
                 }}
               >
-                <span className="text-sm font-bold text-[#160800]">{t.label}</span>
-                {t.seats != null && <span className="text-[9px] text-gray-500">{t.seats}p</span>}
+                {/* Divider lines between the attached 2-tops (square tables only). */}
+                {t.shape !== "round" && dim.cells > 1 && Array.from({ length: dim.cells - 1 }).map((_, i) => (
+                  <div key={i} className="absolute top-1 bottom-1 w-px bg-[#160800]/15" style={{ left: `${((i + 1) / dim.cells) * 100}%` }} />
+                ))}
+                <div className="relative z-10 flex flex-col items-center leading-none">
+                  <span className="text-sm font-bold text-[#160800]">{t.label}</span>
+                  {t.seats != null && <span className="text-[9px] text-gray-500">{t.seats}p</span>}
+                </div>
               </div>
               );
             })}

@@ -75,14 +75,18 @@ const BRAND = "#A2492C";
 const OK = "#86efac";
 const DANGER = "#E5484D";
 
-/** Floor-plan tile size (px) scaled to seat count — a 6-top reads bigger than a
- *  2-top, matching the BO editor. Buckets: ≤2 small · ≤4 medium · ≤6 large · 8+ XL. */
-function tableTileSize(seats: number | null | undefined): number {
+/** Floor-plan tile dimensions, matching the BO editor. Square seats render as
+ *  ATTACHED 2-tops pushed together (4-pax = two squares, 6-pax = three); round
+ *  tables stay a single scaled circle. */
+function tableDims(seats: number | null | undefined, shape: "square" | "round"): { w: number; h: number; cells: number } {
   const s = seats ?? 4;
-  if (s <= 2) return 58;
-  if (s <= 4) return 74;
-  if (s <= 6) return 92;
-  return 110;
+  if (shape === "round") {
+    const d = s <= 2 ? 58 : s <= 4 ? 74 : s <= 6 ? 90 : 104;
+    return { w: d, h: d, cells: 1 };
+  }
+  const cells = s <= 2 ? 1 : s <= 4 ? 2 : s <= 6 ? 3 : 4;
+  const unit = 56;
+  return { w: unit * cells, h: unit, cells };
 }
 
 type AppliedReward = { redemptionId: string; name: string; descriptor: RedeemDiscount } | null;
@@ -864,15 +868,23 @@ export default function Register() {
         {panel === "table" && orderType === "dine_in" && (
           <View className="px-4 pb-3">
             <Text className="text-cream/50 text-[11px] mb-1.5" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.8 }}>TABLE STAND NO. — the numbered stand you hand the guest</Text>
-            <View className="flex-row flex-wrap" style={{ gap: 6 }}>
-              {Array.from({ length: 15 }, (_, i) => String(i + 1)).map((n) => {
-                const on = tableNumber === n;
-                return (
-                  <Pressable key={n} onPress={() => { Haptics.selectionAsync(); if (on) { setTableNumber(""); } else { setTableNumber(n); setPanel("none"); } }} className="h-11 rounded-xl items-center justify-center" style={{ width: 52, backgroundColor: on ? BRAND : "rgba(245,243,240,0.06)", borderWidth: on ? 0 : 1, borderColor: "rgba(245,243,240,0.12)" }}>
-                    <Text className={on ? "text-white" : "text-cream/75"} style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 16 }}>{n}</Text>
-                  </Pressable>
-                );
-              })}
+            <View className="flex-row items-center" style={{ gap: 8 }}>
+              <NumpadField
+                value={tableNumber}
+                onChangeText={setTableNumber}
+                placeholder="Tap to enter stand #"
+                mode="integer"
+                prefix="#"
+                title="Table Stand No."
+                onDone={() => { if (tableNumber) setPanel("none"); }}
+                className="flex-1 h-11 px-3 rounded-xl border border-cream/15"
+                style={{ backgroundColor: "rgba(245,243,240,0.06)" }}
+              />
+              {!!tableNumber && (
+                <Pressable onPress={() => { Haptics.selectionAsync(); setTableNumber(""); }} className="h-11 px-3 rounded-xl items-center justify-center" style={{ backgroundColor: "rgba(245,243,240,0.06)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}>
+                  <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Clear</Text>
+                </Pressable>
+              )}
             </View>
           </View>
         )}
@@ -1153,7 +1165,7 @@ export default function Register() {
                     <View style={{ position: "relative", width: "100%", height: 440, backgroundColor: "rgba(245,243,240,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(245,243,240,0.08)" }}>
                       {g.slots.map((slot) => {
                         const has = slot.orders.length > 0;
-                        const TILE = tableTileSize(slot.seats);
+                        const dim = tableDims(slot.seats, slot.shape);
                         return (
                           <Pressable
                             key={slot.label}
@@ -1167,13 +1179,16 @@ export default function Register() {
                             style={{
                               position: "absolute",
                               left: `${slot.x * 100}%`, top: `${slot.y * 100}%`,
-                              marginLeft: -TILE / 2, marginTop: -TILE / 2,
-                              width: TILE, height: TILE,
-                              borderRadius: slot.shape === "round" ? TILE / 2 : 14, borderWidth: 1,
+                              marginLeft: -dim.w / 2, marginTop: -dim.h / 2,
+                              width: dim.w, height: dim.h,
+                              borderRadius: slot.shape === "round" ? dim.h / 2 : 14, borderWidth: 1,
                               backgroundColor: has ? "rgba(194,69,45,0.18)" : "rgba(245,243,240,0.06)",
                               borderColor: has ? "rgba(194,69,45,0.6)" : "rgba(245,243,240,0.14)",
                             }}
                           >
+                            {slot.shape !== "round" && dim.cells > 1 && Array.from({ length: dim.cells - 1 }).map((_, i) => (
+                              <View key={`d${i}`} style={{ position: "absolute", top: 8, bottom: 8, width: 1, left: `${((i + 1) / dim.cells) * 100}%`, backgroundColor: "rgba(245,243,240,0.18)" }} />
+                            ))}
                             <Text style={{ fontFamily: "Peachi-Bold", fontSize: 18, color: has ? "#F5F3F0" : "rgba(245,243,240,0.6)" }} numberOfLines={1}>{slot.label}</Text>
                             {slot.seats != null && (
                               <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 9, color: "rgba(245,243,240,0.4)" }}>{slot.seats}p</Text>
