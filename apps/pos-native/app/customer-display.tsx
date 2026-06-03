@@ -983,7 +983,11 @@ function PointsHero({
         (next.multiplier ?? 1) > (t?.multiplier ?? 1) ? `${next.multiplier}× Points` : null,
       ].filter(Boolean).join(" + ")
     : "";
-  const spendLabel = prog?.metric === "spend" ? `RM ${(moreNeeded / 100).toFixed(0)}` : `${moreNeeded} visit${moreNeeded === 1 ? "" : "s"}`;
+  // Progress is in RM already (quarterly spend, same scale as the tier
+  // thresholds) — format directly, NO /100. Mirrors pickup's TierCard
+  // (`RM${spend_to_next_tier}`). The old /100 turned Silver's RM300 into
+  // a nonsensical "RM 3 more".
+  const spendLabel = prog?.metric === "spend" ? `RM ${moreNeeded.toFixed(0)}` : `${moreNeeded} visit${moreNeeded === 1 ? "" : "s"}`;
   // Tier card — sized down ~25% from the original on 2026-05-31 per
   // request, freeing more vertical room in the right column for the
   // cart / order list below. All font sizes, paddings, bars, and gaps
