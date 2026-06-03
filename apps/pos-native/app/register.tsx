@@ -25,6 +25,7 @@ import { createSale, getNextQueueNumber } from "@/lib/checkout";
 import { useSettings, gridColumns, serviceChargeRate, receiptConfig, tableZones } from "@/lib/settings";
 import { useTablesPanel, type TableSlot, type TableOrderRef } from "@/lib/use-tables-panel";
 import { useOrdersPanel, type KdsOrder } from "@/lib/use-orders-panel";
+import { useOrderHistory, type HistoryOrder, type HistoryChannel } from "@/lib/use-order-history";
 import { useShift, openShift, closeShift, shiftTotals, type Shift, type ShiftTotals } from "@/lib/shift";
 import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/printer";
 import { outletFull, outletShort } from "@/lib/outlets";
@@ -117,9 +118,17 @@ export default function Register() {
   const { staff, outletId, signOut, loggedInAt, shiftEndsAt } = usePos();
   const [activeCat, setActiveCat] = useState<string>("all");
   // One "Orders" command center — a single panel with three tabs: Tables
-  // (dine-in floor) · QR self-orders · Pickup & Grab. `hub` is the active
-  // tab, or null when the panel is closed.
-  const [hub, setHub] = useState<"tables" | "qr" | "online" | null>(null);
+  // (dine-in floor + QR self-orders, consolidated) · Pickup & Grab (live KDS,
+  // channel-filterable) · History (today's orders, all channels, filterable).
+  // `hub` is the active tab, or null when the panel is closed.
+  const [hub, setHub] = useState<"tables" | "online" | "history" | null>(null);
+  // Tables tab: which floor/zone is shown (null = first), and the table the
+  // cashier tapped to inspect its order(s) — the consolidated QR view.
+  const [activeFloor, setActiveFloor] = useState<string | null>(null);
+  const [selectedTable, setSelectedTable] = useState<TableSlot | null>(null);
+  // Channel filters for the live (Pickup & Grab) + History tabs.
+  const [liveFilter, setLiveFilter] = useState<"all" | "pickup" | "grab">("all");
+  const [histFilter, setHistFilter] = useState<"all" | HistoryChannel>("all");
   // Which order's status update is in flight (uid) — disables its buttons.
   const [bumpingUid, setBumpingUid] = useState<string | null>(null);
   // Shift open/close UI.
@@ -223,6 +232,12 @@ export default function Register() {
   // Mounted persistently so it keeps catching up + receiving Realtime even
   // while the modal is closed (drives the header badge count).
   const { orders: kdsOrders, reload: reloadOrders } = useOrdersPanel(outletId);
+  // Today's order history (all channels) for the History tab. Refreshed each
+  // time the tab is opened so the counter always sees the latest day's sales.
+  const { orders: historyOrders, loading: historyLoading, reload: reloadHistory } = useOrderHistory(outletId);
+  useEffect(() => { if (hub === "history") void reloadHistory(); }, [hub, reloadHistory]);
+  // Drop any selected-table detail when the panel closes or switches tab.
+  useEffect(() => { if (hub !== "tables") setSelectedTable(null); }, [hub]);
 
   // ── Open Store (cashier shift) ──────────────────────────────────────
   // Resolved up here (ahead of the order handlers) so the ring-up + Orders
@@ -1410,9 +1425,9 @@ export default function Register() {
                 <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>Orders · {outletShort(outletId)}</Text>
                 <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
                   {hub === "tables"
-                    ? `${tableSlots.filter((t) => t.orders.length > 0).length} of ${tableSlots.length} tables have orders · live`
-                    : hub === "qr"
-                    ? (qrOrders.length === 0 ? "No live QR table orders" : `${qrOrders.length} QR table order${qrOrders.length === 1 ? "" : "s"} · self-ordered · live`)
+                    ? `${tableSlots.filter((t) => t.orders.length > 0).length} of ${tableSlots.length} tables have orders · tap a table to see its order · live`
+                    : hub === "history"
+                    ? (historyLoading ? "Loading today's orders…" : `${historyOrders.length} order${historyOrders.length === 1 ? "" : "s"} today · all channels`)
                     : (kdsOrders.length === 0 ? "No live delivery or pickup orders" : `${kdsOrders.length} in the kitchen · Grab + Pickup · live`)}
                 </Text>
               </View>
@@ -1422,27 +1437,29 @@ export default function Register() {
                   <View className="flex-row items-center gap-1.5"><Bike size={14} color="#22C55E" /><Text className="text-cream/55 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Grab</Text></View>
                   <View className="flex-row items-center gap-1.5"><ShoppingBag size={14} color="#3B82F6" /><Text className="text-cream/55 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Pickup</Text></View>
                 </>)}
+                {hub === "history" && (<><TableLegendDot color="#FBBF24" label="Counter" /><TableLegendDot color="#3B82F6" label="Pickup" /><TableLegendDot color="#22C55E" label="Grab" /></>)}
                 <Pressable onPress={() => setHub(null)} className="active:opacity-60 ml-2">
                   <X size={22} color="rgba(245,243,240,0.7)" />
                 </Pressable>
               </View>
             </View>
-            {/* Tab switcher — one command center for every order channel. */}
-            <View className="flex-row gap-2 mb-4">
+            {/* Tab switcher — one command center for every order channel.
+                Full-width, large touch targets (SUNMI counter use). */}
+            <View className="flex-row gap-2.5 mb-4">
               {(() => {
-                const tabs: { key: "tables" | "qr" | "online"; label: string; Icon: typeof Grid3x3; count: number }[] = [
+                const tabs: { key: "tables" | "online" | "history"; label: string; Icon: typeof Grid3x3; count: number }[] = [
                   { key: "tables", label: "Tables", Icon: Grid3x3, count: tableSlots.filter((t) => t.orders.length > 0).length },
-                  { key: "qr", label: "QR self-orders", Icon: QrCode, count: qrOrders.length },
                   { key: "online", label: "Pickup & Grab", Icon: Bike, count: kdsOrders.length },
+                  { key: "history", label: "History", Icon: ClipboardList, count: historyOrders.length },
                 ];
                 return tabs.map(({ key, label, Icon, count }) => (
                   <Pressable key={key} onPress={() => { Haptics.selectionAsync(); setHub(key); }}
-                    className={`flex-row items-center gap-2 px-4 py-2.5 rounded-xl border active:opacity-70 ${hub === key ? "border-primary bg-primary/15" : "border-cream/12"}`}>
-                    <Icon size={15} color={hub === key ? "#C2452D" : "rgba(245,243,240,0.6)"} />
-                    <Text className={hub === key ? "text-cream text-xs" : "text-cream/60 text-xs"} style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{label}</Text>
+                    className={`flex-1 flex-row items-center justify-center gap-2.5 px-4 py-4 rounded-2xl border active:opacity-70 ${hub === key ? "border-primary bg-primary/15" : "border-cream/12"}`}>
+                    <Icon size={20} color={hub === key ? "#C2452D" : "rgba(245,243,240,0.6)"} />
+                    <Text className={hub === key ? "text-cream text-base" : "text-cream/60 text-base"} style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{label}</Text>
                     {count > 0 && (
-                      <View className="rounded-full px-1.5" style={{ backgroundColor: hub === key ? "#C2452D" : "rgba(245,243,240,0.18)" }}>
-                        <Text className="text-cream text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{count}</Text>
+                      <View className="rounded-full px-2 py-0.5 min-w-[22px] items-center" style={{ backgroundColor: hub === key ? "#C2452D" : "rgba(245,243,240,0.18)" }}>
+                        <Text className="text-cream text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{count}</Text>
                       </View>
                     )}
                   </Pressable>
@@ -1451,7 +1468,10 @@ export default function Register() {
             </View>
             <ScrollView style={{ maxHeight: 600 }} showsVerticalScrollIndicator={false}>
               {hub === "tables" && (() => {
-                // Group the flat slots back into their zones for display.
+                // Group the flat slots into their zones (= floors). The data
+                // already carries the saved BackOffice template; we render ONE
+                // floor at a time with a switcher so multi-floor outlets stay
+                // navigable instead of an endless vertical scroll.
                 const groups: { name: string; slots: TableSlot[] }[] = [];
                 for (const slot of tableSlots) {
                   let g = groups.find((x) => x.name === slot.zone);
@@ -1467,34 +1487,49 @@ export default function Register() {
                     </View>
                   );
                 }
-                return groups.map((g) => (
-                  <View key={g.name} style={{ width: "100%", marginBottom: 18 }}>
-                    <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 1.2, color: "rgba(245,243,240,0.5)", marginBottom: 8 }}>
-                      {g.name.toUpperCase()}
-                    </Text>
-                    {/* Floor-plan canvas: tables at their saved (normalised) positions. */}
+                const active = groups.find((g) => g.name === activeFloor) ?? groups[0];
+                return (
+                  <View style={{ width: "100%" }}>
+                    {/* Floor switcher — only when more than one floor/zone exists. */}
+                    {groups.length > 1 && (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 14 }}>
+                        {groups.map((g) => {
+                          const on = g.name === active.name;
+                          const cnt = g.slots.filter((s) => s.orders.length > 0).length;
+                          return (
+                            <Pressable key={g.name} onPress={() => { Haptics.selectionAsync(); setActiveFloor(g.name); setSelectedTable(null); }}
+                              className={`flex-row items-center gap-2 px-5 py-3 rounded-xl border active:opacity-70 ${on ? "border-primary bg-primary/15" : "border-cream/12"}`}>
+                              <Text className={on ? "text-cream text-sm" : "text-cream/60 text-sm"} style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{g.name}</Text>
+                              {cnt > 0 && (<View className="rounded-full px-2 min-w-[20px] items-center" style={{ backgroundColor: on ? "#C2452D" : "rgba(245,243,240,0.18)" }}><Text className="text-cream text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{cnt}</Text></View>)}
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
+                    )}
+                    {/* Tapped-table detail — the consolidated QR self-order view. */}
+                    {selectedTable && selectedTable.orders.length > 0 && (
+                      <TableOrdersDetail slot={selectedTable} onClose={() => setSelectedTable(null)} />
+                    )}
+                    {/* Floor-plan canvas: the saved template (tables at their
+                        normalised positions). Tap a busy table for its order(s). */}
                     <View style={{ position: "relative", width: "100%", height: 440, backgroundColor: "rgba(245,243,240,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(245,243,240,0.08)" }}>
-                      {g.slots.map((slot) => {
+                      {active.slots.map((slot) => {
                         const has = slot.orders.length > 0;
+                        const sel = selectedTable?.label === slot.label && selectedTable?.zone === slot.zone;
                         const dim = tableDims(slot.seats, slot.shape, slot.orientation);
                         return (
                           <Pressable
                             key={slot.label}
-                            onPress={() => {
-                              // QR floor plan is view-only: it shows which physical
-                              // tables have QR self-orders. Counter orders use a
-                              // Table Stand # (not a floor-plan table), so no assign.
-                              Haptics.selectionAsync();
-                            }}
+                            onPress={() => { Haptics.selectionAsync(); setSelectedTable(has ? slot : null); }}
                             className="active:opacity-80 items-center justify-center"
                             style={{
                               position: "absolute",
                               left: `${slot.x * 100}%`, top: `${slot.y * 100}%`,
                               marginLeft: -dim.w / 2, marginTop: -dim.h / 2,
                               width: dim.w, height: dim.h,
-                              borderRadius: slot.shape === "round" ? dim.h / 2 : 14, borderWidth: 1,
+                              borderRadius: slot.shape === "round" ? dim.h / 2 : 14, borderWidth: sel ? 2 : 1,
                               backgroundColor: has ? "rgba(194,69,45,0.18)" : "rgba(245,243,240,0.06)",
-                              borderColor: has ? "rgba(194,69,45,0.6)" : "rgba(245,243,240,0.14)",
+                              borderColor: sel ? "#FBBF24" : has ? "rgba(194,69,45,0.6)" : "rgba(245,243,240,0.14)",
                             }}
                           >
                             {slot.shape !== "round" && dim.cells > 1 && Array.from({ length: dim.cells - 1 }).map((_, i) => (
@@ -1516,64 +1551,78 @@ export default function Register() {
                       })}
                     </View>
                   </View>
-                ));
+                );
               })()}
-              {/* ── QR self-orders tab — guests who scanned the table QR. ── */}
-              {hub === "qr" && (
-                <View className="flex-row flex-wrap" style={{ gap: 12 }}>
-                  {qrOrders.map((o) => (
-                    <View key={o.id} className="rounded-2xl border border-border p-4" style={{ width: 264, backgroundColor: "rgba(245,243,240,0.03)" }}>
-                      <View className="flex-row items-center justify-between mb-2">
-                        <View className="flex-row items-center gap-2">
-                          <QrCode size={15} color="#3B82F6" />
-                          <Text className="text-cream text-sm" style={{ fontFamily: "Peachi-Bold" }}>{o.orderNumber}</Text>
-                        </View>
-                        <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: "rgba(245,243,240,0.08)" }}>
-                          <Text className="text-cream/70 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{o.status}</Text>
-                        </View>
-                      </View>
-                      <View className="flex-row items-center justify-between">
-                        <Text className="text-cream/60 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Table {o.tableKey}</Text>
-                        <Text className="text-cream text-sm" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(o.total)}</Text>
-                      </View>
-                      <Text className="text-cream/40 text-[11px] mt-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                        {new Date(o.createdAt).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })}
-                      </Text>
-                    </View>
-                  ))}
-                  {qrOrders.length === 0 && (
-                    <View className="py-16 items-center w-full">
-                      <QrCode size={40} color="rgba(245,243,240,0.18)" />
-                      <Text className="text-cream/40 text-sm mt-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                        Orders guests place by scanning the table QR will appear here.
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* ── Pickup & Grab tab — on-register KDS. Status writes go through
-                  the service-role API (RLS blocks anon updates on printed rows). */}
-              {hub === "online" && (
-                <View className="flex-row flex-wrap" style={{ gap: 12 }}>
-                  {kdsOrders.map((order) => (
-                    <KdsCard
-                      key={order.uid}
-                      order={order}
-                      busy={bumpingUid === order.uid}
-                      onAdvance={(status) => advanceOrderStatus(order, status)}
+              {/* ── Pickup & Grab tab — on-register KDS, channel-filterable so
+                  the cashier sees ALL incoming by default (never misses one)
+                  but can isolate a channel. Status writes go through the
+                  service-role API (RLS blocks anon updates on printed rows). */}
+              {hub === "online" && (() => {
+                const shown = kdsOrders.filter((o) => liveFilter === "all" || o.source === liveFilter);
+                return (
+                  <View>
+                    <ChannelFilter
+                      value={liveFilter}
+                      onChange={(v) => { Haptics.selectionAsync(); setLiveFilter(v as "all" | "pickup" | "grab"); }}
+                      options={[
+                        { key: "all", label: "All", dot: null, count: kdsOrders.length },
+                        { key: "pickup", label: "Pickup", dot: "#3B82F6", count: kdsOrders.filter((o) => o.source === "pickup").length },
+                        { key: "grab", label: "Grab", dot: "#22C55E", count: kdsOrders.filter((o) => o.source === "grab").length },
+                      ]}
                     />
-                  ))}
-                  {kdsOrders.length === 0 && (
-                    <View className="py-16 items-center w-full">
-                      <ChefHat size={40} color="rgba(245,243,240,0.18)" />
-                      <Text className="text-cream/40 text-sm mt-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                        Grab and pickup orders will appear here as they come in.
-                      </Text>
+                    <View className="flex-row flex-wrap" style={{ gap: 12 }}>
+                      {shown.map((order) => (
+                        <KdsCard
+                          key={order.uid}
+                          order={order}
+                          busy={bumpingUid === order.uid}
+                          onAdvance={(status) => advanceOrderStatus(order, status)}
+                        />
+                      ))}
+                      {shown.length === 0 && (
+                        <View className="py-16 items-center w-full">
+                          <ChefHat size={40} color="rgba(245,243,240,0.18)" />
+                          <Text className="text-cream/40 text-sm mt-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                            {liveFilter === "all" ? "Grab and pickup orders will appear here as they come in." : `No live ${liveFilter} orders right now.`}
+                          </Text>
+                        </View>
+                      )}
                     </View>
-                  )}
-                </View>
-              )}
+                  </View>
+                );
+              })()}
+
+              {/* ── History tab — today's orders across every channel so the
+                  counter can double-check the day. Read-only review; tap a row
+                  to expand the receipt. Filterable by channel. ── */}
+              {hub === "history" && (() => {
+                const shown = historyOrders.filter((o) => histFilter === "all" || o.channel === histFilter);
+                return (
+                  <View>
+                    <ChannelFilter
+                      value={histFilter}
+                      onChange={(v) => { Haptics.selectionAsync(); setHistFilter(v as "all" | HistoryChannel); }}
+                      options={[
+                        { key: "all", label: "All", dot: null, count: historyOrders.length },
+                        { key: "counter", label: "Counter", dot: "#FBBF24", count: historyOrders.filter((o) => o.channel === "counter").length },
+                        { key: "pickup", label: "Pickup", dot: "#3B82F6", count: historyOrders.filter((o) => o.channel === "pickup").length },
+                        { key: "grab", label: "Grab", dot: "#22C55E", count: historyOrders.filter((o) => o.channel === "grab").length },
+                      ]}
+                    />
+                    <View style={{ gap: 8 }}>
+                      {shown.map((o) => <HistoryRow key={o.uid} order={o} />)}
+                      {shown.length === 0 && (
+                        <View className="py-16 items-center w-full">
+                          <ClipboardList size={40} color="rgba(245,243,240,0.18)" />
+                          <Text className="text-cream/40 text-sm mt-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                            {historyLoading ? "Loading today's orders…" : histFilter === "all" ? "No orders yet today." : `No ${histFilter} orders today.`}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              })()}
             </ScrollView>
           </View>
         </View>
@@ -2286,6 +2335,101 @@ function TableLegendDot({ color, label }: { color: string; label: string }) {
       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
       <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 10, letterSpacing: 0.8, color: "rgba(245,243,240,0.6)" }}>{label}</Text>
     </View>
+  );
+}
+
+// ── Orders panel: channel filter + table detail + history row ──────
+/** Channel filter chips for the live (Pickup & Grab) and History tabs —
+ *  lets the counter isolate a channel while defaulting to "All". */
+function ChannelFilter({
+  value, onChange, options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { key: string; label: string; dot: string | null; count: number }[];
+}) {
+  return (
+    <View className="flex-row mb-4" style={{ gap: 8, flexWrap: "wrap" }}>
+      {options.map((o) => {
+        const on = value === o.key;
+        return (
+          <Pressable key={o.key} onPress={() => onChange(o.key)}
+            className={`flex-row items-center gap-2 px-4 py-2.5 rounded-xl border active:opacity-70 ${on ? "border-primary bg-primary/15" : "border-cream/12"}`}>
+            {o.dot && <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: o.dot }} />}
+            <Text className={on ? "text-cream text-sm" : "text-cream/60 text-sm"} style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{o.label}</Text>
+            <View className="rounded-full px-1.5 min-w-[20px] items-center" style={{ backgroundColor: on ? "#C2452D" : "rgba(245,243,240,0.14)" }}>
+              <Text className="text-cream text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{o.count}</Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Detail card for a tapped table — its live order(s). This is the
+ *  consolidated QR self-order view: instead of a separate tab, you tap the
+ *  table on the floor plan to see what guests self-ordered on it. */
+function TableOrdersDetail({ slot, onClose }: { slot: TableSlot; onClose: () => void }) {
+  return (
+    <View className="rounded-2xl border p-4 mb-3" style={{ borderColor: "rgba(251,191,36,0.4)", backgroundColor: "rgba(251,191,36,0.08)" }}>
+      <View className="flex-row items-center justify-between mb-2.5">
+        <Text className="text-cream text-base" style={{ fontFamily: "Peachi-Bold" }}>{slot.label} · {slot.orders.length} order{slot.orders.length === 1 ? "" : "s"}</Text>
+        <Pressable onPress={onClose} className="active:opacity-60"><X size={18} color="rgba(245,243,240,0.7)" /></Pressable>
+      </View>
+      <View style={{ gap: 8 }}>
+        {slot.orders.map((o) => (
+          <View key={o.id} className="flex-row items-center rounded-xl px-3 py-2.5" style={{ gap: 8, backgroundColor: "rgba(245,243,240,0.05)" }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: o.source === "qr" ? "#3B82F6" : "#FBBF24" }} />
+            <Text className="text-cream text-sm flex-1" style={{ fontFamily: "SpaceGrotesk_700Bold" }} numberOfLines={1}>{o.orderNumber}</Text>
+            <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+              {new Date(o.createdAt).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })}
+            </Text>
+            <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: "rgba(245,243,240,0.08)" }}>
+              <Text className="text-cream/70 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{o.status}</Text>
+            </View>
+            <Text className="text-cream text-sm" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(o.total)}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** One row in the History tab. Tap to expand the receipt's line items so the
+ *  counter can double-check exactly what was rung up. */
+function HistoryRow({ order }: { order: HistoryOrder }) {
+  const [open, setOpen] = useState(false);
+  const dot = order.channel === "grab" ? "#22C55E" : order.channel === "pickup" ? "#3B82F6" : "#FBBF24";
+  const chan = order.channel === "grab" ? "Grab" : order.channel === "pickup" ? "Pickup" : "Counter";
+  const voided = /cancel|refund|void|fail/i.test(order.status);
+  return (
+    <Pressable onPress={() => { Haptics.selectionAsync(); setOpen((v) => !v); }} className="rounded-2xl border border-border active:opacity-80" style={{ backgroundColor: "rgba(245,243,240,0.03)" }}>
+      <View className="flex-row items-center px-4 py-3" style={{ gap: 10 }}>
+        <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: dot }} />
+        <View className="flex-1">
+          <Text className="text-cream text-sm" style={{ fontFamily: "Peachi-Bold" }} numberOfLines={1}>{order.orderNumber}</Text>
+          <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+            {chan} · {new Date(order.createdAt).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })} · {order.items.length} item{order.items.length === 1 ? "" : "s"}
+          </Text>
+        </View>
+        {voided && (
+          <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: "rgba(239,68,68,0.18)" }}>
+            <Text className="text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#FCA5A5" }}>{order.status}</Text>
+          </View>
+        )}
+        <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(order.total)}</Text>
+      </View>
+      {open && order.items.length > 0 && (
+        <View className="px-4 pb-3" style={{ gap: 4, borderTopWidth: 1, borderColor: "rgba(245,243,240,0.06)", paddingTop: 8 }}>
+          {order.items.map((it, i) => (
+            <Text key={i} className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_500Medium" }} numberOfLines={1}>
+              {it.qty}× {it.name}{it.variant ? ` · ${it.variant}` : ""}
+            </Text>
+          ))}
+        </View>
+      )}
+    </Pressable>
   );
 }
 
