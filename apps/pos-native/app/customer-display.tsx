@@ -811,7 +811,8 @@ function RewardsList({ snapshot }: { snapshot: LoyaltySnapshot }) {
 function ClaimableRewards({ snapshot, memberId }: { snapshot: LoyaltySnapshot; memberId: string }) {
   type Item =
     | { kind: "claim"; id: string; title: string; sub: string; mystery: boolean }
-    | { kind: "voucher"; id: string; title: string; sub: string };
+    | { kind: "voucher"; id: string; title: string; sub: string }
+    | { kind: "shop"; id: string; title: string; sub: string; points: number; icon: "coffee" | "tag" };
   // Mystery bags are NOT shown as a claim button here — they reveal on the
   // thank-you screen, and any missed one is silently auto-granted (see the
   // silent-claim effect). Only non-mystery claimables (promos / welcome gifts)
@@ -828,8 +829,25 @@ function ClaimableRewards({ snapshot, memberId }: { snapshot: LoyaltySnapshot; m
   const vouchers: Item[] = snapshot.vouchers
     .filter((v) => v.source_type !== "mission")
     .map((v) => ({ kind: "voucher", id: v.id, title: v.title, sub: voucherSummary(v) }));
-  const all = [...claims, ...vouchers];
-  const shown = all.slice(0, 3);
+  // Points shop — the rewards the member's balance can ALREADY get. This is the
+  // fix for "I have points but no rewards show up": affordable catalog items
+  // (e.g. RM5 at 100 pts) surface here as redeemable cards. Locked ones (priced
+  // above balance) are left to the ordering screen + register Redeem modal, so
+  // everything on the idle list is genuinely actionable right now.
+  const affordableShop: Item[] = snapshot.shop
+    .filter((s) => s.affordable)
+    .map((s) => ({
+      kind: "shop",
+      id: s.id,
+      title: s.name,
+      sub: "Redeem with your Points",
+      points: s.points_required,
+      icon: /free|drink|coffee/i.test(s.name) ? "coffee" : "tag",
+    }));
+  // Affordable points rewards sit right after tap-to-claim so a returning
+  // member always sees what their balance buys, even ahead of owned vouchers.
+  const all = [...claims, ...affordableShop, ...vouchers];
+  const shown = all.slice(0, 4);
   const more = all.length - shown.length;
 
   if (all.length === 0) {
@@ -844,6 +862,8 @@ function ClaimableRewards({ snapshot, memberId }: { snapshot: LoyaltySnapshot; m
       {shown.map((it) =>
         it.kind === "claim"
           ? <ClaimCard key={it.id} memberId={memberId} claimId={it.id} title={it.title} sub={it.sub} mystery={it.mystery} />
+          : it.kind === "shop"
+          ? <ShopRewardStatic key={it.id} title={it.title} sub={it.sub} points={it.points} icon={it.icon} />
           : <RewardCardStatic key={it.id} title={it.title} sub={it.sub} />,
       )}
       {more > 0 && (
@@ -908,6 +928,27 @@ function RewardCardStatic({ title, sub }: { title: string; sub: string }) {
       </View>
       <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: "rgba(26,2,0,0.08)" }}>
         <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 0.5, color: DARKFG }}>ASK CASHIER</Text>
+      </View>
+    </View>
+  );
+}
+
+/** Points-shop reward the member can already afford — shown on the idle screen
+ *  so a returning member sees what their balance buys. Informational here (no
+ *  order to redeem onto yet); the cashier redeems it, or the customer taps it
+ *  on the ordering screen. Gold to read as "within reach", static like the
+ *  voucher card (the cashier applies it). */
+function ShopRewardStatic({ title, sub, points, icon }: { title: string; sub: string; points: number; icon: "coffee" | "tag" }) {
+  const Icon = icon === "coffee" ? Coffee : Tag;
+  return (
+    <View className="flex-row items-center rounded-2xl px-3.5 py-3" style={{ backgroundColor: "rgba(251,191,36,0.10)", borderWidth: 1, borderColor: "rgba(251,191,36,0.40)", gap: 11 }}>
+      <View className="h-10 w-10 rounded-xl items-center justify-center" style={{ backgroundColor: GOLD }}><Icon size={18} color={DARKFG} /></View>
+      <View className="flex-1">
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, color: CREAM }} numberOfLines={1}>{title}</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 11, color: GOLD }} numberOfLines={1}>{sub}</Text>
+      </View>
+      <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: GOLD }}>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 0.3, color: DARKFG }}>{points} PTS</Text>
       </View>
     </View>
   );
