@@ -1436,7 +1436,6 @@ export default function Register() {
               </View>
               <View className="flex-row items-center gap-4">
                 {hub === "tables" && (<><TableLegendDot color="#3B82F6" label="QR table" /><TableLegendDot color="#FBBF24" label="Register" /></>)}
-                {hub === "history" && (<><TableLegendDot color="#FBBF24" label="Counter" /><TableLegendDot color="#3B82F6" label="Pickup" /><TableLegendDot color="#22C55E" label="Grab" /></>)}
                 <Pressable onPress={() => setHub(null)} className="active:opacity-60 ml-2">
                   <X size={22} color="rgba(245,243,240,0.7)" />
                 </Pressable>
@@ -1593,9 +1592,7 @@ export default function Register() {
                       onChange={(v) => { Haptics.selectionAsync(); setHistFilter(v as "all" | HistoryChannel); }}
                       options={[
                         { key: "all", label: "All", dot: null, count: historyOrders.length },
-                        { key: "counter", label: "Counter", dot: "#FBBF24", count: historyOrders.filter((o) => o.channel === "counter").length },
-                        { key: "pickup", label: "Pickup", dot: "#3B82F6", count: historyOrders.filter((o) => o.channel === "pickup").length },
-                        { key: "grab", label: "Grab", dot: "#22C55E", count: historyOrders.filter((o) => o.channel === "grab").length },
+                        ...HIST_CHANNELS.map((c) => ({ key: c.key, label: c.label, dot: c.dot, count: historyOrders.filter((o) => o.channel === c.key).length })),
                       ]}
                     />
                     <View style={{ gap: 8 }}>
@@ -1604,7 +1601,7 @@ export default function Register() {
                         <View className="py-16 items-center w-full">
                           <ClipboardList size={40} color="rgba(245,243,240,0.18)" />
                           <Text className="text-cream/40 text-sm mt-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                            {historyLoading ? "Loading today's orders…" : histFilter === "all" ? "No orders yet today." : `No ${histFilter} orders today.`}
+                            {historyLoading ? "Loading today's orders…" : histFilter === "all" ? "No orders yet today." : `No ${HIST_CHANNELS.find((c) => c.key === histFilter)?.label ?? histFilter} orders today.`}
                           </Text>
                         </View>
                       )}
@@ -2385,12 +2382,23 @@ function TableOrdersDetail({ slot, onClose }: { slot: TableSlot; onClose: () => 
   );
 }
 
+/** History channels — label + dot colour, shared by the filter chips and the
+ *  rows. Order = how they appear in the filter. */
+const HIST_CHANNELS: { key: HistoryChannel; label: string; dot: string }[] = [
+  { key: "dine_in", label: "Dine in", dot: "#FBBF24" },
+  { key: "takeaway", label: "Takeaway", dot: "#F97316" },
+  { key: "qr_table", label: "QR table", dot: "#3B82F6" },
+  { key: "grab", label: "Grab", dot: "#22C55E" },
+  { key: "pickup", label: "Pickup", dot: "#2DD4BF" },
+];
+
 /** One row in the History tab. Tap to expand the receipt's line items so the
  *  counter can double-check exactly what was rung up. */
 function HistoryRow({ order }: { order: HistoryOrder }) {
   const [open, setOpen] = useState(false);
-  const dot = order.channel === "grab" ? "#22C55E" : order.channel === "pickup" ? "#3B82F6" : "#FBBF24";
-  const chan = order.channel === "grab" ? "Grab" : order.channel === "pickup" ? "Pickup" : "Counter";
+  const meta = HIST_CHANNELS.find((c) => c.key === order.channel);
+  const dot = meta?.dot ?? "#FBBF24";
+  const chan = meta?.label ?? order.channel;
   const voided = /cancel|refund|void|fail/i.test(order.status);
   return (
     <Pressable onPress={() => { Haptics.selectionAsync(); setOpen((v) => !v); }} className="rounded-2xl border border-border active:opacity-80" style={{ backgroundColor: "rgba(245,243,240,0.03)" }}>

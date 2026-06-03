@@ -16,7 +16,7 @@ import { supabase } from "./supabase";
  * SELECT only — no writes here.
  */
 
-export type HistoryChannel = "counter" | "grab" | "pickup";
+export type HistoryChannel = "dine_in" | "takeaway" | "qr_table" | "grab" | "pickup";
 export type HistoryItem = { name: string; qty: number; variant?: string | null };
 export type HistoryOrder = {
   uid: string; // `${channel}:${id}` — stable React key
@@ -37,7 +37,7 @@ function mytMidnightIso(): string {
   return new Date(midnight).toISOString();
 }
 
-type OrderRow = { id: string; order_number: string | null; status: string; total: number | null; created_at: string };
+type OrderRow = { id: string; order_number: string | null; status: string; total: number | null; created_at: string; order_type: string | null };
 
 export function useOrderHistory(outletId: string | null | undefined) {
   const [storeId, setStoreId] = useState<string | null>(null);
@@ -63,20 +63,23 @@ export function useOrderHistory(outletId: string | null | undefined) {
   const load = useCallback(async () => {
     if (!outletId) return;
     const since = mytMidnightIso();
-    const [{ data: posRows }, pickupRes] = await Promise.all([
-      // Counter + Grab both live in pos_orders; split by source below.
+    const [{ data: posRows }, appRes] = await Promise.all([
+      // Counter + Grab both live in pos_orders; counter splits into dine-in /
+      // takeaway by order_type, grab is source='grabfood'.
       supabase
         .from("pos_orders")
-        .select("id, order_number, status, total, created_at, source")
+        .select("id, order_number, status, total, created_at, source, order_type")
         .eq("outlet_id", outletId)
         .gte("created_at", since)
         .order("created_at", { ascending: false }),
+      // Customer pickup app: dine_in = QR-table self-order, everything else =
+      // pickup. (Unlike the live KDS we KEEP dine_in here so QR-table orders
+      // show in history.)
       storeId
         ? supabase
             .from("orders")
-            .select("id, order_number, status, total, created_at")
+            .select("id, order_number, status, total, created_at, order_type")
             .eq("store_id", storeId)
-            .neq("order_type", "dine_in")
             .gte("created_at", since)
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [] as OrderRow[] }),
@@ -84,17 +87,17 @@ export function useOrderHistory(outletId: string | null | undefined) {
     const pos = (posRows ?? []) as (OrderRow & { source: string | null })[];
     const counter = pos.filter((o) => o.source !== "grabfood");
     const grab = pos.filter((o) => o.source === "grabfood");
-    const pickup = ((pickupRes as { data?: OrderRow[] | null }).data ?? []) as OrderRow[];
+    const app = ((appRes as { data?: OrderRow[] | null }).data ?? []) as OrderRow[];
 
-    // Items: pos_order_items for counter + grab; order_items for pickup.
+    // Items: pos_order_items for counter + grab; order_items for the app orders.
     const posIds = pos.map((o) => o.id);
-    const pickupIds = pickup.map((o) => o.id);
-    const [posItems, pickupItems] = await Promise.all([
+    const appIds = app.map((o) => o.id);
+    const [posItems, appItems] = await Promise.all([
       posIds.length
         ? supabase.from("pos_order_items").select("order_id, product_name, variant_name, quantity").in("order_id", posIds)
         : Promise.resolve({ data: [] as any[] }),
-      pickupIds.length
-        ? supabase.from("order_items").select("order_id, product_name, variant_name, quantity").in("order_id", pickupIds)
+      appIds.length
+        ? supabase.from("order_items").select("order_id, product_name, variant_name, quantity").in("order_id", appIds)
         : Promise.resolve({ data: [] as any[] }),
     ]);
     const byOrder = (rows: any[]): Map<string, HistoryItem[]> => {
@@ -107,7 +110,7 @@ export function useOrderHistory(outletId: string | null | undefined) {
       return m;
     };
     const pItems = byOrder(posItems.data ?? []);
-    const oItems = byOrder(pickupItems.data ?? []);
+    const oItems = byOrder(appItems.data ?? []);
 
     const mk = (o: OrderRow, channel: HistoryChannel, items: Map<string, HistoryItem[]>): HistoryOrder => ({
       uid: `${channel}:${o.id}`,
@@ -120,9 +123,9 @@ export function useOrderHistory(outletId: string | null | undefined) {
       items: items.get(o.id) ?? [],
     });
     const merged: HistoryOrder[] = [
-      ...counter.map((o) => mk(o, "counter", pItems)),
+      ...counter.map((o) => mk(o, o.order_type === "dine_in" ? "dine_in" : "takeaway", pItems)),
       ...grab.map((o) => mk(o, "grab", pItems)),
-      ...pickup.map((o) => mk(o, "pickup", oItems)),
+      ...app.map((o) => mk(o, o.order_type === "dine_in" ? "qr_table" : "pickup", oItems)),
     ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 
     setOrders(merged);
