@@ -231,13 +231,13 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Bean-Shop trigger: any template with points_cost is a points-shop
-  // item. Surfaced as a chip so the list reads "Bean Shop · 300".
+  // Points-Shop trigger: any template with points_cost is a points-shop
+  // item. Surfaced as a chip so the list reads "Points Shop · 300".
   for (const t of templates) {
     if (t.points_cost != null && t.points_cost > 0) {
       pushTrig(t.id, {
         type: "points_shop",
-        label: `Bean Shop · ${t.points_cost}`,
+        label: `Points Shop · ${t.points_cost}`,
         config: { cost_beans: t.points_cost },
       });
     }
