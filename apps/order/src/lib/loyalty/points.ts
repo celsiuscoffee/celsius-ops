@@ -243,14 +243,19 @@ export async function deductLoyaltyPoints(
       return false;
     }
 
-    // Fetch reward
+    // Fetch reward from the canonical voucher_templates (the legacy
+    // `rewards` table is being retired). title→name and
+    // points_cost→points_required aliases keep the points math identical;
+    // auto_issue + reward_type were backfilled onto voucher_templates so the
+    // auto-issue gate below behaves exactly as before. Keyed by
+    // legacy_reward_id — the text id the app + redemptions/consume RPCs use.
     const { data: reward, error: rewardErr } = await supabase
-      .from("rewards")
-      .select("id, name, points_required, auto_issue, reward_type")
-      .eq("id", rewardId)
+      .from("voucher_templates")
+      .select("name:title, points_required:points_cost, auto_issue, reward_type")
+      .eq("legacy_reward_id", rewardId)
       .eq("brand_id", BRAND_ID)
       .eq("is_active", true)
-      .single();
+      .maybeSingle();
 
     if (rewardErr || !reward) {
       console.warn("[loyalty] deductLoyaltyPoints: reward not found", rewardId, rewardErr?.message);
