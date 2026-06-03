@@ -455,7 +455,21 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
             <X size={14} color="#B91C1C" />
           </button>
         </div>
-      ) : null}
+      ) : (
+        // No reward applied — offer to pick one (parity with native cart's
+        // "Apply a reward" pill). Links to /rewards where the customer's
+        // vouchers + catalog rewards are listed and applied.
+        <Link
+          href="/rewards"
+          className="mx-4 mt-1 mb-3 flex items-center gap-2 rounded-2xl px-3 py-2 active:opacity-70"
+          style={{ backgroundColor: "#FFFFFF", border: "1px dashed rgba(185,28,28,0.40)" }}
+        >
+          <Gift size={16} color="#B91C1C" strokeWidth={1.75} />
+          <span className="flex-1 font-peachi font-bold text-[13px]" style={{ color: "#B91C1C" }}>
+            Apply a reward
+          </span>
+        </Link>
+      )}
 
       <div className="px-4 pt-4 pb-2 border-t border-[rgba(26,2,0,0.10)]">
         <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>

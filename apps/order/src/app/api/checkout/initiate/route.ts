@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireMinAppVersion } from "@/lib/min-app-version";
 import { createPayment } from "@/lib/revenue-monster/client";
 import { earnLoyaltyPoints, deductLoyaltyPoints, getTierMultiplier } from "@/lib/loyalty/points";
+import { applyOrderV2Hooks } from "@/lib/loyalty/v2";
 import {
   evaluatePromotions,
   recordPromotionApplications,
@@ -11,7 +12,7 @@ import {
 import type { OrderRow } from "@/lib/supabase/types";
 import { defaultMethodSets } from "@/lib/payments/gateway-methods";
 import { getOutletSst } from "@/lib/outlet-sst";
-import { computeVoucherDiscount } from "@celsius/shared";
+import { computeVoucherDiscount, type VoucherDiscountSpec } from "@celsius/shared";
 import {
   DISCOUNT_SPEC_COLUMNS,
   type DiscountSpecRow,
@@ -271,19 +272,81 @@ export async function POST(request: NextRequest) {
     // web / QR-table PWA checkout matches every other channel and a stale
     // or malicious client can't claim a discount the reward doesn't grant.
     let rewardDiscountSenAmt = 0;
+    // Set when the applied reward resolves to a WALLET voucher (issued_rewards
+    // row) rather than a catalog / points-shop reward — stored on the order so
+    // the confirm / markRmOrderPaid / free-order paths consume it
+    // (applyOrderV2Hooks → markVoucherUsed) instead of leaving it re-appliable.
+    let resolvedWalletVoucherId: string | null = null;
     if (rewardId) {
-      const { data: tmpl } = await supabase
-        .from("voucher_templates")
-        .select(DISCOUNT_SPEC_COLUMNS)
-        .eq("legacy_reward_id", rewardId)
-        .eq("is_active", true)
-        .maybeSingle<DiscountSpecRow>();
-      // Reject unknown/inactive rewards — silently dropping the discount
-      // would charge the pre-reward amount while the UI showed it applied.
-      if (!tmpl) {
+      let spec: VoucherDiscountSpec | null = null;
+
+      // 1) Wallet voucher (mission / mystery / welcome / points-redemption —
+      //    "Free Drink", "RM5 Off", etc.). Minted in issued_rewards with
+      //    reward_id = NULL and NO legacy_reward_id, so the template lookup
+      //    below 400'd on them and the discount silently never applied (same
+      //    class as the POS /redeem fix, commit 9685d1e7). issued_rewards
+      //    denormalises the discount mechanics at grant time. Scoped to the
+      //    member so a stale client can't burn someone else's voucher.
+      //    Select ONLY the columns issued_rewards actually has — max_discount_value
+      //    / free_product_ids / bogo_* / combo_* live on voucher_templates, and
+      //    selecting them here 42703s (the ec041a3 incident); they're null for
+      //    wallet vouchers regardless.
+      if (loyaltyId) {
+        const { data: ir } = await supabase
+          .from("issued_rewards")
+          .select(
+            "discount_type, discount_value, min_order_value, applicable_categories, applicable_products, free_product_name",
+          )
+          .eq("id", rewardId)
+          .eq("member_id", loyaltyId)
+          .eq("brand_id", "brand-celsius")
+          .eq("status", "active")
+          .maybeSingle();
+        if (ir) {
+          const r = ir as {
+            discount_type: string | null;
+            discount_value: number | null;
+            min_order_value: number | null;
+            applicable_categories: string[] | null;
+            applicable_products: string[] | null;
+            free_product_name: string | null;
+          };
+          resolvedWalletVoucherId = rewardId;
+          spec = {
+            discount_type: (r.discount_type as VoucherDiscountSpec["discount_type"]) ?? null,
+            discount_value: r.discount_value,
+            max_discount_value_sen: null,
+            min_order_value_sen: r.min_order_value != null ? Number(r.min_order_value) : null,
+            applicable_categories: r.applicable_categories,
+            applicable_products: r.applicable_products,
+            free_product_ids: null,
+            free_product_name: r.free_product_name,
+            bogo_buy_qty: null,
+            bogo_free_qty: null,
+            combo_price_sen: null,
+            override_price_sen: null,
+          };
+        }
+      }
+
+      // 2) Catalog / points-shop reward — canonical template keyed by
+      //    legacy_reward_id (full spec incl. bogo / combo / override).
+      if (!spec) {
+        const { data: tmpl } = await supabase
+          .from("voucher_templates")
+          .select(DISCOUNT_SPEC_COLUMNS)
+          .eq("legacy_reward_id", rewardId)
+          .eq("is_active", true)
+          .maybeSingle<DiscountSpecRow>();
+        if (tmpl) spec = rowToDiscountSpec(tmpl);
+      }
+
+      // Reject genuinely unknown / inactive rewards — silently dropping the
+      // discount would charge full price while the UI showed it applied.
+      if (!spec) {
         return NextResponse.json({ error: "Reward is no longer valid" }, { status: 400 });
       }
-      const spec = rowToDiscountSpec(tmpl);
+
       const cart = await buildEngineCart(
         supabase,
         items,
@@ -407,7 +470,13 @@ export async function POST(request: NextRequest) {
         discount_amount:        voucherDiscountSen,
         voucher_code:           voucherCode ?? null,
         reward_discount_amount: rewardDiscountSenAmt,
-        reward_id:              rewardId ?? null,
+        // Wallet vouchers (issued_rewards) consume via wallet_voucher_id — the
+        // confirm-stripe / confirm-maybank-qr / markRmOrderPaid paths + the
+        // free-order branch below all run applyOrderV2Hooks(walletVoucherId) to
+        // mark them used. Catalog / points-shop rewards keep reward_id so
+        // deductLoyaltyPoints can burn the points. A reward is never both.
+        reward_id:              resolvedWalletVoucherId ? null : (rewardId ?? null),
+        wallet_voucher_id:      resolvedWalletVoucherId,
         reward_name:            rewardName ?? null,
         sst_amount:             sstSen,
         first_order_discount_amount: fodDiscountSen,
@@ -491,7 +560,24 @@ export async function POST(request: NextRequest) {
         if (pointsToEarn > 0) {
           earnLoyaltyPoints(loyaltyId, order.id, pointsToEarn, order.store_id);
         }
-        if (rewardId) {
+        if (resolvedWalletVoucherId) {
+          // Wallet voucher fully covered the bill (e.g. a Free Drink). There's
+          // no gateway webhook / confirm callback for a RM0 order, so consume
+          // it here — the same applyOrderV2Hooks path the paid flows use (marks
+          // the voucher used + runs mission / mystery / referral hooks).
+          // Without this the free drink would be re-appliable next order.
+          try {
+            await applyOrderV2Hooks({
+              memberId:        loyaltyId,
+              orderId:         order.id,
+              outletId:        order.store_id,
+              orderCreatedAt:  (order as { created_at?: string }).created_at ?? new Date().toISOString(),
+              walletVoucherId: resolvedWalletVoucherId,
+            });
+          } catch (e) {
+            console.error(`[checkout] free-order v2 hooks failed for order=${order.id}`, e);
+          }
+        } else if (rewardId) {
           deductLoyaltyPoints(loyaltyId, rewardId, order.store_id);
         }
       }
