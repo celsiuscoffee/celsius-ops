@@ -1227,6 +1227,9 @@ function MysteryBox({ memberId, claimable, basePoints }: { memberId: string; cla
     setRevealed(out ?? { outcome_type: "no_bonus", multiplier_value: null, flat_beans_value: null, label: "Reward unlocked", voucher_title: null, emoji: "🎁" });
     setBusy(false);
   }
+  // "Got it" → close the reveal and drop the 2nd screen back to idle, ready for
+  // the next customer (mirrors the native app's dismiss on the reveal card).
+  function dismiss() { useDisplay.getState().setStatus("idle"); }
 
   // ── Unrevealed: saffron tile with Gift + "Reveal" pill ──
   if (!revealed) {
@@ -1253,13 +1256,14 @@ function MysteryBox({ memberId, claimable, basePoints }: { memberId: string; cla
     );
   }
 
-  // ── No bonus: quiet card (never punishing) ──
+  // ── No bonus: quiet WHITE card (never punishing), matches the native app ──
   if (revealed.outcome_type === "no_bonus") {
     return (
-      <View className="rounded-3xl items-center" style={{ width: "100%", maxWidth: 340, paddingHorizontal: 28, paddingVertical: 32, backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.14)" }}>
-        <Sparkles size={42} color="rgba(245,243,240,0.5)" strokeWidth={1.6} />
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 26, color: CREAM, marginTop: 12 }}>{revealed.label}</Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(245,243,240,0.6)", marginTop: 6, textAlign: "center" }}>Better luck on your next order ☕</Text>
+      <View className="rounded-3xl items-center" style={{ width: "100%", maxWidth: 340, paddingHorizontal: 28, paddingVertical: 30, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "rgba(26,2,0,0.10)" }}>
+        <Sparkles size={42} color="#6B6B6B" strokeWidth={1.6} />
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 26, color: "#1A0200", marginTop: 12 }}>No bonus this time</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(26,2,0,0.55)", marginTop: 6, textAlign: "center" }}>Better luck on your next order ☕</Text>
+        <GotItPill variant="quiet" onPress={dismiss} />
       </View>
     );
   }
@@ -1300,7 +1304,21 @@ function MysteryBox({ memberId, claimable, basePoints }: { memberId: string; cla
           <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(245,243,240,0.75)", marginTop: 8, textAlign: "center" }}>Show this to our barista</Text>
         </>
       )}
+      <GotItPill variant="amber" onPress={dismiss} />
     </View>
+  );
+}
+
+/** "Got it" dismiss pill on the Mystery reveal — mirrors the native app's
+ *  DismissPill (quiet = espresso on the white no-bonus card; amber = gold on
+ *  the espresso win card). Full-width rounded button. */
+function GotItPill({ variant, onPress, label = "Got it" }: { variant: "amber" | "quiet"; onPress: () => void; label?: string }) {
+  const bg = variant === "amber" ? "#FBBF24" : "#1A0200";
+  const fg = variant === "amber" ? "#1A0200" : "#FFFFFF";
+  return (
+    <Pressable onPress={onPress} className="active:opacity-85" style={{ marginTop: 20, alignSelf: "stretch", backgroundColor: bg, borderRadius: 100, paddingVertical: 12, alignItems: "center", justifyContent: "center" }}>
+      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, color: fg }}>{label}</Text>
+    </Pressable>
   );
 }
 
