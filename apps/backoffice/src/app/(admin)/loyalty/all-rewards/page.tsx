@@ -24,7 +24,7 @@ const BRAND_ID = "brand-celsius";
 // ─── Static option lists ────────────────────────────────────────
 
 const TRIGGER_META: Record<TriggerType, { label: string; icon: typeof Coins; className: string }> = {
-  points_shop:   { label: "Bean Shop",     icon: Coins,     className: "bg-amber-50  text-amber-700  border-amber-200" },
+  points_shop:   { label: "Points Shop",   icon: Coins,     className: "bg-amber-50  text-amber-700  border-amber-200" },
   mission:       { label: "Challenges",    icon: Target,    className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   mystery:       { label: "Mystery",       icon: Gift,      className: "bg-yellow-50 text-yellow-700 border-yellow-200" },
   birthday:      { label: "Birthday",      icon: Cake,      className: "bg-pink-50   text-pink-700   border-pink-200" },
@@ -83,7 +83,7 @@ function formatDiscount(r: RewardRow): string {
   else if (dt === "bogo")         bits.push(`bogo · ${r.bogo_buy_qty ?? 1}+${r.bogo_free_qty ?? 1}`);
   else if (dt === "combo")        bits.push("combo");
   else if (dt === "override_price") bits.push("override_price");
-  else if (dt === "beans_multiplier" && r.multiplier_value != null) bits.push(`beans × ${r.multiplier_value}`);
+  else if (dt === "beans_multiplier" && r.multiplier_value != null) bits.push(`points × ${r.multiplier_value}`);
   else                            bits.push(dt ?? "—");
   if (min != null) bits.push(`min ${min}¢`);
   return bits.join(" · ");

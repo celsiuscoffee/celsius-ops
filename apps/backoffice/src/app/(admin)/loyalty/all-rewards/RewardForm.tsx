@@ -496,12 +496,12 @@ export default function RewardForm({ mode, initial }: Props) {
           </Prefix>
         </Field>
 
-        <Field label="Bean Shop cost" help="Points the customer spends to redeem this in the Bean Shop. Leave blank if it isn't a points-shop item. (Replaces the old Points Shop page — Bean Shop rewards are configured here now.)">
+        <Field label="Points Shop cost" help="Points the customer spends to redeem this in the Points Shop. Leave blank if it isn't a points-shop item. (Replaces the old Points Shop page — Points Shop rewards are configured here now.)">
           <input
             type="number" step={1} min={0}
             value={val.points_cost ?? ""}
             onChange={(e) => update("points_cost", e.target.value === "" ? null : Math.max(0, Math.round(Number(e.target.value))))}
-            placeholder="Blank = not in Bean Shop"
+            placeholder="Blank = not in Points Shop"
             className="w-40 px-3 py-2 text-sm border border-slate-200 rounded-lg"
           />
         </Field>
@@ -529,7 +529,7 @@ export default function RewardForm({ mode, initial }: Props) {
                     {icon}
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold text-slate-900 truncate">{t.label}</div>
-                      <div className="text-xs text-slate-500">Configured on this page — see “Bean Shop cost”.</div>
+                      <div className="text-xs text-slate-500">Configured on this page — see “Points Shop cost”.</div>
                     </div>
                   </div>
                 );
@@ -560,11 +560,11 @@ export default function RewardForm({ mode, initial }: Props) {
             <input type="number" value={val.validity_days} onChange={(e) => update("validity_days", Number(e.target.value))} />
           </Prefix>
         </Field>
-        <Field label="Stacks with beans">
+        <Field label="Stacks with points">
           <Switch
             checked={val.stacks_with_beans}
             onChange={(v) => update("stacks_with_beans", v)}
-            label="Earn beans on the discounted subtotal"
+            label="Earn points on the discounted subtotal"
           />
         </Field>
         <Field label="Stacks with other vouchers">

@@ -42,7 +42,7 @@ const TIERS = ["Bronze", "Silver", "Gold", "Platinum"];
 // the source of truth is now the reward_kinds table (editable via the
 // Reward Library → Reward Kinds admin page).
 const OUTCOME_LABELS: Record<OutcomeType, string> = {
-  beans_multiplier: "Bean Multiplier",
+  beans_multiplier: "Point Multiplier",
   flat_beans: "Flat Bonus Points",
   voucher: "Voucher",
   no_bonus: "No Bonus (just Points)",
@@ -111,7 +111,7 @@ export default function MysteryPage() {
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             <Sparkles className="w-6 h-6" />
-            Mystery Bean Pool
+            Mystery Reward Pool
           </h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Tap-to-reveal outcomes customers can win after each order. Weights are relative —
@@ -325,7 +325,7 @@ function MysteryModal({
 
         <div className="p-5 space-y-4">
           <Field label="Label">
-            <input value={label} onChange={(e) => setLabel(e.target.value)} className="w-full border rounded-lg px-3 py-2 bg-background" placeholder="3× Bean Multiplier" />
+            <input value={label} onChange={(e) => setLabel(e.target.value)} className="w-full border rounded-lg px-3 py-2 bg-background" placeholder="3× Point Multiplier" />
           </Field>
 
           <Field label="Outcome type">
@@ -423,7 +423,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <Sparkles className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
       <h3 className="font-medium mb-1">No outcomes yet</h3>
       <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
-        Add reveal outcomes to start showing Mystery Bean cards on order confirmation. We recommend at least one "no bonus" outcome at 50%+ weight to make wins feel like wins.
+        Add reveal outcomes to start showing Mystery Reward cards on order confirmation. We recommend at least one "no bonus" outcome at 50%+ weight to make wins feel like wins.
       </p>
       <button onClick={onCreate} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium">
         <Plus className="w-4 h-4" /> Add first outcome

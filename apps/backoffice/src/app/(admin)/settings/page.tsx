@@ -144,7 +144,7 @@ const GROUPS: Group[] = [
       {
         href: "/loyalty/mystery",
         Icon: Star,
-        title: "Mystery Bean Pool",
+        title: "Mystery Reward Pool",
         blurb: "Surprise reward outcomes shown on the customer-display after checkout.",
       },
     ],

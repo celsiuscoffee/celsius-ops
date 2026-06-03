@@ -43,7 +43,7 @@ export default function ActiveVouchersPage() {
           Vouchers Issued
         </h1>
         <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-          Per-customer voucher wallet — issued by Missions, Mystery Bean, Birthday treats, Referrals,
+          Per-customer voucher wallet — issued by Missions, Mystery Reward, Birthday treats, Referrals,
           or manual grants. Includes active, used, and expired states.
           <br />
           <span className="text-xs text-muted-foreground/80">
