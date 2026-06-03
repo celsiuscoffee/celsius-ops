@@ -65,6 +65,10 @@ export async function PUT(request: NextRequest) {
     "ghl_terminal_id",
     "grid_columns",
     "layout_mode",
+    // Per-outlet SST (checkout tax) — every channel (POS, pickup, web, QR)
+    // charges THIS outlet's SST. sst_rate is a fraction (0.06 = 6%).
+    "sst_enabled",
+    "sst_rate",
     // Outlet-level tax + LHDN e-Invoice defaults (per-product can override).
     "default_tax_rate",
     "default_tax_inclusive",

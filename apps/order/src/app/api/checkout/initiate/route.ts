@@ -10,6 +10,7 @@ import {
 } from "@/lib/loyalty/promotions";
 import type { OrderRow } from "@/lib/supabase/types";
 import { defaultMethodSets } from "@/lib/payments/gateway-methods";
+import { getOutletSst } from "@/lib/outlet-sst";
 import { computeVoucherDiscount } from "@celsius/shared";
 import {
   DISCOUNT_SPEC_COLUMNS,
@@ -198,10 +199,14 @@ export async function POST(request: NextRequest) {
     const { data: settingsRows } = await supabase
       .from("app_settings")
       .select("key, value")
-      .in("key", ["points_per_rm", "min_order_value", "sst"]);
+      .in("key", ["points_per_rm", "min_order_value"]);
     const settingsMap = new Map((settingsRows ?? []).map((r) => [r.key, r.value]));
     const pointsPerRm  = Number((settingsMap.get("points_per_rm") as any)?.rate ?? 1);
     const minOrderRm   = Number((settingsMap.get("min_order_value") as any)?.rm ?? 0);
+
+    // SST is PER-OUTLET now — a pickup/web/QR order charges the SAME tax as the
+    // in-store register for that outlet (resolved from pos_branch_settings).
+    const outletSst = await getOutletSst(supabase, storeId);
 
     // First-order discount lives on the promotions table now (see
     // orders/route.ts for the same lookup). Reads the most recent
@@ -290,11 +295,11 @@ export async function POST(request: NextRequest) {
 
     // ── Server-side SST calculation ───────────────────────────────────────
     // Pulled from the batched settings read above. The client-supplied
-    // `sst` field is intentionally ignored — settings.sst is the only
-    // source of truth so a stale or malicious client can't zero out tax.
-    const sstSettingVal = settingsMap.get("sst") as { enabled?: boolean; rate?: number } | undefined;
-    const sstEnabled = sstSettingVal?.enabled !== false;
-    const sstRate    = sstSettingVal?.rate ?? 0.06;
+    // SST is server-authoritative + per-outlet (resolved above from the
+    // ordering outlet's pos_branch_settings), so a stale or malicious client
+    // can't change the tax. The payload `sst` is ignored.
+    const sstEnabled = outletSst.enabled;
+    const sstRate    = outletSst.rate;
     void sst; // accepted in payload for backward-compat; intentionally unused
 
     // ── First-order discount ──────────────────────────────────────────────

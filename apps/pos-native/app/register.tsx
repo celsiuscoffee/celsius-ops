@@ -303,13 +303,10 @@ export default function Register() {
       if (outletId) refreshSettings(outletId);
     }, [outletId, refreshSettings]),
   );
-  // Live: a backoffice edit pushes straight to the running till via realtime.
-  // TWO sources — the outlet's pos_branch_settings row (service charge, grid,
-  // receipt, tables…) AND the GLOBAL app_settings.sst (the SST on/off + rate is
-  // stored there, not on the outlet row). Without the app_settings listener,
-  // toggling SST off in the backoffice never reached a register that stayed on
-  // this screen (it only refreshed on focus) — so the till kept charging the
-  // cached SST. Both fire refreshSettings, which re-reads app_settings.sst.
+  // Live: a backoffice edit to this outlet's pos_branch_settings row pushes
+  // straight to the running till via realtime. SST now lives on that row too
+  // (per-outlet sst_enabled / sst_rate), so a tax toggle reflects live without
+  // an app restart — covered by this same listener.
   useEffect(() => {
     if (!outletId) return;
     const ch = supabase
@@ -317,11 +314,6 @@ export default function Register() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "pos_branch_settings", filter: `outlet_id=eq.${outletId}` },
-        () => { refreshSettings(outletId); },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "app_settings", filter: `key=eq.sst` },
         () => { refreshSettings(outletId); },
       )
       .subscribe();

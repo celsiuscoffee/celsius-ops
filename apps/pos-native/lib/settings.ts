@@ -38,6 +38,11 @@ export type BranchSettings = {
   table_layout: { name?: string; tables?: unknown }[] | null;
   default_tax_rate: number | null;
   default_tax_inclusive: boolean | null;
+  // Per-outlet SST (checkout tax). Each outlet sets its own on/off + rate;
+  // every channel charges the ORDERING outlet's SST. rate is a fraction
+  // (0.06 = 6%).
+  sst_enabled: boolean | null;
+  sst_rate: number | null;
   einvoice_tin: string | null;
   einvoice_brn: string | null;
   einvoice_sst_no: string | null;
@@ -55,8 +60,9 @@ export type OutletInfo = {
 type SettingsState = {
   settings: BranchSettings | null;
   outlet: OutletInfo | null;
-  /** Global SST — the single source of truth (app_settings.sst), shared
-   *  with the pickup/order app so the POS charges the same rate. */
+  /** This outlet's SST — sourced from its pos_branch_settings row
+   *  (sst_enabled / sst_rate), so each outlet charges its own tax. The
+   *  pickup/order app reads the same per-outlet row at checkout. */
   sst: { rate: number; enabled: boolean };
   outletId: string | null;
   loading: boolean;
@@ -86,25 +92,25 @@ export const useSettings = create<SettingsState>((set, get) => ({
     set({ loading: true, error: null, outletId });
     // Pull the BO-managed settings row + the outlet master (for the
     // receipt header) together.
-    const [settingsRes, outletRes, sstRes] = await Promise.all([
+    const [settingsRes, outletRes] = await Promise.all([
       supabase.from("pos_branch_settings").select("*").eq("outlet_id", outletId).maybeSingle(),
       supabase.from("outlets").select("name, address, city, state, phone").eq("id", outletId).maybeSingle(),
-      // Single source of truth for SST — the same global app_settings.sst the
-      // pickup/order app reads, so a backoffice change lands on every channel.
-      // anon SELECT is permitted on app_settings.
-      supabase.from("app_settings").select("value").eq("key", "sst").maybeSingle(),
     ]);
     if (settingsRes.error) {
       set({ loading: false, error: settingsRes.error.message });
       return;
     }
-    const sstVal = (sstRes.data as { value?: { rate?: number; enabled?: boolean } } | null)?.value;
+    const branch = (settingsRes.data as BranchSettings) ?? null;
+    // SST is per-outlet now: read this outlet's sst_enabled / sst_rate off the
+    // branch row. No branch row (or unset) → SST off (safe default). Because it
+    // lives on pos_branch_settings, the register's existing realtime listener
+    // on that table already pushes a backoffice SST change to the live till.
     set({
-      settings: (settingsRes.data as BranchSettings) ?? null,
+      settings: branch,
       outlet: (outletRes.data as OutletInfo) ?? null,
       sst: {
-        rate: typeof sstVal?.rate === "number" ? sstVal.rate : 0.06,
-        enabled: sstVal?.enabled !== false,
+        rate: typeof branch?.sst_rate === "number" ? branch.sst_rate : 0.06,
+        enabled: branch?.sst_enabled === true,
       },
       loading: false,
     });

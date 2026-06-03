@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getTierMultiplier } from "@/lib/loyalty/points";
 import { evaluatePromotions, type CartLine } from "@/lib/loyalty/promotions";
+import { getOutletSst } from "@/lib/outlet-sst";
 
 // POST /api/checkout/quote
 //
@@ -81,14 +82,14 @@ export async function POST(request: NextRequest) {
     const { data: settings } = await supabase
       .from("app_settings")
       .select("key, value")
-      .in("key", ["points_per_rm", "sst", "min_order_value"]);
+      .in("key", ["points_per_rm", "min_order_value"]);
     const settingsMap = new Map<string, unknown>();
     for (const s of (settings ?? []) as Array<{ key: string; value: unknown }>) {
       settingsMap.set(s.key, s.value);
     }
-    const sstVal = settingsMap.get("sst") as { enabled?: boolean; rate?: number } | undefined;
-    const sstEnabled = sstVal?.enabled !== false;
-    const sstRate = sstVal?.rate ?? 0.06;
+    // SST is per-outlet — match what /checkout/initiate will charge so the
+    // preview total equals the amount the order is actually created for.
+    const { enabled: sstEnabled, rate: sstRate } = await getOutletSst(supabase, storeId);
     const pointsPerRm = Number((settingsMap.get("points_per_rm") as { rate?: number } | undefined)?.rate ?? 1);
     const minOrderRm = Number((settingsMap.get("min_order_value") as { rm?: number } | undefined)?.rm ?? 0);
 

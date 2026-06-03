@@ -481,6 +481,7 @@ const NAV_SECTIONS: NavSection[] = [
           { label: "All Rewards",     href: "/loyalty/all-rewards",  icon: <Ticket className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
           { label: "Outcome Types",   href: "/loyalty/reward-kinds", icon: <Layers className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
           { label: "Birthday Treats", href: "/loyalty/birthday",     icon: <Cake className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
+          { label: "Earn Rate",       href: "/loyalty/settings",     icon: <Coins className={ICON_SIZE} />,  moduleKey: "loyalty:rewards" },
         ],
       },
       {

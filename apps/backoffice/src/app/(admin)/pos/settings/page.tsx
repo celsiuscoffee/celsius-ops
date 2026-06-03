@@ -30,6 +30,10 @@ type Settings = {
   ghl_terminal_id:         string | null;
   grid_columns:            number | null;
   layout_mode:             string | null;
+  // Per-outlet SST (checkout tax). Applied by EVERY channel for this outlet —
+  // in-store POS, pickup, web, QR-table. sst_rate is a fraction (0.06 = 6%).
+  sst_enabled:             boolean | null;
+  sst_rate:                number | null;
   // Tax + LHDN e-Invoice defaults applied to all products that don't override.
   default_tax_rate:        number | null;
   default_tax_inclusive:   boolean | null;
@@ -186,6 +190,26 @@ export default function POSSettingsPage() {
               className="input"
             />
           </Field>
+          {/* Per-outlet SST — every channel (POS, pickup, web, QR) charges THIS
+              outlet's tax. Stored as a fraction; shown/edited as a percentage. */}
+          <Toggle
+            checked={editing.sst_enabled === true}
+            onChange={(v) => update("sst_enabled", v)}
+            label="Charge SST (tax) at this outlet"
+          />
+          {editing.sst_enabled && (
+            <Field label="SST Rate (%)">
+              <input
+                type="number"
+                step="0.5"
+                min={0}
+                max={50}
+                value={Math.round((editing.sst_rate ?? 0.06) * 100)}
+                onChange={(e) => update("sst_rate", Math.max(0, Number(e.target.value)) / 100)}
+                className="input"
+              />
+            </Field>
+          )}
           <Field label="Default Order Type">
             <select
               value={editing.default_order_type ?? "takeaway"}

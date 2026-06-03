@@ -17,6 +17,7 @@ import {
 } from "@/lib/loyalty/promotions";
 import { requireCustomerSession } from "@/lib/customer-jwt";
 import { attributeOrderToCampaign } from "@/lib/push/attribution";
+import { getOutletSst } from "@/lib/outlet-sst";
 import {
   DISCOUNT_SPEC_COLUMNS,
   type DiscountSpecRow,
@@ -364,7 +365,7 @@ export async function POST(request: NextRequest) {
     const { data: settingsRows } = await supabase
       .from("app_settings")
       .select("key, value")
-      .in("key", ["points_per_rm", "min_order_value", "sst"]);
+      .in("key", ["points_per_rm", "min_order_value"]);
     const settingsMap = new Map((settingsRows ?? []).map((r) => [r.key, r.value]));
     const pointsPerRm  = Number((settingsMap.get("points_per_rm") as any)?.rate ?? 1);
     const minOrderRm   = Number((settingsMap.get("min_order_value") as any)?.rm ?? 0);
@@ -389,12 +390,11 @@ export async function POST(request: NextRequest) {
           amount: Number(fodRow.discount_value ?? 0),
         }
       : undefined;
-    // SST is server-authoritative — we never trust the client-supplied
-    // `sst` because (a) the pickup-native client doesn't send it and
-    // (b) honoring it would let a stale or malicious client zero out
-    // tax on an order whose backoffice setting still has it enabled.
-    const sstConfig    = (settingsMap.get("sst") as { rate?: number; enabled?: boolean } | undefined) ?? { rate: 0.06, enabled: true };
-    const sstRate      = sstConfig.enabled === false ? 0 : Number(sstConfig.rate ?? 0.06);
+    // SST is server-authoritative + PER-OUTLET — resolved from the ordering
+    // outlet's pos_branch_settings, never the client-supplied `sst`. sstRate is
+    // the EFFECTIVE rate (0 when the outlet has SST off).
+    const outletSst    = await getOutletSst(supabase, storeId);
+    const sstRate      = outletSst.enabled ? outletSst.rate : 0;
 
     if (minOrderRm > 0 && total < minOrderRm) {
       return NextResponse.json(
