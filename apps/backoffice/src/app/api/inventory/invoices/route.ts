@@ -31,9 +31,18 @@ export async function GET(req: NextRequest) {
   // is overdue from the supplier's perspective. We surface it as overdue in
   // the cards and filter without rewriting the status, so the table badge
   // still reads INITIATED — useful triage info for Finance.
+  //
+  // Same treatment for the two-leg payment states: a DEPOSIT_PAID or
+  // PARTIALLY_PAID invoice still owes its balance, so once that balance is
+  // past the due date it's overdue. We surface it without rewriting the
+  // status — flipping to OVERDUE would erase the "deposit paid" state and
+  // break the Initiate Balance Payment flow. dueNow() (below) already counts
+  // only the remaining balance for these, so the Overdue card amount is right.
   const overdueOr: Prisma.InvoiceWhereInput[] = [
     { status: "OVERDUE" },
     { status: "INITIATED", dueDate: { lt: _todayStart } },
+    { status: "DEPOSIT_PAID", dueDate: { lt: _todayStart } },
+    { status: "PARTIALLY_PAID", dueDate: { lt: _todayStart } },
   ];
 
   // GRNI / "pending invoice" = goods received, supplier hasn't sent the

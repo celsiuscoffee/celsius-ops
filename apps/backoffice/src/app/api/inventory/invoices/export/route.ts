@@ -36,9 +36,14 @@ export async function GET(req: NextRequest) {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart.getTime() + 86400000);
 
+  // Mirror the list route: overdue = unpaid past due, including the two-leg
+  // states (DEPOSIT_PAID / PARTIALLY_PAID) whose balance is past due. Status
+  // is left intact; only the remaining balance is owed.
   const overdueOr: Prisma.InvoiceWhereInput[] = [
     { status: "OVERDUE" },
     { status: "INITIATED", dueDate: { lt: todayStart } },
+    { status: "DEPOSIT_PAID", dueDate: { lt: todayStart } },
+    { status: "PARTIALLY_PAID", dueDate: { lt: todayStart } },
   ];
 
   const pendingInvoiceWhere: Prisma.InvoiceWhereInput = {

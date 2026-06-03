@@ -802,7 +802,7 @@ export default function InvoicesPage() {
     const reconFlag = hasVariance && attachRecon
       ? {
           code: "BILLED_VS_RECEIVED",
-          message: `Supplier billed RM ${billed.toFixed(2)} vs received total RM ${attachRecon.receivedTotal.toFixed(2)} (Δ RM ${(billed - attachRecon.receivedTotal).toFixed(2)})`,
+          message: `Supplier billed ${formatRM(billed)} vs received total ${formatRM(attachRecon.receivedTotal)} (Δ ${formatRM(billed - attachRecon.receivedTotal)})`,
           reason: attachVarianceReason.trim(),
           detectedAt: new Date().toISOString(),
           qtyVariances: attachRecon.lines.filter((l) => Math.abs(l.qtyVariance) > 0.0001).map((l) => ({ product: l.product, ordered: l.ordered, received: l.received })),
@@ -1086,7 +1086,7 @@ export default function InvoicesPage() {
                 </span>
               )}
             </div>
-            <p className={`text-lg font-bold ${card.color}`}>RM {card.amount.toFixed(2)}</p>
+            <p className={`text-lg font-bold ${card.color}`}>{formatRM(card.amount)}</p>
             {card.key === "payable" && pendingInvoiceCount > 0 && (
               // Soft-hide: GRNI placeholders are excluded from Payable count/amount,
               // but the sub-line keeps the full liability visible for cashflow planning.
@@ -1095,7 +1095,7 @@ export default function InvoicesPage() {
                 className="mt-0.5 text-[10px] text-yellow-700 hover:underline cursor-pointer"
                 title="Click to view Pending Invoice rows"
               >
-                + RM {totalPendingInvoice.toFixed(2)} awaiting invoice
+                + {formatRM(totalPendingInvoice)} awaiting invoice
               </p>
             )}
             {card.key === "due_today" && card.count > 0 && cardFilter === "due_today" && (
@@ -1385,9 +1385,9 @@ export default function InvoicesPage() {
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-base font-bold text-gray-900">RM {inv.amount.toFixed(2)}</p>
+                  <p className="text-base font-bold text-gray-900">{formatRM(inv.amount)}</p>
                   {(inv.status === "PARTIALLY_PAID" || inv.status === "DEPOSIT_PAID") && inv.amountPaid > 0 && (
-                    <p className="text-[10px] text-amber-600">Bal: RM {(inv.amount - inv.amountPaid).toFixed(2)}</p>
+                    <p className="text-[10px] text-amber-600">Bal: {formatRM(inv.amount - inv.amountPaid)}</p>
                   )}
                 </div>
               </div>
@@ -1577,7 +1577,7 @@ export default function InvoicesPage() {
                       <Badge className={`text-[10px] ${statusColor(inv.status)}`}>{statusLabel(inv.status, inv.paymentType)}</Badge>
                     )}
                     {(inv.status === "PARTIALLY_PAID" || inv.status === "DEPOSIT_PAID") && inv.amountPaid > 0 && (
-                      <p className="text-[9px] text-amber-600 mt-0.5">Bal: RM {(inv.amount - inv.amountPaid).toFixed(2)}</p>
+                      <p className="text-[9px] text-amber-600 mt-0.5">Bal: {formatRM(inv.amount - inv.amountPaid)}</p>
                     )}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{inv.issueDate}</td>
@@ -1610,12 +1610,12 @@ export default function InvoicesPage() {
                       if (inDepositLeg) {
                         return (
                           <>
-                            {depositAmt.toFixed(2)}
-                            <p className="text-[9px] text-gray-400 mt-0.5">of {inv.amount.toFixed(2)}</p>
+                            {depositAmt.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <p className="text-[9px] text-gray-400 mt-0.5">of {inv.amount.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                           </>
                         );
                       }
-                      return inv.amount.toFixed(2);
+                      return inv.amount.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     })()}
                   </td>
                   <td className="px-4 py-3">
@@ -1805,11 +1805,11 @@ export default function InvoicesPage() {
                       <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                         <div className="rounded bg-white px-2 py-1.5">
                           <span className="text-amber-700">Deposit</span>
-                          <p className="font-semibold text-amber-900">RM {depAmt.toFixed(2)}</p>
+                          <p className="font-semibold text-amber-900">{formatRM(depAmt)}</p>
                         </div>
                         <div className="rounded bg-white px-2 py-1.5">
                           <span className="text-amber-700">Balance</span>
-                          <p className="font-semibold text-amber-900">RM {balance.toFixed(2)}</p>
+                          <p className="font-semibold text-amber-900">{formatRM(balance)}</p>
                         </div>
                       </div>
                     ) : (
@@ -2127,7 +2127,7 @@ export default function InvoicesPage() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-base font-semibold text-gray-900">Send Proof of Payment</h3>
-                <p className="mt-0.5 text-xs text-gray-500">{popDialogInvoice.invoiceNumber} · {popDialogInvoice.supplier} · RM {popDialogInvoice.amount.toFixed(2)}</p>
+                <p className="mt-0.5 text-xs text-gray-500">{popDialogInvoice.invoiceNumber} · {popDialogInvoice.supplier} · {formatRM(popDialogInvoice.amount)}</p>
               </div>
               <button onClick={() => setPopDialogInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
                 <X className="h-5 w-5" />
@@ -2181,7 +2181,7 @@ export default function InvoicesPage() {
 
             <div className="space-y-3">
               <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                <p><span className="font-medium text-gray-800">{rejectingInvoice.invoiceNumber}</span> · {rejectingInvoice.supplier} · RM {rejectingInvoice.amount.toFixed(2)}</p>
+                <p><span className="font-medium text-gray-800">{rejectingInvoice.invoiceNumber}</span> · {rejectingInvoice.supplier} · {formatRM(rejectingInvoice.amount)}</p>
                 {rejectingInvoice.paymentRef && (
                   <p className="mt-1 text-[11px] text-gray-500">Initiated ref: <code className="rounded bg-white px-1 py-0.5 text-[10px]">{rejectingInvoice.paymentRef}</code> (will be cleared)</p>
                 )}
@@ -2235,7 +2235,7 @@ export default function InvoicesPage() {
             <div className="rounded-lg bg-gray-50 px-3 py-2.5 text-sm">
               <div className="flex items-center justify-between">
                 <span className="font-medium text-gray-900">{payingInvoice.invoiceNumber}</span>
-                <span className="font-bold text-gray-900">RM {payingInvoice.amount.toFixed(2)}</span>
+                <span className="font-bold text-gray-900">{formatRM(payingInvoice.amount)}</span>
               </div>
               <p className="mt-0.5 text-xs text-gray-500">{payingInvoice.supplier} · {payingInvoice.outlet}</p>
             </div>
@@ -2246,11 +2246,11 @@ export default function InvoicesPage() {
                 <p className="text-xs font-medium text-amber-700 mb-1.5">Deposit Payment ({payingInvoice.depositPercent}%)</p>
                 <div className="flex items-center justify-between">
                   <span className="text-amber-800">Deposit</span>
-                  <span className="font-medium text-amber-900">RM {(payingInvoice.depositAmount ?? Math.round(payingInvoice.amount * payingInvoice.depositPercent / 100 * 100) / 100).toFixed(2)}</span>
+                  <span className="font-medium text-amber-900">{formatRM(payingInvoice.depositAmount ?? Math.round(payingInvoice.amount * payingInvoice.depositPercent / 100 * 100) / 100)}</span>
                 </div>
                 <div className="flex items-center justify-between mt-0.5">
                   <span className="text-amber-800">Balance</span>
-                  <span className="font-medium text-amber-900">RM {(payingInvoice.amount - (payingInvoice.depositAmount ?? Math.round(payingInvoice.amount * payingInvoice.depositPercent / 100 * 100) / 100)).toFixed(2)}</span>
+                  <span className="font-medium text-amber-900">{formatRM(payingInvoice.amount - (payingInvoice.depositAmount ?? Math.round(payingInvoice.amount * payingInvoice.depositPercent / 100 * 100) / 100))}</span>
                 </div>
                 {payingInvoice.depositPaidAt && (
                   <p className="mt-1.5 text-xs text-green-600">✓ Deposit paid on {new Date(payingInvoice.depositPaidAt).toLocaleDateString("en-MY")}{payingInvoice.depositRef ? ` — Ref: ${payingInvoice.depositRef}` : ""}</p>
@@ -2377,7 +2377,7 @@ export default function InvoicesPage() {
                 <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-semibold text-amber-900">Pay partial?</p>
-                    <p className="text-[11px] text-amber-700">Outstanding: RM {remaining.toFixed(2)}</p>
+                    <p className="text-[11px] text-amber-700">Outstanding: {formatRM(remaining)}</p>
                   </div>
                   <Input
                     type="number"
@@ -2396,12 +2396,12 @@ export default function InvoicesPage() {
                   />
                   {validPartial && partial < remaining && (
                     <p className="mt-1.5 text-[11px] text-amber-800">
-                      After this: RM {projectedRemaining.toFixed(2)} still owed → status will become <strong>partial</strong>.
+                      After this: {formatRM(projectedRemaining)} still owed → status will become <strong>partial</strong>.
                     </p>
                   )}
                   {validPartial && partial > remaining && (
                     <p className="mt-1.5 text-[11px] text-red-700">
-                      Amount exceeds outstanding (RM {remaining.toFixed(2)}). Will cap at outstanding.
+                      Amount exceeds outstanding ({formatRM(remaining)}). Will cap at outstanding.
                     </p>
                   )}
                 </div>
@@ -2539,7 +2539,7 @@ export default function InvoicesPage() {
                   Review flags
                 </h3>
                 <p className="mt-0.5 text-xs text-gray-500">
-                  {reviewingFlags.invoiceNumber} · {reviewingFlags.supplier} · RM {reviewingFlags.amount.toFixed(2)}
+                  {reviewingFlags.invoiceNumber} · {reviewingFlags.supplier} · {formatRM(reviewingFlags.amount)}
                 </p>
               </div>
               <button onClick={() => setReviewingFlags(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100">
