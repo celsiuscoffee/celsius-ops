@@ -111,6 +111,23 @@ export function MenuColumns({
 
   const [active, setActive] = useState(sections[0]?.id ?? "");
 
+  // Measured height of the sticky chrome (header + outlet row + the
+  // CONDITIONAL reserved-voucher banner). The rail's sticky offset + the
+  // scroll-spy math key off this so they stay correct whether or not the
+  // banner is showing. A hardcoded offset let the banner (z-10) overlap the
+  // category rail + product list whenever a voucher was locked in.
+  const chromeRef = useRef<HTMLDivElement>(null);
+  const [chromeH, setChromeH] = useState(150);
+  useEffect(() => {
+    const el = chromeRef.current;
+    if (!el) return;
+    const update = () => setChromeH(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Search results — flat list across all sections, deduped by product
   // id (Best Sellers + the original category section would otherwise
   // surface the same product twice).
@@ -137,7 +154,7 @@ export function MenuColumns({
     function onScroll() {
       if (Date.now() - userClickedAtRef.current < 600) return;
       let nextActive = sections[0]?.id ?? "";
-      const offset = 160;
+      const offset = chromeH + 12;
       for (const s of sections) {
         const el = sectionRefs.current[s.id];
         if (!el) continue;
@@ -150,14 +167,14 @@ export function MenuColumns({
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
-  }, [sections]);
+  }, [sections, chromeH]);
 
   const onPickPill = (id: string) => {
     setActive(id);
     userClickedAtRef.current = Date.now();
     const el = sectionRefs.current[id];
     if (!el) return;
-    const top = el.getBoundingClientRect().top + window.scrollY - 110;
+    const top = el.getBoundingClientRect().top + window.scrollY - chromeH - 8;
     window.scrollTo({ top, behavior: "smooth" });
   };
 
@@ -166,7 +183,7 @@ export function MenuColumns({
       {/* Chrome block — header + outlet picker (+ reserved-voucher
           banner) freeze together at the top so the outlet stays in view
           while the product list scrolls under it. */}
-      <div className="sticky top-0 z-10">
+      <div ref={chromeRef} className="sticky top-0 z-10">
       {/* Espresso header. Search is a toggle (matching
           apps/pickup-native/app/menu.tsx:375-430): the title row shows
           a Search icon + Cart; tapping Search swaps the whole bar into
@@ -260,7 +277,7 @@ export function MenuColumns({
         className="flex-shrink-0 bg-white overflow-y-auto w-[76px] min-[420px]:w-24"
         style={{
           position: "sticky",
-          top: "calc(env(safe-area-inset-top, 0px) + 100px)",
+          top: `${chromeH}px`,
           alignSelf: "flex-start",
           height: "calc(100dvh - 140px)",
           WebkitOverflowScrolling: "touch",

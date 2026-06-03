@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Lock } from "lucide-react";
 
 /**
@@ -83,14 +83,24 @@ export function TierCarousel() {
   // same one-card-per-page snap as native (CARD_W = SCREEN_W - 32).
   const [cardW, setCardW] = useState(330);
 
-  useEffect(() => {
-    const measure = () => {
-      const w = scrollRef.current?.clientWidth;
-      if (w) setCardW(w - 32);
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+  // Measure the card width from the scroll container the moment it mounts.
+  // The container only renders after tiers load (this component returns null
+  // before that), so an on-mount effect measured a null ref and the cards
+  // stayed at the 330px placeholder until a resize — the "small then big"
+  // pop. A callback ref + ResizeObserver sets the real width during commit
+  // (before paint) and tracks later resizes.
+  const roRef = useRef<ResizeObserver | null>(null);
+  const attachScroll = useCallback((el: HTMLDivElement | null) => {
+    scrollRef.current = el;
+    roRef.current?.disconnect();
+    roRef.current = null;
+    if (el) {
+      const measure = () => setCardW(el.clientWidth - 32);
+      measure();
+      const ro = new ResizeObserver(measure);
+      ro.observe(el);
+      roRef.current = ro;
+    }
   }, []);
 
   useEffect(() => {
@@ -165,7 +175,7 @@ export function TierCarousel() {
       </p>
 
       <div
-        ref={scrollRef}
+        ref={attachScroll}
         onScroll={onScroll}
         className="flex overflow-x-auto pb-1"
         style={{
