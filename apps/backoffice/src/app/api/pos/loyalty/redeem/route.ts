@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { markVoucherUsed } from "@celsius/shared";
 
 // Service-role required: member_brands writes + issued_rewards updates
 // are blocked under anon. Without this, the modal hand-off succeeds
@@ -115,14 +116,18 @@ export async function POST(req: NextRequest) {
 
     if (issued_reward_id) {
       // ── Issued reward (birthday/welcome): no point deduction ──
-      const { error: irErr } = await supabase
-        .from("issued_rewards")
-        .update({ status: "used" })
-        .eq("id", issued_reward_id)
-        .eq("member_id", member_id)
-        .eq("status", "active");
-
-      if (irErr) {
+      // Single source of truth: the shared markVoucherUsed helper (the same
+      // one apps/order's checkout uses) flips status → 'used' AND stamps
+      // redeemed_at, scoped to id + member_id + brand_id + status='active'.
+      // Idempotent — a re-call on an already-burned voucher returns
+      // alreadyUsed:true rather than erroring, so a POS retry won't 500.
+      const burn = await markVoucherUsed({
+        supabase,
+        voucherId: issued_reward_id,
+        memberId: member_id,
+        brandId: BRAND_ID,
+      });
+      if (!burn.ok) {
         return NextResponse.json({ error: "Failed to use issued reward" }, { status: 500 });
       }
 
