@@ -552,10 +552,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ── Revenue Monster fallback (not currently used) ──────────────────────
+    // ── Revenue Monster (card / FPX / TNG / Boost / ShopeePay) ─────────────
+    // Sends the customer to RM's hosted page (card / FPX) or a wallet deep
+    // link (TNG / Boost / ShopeePay). createPayment returns BOTH the URL and
+    // the RM checkoutId, so we MUST destructure — the previous code assigned
+    // the whole { paymentUrl, checkoutId } object to `paymentUrl`, so the
+    // client redirected to "[object Object]" and RM checkout never opened.
+    // We also stash the checkoutId so the order page can poll RM for the
+    // result (webhook delivery is best-effort in Direct mode), matching the
+    // native pickup app's /api/payments/create path.
     const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL ?? "https://order.celsiuscoffee.com").trim();
     try {
-      const paymentUrl = await createPayment({
+      const { paymentUrl, checkoutId } = await createPayment({
         orderId:       order.id,
         orderNumber:   order.order_number,
         storeId:       order.store_id,
@@ -564,6 +572,11 @@ export async function POST(request: NextRequest) {
         redirectUrl:   `${baseUrl}/order/${order.id}?payment=done`,
         notifyUrl:     `${baseUrl}/api/payments/webhook`,
       });
+
+      await supabase
+        .from("orders")
+        .update({ payment_checkout_id: checkoutId } as Record<string, unknown>)
+        .eq("id", order.id);
 
       return NextResponse.json({
         orderId:     order.id,

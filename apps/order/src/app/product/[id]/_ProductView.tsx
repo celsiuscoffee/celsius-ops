@@ -269,7 +269,7 @@ export function ProductView({ product }: { product: Product }) {
         />
       </section>
 
-      <section className="mt-5 px-5 flex items-center gap-3">
+      <section className="mt-5 px-5 flex items-center justify-center gap-3">
         <button
           type="button"
           onClick={() => setQty((q) => Math.max(1, q - 1))}
