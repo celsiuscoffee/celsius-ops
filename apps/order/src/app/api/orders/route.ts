@@ -423,8 +423,57 @@ export async function POST(request: NextRequest) {
     }
 
     const orderNumber        = generateOrderNumber();
-    const subtotalSen        = Math.round(total * 100);
-    let   voucherDiscountSen = Math.round(discountSen ?? 0);
+
+    // ── Server-authoritative subtotal ───────────────────────────────────────
+    // SECURITY: never trust the client `total` for the charged amount. Look up
+    // each product's real price from the DB and recompute base × qty, adding
+    // only NON-NEGATIVE modifier deltas (a crafted negative delta would let a
+    // request deflate the bill). Mirrors /api/checkout/initiate. The client
+    // `total` is kept only for the min-order UX check above.
+    type PricingItem = {
+      product?: { id?: string };
+      productId?: string;
+      product_id?: string;
+      quantity: number;
+      modifiers?: unknown;
+    };
+    const pricingItems = items as PricingItem[];
+    const pricingIds = pricingItems
+      .map((i) => i.product?.id ?? i.productId ?? i.product_id)
+      .filter(Boolean) as string[];
+    const { data: pricedProducts, error: pricedErr } = await supabase
+      .from("products")
+      .select("id, price")
+      .in("id", pricingIds);
+    if (pricedErr || !pricedProducts || pricedProducts.length === 0) {
+      return NextResponse.json({ error: "Failed to verify product prices" }, { status: 400 });
+    }
+    const pricedMap = new Map(
+      (pricedProducts as Array<{ id: string; price: number }>).map((p) => [p.id, p.price]),
+    );
+    let serverSubtotalSen = 0;
+    for (const it of pricingItems) {
+      const pid = (it.product?.id ?? it.productId ?? it.product_id) as string;
+      const dbPrice = pricedMap.get(pid);
+      if (dbPrice == null) {
+        return NextResponse.json({ error: `Product ${pid} not found` }, { status: 400 });
+      }
+      const mods = Array.isArray(it.modifiers)
+        ? (it.modifiers as Array<{ priceDelta?: number }>)
+        : (((it.modifiers as { selections?: Array<{ priceDelta?: number }> } | null)?.selections) ?? []);
+      const modifierDeltaSen = mods.reduce(
+        (sum, m) => sum + Math.max(0, Math.round((m.priceDelta ?? 0) * 100)), 0,
+      );
+      const unitPriceSen = Math.round(dbPrice * 100) + modifierDeltaSen;
+      serverSubtotalSen += unitPriceSen * it.quantity;
+    }
+    const subtotalSen        = serverSubtotalSen;
+    // SECURITY: the legacy client-supplied `discountSen` is never trusted — no
+    // first-party client sends it and 0 orders have ever used it. Real
+    // discounts flow through the authoritative reward / wallet-voucher /
+    // promotion engines below.
+    let   voucherDiscountSen = 0;
+    void discountSen;
 
     // Server-side reward validation + bound. Was: trust the client's
     // rewardDiscountSen blindly. A stale or malicious client could
@@ -566,9 +615,11 @@ export async function POST(request: NextRequest) {
     };
     const cartLinesBare = (items as IncomingItem[]).map((i) => {
       const pid = i.product?.id ?? i.productId ?? i.product_id ?? "";
-      const unit = i.basePrice != null
+      // Use the authoritative DB price (not client basePrice) so a crafted
+      // basePrice can't inflate a percentage-off promo discount.
+      const unit = pricedMap.get(pid) ?? (i.basePrice != null
         ? i.basePrice
-        : (i.totalPrice ?? 0) / Math.max(1, i.quantity);
+        : (i.totalPrice ?? 0) / Math.max(1, i.quantity));
       return { product_id: pid, quantity: i.quantity, unit_price: unit };
     });
     // Batch-look-up product categories so the loyalty evaluator can

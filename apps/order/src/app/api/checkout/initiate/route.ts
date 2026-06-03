@@ -185,9 +185,11 @@ export async function POST(request: NextRequest) {
       if (dbPrice == null) {
         return NextResponse.json({ error: `Product ${pid} not found` }, { status: 400 });
       }
-      // dbPrice is in RM (e.g. 12.90), convert to sen and multiply by quantity
+      // dbPrice is in RM (e.g. 12.90), convert to sen and multiply by quantity.
+      // SECURITY: clamp modifier deltas to >=0 so a crafted negative priceDelta
+      // can't deflate the server-recomputed subtotal.
       const modifierDeltaSen = (item.modifiers?.selections ?? []).reduce(
-        (sum, s) => sum + Math.round((s.priceDelta ?? 0) * 100), 0
+        (sum, s) => sum + Math.max(0, Math.round((s.priceDelta ?? 0) * 100)), 0
       );
       const unitPriceSen = Math.round(dbPrice * 100) + modifierDeltaSen;
       serverSubtotalSen += unitPriceSen * item.quantity;
@@ -229,12 +231,10 @@ export async function POST(request: NextRequest) {
       : undefined;
 
     // ── Server-side monetary validation ────────────────────────────────────
-    const rawDiscountSen = discountSen ?? 0;
-    if (
-      rawDiscountSen < 0 ||
-      rawDiscountSen > serverSubtotalSen ||
-      serverSubtotalSen <= 0
-    ) {
+    // The legacy client-supplied `discountSen` is no longer trusted (ignored
+    // below — real discounts come from the authoritative reward / voucher /
+    // promotion engines). Only guard that the recomputed subtotal is positive.
+    if (serverSubtotalSen <= 0) {
       return NextResponse.json({ error: "Invalid order amounts" }, { status: 400 });
     }
     if (minOrderRm > 0 && total < minOrderRm) {
@@ -373,7 +373,11 @@ export async function POST(request: NextRequest) {
     // ── Compute totals server-side ─────────────────────────────────────────
     const orderNumber          = generateOrderNumber();
     const subtotalSen          = serverSubtotalSen;
-    const voucherDiscountSen   = Math.round(discountSen ?? 0);
+    // SECURITY: ignore the legacy client `discountSen` (no first-party client
+    // sends it; 0 orders have ever used it). Server-authoritative discounts
+    // only. Still accepted in the payload for backward-compat.
+    const voucherDiscountSen   = 0;
+    void discountSen;
     const afterDiscount        = Math.max(
       0,
       subtotalSen - voucherDiscountSen - rewardDiscountSenAmt - fodDiscountSen - promoDiscountSen
