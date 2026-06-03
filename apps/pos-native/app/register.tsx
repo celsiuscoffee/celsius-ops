@@ -117,17 +117,15 @@ type Panel = "none" | "customer" | "table";
 export default function Register() {
   const { staff, outletId, signOut, loggedInAt, shiftEndsAt } = usePos();
   const [activeCat, setActiveCat] = useState<string>("all");
-  // One "Orders" command center — a single panel with three tabs: Tables
-  // (dine-in floor + QR self-orders, consolidated) · Pickup & Grab (live KDS,
-  // channel-filterable) · History (today's orders, all channels, filterable).
+  // One "Orders" command center — four tabs: QR Tables (dine-in floor + QR
+  // self-orders) · Pickup · Grab · History (today, all channels, filterable).
   // `hub` is the active tab, or null when the panel is closed.
-  const [hub, setHub] = useState<"tables" | "online" | "history" | null>(null);
-  // Tables tab: which floor/zone is shown (null = first), and the table the
-  // cashier tapped to inspect its order(s) — the consolidated QR view.
+  const [hub, setHub] = useState<"tables" | "pickup" | "grab" | "history" | null>(null);
+  // QR Tables tab: which floor/zone is shown (null = first), and the table the
+  // cashier tapped to inspect its order(s).
   const [activeFloor, setActiveFloor] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<TableSlot | null>(null);
-  // Channel filters for the live (Pickup & Grab) + History tabs.
-  const [liveFilter, setLiveFilter] = useState<"all" | "pickup" | "grab">("all");
+  // Channel filter for the History tab (all channels in one list).
   const [histFilter, setHistFilter] = useState<"all" | HistoryChannel>("all");
   // Which order's status update is in flight (uid) — disables its buttons.
   const [bumpingUid, setBumpingUid] = useState<string | null>(null);
@@ -1428,15 +1426,16 @@ export default function Register() {
                     ? `${tableSlots.filter((t) => t.orders.length > 0).length} of ${tableSlots.length} tables have orders · tap a table to see its order · live`
                     : hub === "history"
                     ? (historyLoading ? "Loading today's orders…" : `${historyOrders.length} order${historyOrders.length === 1 ? "" : "s"} today · all channels`)
-                    : (kdsOrders.length === 0 ? "No live delivery or pickup orders" : `${kdsOrders.length} in the kitchen · Grab + Pickup · live`)}
+                    : (() => {
+                        const ch: "pickup" | "grab" = hub === "grab" ? "grab" : "pickup";
+                        const n = kdsOrders.filter((o) => o.source === ch).length;
+                        const label = ch === "grab" ? "Grab" : "pickup";
+                        return n === 0 ? `No live ${label} orders` : `${n} ${label} order${n === 1 ? "" : "s"} · live`;
+                      })()}
                 </Text>
               </View>
               <View className="flex-row items-center gap-4">
                 {hub === "tables" && (<><TableLegendDot color="#3B82F6" label="QR table" /><TableLegendDot color="#FBBF24" label="Register" /></>)}
-                {hub === "online" && (<>
-                  <View className="flex-row items-center gap-1.5"><Bike size={14} color="#22C55E" /><Text className="text-cream/55 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Grab</Text></View>
-                  <View className="flex-row items-center gap-1.5"><ShoppingBag size={14} color="#3B82F6" /><Text className="text-cream/55 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Pickup</Text></View>
-                </>)}
                 {hub === "history" && (<><TableLegendDot color="#FBBF24" label="Counter" /><TableLegendDot color="#3B82F6" label="Pickup" /><TableLegendDot color="#22C55E" label="Grab" /></>)}
                 <Pressable onPress={() => setHub(null)} className="active:opacity-60 ml-2">
                   <X size={22} color="rgba(245,243,240,0.7)" />
@@ -1447,9 +1446,10 @@ export default function Register() {
                 Full-width, large touch targets (SUNMI counter use). */}
             <View className="flex-row gap-2.5 mb-4">
               {(() => {
-                const tabs: { key: "tables" | "online" | "history"; label: string; Icon: typeof Grid3x3; count: number }[] = [
-                  { key: "tables", label: "Tables", Icon: Grid3x3, count: tableSlots.filter((t) => t.orders.length > 0).length },
-                  { key: "online", label: "Pickup & Grab", Icon: Bike, count: kdsOrders.length },
+                const tabs: { key: "tables" | "pickup" | "grab" | "history"; label: string; Icon: typeof Grid3x3; count: number }[] = [
+                  { key: "tables", label: "QR Tables", Icon: Grid3x3, count: tableSlots.filter((t) => t.orders.length > 0).length },
+                  { key: "pickup", label: "Pickup", Icon: ShoppingBag, count: kdsOrders.filter((o) => o.source === "pickup").length },
+                  { key: "grab", label: "Grab", Icon: Bike, count: kdsOrders.filter((o) => o.source === "grab").length },
                   { key: "history", label: "History", Icon: ClipboardList, count: historyOrders.length },
                 ];
                 return tabs.map(({ key, label, Icon, count }) => (
@@ -1553,41 +1553,30 @@ export default function Register() {
                   </View>
                 );
               })()}
-              {/* ── Pickup & Grab tab — on-register KDS, channel-filterable so
-                  the cashier sees ALL incoming by default (never misses one)
-                  but can isolate a channel. Status writes go through the
-                  service-role API (RLS blocks anon updates on printed rows). */}
-              {hub === "online" && (() => {
-                const shown = kdsOrders.filter((o) => liveFilter === "all" || o.source === liveFilter);
+              {/* ── Pickup / Grab tabs — one dedicated on-register KDS per
+                  channel (separate top-level tabs). Status writes go through
+                  the service-role API (RLS blocks anon updates on printed rows). */}
+              {(hub === "pickup" || hub === "grab") && (() => {
+                const ch: "pickup" | "grab" = hub === "grab" ? "grab" : "pickup";
+                const shown = kdsOrders.filter((o) => o.source === ch);
                 return (
-                  <View>
-                    <ChannelFilter
-                      value={liveFilter}
-                      onChange={(v) => { Haptics.selectionAsync(); setLiveFilter(v as "all" | "pickup" | "grab"); }}
-                      options={[
-                        { key: "all", label: "All", dot: null, count: kdsOrders.length },
-                        { key: "pickup", label: "Pickup", dot: "#3B82F6", count: kdsOrders.filter((o) => o.source === "pickup").length },
-                        { key: "grab", label: "Grab", dot: "#22C55E", count: kdsOrders.filter((o) => o.source === "grab").length },
-                      ]}
-                    />
-                    <View className="flex-row flex-wrap" style={{ gap: 12 }}>
-                      {shown.map((order) => (
-                        <KdsCard
-                          key={order.uid}
-                          order={order}
-                          busy={bumpingUid === order.uid}
-                          onAdvance={(status) => advanceOrderStatus(order, status)}
-                        />
-                      ))}
-                      {shown.length === 0 && (
-                        <View className="py-16 items-center w-full">
-                          <ChefHat size={40} color="rgba(245,243,240,0.18)" />
-                          <Text className="text-cream/40 text-sm mt-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                            {liveFilter === "all" ? "Grab and pickup orders will appear here as they come in." : `No live ${liveFilter} orders right now.`}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
+                  <View className="flex-row flex-wrap" style={{ gap: 12 }}>
+                    {shown.map((order) => (
+                      <KdsCard
+                        key={order.uid}
+                        order={order}
+                        busy={bumpingUid === order.uid}
+                        onAdvance={(status) => advanceOrderStatus(order, status)}
+                      />
+                    ))}
+                    {shown.length === 0 && (
+                      <View className="py-16 items-center w-full">
+                        <ChefHat size={40} color="rgba(245,243,240,0.18)" />
+                        <Text className="text-cream/40 text-sm mt-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                          {ch === "grab" ? "Grab orders will appear here as they come in." : "Pickup orders will appear here as they come in."}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 );
               })()}
