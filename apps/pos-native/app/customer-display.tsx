@@ -410,7 +410,8 @@ export default function CustomerDisplay() {
               </View>
             )}
             <View style={{ flex: 1.15, marginTop: posters.length > 0 ? 14 : 0 }}>
-              <Eyebrow color="rgba(245,243,240,0.45)" style={{ marginBottom: 8, paddingHorizontal: 4 }}>AVAILABLE REWARDS</Eyebrow>
+              <Eyebrow color="rgba(245,243,240,0.45)" style={{ paddingHorizontal: 4 }}>AVAILABLE REWARDS</Eyebrow>
+              <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.42)", paddingHorizontal: 4, marginTop: 2, marginBottom: 8 }}>Tell the cashier to apply these to your order</Text>
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
                 <ClaimableRewards snapshot={snapshot} memberId={member.id} />
               </ScrollView>
@@ -847,7 +848,7 @@ function ClaimableRewards({ snapshot, memberId }: { snapshot: LoyaltySnapshot; m
       )}
       {more > 0 && (
         <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12, color: "rgba(245,243,240,0.5)", paddingHorizontal: 4, marginTop: 2 }}>
-          +{more} more reward{more === 1 ? "" : "s"} — show your app at the till
+          +{more} more reward{more === 1 ? "" : "s"} — just ask the cashier
         </Text>
       )}
     </View>
@@ -906,7 +907,7 @@ function RewardCardStatic({ title, sub }: { title: string; sub: string }) {
         <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(26,2,0,0.55)" }} numberOfLines={1}>{sub}</Text>
       </View>
       <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: "rgba(26,2,0,0.08)" }}>
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 0.5, color: DARKFG }}>USE AT TILL</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 0.5, color: DARKFG }}>ASK CASHIER</Text>
       </View>
     </View>
   );
