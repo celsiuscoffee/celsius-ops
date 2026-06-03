@@ -746,8 +746,9 @@ export async function fetchLoyaltySnapshot(
       .eq("is_active", true)
       .order("sort_order", { ascending: true }),
     // Tier evaluated the SAME way native pickup does (apps/order
-    // /api/loyalty/member-tier → evaluate_member_tier): qualification runs
-    // on THIS QUARTER's earned points, not lifetime total_spent. Returns the
+    // /api/loyalty/member-tier → evaluate_member_tier) — keep the two in sync.
+    // Qualification runs on THIS QUARTER's earned points, not lifetime
+    // total_spent (the POS earn RPC never increments total_spent). Returns the
     // active tier + quarterly spend/visits + distance-to-next, and atomically
     // refreshes current_tier_id (quarter-locked, upgrade-only). Running it
     // here keeps the POS 2nd-screen tier bar identical to — and as live as —
