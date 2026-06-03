@@ -78,6 +78,24 @@ export type {
 } from "./loyalty/discount-engine";
 export { isPromoLiveNow } from "./loyalty/promo-eligibility";
 export type { PromoSchedule } from "./loyalty/promo-eligibility";
+// Discount-spec helpers (voucher_templates row → engine spec; order items →
+// engine cart) — moved here so POS, native, and QR-table build them identically.
+export {
+  DISCOUNT_SPEC_COLUMNS,
+  rowToDiscountSpec,
+  buildEngineCart,
+  inlineSpecFromIssued,
+  specToRegisterDescriptor,
+} from "./loyalty/discount-spec";
+export type {
+  DiscountSpecRow,
+  IssuedRewardInlineSpec,
+  RegisterDiscountDescriptor,
+} from "./loyalty/discount-spec";
+// Single source of truth for resolving + computing an applied order reward
+// (wallet voucher OR catalog) — used by every server redemption route.
+export { resolveOrderReward } from "./loyalty/order-reward";
+export type { ResolvedOrderReward } from "./loyalty/order-reward";
 
 // Order number format: CC-{OUTLET_CODE}-{SEQUENCE}
 export function generateOrderNumber(outletCode: string, sequence: number): string {

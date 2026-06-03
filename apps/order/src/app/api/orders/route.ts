@@ -5,9 +5,7 @@ import type { OrderRow } from "@/lib/supabase/types";
 import {
   checkRateLimit,
   RATE_LIMITS,
-  computeVoucherDiscount,
-  type VoucherDiscountSpec,
-  type DiscountCartLine,
+  resolveOrderReward,
 } from "@celsius/shared";
 import { getTierMultiplier } from "@/lib/loyalty/points";
 import {
@@ -18,12 +16,6 @@ import {
 import { requireCustomerSession } from "@/lib/customer-jwt";
 import { attributeOrderToCampaign } from "@/lib/push/attribution";
 import { getOutletSst } from "@/lib/outlet-sst";
-import {
-  DISCOUNT_SPEC_COLUMNS,
-  type DiscountSpecRow,
-  rowToDiscountSpec,
-  buildEngineCart,
-} from "@/lib/loyalty/discount-spec";
 
 function normalisePhoneForLookup(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -68,119 +60,10 @@ function generateOrderNumber(): string {
   return `C-${String(Math.floor(Math.random() * 9999)).padStart(4, "0")}`;
 }
 
-/** Server-side reward validation + AUTHORITATIVE discount recompute.
- *  Was: trust the client's `rewardDiscountSen` (clamped to subtotal).
- *  Now: gate the reward (active / window / stock / min-order / points)
- *  AND recompute the discount from the canonical voucher_templates spec
- *  via the shared engine — the client number is never used for money,
- *  so a stale or malicious client can't claim a discount the reward
- *  doesn't grant, and combo/bogo/override_price/free_upgrade actually
- *  apply. */
-async function validateAppliedReward(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  args: {
-    rewardId: string;
-    items: unknown;
-    subtotalSen: number;
-    minOrderRm: number;
-    totalRm: number;
-    loyaltyId: string | null;
-  },
-): Promise<{ ok: true; discountSen: number } | { ok: false; error: string }> {
-  // Cleanup: catalog validation reads voucher_templates (the canonical
-  // source) by legacy_reward_id, not the rewards table. points_cost is
-  // the template's name for points_required.
-  const { data: reward } = await supabase
-    .from("voucher_templates")
-    .select("id, is_active, valid_from, valid_until, stock, points_cost, " + DISCOUNT_SPEC_COLUMNS)
-    .eq("legacy_reward_id", args.rewardId)
-    .maybeSingle<{
-      id: string;
-      is_active: boolean | null;
-      valid_from: string | null;
-      valid_until: string | null;
-      stock: number | null;
-      points_cost: number | null;
-    } & DiscountSpecRow>();
-
-  if (!reward) {
-    return { ok: false, error: "Reward no longer available" };
-  }
-  if (!reward.is_active) {
-    return { ok: false, error: "Reward is no longer active" };
-  }
-  const now = Date.now();
-  if (reward.valid_from && new Date(reward.valid_from).getTime() > now) {
-    return { ok: false, error: "Reward not yet active" };
-  }
-  if (reward.valid_until && new Date(reward.valid_until).getTime() < now) {
-    return { ok: false, error: "Reward has expired" };
-  }
-  if (reward.stock != null && reward.stock <= 0) {
-    return { ok: false, error: "Reward is out of stock" };
-  }
-  // min_order_value is SEN — compare against the sen subtotal, not the RM
-  // total (the old `totalRm < min_order_value` made an "RM15+" reward
-  // demand RM1500).
-  if (reward.min_order_value != null && args.subtotalSen < Number(reward.min_order_value)) {
-    return {
-      ok: false,
-      error: `Reward needs a minimum order of RM${(Number(reward.min_order_value) / 100).toFixed(2)}`,
-    };
-  }
-
-  // Pre-check the points balance for catalog rewards. Without this,
-  // the customer's order proceeds to a Stripe charge before the
-  // post-payment `deductLoyaltyPoints` discovers the shortfall and
-  // logs RECONCILE MANUALLY — i.e. they pay the discounted amount
-  // but the reward never gets consumed. Skip the check when the
-  // member already holds an active issued_reward row for this
-  // reward (auto-issued vouchers don't deduct from points balance).
-  const pointsCost = reward.points_cost ?? 0;
-  if (pointsCost > 0 && args.loyaltyId) {
-    const { data: voucher } = await supabase
-      .from("issued_rewards")
-      .select("id")
-      .eq("member_id", args.loyaltyId)
-      // issued_rewards.reward_id holds the legacy text id, so match on
-      // the original args.rewardId — NOT reward.id (now a template UUID).
-      .eq("reward_id", args.rewardId)
-      .eq("status", "active")
-      .limit(1)
-      .maybeSingle();
-    if (!voucher) {
-      const { data: mb } = await supabase
-        .from("member_brands")
-        .select("points_balance")
-        .eq("member_id", args.loyaltyId)
-        .eq("brand_id", "brand-celsius")
-        .single<{ points_balance: number }>();
-      const balance = mb?.points_balance ?? 0;
-      if (balance < pointsCost) {
-        return {
-          ok: false,
-          error: `Not enough points (need ${pointsCost}, have ${balance})`,
-        };
-      }
-    }
-  }
-
-  // Authoritative discount: recompute from the canonical spec via the
-  // shared engine — the client's number is never trusted for money, and
-  // every type (flat/percent/free_item/free_upgrade/bogo/combo/
-  // override_price) is computed the same way the wallet path does.
-  const spec = rowToDiscountSpec(reward);
-  const cart = await buildEngineCart(
-    supabase,
-    args.items,
-    !!(spec.applicable_categories && spec.applicable_categories.length),
-  );
-  const result = computeVoucherDiscount({ spec, cart });
-  // Final guard against the order subtotal (the engine already bounds at
-  // its own line-sum; this re-clamps against the authoritative subtotal).
-  const discountSen = Math.max(0, Math.min(args.subtotalSen, result.discount_sen));
-  return { ok: true, discountSen };
-}
+// Catalog reward resolution + validation + discount now live in
+// @celsius/shared resolveOrderReward (resolveCatalogReward), shared by
+// QR-table (/api/checkout/initiate), native pickup (this route), and the
+// POS register so the three channels never drift.
 
 export async function POST(request: NextRequest) {
   // Rate limit by IP — without this an attacker can script the
@@ -475,102 +358,38 @@ export async function POST(request: NextRequest) {
     let   voucherDiscountSen = 0;
     void discountSen;
 
-    // Server-side reward validation + bound. Was: trust the client's
-    // rewardDiscountSen blindly. A stale or malicious client could
-    // claim a discount on an expired / inactive / out-of-stock reward,
-    // or claim a value larger than the cart subtotal.
+    // Reward resolution + discount via the SINGLE shared resolver
+    // (@celsius/shared resolveOrderReward) — the same path QR-table
+    // (/api/checkout/initiate) and the POS register use, so the three
+    // channels never drift. Handles wallet vouchers (explicit
+    // walletVoucherId, or a rewardId that's actually an issued voucher)
+    // AND catalog rewards (rewardId = voucher_templates.legacy_reward_id),
+    // always computing through the shared discount engine — the client's
+    // number is never trusted.
     let rewardDiscountSenAmt = 0;
-    if (walletVoucherId) {
-      // Wallet voucher path — load + validate the voucher, then defer
-      // the actual discount math to @celsius/shared's
-      // computeVoucherDiscount so POS and Pickup never drift on the
-      // arithmetic.
-      const { data: voucher } = await supabase
-        .from("issued_rewards")
-        .select(`
-          id, member_id, status, expires_at, voucher_template_id, min_order_value,
-          discount_type, discount_value,
-          applicable_categories, applicable_products, free_product_name
-        `)
-        .eq("id", walletVoucherId)
-        .single();
-      if (!voucher || voucher.member_id !== loyaltyId) {
-        return NextResponse.json({ error: "Voucher not found" }, { status: 400 });
-      }
-      if (voucher.status !== "active") {
-        return NextResponse.json({ error: "Voucher already used or inactive" }, { status: 400 });
-      }
-      if (voucher.expires_at && new Date(voucher.expires_at as string) < new Date()) {
-        return NextResponse.json({ error: "Voucher expired" }, { status: 400 });
-      }
-
-      // Canonical spec: prefer the voucher's voucher_template (it carries
-      // max_discount_value, free_product_ids, and the bogo/combo/override
-      // knobs that issued_rewards doesn't). Fall back to the issued_rewards
-      // inline columns for legacy vouchers minted before the template link.
-      const templateId = (voucher as { voucher_template_id?: string | null }).voucher_template_id ?? null;
-      const { data: tmpl } = templateId
-        ? await supabase
-            .from("voucher_templates")
-            .select(DISCOUNT_SPEC_COLUMNS)
-            .eq("id", templateId)
-            .maybeSingle<DiscountSpecRow>()
-        : { data: null };
-      const spec: VoucherDiscountSpec = tmpl
-        ? rowToDiscountSpec(tmpl)
-        : {
-            discount_type: (voucher.discount_type as VoucherDiscountSpec["discount_type"]) ?? null,
-            discount_value: (voucher.discount_value as number | null) ?? null,
-            max_discount_value_sen: null,
-            min_order_value_sen: voucher.min_order_value != null
-              ? Number(voucher.min_order_value) // issued_rewards.min_order_value is SEN
-              : null,
-            applicable_categories: (voucher.applicable_categories as string[] | null) ?? null,
-            applicable_products: (voucher.applicable_products as string[] | null) ?? null,
-            free_product_ids: null,
-            free_product_name: (voucher.free_product_name as string | null) ?? null,
-            bogo_buy_qty: null,
-            bogo_free_qty: null,
-            combo_price_sen: null,
-            override_price_sen: null,
-          };
-
-      // unit_price_sen uses base price (modifiers stay paid); category
-      // resolved only when the spec filters by category.
-      const cart = await buildEngineCart(
+    {
+      const resolved = await resolveOrderReward({
         supabase,
-        items,
-        !!(spec.applicable_categories && spec.applicable_categories.length),
-      );
-      const result = computeVoucherDiscount({ spec, cart });
-
-      // Translate engine reasons → user-facing 400 messages where
-      // they're customer-actionable (preserves the previous
-      // behaviour). Other reasons silently cap to 0 so the order
-      // still proceeds — the wallet voucher gets consumed but the
-      // customer only gets what they were entitled to.
-      if (result.reason === "below_min_order") {
-        return NextResponse.json({ error: "Minimum order not met for voucher" }, { status: 400 });
-      }
-
-      // Authoritative: use the engine's value directly (bounded by the
-      // order subtotal), NOT min(client, engine). The client number is a
-      // preview only — trusting it would cap newly-supported types
-      // (combo/override_price/free_upgrade) at the client's stale 0.
-      rewardDiscountSenAmt = Math.max(0, Math.min(subtotalSen, result.discount_sen));
-    } else if (rewardId) {
-      const validated = await validateAppliedReward(supabase, {
+        memberId: loyaltyId ?? null,
         rewardId,
+        walletVoucherId,
         items,
         subtotalSen,
-        minOrderRm,
-        totalRm: total,
-        loyaltyId: loyaltyId ?? null,
       });
-      if (!validated.ok) {
-        return NextResponse.json({ error: validated.error }, { status: 400 });
+      if (!resolved.ok) {
+        return NextResponse.json({ error: resolved.error }, { status: 400 });
       }
-      rewardDiscountSenAmt = validated.discountSen;
+      rewardDiscountSenAmt = resolved.discountSen;
+      // Narrow the persisted ids to the resolved kind so the order row, the
+      // non-stackable-tier drop below, and the consume paths all agree:
+      // wallet vouchers consume via wallet_voucher_id, catalog rewards via
+      // reward_id — never both.
+      if (resolved.kind === "wallet") {
+        walletVoucherId = resolved.walletVoucherId;
+        rewardId = null;
+      } else if (resolved.kind === "catalog") {
+        walletVoucherId = null;
+      }
     }
 
     // First-order discount: server validates independently — checks the orders

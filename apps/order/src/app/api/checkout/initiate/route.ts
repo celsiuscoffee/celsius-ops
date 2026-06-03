@@ -12,13 +12,7 @@ import {
 import type { OrderRow } from "@/lib/supabase/types";
 import { defaultMethodSets } from "@/lib/payments/gateway-methods";
 import { getOutletSst } from "@/lib/outlet-sst";
-import { computeVoucherDiscount, type VoucherDiscountSpec } from "@celsius/shared";
-import {
-  DISCOUNT_SPEC_COLUMNS,
-  type DiscountSpecRow,
-  rowToDiscountSpec,
-  buildEngineCart,
-} from "@/lib/loyalty/discount-spec";
+import { resolveOrderReward } from "@celsius/shared";
 
 function generateOrderNumber(): string {
   return `C-${Date.now().toString(36).slice(-4).toUpperCase()}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`;
@@ -264,96 +258,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── Server-side reward discount (AUTHORITATIVE via shared engine) ─────
-    // Resolve the canonical voucher_templates spec by legacy_reward_id and
-    // recompute through @celsius/shared computeVoucherDiscount — the SAME
-    // path as /api/orders, covering all 9 discount types. Replaces the old
-    // reward_configs flat/percent-inline + trust-client logic, so this
-    // web / QR-table PWA checkout matches every other channel and a stale
-    // or malicious client can't claim a discount the reward doesn't grant.
+    // ── Server-side reward discount (AUTHORITATIVE, shared resolver) ─────
+    // resolveOrderReward (@celsius/shared) is the SINGLE resolver used by
+    // this route, /api/orders, and the POS register — it handles BOTH wallet
+    // vouchers (mission/mystery/welcome/points-redemption; the QR-table
+    // client sends the voucher's id as rewardId and never sets voucher_id)
+    // AND catalog rewards (rewardId = voucher_templates.legacy_reward_id),
+    // and always computes via the shared discount engine. Wallet vouchers
+    // consume via wallet_voucher_id (confirm / markRmOrderPaid / free-order);
+    // catalog rewards burn points via reward_id. A reward is never both.
     let rewardDiscountSenAmt = 0;
-    // Set when the applied reward resolves to a WALLET voucher (issued_rewards
-    // row) rather than a catalog / points-shop reward — stored on the order so
-    // the confirm / markRmOrderPaid / free-order paths consume it
-    // (applyOrderV2Hooks → markVoucherUsed) instead of leaving it re-appliable.
     let resolvedWalletVoucherId: string | null = null;
     if (rewardId) {
-      let spec: VoucherDiscountSpec | null = null;
-
-      // 1) Wallet voucher (mission / mystery / welcome / points-redemption —
-      //    "Free Drink", "RM5 Off", etc.). Minted in issued_rewards with
-      //    reward_id = NULL and NO legacy_reward_id, so the template lookup
-      //    below 400'd on them and the discount silently never applied (same
-      //    class as the POS /redeem fix, commit 9685d1e7). issued_rewards
-      //    denormalises the discount mechanics at grant time. Scoped to the
-      //    member so a stale client can't burn someone else's voucher.
-      //    Select ONLY the columns issued_rewards actually has — max_discount_value
-      //    / free_product_ids / bogo_* / combo_* live on voucher_templates, and
-      //    selecting them here 42703s (the ec041a3 incident); they're null for
-      //    wallet vouchers regardless.
-      if (loyaltyId) {
-        const { data: ir } = await supabase
-          .from("issued_rewards")
-          .select(
-            "discount_type, discount_value, min_order_value, applicable_categories, applicable_products, free_product_name",
-          )
-          .eq("id", rewardId)
-          .eq("member_id", loyaltyId)
-          .eq("brand_id", "brand-celsius")
-          .eq("status", "active")
-          .maybeSingle();
-        if (ir) {
-          const r = ir as {
-            discount_type: string | null;
-            discount_value: number | null;
-            min_order_value: number | null;
-            applicable_categories: string[] | null;
-            applicable_products: string[] | null;
-            free_product_name: string | null;
-          };
-          resolvedWalletVoucherId = rewardId;
-          spec = {
-            discount_type: (r.discount_type as VoucherDiscountSpec["discount_type"]) ?? null,
-            discount_value: r.discount_value,
-            max_discount_value_sen: null,
-            min_order_value_sen: r.min_order_value != null ? Number(r.min_order_value) : null,
-            applicable_categories: r.applicable_categories,
-            applicable_products: r.applicable_products,
-            free_product_ids: null,
-            free_product_name: r.free_product_name,
-            bogo_buy_qty: null,
-            bogo_free_qty: null,
-            combo_price_sen: null,
-            override_price_sen: null,
-          };
-        }
-      }
-
-      // 2) Catalog / points-shop reward — canonical template keyed by
-      //    legacy_reward_id (full spec incl. bogo / combo / override).
-      if (!spec) {
-        const { data: tmpl } = await supabase
-          .from("voucher_templates")
-          .select(DISCOUNT_SPEC_COLUMNS)
-          .eq("legacy_reward_id", rewardId)
-          .eq("is_active", true)
-          .maybeSingle<DiscountSpecRow>();
-        if (tmpl) spec = rowToDiscountSpec(tmpl);
-      }
-
-      // Reject genuinely unknown / inactive rewards — silently dropping the
-      // discount would charge full price while the UI showed it applied.
-      if (!spec) {
-        return NextResponse.json({ error: "Reward is no longer valid" }, { status: 400 });
-      }
-
-      const cart = await buildEngineCart(
+      const resolved = await resolveOrderReward({
         supabase,
+        memberId: loyaltyId ?? null,
+        rewardId,
         items,
-        !!(spec.applicable_categories && spec.applicable_categories.length),
-      );
-      const result = computeVoucherDiscount({ spec, cart });
-      rewardDiscountSenAmt = Math.max(0, Math.min(serverSubtotalSen, result.discount_sen));
+        subtotalSen: serverSubtotalSen,
+      });
+      if (!resolved.ok) {
+        return NextResponse.json({ error: resolved.error }, { status: 400 });
+      }
+      rewardDiscountSenAmt = resolved.discountSen;
+      if (resolved.kind === "wallet") resolvedWalletVoucherId = resolved.walletVoucherId;
     }
 
     // ── Server-side SST calculation ───────────────────────────────────────
