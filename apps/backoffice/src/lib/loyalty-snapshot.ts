@@ -681,7 +681,7 @@ export async function fetchLoyaltySnapshot(
     });
   })();
 
-  const [mbRes, vouchersRes, dropsRes, pushedRes, shopRes, tiersRes] = await Promise.all([
+  const [mbRes, vouchersRes, dropsRes, pushedRes, shopRes, tiersRes, evRes] = await Promise.all([
     supabase
       .from("member_brands")
       .select("points_balance, total_visits, total_spent, current_tier_id")
@@ -745,7 +745,17 @@ export async function fetchLoyaltySnapshot(
       .eq("brand_id", BRAND_ID)
       .eq("is_active", true)
       .order("sort_order", { ascending: true }),
+    // Tier evaluated the SAME way native pickup does (apps/order
+    // /api/loyalty/member-tier → evaluate_member_tier): qualification runs
+    // on THIS QUARTER's earned points, not lifetime total_spent. Returns the
+    // active tier + quarterly spend/visits + distance-to-next, and atomically
+    // refreshes current_tier_id (quarter-locked, upgrade-only). Running it
+    // here keeps the POS 2nd-screen tier bar identical to — and as live as —
+    // the pickup app's. Safe to call in parallel: we trust the RPC's own
+    // tier_id output below, never the (possibly mid-write) member_brands read.
+    supabase.rpc("evaluate_member_tier", { p_member_id: memberId, p_brand_id: BRAND_ID }),
   ]);
+  const ev = (evRes && !evRes.error ? (evRes.data as Record<string, unknown> | null) : null) ?? null;
 
   const mb = mbRes.data ?? null;
   const balance = mb?.points_balance ?? 0;
@@ -769,15 +779,25 @@ export async function fetchLoyaltySnapshot(
     stackable: boolean | null;
   }>;
 
-  // Current tier — match by id from all tiers (admin or ladder), fall
-  // back to first ladder tier (Bronze) when member hasn't been assigned.
+  // Current tier — prefer the freshly-evaluated tier_id from the RPC (so a
+  // member who just crossed a threshold shows their NEW tier immediately,
+  // like pickup); fall back to the stored id, then Bronze.
   const ladderTiers = tiers.filter((t) => t.sort_order <= 50);
-  const currentRow = tiers.find((t) => t.id === mb?.current_tier_id) ?? ladderTiers[0] ?? null;
-  // Next tier shown for progress — only walk the public ladder, so a
-  // Black Card / Staff member doesn't see "next: Staff" nonsense.
-  const nextRow = currentRow && currentRow.sort_order <= 50
-    ? ladderTiers.find((t) => t.sort_order > currentRow.sort_order) ?? null
-    : null;
+  const evTierId = (ev?.tier_id as string | null | undefined) ?? null;
+  const currentRow =
+    tiers.find((t) => t.id === evTierId) ??
+    tiers.find((t) => t.id === mb?.current_tier_id) ??
+    ladderTiers[0] ??
+    null;
+  // Next tier shown for progress — prefer the RPC's next_tier_id (already
+  // skips invitation-only tiers); fall back to walking the public ladder, so
+  // a Black Card / Staff member never sees "next: Staff" nonsense.
+  const evNextTierId = (ev?.next_tier_id as string | null | undefined) ?? null;
+  const nextRow =
+    (evNextTierId ? tiers.find((t) => t.id === evNextTierId) ?? null : null) ??
+    (currentRow && currentRow.sort_order <= 50
+      ? ladderTiers.find((t) => t.sort_order > currentRow.sort_order) ?? null
+      : null);
 
   const toInfo = (
     r: (typeof tiers)[number] | null,
@@ -802,10 +822,16 @@ export async function fetchLoyaltySnapshot(
         }
       : null;
 
+  // Progress — quarterly spend/visits from the engine (RM + count, same scale
+  // as the tier thresholds), matching what pickup's tier card shows. Falls
+  // back to lifetime figures only if the RPC didn't return. NB: these are RM,
+  // not sen — the consumer must format them as RM directly (no /100).
+  const periodSpend = ev ? Number(ev.spend_this_period ?? 0) : totalSpent;
+  const periodVisits = ev ? Number(ev.visits_this_period ?? 0) : totalVisits;
   const progress = nextRow
     ? nextRow.qualification_metric === "visits"
-      ? { metric: "visits" as const, current: totalVisits, target: nextRow.min_visits }
-      : { metric: "spend" as const, current: totalSpent, target: Number(nextRow.min_spend) }
+      ? { metric: "visits" as const, current: periodVisits, target: nextRow.min_visits }
+      : { metric: "spend" as const, current: periodSpend, target: Number(nextRow.min_spend) }
     : null;
 
   // ── Vouchers — drop expired + bean-points redemptions ──────
