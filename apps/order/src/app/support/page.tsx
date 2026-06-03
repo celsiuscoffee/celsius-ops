@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ArrowLeft, Mail, AtSign, ChevronRight } from "lucide-react";
-import { BottomNav } from "../_BottomNav";
 
 /**
  * Support / help — ports apps/pickup-native/app/support.tsx: intro,
@@ -9,7 +8,7 @@ import { BottomNav } from "../_BottomNav";
  */
 export default function SupportPage() {
   return (
-    <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
+    <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+24px)]">
       <header
         className="bg-[#160800] text-white px-4 pb-3 flex items-center gap-3"
         style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
@@ -101,8 +100,6 @@ export default function SupportPage() {
           for details on how we handle your personal data.
         </p>
       </div>
-
-      <BottomNav active="account" />
     </main>
   );
 }

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ArrowLeft, Check, Lock } from "lucide-react";
-import { BottomNav } from "../_BottomNav";
 
 /**
  * Tier benefits — full tier table with per-tier perks. Mirrors
@@ -54,7 +53,7 @@ const TIERS: Tier[] = [
 
 export default function TierBenefitsPage() {
   return (
-    <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
+    <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+24px)]">
       <header
         className="bg-[#160800] text-white px-4 pb-3 flex items-center gap-3"
         style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
@@ -97,8 +96,6 @@ export default function TierBenefitsPage() {
         <Lock size={11} className="inline mr-1" />
         Tier status reviewed every 90 days based on rolling-window beans earned.
       </p>
-
-      <BottomNav active="rewards" />
     </main>
   );
 }

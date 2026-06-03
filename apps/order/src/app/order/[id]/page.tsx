@@ -1,5 +1,4 @@
 import { OrderTrackingView } from "./_OrderTrackingView";
-import { BottomNav } from "../../_BottomNav";
 
 export default async function OrderDetailPage({
   params,
@@ -8,9 +7,9 @@ export default async function OrderDetailPage({
 }) {
   const { id } = await params;
   return (
-    <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
+    // No bottom tab bar — matches native (sub-screens opt out). Back via header.
+    <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+24px)]">
       <OrderTrackingView orderId={id} />
-      <BottomNav active="orders" />
     </main>
   );
 }

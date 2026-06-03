@@ -1,6 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { StoreList } from "./_StoreList";
-import { BottomNav } from "../_BottomNav";
 
 /**
  * Outlet picker. Server-fetches active outlets from Supabase; the
@@ -42,9 +41,9 @@ async function fetchOutlets(): Promise<Outlet[]> {
 export default async function StorePage() {
   const outlets = await fetchOutlets();
   return (
-    <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
+    // No bottom tab bar — matches native (sub-screens opt out). Back via header.
+    <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+24px)]">
       <StoreList outlets={outlets} />
-      <BottomNav active="home" />
     </main>
   );
 }
