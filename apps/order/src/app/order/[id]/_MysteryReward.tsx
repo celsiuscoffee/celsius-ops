@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles, Gift } from "lucide-react";
+import Link from "next/link";
+import { Sparkles, Gift, ChevronRight, Check } from "lucide-react";
 
 /**
- * Mystery-bean reveal on the order page — port of the MysteryBean flow
+ * Mystery-reward reveal on the order page — port of the MysteryBean flow
  * from apps/pickup-native (components/MysteryBean.tsx + the order screen
  * wiring). After payment, GET /api/loyalty/me/mystery/[orderId] checks
  * for a pending drop; if one exists and isn't revealed, we show a
  * tap-to-reveal card. Tapping POSTs .../[dropId]/reveal which applies
- * the outcome (bean multiplier / flat beans / voucher) and returns the
+ * the outcome (point multiplier / bonus Points / voucher) and returns the
  * payload we present. Web uses a tap-to-reveal card rather than the
- * native scratch animation.
+ * native scratch animation, but mirrors native's gold pre-reveal tile +
+ * espresso reveal card and the "Points" / "Mystery Reward" copy.
  */
 type Pending = { drop_id: string; revealed: boolean };
 
@@ -96,7 +98,59 @@ export function MysteryReward({
 
   // ── Revealed outcome ──────────────────────────────────────────────
   if (revealed) {
-    const win = revealed.outcome_type !== "no_bonus";
+    const isMultiplier =
+      revealed.outcome_type === "beans_multiplier" &&
+      !!revealed.multiplier_value &&
+      revealed.multiplier_value > 1;
+    const isVoucher = revealed.outcome_type === "voucher";
+    const isNoBonus = revealed.outcome_type === "no_bonus";
+    const isFlat = revealed.outcome_type === "flat_beans" && !!revealed.flat_beans_value;
+    const isSurprise = revealed.outcome_type === "surprise_in_store";
+    const isTyped = isMultiplier || isVoucher || isFlat || isSurprise;
+
+    // No bonus — quiet white card, never feels punishing.
+    if (isNoBonus) {
+      return (
+        <section className="px-4 pt-5">
+          <div
+            className="flex flex-col items-center text-center"
+            style={{
+              backgroundColor: "#FFFFFF",
+              border: "1px solid rgba(26,2,0,0.10)",
+              borderRadius: 18,
+              padding: 24,
+            }}
+          >
+            <Sparkles size={32} color="#6B6B6B" strokeWidth={1.6} />
+            <p className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 18, marginTop: 10 }}>
+              No bonus this time
+            </p>
+            <p style={{ color: "#6B6B6B", fontSize: 13, marginTop: 4 }}>
+              Better luck on your next order ☕
+            </p>
+            <button
+              type="button"
+              onClick={() => setDismissed(true)}
+              className="flex items-center justify-center active:opacity-85"
+              style={{
+                marginTop: 20,
+                backgroundColor: "#1A0200",
+                borderRadius: 9999,
+                paddingTop: 11,
+                paddingBottom: 11,
+                width: "100%",
+              }}
+            >
+              <span className="font-peachi font-bold" style={{ color: "#FFFFFF", fontSize: 14 }}>
+                Got it
+              </span>
+            </button>
+          </div>
+        </section>
+      );
+    }
+
+    // Win — espresso surface with amber accents.
     return (
       <section className="px-4 pt-5">
         <div
@@ -104,81 +158,191 @@ export function MysteryReward({
           style={{
             backgroundColor: "#1A0200",
             borderRadius: 18,
-            padding: 24,
-            boxShadow: "0 6px 14px rgba(22,8,0,0.18)",
+            padding: "28px 24px",
+            boxShadow: "0 10px 18px rgba(26,2,0,0.18)",
           }}
         >
-          <span style={{ fontSize: 44, lineHeight: 1 }}>{revealed.reveal_emoji ?? (win ? "🎉" : "☕")}</span>
-          <p
-            className="uppercase"
-            style={{ color: "rgba(251,191,36,0.75)", fontSize: 10, fontWeight: 700, letterSpacing: 2, marginTop: 12 }}
-          >
-            {win ? "You won" : "Mystery bean"}
-          </p>
-          <p className="font-peachi font-bold" style={{ color: "#FBBF24", fontSize: 22, marginTop: 4 }}>
-            {revealed.label}
-          </p>
-          {revealed.total_beans_awarded > 0 ? (
-            <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, marginTop: 6 }}>
-              +{revealed.total_beans_awarded} beans added
-            </p>
+          <Sparkles size={38} color="#FBBF24" strokeWidth={1.6} />
+
+          {isMultiplier ? (
+            <>
+              <span
+                className="font-peachi font-bold"
+                style={{ color: "#FBBF24", fontSize: 56, letterSpacing: -2, lineHeight: "56px", marginTop: 10 }}
+              >
+                {revealed.multiplier_value}×
+              </span>
+              <span
+                className="uppercase"
+                style={{ color: "rgba(251,191,36,0.85)", fontSize: 10, fontWeight: 700, letterSpacing: 2, marginTop: 6 }}
+              >
+                Point Multiplier
+              </span>
+              <div
+                style={{ height: 1, backgroundColor: "rgba(251,191,36,0.18)", alignSelf: "stretch", margin: "18px -24px" }}
+              />
+              <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>
+                Your {baseBeansEarned ?? 0} Points became
+              </span>
+              <span className="font-peachi font-bold" style={{ color: "#FFFFFF", fontSize: 22, marginTop: 2 }}>
+                {revealed.total_beans_awarded} Points
+              </span>
+            </>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setDismissed(true)}
-            className="rounded-full active:opacity-80"
-            style={{
-              marginTop: 18,
-              backgroundColor: "#FBBF24",
-              paddingLeft: 24,
-              paddingRight: 24,
-              paddingTop: 10,
-              paddingBottom: 10,
-            }}
-          >
-            <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 14 }}>
-              {revealed.voucher_id ? "View in wallet" : "Got it"}
-            </span>
-          </button>
+
+          {isVoucher ? (
+            <>
+              <span
+                className="font-peachi font-bold"
+                style={{ color: "#FBBF24", fontSize: 22, letterSpacing: -0.3, marginTop: 10 }}
+              >
+                {revealed.label}
+              </span>
+              <span style={{ color: "rgba(255,255,255,0.75)", fontSize: 13, marginTop: 6 }}>
+                Added to your rewards
+              </span>
+            </>
+          ) : null}
+
+          {isFlat ? (
+            <>
+              <span
+                className="font-peachi font-bold"
+                style={{ color: "#FBBF24", fontSize: 48, letterSpacing: -2, marginTop: 10 }}
+              >
+                +{revealed.flat_beans_value}
+              </span>
+              <span
+                className="uppercase"
+                style={{ color: "rgba(251,191,36,0.85)", fontSize: 10, fontWeight: 700, letterSpacing: 2, marginTop: 4 }}
+              >
+                Bonus Points
+              </span>
+            </>
+          ) : null}
+
+          {isSurprise ? (
+            <>
+              <span className="font-peachi font-bold" style={{ color: "#FBBF24", fontSize: 20, marginTop: 10 }}>
+                Surprise at pickup
+              </span>
+              <span style={{ color: "rgba(255,255,255,0.75)", fontSize: 13, marginTop: 6 }}>
+                Show this to the barista when you collect your order
+              </span>
+            </>
+          ) : null}
+
+          {/* Generic win fallback when the outcome label doesn't map to a
+              typed variant — still presents the prize + any Points added. */}
+          {!isTyped ? (
+            <>
+              <span className="font-peachi font-bold" style={{ color: "#FBBF24", fontSize: 22, marginTop: 10 }}>
+                {revealed.label}
+              </span>
+              {revealed.total_beans_awarded > 0 ? (
+                <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, marginTop: 6 }}>
+                  +{revealed.total_beans_awarded} Points added
+                </span>
+              ) : null}
+            </>
+          ) : null}
+
+          {isVoucher ? (
+            <Link
+              href="/rewards"
+              onClick={() => setDismissed(true)}
+              className="flex items-center justify-center active:opacity-85"
+              style={{
+                marginTop: 20,
+                backgroundColor: "#FBBF24",
+                borderRadius: 9999,
+                paddingTop: 11,
+                paddingBottom: 11,
+                width: "100%",
+                gap: 6,
+              }}
+            >
+              <Gift size={15} color="#1A0200" strokeWidth={2.4} />
+              <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 14 }}>
+                View in rewards
+              </span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setDismissed(true)}
+              className="flex items-center justify-center active:opacity-85"
+              style={{
+                marginTop: 20,
+                backgroundColor: "#FBBF24",
+                borderRadius: 9999,
+                paddingTop: 11,
+                paddingBottom: 11,
+                width: "100%",
+                gap: 6,
+              }}
+            >
+              <Check size={15} color="#1A0200" strokeWidth={2.6} />
+              <span className="font-peachi font-bold" style={{ color: "#1A0200", fontSize: 14 }}>
+                Got it
+              </span>
+            </button>
+          )}
         </div>
       </section>
     );
   }
 
-  // ── Pending — tap to reveal ───────────────────────────────────────
+  // ── Pending — gold "Tap to Reveal" tile (matches native MysteryBean) ──
   return (
     <section className="px-4 pt-5">
       <button
         type="button"
         onClick={reveal}
         disabled={revealing}
-        className="w-full flex items-center text-left active:opacity-90"
+        className="w-full flex flex-col items-center text-center active:opacity-90"
         style={{
-          backgroundColor: "#1A0200",
+          backgroundColor: "#FBBF24",
           borderRadius: 18,
-          padding: 16,
-          gap: 14,
-          boxShadow: "0 6px 14px rgba(22,8,0,0.18)",
+          padding: 24,
+          border: "1px solid rgba(26,2,0,0.25)",
+          boxShadow: "0 6px 14px rgba(26,2,0,0.28)",
         }}
       >
+        <Gift size={44} color="#1A0200" strokeWidth={1.8} />
         <span
-          className="flex items-center justify-center flex-shrink-0"
-          style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: "rgba(251,191,36,0.20)" }}
+          className="uppercase"
+          style={{ color: "rgba(26,2,0,0.7)", fontSize: 10, fontWeight: 700, letterSpacing: 2, marginTop: 14 }}
         >
-          <Gift size={24} color="#FBBF24" strokeWidth={2} />
+          Tap to Reveal
         </span>
-        <span className="flex-1 min-w-0">
-          <span
-            className="block uppercase"
-            style={{ color: "#FBBF24", fontSize: 10, fontWeight: 700, letterSpacing: 1.6 }}
-          >
-            Mystery bean
-          </span>
-          <span className="block font-peachi font-bold" style={{ color: "#FFFFFF", fontSize: 16, marginTop: 2 }}>
-            {revealing ? "Revealing…" : "Tap to reveal your reward"}
-          </span>
+        <span
+          className="font-peachi font-bold"
+          style={{ color: "#1A0200", fontSize: 26, letterSpacing: -0.3, marginTop: 4 }}
+        >
+          Mystery Reward
         </span>
-        <Sparkles size={20} color="#FBBF24" strokeWidth={1.8} />
+        <span style={{ color: "rgba(26,2,0,0.72)", fontSize: 13, marginTop: 6, fontWeight: 500 }}>
+          You&apos;ve got something. One tap.
+        </span>
+        <span
+          className="flex items-center justify-center"
+          style={{
+            marginTop: 16,
+            backgroundColor: "#1A0200",
+            borderRadius: 9999,
+            paddingLeft: 20,
+            paddingRight: 20,
+            paddingTop: 10,
+            paddingBottom: 10,
+            gap: 6,
+          }}
+        >
+          <span className="font-peachi font-bold" style={{ color: "#FBBF24", fontSize: 13 }}>
+            {revealing ? "Revealing…" : "Reveal"}
+          </span>
+          {!revealing ? <ChevronRight size={14} color="#FBBF24" strokeWidth={2.4} /> : null}
+        </span>
       </button>
     </section>
   );

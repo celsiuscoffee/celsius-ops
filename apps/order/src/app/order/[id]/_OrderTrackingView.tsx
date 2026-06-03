@@ -357,7 +357,7 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
                 className="mt-1 text-right"
                 style={{ color: "#A2492C", fontSize: 12, fontWeight: 700 }}
               >
-                +{order.loyalty_points_earned} beans earned
+                +{order.loyalty_points_earned} Points earned
               </p>
             ) : null}
           </div>

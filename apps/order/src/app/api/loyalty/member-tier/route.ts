@@ -47,11 +47,17 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdmin();
     const { data: pre } = await supabase
       .from("member_brands")
-      .select("current_tier_id")
+      .select("current_tier_id, points_balance, total_points_earned")
       .eq("member_id", memberId)
       .eq("brand_id", BRAND_ID)
       .maybeSingle();
     const prevTierId = (pre as { current_tier_id?: string | null } | null)?.current_tier_id ?? null;
+    // Live balance + lifetime earned, straight from member_brands — the SAME
+    // source POS + native read. The web clients used to render a STALE
+    // localStorage snapshot (e.g. 1894 while POS showed 2102); returning the
+    // authoritative value here lets the home + account surfaces refresh.
+    const liveBalance = (pre as { points_balance?: number | null } | null)?.points_balance ?? null;
+    const liveEarned  = (pre as { total_points_earned?: number | null } | null)?.total_points_earned ?? null;
 
     const res = await fetch(
       `${LOYALTY_BASE}/api/member-tier?member_id=${encodeURIComponent(memberId)}&brand_id=${BRAND_ID}`,
@@ -87,7 +93,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json({
+      ...data,
+      // Authoritative live values from member_brands (override anything the
+      // tier proxy may have returned) so web matches POS + native.
+      points_balance: liveBalance,
+      total_points_earned: liveEarned,
+    });
   } catch (err) {
     console.error("Loyalty member-tier fetch error:", err);
     return NextResponse.json({ error: "Failed to fetch tier" }, { status: 500 });

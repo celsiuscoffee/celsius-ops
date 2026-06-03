@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CreditCard, Wallet, Banknote } from "lucide-react";
+import { ArrowLeft, ChevronDown, Check } from "lucide-react";
 import { StripePaymentForm } from "@/components/stripe-payment-form";
+import { PaymentBrandIcon } from "./_PaymentBrandIcon";
 import { calcRewardDiscount, type AppliedReward } from "@/lib/reward-discount";
 
 type CartItem = {
@@ -44,23 +45,104 @@ type GatewayMethodRow = {
 };
 type GatewayConfig = { paymentsEnabled: boolean; methods: GatewayMethodRow[] };
 
-// Display metadata per method_id. WHICH methods are shown and their gateway
+// Display labels per method_id. WHICH methods are shown + their gateway
 // routing come from /api/payments/gateway-config (the same source the native
-// pickup app reads) — this map only supplies labels/icons.
-const METHOD_DISPLAY: Record<
-  string,
-  { label: string; subtitle?: string; iconSrc?: string; iconFallback: typeof CreditCard }
-> = {
-  fpx:        { label: "Online Banking",       subtitle: "FPX",     iconSrc: "/payment-icons/fpx.svg",        iconFallback: Banknote },
-  tng:        { label: "Touch 'n Go",          subtitle: "eWallet", iconSrc: "/payment-icons/tng.svg",        iconFallback: Wallet },
-  boost:      { label: "Boost",                subtitle: "eWallet", iconSrc: "/payment-icons/boost.svg",      iconFallback: Wallet },
-  shopeepay:  { label: "ShopeePay",            subtitle: "eWallet",                                            iconFallback: Wallet },
-  grabpay:    { label: "GrabPay",              subtitle: "eWallet", iconSrc: "/payment-icons/grabpay.svg",    iconFallback: Wallet },
-  duitnow:    { label: "DuitNow",              subtitle: "QR",                                                 iconFallback: Wallet },
-  card:       { label: "Credit / Debit Card",                       iconSrc: "/payment-icons/card.svg",       iconFallback: CreditCard },
-  apple_pay:  { label: "Apple Pay",                                 iconSrc: "/payment-icons/apple-pay.svg",  iconFallback: CreditCard },
-  google_pay: { label: "Google Pay",                                iconSrc: "/payment-icons/google-pay.svg", iconFallback: CreditCard },
+// pickup app reads). Brand icons are rendered by <PaymentBrandIcon> (a port
+// of the native component) so web + native show identical chips. The grouped
+// layout (Card · Apple/Google Pay · E-Wallet · Online Banking) mirrors
+// apps/pickup-native/app/checkout.tsx.
+const METHOD_DISPLAY: Record<string, { label: string; subtitle?: string }> = {
+  fpx:        { label: "Online Banking", subtitle: "FPX" },
+  tng:        { label: "Touch 'n Go" },
+  boost:      { label: "Boost" },
+  shopeepay:  { label: "ShopeePay" },
+  grabpay:    { label: "GrabPay" },
+  duitnow:    { label: "DuitNow" },
+  card:       { label: "Credit / Debit Card" },
+  apple_pay:  { label: "Apple Pay" },
+  google_pay: { label: "Google Pay" },
 };
+
+// Wallet method ids collapsed under the single "E-Wallet" category row —
+// same grouping native uses. Display order follows the gateway config.
+const WALLET_IDS = ["tng", "boost", "shopeepay", "grabpay", "duitnow"];
+
+// One row of the grouped payment picker — radio · title/subtitle · brand
+// chip · optional chevron for the expandable E-Wallet category. Port of the
+// native CategoryRow (apps/pickup-native/app/checkout.tsx).
+function MethodRow({
+  selected,
+  onClick,
+  title,
+  subtitle,
+  iconMethodId,
+  expandable = false,
+  expanded = false,
+  hasDivider = false,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  title: string;
+  subtitle?: string;
+  iconMethodId: string;
+  expandable?: boolean;
+  expanded?: boolean;
+  hasDivider?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center text-left active:opacity-80"
+      style={{
+        backgroundColor: "#FFFFFF",
+        gap: 12,
+        padding: 16,
+        borderTop: hasDivider ? "1px solid rgba(26,2,0,0.08)" : undefined,
+      }}
+    >
+      <span
+        className="flex-shrink-0 flex items-center justify-center"
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: 10,
+          borderWidth: 2,
+          borderStyle: "solid",
+          borderColor: selected ? "#A2492C" : "#D6CCC2",
+          backgroundColor: selected ? "#A2492C" : "transparent",
+        }}
+      >
+        {selected ? (
+          <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#FFFFFF" }} />
+        ) : null}
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="block truncate" style={{ color: "#1A0200", fontSize: 15, fontWeight: 700 }}>
+          {title}
+        </span>
+        {subtitle ? (
+          <span
+            className="block truncate"
+            style={{ color: "#6B6B6B", fontSize: 12, marginTop: 2, fontWeight: 500 }}
+          >
+            {subtitle}
+          </span>
+        ) : null}
+      </span>
+      <PaymentBrandIcon methodId={iconMethodId} size={36} />
+      <span style={{ width: 16, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+        {expandable ? (
+          <ChevronDown
+            size={16}
+            color="#8E8E93"
+            style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 150ms" }}
+          />
+        ) : null}
+      </span>
+    </button>
+  );
+}
 
 function readState(): Persisted["state"] {
   try {
@@ -82,6 +164,8 @@ export function CheckoutView() {
   const [confirming, setConfirming] = useState(false);
   const [tier, setTier] = useState<Tier | null>(null);
   const [gateway, setGateway] = useState<GatewayConfig | null>(null);
+  // Whether the E-Wallet category row is expanded into its sub-picker.
+  const [ewalletExpanded, setEwalletExpanded] = useState(false);
 
   useEffect(() => {
     setState(readState() ?? null);
@@ -211,14 +295,8 @@ export function CheckoutView() {
         id === "apple_pay" ? supportsApplePay : id === "google_pay" ? !supportsApplePay : true,
       )
       .map((id) => {
-        const d = METHOD_DISPLAY[id] ?? { label: id, iconFallback: CreditCard };
-        return {
-          id,
-          label: d.label,
-          subtitle: d.subtitle,
-          iconSrc: d.iconSrc,
-          iconFallback: d.iconFallback,
-        };
+        const d = METHOD_DISPLAY[id] ?? { label: id };
+        return { id, label: d.label, subtitle: d.subtitle };
       });
   }, [gateway]);
 
@@ -328,6 +406,16 @@ export function CheckoutView() {
     }
   };
 
+  // Group the available methods into the native-style categories: Card ·
+  // device wallets · E-Wallet (expandable sub-picker) · Online Banking.
+  // Availability + order follow /api/payments/gateway-config.
+  const cardMethod = visibleMethods.find((m) => m.id === "card");
+  const applePayMethod = visibleMethods.find((m) => m.id === "apple_pay");
+  const googlePayMethod = visibleMethods.find((m) => m.id === "google_pay");
+  const walletMethods = visibleMethods.filter((m) => WALLET_IDS.includes(m.id));
+  const fpxMethod = visibleMethods.find((m) => m.id === "fpx");
+  const selectedWallet = walletMethods.find((w) => w.id === method) ?? null;
+
   return (
     <>
       <header
@@ -400,99 +488,124 @@ export function CheckoutView() {
       </section>
 
       <section className="px-4 pt-5">
-        <h2 className="font-peachi font-bold text-[16px]">Pay with</h2>
-        <ul className="mt-2 flex flex-col">
-          {visibleMethods.map((m, idx) => {
-            const Fallback = m.iconFallback ?? CreditCard;
-            const active = method === m.id;
-            const isLast = idx === visibleMethods.length - 1;
-            return (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  onClick={() => setMethod(m.id)}
-                  className="w-full flex items-center text-left active:opacity-80"
-                  style={{
-                    backgroundColor: "#FFFFFF",
-                    border: active
-                      ? "2px solid #160800"
-                      : "1px solid rgba(26,2,0,0.10)",
-                    borderRadius: 16,
-                    padding: 14,
-                    gap: 14,
-                    marginBottom: isLast ? 0 : 8,
-                  }}
-                >
-                  <span
-                    className="flex items-center justify-center flex-shrink-0"
-                    style={{
-                      width: 44,
-                      height: 36,
-                      borderRadius: 8,
-                      backgroundColor: "#F7F4F0",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {m.iconSrc ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={m.iconSrc}
-                        alt=""
-                        style={{
-                          maxWidth: "70%",
-                          maxHeight: "70%",
-                          objectFit: "contain",
+        <p
+          className="uppercase"
+          style={{ color: "#6B6B6B", fontSize: 10, fontWeight: 700, letterSpacing: 1.4, marginBottom: 8 }}
+        >
+          Payment method
+        </p>
+        <div
+          className="bg-white"
+          style={{ border: "1px solid rgba(26,2,0,0.10)", borderRadius: 16, overflow: "hidden" }}
+        >
+          {cardMethod ? (
+            <MethodRow
+              selected={method === "card"}
+              onClick={() => {
+                setMethod("card");
+                setEwalletExpanded(false);
+              }}
+              title="Credit / Debit Card"
+              iconMethodId="card"
+            />
+          ) : null}
+
+          {applePayMethod ? (
+            <MethodRow
+              selected={method === "apple_pay"}
+              onClick={() => {
+                setMethod("apple_pay");
+                setEwalletExpanded(false);
+              }}
+              title="Apple Pay"
+              iconMethodId="apple_pay"
+              hasDivider={!!cardMethod}
+            />
+          ) : null}
+
+          {googlePayMethod ? (
+            <MethodRow
+              selected={method === "google_pay"}
+              onClick={() => {
+                setMethod("google_pay");
+                setEwalletExpanded(false);
+              }}
+              title="Google Pay"
+              iconMethodId="google_pay"
+              hasDivider={!!(cardMethod || applePayMethod)}
+            />
+          ) : null}
+
+          {walletMethods.length > 0 ? (
+            <>
+              {/* E-Wallet — one category row that expands an inline dropdown
+                  sub-picker (TnG / Boost / ShopeePay / GrabPay). Native opens a
+                  bottom sheet; on web the dropdown reads the same and keeps the
+                  PWA on a single surface. The group row shows the chosen
+                  wallet's icon + name once one is picked. */}
+              <MethodRow
+                selected={!!selectedWallet}
+                onClick={() => setEwalletExpanded((v) => !v)}
+                title="E-Wallet"
+                subtitle={selectedWallet?.label}
+                iconMethodId={selectedWallet ? selectedWallet.id : "ewallet"}
+                expandable
+                expanded={ewalletExpanded}
+                hasDivider={!!(cardMethod || applePayMethod || googlePayMethod)}
+              />
+              {ewalletExpanded ? (
+                <div style={{ backgroundColor: "#FBFAF8", borderTop: "1px solid rgba(26,2,0,0.06)" }}>
+                  {walletMethods.map((w, i) => {
+                    const picked = method === w.id;
+                    return (
+                      <button
+                        key={w.id}
+                        type="button"
+                        onClick={() => {
+                          setMethod(w.id);
+                          setEwalletExpanded(false);
                         }}
-                      />
-                    ) : (
-                      <Fallback size={20} color="#1A0200" />
-                    )}
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span
-                      className="block truncate"
-                      style={{ color: "#1A0200", fontSize: 14, fontWeight: 700 }}
-                    >
-                      {m.label}
-                    </span>
-                    {m.subtitle ? (
-                      <span
-                        className="block truncate"
-                        style={{ color: "#6B6B6B", fontSize: 12, marginTop: 2, fontWeight: 500 }}
+                        className="w-full flex items-center text-left active:opacity-80"
+                        style={{
+                          gap: 12,
+                          paddingLeft: 48,
+                          paddingRight: 16,
+                          paddingTop: 12,
+                          paddingBottom: 12,
+                          borderTop: i > 0 ? "1px solid rgba(26,2,0,0.05)" : undefined,
+                          backgroundColor: "transparent",
+                        }}
                       >
-                        {m.subtitle}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span
-                    className="flex-shrink-0 rounded-full border"
-                    style={{
-                      width: 20,
-                      height: 20,
-                      borderColor: active ? "#160800" : "#C4BDB3",
-                      backgroundColor: active ? "#160800" : "transparent",
-                      borderWidth: active ? 0 : 1,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {active ? (
-                      <span
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 4,
-                          backgroundColor: "#FFFFFF",
-                        }}
-                      />
-                    ) : null}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                        <PaymentBrandIcon methodId={w.id} size={32} />
+                        <span
+                          className="flex-1 min-w-0 truncate"
+                          style={{ color: "#1A0200", fontSize: 14, fontWeight: 700 }}
+                        >
+                          {w.label}
+                        </span>
+                        {picked ? <Check size={18} color="#A2492C" strokeWidth={2.5} /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
+          {fpxMethod ? (
+            <MethodRow
+              selected={method === "fpx"}
+              onClick={() => {
+                setMethod("fpx");
+                setEwalletExpanded(false);
+              }}
+              title="Online Banking"
+              subtitle="FPX"
+              iconMethodId="fpx"
+              hasDivider={!!(cardMethod || applePayMethod || googlePayMethod || walletMethods.length > 0)}
+            />
+          ) : null}
+        </div>
       </section>
 
       <section className="px-4 pt-4">

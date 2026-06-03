@@ -3,7 +3,6 @@ import { getMenuData } from "@/lib/menu-data";
 import { GlobalCartPill } from "../_GlobalCartPill";
 import { BottomNav } from "../_BottomNav";
 import { MenuColumns } from "./_MenuColumns";
-import { ReservedVoucherBanner } from "./_ReservedVoucherBanner";
 import { OutletGate } from "./_OutletGate";
 import { OutletPickerRow } from "./_OutletPickerRow";
 
@@ -76,9 +75,10 @@ export default async function MenuPage() {
   return (
     <main className="bg-white text-[#160800] pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
       <OutletGate />
-      {/* MenuColumns owns the sticky header (with the search toggle),
-          so the outlet picker + reserved-voucher banner are passed in
-          as children to render directly beneath it. */}
+      {/* MenuColumns owns the sticky header (with the search toggle), so the
+          outlet picker is passed in as a child to render beneath it. The
+          reserved-voucher "locked in" reminder is intentionally NOT shown
+          here — an applied reward surfaces only at checkout. */}
       <MenuColumns
         sections={sections}
         allProducts={menu.products.filter(
@@ -86,7 +86,6 @@ export default async function MenuPage() {
         )}
       >
         <OutletPickerRow />
-        <ReservedVoucherBanner />
       </MenuColumns>
       <GlobalCartPill />
       <BottomNav active="menu" />

@@ -1,5 +1,4 @@
 import { CartView } from "./_CartView";
-import { BottomNav } from "../_BottomNav";
 import { getMenuData } from "@/lib/menu-data";
 
 /**
@@ -19,9 +18,10 @@ export default async function CartPage() {
     .map((p) => ({ id: p.id, name: p.name, basePrice: p.basePrice, image: p.image }));
 
   return (
-    <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
+    // No bottom nav on the cart — the sticky "Continue to checkout" bar (in
+    // CartView) is the bottom UI, matching the product page. pb clears it.
+    <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+96px)]">
       <CartView bestSellers={bestSellers} />
-      <BottomNav active="home" />
     </main>
   );
 }

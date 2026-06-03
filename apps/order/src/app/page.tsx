@@ -134,11 +134,12 @@ export default async function HomePage() {
       <VoucherRail />
 
       {/* Best Sellers — horizontal scroll matching apps/pickup-native/app
-          /index.tsx: w-44 cards, 4/5 image aspect, ChevronRight CTA. */}
+          /index.tsx: w-40 compact cards, 4/5 image aspect, ChevronRight CTA.
+          px-4 aligns the first card with the challenge box (mx-4) above. */}
       {bestSellers.length > 0 && (
         <section className="mt-5">
           <div className="flex items-center px-4 mb-3">
-            <h2 className="font-peachi font-bold text-[20px] flex-1">Best Sellers</h2>
+            <h2 className="font-peachi font-bold text-[18px] flex-1">Best Sellers</h2>
             <Link
               href="/menu"
               className="text-[#A2492C] text-xs font-bold flex items-center gap-0.5 active:opacity-70"
@@ -155,7 +156,7 @@ export default async function HomePage() {
               <Link
                 key={p.id}
                 href={`/product/${p.id}`}
-                className="flex-shrink-0 w-44 rounded-2xl bg-white overflow-hidden active:opacity-70"
+                className="flex-shrink-0 w-40 rounded-2xl bg-white overflow-hidden active:opacity-70"
                 style={{
                   border: "1px solid rgba(26, 2, 0, 0.10)",
                   boxShadow: "0 3px 8px rgba(0,0,0,0.06)",
@@ -168,22 +169,22 @@ export default async function HomePage() {
                       src={p.image}
                       alt={p.name}
                       fill
-                      sizes="176px"
+                      sizes="160px"
                       className="object-cover"
                     />
                   ) : null}
                 </div>
-                <div className="p-3">
-                  <p className="font-peachi font-bold text-[14px] text-[#160800] truncate">{p.name}</p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="font-peachi font-bold text-[16px] text-[#A2492C]">
+                <div className="px-3 py-2.5">
+                  <p className="font-peachi font-bold text-[13px] text-[#160800] truncate">{p.name}</p>
+                  <div className="mt-1.5 flex items-center justify-between">
+                    <span className="font-peachi font-bold text-[14px] text-[#A2492C]">
                       RM{p.basePrice.toFixed(2)}
                     </span>
                     <span
                       className="rounded-full bg-[#160800] flex items-center justify-center"
-                      style={{ width: 28, height: 28 }}
+                      style={{ width: 24, height: 24 }}
                     >
-                      <ChevronRight size={16} color="#FFFFFF" />
+                      <ChevronRight size={14} color="#FFFFFF" />
                     </span>
                   </div>
                 </div>

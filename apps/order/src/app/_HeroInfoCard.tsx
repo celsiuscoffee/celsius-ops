@@ -13,6 +13,7 @@ import { ChevronRight } from "lucide-react";
 type Persisted = {
   state?: {
     phone?: string | null;
+    loyaltyId?: string | null;
     member?: { name?: string | null; pointsBalance?: number };
   };
 };
@@ -36,17 +37,52 @@ export function HeroInfoCard({ voucherCount = 0 }: { voucherCount?: number }) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    let memberId: string | null = null;
     try {
       const raw = window.localStorage.getItem("celsius-pickup");
       if (raw) {
         const parsed = JSON.parse(raw) as Persisted;
         setName(firstNameOf(parsed.state?.member?.name));
         setBeans(parsed.state?.member?.pointsBalance ?? null);
+        memberId = parsed.state?.loyaltyId ?? null;
       }
     } catch {
       /* ignore */
     }
     setHydrated(true);
+
+    // Refresh the LIVE balance from member_brands (the same source POS +
+    // native read). The cached localStorage value goes stale whenever points
+    // change on another surface (e.g. a POS purchase) — which is why the web
+    // could show 1894 while POS showed 2102. Falls back to the cached value
+    // if the fetch fails.
+    if (!memberId) return;
+    let cancelled = false;
+    fetch(`/api/loyalty/member-tier?member_id=${encodeURIComponent(memberId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled) return;
+        const live = (d as { points_balance?: number | null } | null)?.points_balance;
+        if (typeof live !== "number") return;
+        setBeans(live);
+        // Write the fresh value back so the account / tier surfaces that read
+        // the same cache also show it.
+        try {
+          const raw = window.localStorage.getItem("celsius-pickup");
+          const parsed = raw ? JSON.parse(raw) : { state: {} };
+          const state = parsed.state ?? {};
+          state.member = { ...(state.member ?? {}), pointsBalance: live };
+          window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state }));
+        } catch {
+          /* ignore */
+        }
+      })
+      .catch(() => {
+        /* keep cached value */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const greeting = greetingFor(new Date().getHours());

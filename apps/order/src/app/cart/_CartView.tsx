@@ -535,19 +535,26 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
           </div>
         ) : null}
 
+      </div>
+
+      {/* Sticky checkout bar — replaces the bottom nav on the cart page,
+          matching the product page's fixed add-to-cart bar. */}
+      <div
+        className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#EBE5DE] px-4 pt-3"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+      >
         {belowMin ? (
           <p
             className="text-center text-[12px]"
-            style={{ color: "#A2492C", fontWeight: 500, marginTop: 12, marginBottom: 8 }}
+            style={{ color: "#A2492C", fontWeight: 500, marginBottom: 8 }}
           >
             Add RM{(minOrder - subtotal).toFixed(2)} more to checkout (min RM{minOrder.toFixed(2)})
           </p>
         ) : null}
-
         {belowMin || outletClosed ? (
           <div
             className="block w-full rounded-full text-white text-center py-4 font-peachi font-bold cursor-not-allowed"
-            style={{ marginTop: belowMin ? 0 : 12, backgroundColor: "rgba(162,73,44,0.40)" }}
+            style={{ backgroundColor: "rgba(162,73,44,0.40)" }}
             aria-disabled="true"
           >
             {outletClosed ? "Outlet closed" : "Continue to checkout"}
@@ -556,7 +563,6 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
           <Link
             href="/checkout"
             className="block w-full rounded-full bg-[#A2492C] text-white text-center py-4 font-peachi font-bold active:opacity-80"
-            style={{ marginTop: 12 }}
           >
             Continue to checkout
           </Link>

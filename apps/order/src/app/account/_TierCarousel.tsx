@@ -131,7 +131,37 @@ export function TierCarousel() {
     if (memberId) {
       fetch(`/api/loyalty/member-tier?member_id=${encodeURIComponent(memberId)}`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => setMember((d ?? null) as MemberTier | null))
+        .then((d) => {
+          setMember((d ?? null) as MemberTier | null);
+          // Live points + lifetime earned from member_brands — overrides the
+          // stale localStorage snapshot the stats strip was seeded with
+          // (POS/native already show this value).
+          const live = d as { points_balance?: number | null; total_points_earned?: number | null } | null;
+          if (live && typeof live.points_balance === "number") {
+            const livePoints = live.points_balance;
+            const liveEarned =
+              typeof live.total_points_earned === "number" ? live.total_points_earned : null;
+            setStats((s) => ({
+              ...s,
+              points: livePoints,
+              earned: liveEarned ?? s.earned,
+            }));
+            // Refresh the cache so the home hero + a re-open of account stay in sync.
+            try {
+              const raw = window.localStorage.getItem("celsius-pickup");
+              const parsed = raw ? JSON.parse(raw) : { state: {} };
+              const state = parsed.state ?? {};
+              state.member = {
+                ...(state.member ?? {}),
+                pointsBalance: livePoints,
+                ...(liveEarned !== null ? { totalPointsEarned: liveEarned } : {}),
+              };
+              window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state }));
+            } catch {
+              /* ignore */
+            }
+          }
+        })
         .catch(() => {
           /* ignore */
         });
