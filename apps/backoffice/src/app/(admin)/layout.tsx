@@ -246,10 +246,14 @@ const NAV_SECTIONS: NavSection[] = [
       },
     ],
   },
+  // Rewards — the loyalty programme's day-to-day surfaces. Pulled out of
+  // "Marketing" into its own top-level section. The loyalty *config* (Tiers,
+  // Discount Engine, All Rewards, Outcome Types, Birthday Treats) still lives
+  // under Settings → Loyalty.
   {
-    label: "Marketing",
-    icon: <Megaphone className={ICON_SIZE} />,
-    railIcon: <Megaphone className={RAIL_ICON_SIZE} />,
+    label: "Rewards",
+    icon: <Gift className={ICON_SIZE} />,
+    railIcon: <Gift className={RAIL_ICON_SIZE} />,
     dividerBefore: true,
     subgroups: [
       {
@@ -269,10 +273,10 @@ const NAV_SECTIONS: NavSection[] = [
         // pickup app's rewards screen top-to-bottom so admin mental
         // model matches what the customer sees.
         //
-        // The Bean-Points Shop has no entry here: its catalog is managed
+        // The Points Shop has no entry here: its catalog is managed
         // in All Rewards (Setup) — any template with points_cost set is a
         // points-shop item. The legacy rewards-table editor (/loyalty/
-        // rewards) was removed once the Bean-Shop readers migrated to
+        // rewards) was removed once the Points-Shop readers migrated to
         // voucher_templates, so there's a single edit surface again.
         label: "Channels",
         items: [
@@ -303,7 +307,7 @@ const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        label: "Loyalty Campaigns",
+        label: "Campaigns",
         items: [
           { label: "Campaigns", href: "/loyalty/campaigns", icon: <Megaphone className={ICON_SIZE} />,     moduleKey: "loyalty:campaigns" },
           // Engage = unified surface for "how we reach customers".
@@ -312,8 +316,16 @@ const NAV_SECTIONS: NavSection[] = [
           { label: "Engage",    href: "/loyalty/engage",    icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
         ],
       },
-      // Reviews + paid/recruitment ads — folded into Marketing (each was its
-      // own top-level sidebar section before the consolidation).
+    ],
+  },
+  // Marketing — now just the outward-facing channels (customer reviews + paid
+  // ads). The loyalty/rewards surfaces moved to their own "Rewards" section
+  // above.
+  {
+    label: "Marketing",
+    icon: <Megaphone className={ICON_SIZE} />,
+    railIcon: <Megaphone className={RAIL_ICON_SIZE} />,
+    subgroups: [
       {
         label: "Reviews",
         items: [

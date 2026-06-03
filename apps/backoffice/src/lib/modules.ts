@@ -153,7 +153,7 @@ export const APP_ORDER: readonly string[] = [
 export const APP_SECTION_LABELS: Record<string, string> = {
   pickup: "POS & Pickup",
   inventory: "Procurement",
-  loyalty: "Marketing",
+  loyalty: "Rewards",
   reviews: "Reviews",
   ads: "Google Ads",
   sales: "Sales",
