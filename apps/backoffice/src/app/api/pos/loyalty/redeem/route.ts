@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { markVoucherUsed } from "@celsius/shared";
+import {
+  markVoucherUsed,
+  rowToDiscountSpec,
+  inlineSpecFromIssued,
+  specToRegisterDescriptor,
+  DISCOUNT_SPEC_COLUMNS,
+  type DiscountSpecRow,
+  type VoucherDiscountSpec,
+} from "@celsius/shared";
 
 // Service-role required: member_brands writes + issued_rewards updates
 // are blocked under anon. Without this, the modal hand-off succeeds
@@ -42,12 +50,18 @@ export async function POST(req: NextRequest) {
     //    at the till. Resolve them from issued_rewards directly instead.
     //  • Catalog / Bean-Shop reward: the canonical voucher_templates row, keyed
     //    by legacy_reward_id (name:title, points_required:points_cost aliases keep
-    //    the downstream points math + buildDiscountInfo unchanged).
+    //    the downstream points math unchanged).
     let reward: Record<string, any> | null = null;
+    // Canonical discount spec, resolved the SAME way every channel does
+    // (apps/order's wallet + catalog paths) so POS never drifts. The
+    // register is client-authoritative — it applies this spec to its own
+    // on-screen cart — so we hand back a descriptor (specToRegisterDescriptor)
+    // rather than computing a sen amount here (the redeem route has no cart).
+    let spec: VoucherDiscountSpec | null = null;
     if (issued_reward_id) {
       const { data: ir, error: irLookupErr } = await supabase
         .from("issued_rewards")
-        .select("id, member_id, title, description, discount_type, discount_value, min_order_value, applicable_products, applicable_categories, free_product_name, status")
+        .select("id, member_id, title, description, voucher_template_id, discount_type, discount_value, min_order_value, applicable_products, applicable_categories, free_product_name, status")
         .eq("id", issued_reward_id)
         .eq("member_id", member_id)
         .maybeSingle();
@@ -59,6 +73,22 @@ export async function POST(req: NextRequest) {
       }
       // points_required 0 (issued vouchers cost no points); stock null (no cap).
       reward = { ...ir, name: ir.title, points_required: 0, stock: null };
+      // Prefer the linked voucher_template's full mechanics — max_discount,
+      // free_product_ids, and the bogo/combo/override knobs live ONLY on the
+      // template, not the denormalized issued_rewards row. Without this an
+      // earned bogo/combo voucher loses those knobs at the till (the exact
+      // drift apps/order's wallet path already fixes). Fall back to the
+      // inline columns for legacy vouchers minted before the link existed.
+      if (ir.voucher_template_id) {
+        const { data: tmpl } = await supabase
+          .from("voucher_templates")
+          .select(DISCOUNT_SPEC_COLUMNS)
+          .eq("id", ir.voucher_template_id)
+          .maybeSingle<DiscountSpecRow>();
+        spec = tmpl ? rowToDiscountSpec(tmpl) : inlineSpecFromIssued(ir);
+      } else {
+        spec = inlineSpecFromIssued(ir);
+      }
     } else {
       const { data: vt, error: rwErr } = await supabase
         .from("voucher_templates")
@@ -71,8 +101,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Reward not found or inactive" }, { status: 404 });
       }
       reward = vt;
+      spec = rowToDiscountSpec(vt as DiscountSpecRow);
     }
-    if (!reward) {
+    if (!reward || !spec) {
       return NextResponse.json({ error: "Reward not found or inactive" }, { status: 404 });
     }
 
@@ -105,7 +136,7 @@ export async function POST(req: NextRequest) {
         code: null,
         new_balance: balance, // unchanged until the burn at /complete
         reward_name: reward.name,
-        discount: buildDiscountInfo(reward),
+        discount: specToRegisterDescriptor(spec),
         points_spent: reward.points_required ?? 0, // burned at /complete; shown on receipt
         preview: true,
       });
@@ -237,8 +268,8 @@ export async function POST(req: NextRequest) {
         .gt("stock", 0);
     }
 
-    // Build discount info for POS to apply
-    const discount = buildDiscountInfo(reward);
+    // Discount descriptor for the register to apply (shared projection).
+    const discount = specToRegisterDescriptor(spec);
 
     return NextResponse.json({
       success: true,
@@ -255,88 +286,9 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/**
- * Convert reward fields into a structured discount object for the POS cart.
- * Handles both structured (discount_type populated) and legacy (name-based) rewards.
- */
-function buildDiscountInfo(reward: Record<string, any>) {
-  // If discount_type is populated, use structured discount
-  if (reward.discount_type) {
-    return {
-      type: reward.discount_type as string,
-      value: Number(reward.discount_value ?? 0),
-      max_discount: reward.max_discount_value ? Number(reward.max_discount_value) : null,
-      min_order: reward.min_order_value ? Number(reward.min_order_value) : null,
-      applicable_products: reward.applicable_products ?? null,
-      applicable_categories: reward.applicable_categories ?? null,
-      free_product_ids: reward.free_product_ids ?? null,
-      free_product_name: reward.free_product_name ?? null,
-      // Type-specific knobs so the POS-native engine can apply bogo /
-      // combo / override_price (it's client-authoritative on the register).
-      bogo_buy_qty: reward.bogo_buy_qty ?? null,
-      bogo_free_qty: reward.bogo_free_qty ?? null,
-      combo_price_sen: reward.combo_price_sen ?? null,
-      override_price_sen: reward.override_price_sen ?? null,
-    };
-  }
-
-  // Legacy rewards: infer discount from name
-  const name = (reward.name ?? "").toLowerCase();
-
-  // "RM5" / "RM 5" / "RM10" pattern → fixed_amount
-  const rmMatch = name.match(/rm\s?(\d+(?:\.\d+)?)/);
-  if (rmMatch) {
-    return {
-      type: "fixed_amount",
-      value: parseFloat(rmMatch[1]),
-      max_discount: null,
-      min_order: null,
-      applicable_products: null,
-      applicable_categories: null,
-      free_product_ids: null,
-      free_product_name: null,
-    };
-  }
-
-  // "Free Drink" / "Free Coffee" → free_item
-  if (name.includes("free")) {
-    return {
-      type: "free_item",
-      value: 0,
-      max_discount: null,
-      min_order: null,
-      applicable_products: reward.applicable_products ?? null,
-      applicable_categories: reward.applicable_categories ?? null,
-      free_product_ids: reward.free_product_ids ?? null,
-      free_product_name: reward.free_product_name ?? reward.name,
-    };
-  }
-
-  // "X% off" pattern → percentage
-  const pctMatch = name.match(/(\d+)\s?%/);
-  if (pctMatch) {
-    return {
-      type: "percentage",
-      value: parseInt(pctMatch[1]),
-      max_discount: null,
-      min_order: null,
-      applicable_products: null,
-      applicable_categories: null,
-      free_product_ids: null,
-      free_product_name: null,
-    };
-  }
-
-  // Unknown — return as name-only (staff applies manually)
-  return {
-    type: "manual",
-    value: 0,
-    max_discount: null,
-    min_order: null,
-    applicable_products: null,
-    applicable_categories: null,
-    free_product_ids: null,
-    free_product_name: null,
-    note: reward.name,
-  };
-}
+// The POS discount descriptor is now built by @celsius/shared
+// specToRegisterDescriptor(spec) — one lossless, unit-safe projection of
+// the canonical VoucherDiscountSpec, shared with native + QR-table. The old
+// name-parsing buildDiscountInfo (which leaked RM-vs-SEN on its dead legacy
+// branch, and never carried the template-only bogo/combo/override knobs for
+// issued vouchers) is gone.
