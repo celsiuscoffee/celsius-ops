@@ -707,24 +707,27 @@ export default function Register() {
   }
 
   // Core redemption — shared by the cashier reward modal and the customer's
-  // 2nd-screen redeem (reverse channel). Returns false if it couldn't apply.
-  async function applyRewardArgs(rewardId: string | null, issuedRewardId: string | null): Promise<boolean> {
-    if (!member || !outletId) return false;
+  // 2nd-screen redeem (reverse channel). Returns { ok, reason } so callers can
+  // show an accurate message (tier-bigger / needs-item / error) rather than a
+  // misleading generic one.
+  type RedeemFail = "busy" | "needs_item" | "tier_bigger" | "error";
+  async function applyRewardArgs(rewardId: string | null, issuedRewardId: string | null): Promise<{ ok: boolean; reason?: RedeemFail }> {
+    if (!member || !outletId) return { ok: false, reason: "error" };
     // In-flight guard — strictly one redeem call at a time so a concurrent
     // double-tap can't reserve/commit twice. (The single-reward-per-order limit
     // is enforced at the card/reverse-channel call sites so the Rewards modal
     // can still SWITCH.)
-    if (redeemBusyRef.current) return false;
+    if (redeemBusyRef.current) return { ok: false, reason: "busy" };
     redeemBusyRef.current = true;
     try {
       // preview=true RESERVES a catalog reward on the cart without burning
-      // Beans — the burn happens at payment (/complete). Issued vouchers ignore
-      // it and commit immediately (they cost no Beans).
+      // points — the burn happens at payment (/complete). Issued vouchers ignore
+      // it and commit immediately (they cost no points).
       const res = await redeemReward({ memberId: member.id, rewardId, outletId, issuedRewardId, preview: true });
       const disc = computeRewardDiscount(res.discount, lines);
       if (disc <= 0 && (res.discount.type === "free_item" || res.discount.type === "free_upgrade")) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        return false;
+        return { ok: false, reason: "needs_item" };
       }
       // Non-stackable tier (Black Card / Staff): only apply the voucher if it
       // beats the tier % — otherwise keep the bigger tier discount (pickup parity).
@@ -733,7 +736,7 @@ export default function Register() {
         const tierD = Math.round((subtotal * (t.discount_percent ?? 0)) / 100);
         if (tierD >= disc) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-          return false;
+          return { ok: false, reason: "tier_bigger" };
         }
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -747,23 +750,39 @@ export default function Register() {
         descriptor: res.discount,
         pointsCost: res.points_spent ?? 0, // points this reward costs — shown on the receipt
       });
-      // Only drop the displayed balance when Beans were ACTUALLY spent now (an
+      // Only drop the displayed balance when points were ACTUALLY spent now (an
       // immediate issued-voucher commit). A reserved catalog reward keeps the
       // member's full balance until it burns at payment.
       if (!deferred) setMember((m) => (m ? { ...m, points_balance: res.new_balance ?? m.points_balance } : m));
-      return true;
+      return { ok: true };
     } catch {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return false;
+      return { ok: false, reason: "error" };
     } finally {
       redeemBusyRef.current = false;
     }
   }
 
+  // Accurate redeem-failure alert (the old generic "add a qualifying item" was
+  // shown even when the real reason was the non-stackable tier discount).
+  function showRedeemError(reason?: RedeemFail) {
+    if (reason === "busy") return; // silent — another redeem is in flight
+    if (reason === "tier_bigger") {
+      Alert.alert(
+        `${member?.tier?.name ?? "Tier"} discount is bigger`,
+        "This reward is smaller than the discount already on the bill, so it wouldn't save more — the member keeps their points.",
+      );
+    } else if (reason === "needs_item") {
+      Alert.alert("Add an item first", "This is a free-item reward — add a qualifying item to the cart before redeeming it.");
+    } else {
+      Alert.alert("Couldn't redeem", "Something went wrong applying that reward. Please try again.");
+    }
+  }
+
   async function applyReward(r: IssuedVoucher | CatalogReward, isCatalog: boolean) {
-    const ok = await applyRewardArgs(r.reward_id ?? r.id, isCatalog ? null : r.id);
-    if (ok) setShowRewards(false);
-    else alert("Couldn't apply that reward. If it's a free-item reward, add a qualifying item first.");
+    const res = await applyRewardArgs(r.reward_id ?? r.id, isCatalog ? null : r.id);
+    if (res.ok) setShowRewards(false);
+    else showRedeemError(res.reason);
   }
 
   // Redeem a points-shop reward on the member's behalf (cashier taps when the
@@ -782,8 +801,8 @@ export default function Register() {
       Alert.alert(s.name, `Needs ${s.points_required} Points — not enough yet.`);
       return;
     }
-    const ok = await applyRewardArgs(s.id, null);
-    if (!ok) Alert.alert("Couldn't redeem", "If it's a free-item reward, add a qualifying item to the cart first.");
+    const res = await applyRewardArgs(s.id, null);
+    if (!res.ok) showRedeemError(res.reason);
   }
 
   function newOrder() {

@@ -33,25 +33,50 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "member_id and reward_id required" }, { status: 400 });
     }
 
-    // Cleanup: resolve the canonical voucher_templates row (Bean-Shop
-    // mirror) by legacy_reward_id, not the legacy rewards table. The
-    // name:title and points_required:points_cost aliases keep all the
-    // downstream code (buildDiscountInfo, points math) unchanged; "*"
-    // still pulls discount_type/value/free_product_* for the discount.
-    const { data: reward, error: rwErr } = await supabase
-      .from("voucher_templates")
-      .select("*, name:title, points_required:points_cost")
-      .eq("legacy_reward_id", reward_id)
-      .eq("brand_id", BRAND_ID)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (rwErr || !reward) {
+    // Resolve the reward + its discount descriptor from one of two sources:
+    //  • Issued voucher (mystery / mission / birthday / welcome): the discount
+    //    lives on the issued_rewards row itself. These are minted by the engine
+    //    with reward_id = NULL and no legacy_reward_id, so the voucher_templates
+    //    lookup below would 404 — meaning earned vouchers could NEVER be redeemed
+    //    at the till. Resolve them from issued_rewards directly instead.
+    //  • Catalog / Bean-Shop reward: the canonical voucher_templates row, keyed
+    //    by legacy_reward_id (name:title, points_required:points_cost aliases keep
+    //    the downstream points math + buildDiscountInfo unchanged).
+    let reward: Record<string, any> | null = null;
+    if (issued_reward_id) {
+      const { data: ir, error: irLookupErr } = await supabase
+        .from("issued_rewards")
+        .select("id, member_id, title, description, discount_type, discount_value, min_order_value, applicable_products, applicable_categories, free_product_name, status")
+        .eq("id", issued_reward_id)
+        .eq("member_id", member_id)
+        .maybeSingle();
+      if (irLookupErr || !ir) {
+        return NextResponse.json({ error: "Reward not found" }, { status: 404 });
+      }
+      if (ir.status !== "active") {
+        return NextResponse.json({ error: "Reward already used or expired" }, { status: 400 });
+      }
+      // points_required 0 (issued vouchers cost no points); stock null (no cap).
+      reward = { ...ir, name: ir.title, points_required: 0, stock: null };
+    } else {
+      const { data: vt, error: rwErr } = await supabase
+        .from("voucher_templates")
+        .select("*, name:title, points_required:points_cost")
+        .eq("legacy_reward_id", reward_id)
+        .eq("brand_id", BRAND_ID)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (rwErr || !vt) {
+        return NextResponse.json({ error: "Reward not found or inactive" }, { status: 404 });
+      }
+      reward = vt;
+    }
+    if (!reward) {
       return NextResponse.json({ error: "Reward not found or inactive" }, { status: 404 });
     }
 
-    // Check stock
-    if (reward.stock !== null && reward.stock <= 0) {
+    // Check stock (catalog rewards only — issued vouchers carry stock = null)
+    if (reward.stock != null && reward.stock <= 0) {
       return NextResponse.json({ error: "Reward out of stock" }, { status: 400 });
     }
 
