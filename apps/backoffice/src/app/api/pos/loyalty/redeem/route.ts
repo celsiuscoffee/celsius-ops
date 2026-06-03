@@ -33,6 +33,10 @@ function generateCode(): string {
  *
  * For catalog rewards: deducts points, creates redemption record
  * For issued rewards: marks issued_reward as "used", creates redemption record (0 points)
+ *
+ * The discount descriptor is built via @celsius/shared specToRegisterDescriptor
+ * from the canonical voucher spec (Phase 2 of the cross-channel rewards
+ * consolidation) — the same spec native + QR-table resolve from.
  */
 export async function POST(req: NextRequest) {
   try {
