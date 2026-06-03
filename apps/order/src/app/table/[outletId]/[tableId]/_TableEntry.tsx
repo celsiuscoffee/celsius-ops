@@ -38,11 +38,14 @@ export function TableEntry({
       state.outletIsOpen = true;
       state.orderType = "dine_in";
       state.tableNumber = tableId;
-      // A fresh table session shouldn't inherit a previous pickup
-      // cart/reward — start the dine-in basket clean.
+      // Start the dine-in basket clean (a stale pickup cart shouldn't bleed
+      // in), but KEEP any applied reward / reserved voucher. A customer who
+      // locks in a Free Drink and THEN scans the table QR to order (or
+      // re-scans mid-order) must not lose it — clearing it here was why the
+      // free drink never reached the dine-in order (reward_id NULL → not free,
+      // while the same reward worked fine on pickup). The reward is
+      // re-validated server-side at checkout regardless.
       state.cart = [];
-      state.appliedReward = null;
-      state.reservedVoucher = null;
       window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state }));
     } catch {
       /* ignore */
