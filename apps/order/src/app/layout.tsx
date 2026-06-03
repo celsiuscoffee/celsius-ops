@@ -24,9 +24,9 @@ const peachi = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Celsius Coffee — Order & Pickup",
+  title: "Celsius Coffee — QR Table Order",
   description:
-    "Order your favourite Celsius Coffee drinks ahead and skip the queue. Pickup at Shah Alam, Conezion, or Tamarind Square.",
+    "Scan the QR code at your table to order Celsius Coffee drinks & food right from your seat.",
   manifest: "/manifest.json",
   icons: {
     icon: [

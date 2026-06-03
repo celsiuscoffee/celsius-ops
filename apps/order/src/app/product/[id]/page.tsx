@@ -1,7 +1,5 @@
 import { notFound } from "next/navigation";
 import { getMenuData } from "@/lib/menu-data";
-import { GlobalCartPill } from "../../_GlobalCartPill";
-import { BottomNav } from "../../_BottomNav";
 import { ProductView } from "./_ProductView";
 
 /**
@@ -25,10 +23,10 @@ export default async function ProductPage({
   if (!product) notFound();
 
   return (
-    <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+88px)]">
+    // No bottom nav + no floating cart pill on the product page — the sticky
+    // Add-to-cart bar (in ProductView) IS the bottom UI. pb clears that bar.
+    <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+96px)]">
       <ProductView product={product} />
-      <GlobalCartPill />
-      <BottomNav active="menu" />
     </main>
   );
 }

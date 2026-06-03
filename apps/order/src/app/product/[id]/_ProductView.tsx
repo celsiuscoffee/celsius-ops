@@ -289,7 +289,15 @@ export function ProductView({ product }: { product: Product }) {
         </button>
       </section>
 
-      <div className="mt-6 px-5 pb-8">
+      </div>
+
+      {/* Sticky Add-to-cart bar — replaces the bottom nav on the product
+          page (no nav, no floating cart pill here). Matches BottomNav's
+          fixed/full-width/safe-area placement so it sits in the same spot. */}
+      <div
+        className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#EBE5DE] px-5 pt-3"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+      >
         <button
           type="button"
           onClick={onAdd}
@@ -300,7 +308,6 @@ export function ProductView({ product }: { product: Product }) {
         >
           {requiredAllPicked ? `Add ${qty} · RM${totalPrice.toFixed(2)}` : "Pick required options"}
         </button>
-      </div>
       </div>
     </>
   );

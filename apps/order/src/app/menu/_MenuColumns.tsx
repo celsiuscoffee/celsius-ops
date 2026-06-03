@@ -218,7 +218,7 @@ export function MenuColumns({
             <Link href="/" className="-ml-1 p-1 active:opacity-60" aria-label="Back to home">
               <ArrowLeft size={20} color="#FFFFFF" />
             </Link>
-            <h1 className="flex-1 font-peachi font-bold text-[22px] truncate">Pickup</h1>
+            <h1 className="flex-1 font-peachi font-bold text-[22px] truncate">QR Table Order</h1>
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
