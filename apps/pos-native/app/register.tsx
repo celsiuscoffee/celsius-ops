@@ -237,7 +237,7 @@ export default function Register() {
   const advanceOrderStatus = useCallback(async (order: KdsOrder, status: "preparing" | "ready" | "completed") => {
     // Register-side channel gate: can't accept/advance Grab/Pickup orders
     // until the store is open on this till.
-    if (!shift) { promptOpenStore(); return; }
+    if (!shiftLoading && !shift) { promptOpenStore(); return; }
     setBumpingUid(order.uid);
     console.log(`[order-status] tap ${order.source} ${order.orderNumber} -> ${status}`);
     try {
@@ -254,7 +254,7 @@ export default function Register() {
       setBumpingUid(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadOrders, shift]);
+  }, [reloadOrders, shift, shiftLoading]);
 
   // ── Open Store (cashier shift) open/close ──
   const openShiftModal = useCallback(() => {
@@ -607,7 +607,7 @@ export default function Register() {
   }
 
   function onAdd(p: Product) {
-    if (!shift) { promptOpenStore(); return; }
+    if (!shiftLoading && !shift) { promptOpenStore(); return; }
     if (p.available === false) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Alert.alert(p.name, `Out of stock at ${outletShort(outletId)}. Long-press the item to mark it back in stock.`);
