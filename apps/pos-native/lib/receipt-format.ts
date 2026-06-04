@@ -52,6 +52,13 @@ export interface OutletInfo {
   city?: string | null;
   state?: string | null;
   phone?: string | null;
+  /** Registered legal company name (e.g. "Celsius Coffee Sdn Bhd"). Printed
+   *  under the branch on the receipt for tax/e-Invoice compliance. Optional —
+   *  omitted entirely when unset in POS settings. */
+  companyName?: string | null;
+  /** SSM / business registration number (LHDN BRN). Printed as "(SSM: …)".
+   *  Optional — omitted when unset. */
+  regNo?: string | null;
 }
 
 export interface ReceiptConfig {
@@ -112,6 +119,14 @@ function formatOutletHeader(outlet: OutletInfo): string[] {
   // here (strip the brand prefix) — avoids printing the name twice.
   const branch = outlet.name.replace(/^\s*celsius\s+coffee\s*/i, "").trim() || outlet.name;
   lines.push(centerText(branch));
+  // Registered company name + SSM/registration number — the supplier's legal
+  // identity for a tax receipt. Both are optional and only printed when set in
+  // POS settings (Tax & e-Invoice). Word-wrap the company name so a long
+  // "Sdn Bhd" entity name can never overflow the 80mm line.
+  if (outlet.companyName) {
+    for (const ln of wrapText(outlet.companyName, CHARS_PER_LINE)) lines.push(centerText(ln));
+  }
+  if (outlet.regNo) lines.push(centerText(`(SSM: ${outlet.regNo})`));
   const addressParts: string[] = [];
   if (outlet.address) addressParts.push(outlet.address);
   if (outlet.city) addressParts.push(outlet.city);

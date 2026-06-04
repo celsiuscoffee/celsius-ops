@@ -49,13 +49,18 @@ export type BranchSettings = {
   einvoice_sst_no: string | null;
 };
 
-/** Outlet master data for the receipt header (name + address + phone). */
+/** Outlet master data for the receipt header (name + address + phone +
+ *  registered company name & SSM number). Sourced from the `outlets` view. */
 export type OutletInfo = {
   name: string;
   address: string | null;
   city: string | null;
   state: string | null;
   phone: string | null;
+  // Legal identity printed on the receipt (editable in backoffice Outlet
+  // settings). null → that line is omitted.
+  company_name: string | null;
+  reg_no: string | null;
 };
 
 type SettingsState = {
@@ -114,7 +119,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
     // receipt header) together.
     const [settingsRes, outletRes] = await Promise.all([
       supabase.from("pos_branch_settings").select("*").eq("outlet_id", outletId).maybeSingle(),
-      supabase.from("outlets").select("name, address, city, state, phone").eq("id", outletId).maybeSingle(),
+      supabase.from("outlets").select("name, address, city, state, phone, company_name, reg_no").eq("id", outletId).maybeSingle(),
     ]);
     if (settingsRes.error) {
       // Offline / DB unreachable → fall back to the last cached settings so a

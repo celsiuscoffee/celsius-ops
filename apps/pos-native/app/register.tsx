@@ -1004,6 +1004,11 @@ export default function Register() {
         city: outlet?.city ?? null,
         state: outlet?.state ?? null,
         phone: outlet?.phone ?? null,
+        // Legal supplier identity for the tax receipt — company name + SSM are
+        // editable in backoffice Outlet settings and flow through the `outlets`
+        // view (company_name / reg_no).
+        companyName: outlet?.company_name ?? null,
+        regNo: outlet?.reg_no ?? null,
       };
       setTimeout(() => {
         printKitchenDocket80mm(printOrder, outletInfo, outletId).catch((e) => console.error("[print] docket:", e?.message ?? e));
@@ -1067,7 +1072,7 @@ export default function Register() {
                 Pickup + Grab. Badge = live incoming orders (QR + delivery). */}
             <Pressable onPress={() => { Haptics.selectionAsync(); setHub((v) => (v ? null : "tables")); }} className={`flex-row items-center gap-2 px-3 py-2 rounded-xl border active:opacity-60 ${hub ? "border-primary bg-primary/10" : "border-cream/15"}`}>
               <ClipboardList size={16} color="rgba(245,243,240,0.7)" />
-              <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Orders</Text>
+              <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Live Orders</Text>
               {(() => {
                 const liveKds = kdsOrders.filter((o) => o.status !== "ready").length;
                 const incoming = kdsOrders.length + qrOrders.length;
@@ -1862,7 +1867,7 @@ export default function Register() {
                       {(["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "←"]).map((k) => (
                         <Pressable key={k} onPress={() => { Haptics.selectionAsync(); if (k === "C") setTableNumber(""); else if (k === "←") setTableNumber(tableNumber.slice(0, -1)); else if (tableNumber.length < 4) setTableNumber(tableNumber === "0" ? k : tableNumber + k); }}
                           className="items-center justify-center rounded-xl active:opacity-70" style={{ width: "31.5%", height: 48, backgroundColor: k === "C" || k === "←" ? "rgba(245,243,240,0.06)" : "rgba(245,243,240,0.1)" }}>
-                          <Text className="text-cream text-xl" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{k}</Text>
+                          <Text className="text-cream" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: k === "C" ? 15 : 20 }}>{k === "C" ? "Clear" : k}</Text>
                         </Pressable>
                       ))}
                     </View>
@@ -3064,7 +3069,7 @@ function NumpadField({
               {(["1", "2", "3", "4", "5", "6", "7", "8", "9", mode === "decimal" ? "." : "C", "0", "←"]).map((k) => (
                 <Pressable key={k} onPress={() => press(k)} className="items-center justify-center rounded-2xl active:opacity-70"
                   style={{ width: 92, height: 58, backgroundColor: k === "←" || k === "C" ? "rgba(245,243,240,0.06)" : "rgba(245,243,240,0.1)" }}>
-                  <Text className="text-cream" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 24 }}>{k}</Text>
+                  <Text className="text-cream" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: k === "C" ? 18 : 24 }}>{k === "C" ? "Clear" : k}</Text>
                 </Pressable>
               ))}
             </View>
