@@ -211,14 +211,20 @@ export async function POST(request: NextRequest) {
     // active row with trigger_type='first_order'.
     const { data: fodRow } = await supabase
       .from("promotions")
-      .select("discount_type, discount_value, is_active")
+      .select("discount_type, discount_value, is_active, channels")
       .eq("brand_id", "brand-celsius")
       .eq("trigger_type", "first_order")
       .eq("is_active", true)
       .order("priority", { ascending: false })
       .limit(1)
       .maybeSingle();
-    const fodConfig = fodRow
+    // Channel scope — the first-order promo only applies on its channels
+    // (empty/null = all). The promo engine no longer applies first_order, so
+    // this path is the single authoritative + channel-aware handler.
+    const fodChannels = (fodRow?.channels as string[] | null) ?? null;
+    const fodChannelOk =
+      !fodChannels || fodChannels.length === 0 || fodChannels.includes(channelForOrderType(orderType));
+    const fodConfig = fodRow && fodChannelOk
       ? {
           enabled: true,
           type: (fodRow.discount_type as string) === "percentage_off" ? "percent" : "fixed",

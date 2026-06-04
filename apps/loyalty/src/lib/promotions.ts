@@ -37,7 +37,7 @@ export interface Promotion {
   brand_id: string;
   name: string;
   description: string | null;
-  trigger_type: 'auto' | 'code' | 'tier_perk' | 'reward_link';
+  trigger_type: 'auto' | 'code' | 'tier_perk' | 'reward_link' | 'first_order';
   promo_code: string | null;
   tier_id: string | null;
   discount_type:
@@ -453,7 +453,11 @@ export async function evaluateCart(
   // Implementation is a filter on the candidate pool, kept outside the
   // per-promo eligibility loop so the rule is easy to reason about and
   // cheap to short-circuit: one tier lookup, then a `.filter`.
-  let candidatePromos: Promotion[] = promos;
+  // first_order promos are owned by apps/order's dedicated first-order path
+  // (initiate/orders/quote), which does the proper "first order on this phone"
+  // + channel checks. Exclude them here so the discount isn't applied twice
+  // (engine + that path) and never applies without a first-order gate.
+  let candidatePromos: Promotion[] = promos.filter((p) => p.trigger_type !== 'first_order');
   if (ctx.member_tier_id) {
     const tier = await getTierMeta(ctx.member_tier_id);
     if (tier && tier.stackable === false) {

@@ -132,14 +132,18 @@ export async function POST(request: NextRequest) {
     // as initiate / orders): most recent active trigger_type=first_order.
     const { data: fodRow } = await supabase
       .from("promotions")
-      .select("discount_type, discount_value")
+      .select("discount_type, discount_value, channels")
       .eq("brand_id", "brand-celsius")
       .eq("trigger_type", "first_order")
       .eq("is_active", true)
       .order("priority", { ascending: false })
       .limit(1)
       .maybeSingle();
-    const fodConfig = fodRow
+    // Channel scope — match initiate/orders so the preview equals the charge.
+    const fodChannels = (fodRow?.channels as string[] | null) ?? null;
+    const fodChannelOk =
+      !fodChannels || fodChannels.length === 0 || fodChannels.includes(channelForOrderType(orderType));
+    const fodConfig = fodRow && fodChannelOk
       ? {
           type: (fodRow.discount_type as string) === "percentage_off" ? "percent" : "fixed",
           amount: Number((fodRow as { discount_value?: number }).discount_value ?? 0),

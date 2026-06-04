@@ -259,14 +259,20 @@ export async function POST(request: NextRequest) {
     // Falls back to disabled when nothing's configured.
     const { data: fodRow } = await supabase
       .from("promotions")
-      .select("discount_type, discount_value, is_active")
+      .select("discount_type, discount_value, is_active, channels")
       .eq("brand_id", "brand-celsius")
       .eq("trigger_type", "first_order")
       .eq("is_active", true)
       .order("priority", { ascending: false })
       .limit(1)
       .maybeSingle();
-    const fodConfig = fodRow
+    // Channel scope — this route is the native pickup checkout, so the
+    // first-order promo applies only if it allows the "pickup" channel
+    // (empty/null = all channels).
+    const fodChannels = (fodRow?.channels as string[] | null) ?? null;
+    const fodChannelOk =
+      !fodChannels || fodChannels.length === 0 || fodChannels.includes("pickup");
+    const fodConfig = fodRow && fodChannelOk
       ? {
           enabled: true,
           type: (fodRow.discount_type as string) === "percentage_off" ? "percent" : "fixed",
