@@ -4,10 +4,12 @@ import { isGrabConfigured, markOrderReady } from "@/lib/grab";
 
 /**
  * POST /api/pos/order-status
- * Body: { source: "pickup" | "grab", id: string, status: string }
+ * Body: { source: "pickup" | "grab" | "qr", id: string, status: string }
  *
- * Advances the kitchen/fulfilment status of a Grab or Pickup order from
- * the POS register's order-management panel (the on-register KDS).
+ * Advances the kitchen/fulfilment status of a Grab, Pickup or QR-table
+ * dine-in order from the POS register's order-management panel (the
+ * on-register KDS). "qr" rows live in the same `orders` table as pickup
+ * (order_type=dine_in) — the cashier taps Done to mark them served.
  *
  * Why service-role: the customer `orders` table (pickup app) only lets
  * the anon key UPDATE rows where kitchen_docket_printed_at IS NULL (the
@@ -31,8 +33,8 @@ const ALLOWED = new Set(["ready", "completed"]);
 export async function POST(req: NextRequest) {
   try {
     const { source, id, status } = await req.json();
-    if (source !== "pickup" && source !== "grab") {
-      return NextResponse.json({ error: "source must be 'pickup' or 'grab'" }, { status: 400 });
+    if (source !== "pickup" && source !== "grab" && source !== "qr") {
+      return NextResponse.json({ error: "source must be 'pickup', 'grab' or 'qr'" }, { status: 400 });
     }
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -41,7 +43,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `status must be one of ${[...ALLOWED].join(", ")}` }, { status: 400 });
     }
 
-    const table = source === "pickup" ? "orders" : "pos_orders";
+    // pickup + qr dine-in both live in `orders`; only grab is `pos_orders`.
+    const table = source === "grab" ? "pos_orders" : "orders";
     const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
     // pos_orders carries the Grab order id in external_id; pickup orders
     // don't have that column, so only ask for it on the grab path.
