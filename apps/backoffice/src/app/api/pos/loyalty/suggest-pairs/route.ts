@@ -35,8 +35,8 @@ const FOOD_CATEGORIES = new Set([
   "cakes", "cookies", "croissant", "fries", "nasi-lemak", "noodle", "pasta", "roti-bakar", "sandwiches",
 ]);
 
-type Weights = { combo: number; co: number; usual: number; round: number; complement: number };
-const DEFAULT_WEIGHTS: Weights = { combo: 3.0, co: 2.0, usual: 1.5, round: 1.0, complement: 1.0 };
+type Weights = { combo: number; co: number; usual: number; round: number; complement: number; roundPromo: number };
+const DEFAULT_WEIGHTS: Weights = { combo: 3.0, co: 2.0, usual: 1.5, round: 1.0, complement: 1.0, roundPromo: 2.0 };
 
 // Canonical day-part bands — must match storehub-helpers ROUNDS (and the
 // refresh_pos_pairing_signals() bucketing that writes pair_round_scores), so
@@ -191,6 +191,18 @@ export async function POST(req: NextRequest) {
     const roundScores = (round && roundCfg?.[round]) || {};
     const maxRound = Math.max(1, ...Object.values(roundScores));
 
+    // The owner's CURATED daypart pairings: every category/product featured in a
+    // promotion that's live RIGHT NOW (combos[] is already time-filtered, so at
+    // breakfast this is roti bakar / nasi lemak / sandwiches…). We boost these so
+    // the round's promoted items LEAD the suggestions even before the combo is
+    // completed — capitalising on the round-based promos.
+    const roundPromoCats = new Set<string>();
+    const roundPromoProds = new Set<string>();
+    for (const c of combos) {
+      for (const cat of c.catIds) roundPromoCats.add(cat);
+      for (const pid of c.prodIds) roundPromoProds.add(pid);
+    }
+
     // ── Score every candidate ──
     type Scored = { p: Product; score: number; reason: string; discount_label?: string; combo_id?: string };
     const scored: Scored[] = [];
@@ -208,9 +220,13 @@ export async function POST(req: NextRequest) {
       const usual = usualIds.has(p.id) ? 1 : 0;
       const roundN = (roundScores[p.id] ?? 0) / maxRound;
       const complement = cartIds.length > 0 ? ((preferFood && isFood) || (!preferFood && !isFood) ? 1 : 0) : 0;
+      // Featured in a promo the owner is running THIS round (even if the cart
+      // hasn't completed the combo yet) → lead with it.
+      const roundPromo = roundPromoCats.has(p.category ?? "") || roundPromoProds.has(p.id) ? 1 : 0;
 
       const score =
         weights.combo * (promo ? 1 : 0) +
+        weights.roundPromo * roundPromo +
         weights.co * co +
         weights.usual * usual +
         weights.round * roundN +
@@ -219,12 +235,29 @@ export async function POST(req: NextRequest) {
 
       // Reason = the strongest contributing signal (for the on-card tag).
       const reason = promo ? (promo.kind === "combo" ? "Combo deal" : "On offer")
+        : roundPromo ? "Today's combo"
         : usual ? "Your usual" : co > 0 ? "Often paired together" : roundN > 0 ? "Popular right now" : "You might like";
       scored.push({ p, score, reason, discount_label: promo?.label, combo_id: promo?.id });
     }
 
     scored.sort((a, b) => b.score - a.score);
-    const pairs = scored.slice(0, 3).map((s) => ({
+    // Mix the combination — spread the 3 slots across DIFFERENT categories so the
+    // customer sees a varied set (e.g. a roti + a nasi lemak + a cake), not three
+    // near-duplicates from one category. Best of each fresh category first, then
+    // top up by score if there aren't 3 distinct categories to fill.
+    const picked: Scored[] = [];
+    const pickedCats = new Set<string>();
+    for (const s of scored) {
+      if (picked.length >= 3) break;
+      const cat = s.p.category ?? "";
+      if (pickedCats.has(cat)) continue;
+      picked.push(s); pickedCats.add(cat);
+    }
+    for (const s of scored) {
+      if (picked.length >= 3) break;
+      if (!picked.includes(s)) picked.push(s);
+    }
+    const pairs = picked.map((s) => ({
       product_id: s.p.id,
       name: s.p.name,
       price_sen: s.p.price_sen,
