@@ -30,6 +30,8 @@ import { useSettings, gridColumns, serviceChargeRate, receiptConfig, tableZones 
 import { useGridPrefs } from "@/lib/grid-prefs";
 import { useTablesPanel, type TableSlot, type TableOrderRef } from "@/lib/use-tables-panel";
 import { useOrdersPanel, type KdsOrder } from "@/lib/use-orders-panel";
+import { useOrderChime } from "@/lib/use-order-chime";
+import { useServingAlarm, type ServingItem } from "@/lib/use-serving-alarm";
 import { useOrderHistory, type HistoryOrder, type HistoryChannel } from "@/lib/use-order-history";
 import { useShift, openShift, closeShift, shiftTotals, type Shift, type ShiftTotals } from "@/lib/shift";
 import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/printer";
@@ -245,6 +247,20 @@ export default function Register() {
   // Mounted persistently so it keeps catching up + receiving Realtime even
   // while the modal is closed (drives the header badge count).
   const { orders: kdsOrders, reload: reloadOrders } = useOrdersPanel(outletId);
+  // Serving-time alarm candidates: pickup orders not yet "ready" + QR-table
+  // orders not yet "done". Pressing Ready/Done drops the order from these
+  // lists, which silences the alarm for it. (Grab runs to its own SLA.)
+  const servingAlarmItems = useMemo<ServingItem[]>(() => {
+    const pickup = kdsOrders
+      .filter((o) => o.source === "pickup" && o.status !== "ready")
+      .map((o) => ({ id: o.uid, createdAt: o.createdAt }));
+    const tables = tableSlots
+      .flatMap((s) => s.orders)
+      .filter((o) => o.source === "qr")
+      .map((o) => ({ id: o.id, createdAt: o.createdAt }));
+    return [...pickup, ...tables];
+  }, [kdsOrders, tableSlots]);
+  useServingAlarm(servingAlarmItems);
   // Today's order history (all channels) for the History tab. Refreshed each
   // time the tab is opened so the counter always sees the latest day's sales.
   const { orders: historyOrders, loading: historyLoading, reload: reloadHistory } = useOrderHistory(outletId);
@@ -418,6 +434,9 @@ export default function Register() {
   // Mirror: auto-print kitchen dockets when Grab's webhook lands a new
   // pos_orders row (source='grabfood') for this outlet.
   useGrabPrinter(outletId, productsByIdForPrinter);
+  // Audible chime when a new external order (table QR / pickup app / GrabFood)
+  // arrives — so staff away from the till still notice. Till sales don't chime.
+  useOrderChime(outletId);
 
   // Full catalog lookup — resolve a suggested-pair product_id back to its
   // Product so a tap can route through onAdd (86 check + modifier sheet + add).
