@@ -467,7 +467,7 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
         // "Apply a reward" pill). Links to /rewards where the customer's
         // vouchers + catalog rewards are listed and applied.
         <Link
-          href="/rewards"
+          href="/rewards?next=cart"
           className="mx-4 mt-1 mb-3 flex items-center gap-2 rounded-2xl px-3 py-2 active:opacity-70"
           style={{ backgroundColor: "#FFFFFF", border: "1px dashed rgba(185,28,28,0.40)" }}
         >

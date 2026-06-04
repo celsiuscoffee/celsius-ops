@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronDown, Check } from "lucide-react";
+import { ArrowLeft, ChevronDown, Check, Gift } from "lucide-react";
 import { StripePaymentForm } from "@/components/stripe-payment-form";
 import { PaymentBrandIcon } from "./_PaymentBrandIcon";
 import { calcRewardDiscount, type AppliedReward } from "@/lib/reward-discount";
@@ -634,6 +634,18 @@ export function CheckoutView() {
             RM{subtotal.toFixed(2)}
           </span>
         </div>
+        {!reward ? (
+          <Link
+            href="/rewards?next=checkout"
+            className="flex items-center gap-2 active:opacity-70"
+            style={{ marginBottom: 6 }}
+          >
+            <Gift size={15} color="#A2492C" strokeWidth={1.9} />
+            <span className="text-[13px]" style={{ color: "#A2492C", fontWeight: 600 }}>
+              Add a reward
+            </span>
+          </Link>
+        ) : null}
         {rewardDiscountShown > 0 ? (
           <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
             <span className="text-[13px] truncate" style={{ color: "#A2492C" }}>

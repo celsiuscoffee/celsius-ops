@@ -295,7 +295,15 @@ function CatalogCard({ reward, balance }: { reward: Reward; balance: number }) {
           onClick={() => {
             if (!canUse) return;
             applyCatalogReward(reward);
-            router.push("/menu");
+            // Return to wherever the customer started applying from
+            // (checkout / cart) so the deduction is immediately visible and
+            // they can pay — instead of always dumping them on the menu.
+            // Whitelisted to known routes (no open redirect).
+            const next =
+              typeof window !== "undefined"
+                ? new URLSearchParams(window.location.search).get("next")
+                : null;
+            router.push(next === "checkout" ? "/checkout" : next === "cart" ? "/cart" : "/menu");
           }}
           className="rounded-full flex items-center justify-center flex-shrink-0 active:opacity-80"
           style={{
