@@ -24,6 +24,9 @@ type Settings = {
   receipt_show_logo:       boolean | null;
   receipt_qr_url:          string | null;
   receipt_qr_label:        string | null;
+  receipt_qr_mode:         string | null;
+  receipt_app_url:         string | null;
+  receipt_app_label:       string | null;
   receipt_promo_enabled:   boolean | null;
   receipt_promo_text:      string | null;
   ghl_merchant_id:         string | null;
@@ -275,25 +278,71 @@ export default function POSSettingsPage() {
 
         {/* QR */}
         <Section title="QR Code on Receipt" Icon={QrCode}>
-          <p className="text-[11px] text-gray-500 -mt-1">Print a QR at the bottom of receipts — e.g. Google Review, social link.</p>
-          <Field label="QR URL">
-            <input
-              type="url"
-              value={editing.receipt_qr_url ?? ""}
-              onChange={(e) => update("receipt_qr_url", e.target.value)}
-              placeholder="https://g.page/r/your-google-review-link"
-              className="input font-mono"
-            />
-          </Field>
-          <Field label="Label above QR">
-            <input
-              type="text"
-              value={editing.receipt_qr_label ?? ""}
-              onChange={(e) => update("receipt_qr_label", e.target.value)}
-              placeholder="Scan to leave us a review!"
+          <p className="text-[11px] text-gray-500 -mt-1">Pick what the QR at the bottom of the receipt points to.</p>
+          <Field label="Receipt QR shows">
+            <select
+              value={editing.receipt_qr_mode ?? "review"}
+              onChange={(e) => update("receipt_qr_mode", e.target.value)}
               className="input"
-            />
+            >
+              <option value="review">Google Review</option>
+              <option value="app">App Download</option>
+              <option value="off">Off — no QR</option>
+            </select>
           </Field>
+
+          {(editing.receipt_qr_mode ?? "review") === "review" && (
+            <>
+              <Field label="Review URL">
+                <input
+                  type="url"
+                  value={editing.receipt_qr_url ?? ""}
+                  onChange={(e) => update("receipt_qr_url", e.target.value)}
+                  placeholder="https://g.page/r/your-google-review-link"
+                  className="input font-mono"
+                />
+              </Field>
+              <Field label="Label above QR">
+                <input
+                  type="text"
+                  value={editing.receipt_qr_label ?? ""}
+                  onChange={(e) => update("receipt_qr_label", e.target.value)}
+                  placeholder="Scan to leave us a review!"
+                  className="input"
+                />
+              </Field>
+            </>
+          )}
+
+          {(editing.receipt_qr_mode ?? "review") === "app" && (
+            <>
+              <Field label="App download link">
+                <input
+                  type="url"
+                  value={editing.receipt_app_url ?? ""}
+                  onChange={(e) => update("receipt_app_url", e.target.value)}
+                  placeholder="https://order.celsiuscoffee.com"
+                  className="input font-mono"
+                />
+              </Field>
+              <Field label="Label above QR">
+                <input
+                  type="text"
+                  value={editing.receipt_app_label ?? ""}
+                  onChange={(e) => update("receipt_app_label", e.target.value)}
+                  placeholder="Scan to download our app"
+                  className="input"
+                />
+              </Field>
+              <p className="text-[11px] text-gray-500">
+                Point this at <span className="font-mono">order.celsiuscoffee.com</span> (installs as an app on both iOS &amp; Android), or a link that routes to the App Store / Play Store.
+              </p>
+            </>
+          )}
+
+          {(editing.receipt_qr_mode ?? "review") === "off" && (
+            <p className="text-[11px] text-gray-500">No QR will print at the bottom of the receipt.</p>
+          )}
         </Section>
 
         {/* Promo */}

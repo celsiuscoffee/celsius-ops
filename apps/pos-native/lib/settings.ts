@@ -24,6 +24,11 @@ export type BranchSettings = {
   receipt_show_logo: boolean | null;
   receipt_qr_url: string | null;
   receipt_qr_label: string | null;
+  // Receipt QR picker: 'review' (Google review link, default) | 'app'
+  // (app-download link) | 'off'. Drives which QR the receipt prints.
+  receipt_qr_mode: string | null;
+  receipt_app_url: string | null;
+  receipt_app_label: string | null;
   receipt_promo_enabled: boolean | null;
   receipt_promo_text: string | null;
   ghl_merchant_id: string | null;
@@ -238,6 +243,9 @@ export function receiptConfig(s: BranchSettings | null) {
     showLogo: s?.receipt_show_logo !== false,
     qrUrl: s?.receipt_qr_url || "",
     qrLabel: s?.receipt_qr_label || "",
+    qrMode: s?.receipt_qr_mode || "review",
+    appUrl: s?.receipt_app_url || "",
+    appLabel: s?.receipt_app_label || "",
     promoEnabled: s?.receipt_promo_enabled === true,
     promoText: s?.receipt_promo_text || "",
     receiptHeader: s?.receipt_header || "",

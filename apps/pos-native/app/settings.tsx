@@ -9,6 +9,7 @@ import {
 import { usePos } from "@/lib/store";
 import { useSettings } from "@/lib/settings";
 import { useGridPrefs, ALL_COLS_MIN, ALL_COLS_MAX, ALL_IMG_MIN, ALL_IMG_MAX, ALL_IMG_STEP } from "@/lib/grid-prefs";
+import { usePrintPrefs } from "@/lib/print-prefs";
 import { outletShort, outletFull } from "@/lib/outlets";
 import { getPrinterStatus, reconnectPrinter, testPrint, printerAvailable } from "@/lib/printer";
 
@@ -27,6 +28,9 @@ export default function SettingsScreen() {
   const setAllColumns = useGridPrefs((s) => s.setColumns);
   const setAllImageHeight = useGridPrefs((s) => s.setImageHeight);
   const loadGridPrefs = useGridPrefs((s) => s.load);
+  const printMaster = usePrintPrefs((s) => s.printMaster);
+  const setPrintMaster = usePrintPrefs((s) => s.setPrintMaster);
+  const loadPrintPrefs = usePrintPrefs((s) => s.load);
 
   const [printer, setPrinter] = useState<{ connected: boolean; status?: string; name?: string; paper?: string } | null>(null);
   const [printerBusy, setPrinterBusy] = useState(false);
@@ -35,6 +39,7 @@ export default function SettingsScreen() {
     if (outletId) loadSettings(outletId);
     refreshPrinter();
     void loadGridPrefs();
+    void loadPrintPrefs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outletId]);
 
@@ -105,6 +110,21 @@ export default function SettingsScreen() {
             <Text className="text-cream/35 text-[11px] mt-1" style={{ fontFamily: "SpaceGrotesk_400Regular" }}>
               SUNMI D3 built-in 80mm thermal head. Receipts + kitchen dockets print here automatically on checkout.
             </Text>
+          </Card>
+
+          {/* ── Kitchen docket routing (device-local) ── */}
+          <Card title="Kitchen Dockets" Icon={FileText}>
+            <Text className="text-cream/45 text-[11px] mb-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+              With LAN station printers set up (Bar / Kitchen), each prints its own items. This controls the consolidated copy on the D3. Saved on this terminal.
+            </Text>
+            <ToggleRow
+              label="Counter master docket"
+              hint={printMaster
+                ? "D3 prints the full order as a counter/expo copy (the receipt prints regardless)."
+                : "Off — D3 prints the receipt only; each station printer handles its own items."}
+              value={printMaster}
+              onToggle={() => { Haptics.selectionAsync(); setPrintMaster(!printMaster); }}
+            />
           </Card>
 
           {/* ── All-tab menu layout (device-local, editable here) ── */}
@@ -223,6 +243,22 @@ function StepRow({
           <Plus size={18} color="#fff" />
         </Pressable>
       </View>
+    </View>
+  );
+}
+
+function ToggleRow({
+  label, hint, value, onToggle,
+}: { label: string; hint?: string; value: boolean; onToggle: () => void }) {
+  return (
+    <View className="flex-row items-center justify-between py-2">
+      <View style={{ flex: 1, paddingRight: 14 }}>
+        <Text className="text-cream/70 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{label}</Text>
+        {hint ? <Text className="text-cream/40 text-[11px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{hint}</Text> : null}
+      </View>
+      <Pressable onPress={onToggle} className="rounded-full active:opacity-80" style={{ width: 58, height: 32, padding: 3, justifyContent: "center", backgroundColor: value ? BRAND : "rgba(245,243,240,0.18)" }}>
+        <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: "#fff", transform: [{ translateX: value ? 26 : 0 }] }} />
+      </Pressable>
     </View>
   );
 }

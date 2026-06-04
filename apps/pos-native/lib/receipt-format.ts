@@ -65,6 +65,11 @@ export interface ReceiptConfig {
   showLogo?: boolean;
   qrUrl?: string | null;
   qrLabel?: string | null;
+  /** Receipt QR picker: 'review' (default) | 'app' | 'off'. */
+  qrMode?: string | null;
+  /** App-download link + label, used when qrMode === 'app'. */
+  appUrl?: string | null;
+  appLabel?: string | null;
   promoEnabled?: boolean;
   promoText?: string | null;
   receiptHeader?: string | null;
@@ -261,13 +266,22 @@ export function formatReceipt(
   footerLines.push(centerText("www.celsiuscoffee.com"));
   footerLines.push("");
 
+  // Receipt QR — per-outlet pick (BackOffice → POS Settings → Receipt):
+  // 'review' (Google review link, default) | 'app' (app-download link) | 'off'.
+  // Defaults to 'review' so existing receipts are unchanged.
+  const qrMode = (config?.qrMode || "review").toLowerCase();
+  const qrUrl =
+    qrMode === "off" ? "" : qrMode === "app" ? (config?.appUrl || "") : (config?.qrUrl || "");
+  const qrLabel =
+    qrMode === "off" ? "" : qrMode === "app" ? (config?.appLabel || "Scan to download our app") : (config?.qrLabel || "");
+
   return {
     header: headerLines.join("\n"),
     body: bodyLines.join("\n"),
     footer: footerLines.join("\n"),
     showLogo: config?.showLogo !== false,
-    qrUrl: config?.qrUrl || "",
-    qrLabel: config?.qrLabel || "",
+    qrUrl,
+    qrLabel,
     promoText: config?.promoEnabled && config?.promoText ? config.promoText : "",
   };
 }

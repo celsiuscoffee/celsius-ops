@@ -1,7 +1,9 @@
 import SunmiPrinter from "@/modules/sunmi-printer";
 import { supabase } from "./supabase";
+import { usePrintPrefs } from "./print-prefs";
 import {
   formatKitchenDocket,
+  stationsForOrder,
   formatReceipt,
   type DocketOrder,
   type DocketData,
@@ -207,14 +209,19 @@ export async function routeKitchenDockets(order: DocketOrder, outletId: string):
   if (netDockets.length === 0) return false; // no LAN station printers → built-in fallback
 
   // 1. Counter / POS master copy: the WHOLE order on the D3 built-in.
-  try {
-    const all = formatKitchenDocket(order, ""); // "" → all items, no station filter
-    if (all && SunmiPrinter) {
-      all.station = "ORDER";
-      await SunmiPrinter.printOrderDocket(all);
+  //    Skippable per-terminal (Settings → "Counter master docket"): the customer
+  //    receipt already lists every item, so some counters don't want the
+  //    duplicate ticket. Station printers (below) are unaffected either way.
+  if (usePrintPrefs.getState().printMaster) {
+    try {
+      const all = formatKitchenDocket(order, ""); // "" → all items, no station filter
+      if (all && SunmiPrinter) {
+        all.station = "ORDER";
+        await SunmiPrinter.printOrderDocket(all);
+      }
+    } catch (e) {
+      console.error("[net-printer] master docket:", (e as any)?.message ?? e);
     }
-  } catch (e) {
-    console.error("[net-printer] master docket:", (e as any)?.message ?? e);
   }
 
   // 2. Each LAN station printer gets only its station's items.
@@ -230,6 +237,26 @@ export async function routeKitchenDockets(order: DocketOrder, outletId: string):
         if (SunmiPrinter) await SunmiPrinter.printOrderDocket(d);
       } catch {
         /* built-in already faulted upstream; nothing more to do */
+      }
+    }
+  }
+
+  // 3. Stations that have items but NO network printer of their own still need a
+  //    make-ticket — print each on the D3. So e.g. Kitchen gets its own clean
+  //    docket even before its LAN printer is wired, and removing/sharing a printer
+  //    never silently drops a station's docket. (The master copy above, if enabled,
+  //    is a consolidated expo copy on top; this is the per-station make copy.)
+  const netStations = new Set(
+    netDockets.map((p) => (p.station ?? "").trim().toLowerCase()).filter(Boolean),
+  );
+  for (const station of stationsForOrder(order)) {
+    if (!station || netStations.has(station.trim().toLowerCase())) continue;
+    const d = formatKitchenDocket(order, station);
+    if (d && SunmiPrinter) {
+      try {
+        await SunmiPrinter.printOrderDocket(d);
+      } catch (e) {
+        console.error(`[net-printer] D3 station docket ${station}:`, (e as any)?.message ?? e);
       }
     }
   }

@@ -12,6 +12,7 @@ import {
   Plus, Minus, LogOut, X, CheckCircle2,
   Settings as SettingsIcon, User, Gift, Trash2, Tag,
   Grid3x3, QrCode, CreditCard, ClipboardList, Bike, ShoppingBag, ChefHat, Coffee, Power, Sparkles,
+  AlertTriangle,
 } from "lucide-react-native";
 import { usePos, shiftSessionExpired } from "@/lib/store";
 import { apiPost } from "@/lib/api";
@@ -28,6 +29,7 @@ import { getOnline, subscribeOnline } from "@/lib/connectivity";
 import { subscribePending, pendingCount } from "@/lib/offline-queue";
 import { useSettings, gridColumns, serviceChargeRate, receiptConfig, tableZones } from "@/lib/settings";
 import { useGridPrefs } from "@/lib/grid-prefs";
+import { usePrintPrefs } from "@/lib/print-prefs";
 import { useTablesPanel, type TableSlot, type TableOrderRef } from "@/lib/use-tables-panel";
 import { useOrdersPanel, type KdsOrder } from "@/lib/use-orders-panel";
 import { useOrderChime } from "@/lib/use-order-chime";
@@ -253,14 +255,29 @@ export default function Register() {
   const servingAlarmItems = useMemo<ServingItem[]>(() => {
     const pickup = kdsOrders
       .filter((o) => o.source === "pickup" && o.status !== "ready")
-      .map((o) => ({ id: o.uid, createdAt: o.createdAt }));
-    const tables = tableSlots
-      .flatMap((s) => s.orders)
-      .filter((o) => o.source === "qr")
-      .map((o) => ({ id: o.id, createdAt: o.createdAt }));
+      .map((o) => ({ id: o.uid, createdAt: o.createdAt, channel: "pickup" as const, label: o.orderNumber }));
+    const tables = tableSlots.flatMap((s) =>
+      s.orders
+        .filter((o) => o.source === "qr")
+        .map((o) => ({ id: o.id, createdAt: o.createdAt, channel: "table" as const, label: s.label })),
+    );
     return [...pickup, ...tables];
   }, [kdsOrders, tableSlots]);
-  useServingAlarm(servingAlarmItems);
+  // Orders past the 10-min serving target → drives the alarm sound + the popup.
+  const overdueOrders = useServingAlarm(servingAlarmItems);
+  const [overdueAck, setOverdueAck] = useState(false);
+  const prevOverdueCount = useRef(0);
+  useEffect(() => {
+    if (overdueOrders.length > prevOverdueCount.current) setOverdueAck(false); // a new order went overdue → re-pop
+    if (overdueOrders.length === 0) setOverdueAck(false);                      // all cleared → reset
+    prevOverdueCount.current = overdueOrders.length;
+  }, [overdueOrders]);
+  // Only over the main register (not while the orders panel is already open).
+  const showOverduePopup = overdueOrders.length > 0 && !overdueAck && hub === null;
+  const openOverdueHub = useCallback(() => {
+    setOverdueAck(true);
+    setHub(overdueOrders.every((o) => o.channel === "table") ? "tables" : "pickup");
+  }, [overdueOrders]);
   // Today's order history (all channels) for the History tab. Refreshed each
   // time the tab is opened so the counter always sees the latest day's sales.
   const { orders: historyOrders, loading: historyLoading, reload: reloadHistory } = useOrderHistory(outletId);
@@ -271,6 +288,7 @@ export default function Register() {
   useEffect(() => {
     startSyncLoop();
     void useGridPrefs.getState().load();
+    void usePrintPrefs.getState().load();
     const offOnline = subscribeOnline(setOnline);
     const offPending = subscribePending(setPendingSales);
     void pendingCount();
@@ -1738,6 +1756,51 @@ export default function Register() {
                 );
               })()}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Serving-time overdue alarm popup ────────────────────────────
+          Pops on the main register when an order passes the 10-min serving
+          target (pickup not Ready / table not Done), paired with the alarm
+          sound. Auto-clears as orders are actioned; "Open Live Orders" jumps
+          to the panel to act on them. */}
+      <Modal visible={showOverduePopup} transparent animationType="fade" onRequestClose={() => setOverdueAck(true)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(22,8,0,0.92)" }} className="items-center justify-center px-12">
+          <View className="w-full max-w-3xl rounded-3xl p-8" style={{ backgroundColor: "#2A1206", borderWidth: 2, borderColor: "#C2452D" }}>
+            <View className="flex-row items-center gap-3 mb-1">
+              <AlertTriangle size={30} color="#C2452D" />
+              <Text className="text-cream text-2xl" style={{ fontFamily: "Peachi-Bold" }}>
+                {overdueOrders.length} order{overdueOrders.length === 1 ? "" : "s"} past 10 min
+              </Text>
+            </View>
+            <Text className="text-cream/60 text-sm mb-5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+              Serving target exceeded — mark Ready / Done as soon as they're served.
+            </Text>
+            <View className="gap-2 mb-6">
+              {overdueOrders.map((o) => {
+                const mins = Math.max(0, Math.floor((Date.now() - new Date(o.createdAt).getTime()) / 60000));
+                return (
+                  <View key={o.id} className="flex-row items-center justify-between rounded-2xl px-4 py-3" style={{ backgroundColor: "rgba(194,69,45,0.14)" }}>
+                    <View className="flex-row items-center gap-3">
+                      <View className="rounded-lg px-2 py-1" style={{ backgroundColor: o.channel === "table" ? "#3B82F6" : "#FBBF24" }}>
+                        <Text className="text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#160800" }}>{o.channel === "table" ? "TABLE" : "PICKUP"}</Text>
+                      </View>
+                      <Text className="text-cream text-lg" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{o.label}</Text>
+                    </View>
+                    <Text className="text-lg" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#FF8A6B" }}>{mins} min</Text>
+                  </View>
+                );
+              })}
+            </View>
+            <View className="flex-row gap-3">
+              <Pressable onPress={() => { Haptics.selectionAsync(); setOverdueAck(true); }} className="flex-1 items-center justify-center rounded-2xl py-4 border border-cream/15 active:opacity-60">
+                <Text className="text-cream/70 text-base" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Dismiss</Text>
+              </Pressable>
+              <Pressable onPress={() => { Haptics.selectionAsync(); openOverdueHub(); }} className="flex-1 items-center justify-center rounded-2xl py-4 active:opacity-80" style={{ backgroundColor: "#C2452D" }}>
+                <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Open Live Orders</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
