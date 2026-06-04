@@ -14,6 +14,7 @@ type Persisted = {
   state?: {
     phone?: string | null;
     loyaltyId?: string | null;
+    sessionToken?: string | null;
     member?: { name?: string | null; pointsBalance?: number };
   };
 };
@@ -31,13 +32,15 @@ function greetingFor(hour: number): string {
   return "Good evening";
 }
 
-export function HeroInfoCard({ voucherCount = 0 }: { voucherCount?: number }) {
+export function HeroInfoCard() {
   const [name, setName] = useState<string | null>(null);
   const [beans, setBeans] = useState<number | null>(null);
+  const [voucherCount, setVoucherCount] = useState(0);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     let memberId: string | null = null;
+    let token: string | null = null;
     try {
       const raw = window.localStorage.getItem("celsius-pickup");
       if (raw) {
@@ -45,41 +48,64 @@ export function HeroInfoCard({ voucherCount = 0 }: { voucherCount?: number }) {
         setName(firstNameOf(parsed.state?.member?.name));
         setBeans(parsed.state?.member?.pointsBalance ?? null);
         memberId = parsed.state?.loyaltyId ?? null;
+        token = parsed.state?.sessionToken ?? null;
       }
     } catch {
       /* ignore */
     }
     setHydrated(true);
 
+    let cancelled = false;
+
     // Refresh the LIVE balance from member_brands (the same source POS +
     // native read). The cached localStorage value goes stale whenever points
     // change on another surface (e.g. a POS purchase) — which is why the web
     // could show 1894 while POS showed 2102. Falls back to the cached value
     // if the fetch fails.
-    if (!memberId) return;
-    let cancelled = false;
-    fetch(`/api/loyalty/member-tier?member_id=${encodeURIComponent(memberId)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (cancelled) return;
-        const live = (d as { points_balance?: number | null } | null)?.points_balance;
-        if (typeof live !== "number") return;
-        setBeans(live);
-        // Write the fresh value back so the account / tier surfaces that read
-        // the same cache also show it.
-        try {
-          const raw = window.localStorage.getItem("celsius-pickup");
-          const parsed = raw ? JSON.parse(raw) : { state: {} };
-          const state = parsed.state ?? {};
-          state.member = { ...(state.member ?? {}), pointsBalance: live };
-          window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state }));
-        } catch {
-          /* ignore */
-        }
-      })
-      .catch(() => {
-        /* keep cached value */
-      });
+    if (memberId) {
+      fetch(`/api/loyalty/member-tier?member_id=${encodeURIComponent(memberId)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (cancelled) return;
+          const live = (d as { points_balance?: number | null } | null)?.points_balance;
+          if (typeof live !== "number") return;
+          setBeans(live);
+          // Write the fresh value back so the account / tier surfaces that read
+          // the same cache also show it.
+          try {
+            const raw = window.localStorage.getItem("celsius-pickup");
+            const parsed = raw ? JSON.parse(raw) : { state: {} };
+            const state = parsed.state ?? {};
+            state.member = { ...(state.member ?? {}), pointsBalance: live };
+            window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state }));
+          } catch {
+            /* ignore */
+          }
+        })
+        .catch(() => {
+          /* keep cached value */
+        });
+    }
+
+    // Active-rewards count — fetched from the SAME /api/loyalty/me/vouchers
+    // source the home VoucherRail renders, so the header "Rewards" counter
+    // matches the "Available rewards" rail. Was stuck at 0: the home page
+    // renders <HeroInfoCard /> with no voucherCount prop, so the default held.
+    if (token) {
+      fetch("/api/loyalty/me/vouchers", { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data) => {
+          if (cancelled) return;
+          const list = (Array.isArray(data) ? data : (data?.vouchers ?? [])) as Array<{
+            status?: string | null;
+          }>;
+          setVoucherCount(list.filter((v) => v.status === "active" || !v.status).length);
+        })
+        .catch(() => {
+          /* keep 0 */
+        });
+    }
+
     return () => {
       cancelled = true;
     };
