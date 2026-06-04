@@ -108,6 +108,7 @@ function writeCart(items: CartItem[]) {
 type Quote = {
   promoLines: Array<{ name: string; amountSen: number }>;
   promoDiscountSen: number;
+  rewardDiscountSen: number;
   minOrderRm: number;
 };
 
@@ -159,6 +160,10 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
         storeId: outletId,
         loyaltyPhone: phone,
         loyaltyId,
+        // Resolve the reward server-side — the client can't compute
+        // free_item / category-filtered rewards (cart lines carry no category).
+        rewardId: reward?.id ?? null,
+        walletVoucherId: reward?.voucher_id ?? null,
       }),
     })
       .then((r) => (r.ok ? r.json() : null))
@@ -169,7 +174,7 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
     return () => {
       cancelled = true;
     };
-  }, [items, outletId, phone, loyaltyId]);
+  }, [items, outletId, phone, loyaltyId, reward?.id, reward?.voucher_id]);
 
   // Re-check the chosen outlet's open state so a customer who flipped to
   // closed mid-cart gets a banner here instead of a 422 at checkout.
@@ -198,10 +203,12 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
     };
   }, [outletId, items.length]);
 
-  const rewardDiscount = Math.min(
-    calcRewardDiscount(reward, rewardLines, subtotal),
-    subtotal,
-  );
+  // Authoritative reward discount from the server quote (it resolves
+  // free_item / category-filtered rewards the client can't preview — its cart
+  // lines have no category); fall back to the client estimate while quoting.
+  const rewardDiscount = quote
+    ? quote.rewardDiscountSen / 100
+    : Math.min(calcRewardDiscount(reward, rewardLines, subtotal), subtotal);
   // Reward voucher comes off AFTER the promo engine, matching checkout's
   // discount-layering order. No SST here — that's checkout-only.
   const promoDiscount = quote ? quote.promoDiscountSen / 100 : 0;

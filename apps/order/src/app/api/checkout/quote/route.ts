@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getTierMultiplier } from "@/lib/loyalty/points";
 import { evaluatePromotions, type CartLine } from "@/lib/loyalty/promotions";
 import { getOutletSst } from "@/lib/outlet-sst";
+import { resolveOrderReward } from "@celsius/shared";
 
 // POST /api/checkout/quote
 //
@@ -27,6 +28,8 @@ export async function POST(request: NextRequest) {
       storeId,
       loyaltyPhone,
       loyaltyId,
+      rewardId = null,
+      walletVoucherId = null,
       rewardDiscountSen = 0,
       voucherDiscountSen = 0,
     } = body as {
@@ -34,6 +37,8 @@ export async function POST(request: NextRequest) {
       storeId?: string | null;
       loyaltyPhone?: string | null;
       loyaltyId?: string | null;
+      rewardId?: string | null;
+      walletVoucherId?: string | null;
       rewardDiscountSen?: number;
       voucherDiscountSen?: number;
     };
@@ -76,6 +81,34 @@ export async function POST(request: NextRequest) {
         unit_price: price,
         category: catMap.get(pid) ?? undefined,
       });
+    }
+
+    // Authoritative reward discount — resolve + compute via the SAME shared
+    // resolver /api/checkout/initiate uses, so the previewed deduction equals
+    // what the order is actually created with. The client CANNOT compute
+    // free_item / category-filtered rewards (e.g. Free Drink): its cart lines
+    // carry no product category, so calcRewardDiscount returns 0, the deduction
+    // never shows, and the previewed total stays at full price — yet initiate
+    // applies the reward server-side (it resolves category from the products
+    // table), dropping the real total to 0 and skipping the gateway. Resolve it
+    // here the same way. Falls back to the client number when not resolvable.
+    let resolvedRewardDiscountSen = Math.round(rewardDiscountSen);
+    if (rewardId || walletVoucherId) {
+      const enrichedItems = items.map((it) => {
+        const pid = (it.product?.id ?? it.product_id) as string;
+        const price = priceMap.get(pid) ?? 0;
+        const qty = Number(it.quantity) || 1;
+        return { product: { id: pid }, productId: pid, quantity: qty, basePrice: price, totalPrice: price * qty };
+      });
+      const resolved = await resolveOrderReward({
+        supabase,
+        memberId: loyaltyId ?? null,
+        rewardId,
+        walletVoucherId,
+        items: enrichedItems,
+        subtotalSen,
+      });
+      if (resolved.ok) resolvedRewardDiscountSen = resolved.discountSen;
     }
 
     // Settings — SST + points rate.
@@ -155,7 +188,7 @@ export async function POST(request: NextRequest) {
       0,
       subtotalSen -
         Math.round(voucherDiscountSen) -
-        Math.round(rewardDiscountSen) -
+        resolvedRewardDiscountSen -
         fodDiscountSen -
         promoDiscountSen,
     );
@@ -169,7 +202,7 @@ export async function POST(request: NextRequest) {
       subtotalSen,
       promoDiscountSen,
       promoLines,
-      rewardDiscountSen: Math.round(rewardDiscountSen),
+      rewardDiscountSen: resolvedRewardDiscountSen,
       firstOrderDiscountSen: fodDiscountSen,
       sstSen,
       sstRate,

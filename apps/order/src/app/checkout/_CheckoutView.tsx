@@ -239,6 +239,7 @@ export function CheckoutView() {
   const [quote, setQuote] = useState<{
     promoLines: Array<{ name: string; amountSen: number }>;
     promoDiscountSen: number;
+    rewardDiscountSen: number;
     firstOrderDiscountSen: number;
     sstSen: number;
     totalSen: number;
@@ -260,6 +261,12 @@ export function CheckoutView() {
         storeId: state?.outletId ?? null,
         loyaltyPhone: state?.phone ?? null,
         loyaltyId: state?.loyaltyId ?? null,
+        // Send the reward ids so the server resolves the discount
+        // authoritatively (the client can't compute free_item/category
+        // rewards — its cart lines have no category). rewardDiscountSen is a
+        // fallback for legacy/unresolvable cases.
+        rewardId: reward?.id ?? null,
+        walletVoucherId: reward?.voucher_id ?? null,
         rewardDiscountSen,
       }),
     })
@@ -271,11 +278,15 @@ export function CheckoutView() {
     return () => {
       cancelled = true;
     };
-  }, [state, rewardDiscountSen]);
+  }, [state, rewardDiscountSen, reward?.id, reward?.voucher_id]);
 
   // Use the server quote's total when present; fall back to the
   // client subtotal-minus-reward while it loads.
   const grandTotal = quote ? quote.totalSen / 100 : Math.max(0, subtotal - rewardDiscount);
+  // The reward deduction shown is the server quote's authoritative value (it
+  // resolves free_item / category-filtered rewards the client can't preview);
+  // fall back to the client estimate only while the quote is in flight.
+  const rewardDiscountShown = quote ? quote.rewardDiscountSen / 100 : rewardDiscount;
 
   // Payment tiles + routing follow /api/payments/gateway-config — the same
   // source the native pickup app uses — so web and native offer/route the
@@ -623,13 +634,13 @@ export function CheckoutView() {
             RM{subtotal.toFixed(2)}
           </span>
         </div>
-        {rewardDiscount > 0 ? (
+        {rewardDiscountShown > 0 ? (
           <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
             <span className="text-[13px] truncate" style={{ color: "#A2492C" }}>
               Reward{reward?.name ? ` · ${reward.name}` : ""}
             </span>
             <span className="text-[14px]" style={{ color: "#A2492C", fontWeight: 500 }}>
-              −RM{rewardDiscount.toFixed(2)}
+              −RM{rewardDiscountShown.toFixed(2)}
             </span>
           </div>
         ) : null}
