@@ -241,18 +241,29 @@ export async function POST(req: NextRequest) {
     }
 
     scored.sort((a, b) => b.score - a.score);
-    // Mix the combination — spread the 3 slots across DIFFERENT categories so the
-    // customer sees a varied set (e.g. a roti + a nasi lemak + a cake), not three
-    // near-duplicates from one category. Best of each fresh category first, then
-    // top up by score if there aren't 3 distinct categories to fill.
+    // Mix the combination for CONVERSION — the goal is that an add actually
+    // happens, and three suggestions of the same type give the customer one hook,
+    // not three. So spread the 3 slots across distinct HOOKS (reason) AND
+    // categories: ideally a deal + a proven pairing + a popular pick, so each
+    // slot is a different reason to bite — never three near-duplicates.
     const picked: Scored[] = [];
     const pickedCats = new Set<string>();
+    const pickedReasons = new Set<string>();
+    // Pass 1 — distinct reason AND category (the most varied, multi-angle pitch).
     for (const s of scored) {
       if (picked.length >= 3) break;
       const cat = s.p.category ?? "";
-      if (pickedCats.has(cat)) continue;
+      if (pickedCats.has(cat) || pickedReasons.has(s.reason)) continue;
+      picked.push(s); pickedCats.add(cat); pickedReasons.add(s.reason);
+    }
+    // Pass 2 — fill remaining slots with a fresh category.
+    for (const s of scored) {
+      if (picked.length >= 3) break;
+      const cat = s.p.category ?? "";
+      if (picked.includes(s) || pickedCats.has(cat)) continue;
       picked.push(s); pickedCats.add(cat);
     }
+    // Pass 3 — top up by raw score if still short of 3.
     for (const s of scored) {
       if (picked.length >= 3) break;
       if (!picked.includes(s)) picked.push(s);
