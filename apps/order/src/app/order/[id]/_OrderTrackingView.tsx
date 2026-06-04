@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ShoppingBag, Coffee, CheckCircle2, XCircle } from "lucide-react";
 import { MysteryReward } from "./_MysteryReward";
@@ -148,29 +148,33 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
           // current step pulses with a subtle scale animation, pending
           // steps stay hollow. Connected by hairline rails that fill
           // when the step before them is done.
-          <div className="flex items-start">
-            {STEPPER.map((step, i) => {
-              const isLast = i === STEPPER.length - 1;
-              const state =
-                i < stepIdx ? "done" : i === stepIdx ? "current" : "pending";
-              const bg =
-                state === "done"
-                  ? "#FBEBE8"
-                  : state === "current"
-                  ? "#A2492C"
-                  : "#FFFFFF";
-              const iconColor =
-                state === "done"
-                  ? "#A2492C"
-                  : state === "current"
-                  ? "#FFFFFF"
-                  : "#8E8E93";
-              const border =
-                state === "pending" ? "1px solid rgba(26,2,0,0.12)" : "none";
-              const Icon = step.Icon;
-              return (
-                <div key={step.title} className="flex-1">
-                  <div className="flex items-center">
+          <div>
+            {/* Rail — icons sit at 0% / 50% / 100% with the connectors filling
+                between them, so the first step hugs the left edge and the last
+                hugs the right (aligned with the cards above/below) instead of
+                the last node floating two-thirds in. */}
+            <div className="flex items-center">
+              {STEPPER.map((step, i) => {
+                const isLast = i === STEPPER.length - 1;
+                const state =
+                  i < stepIdx ? "done" : i === stepIdx ? "current" : "pending";
+                const bg =
+                  state === "done"
+                    ? "#FBEBE8"
+                    : state === "current"
+                    ? "#A2492C"
+                    : "#FFFFFF";
+                const iconColor =
+                  state === "done"
+                    ? "#A2492C"
+                    : state === "current"
+                    ? "#FFFFFF"
+                    : "#8E8E93";
+                const border =
+                  state === "pending" ? "1px solid rgba(26,2,0,0.12)" : "none";
+                const Icon = step.Icon;
+                return (
+                  <Fragment key={step.title}>
                     <span
                       className="flex items-center justify-center flex-shrink-0"
                       style={{
@@ -203,8 +207,26 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
                         }}
                       />
                     ) : null}
-                  </div>
-                  <div className="mt-2.5" style={{ paddingRight: isLast ? 0 : 12 }}>
+                  </Fragment>
+                );
+              })}
+            </div>
+            {/* Labels — each tracks its node: first left-aligned, middle
+                centred, last right-aligned, so they line up under the icons
+                across the full width. */}
+            <div className="flex items-start mt-2.5">
+              {STEPPER.map((step, i) => {
+                const isLast = i === STEPPER.length - 1;
+                const state =
+                  i < stepIdx ? "done" : i === stepIdx ? "current" : "pending";
+                return (
+                  <div
+                    key={step.title}
+                    className="flex-1 min-w-0"
+                    style={{
+                      textAlign: i === 0 ? "left" : isLast ? "right" : "center",
+                    }}
+                  >
                     <p
                       className="uppercase truncate"
                       style={{
@@ -233,9 +255,9 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
                       {step.sub}
                     </p>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
             <style>{`
               @keyframes celsius-step-pulse {
                 0%, 100% { transform: scale(1); }
