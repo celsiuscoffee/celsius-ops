@@ -3,7 +3,7 @@
     "name": "Celsius Coffee",
     "slug": "celsius-pickup-native",
     "scheme": "celsiuscoffee",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,8 @@
     "ios": {
       "bundleIdentifier": "com.celsiuscoffee.pickup.next",
       "supportsTablet": false,
-      "buildNumber": "10",
+      "buildNumber": "11",
+      "associatedDomains": ["applinks:order.celsiuscoffee.com"],
       "entitlements": {
         "aps-environment": "production"
       },
@@ -34,8 +35,18 @@
     },
     "android": {
       "package": "com.celsiuscoffee.pickup.next",
-      "versionCode": 8,
+      "versionCode": 9,
       "googleServicesFile": "./google-services.json",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "order.celsiuscoffee.com", "pathPrefix": "/table" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#160800"
