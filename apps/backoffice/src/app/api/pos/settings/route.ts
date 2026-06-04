@@ -75,6 +75,9 @@ export async function PUT(request: NextRequest) {
     "einvoice_tin",
     "einvoice_brn",
     "einvoice_sst_no",
+    // Registered legal company name printed on the POS receipt (SSM number
+    // prints from einvoice_brn).
+    "company_name",
     // GrabFood ordering hours (drives the menu serviceHours we serve to Grab).
     "grab_open_time",
     "grab_close_time",
