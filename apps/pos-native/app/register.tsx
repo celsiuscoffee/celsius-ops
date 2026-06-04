@@ -35,13 +35,13 @@ import { useOrdersPanel, type KdsOrder } from "@/lib/use-orders-panel";
 import { useOrderChime } from "@/lib/use-order-chime";
 import { useServingAlarm, type ServingItem } from "@/lib/use-serving-alarm";
 import { useOrderHistory, type HistoryOrder, type HistoryChannel } from "@/lib/use-order-history";
-import { useShift, openShift, closeShift, shiftTotals, type Shift, type ShiftTotals } from "@/lib/shift";
+import { useShift, openShift, closeShift, reopenShift, findRecentClosedShift, shiftTotals, type Shift, type ShiftTotals } from "@/lib/shift";
 import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/printer";
 import { outletFull, outletShort } from "@/lib/outlets";
 import {
   lookupMember, fetchRewards, fetchUsual, redeemReward, computeRewardDiscount,
   computeTierDiscount, evaluatePromotions,
-  fetchSuggestedPairs, fetchSnapshot, claimMystery,
+  fetchSuggestedPairs, logPairAdd, fetchSnapshot, claimMystery,
   type Member, type RewardsResponse, type IssuedVoucher, type CatalogReward, type RedeemDiscount, type UsualItem, type AppliedPromo,
   type SuggestedPair, type ClaimableCard, type MysteryReveal, type ShopCard,
 } from "@/lib/loyalty";
@@ -298,6 +298,19 @@ export default function Register() {
   // Drop any selected-table detail when the panel closes or switches tab.
   useEffect(() => { if (hub !== "tables") setSelectedTable(null); }, [hub]);
 
+  // Outstanding live orders (pickup + Grab KDS + active QR-table orders). Used
+  // to guard the shift end/close so a shift can never end while customers are
+  // still waiting on orders.
+  const openLiveCount = useMemo(
+    () => kdsOrders.length + tableSlots.reduce((n, s) => n + s.orders.length, 0),
+    [kdsOrders, tableSlots],
+  );
+  // True once a rostered shift's clock has run out but the cashier is kept in to
+  // finish open orders → drives a non-blocking "shift ended" banner.
+  const [shiftEnded, setShiftEnded] = useState(false);
+  // A recently-closed shift available to resume (set when the Open Store sheet opens).
+  const [recentClosed, setRecentClosed] = useState<Shift | null>(null);
+
   // ── Open Store (cashier shift) ──────────────────────────────────────
   // Resolved up here (ahead of the order handlers) so the ring-up + Orders
   // gates can read whether the store is open. `shift` non-null = store open.
@@ -309,9 +322,10 @@ export default function Register() {
   // route (anon can't UPDATE printed pickup rows under RLS). Realtime
   // flows the change back through useOrdersPanel so the card re-buckets.
   const advanceOrderStatus = useCallback(async (order: KdsOrder, status: "preparing" | "ready" | "completed") => {
-    // Register-side channel gate: can't accept/advance Grab/Pickup orders
-    // until the store is open on this till.
-    if (!shiftLoading && !shift) { promptOpenStore(); return; }
+    // NOTE: deliberately NOT gated on the store being open. A live order that
+    // already arrived must always be advance-able / hand-over-able — even after
+    // the shift closed — so a close can never freeze a customer's in-progress
+    // order. (Ringing up a NEW sale still requires the store open; see onAdd.)
     setBumpingUid(order.uid);
     console.log(`[order-status] tap ${order.source} ${order.orderNumber} -> ${status}`);
     try {
@@ -334,7 +348,8 @@ export default function Register() {
   // rows (order_type=dine_in); the service-role route flips status→completed,
   // which lights up the guest's "Served" step and re-buckets the table.
   const markTableOrderDone = useCallback(async (order: TableOrderRef) => {
-    if (!shiftLoading && !shift) { promptOpenStore(); return; }
+    // Not gated on store-open — see advanceOrderStatus: a table order must be
+    // serve-able / clearable even after the shift closed.
     setBumpingUid(`qr:${order.id}`);
     try {
       await apiPost("/api/pos/order-status", { source: "qr", id: order.id, status: "completed" });
@@ -353,10 +368,22 @@ export default function Register() {
     Haptics.selectionAsync();
     setClosedSummary(null);
     setLiveTotals(null);
+    setRecentClosed(null);
     setShowShift(true);
-    // Pull live sales for the open shift so the close screen shows a summary.
+    // Pull live sales for the open shift so the close screen shows a summary;
+    // if the store is closed, surface a recently-closed shift to resume.
     if (shift) shiftTotals(shift.id).then(setLiveTotals).catch(() => setLiveTotals(null));
-  }, [shift]);
+    else if (outletId) findRecentClosedShift(outletId).then(setRecentClosed).catch(() => setRecentClosed(null));
+  }, [shift, outletId]);
+  const doReopenShift = useCallback(async (s: Shift) => {
+    setShiftBusy(true);
+    await reopenShift(s.id);
+    await reloadShift();
+    setRecentClosed(null);
+    setShiftEnded(false);
+    setShiftBusy(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [reloadShift]);
   const doOpenShift = useCallback(async () => {
     if (!outletId || !staff?.staffId) return;
     setShiftBusy(true);
@@ -365,15 +392,33 @@ export default function Register() {
     setShiftBusy(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [outletId, staff?.staffId, reloadShift]);
-  const doCloseShift = useCallback(async () => {
+  const performCloseShift = useCallback(async () => {
     if (!shift || !staff?.staffId) return;
     setShiftBusy(true);
     const totals = await closeShift(shift, staff.staffId);
     setClosedSummary(totals ?? { orders: 0, sales: 0 });
+    setShiftEnded(false);
     await reloadShift();
     setShiftBusy(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [shift, staff?.staffId, reloadShift]);
+  const doCloseShift = useCallback(() => {
+    // Don't strand customers: closing with live orders open needs a confirm.
+    // (They stay on the Orders screen + actionable after close — but the cashier
+    // should know they're walking away from open work.)
+    if (openLiveCount > 0) {
+      Alert.alert(
+        "Close store?",
+        `${openLiveCount} live order${openLiveCount === 1 ? "" : "s"} still open. They'll stay on the Orders screen and can still be handed over — close anyway?`,
+        [
+          { text: "Keep open", style: "cancel" },
+          { text: "Close anyway", style: "destructive", onPress: () => void performCloseShift() },
+        ],
+      );
+      return;
+    }
+    void performCloseShift();
+  }, [openLiveCount, performCloseShift]);
   // Initial load + re-read backoffice settings whenever the register regains
   // focus, so a grid / service-charge / receipt change shows without an app
   // restart (the store used to cache the first load and never refetch).
@@ -487,17 +532,23 @@ export default function Register() {
   useEffect(() => {
     if (!staff) return;
     const maybeLogout = () => {
-      if (shiftSessionExpired(loggedInAt, shiftEndsAt) && lines.length === 0 && !showCheckout && !paid) {
-        if (shiftEndsAt != null && shift) { void closeShift(shift, staff.staffId); }
-        signOut();
-        router.replace("/");
-      }
+      if (!shiftSessionExpired(loggedInAt, shiftEndsAt)) { setShiftEnded(false); return; }
+      // The session's clock is up. Never yank the cashier mid-task: hold for an
+      // empty cart, no checkout in flight, AND no open live orders (customers
+      // are still waiting on those).
+      if (lines.length > 0 || showCheckout || paid) return;
+      if (openLiveCount > 0) { setShiftEnded(true); return; } // keep them in to finish + hand over
+      // Safe gap, nothing outstanding → close the rostered shift + sign out.
+      if (shiftEndsAt != null && shift) { void closeShift(shift, staff.staffId); }
+      setShiftEnded(false);
+      signOut();
+      router.replace("/");
     };
     maybeLogout();
     const id = setInterval(maybeLogout, 20000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staff, loggedInAt, shiftEndsAt, lines.length, showCheckout, paid, shift]);
+  }, [staff, loggedInAt, shiftEndsAt, lines.length, showCheckout, paid, shift, openLiveCount]);
 
   // ── Open Store on scheduled login ────────────────────────────────────
   // A rostered session (shiftEndsAt set) auto-opens the store the first time
@@ -562,9 +613,14 @@ export default function Register() {
   // like tapping the grid). No-op if the product isn't in this outlet's menu.
   const addPair = useCallback((pair: SuggestedPair) => {
     const p = productById.get(pair.product_id);
-    if (p) onAdd(p);
+    if (!p) return;
+    onAdd(p);
+    // Upsell attribution — record that a suggested bite was added (with its 1..3
+    // slot), so pair-adds ÷ orders is measurable. Best-effort; never blocks.
+    const rank = pairs.findIndex((x) => x.product_id === pair.product_id) + 1;
+    logPairAdd(outletId, pair, rank, "register");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productById]);
+  }, [productById, pairs, outletId]);
 
   const subtotal = cartSubtotal(lines);
   const scRate = serviceChargeRate(settings);
@@ -624,7 +680,7 @@ export default function Register() {
   useEffect(() => {
     useDisplay.getState().setMember(
       member
-        ? { id: member.id, name: member.name, phone: member.phone, pointsBalance: member.points_balance, tierName: member.tier?.name ?? null, tierColor: member.tier?.color ?? null }
+        ? { id: member.id, name: member.name, phone: member.phone, pointsBalance: member.points_balance, tierName: member.tier?.name ?? null, tierColor: member.tier?.color ?? null, isNew: (member.total_visits ?? 0) === 0 }
         : null,
     );
   }, [member]);
@@ -1552,6 +1608,18 @@ export default function Register() {
           The modal opens already in the payment-display state — we set
           displayStatus="payment" the moment showCheckout becomes true
           (see effect below) so the customer sees the QR immediately. */}
+      {/* Non-blocking "shift ended" banner — the rostered shift's clock ran out
+          but the cashier is held in to finish open orders. Tap → Close Store. */}
+      {shiftEnded && (
+        <View pointerEvents="box-none" style={{ position: "absolute", top: 6, left: 0, right: 0, alignItems: "center", zIndex: 60 }}>
+          <Pressable onPress={openShiftModal} className="flex-row items-center gap-2 rounded-2xl px-4 py-2.5 active:opacity-80" style={{ backgroundColor: "#5b2410", borderWidth: 1, borderColor: "#FBBF24" }}>
+            <AlertTriangle size={16} color="#FBBF24" />
+            <Text className="text-amber-200 text-sm" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
+              Shift ended — hand over {openLiveCount} open order{openLiveCount === 1 ? "" : "s"}, then Close Store
+            </Text>
+          </Pressable>
+        </View>
+      )}
       {/* ── Tables panel — live dine-in occupancy ─────────────────────
           Grid of T1..Tn, colour-coded by status. Tapping a busy tile
           shows the current order summary (read-only — tabs/cart edits
@@ -1878,6 +1946,16 @@ export default function Register() {
                 <Pressable onPress={doOpenShift} disabled={shiftBusy} className={`h-14 rounded-2xl items-center justify-center flex-row gap-2 ${shiftBusy ? "bg-primary/40" : "bg-primary active:opacity-80"}`}>
                   {shiftBusy ? <ActivityIndicator color="#F5F3F0" /> : <><Power size={20} color="#F5F3F0" /><Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Open Store</Text></>}
                 </Pressable>
+                {recentClosed?.closed_at && (
+                  // Recover an accidental / too-early close: reopen the last shift
+                  // so the same service stays on one shift + Z-report.
+                  <Pressable onPress={() => void doReopenShift(recentClosed)} disabled={shiftBusy}
+                    className="h-12 rounded-2xl items-center justify-center flex-row gap-2 border active:opacity-70" style={{ borderColor: "rgba(251,191,36,0.5)" }}>
+                    <Text className="text-amber-300 text-sm" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
+                      Resume last shift · closed {Math.max(1, Math.round((Date.now() - new Date(recentClosed.closed_at).getTime()) / 60000))}m ago
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             )}
           </View>

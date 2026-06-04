@@ -122,6 +122,37 @@ export async function closeShift(shift: Shift, staffId: string): Promise<ShiftTo
   return totals;
 }
 
+/** The most recently CLOSED shift for this register, if it closed within the
+ *  window (default 6h) — so an accidental/early close can be resumed instead of
+ *  starting a fresh shift (which would split the same service across two
+ *  Z-reports). */
+export async function findRecentClosedShift(outletId: string, withinMin = 360): Promise<Shift | null> {
+  const registerId = await resolveRegisterId(outletId);
+  if (!registerId) return null;
+  const { data } = await supabase
+    .from("pos_shifts")
+    .select("id, outlet_id, register_id, opened_by, opened_at, closed_at, status, opening_cash, closing_cash, total_sales, total_orders")
+    .eq("outlet_id", outletId)
+    .eq("register_id", registerId)
+    .not("closed_at", "is", null)
+    .gte("closed_at", new Date(Date.now() - withinMin * 60_000).toISOString())
+    .order("closed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as Shift | null) ?? null;
+}
+
+/** Reopen a closed shift (clears closed_at) — recovers from an accidental or
+ *  too-early close so the run's orders + Z-report stay on one shift. */
+export async function reopenShift(shiftId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from("pos_shifts")
+    .update({ closed_at: null, closed_by: null, status: "open" })
+    .eq("id", shiftId);
+  if (error) { console.warn("[shift] reopenShift failed:", error.message); return false; }
+  return true;
+}
+
 /** Tracks the outlet register's current open shift. Re-checks on mount
  *  and exposes a manual reload for after open/close. */
 export function useShift(outletId: string | null | undefined) {

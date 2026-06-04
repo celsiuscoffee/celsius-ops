@@ -456,6 +456,25 @@ export async function fetchSuggestedPairs(
   }
 }
 
+/** Upsell attribution — fire (best-effort) when a suggested pair is ADDED to the
+ *  cart, so the success rate (pair-adds ÷ orders) is measurable per round/reason.
+ *  Fire-and-forget; never throws, never blocks the add. */
+export function logPairAdd(
+  outletId: string | null,
+  pair: SuggestedPair,
+  rank: number,
+  source: "register" | "display",
+): void {
+  apiPost("/api/pos/loyalty/pair-event", {
+    outlet_id: outletId,
+    product_id: pair.product_id,
+    product_name: pair.name,
+    reason: pair.reason,
+    rank,
+    source,
+  }).catch(() => {});
+}
+
 /** Lightweight read of currently-active combo + category promos for the
  *  customer-display ordering screen. Snapshot-style `active_promos` is
  *  member-gated; this is the guest fallback so the "Pair with a bite"

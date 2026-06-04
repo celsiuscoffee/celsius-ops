@@ -30,7 +30,14 @@ export function sessionExpired(loggedInAt: number | null): boolean {
  *  endpoint, already incl. a wind-down grace); an off-schedule / manager
  *  override session falls back to the fixed 2-hour TTL. */
 export function shiftSessionExpired(loggedInAt: number | null, shiftEndsAt: number | null): boolean {
-  if (shiftEndsAt != null) return Date.now() >= shiftEndsAt;
+  // A rostered session expires at its shift end — but ONLY if it actually began
+  // during that shift. Logging in AFTER the shift end (e.g. to hand over orders
+  // left over from a shift that already closed) must NOT instantly re-expire —
+  // that was the sign-in → immediate sign-out loop. In that case fall back to
+  // the normal idle TTL so the cashier can log in and work.
+  if (shiftEndsAt != null && loggedInAt != null && loggedInAt < shiftEndsAt) {
+    return Date.now() >= shiftEndsAt;
+  }
   return sessionExpired(loggedInAt);
 }
 
