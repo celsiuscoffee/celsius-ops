@@ -37,6 +37,14 @@ async function isValidAdminToken(token: string): Promise<boolean> {
 const PWA_PASSTHROUGH = [
   /^\/api(\/|$)/,
   /^\/staff(\/|$)/,
+  // Deep-link association files (AASA + assetlinks.json) are real Next.js
+  // route handlers in this app. The AASA path
+  // (/.well-known/apple-app-site-association) is EXTENSIONLESS, so without
+  // this it falls through to the SPA-shell rewrite below and gets served
+  // index.html — Apple then can't parse it and iOS Universal Links silently
+  // break. assetlinks.json already passes via the file-extension rule, but
+  // pin the whole dir so both stay served by their routes.
+  /^\/\.well-known(\/|$)/,
   /^\/_next(\/|$)/,
   /^\/_expo(\/|$)/,
   /^\/assets(\/|$)/,

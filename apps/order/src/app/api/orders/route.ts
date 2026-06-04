@@ -11,6 +11,7 @@ import { getTierMultiplier } from "@/lib/loyalty/points";
 import {
   evaluatePromotions,
   recordPromotionApplications,
+  channelForOrderType,
   type CartLine,
 } from "@/lib/loyalty/promotions";
 import { requireCustomerSession } from "@/lib/customer-jwt";
@@ -103,7 +104,29 @@ export async function POST(request: NextRequest) {
       loyaltyId,
       clientSupportsSkipPayment,
       pickupAt: pickupAtInput,
+      orderType: orderTypeInput,
+      tableNumber: tableNumberInput,
     } = body;
+    // Fulfilment type — the native app sends "pickup" (default) or "dine_in"
+    // (entered via a table-QR deep link). dine_in REQUIRES a table number;
+    // pickup never carries one. The promo channel follows: dine_in resolves
+    // to "qr_table" (the QR self-order channel the PWA + POS share), else
+    // "pickup". This is what surfaces the order on the POS "QR Tables" tab.
+    const orderType: "pickup" | "dine_in" =
+      orderTypeInput === "dine_in" ? "dine_in" : "pickup";
+    const tableNumber =
+      orderType === "dine_in" &&
+      typeof tableNumberInput === "string" &&
+      tableNumberInput.trim().length > 0
+        ? tableNumberInput.trim()
+        : null;
+    if (orderType === "dine_in" && !tableNumber) {
+      return NextResponse.json(
+        { error: "A table number is required for dine-in orders." },
+        { status: 400 },
+      );
+    }
+    const orderChannel = channelForOrderType(orderType);
     // pickupAt — optional ISO timestamp for scheduled pickup. Null /
     // omitted = brew immediately (ASAP, original behaviour). Stored on
     // the order row so a future KDS scheduler can hold the order out
@@ -266,12 +289,11 @@ export async function POST(request: NextRequest) {
       .order("priority", { ascending: false })
       .limit(1)
       .maybeSingle();
-    // Channel scope — this route is the native pickup checkout, so the
-    // first-order promo applies only if it allows the "pickup" channel
-    // (empty/null = all channels).
+    // Channel scope — the first-order promo applies only if it allows this
+    // order's channel (qr_table for dine-in, else pickup; empty/null = all).
     const fodChannels = (fodRow?.channels as string[] | null) ?? null;
     const fodChannelOk =
-      !fodChannels || fodChannels.length === 0 || fodChannels.includes("pickup");
+      !fodChannels || fodChannels.length === 0 || fodChannels.includes(orderChannel);
     const fodConfig = fodRow && fodChannelOk
       ? {
           enabled: true,
@@ -474,8 +496,9 @@ export async function POST(request: NextRequest) {
       member_id: loyaltyId,
       outlet_id: selectedStore.id,
       member_tier_id: memberTierId,
-      // This route is the native pickup checkout — always the pickup channel.
-      channel: "pickup",
+      // dine_in resolves to "qr_table" (the QR self-order channel), pickup
+      // stays "pickup" — channel-scoped promos apply correctly either way.
+      channel: orderChannel,
     });
 
     // Non-stackable tier exclusivity (Staff, Black Card). The flat
@@ -584,6 +607,8 @@ export async function POST(request: NextRequest) {
         loyalty_id:             loyaltyId ?? null,
         loyalty_points_earned:  pointsToEarn,
         pickup_at:              pickupAt,
+        order_type:             orderType,
+        table_number:           tableNumber,
       } as Record<string, unknown>)
       .select()
       .single();

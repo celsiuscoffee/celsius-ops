@@ -138,6 +138,12 @@ export const api = {
      *  scheduled orders to the brew queue when they're inside the
      *  prep window. */
     pickupAt?: string | null;
+    /** Fulfilment context. "dine_in" + tableNumber are set when the order
+     *  originates from a table-QR deep link (app/table/[outletId]/[tableId]);
+     *  defaults to "pickup". The server tags the orders row so QR self-orders
+     *  surface on the POS register's "QR Tables" tab. */
+    orderType?: "pickup" | "dine_in" | null;
+    tableNumber?: string | null;
   }) =>
     post<{ orderId: string; orderNumber: string }>("/api/orders", {
       ...payload,

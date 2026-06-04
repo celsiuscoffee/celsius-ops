@@ -175,6 +175,8 @@ export default function Checkout() {
   const appliedReward = useApp((s) => s.appliedReward);
   const setAppliedReward = useApp((s) => s.setAppliedReward);
   const loyaltyId = useApp((s) => s.loyaltyId);
+  const orderType = useApp((s) => s.orderType);
+  const tableNumber = useApp((s) => s.tableNumber);
   const queryClient = useQueryClient();
 
   // SST is config-driven via /api/settings?key=sst — admin can toggle/adjust
@@ -755,6 +757,11 @@ export default function Checkout() {
         rewardDiscountSen: Math.round(rewardDiscount * 100),
         walletVoucherId: appliedReward?.voucher_id ?? null,
         pickupAt:         pickupAtIso,
+        // Fulfilment context — dine_in + table# when the customer entered via
+        // a table-QR deep link; the server tags the orders row so it lands on
+        // the POS register's "QR Tables" tab. Defaults to pickup otherwise.
+        orderType:        orderType ?? "pickup",
+        tableNumber:      orderType === "dine_in" ? (tableNumber ?? null) : null,
       });
       // Pin the summary BEFORE clearCart so the customer keeps seeing
       // their RM 4.45 (or whatever) behind the Stripe / Apple Pay

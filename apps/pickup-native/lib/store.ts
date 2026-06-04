@@ -84,6 +84,14 @@ export type MemberProfile = {
 type AppState = {
   outletId: string | null;
   outletName: string | null;
+  /** Order fulfilment context. Set to "dine_in" + a tableNumber when the
+   *  customer enters via a table-QR deep link (app/table/[outletId]/[tableId]);
+   *  null/"pickup" otherwise. Deliberately NOT persisted (see partialize) —
+   *  a per-visit context that must reset on app kill so someone who scanned
+   *  Table 5 yesterday doesn't silently place a dine-in Table-5 order from
+   *  home today. */
+  orderType: "pickup" | "dine_in" | null;
+  tableNumber: string | null;
   cart: CartItem[];
   phone: string | null;
   loyaltyId: string | null;
@@ -108,6 +116,12 @@ type AppState = {
   seenOnboardings: string[];
 
   setOutlet: (id: string, name: string) => void;
+  /** Enter dine-in mode from a table-QR deep link: pin the outlet, flag
+   *  dine_in + table, and start a clean basket (mirrors the PWA's
+   *  _TableEntry — a fresh table session shouldn't inherit a stale cart). */
+  setDineIn: (outletId: string, outletName: string, tableNumber: string) => void;
+  /** Drop back to pickup (clears the table context; leaves the cart). */
+  clearDineIn: () => void;
   addToCart: (item: Omit<CartItem, "cartId">) => void;
   /** Replace an existing cart line in-place — preserves its position
    *  in the array (so the customer's edit doesn't reshuffle the cart)
@@ -136,6 +150,8 @@ export const useApp = create<AppState>()(
     (set) => ({
       outletId: null,
       outletName: null,
+      orderType: null,
+      tableNumber: null,
       cart: [],
       phone: null,
       loyaltyId: null,
@@ -146,6 +162,16 @@ export const useApp = create<AppState>()(
       seenOnboardings: [],
 
       setOutlet: (id, name) => set({ outletId: id, outletName: name }),
+      setDineIn: (outletId, outletName, tableNumber) =>
+        set({
+          outletId,
+          outletName,
+          orderType: "dine_in",
+          tableNumber,
+          cart: [],
+          appliedReward: null,
+        }),
+      clearDineIn: () => set({ orderType: "pickup", tableNumber: null }),
       addToCart: (item) =>
         set((s) => ({
           cart: [
@@ -190,6 +216,8 @@ export const useApp = create<AppState>()(
           appliedReward: null,
           sessionToken: null,
           reservedVoucher: null,
+          orderType: null,
+          tableNumber: null,
         }),
     }),
     {
@@ -220,6 +248,10 @@ export const useApp = create<AppState>()(
       partialize: (s) => ({
         outletId: s.outletId,
         outletName: s.outletName,
+        // orderType / tableNumber are intentionally NOT persisted — dine-in
+        // is a per-visit context re-established by the table-QR deep link on
+        // each launch; persisting it would strand a customer in "dine-in
+        // Table N" mode after they've left the cafe.
         cart: s.cart,
         phone: s.phone,
         loyaltyId: s.loyaltyId,
