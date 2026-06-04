@@ -438,7 +438,7 @@ export default function CustomerDisplay() {
               <Eyebrow color="rgba(245,243,240,0.45)" style={{ paddingHorizontal: 4 }}>AVAILABLE REWARDS</Eyebrow>
               <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.42)", paddingHorizontal: 4, marginTop: 2, marginBottom: 8 }}>Tell the cashier to apply these to your order</Text>
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
-                <ClaimableRewards snapshot={snapshot} memberId={member.id} />
+                <ClaimableRewards snapshot={snapshot} memberId={member.id} isNew={!!member?.isNew} />
               </ScrollView>
             </View>
           </View>
@@ -496,27 +496,23 @@ export default function CustomerDisplay() {
           )}
         </View>
 
-        {/* Redeem your Points — the points shop, right under the pairs. Tap a card
-            and the register redeems it onto the bill. Hidden once a reward is
-            applied (one per order) so a tap can't burn Points again. */}
-        {member && snapshot && snapshot.shop.length > 0 && !reward && (
-          <View style={{ marginTop: 18 }}>
-            <Eyebrow color="rgba(251,191,36,0.85)" style={{ marginBottom: 8, letterSpacing: 1.6 }}>REDEEM YOUR POINTS</Eyebrow>
-            {/* flex-row of flex-1 cards (top 3) so the row fills the same width
-                as the "Pair with a bite" cards above (same gap:12). */}
-            <View className="flex-row" style={{ gap: 12 }}>
-              {snapshot.shop.slice(0, 3).map((s) => (
-                <ShopRedeemCard key={s.id} shop={s} onRedeem={() => setRedeemRequest({ rewardId: s.id, issuedRewardId: null, name: s.name })} />
-              ))}
-            </View>
-          </View>
+        {/* Redeem your rewards — the most relevant rewards across every type
+            (owned vouchers, then affordable points rewards, then goals), right
+            under the pairs. Tap a card and the register applies it to the bill.
+            Hidden once a reward is applied (one per order) so a tap can't
+            double-redeem. */}
+        {member && snapshot && !reward && (
+          <AvailableRewardsRow snapshot={snapshot} onPick={setRedeemRequest} onMore={openRedeem} />
         )}
 
-        {member && snapshot && snapshot.claimables.length > 0 && (
+        {/* Tap-to-claim gifts only (promos / welcome / birthday). Vouchers + the
+            points shop live in REDEEM YOUR REWARDS above, so claimsOnly avoids
+            repeating them here. */}
+        {member && snapshot && snapshot.claimables.some((c) => c.source_type !== "mystery_pending") && (
           <View style={{ flex: 1, marginTop: 22 }}>
             <Eyebrow color="rgba(245,243,240,0.5)" style={{ marginBottom: 8 }}>REWARDS YOU CAN CLAIM</Eyebrow>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 4 }}>
-              <ClaimableRewards snapshot={snapshot} memberId={member.id} />
+              <ClaimableRewards snapshot={snapshot} memberId={member.id} isNew={!!member?.isNew} claimsOnly />
             </ScrollView>
           </View>
         )}
@@ -533,7 +529,6 @@ export default function CustomerDisplay() {
                 snapshot={snapshot}
                 memberName={member.name}
                 redeemedReward={reward ? { name: reward.name } : null}
-                onRedeem={openRedeem}
               />
             ) :
             snapLoading ? <View className="items-center py-6"><ActivityIndicator color={GOLD} /></View> :
@@ -617,24 +612,63 @@ export default function CustomerDisplay() {
       {redeemOpen && (
         <Pressable onPress={() => setRedeemOpen(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.78)", alignItems: "center", justifyContent: "center" }}>
           <Pressable onPress={() => {}} className="rounded-3xl px-6 py-6" style={{ width: 470, maxHeight: "84%", backgroundColor: SUB, borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}>
-            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: CREAM, textAlign: "center" }}>Redeem a reward</Text>
-            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.55)", textAlign: "center", marginTop: 2, marginBottom: 12 }}>Tap a reward to apply it to your order</Text>
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: CREAM, textAlign: "center" }}>More Rewards</Text>
+            <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.55)", textAlign: "center", marginTop: 2, marginBottom: 12 }}>Tap a reward to add it to your order</Text>
             {redeemLoading ? (
               <View className="items-center py-10"><ActivityIndicator color={GOLD} /></View>
-            ) : redeemList.length === 0 ? (
+            ) : redeemList.length === 0 && (!snapshot || snapshot.shop.length === 0) ? (
               <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, color: "rgba(245,243,240,0.5)", textAlign: "center", paddingVertical: 28 }}>No rewards to redeem yet.</Text>
             ) : (
               <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {redeemList.map((v) => (
-                  <Pressable key={v.id} onPress={() => { setRedeemRequest({ rewardId: v.reward_id ?? v.id, issuedRewardId: v.id, name: v.title }); setRedeemOpen(false); }} className="flex-row items-center rounded-2xl px-3.5 py-3 active:opacity-80" style={{ backgroundColor: "#FBEBE8", borderWidth: 1, borderColor: "rgba(162,73,44,0.22)", gap: 11 }}>
-                    <View className="h-10 w-10 rounded-xl items-center justify-center" style={{ backgroundColor: TERRA }}><Tag size={18} color="#fff" /></View>
-                    <View className="flex-1">
-                      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, color: DARKFG }} numberOfLines={1}>{v.title}</Text>
-                      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(26,2,0,0.55)" }} numberOfLines={1}>{voucherSummary(v)}</Text>
-                    </View>
-                    <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: TERRA }}><Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: "#fff" }}>USE</Text></View>
-                  </Pressable>
-                ))}
+                {/* Vouchers the member already owns — ready to use, no Points spent. */}
+                {redeemList.length > 0 && (
+                  <>
+                    {snapshot && snapshot.shop.length > 0 && (
+                      <Eyebrow color="rgba(134,239,172,0.7)" style={{ marginBottom: 2 }}>YOUR VOUCHERS</Eyebrow>
+                    )}
+                    {redeemList.map((v) => (
+                      <Pressable key={v.id} onPress={() => { setRedeemRequest({ rewardId: v.reward_id ?? v.id, issuedRewardId: v.id, name: v.title }); setRedeemOpen(false); }} className="flex-row items-center rounded-2xl px-3.5 py-3 active:opacity-80" style={{ backgroundColor: "#FBEBE8", borderWidth: 1, borderColor: "rgba(162,73,44,0.22)", gap: 11 }}>
+                        <View className="h-10 w-10 rounded-xl items-center justify-center" style={{ backgroundColor: TERRA }}><Tag size={18} color="#fff" /></View>
+                        <View className="flex-1">
+                          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, color: DARKFG }} numberOfLines={1}>{v.title}</Text>
+                          <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11, color: "rgba(26,2,0,0.55)" }} numberOfLines={1}>{voucherSummary(v)}</Text>
+                        </View>
+                        <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: TERRA }}><Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: "#fff" }}>USE</Text></View>
+                      </Pressable>
+                    ))}
+                  </>
+                )}
+                {/* The full Points shop — every catalogue reward, affordable or not. */}
+                {snapshot && snapshot.shop.length > 0 && (
+                  <>
+                    {redeemList.length > 0 && (
+                      <Eyebrow color="rgba(251,191,36,0.7)" style={{ marginTop: 6, marginBottom: 2 }}>SPEND YOUR POINTS</Eyebrow>
+                    )}
+                    {snapshot.shop.map((s) => {
+                      const aff = s.affordable;
+                      return (
+                        <Pressable
+                          key={s.id}
+                          disabled={!aff}
+                          onPress={() => { setRedeemRequest({ rewardId: s.id, issuedRewardId: null, name: s.name }); setRedeemOpen(false); }}
+                          className="flex-row items-center rounded-2xl px-3.5 py-3 active:opacity-80"
+                          style={{ backgroundColor: aff ? "rgba(251,191,36,0.10)" : "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: aff ? "rgba(251,191,36,0.4)" : "rgba(245,243,240,0.12)", gap: 11, opacity: aff ? 1 : 0.55 }}
+                        >
+                          <View className="h-10 w-10 rounded-xl items-center justify-center" style={{ backgroundColor: aff ? GOLD : "rgba(245,243,240,0.12)" }}>
+                            <Coffee size={18} color={aff ? DARKFG : "rgba(245,243,240,0.5)"} />
+                          </View>
+                          <View className="flex-1">
+                            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, color: CREAM }} numberOfLines={1}>{s.name}</Text>
+                            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10.5, letterSpacing: 0.4, color: aff ? GOLD : "rgba(245,243,240,0.5)" }}>{s.points_required} POINTS</Text>
+                          </View>
+                          <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: aff ? GOLD : "rgba(245,243,240,0.12)" }}>
+                            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: aff ? DARKFG : "rgba(245,243,240,0.5)" }}>{aff ? "REDEEM" : "KEEP EARNING"}</Text>
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </>
+                )}
               </ScrollView>
             )}
             <Pressable onPress={() => setRedeemOpen(false)} className="mt-3 items-center active:opacity-60">
@@ -675,24 +709,39 @@ function PendingOrMemberHeader({ member }: { member: NonNullable<ReturnType<type
       {/* Compact horizontal layout — icon + greeting/name/tier on the left,
           points on the right — so the card stays short and the rewards list
           below gets the room. */}
-      <View className="flex-row items-center" style={{ paddingHorizontal: 16, paddingTop: 13, paddingBottom: 13 }}>
-        <View style={{ width: 46, height: 46, borderRadius: 13, backgroundColor: theme.accent + "1F", borderWidth: 1, borderColor: theme.accent + "44", alignItems: "center", justifyContent: "center", marginRight: 13 }}>
-          <Image source={require("@/assets/icon.png")} style={{ width: 26, height: 26, borderRadius: 7 }} resizeMode="contain" />
+      {member?.isNew ? (
+        // First-ever visit — teach the programme in a glance (points + tier perk)
+        // instead of a points count they don't have yet.
+        <View className="flex-row items-center" style={{ paddingHorizontal: 16, paddingTop: 13, paddingBottom: 13 }}>
+          <View style={{ width: 46, height: 46, borderRadius: 13, backgroundColor: theme.accent + "1F", borderWidth: 1, borderColor: theme.accent + "44", alignItems: "center", justifyContent: "center", marginRight: 13 }}>
+            <Image source={require("@/assets/icon.png")} style={{ width: 26, height: 26, borderRadius: 7 }} resizeMode="contain" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: "Peachi-Bold", fontSize: 19, color: theme.text }}>Welcome to Celsius Rewards</Text>
+            <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12.5, color: theme.muted, marginTop: 4 }}>Earn points on every order</Text>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12.5, color: theme.accent, marginTop: 2 }}>Upgrade tier and get up to 10% fixed discount</Text>
+          </View>
         </View>
-        <View style={{ flex: 1, paddingRight: 8 }}>
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, letterSpacing: 1.6, color: theme.accent }}>WELCOME BACK</Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: "Peachi-Bold", fontSize: 23, color: theme.text, marginTop: 1 }}>{member?.name ?? "Member"}</Text>
-          {!!member?.tierName && (
-            <View style={{ alignSelf: "flex-start", marginTop: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, backgroundColor: theme.accent }}>
-              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, letterSpacing: 1.3, color: theme.surface }}>{member.tierName.toUpperCase()}</Text>
-            </View>
-          )}
+      ) : (
+        <View className="flex-row items-center" style={{ paddingHorizontal: 16, paddingTop: 13, paddingBottom: 13 }}>
+          <View style={{ width: 46, height: 46, borderRadius: 13, backgroundColor: theme.accent + "1F", borderWidth: 1, borderColor: theme.accent + "44", alignItems: "center", justifyContent: "center", marginRight: 13 }}>
+            <Image source={require("@/assets/icon.png")} style={{ width: 26, height: 26, borderRadius: 7 }} resizeMode="contain" />
+          </View>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, letterSpacing: 1.6, color: theme.accent }}>WELCOME BACK</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: "Peachi-Bold", fontSize: 23, color: theme.text, marginTop: 1 }}>{member?.name ?? "Member"}</Text>
+            {!!member?.tierName && (
+              <View style={{ alignSelf: "flex-start", marginTop: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, backgroundColor: theme.accent }}>
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, letterSpacing: 1.3, color: theme.surface }}>{member.tierName.toUpperCase()}</Text>
+              </View>
+            )}
+          </View>
+          <View className="items-end">
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: theme.accent, lineHeight: 30 }}>{(member?.pointsBalance ?? 0).toLocaleString()}</Text>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, letterSpacing: 1.6, color: theme.muted }}>POINTS</Text>
+          </View>
         </View>
-        <View className="items-end">
-          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: theme.accent, lineHeight: 30 }}>{(member?.pointsBalance ?? 0).toLocaleString()}</Text>
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, letterSpacing: 1.6, color: theme.muted }}>POINTS</Text>
-        </View>
-      </View>
+      )}
     </View>
   );
 }
@@ -752,7 +801,7 @@ function Numpad({ outletId, ctaLabel, onSignedIn }: { outletId: string | null; c
       // brand-new number is auto-enrolled as a Bronze member server-side.
       const m = await lookupMember(val);
       if (!m) { setErr("Couldn't sign you in — try again"); return; }
-      useDisplay.getState().setMember({ id: m.id, name: m.name, phone: m.phone, pointsBalance: m.points_balance, tierName: m.tier?.name ?? null, tierColor: m.tier?.color ?? null });
+      useDisplay.getState().setMember({ id: m.id, name: m.name, phone: m.phone, pointsBalance: m.points_balance, tierName: m.tier?.name ?? null, tierColor: m.tier?.color ?? null, isNew: (m.total_visits ?? 0) === 0 });
       setVal("");
       onSignedIn?.(m);
     } catch { setErr("Lookup failed"); }
@@ -789,6 +838,15 @@ function Numpad({ outletId, ctaLabel, onSignedIn }: { outletId: string | null; c
 
 // ─── Member rewards panel ──────────────────────────────────
 function PendingMemberPanel({ member }: { member: any }) {
+  if (member?.isNew) {
+    return (
+      <View className="items-center py-2" style={{ paddingHorizontal: 10 }}>
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: CREAM, textAlign: "center" }} numberOfLines={1} adjustsFontSizeToFit>Welcome to Celsius Rewards</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12.5, color: "rgba(245,243,240,0.6)", marginTop: 6, textAlign: "center" }}>Earn points on every order</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12.5, color: GOLD, marginTop: 2, textAlign: "center" }}>Upgrade tier and get up to 10% fixed discount</Text>
+      </View>
+    );
+  }
   return (
     <View className="items-center py-2">
       <Eyebrow color="rgba(251,191,36,0.85)">WELCOME BACK</Eyebrow>
@@ -836,7 +894,7 @@ function RewardsList({ snapshot }: { snapshot: LoyaltySnapshot }) {
  *  3 most relevant rewards as larger cards: unopened mystery bags / promos are
  *  tappable to claim on the spot; issued vouchers show "Use at till". A "+N
  *  more" line hints at the rest. Challenges (mission-sourced) are excluded. */
-function ClaimableRewards({ snapshot, memberId }: { snapshot: LoyaltySnapshot; memberId: string }) {
+function ClaimableRewards({ snapshot, memberId, isNew, claimsOnly }: { snapshot: LoyaltySnapshot; memberId: string; isNew?: boolean; claimsOnly?: boolean }) {
   type Item =
     | { kind: "claim"; id: string; title: string; sub: string; mystery: boolean }
     | { kind: "voucher"; id: string; title: string; sub: string }
@@ -872,9 +930,29 @@ function ClaimableRewards({ snapshot, memberId }: { snapshot: LoyaltySnapshot; m
       points: s.points_required,
       icon: /free|drink|coffee/i.test(s.name) ? "coffee" : "tag",
     }));
-  // Affordable points rewards sit right after tap-to-claim so a returning
-  // member always sees what their balance buys, even ahead of owned vouchers.
-  const all = [...claims, ...affordableShop, ...vouchers];
+  // A brand-new member has no balance yet, so nothing is "affordable" — instead
+  // show the cheapest catalogue rewards (the goals) so they immediately see what
+  // Points actually buy. Cheapest-first = the most reachable first.
+  const shopGoals: Item[] = isNew
+    ? [...snapshot.shop]
+        .sort((a, b) => a.points_required - b.points_required)
+        .map((s) => ({
+          kind: "shop",
+          id: s.id,
+          title: s.name,
+          sub: "Redeem with your Points",
+          points: s.points_required,
+          icon: /free|drink|coffee/i.test(s.name) ? "coffee" : "tag",
+        }))
+    : [];
+  // Returning: rewards their balance can already get. New: the catalogue goals.
+  // claimsOnly: just the tap-to-claim gifts (vouchers + the points shop are shown
+  // in the "REDEEM YOUR REWARDS" row above, so we don't repeat them here).
+  const all = claimsOnly
+    ? claims
+    : isNew
+    ? [...claims, ...shopGoals, ...vouchers]
+    : [...claims, ...affordableShop, ...vouchers];
   const shown = all.slice(0, 4);
   const more = all.length - shown.length;
 
@@ -986,15 +1064,12 @@ function PointsHero({
   snapshot,
   memberName,
   redeemedReward,
-  onRedeem,
 }: {
   snapshot: LoyaltySnapshot;
   memberName: string | null;
-  // Pulled up onto the tier card to free vertical room in the cart for
-  // more order lines. When a voucher is already applied we show a small
-  // "✓ APPLIED" pill instead of the action button.
+  // When a voucher is already applied we show a small "✓ APPLIED" pill on
+  // the tier card. The redeem action itself lives under "REDEEM YOUR POINTS".
   redeemedReward?: { name: string } | null;
-  onRedeem?: () => void;
 }) {
   const t = snapshot.tier.current;
   const theme = tierTheme(t);
@@ -1059,20 +1134,14 @@ function PointsHero({
             </Text>
           </View>
         )}
-        {/* Redeem / applied-reward pill — filled in the tier accent for a premium feel. */}
-        {onRedeem && (
+        {/* Applied-reward pill — confirms which reward is on the bill. The
+            redeem action itself now lives under "REDEEM YOUR POINTS". */}
+        {redeemedReward && (
           <View style={{ marginTop: 10, alignSelf: "flex-end" }}>
-            {redeemedReward ? (
-              <View className="flex-row items-center rounded-full px-3 py-1.5" style={{ backgroundColor: "rgba(134,239,172,0.18)", borderWidth: 1, borderColor: "rgba(134,239,172,0.5)", gap: 5 }}>
-                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: GREEN }}>✓</Text>
-                <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 11, color: GREEN, maxWidth: 170 }} numberOfLines={1}>{redeemedReward.name}</Text>
-              </View>
-            ) : (
-              <Pressable onPress={onRedeem} className="flex-row items-center rounded-full active:opacity-80" style={{ backgroundColor: theme.accent, paddingHorizontal: 14, paddingVertical: 7, gap: 6 }}>
-                <Gift size={13} color={theme.surface} />
-                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, letterSpacing: 0.8, color: theme.surface }}>REDEEM</Text>
-              </Pressable>
-            )}
+            <View className="flex-row items-center rounded-full px-3 py-1.5" style={{ backgroundColor: "rgba(134,239,172,0.18)", borderWidth: 1, borderColor: "rgba(134,239,172,0.5)", gap: 5 }}>
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: GREEN }}>✓</Text>
+              <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 11, color: GREEN, maxWidth: 170 }} numberOfLines={1}>{redeemedReward.name}</Text>
+            </View>
           </View>
         )}
       </View>
@@ -1173,20 +1242,103 @@ function PairCard({ pair }: { pair: SuggestedPair }) {
 /** Points-shop card for the ordering screen's "Redeem your Points" row. Tapping
  *  sends a redeem request to the register (which applies it to the bill). Dimmed
  *  + non-tappable when the member can't afford it yet. */
-function ShopRedeemCard({ shop, onRedeem }: { shop: ShopCard; onRedeem: () => void }) {
-  const aff = shop.affordable;
+type RewardChipData =
+  | { kind: "voucher"; id: string; name: string; source: string | null }
+  | { kind: "shop"; id: string; name: string; points: number; affordable: boolean };
+
+/** Curated "REDEEM YOUR REWARDS" row — the 3 most relevant rewards the member can
+ *  put on THIS bill, across every type (not points-only): vouchers they already
+ *  own (birthday, mystery-bag wins, promo gifts) come first, then points rewards
+ *  they can already afford, then the cheapest goals to fill the row. Tapping a card
+ *  pushes the reward to the register via the reverse channel; "More Rewards" opens
+ *  the full catalogue. */
+function AvailableRewardsRow({
+  snapshot,
+  onPick,
+  onMore,
+}: {
+  snapshot: LoyaltySnapshot;
+  onPick: (r: { rewardId: string | null; issuedRewardId: string | null; name: string }) => void;
+  onMore: () => void;
+}) {
+  const vchips: RewardChipData[] = snapshot.vouchers
+    .filter((v) => v.source_type !== "mission")
+    .map((v) => ({ kind: "voucher", id: v.id, name: v.title, source: v.source_type }));
+  const affChips: RewardChipData[] = snapshot.shop
+    .filter((s) => s.affordable)
+    .map((s) => ({ kind: "shop", id: s.id, name: s.name, points: s.points_required, affordable: true }));
+  const goalChips: RewardChipData[] = [...snapshot.shop]
+    .filter((s) => !s.affordable)
+    .sort((a, b) => a.points_required - b.points_required)
+    .map((s) => ({ kind: "shop", id: s.id, name: s.name, points: s.points_required, affordable: false }));
+  const chips = [...vchips, ...affChips, ...goalChips];
+  if (chips.length === 0) return null;
+  const top = chips.slice(0, 3);
+  const more = chips.length > 3 || snapshot.vouchers.length > 0;
+  return (
+    <View style={{ marginTop: 18 }}>
+      <Eyebrow color="rgba(251,191,36,0.85)" style={{ marginBottom: 8, letterSpacing: 1.6 }}>REDEEM YOUR REWARDS</Eyebrow>
+      {/* flex-row of flex-1 cards (top 3) so the row matches the "Pair with a
+          bite" cards above (same gap:12). */}
+      <View className="flex-row" style={{ gap: 12 }}>
+        {top.map((c) => (
+          <RewardChip
+            key={c.kind + c.id}
+            chip={c}
+            onPick={() =>
+              c.kind === "voucher"
+                ? onPick({ rewardId: null, issuedRewardId: c.id, name: c.name })
+                : onPick({ rewardId: c.id, issuedRewardId: null, name: c.name })
+            }
+          />
+        ))}
+      </View>
+      {more && (
+        <Pressable
+          onPress={onMore}
+          className="flex-row items-center justify-center rounded-2xl active:opacity-80"
+          style={{ marginTop: 10, paddingVertical: 11, backgroundColor: "rgba(251,191,36,0.10)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)", gap: 7 }}
+        >
+          <Gift size={15} color={GOLD} />
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 0.8, color: GOLD }}>MORE REWARDS</Text>
+          <ChevronRight size={15} color={GOLD} />
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+/** One card in the REDEEM YOUR REWARDS row. Owned vouchers read green
+ *  ("TAP TO USE"); affordable points rewards read gold ("TAP TO REDEEM"); goals
+ *  the member can't afford yet are dimmed ("KEEP EARNING"). */
+function RewardChip({ chip, onPick }: { chip: RewardChipData; onPick: () => void }) {
+  if (chip.kind === "voucher") {
+    return (
+      <Pressable onPress={onPick} className="rounded-2xl active:opacity-80" style={{ flex: 1, padding: 12, backgroundColor: "rgba(134,239,172,0.12)", borderWidth: 1, borderColor: "rgba(134,239,172,0.45)" }}>
+        <View className="flex-row items-center" style={{ gap: 5 }}>
+          <Gift size={13} color={GREEN} />
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 0.5, color: GREEN }} numberOfLines={1}>{voucherSource(chip.source).toUpperCase()}</Text>
+        </View>
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: CREAM, marginTop: 6 }} numberOfLines={2}>{chip.name}</Text>
+        <View className="self-start rounded-full" style={{ marginTop: 8, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: GREEN }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 0.5, color: "#06301B" }}>TAP TO USE</Text>
+        </View>
+      </Pressable>
+    );
+  }
+  const aff = chip.affordable;
   return (
     <Pressable
-      onPress={() => { if (aff) onRedeem(); }}
+      onPress={() => { if (aff) onPick(); }}
       disabled={!aff}
       className="rounded-2xl active:opacity-80"
       style={{ flex: 1, padding: 12, backgroundColor: aff ? "rgba(251,191,36,0.10)" : "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: aff ? "rgba(251,191,36,0.4)" : "rgba(245,243,240,0.12)", opacity: aff ? 1 : 0.55 }}
     >
       <View className="flex-row items-center" style={{ gap: 5 }}>
         <Coffee size={13} color={GOLD} />
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 0.5, color: GOLD }}>{shop.points_required} POINTS</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 0.5, color: GOLD }}>{chip.points} POINTS</Text>
       </View>
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: CREAM, marginTop: 6 }} numberOfLines={2}>{shop.name}</Text>
+      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: CREAM, marginTop: 6 }} numberOfLines={2}>{chip.name}</Text>
       <View className="self-start rounded-full" style={{ marginTop: 8, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: aff ? GOLD : "rgba(245,243,240,0.12)" }}>
         <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 0.5, color: aff ? DARKFG : "rgba(245,243,240,0.5)" }}>{aff ? "TAP TO REDEEM" : "KEEP EARNING"}</Text>
       </View>

@@ -282,7 +282,9 @@ class SunmiPrinterModule : Module() {
           line.printText(o.qrLabel, TextStyle.getStyle().setAlign(Align.CENTER).enableBold(true).setTextSize(24))
         }
         line.printText(" ", TextStyle.getStyle().setTextSize(8))
-        val qr = QrStyle.getStyle(); qr.setAlign(Align.CENTER); qr.setDot(6)
+        // Dot size = QR module size on the 80mm head. 10 prints a large,
+        // easy-to-scan code (review / app-download) that still fits the width.
+        val qr = QrStyle.getStyle(); qr.setAlign(Align.CENTER); qr.setDot(10)
         line.printQrCode(o.qrUrl, qr)
       }
 

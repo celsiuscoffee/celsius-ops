@@ -26,6 +26,9 @@ export type DisplayMember = {
   pointsBalance: number;
   tierName?: string | null;
   tierColor?: string | null;
+  /** First-ever visit (total_visits === 0) → greet as a new member instead
+   *  of "welcome back". */
+  isNew?: boolean;
 } | null;
 
 export type DisplayReward = { name: string; discountSen: number } | null;

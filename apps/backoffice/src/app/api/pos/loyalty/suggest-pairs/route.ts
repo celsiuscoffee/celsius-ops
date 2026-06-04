@@ -155,29 +155,36 @@ export async function POST(req: NextRequest) {
       }))
       .filter((c) => (c.prodIds.length > 0 || c.catIds.length > 0) && (c.outletIds.length === 0 || !outletId || c.outletIds.includes(outletId)));
 
-    function comboFor(candidate: Product): { savingsSen: number; label: string; id: string } | null {
+    type PromoHit = { savingsSen: number; label: string; id: string; kind: "combo" | "offer" };
+    function promoFor(candidate: Product): PromoHit | null {
       const candCat = candidate.category ?? "";
       const other = cartIds.filter((id) => id !== candidate.id);
       const cartCats = new Set(other.map((id) => byId.get(id)?.category).filter(Boolean) as string[]);
+      let offer: PromoHit | null = null; // best standalone offer (combo wins if found)
       for (const c of combos) {
-        // The candidate must COMPLETE the combo — fill a component (category or
-        // product) the cart doesn't already cover, while the cart covers a
-        // DIFFERENT component. So a "drink + roti bakar" combo suggests the
-        // roti bakar when the cart holds the drink — never another drink.
         const candCatHit = !!candCat && c.catIds.includes(candCat);
         const candProdHit = c.prodIds.includes(candidate.id);
-        const addsCat = candCatHit && !cartCats.has(candCat) && c.catIds.some((cat) => cat !== candCat && cartCats.has(cat));
-        const addsProd = candProdHit && other.some((id) => c.prodIds.includes(id));
-        if (!addsCat && !addsProd) continue;
+        if (!candCatHit && !candProdHit) continue;
         const label = c.discount_type === "percentage_off" && c.discount_value ? `${c.discount_value}% OFF`
           : c.discount_type === "fixed_amount_off" && c.discount_value ? `RM${c.discount_value} OFF`
           : c.combo_price ? "COMBO PRICE" : "COMBO";
         const savings = c.discount_type === "fixed_amount_off" && c.discount_value ? Math.round(c.discount_value * 100)
           : c.discount_type === "percentage_off" && c.discount_value ? Math.round((candidate.price_sen * c.discount_value) / 100)
           : 0;
-        return { savingsSen: savings, label, id: c.id };
+        // 1) Combo COMPLETION — the candidate fills a component the cart lacks
+        //    while the cart covers a DIFFERENT one (a real basket + saving). So a
+        //    "drink + roti bakar" combo suggests the roti bakar when the cart
+        //    holds the drink — never another drink. Strongest; returns now.
+        const addsCat = candCatHit && !cartCats.has(candCat) && c.catIds.some((cat) => cat !== candCat && cartCats.has(cat));
+        const addsProd = candProdHit && other.some((id) => c.prodIds.includes(id));
+        if (addsCat || addsProd) return { savingsSen: savings, label, id: c.id, kind: "combo" };
+        // 2) Standalone OFFER — a single-target promo (one category/product) that
+        //    discounts the candidate on its own, no second item required (e.g.
+        //    "Mocktails 20% off"). Surface it as a deal even without a combo.
+        const singleTarget = c.catIds.length + c.prodIds.length <= 1 && c.combo_price == null;
+        if (singleTarget && !offer) offer = { savingsSen: savings, label, id: c.id, kind: "offer" };
       }
-      return null;
+      return offer;
     }
 
     const round = currentRoundKey();
@@ -189,20 +196,21 @@ export async function POST(req: NextRequest) {
     const scored: Scored[] = [];
     for (const p of products) {
       if (cartSet.has(p.id) || unavailable.has(p.id)) continue;
-      const combo = comboFor(p);
+      const promo = promoFor(p);
       const isFood = FOOD_CATEGORIES.has(p.category ?? "");
       // Pure-kind cart → only suggest the complementary kind (a bite for a
-      // drinks cart, a drink for a food cart). A combo-completer always stays
-      // eligible — it's a real saving + AOV bump regardless of kind.
-      if (cartAllDrinks && !isFood && !combo) continue;
-      if (cartAllFood && isFood && !combo) continue;
+      // drinks cart, a drink for a food cart). A live PROMO (combo-completer OR a
+      // standalone offer) always stays eligible — a deal is a strong upsell
+      // regardless of kind; the complement term below still nudges toward food.
+      if (cartAllDrinks && !isFood && !promo) continue;
+      if (cartAllFood && isFood && !promo) continue;
       const co = (coScore.get(p.id) ?? 0) / maxCo;
       const usual = usualIds.has(p.id) ? 1 : 0;
       const roundN = (roundScores[p.id] ?? 0) / maxRound;
       const complement = cartIds.length > 0 ? ((preferFood && isFood) || (!preferFood && !isFood) ? 1 : 0) : 0;
 
       const score =
-        weights.combo * (combo ? 1 : 0) +
+        weights.combo * (promo ? 1 : 0) +
         weights.co * co +
         weights.usual * usual +
         weights.round * roundN +
@@ -210,8 +218,9 @@ export async function POST(req: NextRequest) {
       if (score <= 0) continue;
 
       // Reason = the strongest contributing signal (for the on-card tag).
-      const reason = combo ? "Combo deal" : usual ? "Your usual" : co > 0 ? "Often paired together" : roundN > 0 ? "Popular right now" : "You might like";
-      scored.push({ p, score, reason, discount_label: combo?.label, combo_id: combo?.id });
+      const reason = promo ? (promo.kind === "combo" ? "Combo deal" : "On offer")
+        : usual ? "Your usual" : co > 0 ? "Often paired together" : roundN > 0 ? "Popular right now" : "You might like";
+      scored.push({ p, score, reason, discount_label: promo?.label, combo_id: promo?.id });
     }
 
     scored.sort((a, b) => b.score - a.score);
