@@ -18,6 +18,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     name, code, type, phone, address, city, state, status,
     openTime, closeTime, daysOpen, isOpen, isBusy, pickupTimeMins,
     storehubId, loyaltyOutletId, pickupStoreId, lat, lng,
+    companyName, regNo,
   } = body;
   const data: Record<string, unknown> = {};
   if (name !== undefined) data.name = name;
@@ -39,6 +40,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (pickupStoreId !== undefined) data.pickupStoreId = pickupStoreId || null;
   if (lat !== undefined) data.lat = lat;
   if (lng !== undefined) data.lng = lng;
+  // Legal identity for the POS receipt — flows to the `outlets` view (read by
+  // pos-native) as company_name / reg_no. Empty string clears it.
+  if (companyName !== undefined) data.companyName = companyName || null;
+  if (regNo !== undefined) data.regNo = regNo || null;
 
   // Prisma "Outlet" is the single source of truth — views read from it automatically
   const outlet = await prisma.outlet.update({

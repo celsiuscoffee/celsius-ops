@@ -40,9 +40,6 @@ type Settings = {
   einvoice_tin:            string | null;
   einvoice_brn:            string | null;
   einvoice_sst_no:         string | null;
-  // Registered legal company name printed on the POS receipt (the SSM number
-  // prints from einvoice_brn). Blank → nothing extra prints.
-  company_name:            string | null;
   // GrabFood ordering hours — drives the serviceHours we serve to Grab. Outside
   // this window Grab shows "no menu available". 24h overrides the open/close.
   grab_open_time:          string | null;
@@ -386,19 +383,6 @@ export default function POSSettingsPage() {
           <p className="text-xs text-muted-foreground">
             SST rate is set once under <span className="font-semibold">Settings → System → SST</span> and applies to every channel (pickup + POS).
           </p>
-          <Field label="Company name (printed on receipt)">
-            <input
-              type="text"
-              value={editing.company_name ?? ""}
-              onChange={(e) => update("company_name", e.target.value)}
-              className="input"
-              placeholder="Celsius Coffee Sdn Bhd"
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Legal entity name shown on the printed receipt. The SSM number below
-              (BRN) prints beneath it. Leave blank to print neither.
-            </p>
-          </Field>
           <Field label="TIN (Tax Identification Number)">
             <input
               type="text"

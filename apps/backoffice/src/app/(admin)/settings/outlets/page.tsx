@@ -11,6 +11,7 @@ import { Plus, Pencil, Building2, Loader2, Trash2, Power } from "lucide-react";
 type Outlet = {
   id: string; code: string; name: string; type: string; status: string;
   address: string; city: string; state: string; phone: string;
+  companyName: string; regNo: string;
   staffCount: number; productCount: number;
   // New settings
   lat: number | null; lng: number | null;
@@ -25,6 +26,7 @@ type Outlet = {
 
 type OutletForm = {
   name: string; code: string; type: string; address: string; city: string; state: string; phone: string;
+  companyName: string; regNo: string;
   // Settings
   openTime: string; closeTime: string;
   pickupTimeMins: number;
@@ -34,6 +36,7 @@ type OutletForm = {
 
 const emptyForm: OutletForm = {
   name: "", code: "", type: "OUTLET", address: "", city: "", state: "", phone: "",
+  companyName: "", regNo: "",
   openTime: "", closeTime: "", pickupTimeMins: 15, storehubId: "", pickupStoreId: "",
 };
 
@@ -72,6 +75,8 @@ export default function OutletsPage() {
           address: form.address || "",
           city: form.city || "",
           state: form.state || "",
+          companyName: form.companyName || null,
+          regNo: form.regNo || null,
           openTime: form.openTime || null,
           closeTime: form.closeTime || null,
           pickupTimeMins: form.pickupTimeMins,
@@ -171,6 +176,7 @@ export default function OutletsPage() {
   const openEdit = (b: Outlet) => {
     setForm({
       name: b.name, code: b.code, type: b.type, address: b.address, city: b.city, state: b.state, phone: b.phone,
+      companyName: b.companyName || "", regNo: b.regNo || "",
       openTime: b.openTime || "", closeTime: b.closeTime || "",
       pickupTimeMins: b.pickupTimeMins ?? 15,
       storehubId: b.storehubId || "",
@@ -354,6 +360,12 @@ export default function OutletsPage() {
                 <div><label className="text-sm font-medium text-gray-700">City</label><Input className="mt-1" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
                 <div><label className="text-sm font-medium text-gray-700">State</label><Input className="mt-1" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} /></div>
               </div>
+              {/* Legal identity — printed on the POS receipt header. */}
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="text-sm font-medium text-gray-700">Company Name</label><Input className="mt-1" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} placeholder="Celsius Coffee Sdn Bhd" /></div>
+                <div><label className="text-sm font-medium text-gray-700">SSM / Reg. No.</label><Input className="mt-1" value={form.regNo} onChange={(e) => setForm({ ...form, regNo: e.target.value })} placeholder="202101012345" /></div>
+              </div>
+              <p className="-mt-1 text-xs text-gray-400">Printed on the POS receipt under the outlet name (leave blank to print neither).</p>
             </div>
           )}
 

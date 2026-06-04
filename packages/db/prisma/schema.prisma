@@ -40,6 +40,11 @@ model Outlet {
   status    OutletStatus @default(ACTIVE)
   storehubId String?     @unique
 
+  // Legal identity printed on the POS tax receipt. Exposed to the customer /
+  // POS apps through the `outlets` view as company_name / reg_no (the SSM no).
+  companyName String?
+  regNo       String?
+
   // Location & hours
   lat            Decimal?
   lng            Decimal?

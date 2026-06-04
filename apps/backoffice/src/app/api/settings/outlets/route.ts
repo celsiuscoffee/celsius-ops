@@ -43,6 +43,9 @@ export async function GET(req: NextRequest) {
     storehubId: b.storehubId ?? "",
     pickupStoreId: b.pickupStoreId ?? "",
     loyaltyOutletId: b.loyaltyOutletId ?? "",
+    // Legal identity printed on the POS receipt (outlets view → company_name/reg_no).
+    companyName: b.companyName ?? "",
+    regNo: b.regNo ?? "",
     staffCount: b._count.users,
     productCount: b._count.outletProducts,
   }));
@@ -55,7 +58,7 @@ export async function POST(req: NextRequest) {
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { name, code, type, phone, address, city, state } = body;
+  const { name, code, type, phone, address, city, state, companyName, regNo } = body;
 
   const outlet = await prisma.outlet.create({
     data: {
@@ -66,6 +69,8 @@ export async function POST(req: NextRequest) {
       address: address || "",
       city: city || "",
       state: state || "",
+      companyName: companyName || null,
+      regNo: regNo || null,
     },
   });
 
