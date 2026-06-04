@@ -110,6 +110,15 @@ export async function POST(req: NextRequest) {
     const cartFood = cartIds.filter((id) => FOOD_CATEGORIES.has(byId.get(id)?.category ?? "")).length;
     const cartDrink = cartIds.length - cartFood;
     const preferFood = cartDrink >= cartFood; // cart leans drinks → suggest food
+    // When the cart is PURELY one kind, the suggestion must be the OTHER kind —
+    // a drinks cart wants a BITE, not another coffee. This matters because the
+    // co-purchase signal is dominated by drink+drink group orders (customers buy
+    // 2–4 coffees together), so co_count for drink↔drink dwarfs drink↔food; left
+    // unchecked the strongest signal keeps suggesting more drinks and the food
+    // upsell never surfaces. Restricting the candidate pool lets co-purchase +
+    // round popularity rank WHICH bite (e.g. Latte → Roti Bakar) instead.
+    const cartAllDrinks = cartIds.length > 0 && cartFood === 0;
+    const cartAllFood = cartIds.length > 0 && cartDrink === 0;
 
     // ── Co-purchase signal: aggregate co_count across every cart item ──
     const coScore = new Map<string, number>();
@@ -180,11 +189,16 @@ export async function POST(req: NextRequest) {
     const scored: Scored[] = [];
     for (const p of products) {
       if (cartSet.has(p.id) || unavailable.has(p.id)) continue;
-      const co = (coScore.get(p.id) ?? 0) / maxCo;
       const combo = comboFor(p);
+      const isFood = FOOD_CATEGORIES.has(p.category ?? "");
+      // Pure-kind cart → only suggest the complementary kind (a bite for a
+      // drinks cart, a drink for a food cart). A combo-completer always stays
+      // eligible — it's a real saving + AOV bump regardless of kind.
+      if (cartAllDrinks && !isFood && !combo) continue;
+      if (cartAllFood && isFood && !combo) continue;
+      const co = (coScore.get(p.id) ?? 0) / maxCo;
       const usual = usualIds.has(p.id) ? 1 : 0;
       const roundN = (roundScores[p.id] ?? 0) / maxRound;
-      const isFood = FOOD_CATEGORIES.has(p.category ?? "");
       const complement = cartIds.length > 0 ? ((preferFood && isFood) || (!preferFood && !isFood) ? 1 : 0) : 0;
 
       const score =
