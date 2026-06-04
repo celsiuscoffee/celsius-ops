@@ -40,7 +40,7 @@ function buildExtractPrompt(placement: Placement): string {
     placement === "home"
       ? `Surface: Home carousel banner, ~15:14 aspect.`
       : placement === "pos-display"
-        ? `Surface: POS customer-display screen at the counter, 16:7 ultra-wide aspect.`
+        ? `Surface: POS customer-display screen at the counter, 3:4 portrait aspect (~1080×1440).`
         : `Surface: App splash screen, 9:16 portrait.`;
 
   return `You are reading an existing promotional poster for Celsius Coffee. The image contains text already baked into the pixels (headline + supporting lines). Your job is to OCR that text and return it as editable layers, MATCHING the existing visual composition as closely as possible.
@@ -98,20 +98,16 @@ function buildPrompt(objective: string, placement: Placement): string {
   • BOTTOM ~25% (y > 0.72) — a dark rounded info card overlays the lower portion (member greeting + points/vouchers card). DO NOT place text here; it will be completely hidden.
 Place text in the SAFE BAND between roughly y = 0.12 and y = 0.68.`
       : placement === "pos-display"
-        ? `Surface: POS customer-display second screen at the counter, 16:7 ultra-wide aspect. This is an in-store screen the customer reads while the cashier rings them up. No UI overlays — the whole 16:7 frame is yours.
+        ? `Surface: POS customer-display second screen at the counter, 3:4 portrait aspect (~1080×1440) — it sits beside the rewards panel. This is an in-store screen the customer reads while the cashier rings them up. No UI overlays — the whole frame is yours.
 
   AUDIENCE — the customer is physically AT the counter, deciding their order. The poster's job is to:
     (1) Drive ORDER VOLUME (e.g. "Join Points — RM10 off first order"), and / or
     (2) Drive AOV by suggesting an UPSELL or ADD-ON (e.g. "Add a croissant — RM6", "Make it large +RM2", "Buy 2 cookies, get one free").
-  Headlines should be short, price-forward, and actionable. The customer reads at ~1m distance — type can be LARGER than the home banner equivalents.
+  Headlines should be short, price-forward, and actionable. The customer reads at ~1m distance — type can be LARGE.
 
-  LAYOUT FOR ULTRA-WIDE — the 16:7 frame is short vertically and wide horizontally. Use the same "calm side opposite subject" rule, but spread the text horizontally:
-    • Subject LEFT half → text RIGHT half (anchor x ≈ 0.65-0.85), often a 3-layer vertical stack.
-    • Subject RIGHT half → text LEFT half (anchor x ≈ 0.15-0.35).
-    • Subject CENTRED → text in one of the lower thirds, never overlapping.
-  Text size can scale larger (headline 0.20-0.30) since the frame is short — a "10%" can fill most of the height.
+  LAYOUT — the frame is portrait (taller than wide). With the product filling the upper/centre, place a 2-3 layer vertical text stack in the lower portion (commonly the lower-left), never overlapping the product. Headline ≈ 0.07-0.12 of height; supporting lines ≈ 0.025-0.04.
 
-  No reserved zones. The whole 16:7 frame is yours.`
+  No reserved zones. The whole frame is yours.`
         : `Surface: App splash screen, 9:16 portrait. The poster fills the whole screen, but the customer app paints small overlays — treat these as RESERVED ZONES:
   • TOP-RIGHT corner (x > 0.78, y < 0.10) — a small circular dismiss button (countdown + ✕) sits here.
   • BOTTOM ~8% (y > 0.92) — if the poster has a deeplink, the app shows a tiny "TAP TO OPEN" caption here.

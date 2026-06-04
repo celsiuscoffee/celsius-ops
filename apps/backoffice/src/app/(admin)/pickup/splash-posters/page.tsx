@@ -43,6 +43,8 @@ type Poster = {
   // canonical anchor so AI compose can reopen on a clean image even
   // when composer_state is missing (legacy posters, designer uploads).
   original_bg_url: string | null;
+  // Day-part round for pos-display posters (breakfast..supper). NULL = always.
+  round: string | null;
 };
 
 type Form = {
@@ -62,6 +64,8 @@ type Form = {
   // Mirrors poster.original_bg_url — overwritten by Re-crop uploads,
   // preserved across AI compose saves.
   originalBgUrl: string | null;
+  // Day-part round (pos-display only). "" = always.
+  round: string;
 };
 
 // Cache-bust IMG URLs against the poster's updated_at. Browsers
@@ -96,9 +100,9 @@ const PLACEMENT_META: Record<
   },
   "pos-display": {
     label:       "POS customer screen",
-    aspect:      16 / 7,
-    aspectLabel: "16:7 ultra-wide · ~1600×700",
-    help:        "Auto-rotating banner shown on the second screen at the counter while idle. Drives sign-up + AOV upsells.",
+    aspect:      1080 / 1440,
+    aspectLabel: "3:4 portrait · ~1080×1440",
+    help:        "Auto-rotating portrait card shown beside the rewards panel on the counter's customer screen while idle. Drives sign-up + AOV upsells.",
   },
 };
 
@@ -148,6 +152,7 @@ const empty: Form = {
   placement: "home",
   composerState: null,
   originalBgUrl: null,
+  round: "",
 };
 
 // ---- Schedule helpers ---------------------------------------------------
@@ -341,6 +346,7 @@ export default function SplashPostersPage() {
       placement: p.placement ?? "home",
       composerState: p.composer_state ?? null,
       originalBgUrl: p.original_bg_url ?? null,
+      round: p.round ?? "",
     });
     setDeeplinkMode(null);
     setShowForm(true);
@@ -368,6 +374,7 @@ export default function SplashPostersPage() {
         placement:      p.placement ?? "home",
         composerState:  p.composer_state ?? null,
         originalBgUrl:  p.original_bg_url ?? null,
+        round:          p.round ?? null,
       };
       const res = await adminFetch("/api/pickup/splash-posters", {
         method: "POST",
@@ -457,6 +464,7 @@ export default function SplashPostersPage() {
         placement:     form.placement,
         composerState: form.composerState,
         originalBgUrl: form.originalBgUrl,
+        round:         form.placement === "pos-display" ? (form.round || null) : null,
       };
       const url = form.id
         ? `/api/pickup/splash-posters?id=${encodeURIComponent(form.id)}`
@@ -663,7 +671,7 @@ export default function SplashPostersPage() {
               placement === "home"
                 ? "aspect-[15/14]"
                 : placement === "pos-display"
-                  ? "aspect-[16/7]"
+                  ? "aspect-[3/4]"
                   : "aspect-[9/16]";
             const placementLabel =
               placement === "splash" ? "SPLASH" : placement === "pos-display" ? "POS" : "HOME";
@@ -690,6 +698,11 @@ export default function SplashPostersPage() {
                   <span className={`rounded-full ${placementColor} px-2 py-0.5 text-[10px] font-semibold text-white`}>
                     {placementLabel}
                   </span>
+                  {p.round && (
+                    <span className="rounded-full bg-orange-500 px-2 py-0.5 text-[10px] font-semibold capitalize text-white">
+                      {p.round}
+                    </span>
+                  )}
                   {/* Schedule status pill — replaces the bare ACTIVE
                       pill with one that conveys the real live state:
                       LIVE NOW, SCHEDULED · Apr 12, EXPIRED · Mar 30,
@@ -847,8 +860,8 @@ export default function SplashPostersPage() {
                 <label className="text-xs font-medium text-gray-700">
                   Where it shows
                 </label>
-                <div className="mt-1 grid grid-cols-2 gap-2">
-                  {(["splash", "home"] as Placement[]).map((p) => {
+                <div className="mt-1 grid grid-cols-3 gap-2">
+                  {(["splash", "home", "pos-display"] as Placement[]).map((p) => {
                     const meta = PLACEMENT_META[p];
                     const selected = form.placement === p;
                     return (
@@ -866,7 +879,7 @@ export default function SplashPostersPage() {
                             // a one-shot flash so 2.5s feels brand-new.
                             durationMs:
                               !f.id && (f.durationMs === 2500 || f.durationMs === 4500 || f.durationMs === 5000)
-                                ? p === "home" ? 5000 : 2500
+                                ? p === "splash" ? 2500 : 5000
                                 : f.durationMs,
                           }))
                         }
@@ -877,7 +890,7 @@ export default function SplashPostersPage() {
                         }`}
                       >
                         <p className={`text-sm font-semibold ${selected ? "text-terracotta" : "text-gray-900"}`}>
-                          {p === "splash" ? "Splash" : "Home"}
+                          {p === "splash" ? "Splash" : p === "pos-display" ? "POS screen" : "Home"}
                         </p>
                         <p className="mt-0.5 text-[10px] text-gray-500 leading-tight">
                           {meta.aspectLabel}
@@ -890,6 +903,29 @@ export default function SplashPostersPage() {
                   {PLACEMENT_META[form.placement].help}
                 </p>
               </div>
+
+              {form.placement === "pos-display" && (
+                <div>
+                  <label className="text-xs font-medium text-gray-700">Round (time of day)</label>
+                  <select
+                    value={form.round}
+                    onChange={(e) => setForm((f) => ({ ...f, round: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="">Always — show in every round</option>
+                    <option value="breakfast">Breakfast · 8–10AM</option>
+                    <option value="brunch">Brunch · 10AM–12PM</option>
+                    <option value="lunch">Lunch · 12–3PM</option>
+                    <option value="midday">Midday · 3–5PM</option>
+                    <option value="evening">Evening · 5–7PM</option>
+                    <option value="dinner">Dinner · 7–9PM</option>
+                    <option value="supper">Supper · 9–11PM</option>
+                  </select>
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Only shows on the customer screen during this day-part. &quot;Always&quot; shows in every round.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-medium text-gray-700">

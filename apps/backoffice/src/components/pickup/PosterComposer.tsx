@@ -99,7 +99,7 @@ function shadowParams(strength: number, fontPx: number) {
 const OUTPUT: Record<Placement, { w: number; h: number; previewMax: { w: number; h: number } }> = {
   splash:        { w: 1080, h: 1920, previewMax: { w: 270, h: 480 } },
   home:          { w: 1200, h: 1120, previewMax: { w: 380, h: 355 } },
-  "pos-display": { w: 1600, h:  700, previewMax: { w: 540, h: 236 } },
+  "pos-display": { w: 1080, h: 1440, previewMax: { w: 300, h: 400 } },
 };
 
 type Props = {

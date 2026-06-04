@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
       starts_at:   body.startsAt ?? null,
       ends_at:     body.endsAt ?? null,
       placement,
+      round:       body.round ?? null,
       composer_state:  body.composerState ?? null,
       original_bg_url: body.originalBgUrl ?? null,
     } as Record<string, unknown>)
@@ -78,6 +79,7 @@ export async function PATCH(request: NextRequest) {
   if ("deeplink"       in body) updates.deeplink        = body.deeplink;
   if ("durationMs"     in body) updates.duration_ms     = body.durationMs;
   if ("active"         in body) updates.active          = Boolean(body.active);
+  if ("round"          in body) updates.round           = body.round || null;
   if ("startsAt"       in body) updates.starts_at       = body.startsAt;
   if ("endsAt"         in body) updates.ends_at         = body.endsAt;
   if ("composerState"  in body) updates.composer_state  = body.composerState;
