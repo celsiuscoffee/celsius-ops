@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /**
  * Product catalog for the register. Read directly from Supabase with
@@ -88,7 +89,7 @@ function parseModifiers(raw: unknown): ModifierGroup[] {
     .filter((g) => g.options.length > 0);
 }
 
-export async function fetchCategories(): Promise<Category[]> {
+async function loadCategoriesDb(): Promise<Category[]> {
   const { data, error } = await supabase
     .from("categories")
     .select("id, name, slug, position")
@@ -104,7 +105,7 @@ export async function fetchCategories(): Promise<Category[]> {
  *  (e.g. "shah-alam") — are overlaid as `available=false` so the register can
  *  GREY them out instead of hiding, matching StoreHub + the pickup app + Grab.
  *  Pass the resolved store_id; omit it and everything reads as available. */
-export async function fetchProducts(storeId?: string | null): Promise<Product[]> {
+async function loadProductsDb(storeId?: string | null): Promise<Product[]> {
   const [{ data, error }, oosRes] = await Promise.all([
     supabase
       .from("products")
@@ -142,6 +143,38 @@ export async function fetchProducts(storeId?: string | null): Promise<Product[]>
     modifiers: parseModifiers(p.modifiers),
     available: !oos.has(p.id),
   }));
+}
+
+// ── Read-through cache (cold-boot offline resilience) ────────────────────────
+// The register normally loads the menu online on launch. If a cold reboot
+// happens DURING an outage the DB read fails, so we fall back to the last menu
+// cached on disk; online loads refresh it. Per-outlet "86" availability in the
+// cache may be stale during an outage — acceptable.
+const MENU_CACHE_CATEGORIES = "pos.menu.categories.v1";
+const MENU_CACHE_PRODUCTS = "pos.menu.products.v1";
+
+export async function fetchCategories(): Promise<Category[]> {
+  try {
+    const cats = await loadCategoriesDb();
+    void AsyncStorage.setItem(MENU_CACHE_CATEGORIES, JSON.stringify(cats));
+    return cats;
+  } catch (e) {
+    const cached = await AsyncStorage.getItem(MENU_CACHE_CATEGORIES).catch(() => null);
+    if (cached) return JSON.parse(cached) as Category[];
+    throw e;
+  }
+}
+
+export async function fetchProducts(storeId?: string | null): Promise<Product[]> {
+  try {
+    const products = await loadProductsDb(storeId);
+    void AsyncStorage.setItem(MENU_CACHE_PRODUCTS, JSON.stringify(products));
+    return products;
+  } catch (e) {
+    const cached = await AsyncStorage.getItem(MENU_CACHE_PRODUCTS).catch(() => null);
+    if (cached) return JSON.parse(cached) as Product[];
+    throw e;
+  }
 }
 
 // Food/snack categories used as "pair with a bite" upsell suggestions on

@@ -6,6 +6,7 @@ import {
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Minus, LogOut, X, CheckCircle2,
@@ -22,7 +23,11 @@ import { fetchCategories, fetchProducts, type Product, type ModifierOption } fro
 import { useCart, cartSubtotal, type CartLine } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
 import { createSale, getNextQueueNumber } from "@/lib/checkout";
+import { startSyncLoop } from "@/lib/sale-sync";
+import { getOnline, subscribeOnline } from "@/lib/connectivity";
+import { subscribePending, pendingCount } from "@/lib/offline-queue";
 import { useSettings, gridColumns, serviceChargeRate, receiptConfig, tableZones } from "@/lib/settings";
+import { useGridPrefs } from "@/lib/grid-prefs";
 import { useTablesPanel, type TableSlot, type TableOrderRef } from "@/lib/use-tables-panel";
 import { useOrdersPanel, type KdsOrder } from "@/lib/use-orders-panel";
 import { useOrderHistory, type HistoryOrder, type HistoryChannel } from "@/lib/use-order-history";
@@ -31,7 +36,7 @@ import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/printer";
 import { outletFull, outletShort } from "@/lib/outlets";
 import {
   lookupMember, fetchRewards, fetchUsual, redeemReward, computeRewardDiscount,
-  computeTierDiscount, evaluatePromotions, posOrderComplete,
+  computeTierDiscount, evaluatePromotions,
   fetchSuggestedPairs, fetchSnapshot, claimMystery,
   type Member, type RewardsResponse, type IssuedVoucher, type CatalogReward, type RedeemDiscount, type UsualItem, type AppliedPromo,
   type SuggestedPair, type ClaimableCard, type MysteryReveal, type ShopCard,
@@ -132,6 +137,9 @@ export default function Register() {
   // Shift open/close UI.
   const [showShift, setShowShift] = useState(false);
   const [shiftBusy, setShiftBusy] = useState(false);
+  // Offline / sync status for the header chip (lib/connectivity + offline-queue).
+  const [online, setOnline] = useState(getOnline());
+  const [pendingSales, setPendingSales] = useState(0);
   const [liveTotals, setLiveTotals] = useState<ShiftTotals | null>(null);
   const [closedSummary, setClosedSummary] = useState<ShiftTotals | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -226,6 +234,13 @@ export default function Register() {
     }
     return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [tableSlots]);
+  // The tapped table's LIVE slot, re-derived from tableSlots so its detail
+  // reflects Realtime status changes (a row marked Done updates immediately
+  // rather than showing the stale snapshot captured at tap time).
+  const liveSelectedTable = useMemo<TableSlot | null>(() => {
+    if (!selectedTable) return null;
+    return tableSlots.find((s) => s.label === selectedTable.label && s.zone === selectedTable.zone) ?? selectedTable;
+  }, [selectedTable, tableSlots]);
   // Live Grab + Pickup order feed for the on-register KDS (Orders modal).
   // Mounted persistently so it keeps catching up + receiving Realtime even
   // while the modal is closed (drives the header badge count).
@@ -234,6 +249,18 @@ export default function Register() {
   // time the tab is opened so the counter always sees the latest day's sales.
   const { orders: historyOrders, loading: historyLoading, reload: reloadHistory } = useOrderHistory(outletId);
   useEffect(() => { if (hub === "history") void reloadHistory(); }, [hub, reloadHistory]);
+  // Start the offline-sale sync loop once — drains the local buffer to the cloud
+  // on reconnect / foreground / interval (see lib/sale-sync.ts) — and subscribe
+  // to online + pending-sales state for the header chip.
+  useEffect(() => {
+    startSyncLoop();
+    void useGridPrefs.getState().load();
+    const offOnline = subscribeOnline(setOnline);
+    const offPending = subscribePending(setPendingSales);
+    void pendingCount();
+    return () => { offOnline(); offPending(); };
+  }, []);
+
   // Drop any selected-table detail when the panel closes or switches tab.
   useEffect(() => { if (hub !== "tables") setSelectedTable(null); }, [hub]);
 
@@ -268,6 +295,24 @@ export default function Register() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadOrders, shift, shiftLoading]);
+
+  // Mark a QR-table self-order served/done. QR dine-in orders are `orders`
+  // rows (order_type=dine_in); the service-role route flips status→completed,
+  // which lights up the guest's "Served" step and re-buckets the table.
+  const markTableOrderDone = useCallback(async (order: TableOrderRef) => {
+    if (!shiftLoading && !shift) { promptOpenStore(); return; }
+    setBumpingUid(`qr:${order.id}`);
+    try {
+      await apiPost("/api/pos/order-status", { source: "qr", id: order.id, status: "completed" });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // useTablesPanel's Realtime sub re-buckets the slot automatically.
+    } catch (e) {
+      alert(`Couldn't mark ${order.orderNumber} done.\n${e instanceof Error ? e.message : "Check the connection and try again."}`);
+    } finally {
+      setBumpingUid(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shift, shiftLoading]);
 
   // ── Open Store (cashier shift) open/close ──
   const openShiftModal = useCallback(() => {
@@ -389,6 +434,7 @@ export default function Register() {
   const remove = useCart((s) => s.remove);
   const setLineDiscount = useCart((s) => s.setLineDiscount);
   const setLineNote = useCart((s) => s.setLineNote);
+  const setLineTakeaway = useCart((s) => s.setLineTakeaway);
   const clear = useCart((s) => s.clear);
   // Cart line editor sheet — tap any line in the cart to open. From
   // here the cashier can adjust qty, apply a per-line discount, or
@@ -513,7 +559,13 @@ export default function Register() {
   // app_settings.sst the pickup app also reads.
   const sstAmount = sstCfg.enabled ? Math.round(afterDiscount * sstCfg.rate) : 0;
   const total = afterDiscount + sstAmount;
-  const cols = gridColumns(settings);
+  // The "All" tab can be compacted independently (more columns + shorter/no
+  // product image) via on-device prefs (lib/grid-prefs) so the full catalogue
+  // scrolls less; every other category keeps the BO grid_columns + square cards.
+  const allCols = useGridPrefs((s) => s.allColumns);
+  const allImg = useGridPrefs((s) => s.allImageHeight);
+  const gridPrefsLoaded = useGridPrefs((s) => s.loaded);
+  const cols = activeCat === "all" ? allCols : gridColumns(settings);
 
   const { width: screenW } = useWindowDimensions();
   const GRID_PAD = 12, GRID_GAP = 10;
@@ -872,6 +924,7 @@ export default function Register() {
         queueNumber,
         customerPhone: member?.phone ?? null,
         loyaltyPhone: member?.phone ?? null,
+        memberId: member?.id ?? null,
         // For a deferred catalog reward this is the catalog reward id, which
         // /api/pos/loyalty/complete looks up to burn the Beans now that payment
         // is confirmed. For an issued voucher it's the (already-committed)
@@ -903,11 +956,10 @@ export default function Register() {
       useDisplay.getState().setBeansEarned(orderBeans);   // member's earned, or a guest's claimable potential
       setDisplayStatus("complete");
       setPaid({ orderNumber: sale.orderNumber, total: sale.total, beansEarned, beansBalance });
-      // Loyalty order-hooks for this in-store sale: award Beans, re-eval tier,
-      // and spawn the Mystery Bean. Fire-and-forget + server-idempotent so it
-      // never blocks checkout; the customer display polls the snapshot and
-      // reveals the freshly-spawned drop beside the thank-you.
-      if (member?.id) void posOrderComplete(member.id, sale.id);
+      // Loyalty order-hooks (award points, re-eval tier, spawn Mystery Bean)
+      // are fired by the sale-sync AFTER the order confirms to the cloud — see
+      // lib/sale-sync.ts. Deferring there means an offline sale still earns on
+      // reconnect, and the hook never runs before the order row exists.
       clear();
       setShowCheckout(false);
 
@@ -940,6 +992,8 @@ export default function Register() {
             modifiers: l.modifiers.map((m) => ({ name: m.name })),
             kitchen_station: l.product.kitchen_station ?? null,
             notes: l.note ?? null,
+            // Per-line fulfilment so the docket tags DINE-IN vs TO-GO items.
+            fulfillment: (orderType === "takeaway" || l.takeaway) ? "takeaway" : "dine_in",
           };
         }),
         pos_order_payments: [{ payment_method: method, amount: sale.total }],
@@ -983,12 +1037,23 @@ export default function Register() {
             <View>
               <Text className="text-cream text-base" style={{ fontFamily: "Peachi-Bold" }}>Celsius POS</Text>
               <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                {staff?.staffName ?? ""} · {outletShort(outletId)}
+                {outletShort(outletId)}
               </Text>
             </View>
             {/* Order type is chosen at checkout now — no upfront toggle here. */}
           </View>
           <View className="flex-row items-center gap-2">
+            {/* Offline / sync chip — only shows when disconnected or while a
+                buffered sale is still draining. Sales + dockets keep working
+                offline; this just tells staff their cloud sync is behind. */}
+            {(!online || pendingSales > 0) && (
+              <View className="flex-row items-center gap-2 px-3 py-2 rounded-xl" style={{ backgroundColor: online ? "rgba(251,191,36,0.18)" : "rgba(239,68,68,0.20)" }}>
+                <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: online ? "#FBBF24" : "#EF4444" }} />
+                <Text className="text-cream/90 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                  {!online ? (pendingSales > 0 ? `Offline · ${pendingSales} queued` : "Offline") : `Syncing ${pendingSales}…`}
+                </Text>
+              </View>
+            )}
             {/* Open Store — the cashier shift. Green dot = store open, amber =
                 closed. Scheduled staff auto-open on login; tap to open manually
                 (manager / off-schedule) or to close with an end-of-shift summary. */}
@@ -1017,9 +1082,19 @@ export default function Register() {
             <Pressable onPress={() => { Haptics.selectionAsync(); router.push("/settings"); }} className="h-10 w-10 items-center justify-center rounded-xl border border-cream/15 active:opacity-60">
               <SettingsIcon size={18} color="rgba(245,243,240,0.7)" />
             </Pressable>
-            <Pressable onPress={() => { signOut(); router.replace("/"); }} className="flex-row items-center gap-2 px-3 py-2 rounded-xl border border-cream/15 active:opacity-60">
-              <LogOut size={16} color="rgba(245,243,240,0.7)" />
-              <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Sign out</Text>
+            {/* Account chip — the cashier's name lives on the sign-out control
+                itself (amber-tinted so it stands out) so on a shift change the
+                incoming cashier instantly sees whose account is open and taps to
+                switch. Tap = sign out → login. */}
+            <Pressable onPress={() => { Haptics.selectionAsync(); signOut(); router.replace("/"); }} className="flex-row items-center gap-2 px-3 py-2 rounded-xl border active:opacity-60" style={{ borderColor: "rgba(251,191,36,0.45)", backgroundColor: "rgba(251,191,36,0.10)" }}>
+              <View className="h-6 w-6 rounded-full items-center justify-center" style={{ backgroundColor: "rgba(251,191,36,0.22)" }}>
+                <User size={14} color="#FBBF24" />
+              </View>
+              <Text className="text-cream text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold" }} numberOfLines={1}>{staff?.staffName ?? "Cashier"}</Text>
+              <View className="flex-row items-center gap-1.5 ml-1 pl-2.5" style={{ borderLeftWidth: 1, borderLeftColor: "rgba(245,243,240,0.18)" }}>
+                <LogOut size={15} color="rgba(245,243,240,0.7)" />
+                <Text className="text-cream/60 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Sign out</Text>
+              </View>
             </Pressable>
           </View>
         </View>
@@ -1059,7 +1134,7 @@ export default function Register() {
             (5) arrived and the FlatList re-mounted via key change, making
             the tiles visibly snap from 4-wide to 5-wide. */}
         <View className="flex-1">
-          {prods.isLoading || !settings ? (
+          {prods.isLoading || !settings || !gridPrefsLoaded ? (
             <View className="flex-1 items-center justify-center"><ActivityIndicator color="#FBBF24" /></View>
           ) : (
             <FlatList
@@ -1071,7 +1146,7 @@ export default function Register() {
               contentContainerStyle={{ padding: GRID_PAD, paddingBottom: 32 }}
               columnWrapperStyle={{ gap: GRID_GAP, justifyContent: "flex-start" }}
               ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
-              renderItem={({ item }) => <ProductTile product={item} width={tileW} onPress={() => onAdd(item)} onLongPress={() => promptAvailability(item)} />}
+              renderItem={({ item }) => <ProductTile product={item} width={tileW} imageHeight={activeCat === "all" ? allImg : null} onPress={() => onAdd(item)} onLongPress={() => promptAvailability(item)} />}
               ListEmptyComponent={<Text className="text-cream/30 text-center mt-10" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>No items here yet.</Text>}
               removeClippedSubviews
               initialNumToRender={16}
@@ -1261,11 +1336,32 @@ export default function Register() {
               const lineDisc = item.line_discount_sen ?? 0;
               const net = Math.max(0, gross - lineDisc);
               return (
-                // Tap anywhere on the line (except the +/- steppers) to
-                // open the line editor — qty, discount, remove.
+                // Swipe the line left to reveal a quick Remove action; tap
+                // anywhere on the line (except the +/- steppers) to open the
+                // line editor — qty, discount, remove.
+                <ReanimatedSwipeable
+                  friction={1.6}
+                  rightThreshold={44}
+                  overshootRight={false}
+                  renderRightActions={() => (
+                    // Leading gap (panel-coloured) keeps the action off the price;
+                    // the box is a rounded chip with a little vertical inset.
+                    <View className="flex-row items-stretch" style={{ paddingLeft: 16, backgroundColor: "#1A0A02" }}>
+                      <Pressable
+                        onPress={() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); remove(item.key); }}
+                        className="items-center justify-center active:opacity-80"
+                        style={{ width: 90, backgroundColor: "#DC2626", borderRadius: 16, marginVertical: 6 }}
+                      >
+                        <Trash2 size={22} color="#fff" />
+                        <Text className="text-white mt-1" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10.5, letterSpacing: 0.6 }}>REMOVE</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                >
                 <Pressable
                   onPress={() => { Haptics.selectionAsync(); setEditLineKey(item.key); }}
                   className="flex-row items-center py-3 border-b border-border active:opacity-70"
+                  style={{ backgroundColor: "#1A0A02" }}
                 >
                   <View className="flex-1 pr-2">
                     <Text className="text-cream text-[13px]" style={{ fontFamily: "Peachi-Medium" }} numberOfLines={1}>{item.product.name}</Text>
@@ -1274,6 +1370,11 @@ export default function Register() {
                     )}
                     <View className="flex-row items-center" style={{ gap: 6 }}>
                       <Text className="text-cream/55 text-[11px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{rm(item.unit_sen)}</Text>
+                      {item.takeaway && (
+                        <View className="rounded-full mt-0.5 px-2 py-0.5" style={{ backgroundColor: "rgba(249,115,22,0.16)", borderWidth: 1, borderColor: "rgba(249,115,22,0.5)" }}>
+                          <Text className="text-[9.5px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#F97316", letterSpacing: 0.4 }}>TO-GO</Text>
+                        </View>
+                      )}
                       {lineDisc > 0 && (
                         <View className="rounded-full mt-0.5 px-2 py-0.5" style={{ backgroundColor: "rgba(134,239,172,0.14)", borderWidth: 1, borderColor: "rgba(134,239,172,0.4)" }}>
                           <Text className="text-[9.5px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: OK, letterSpacing: 0.4 }}>−{rm(lineDisc)} OFF</Text>
@@ -1293,6 +1394,7 @@ export default function Register() {
                     <Text className="text-cream text-[13px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(net)}</Text>
                   </View>
                 </Pressable>
+                </ReanimatedSwipeable>
               );
             }}
           />
@@ -1508,8 +1610,8 @@ export default function Register() {
                       </ScrollView>
                     )}
                     {/* Tapped-table detail — the consolidated QR self-order view. */}
-                    {selectedTable && selectedTable.orders.length > 0 && (
-                      <TableOrdersDetail slot={selectedTable} onClose={() => setSelectedTable(null)} />
+                    {liveSelectedTable && liveSelectedTable.orders.length > 0 && (
+                      <TableOrdersDetail slot={liveSelectedTable} busyId={bumpingUid} onDone={markTableOrderDone} onClose={() => setSelectedTable(null)} />
                     )}
                     {/* Floor-plan canvas: the saved template (tables at their
                         normalised positions). Tap a busy table for its order(s). */}
@@ -2011,6 +2113,7 @@ export default function Register() {
               onRemove={() => { remove(line.key); setEditLineKey(null); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); }}
               onSetDiscount={(sen) => { setLineDiscount(line.key, sen); }}
               onSetNote={(note) => { setLineNote(line.key, note); }}
+              onToggleTakeaway={(takeaway) => { setLineTakeaway(line.key, takeaway); }}
             />
           );
         })()}
@@ -2355,10 +2458,16 @@ function ChannelFilter({
   );
 }
 
+/** Statuses where a QR self-order is already finished — no Done action; we
+ *  show a static "Served" marker instead. */
+const TABLE_ORDER_DONE_RE = /done|complete|served|cancel|refund|void|fail/i;
+
 /** Detail card for a tapped table — its live order(s). This is the
  *  consolidated QR self-order view: instead of a separate tab, you tap the
- *  table on the floor plan to see what guests self-ordered on it. */
-function TableOrdersDetail({ slot, onClose }: { slot: TableSlot; onClose: () => void }) {
+ *  table on the floor plan to see what guests self-ordered on it. Each live
+ *  QR self-order gets a Done button to mark it served (status → completed,
+ *  which also advances the guest's order-tracker to "Served"). */
+function TableOrdersDetail({ slot, busyId, onDone, onClose }: { slot: TableSlot; busyId: string | null; onDone: (order: TableOrderRef) => void; onClose: () => void }) {
   return (
     <View className="rounded-2xl border p-4 mb-3" style={{ borderColor: "rgba(251,191,36,0.4)", backgroundColor: "rgba(251,191,36,0.08)" }}>
       <View className="flex-row items-center justify-between mb-2.5">
@@ -2366,19 +2475,51 @@ function TableOrdersDetail({ slot, onClose }: { slot: TableSlot; onClose: () => 
         <Pressable onPress={onClose} className="active:opacity-60"><X size={18} color="rgba(245,243,240,0.7)" /></Pressable>
       </View>
       <View style={{ gap: 8 }}>
-        {slot.orders.map((o) => (
-          <View key={o.id} className="flex-row items-center rounded-xl px-3 py-2.5" style={{ gap: 8, backgroundColor: "rgba(245,243,240,0.05)" }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: o.source === "qr" ? "#3B82F6" : "#FBBF24" }} />
-            <Text className="text-cream text-sm flex-1" style={{ fontFamily: "SpaceGrotesk_700Bold" }} numberOfLines={1}>{o.orderNumber}</Text>
-            <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-              {new Date(o.createdAt).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })}
-            </Text>
-            <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: "rgba(245,243,240,0.08)" }}>
-              <Text className="text-cream/70 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{o.status}</Text>
+        {slot.orders.map((o) => {
+          const done = TABLE_ORDER_DONE_RE.test(o.status);
+          const busy = busyId === `qr:${o.id}`;
+          return (
+            <View key={o.id} className="flex-row items-center rounded-xl px-3 py-2.5" style={{ gap: 8, backgroundColor: "rgba(245,243,240,0.05)" }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: o.source === "qr" ? "#3B82F6" : "#FBBF24" }} />
+              <Text className="text-cream text-sm flex-1" style={{ fontFamily: "SpaceGrotesk_700Bold" }} numberOfLines={1}>{o.orderNumber}</Text>
+              <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                {new Date(o.createdAt).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })}
+              </Text>
+              <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: "rgba(245,243,240,0.08)" }}>
+                <Text className="text-cream/70 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{o.status}</Text>
+              </View>
+              <Text className="text-cream text-sm w-[68px] text-right" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(o.total)}</Text>
+              {/* Done = mark this QR self-order served. Register orders (pos)
+                  are already completed at ring-up, so only QR rows get it. */}
+              {o.source === "qr" ? (
+                done ? (
+                  <View className="flex-row items-center justify-end" style={{ width: 104, gap: 4 }}>
+                    <CheckCircle2 size={15} color="#22C55E" />
+                    <Text className="text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#22C55E", letterSpacing: 0.4 }}>SERVED</Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => onDone(o)}
+                    disabled={busy}
+                    className="flex-row items-center justify-center rounded-full active:opacity-80"
+                    style={{ width: 104, paddingVertical: 8, gap: 5, backgroundColor: "#22C55E", opacity: busy ? 0.6 : 1 }}
+                  >
+                    {busy ? (
+                      <ActivityIndicator size="small" color="#0A2A12" />
+                    ) : (
+                      <>
+                        <CheckCircle2 size={15} color="#0A2A12" />
+                        <Text className="text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#0A2A12", letterSpacing: 0.4 }}>DONE</Text>
+                      </>
+                    )}
+                  </Pressable>
+                )
+              ) : (
+                <View style={{ width: 104 }} />
+              )}
             </View>
-            <Text className="text-cream text-sm" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(o.total)}</Text>
-          </View>
-        ))}
+          );
+        })}
       </View>
     </View>
   );
@@ -2524,6 +2665,7 @@ function LineEditorSheet({
   onRemove,
   onSetDiscount,
   onSetNote,
+  onToggleTakeaway,
 }: {
   line: CartLine;
   onClose: () => void;
@@ -2532,6 +2674,7 @@ function LineEditorSheet({
   onRemove: () => void;
   onSetDiscount: (sen: number) => void;
   onSetNote: (note: string) => void;
+  onToggleTakeaway: (takeaway: boolean) => void;
 }) {
   const lineGross = line.unit_sen * line.qty;
   const currentDisc = line.line_discount_sen ?? 0;
@@ -2587,6 +2730,19 @@ function LineEditorSheet({
             <Text className="text-cream w-10 text-center text-lg" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{line.qty}</Text>
             <Stepper icon={<Plus size={18} color="#F5F3F0" />} onPress={() => { Haptics.selectionAsync(); onInc(); }} />
           </View>
+        </View>
+
+        {/* Takeaway — pack this one item to-go even on a dine-in order, so a
+            single bill can mix dine-in + takeaway (the to-go items get a cup +
+            lid; the kitchen docket tags each line). */}
+        <View className="flex-row items-center justify-between rounded-2xl px-4 py-3" style={{ backgroundColor: line.takeaway ? "rgba(249,115,22,0.12)" : "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: line.takeaway ? "rgba(249,115,22,0.45)" : "rgba(245,243,240,0.10)" }}>
+          <View>
+            <Text className="text-cream/60 text-xs uppercase tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Takeaway</Text>
+            <Text className="text-cream/40 text-[11px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Pack this item to-go</Text>
+          </View>
+          <Pressable onPress={() => { Haptics.selectionAsync(); onToggleTakeaway(!line.takeaway); }} className="rounded-full active:opacity-80" style={{ width: 58, height: 32, padding: 3, justifyContent: "center", backgroundColor: line.takeaway ? "#F97316" : "rgba(245,243,240,0.16)" }}>
+            <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: "#fff", transform: [{ translateX: line.takeaway ? 26 : 0 }] }} />
+          </Pressable>
         </View>
 
         {/* Discount editor */}
@@ -2808,23 +2964,36 @@ function ColorTab({ label, color, width, active, onPress }: { label: string; col
   );
 }
 
-function ProductTile({ product, width, onPress, onLongPress }: { product: Product; width: number; onPress: () => void; onLongPress?: () => void }) {
+// imageHeight: null = square image (default for category tabs); a number sets a
+// fixed image height (All-tab compact mode); 0 = no image (text-only card).
+function ProductTile({ product, width, imageHeight = null, onPress, onLongPress }: { product: Product; width: number; imageHeight?: number | null; onPress: () => void; onLongPress?: () => void }) {
   const oos = product.available === false;
+  const showImage = imageHeight === null || imageHeight > 0;
+  // McD-style: in the compact All-tab layout, colour-code every tile by its
+  // category (a top stripe, thicker when the image is off) so the dense grid
+  // is scannable by colour block — like the McDonald's NCR registers.
+  const accent = imageHeight === null ? null : catColor(product.category, 0);
+  const compact = imageHeight !== null; // All-tab mode — name only, no price
   return (
-    <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={350} className="rounded-2xl overflow-hidden border border-border active:opacity-70" style={{ width, backgroundColor: "rgba(245,243,240,0.04)" }}>
-      <View className="aspect-square w-full bg-cream/5">
-        {product.image_url ? <Image source={{ uri: product.image_url }} className="w-full h-full" resizeMode="cover" style={oos ? { opacity: 0.35 } : undefined} /> : null}
-        {oos && (
-          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(22,8,0,0.5)" }}>
-            <View style={{ backgroundColor: "#E5484D", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: "#fff", letterSpacing: 0.4 }}>OUT OF STOCK</Text>
+    <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={350} className="rounded-2xl overflow-hidden border border-border active:opacity-70" style={{ width, backgroundColor: "rgba(245,243,240,0.04)", opacity: oos && !showImage ? 0.55 : 1 }}>
+      {accent && <View style={{ height: showImage ? 9 : 16, backgroundColor: accent }} />}
+      {showImage && (
+        <View className={imageHeight === null ? "aspect-square w-full bg-cream/5" : "w-full bg-cream/5"} style={imageHeight === null ? undefined : { height: imageHeight }}>
+          {product.image_url ? <Image source={{ uri: product.image_url }} className="w-full h-full" resizeMode="cover" style={oos ? { opacity: 0.35 } : undefined} /> : null}
+          {oos && (
+            <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(22,8,0,0.5)" }}>
+              <View style={{ backgroundColor: "#E5484D", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: "#fff", letterSpacing: 0.4 }}>OUT OF STOCK</Text>
+              </View>
             </View>
-          </View>
-        )}
-      </View>
+          )}
+        </View>
+      )}
       <View className="px-2 py-2">
-        <Text className="text-cream text-[12px]" style={{ fontFamily: "Peachi-Medium", opacity: oos ? 0.5 : 1 }} numberOfLines={2}>{product.name}</Text>
-        <Text className="text-amber-400 text-[12px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_700Bold", opacity: oos ? 0.5 : 1 }}>{rm(product.price_sen)}</Text>
+        <Text className="text-cream" style={{ fontFamily: "Peachi-Medium", fontSize: compact ? 11 : 12, lineHeight: compact ? 13.5 : undefined, opacity: oos ? 0.5 : 1 }} numberOfLines={compact ? undefined : 2}>{product.name}{compact && oos ? "  · 86" : ""}</Text>
+        {!compact && (
+          <Text className="text-amber-400 text-[12px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_700Bold", opacity: oos ? 0.5 : 1 }}>{rm(product.price_sen)}</Text>
+        )}
       </View>
     </Pressable>
   );

@@ -18,6 +18,10 @@ import { supabase } from "./supabase";
 const WINDOW_MS = 6 * 60 * 60 * 1000; // map the last 6h of table activity
 // Drop dead orders so a cancelled/failed attempt doesn't linger on a table.
 const DEAD = new Set(["cancelled", "failed", "refunded", "voided"]);
+// Finished orders fall off the ACTIVE view too — once served/collected the
+// cashier is done with them (they remain in the History tab). This keeps the
+// Tables/Orders panel (and its counts + badge) to orders still in progress.
+const DONE = new Set(["completed", "served", "collected", "fulfilled"]);
 
 export type TableOrderRef = {
   id: string;
@@ -59,7 +63,7 @@ type Row = {
 function toRefs(rows: Row[] | null, source: "qr" | "pos"): TableOrderRef[] {
   const out: TableOrderRef[] = [];
   for (const r of rows ?? []) {
-    if (DEAD.has(r.status)) continue;
+    if (DEAD.has(r.status) || DONE.has(r.status)) continue;
     const k = tableKey(r.table_number);
     if (!k) continue;
     out.push({

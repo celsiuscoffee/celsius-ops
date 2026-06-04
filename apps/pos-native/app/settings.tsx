@@ -4,10 +4,11 @@ import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Constants from "expo-constants";
 import {
-  ChevronLeft, Printer, LayoutGrid, Receipt, FileText, Store, RefreshCw, CheckCircle2, AlertCircle, ExternalLink,
+  ChevronLeft, Printer, LayoutGrid, Receipt, FileText, Store, RefreshCw, CheckCircle2, AlertCircle, ExternalLink, Minus, Plus,
 } from "lucide-react-native";
 import { usePos } from "@/lib/store";
 import { useSettings } from "@/lib/settings";
+import { useGridPrefs, ALL_COLS_MIN, ALL_COLS_MAX, ALL_IMG_MIN, ALL_IMG_MAX, ALL_IMG_STEP } from "@/lib/grid-prefs";
 import { outletShort, outletFull } from "@/lib/outlets";
 import { getPrinterStatus, reconnectPrinter, testPrint, printerAvailable } from "@/lib/printer";
 
@@ -21,6 +22,11 @@ export default function SettingsScreen() {
   const loading = useSettings((s) => s.loading);
   const error = useSettings((s) => s.error);
   const loadSettings = useSettings((s) => s.load);
+  const allColumns = useGridPrefs((s) => s.allColumns);
+  const allImageHeight = useGridPrefs((s) => s.allImageHeight);
+  const setAllColumns = useGridPrefs((s) => s.setColumns);
+  const setAllImageHeight = useGridPrefs((s) => s.setImageHeight);
+  const loadGridPrefs = useGridPrefs((s) => s.load);
 
   const [printer, setPrinter] = useState<{ connected: boolean; status?: string; name?: string; paper?: string } | null>(null);
   const [printerBusy, setPrinterBusy] = useState(false);
@@ -28,6 +34,8 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (outletId) loadSettings(outletId);
     refreshPrinter();
+    void loadGridPrefs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outletId]);
 
   async function refreshPrinter() {
@@ -97,6 +105,21 @@ export default function SettingsScreen() {
             <Text className="text-cream/35 text-[11px] mt-1" style={{ fontFamily: "SpaceGrotesk_400Regular" }}>
               SUNMI D3 built-in 80mm thermal head. Receipts + kitchen dockets print here automatically on checkout.
             </Text>
+          </Card>
+
+          {/* ── All-tab menu layout (device-local, editable here) ── */}
+          <Card title={'"All" Tab Layout'} Icon={LayoutGrid}>
+            <Text className="text-cream/45 text-[11px] mb-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+              Compacts the All tab so more of the full menu fits per screen — more columns and a shorter (or hidden) product image. Other category tabs are unaffected. Saved on this terminal.
+            </Text>
+            <StepRow label="Columns" value={String(allColumns)}
+              onDec={() => { Haptics.selectionAsync(); setAllColumns(allColumns - 1); }}
+              onInc={() => { Haptics.selectionAsync(); setAllColumns(allColumns + 1); }}
+              decDisabled={allColumns <= ALL_COLS_MIN} incDisabled={allColumns >= ALL_COLS_MAX} />
+            <StepRow label="Image size" value={allImageHeight === 0 ? "Off · text only" : `${allImageHeight} px`}
+              onDec={() => { Haptics.selectionAsync(); setAllImageHeight(allImageHeight - ALL_IMG_STEP); }}
+              onInc={() => { Haptics.selectionAsync(); setAllImageHeight(allImageHeight + ALL_IMG_STEP); }}
+              decDisabled={allImageHeight <= ALL_IMG_MIN} incDisabled={allImageHeight >= ALL_IMG_MAX} />
           </Card>
 
           {/* ── Backoffice-managed outlet settings (read-only mirror) ── */}
@@ -181,6 +204,25 @@ function Row({ label, value }: { label: string; value: string }) {
       <Text className="text-cream text-sm text-right flex-1 ml-4" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }} numberOfLines={1}>
         {value}
       </Text>
+    </View>
+  );
+}
+
+function StepRow({
+  label, value, onDec, onInc, decDisabled, incDisabled,
+}: { label: string; value: string; onDec: () => void; onInc: () => void; decDisabled?: boolean; incDisabled?: boolean }) {
+  return (
+    <View className="flex-row items-center justify-between py-2">
+      <Text className="text-cream/70 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{label}</Text>
+      <View className="flex-row items-center gap-3">
+        <Text className="text-cream text-sm text-right" style={{ fontFamily: "SpaceGrotesk_700Bold", minWidth: 96 }} numberOfLines={1}>{value}</Text>
+        <Pressable onPress={onDec} disabled={decDisabled} className="h-11 w-11 items-center justify-center rounded-xl active:opacity-60" style={{ backgroundColor: "rgba(245,243,240,0.06)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)", opacity: decDisabled ? 0.35 : 1 }}>
+          <Minus size={18} color="#F5F3F0" />
+        </Pressable>
+        <Pressable onPress={onInc} disabled={incDisabled} className="h-11 w-11 items-center justify-center rounded-xl active:opacity-60" style={{ backgroundColor: BRAND, opacity: incDisabled ? 0.35 : 1 }}>
+          <Plus size={18} color="#fff" />
+        </Pressable>
+      </View>
     </View>
   );
 }

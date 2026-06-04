@@ -1,6 +1,9 @@
 import { supabase } from "./supabase";
 import type { CartLine } from "./cart";
 import { useSettings } from "./settings";
+import { newId, bufferSale } from "./offline-queue";
+import { flushPending } from "./sale-sync";
+import { getOnline, markOnline, markOffline, withTimeout } from "./connectivity";
 
 /**
  * Order creation — native port of the web register's createPOSOrder
@@ -96,6 +99,8 @@ export type SaleParams = {
   customerPhone?: string | null;
   notes?: string | null;
   // Loyalty (member + applied reward).
+  /** Identified member id — drives the deferred points earn fired on sync. */
+  memberId?: string | null;
   loyaltyPhone?: string | null;
   rewardId?: string | null;
   rewardName?: string | null;
@@ -119,19 +124,59 @@ export type Sale = {
   createdAt: string;
 };
 
+// Register/shift context is cached per outlet so an offline sale can still
+// attribute to the last-known register + shift (reconciled on sync). Resolved
+// online when connected; reused offline.
+const ctxCache: Record<string, { registerId: string | null; shiftId: string | null }> = {};
+
+async function resolveContext(
+  outletId: string,
+  staffId: string,
+): Promise<{ registerId: string | null; shiftId: string | null }> {
+  if (!getOnline()) return ctxCache[outletId] ?? { registerId: null, shiftId: null };
+  try {
+    const registerId = await withTimeout(Promise.resolve(resolveRegisterId(outletId)), 4000);
+    const shiftId = await withTimeout(Promise.resolve(ensureOpenShift(outletId, registerId, staffId)), 4000);
+    ctxCache[outletId] = { registerId, shiftId };
+    markOnline();
+    return ctxCache[outletId];
+  } catch {
+    markOffline();
+    return ctxCache[outletId] ?? { registerId: null, shiftId: null };
+  }
+}
+
+// Online → the sequential CC-CODE-NNNN number. Offline → a distinct time-based
+// fallback (CC-CODE-XXXXX) that won't collide and visibly flags an offline
+// order. Persisted as-is on sync.
+async function resolveOrderNumber(outletId: string): Promise<string> {
+  if (getOnline()) {
+    try {
+      const n = await withTimeout(Promise.resolve(nextOrderNumber(outletId)), 4000);
+      markOnline();
+      return n;
+    } catch {
+      markOffline();
+    }
+  }
+  const code = OUTLET_CODE[outletId] ?? "CC";
+  return `CC-${code}-${Date.now().toString(36).slice(-5).toUpperCase()}`;
+}
+
 export async function createSale(params: SaleParams): Promise<Sale> {
   const { outletId, staffId, lines } = params;
   if (lines.length === 0) throw new Error("Cart is empty");
 
   const subtotal = lines.reduce((s, l) => s + l.unit_sen * l.qty, 0);
-  // Service charge is a backoffice-set percent on the subtotal (sen),
-  // applied to DINE-IN only (mirrors the web register). Reward discount
-  // comes off the total. Total floors at 0 (a fully-discounted order is
-  // valid — e.g. a free-drink voucher).
-  const serviceCharge =
-    params.orderType === "dine_in"
-      ? Math.round((subtotal * (params.serviceChargeRate ?? 0)) / 100)
-      : 0;
+  // Effective per-line fulfilment: a takeaway ORDER packs every line to-go; a
+  // dine-in order honours each line's per-item `takeaway` override. Single
+  // source of truth for the docket tag + pos_order_items.fulfillment.
+  const isTakeaway = (l: CartLine) => params.orderType === "takeaway" || l.takeaway === true;
+  // Service charge applies to DINE-IN lines only (Malaysia convention) — summed
+  // per line so a mixed order charges it correctly. The rate is 0 today, so this
+  // is 0; the moment a service charge is enabled, mixed orders are already right.
+  const dineInGross = lines.reduce((s, l) => s + (isTakeaway(l) ? 0 : l.unit_sen * l.qty), 0);
+  const serviceCharge = Math.round((dineInGross * (params.serviceChargeRate ?? 0)) / 100);
   // Total discount = redeemed voucher + auto tier% / promotions + the
   // cashier's manual discount, clamped so it never exceeds what's owed.
   const rewardDiscount = Math.max(0, params.rewardDiscount ?? 0);
@@ -147,50 +192,52 @@ export async function createSale(params: SaleParams): Promise<Sale> {
   const sstAmount = sstEnabled ? Math.round(afterDiscount * sstRate) : 0;
   const total = afterDiscount + sstAmount;
 
-  const registerId = await resolveRegisterId(outletId);
-  const shiftId = await ensureOpenShift(outletId, registerId, staffId);
-  const orderNumber = await nextOrderNumber(outletId);
+  // ── Build the sale locally (online-first, offline-tolerant) ──────────────
+  // The till never blocks on, or fails because of, the network: assign a client
+  // UUID, record the completed sale to a durable local buffer, then push it to
+  // the cloud via the atomic, idempotent create_pos_sale RPC. Online → the push
+  // lands in ~1s and clears the buffer; offline → it stays buffered and the sync
+  // loop retries on reconnect. The caller prints from the returned Sale either way.
+  const orderId = newId();
+  const createdAt = new Date().toISOString();
+  const { registerId, shiftId } = await resolveContext(outletId, staffId);
+  const orderNumber = await resolveOrderNumber(outletId);
 
-  // ── Order header ──
-  const { data: order, error: orderErr } = await supabase
-    .from("pos_orders")
-    .insert({
-      order_number: orderNumber,
-      outlet_id: outletId,
-      register_id: registerId,
-      shift_id: shiftId,
-      employee_id: staffId,
-      order_type: params.orderType,
-      status: "completed",
-      table_number: params.tableNumber ?? null,
-      queue_number: params.queueNumber ?? null,
-      subtotal,
-      service_charge: serviceCharge,
-      sst_amount: sstAmount,
-      discount_amount: discount,
-      promo_discount: promoDiscount,
-      promo_name: params.promoName ?? null,
-      total,
-      customer_phone: params.customerPhone ?? null,
-      loyalty_phone: params.loyaltyPhone ?? null,
-      reward_id: params.rewardId ?? null,
-      reward_name: params.rewardName ?? null,
-      reward_discount_amount: rewardDiscount,
-      notes: params.notes ?? null,
-    })
-    .select("id, order_number, total, created_at")
-    .single();
-  if (orderErr) throw orderErr;
+  const orderRow = {
+    id: orderId,
+    order_number: orderNumber,
+    outlet_id: outletId,
+    register_id: registerId,
+    shift_id: shiftId,
+    employee_id: staffId,
+    order_type: params.orderType,
+    status: "completed",
+    table_number: params.tableNumber ?? null,
+    queue_number: params.queueNumber ?? null,
+    subtotal,
+    service_charge: serviceCharge,
+    sst_amount: sstAmount,
+    discount_amount: discount,
+    promo_discount: promoDiscount,
+    promo_name: params.promoName ?? null,
+    total,
+    customer_phone: params.customerPhone ?? null,
+    loyalty_phone: params.loyaltyPhone ?? null,
+    reward_id: params.rewardId ?? null,
+    reward_name: params.rewardName ?? null,
+    reward_discount_amount: rewardDiscount,
+    notes: params.notes ?? null,
+    created_at: createdAt,
+  };
 
-  // ── Line items ──
   // line_discount_sen (per-cart-line manual discount) is persisted as
-  // pos_order_items.discount_amount so reporting can split line-level
-  // vs order-level promos. item_total is the net (post-discount) value.
+  // pos_order_items.discount_amount so reporting can split line-level vs
+  // order-level promos. item_total is the net (post-discount) value.
   const items = lines.map((l) => {
     const lineDiscount = l.line_discount_sen ?? 0;
     const lineGross = l.unit_sen * l.qty;
     return {
-      order_id: order.id,
+      id: newId(),
       product_id: l.product.id,
       product_name: l.product.name,
       quantity: l.qty,
@@ -200,33 +247,37 @@ export async function createSale(params: SaleParams): Promise<Sale> {
       discount_amount: lineDiscount,
       item_total: Math.max(0, lineGross - lineDiscount),
       kitchen_station: l.product.kitchen_station ?? null,
-      kitchen_status: "pending",
-      // Per-item kitchen note — printed under the item on the docket and
-      // kept on the order line (same column Grab/Pickup dockets read).
+      // Per-item kitchen note — printed under the item on the docket and kept
+      // on the order line (same column Grab/Pickup dockets read).
       notes: l.note ?? null,
+      // Per-line fulfilment so the kitchen packs the right items + reports can
+      // split a mixed order at the line level.
+      fulfillment: isTakeaway(l) ? "takeaway" : "dine_in",
     };
   });
-  const { error: itemsErr } = await supabase.from("pos_order_items").insert(items);
-  if (itemsErr) throw itemsErr;
 
-  // ── Payment ──
-  const { error: payErr } = await supabase.from("pos_order_payments").insert({
-    order_id: order.id,
-    payment_method: params.paymentMethod,
-    amount: total,
-    status: "completed",
+  const payments = [
+    { id: newId(), payment_method: params.paymentMethod, amount: total, status: "completed" },
+  ];
+
+  await bufferSale({
+    payload: { order: orderRow, items, payments },
+    loyalty: params.memberId ? { memberId: params.memberId, orderId } : null,
+    bufferedAt: createdAt,
+    attempts: 0,
   });
-  if (payErr) throw payErr;
+  // Fire-and-forget push: online syncs immediately, offline stays buffered.
+  void flushPending();
 
   return {
-    id: order.id,
-    orderNumber: order.order_number,
+    id: orderId,
+    orderNumber,
     subtotal,
     serviceCharge,
     sst: sstAmount,
     discount,
-    total: order.total,
-    createdAt: order.created_at ?? new Date().toISOString(),
+    total,
+    createdAt,
   };
 }
 

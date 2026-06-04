@@ -284,6 +284,7 @@ export type DocketOrder = {
     kitchen_station?: string | null;
     modifiers?: unknown;
     notes?: string | null;
+    fulfillment?: string | null; // 'dine_in' | 'takeaway' — per-line tag
   }[];
 };
 
@@ -298,7 +299,11 @@ export function formatKitchenDocket(order: DocketOrder, station: string): Docket
 
   const itemLines: string[] = [];
   for (const item of items) {
-    itemLines.push(`${item.quantity}x ${item.product_name}`);
+    // On a dine-in order, flag the exception items that are packed to-go so
+    // the kitchen grabs a cup + lid. (A whole-takeaway order already says so
+    // in the header, so we only tag the per-line overrides.)
+    const toGo = order.order_type === "dine_in" && item.fulfillment === "takeaway";
+    itemLines.push(`${item.quantity}x ${item.product_name}${toGo ? "   >> TO-GO" : ""}`);
     if (item.variant_name) itemLines.push(`   ${item.variant_name}`);
     const mods = item.modifiers;
     if (Array.isArray(mods) && mods.length > 0) {

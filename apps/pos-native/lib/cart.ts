@@ -21,6 +21,12 @@ export type CartLine = {
   // pos_order_items.notes and printed under the item on the kitchen docket
   // — the per-product replacement for the old single order-wide note.
   note?: string;
+  // Per-line fulfilment override: true = pack this item to-go even on a
+  // dine-in order. Lets one bill mix dine-in + takeaway. The EFFECTIVE
+  // fulfilment is resolved at checkout (a takeaway order forces every line
+  // to-go); this flag is the dine-in-order exception. Drives the kitchen
+  // docket tag + pos_order_items.fulfillment.
+  takeaway?: boolean;
 };
 
 type CartState = {
@@ -35,6 +41,8 @@ type CartState = {
   setLineDiscount: (key: string, sen: number) => void;
   /** Set the per-item kitchen note. Trimmed; empty clears it. */
   setLineNote: (key: string, note: string) => void;
+  /** Flip a line's fulfilment override (true = pack to-go on a dine-in order). */
+  setLineTakeaway: (key: string, takeaway: boolean) => void;
   clear: () => void;
 };
 
@@ -78,6 +86,8 @@ export const useCart = create<CartState>((set) => ({
         return { ...l, note: trimmed ? trimmed : undefined };
       }),
     })),
+  setLineTakeaway: (key, takeaway) =>
+    set((s) => ({ lines: s.lines.map((l) => (l.key === key ? { ...l, takeaway } : l)) })),
   clear: () => set({ lines: [] }),
 }));
 

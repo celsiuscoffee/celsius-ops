@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { supabase } from "./supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /**
  * POS branch settings — the backoffice (apps/backoffice → POS Settings)
@@ -74,6 +75,25 @@ type SettingsState = {
   refresh: (outletId: string) => Promise<void>;
 };
 
+// Cold-boot offline cache for the per-outlet settings (SST + receipt config).
+const SETTINGS_CACHE_PREFIX = "pos.settings.cache.v1.";
+type CachedSettings = { settings: BranchSettings | null; outlet: OutletInfo | null; sst: { rate: number; enabled: boolean } };
+async function saveSettingsCache(outletId: string, c: CachedSettings): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_CACHE_PREFIX + outletId, JSON.stringify(c));
+  } catch {
+    /* ignore */
+  }
+}
+async function loadSettingsCache(outletId: string): Promise<CachedSettings | null> {
+  try {
+    const raw = await AsyncStorage.getItem(SETTINGS_CACHE_PREFIX + outletId);
+    return raw ? (JSON.parse(raw) as CachedSettings) : null;
+  } catch {
+    return null;
+  }
+}
+
 export const useSettings = create<SettingsState>((set, get) => ({
   settings: null,
   outlet: null,
@@ -97,6 +117,16 @@ export const useSettings = create<SettingsState>((set, get) => ({
       supabase.from("outlets").select("name, address, city, state, phone").eq("id", outletId).maybeSingle(),
     ]);
     if (settingsRes.error) {
+      // Offline / DB unreachable → fall back to the last cached settings so a
+      // cold reboot mid-outage still has SST + receipt config instead of bare
+      // defaults. Keep whatever's already in memory if present.
+      if (!get().settings) {
+        const cached = await loadSettingsCache(outletId);
+        if (cached) {
+          set({ settings: cached.settings, outlet: cached.outlet, sst: cached.sst, loading: false, error: settingsRes.error.message });
+          return;
+        }
+      }
       set({ loading: false, error: settingsRes.error.message });
       return;
     }
@@ -105,15 +135,13 @@ export const useSettings = create<SettingsState>((set, get) => ({
     // branch row. No branch row (or unset) → SST off (safe default). Because it
     // lives on pos_branch_settings, the register's existing realtime listener
     // on that table already pushes a backoffice SST change to the live till.
-    set({
-      settings: branch,
-      outlet: (outletRes.data as OutletInfo) ?? null,
-      sst: {
-        rate: typeof branch?.sst_rate === "number" ? branch.sst_rate : 0.06,
-        enabled: branch?.sst_enabled === true,
-      },
-      loading: false,
-    });
+    const outletInfo = (outletRes.data as OutletInfo) ?? null;
+    const sst = {
+      rate: typeof branch?.sst_rate === "number" ? branch.sst_rate : 0.06,
+      enabled: branch?.sst_enabled === true,
+    };
+    set({ settings: branch, outlet: outletInfo, sst, loading: false });
+    void saveSettingsCache(outletId, { settings: branch, outlet: outletInfo, sst });
   },
 }));
 

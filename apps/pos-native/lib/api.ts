@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { markOnline, markOffline } from "./connectivity";
 
 /**
  * Thin client for the POS Next.js API (auth/pin, loyalty, order
@@ -21,8 +22,30 @@ function headers(extra?: Record<string, string>): Record<string, string> {
   };
 }
 
+const TIMEOUT_MS = 8000;
+
+/** One fetch with a hard timeout + connectivity tracking. A response (even an
+ *  error status) means the server is REACHABLE → markOnline. A thrown
+ *  fetch/abort means the network is down → markOffline. This is what drives the
+ *  offline banner + the redeem/lookup gating, and stops loyalty calls hanging
+ *  ~30s on a dead socket during an outage. */
+async function doFetch(path: string, init: RequestInit): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { ...init, signal: ctrl.signal });
+    markOnline();
+    return res;
+  } catch (e) {
+    markOffline();
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await doFetch(path, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(body),
@@ -35,7 +58,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { headers: headers() });
+  const res = await doFetch(path, { headers: headers() });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`${res.status} ${path} — ${text || res.statusText}`);

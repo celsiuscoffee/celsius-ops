@@ -28,6 +28,23 @@ const CREAM = "#F5F3F0";
 const GOLD = "#FBBF24";
 const TERRA = "#A2492C";
 const GREEN = "#86efac";
+
+// Premium per-tier palette for the customer-display tier card — mirrors the
+// native app's tier-styles (champagne Black Card, metallic Platinum, dark-gold
+// Gold, slate Silver) so the in-store card reads as the same premium surface.
+// Keyed by tier name, with the DB tier colour as a fallback for custom tiers.
+function tierTheme(t: { name?: string | null; color?: string | null } | null | undefined): {
+  surface: string; accent: string; text: string; muted: string;
+} {
+  const key = (t?.name ?? "").toLowerCase();
+  if (key.includes("black")) return { surface: "#0A0A0A", accent: "#D4B978", text: "#FFFFFF", muted: "rgba(255,255,255,0.72)" };
+  if (key.includes("platinum") || key.includes("elite")) return { surface: "#0C0E14", accent: "#D9DDE5", text: "#FFFFFF", muted: "rgba(255,255,255,0.72)" };
+  if (key.includes("gold")) return { surface: "#241905", accent: "#F4C430", text: "#FFF6DC", muted: "rgba(255,246,220,0.72)" };
+  if (key.includes("silver")) return { surface: "#1F2329", accent: "#D8DCE2", text: "#FFFFFF", muted: "rgba(255,255,255,0.72)" };
+  if (key.includes("staff") || key.includes("arba")) return { surface: "#2A0E08", accent: "#FBBF24", text: "#FFFFFF", muted: "rgba(255,255,255,0.72)" };
+  const c = t?.color && lum(t.color) >= 0.08 ? t.color : TERRA;
+  return { surface: "#240E04", accent: c, text: "#FFFFFF", muted: "rgba(255,255,255,0.72)" };
+}
 const DARKFG = "#1A0200";
 const rm = (sen: number) => `RM ${(sen / 100).toFixed(2)}`;
 
@@ -396,30 +413,34 @@ export default function CustomerDisplay() {
 
   // ── 3. Idle / welcome ──
   if (!hasCart) {
-    // Identified member (rewards loaded) → AVAILABLE REWARDS on the LEFT,
-    // identity card on the RIGHT. Gives a returning regular something to act
-    // on while idle. Poster sits above the rewards so brand content stays.
+    // Identified member (rewards loaded) → LEFT is the full-size splash photo
+    // (same structure as the guest idle, so the poster art renders at ONE
+    // consistent size); RIGHT carries the identity + tier + points AND the
+    // AVAILABLE REWARDS list beneath it.
     if (member && snapshot) {
+      const hasPoster = posters.length > 0;
       return (
         <View className="flex-1 flex-row" style={{ backgroundColor: PAGE }}>
-          <View className="flex-1 p-6">
-            {posters.length > 0 && (
-              <View style={{ flex: 0.85 }} className="items-center">
-                <Posters posters={posters} />
-                <Eyebrow color="rgba(245,243,240,0.45)" style={{ marginTop: 10 }}>TODAY AT CELSIUS COFFEE</Eyebrow>
-              </View>
-            )}
-            <View style={{ flex: 1.15, marginTop: posters.length > 0 ? 14 : 0 }}>
+          {hasPoster && (
+            <View className="flex-1 items-center p-6">
+              <Posters posters={posters} />
+              <Eyebrow color="rgba(245,243,240,0.45)" style={{ marginTop: 10 }}>TODAY AT CELSIUS COFFEE</Eyebrow>
+            </View>
+          )}
+          <View
+            className="p-8"
+            style={hasPoster
+              ? { width: 460, borderLeftWidth: 1, borderColor: "rgba(245,243,240,0.08)", backgroundColor: SUB }
+              : { flex: 1, backgroundColor: SUB }}
+          >
+            <PendingOrMemberHeader member={member} />
+            <View style={{ flex: 1, marginTop: 18 }}>
               <Eyebrow color="rgba(245,243,240,0.45)" style={{ paddingHorizontal: 4 }}>AVAILABLE REWARDS</Eyebrow>
               <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.42)", paddingHorizontal: 4, marginTop: 2, marginBottom: 8 }}>Tell the cashier to apply these to your order</Text>
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
                 <ClaimableRewards snapshot={snapshot} memberId={member.id} />
               </ScrollView>
             </View>
-          </View>
-          <View className="items-center justify-center p-8" style={{ width: 430, borderLeftWidth: 1, borderColor: "rgba(245,243,240,0.08)", backgroundColor: SUB }}>
-            <Image source={require("@/assets/icon.png")} style={{ width: 72, height: 72, borderRadius: 18, marginBottom: 12 }} resizeMode="contain" />
-            <PendingOrMemberHeader member={member} />
           </View>
         </View>
       );
@@ -437,9 +458,9 @@ export default function CustomerDisplay() {
           className="items-center justify-center p-8"
           style={posters.length > 0 ? { width: 460, borderLeftWidth: 1, borderColor: "rgba(245,243,240,0.08)", backgroundColor: SUB } : { flex: 1 }}
         >
-          <Image source={require("@/assets/icon.png")} style={{ width: 72, height: 72, borderRadius: 18, marginBottom: 10 }} resizeMode="contain" />
           {member ? <PendingOrMemberHeader member={member} /> : (
             <>
+              <Image source={require("@/assets/icon.png")} style={{ width: 72, height: 72, borderRadius: 18, marginBottom: 10 }} resizeMode="contain" />
               <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: CREAM }}>Check Your Rewards</Text>
               <Eyebrow color="rgba(245,243,240,0.55)" style={{ marginTop: 6 }}>ENTER YOUR PHONE NUMBER</Eyebrow>
               <Numpad outletId={outletId} />
@@ -481,11 +502,13 @@ export default function CustomerDisplay() {
         {member && snapshot && snapshot.shop.length > 0 && !reward && (
           <View style={{ marginTop: 18 }}>
             <Eyebrow color="rgba(251,191,36,0.85)" style={{ marginBottom: 8, letterSpacing: 1.6 }}>REDEEM YOUR POINTS</Eyebrow>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {snapshot.shop.slice(0, 6).map((s) => (
+            {/* flex-row of flex-1 cards (top 3) so the row fills the same width
+                as the "Pair with a bite" cards above (same gap:12). */}
+            <View className="flex-row" style={{ gap: 12 }}>
+              {snapshot.shop.slice(0, 3).map((s) => (
                 <ShopRedeemCard key={s.id} shop={s} onRedeem={() => setRedeemRequest({ rewardId: s.id, issuedRewardId: null, name: s.name })} />
               ))}
-            </ScrollView>
+            </View>
           </View>
         )}
 
@@ -642,28 +665,33 @@ function Centered({ children }: { children: React.ReactNode }) {
 }
 
 function PendingOrMemberHeader({ member }: { member: NonNullable<ReturnType<typeof useDisplay.getState>["member"]> }) {
-  // Name on its own line, auto-shrinks to fit — "Welcome back, {name}" was
-  // wrapping awkwardly in this narrow column when the name was long.
-  const tierColor = member?.tierColor && lum(member.tierColor) >= 0.08 ? member.tierColor : GOLD;
+  // Premium identity card — one cohesive tier-themed surface (champagne Black
+  // Card, metallic Platinum, etc.) instead of a scattered logo / name / pill /
+  // points stack. Mirrors the cart-state tier card.
+  const theme = tierTheme({ name: member?.tierName, color: member?.tierColor });
   return (
-    <View className="items-center w-full">
-      <Eyebrow color="rgba(245,243,240,0.55)">WELCOME BACK</Eyebrow>
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        style={{ fontFamily: "Peachi-Bold", fontSize: 26, color: CREAM, marginTop: 3, textAlign: "center" }}
-      >
-        {member?.name ?? "Member"}
-      </Text>
-      {!!member?.tierName && (
-        <View className="mt-2 rounded-full px-3 py-1" style={{ backgroundColor: tierColor + "22", borderWidth: 1, borderColor: tierColor + "55" }}>
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 1.5, color: tierColor }}>{member.tierName.toUpperCase()}</Text>
+    <View className="w-full rounded-2xl overflow-hidden" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.accent + "44" }}>
+      <View style={{ height: 4, backgroundColor: theme.accent }} />
+      {/* Compact horizontal layout — icon + greeting/name/tier on the left,
+          points on the right — so the card stays short and the rewards list
+          below gets the room. */}
+      <View className="flex-row items-center" style={{ paddingHorizontal: 16, paddingTop: 13, paddingBottom: 13 }}>
+        <View style={{ width: 46, height: 46, borderRadius: 13, backgroundColor: theme.accent + "1F", borderWidth: 1, borderColor: theme.accent + "44", alignItems: "center", justifyContent: "center", marginRight: 13 }}>
+          <Image source={require("@/assets/icon.png")} style={{ width: 26, height: 26, borderRadius: 7 }} resizeMode="contain" />
         </View>
-      )}
-      {/* Compact beans chip (about half the previous card) */}
-      <View className="mt-3 flex-row items-baseline rounded-2xl px-5 py-2" style={{ backgroundColor: "rgba(251,191,36,0.1)", borderWidth: 1, borderColor: "rgba(251,191,36,0.3)", gap: 6 }}>
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 24, color: GOLD }}>{(member?.pointsBalance ?? 0).toLocaleString()}</Text>
-        <Eyebrow color="rgba(251,191,36,0.7)">POINTS</Eyebrow>
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, letterSpacing: 1.6, color: theme.accent }}>WELCOME BACK</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: "Peachi-Bold", fontSize: 23, color: theme.text, marginTop: 1 }}>{member?.name ?? "Member"}</Text>
+          {!!member?.tierName && (
+            <View style={{ alignSelf: "flex-start", marginTop: 5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, backgroundColor: theme.accent }}>
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, letterSpacing: 1.3, color: theme.surface }}>{member.tierName.toUpperCase()}</Text>
+            </View>
+          )}
+        </View>
+        <View className="items-end">
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: theme.accent, lineHeight: 30 }}>{(member?.pointsBalance ?? 0).toLocaleString()}</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9.5, letterSpacing: 1.6, color: theme.muted }}>POINTS</Text>
+        </View>
       </View>
     </View>
   );
@@ -969,8 +997,7 @@ function PointsHero({
   onRedeem?: () => void;
 }) {
   const t = snapshot.tier.current;
-  const tierColor = t?.color ?? TERRA;
-  const fg = lum(tierColor) >= 0.08 ? tierColor : CREAM;
+  const theme = tierTheme(t);
   const prog = snapshot.tier.progress;
   const pct = prog && prog.target > 0 ? Math.min(100, Math.round((prog.current / prog.target) * 100)) : 0;
   const moreNeeded = prog ? Math.max(0, prog.target - prog.current) : 0;
@@ -993,50 +1020,57 @@ function PointsHero({
   // cart / order list below. All font sizes, paddings, bars, and gaps
   // scaled proportionally.
   return (
-    <View className="rounded-xl overflow-hidden" style={{ backgroundColor: tierColor + "1A", borderWidth: 1, borderColor: tierColor + "38" }}>
-      <View style={{ height: 3, backgroundColor: tierColor }} />
-      <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 9 }}>
-        <View className="flex-row items-start justify-between">
-          <View className="flex-1 pr-2">
-            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 8.5, letterSpacing: 1.5, color: fg + "B3" }}>{memberName ? `HI, ${memberName.toUpperCase()}` : "WELCOME"}</Text>
-            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 17, color: fg, marginTop: 1 }}>{t?.name ?? "Member"}</Text>
+    <View className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.accent + "44" }}>
+      {/* Tier signature: top accent rail (like the native TierCard). */}
+      <View style={{ height: 4, backgroundColor: theme.accent }} />
+      <View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12 }}>
+        <View className="flex-row items-center justify-between">
+          {/* Identity: icon tile + greeting + tier name (+ multiplier badge). */}
+          <View className="flex-row items-center" style={{ flex: 1, paddingRight: 8 }}>
+            <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: theme.accent + "22", borderWidth: 1, borderColor: theme.accent + "44", alignItems: "center", justifyContent: "center", marginRight: 11 }}>
+              <Image source={require("@/assets/icon.png")} style={{ width: 24, height: 24, borderRadius: 6 }} resizeMode="contain" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 1.6, color: theme.accent }} numberOfLines={1}>
+                {memberName ? `HI, ${memberName.toUpperCase()}` : "YOUR TIER"}
+              </Text>
+              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: theme.text, marginTop: 1 }} numberOfLines={1}>{t?.name ?? "Member"}</Text>
+              {(t?.multiplier ?? 1) > 1 && (
+                <View style={{ alignSelf: "flex-start", marginTop: 4, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2.5, backgroundColor: theme.accent }}>
+                  <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 0.5, color: theme.surface }}>{t?.multiplier}× POINTS</Text>
+                </View>
+              )}
+            </View>
           </View>
+          {/* Points, in the tier accent. */}
           <View className="items-end">
-            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: GOLD, lineHeight: 22 }}>{snapshot.balance.toLocaleString()}</Text>
-            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 8.5, letterSpacing: 1.5, color: fg + "8C" }}>POINTS</Text>
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 26, color: theme.accent, lineHeight: 28 }}>{snapshot.balance.toLocaleString()}</Text>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 1.6, color: theme.muted }}>POINTS</Text>
           </View>
         </View>
         {prog && nextName && (
-          <View style={{ marginTop: 7 }}>
-            <View style={{ height: 4, borderRadius: 2, backgroundColor: fg + "2E", overflow: "hidden" }}>
-              <View style={{ height: 4, width: `${pct}%`, backgroundColor: fg }} />
+          <View style={{ marginTop: 11 }}>
+            <View style={{ height: 5, borderRadius: 999, backgroundColor: theme.accent + "26", overflow: "hidden" }}>
+              <View style={{ height: 5, width: `${pct}%`, backgroundColor: theme.accent, borderRadius: 999 }} />
             </View>
-            {/* Motivator: spend X → unlock the next tier + its perks. */}
-            <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 9, color: GOLD, marginTop: 4 }}>
-              {spendLabel} more → {nextName}
+            {/* Motivator: spend X → unlock the next tier (+ its perks). */}
+            <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 10.5, color: theme.muted, marginTop: 5 }} numberOfLines={1}>
+              <Text style={{ color: theme.accent }}>{spendLabel} more</Text> → {nextName}{nextPerks ? `  ·  ${nextPerks}` : ""}
             </Text>
-            {!!nextPerks && (
-              <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 8, color: fg + "99", marginTop: 1 }}>
-                Unlock {nextPerks}
-              </Text>
-            )}
           </View>
         )}
-        {/* Redeem / applied-reward pill — inline at the bottom (right-aligned) so
-            it never overlaps the POINTS column. It used to be absolutely
-            positioned and collided on short top-tier cards with no progress bar
-            (e.g. Black Card + an applied "Free Drink"). */}
+        {/* Redeem / applied-reward pill — filled in the tier accent for a premium feel. */}
         {onRedeem && (
-          <View style={{ marginTop: 8, alignSelf: "flex-end" }}>
+          <View style={{ marginTop: 10, alignSelf: "flex-end" }}>
             {redeemedReward ? (
-              <View className="flex-row items-center rounded-full px-2.5 py-1" style={{ backgroundColor: "rgba(134,239,172,0.18)", borderWidth: 1, borderColor: "rgba(134,239,172,0.5)", gap: 4 }}>
-                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, color: GREEN }}>✓</Text>
-                <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 10, color: GREEN, maxWidth: 150 }} numberOfLines={1}>{redeemedReward.name}</Text>
+              <View className="flex-row items-center rounded-full px-3 py-1.5" style={{ backgroundColor: "rgba(134,239,172,0.18)", borderWidth: 1, borderColor: "rgba(134,239,172,0.5)", gap: 5 }}>
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, color: GREEN }}>✓</Text>
+                <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 11, color: GREEN, maxWidth: 170 }} numberOfLines={1}>{redeemedReward.name}</Text>
               </View>
             ) : (
-              <Pressable onPress={onRedeem} className="flex-row items-center rounded-full px-2.5 py-1 active:opacity-80" style={{ backgroundColor: GOLD + "26", borderWidth: 1, borderColor: GOLD + "80", gap: 4 }}>
-                <Gift size={10} color={GOLD} />
-                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 0.8, color: GOLD }}>REDEEM</Text>
+              <Pressable onPress={onRedeem} className="flex-row items-center rounded-full active:opacity-80" style={{ backgroundColor: theme.accent, paddingHorizontal: 14, paddingVertical: 7, gap: 6 }}>
+                <Gift size={13} color={theme.surface} />
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, letterSpacing: 0.8, color: theme.surface }}>REDEEM</Text>
               </Pressable>
             )}
           </View>
@@ -1146,7 +1180,7 @@ function ShopRedeemCard({ shop, onRedeem }: { shop: ShopCard; onRedeem: () => vo
       onPress={() => { if (aff) onRedeem(); }}
       disabled={!aff}
       className="rounded-2xl active:opacity-80"
-      style={{ width: 156, padding: 12, backgroundColor: aff ? "rgba(251,191,36,0.10)" : "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: aff ? "rgba(251,191,36,0.4)" : "rgba(245,243,240,0.12)", opacity: aff ? 1 : 0.55 }}
+      style={{ flex: 1, padding: 12, backgroundColor: aff ? "rgba(251,191,36,0.10)" : "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: aff ? "rgba(251,191,36,0.4)" : "rgba(245,243,240,0.12)", opacity: aff ? 1 : 0.55 }}
     >
       <View className="flex-row items-center" style={{ gap: 5 }}>
         <Coffee size={13} color={GOLD} />
