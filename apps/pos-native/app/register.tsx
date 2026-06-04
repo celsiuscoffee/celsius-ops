@@ -43,7 +43,7 @@ import {
   computeTierDiscount, evaluatePromotions,
   fetchSuggestedPairs, logPairAdd, fetchSnapshot, claimMystery,
   type Member, type RewardsResponse, type IssuedVoucher, type CatalogReward, type RedeemDiscount, type UsualItem, type AppliedPromo,
-  type SuggestedPair, type ClaimableCard, type MysteryReveal, type ShopCard,
+  type SuggestedPair, type ClaimableCard, type MysteryReveal, type ShopCard, type VoucherCard,
 } from "@/lib/loyalty";
 
 const rm = (sen: number) => `RM ${(sen / 100).toFixed(2)}`;
@@ -202,6 +202,9 @@ export default function Register() {
   // customer display's "Redeem your Beans"). Tapping a card applies it to the
   // cart, so the cashier can redeem on request.
   const [shop, setShop] = useState<ShopCard[]>([]);
+  // Owned vouchers (birthday / mystery-bag wins / promo gifts), mirrored from the
+  // same snapshot — so the "Redeem your rewards" strip isn't points-only.
+  const [vouchers, setVouchers] = useState<VoucherCard[]>([]);
   // In-flight guard for redemption. /api/pos/loyalty/redeem burns Beans +
   // writes a CONFIRMED redemption on every call, so a double-tap or a rapid
   // reverse-channel burst would spend the member's Beans several times over.
@@ -598,15 +601,31 @@ export default function Register() {
   //    any missed one is silently auto-granted there — so the till never shows a
   //    mystery "open" button.
   useEffect(() => {
-    if (!member?.id) { setClaimables([]); setShop([]); return; }
+    if (!member?.id) { setClaimables([]); setShop([]); setVouchers([]); return; }
     let cancelled = false;
     fetchSnapshot(member.id).then((s) => {
       if (cancelled) return;
       setClaimables((s?.claimables ?? []).filter((c) => c.source_type !== "mystery_pending"));
       setShop(s?.shop ?? []);
+      // Mission/challenge vouchers surface under their own section; everything
+      // else (mystery, birthday, referral, gifts) is a redeemable reward.
+      setVouchers((s?.vouchers ?? []).filter((v) => v.source_type !== "mission"));
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [member?.id]);
+
+  // Curated "Redeem your rewards" — owned vouchers first (birthday, mystery-bag
+  // wins, promo gifts), then Points rewards the member can already afford, then
+  // the cheapest goals to fill the row. Mirrors the customer display's row.
+  const redeemChips = useMemo(() => {
+    const vchips = vouchers.map((v) => ({ kind: "voucher" as const, v }));
+    const affChips = shop.filter((s) => s.affordable).map((s) => ({ kind: "shop" as const, s }));
+    const goalChips = [...shop]
+      .filter((s) => !s.affordable)
+      .sort((a, b) => a.points_required - b.points_required)
+      .map((s) => ({ kind: "shop" as const, s }));
+    return [...vchips, ...affChips, ...goalChips];
+  }, [vouchers, shop]);
 
   // Resolve a suggested pair → its catalog Product, then route through onAdd
   // (so an 86'd item is blocked + a modifier item opens its sheet, exactly
@@ -965,6 +984,18 @@ export default function Register() {
     if (!res.ok) showRedeemError(res.reason);
   }
 
+  // Apply an owned voucher (birthday / mystery-bag win / promo gift) to the bill.
+  // Costs no Points — commits immediately. One reward per order, same as Points.
+  async function redeemVoucher(v: VoucherCard) {
+    if (reward) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert("Reward already applied", "Remove the current reward before applying a different one.");
+      return;
+    }
+    const res = await applyRewardArgs(null, v.id);
+    if (!res.ok) showRedeemError(res.reason);
+  }
+
   function newOrder() {
     Haptics.selectionAsync();
     setPaid(null);
@@ -1295,17 +1326,31 @@ export default function Register() {
                   </View>
                 </View>
               )}
-              {member && shop.length > 0 && !reward && (
+              {member && redeemChips.length > 0 && !reward && (
                 <View style={{ flex: 1 }}>
                   <View className="flex-row items-center pb-1.5" style={{ gap: 5 }}>
                     <Sparkles size={12} color="#FBBF24" />
-                    <Text className="text-cream/55 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.2 }}>REDEEM POINTS</Text>
+                    <Text className="text-cream/55 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.2 }}>REDEEM YOUR REWARDS</Text>
                   </View>
                   <View className="flex-row" style={{ gap: 8 }}>
-                    {shop.slice(0, 3).map((s) => (
-                      <RegisterRedeemCard key={s.id} shop={s} onRedeem={() => redeemBeans(s)} />
-                    ))}
+                    {redeemChips.slice(0, 3).map((c) =>
+                      c.kind === "voucher" ? (
+                        <RegisterVoucherCard key={`v${c.v.id}`} voucher={c.v} onUse={() => redeemVoucher(c.v)} />
+                      ) : (
+                        <RegisterRedeemCard key={`s${c.s.id}`} shop={c.s} onRedeem={() => redeemBeans(c.s)} />
+                      ),
+                    )}
                   </View>
+                  {(redeemChips.length > 3 || vouchers.length > 0) && (
+                    <Pressable
+                      onPress={openRewards}
+                      className="flex-row items-center justify-center rounded-xl active:opacity-80"
+                      style={{ marginTop: 8, paddingVertical: 8, backgroundColor: "rgba(251,191,36,0.10)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)", gap: 6 }}
+                    >
+                      <Gift size={13} color="#FBBF24" />
+                      <Text className="text-amber-400 text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.6 }}>MORE REWARDS</Text>
+                    </Pressable>
+                  )}
                 </View>
               )}
               {member && claimables.length > 0 && (
@@ -2448,6 +2493,34 @@ function RegisterClaimCard({ memberId, claimable }: { memberId: string; claimabl
 /** Cashier-side "redeem Beans" card — a points-shop reward the member can buy
  *  with their Beans. Tapping applies it to the cart (cashier redeems on the
  *  customer's request). Dimmed + non-tappable when they can't afford it yet. */
+/** Where a voucher came from → the chip eyebrow (mirrors the customer display). */
+function voucherSource(s: string | null): string {
+  return s === "mystery" ? "Mystery Bag" : s === "mission" ? "Challenge" : s === "birthday" ? "Birthday" : s === "referral" ? "Referral" : s === "points_redemption" ? "Points" : "Reward";
+}
+
+/** Owned voucher in the REDEEM YOUR REWARDS row — green, labelled by source
+ *  (MYSTERY BAG / BIRTHDAY / …), tap to apply it to the bill (no Points spent). */
+function RegisterVoucherCard({ voucher, onUse }: { voucher: VoucherCard; onUse: () => void }) {
+  return (
+    <Pressable
+      onPress={() => { Haptics.selectionAsync(); onUse(); }}
+      className="flex-1 rounded-xl active:opacity-80"
+      style={{ backgroundColor: "rgba(134,239,172,0.10)", borderWidth: 1, borderColor: "rgba(134,239,172,0.4)" }}
+    >
+      <View className="px-2.5 py-2">
+        <View className="flex-row items-center" style={{ gap: 4 }}>
+          <Gift size={10} color={OK} />
+          <Text className="text-[9px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.4, color: OK }} numberOfLines={1}>{voucherSource(voucher.source_type).toUpperCase()}</Text>
+        </View>
+        <Text className="text-cream text-[12px] mt-1" style={{ fontFamily: "Peachi-Medium" }} numberOfLines={2}>{voucher.title}</Text>
+        <View className="self-start rounded-full mt-1.5 px-2.5 py-1" style={{ backgroundColor: OK }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 0.4, color: "#06301B" }}>USE</Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
 function RegisterRedeemCard({ shop, onRedeem }: { shop: ShopCard; onRedeem: () => void }) {
   const aff = shop.affordable;
   return (
