@@ -1117,6 +1117,18 @@ export default function OrderStatus() {
                   {formatPrice((data.total ?? 0) / 100)}
                 </Text>
               </View>
+
+              {(data.total ?? 0) === 0 &&
+              ["paid", "preparing", "ready", "completed", "collected"].includes(
+                data.status,
+              ) ? (
+                <Text
+                  className="text-primary text-center text-[12px] mt-2"
+                  style={{ fontFamily: "Peachi-Bold" }}
+                >
+                  No payment needed — enjoy! ☕
+                </Text>
+              ) : null}
             </View>
           </View>
 

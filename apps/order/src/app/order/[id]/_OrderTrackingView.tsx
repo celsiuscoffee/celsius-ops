@@ -374,6 +374,17 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
                 {rm(order.total)}
               </span>
             </div>
+            {order.total === 0 &&
+            ["paid", "preparing", "ready", "completed", "collected"].includes(
+              order.status.toLowerCase(),
+            ) ? (
+              <p
+                className="mt-2 text-center"
+                style={{ color: "#A2492C", fontSize: 12, fontWeight: 600 }}
+              >
+                No payment needed — enjoy! ☕
+              </p>
+            ) : null}
             {order.loyalty_points_earned && order.loyalty_points_earned > 0 ? (
               <p
                 className="mt-1 text-right"
