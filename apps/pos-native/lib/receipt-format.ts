@@ -303,7 +303,7 @@ export function formatKitchenDocket(order: DocketOrder, station: string): Docket
     // the kitchen grabs a cup + lid. (A whole-takeaway order already says so
     // in the header, so we only tag the per-line overrides.)
     const toGo = order.order_type === "dine_in" && item.fulfillment === "takeaway";
-    itemLines.push(`${item.quantity}x ${item.product_name}${toGo ? "   >> TO-GO" : ""}`);
+    itemLines.push(`${item.quantity}x ${item.product_name}${toGo ? "   >> TAKEAWAY" : ""}`);
     if (item.variant_name) itemLines.push(`   ${item.variant_name}`);
     const mods = item.modifiers;
     if (Array.isArray(mods) && mods.length > 0) {

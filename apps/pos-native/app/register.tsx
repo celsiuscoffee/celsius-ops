@@ -1372,7 +1372,7 @@ export default function Register() {
                       <Text className="text-cream/55 text-[11px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{rm(item.unit_sen)}</Text>
                       {item.takeaway && (
                         <View className="rounded-full mt-0.5 px-2 py-0.5" style={{ backgroundColor: "rgba(249,115,22,0.16)", borderWidth: 1, borderColor: "rgba(249,115,22,0.5)" }}>
-                          <Text className="text-[9.5px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#F97316", letterSpacing: 0.4 }}>TO-GO</Text>
+                          <Text className="text-[9.5px]" style={{ fontFamily: "SpaceGrotesk_700Bold", color: "#F97316", letterSpacing: 0.4 }}>TAKEAWAY</Text>
                         </View>
                       )}
                       {lineDisc > 0 && (
@@ -2738,7 +2738,7 @@ function LineEditorSheet({
         <View className="flex-row items-center justify-between rounded-2xl px-4 py-3" style={{ backgroundColor: line.takeaway ? "rgba(249,115,22,0.12)" : "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: line.takeaway ? "rgba(249,115,22,0.45)" : "rgba(245,243,240,0.10)" }}>
           <View>
             <Text className="text-cream/60 text-xs uppercase tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Takeaway</Text>
-            <Text className="text-cream/40 text-[11px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Pack this item to-go</Text>
+            <Text className="text-cream/40 text-[11px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Pack this item for takeaway</Text>
           </View>
           <Pressable onPress={() => { Haptics.selectionAsync(); onToggleTakeaway(!line.takeaway); }} className="rounded-full active:opacity-80" style={{ width: 58, height: 32, padding: 3, justifyContent: "center", backgroundColor: line.takeaway ? "#F97316" : "rgba(245,243,240,0.16)" }}>
             <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: "#fff", transform: [{ translateX: line.takeaway ? 26 : 0 }] }} />
