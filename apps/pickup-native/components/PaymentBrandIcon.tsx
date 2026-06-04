@@ -59,7 +59,7 @@ type Brand = {
 };
 
 const BRANDS: Record<string, Brand> = {
-  apple_pay:  { bg: "#000000", fg: "#FFFFFF", label: "Pay",   iconSlug: "applepay", iconFg: "FFFFFF" },
+  apple_pay:  { bg: "#FFFFFF", fg: "#3C4043", label: "Pay",   iconSlug: "applepay", iconFg: "000000", border: "#E5E7EB" },
   google_pay: { bg: "#FFFFFF", fg: "#3C4043", label: "GPay",  iconSlug: "googlepay", border: "#E5E7EB" },
   fpx:        { bg: "#1B7A8F", fg: "#FFFFFF", label: "FPX",   iconSource: FPX_ICON       },
   grabpay:    { bg: "#00B14F", fg: "#FFFFFF", label: "Grab",  iconSource: GRABPAY_ICON   },
@@ -74,9 +74,9 @@ type Props = {
   size?:    number;
 };
 
-// Card chip — generic credit-card glyph on the brand navy. Stays
-// network-agnostic so the tile doesn't imply any specific network is
-// accepted on its own.
+// Card chip — generic credit-card glyph on a white card surface with a
+// thin border, matching the brand-logo tiles. Stays network-agnostic so
+// the tile doesn't imply any specific network is accepted on its own.
 function CardChip({ size }: { size: number }) {
   const radius = Math.round(size * 0.28);
   return (
@@ -85,19 +85,22 @@ function CardChip({ size }: { size: number }) {
         width: size,
         height: size,
         borderRadius: radius,
-        backgroundColor: "#0B1A4A",
+        backgroundColor: "#FFFFFF",
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
         alignItems: "center",
         justifyContent: "center",
       }}
     >
-      <CreditCard size={Math.round(size * 0.55)} color="#FFFFFF" strokeWidth={2} />
+      <CreditCard size={Math.round(size * 0.52)} color="#1A0200" strokeWidth={2} />
     </View>
   );
 }
 
-// Group icon for the E-Wallet category — generic wallet glyph on the
-// brand primary background. Used when no specific wallet is picked yet
-// so the tile doesn't visually favour one wallet over the others.
+// Group icon for the E-Wallet category — generic wallet glyph on a white
+// card surface with a thin border, matching the brand-logo tiles. Used
+// when no specific wallet is picked yet so the tile doesn't visually
+// favour one wallet over the others.
 function EWalletGroupChip({ size }: { size: number }) {
   const radius = Math.round(size * 0.28);
   return (
@@ -106,12 +109,14 @@ function EWalletGroupChip({ size }: { size: number }) {
         width: size,
         height: size,
         borderRadius: radius,
-        backgroundColor: "#A2492C",
+        backgroundColor: "#FFFFFF",
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
         alignItems: "center",
         justifyContent: "center",
       }}
     >
-      <Wallet size={Math.round(size * 0.55)} color="#FFFFFF" strokeWidth={2} />
+      <Wallet size={Math.round(size * 0.52)} color="#1A0200" strokeWidth={2} />
     </View>
   );
 }

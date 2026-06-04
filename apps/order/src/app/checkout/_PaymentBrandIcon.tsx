@@ -9,12 +9,14 @@ import { CreditCard, Wallet } from "lucide-react";
 //   1. iconSrc — bundled brand PNG (the SAME assets copied from
 //      apps/pickup-native/assets/pay-icons) rendered on a white chip with a
 //      thin border so the logo's native colors aren't clobbered.
-//   2. iconSlug — single-color mark from cdn.simpleicons.org on the
-//      brand-color chip (Apple Pay / Google Pay — matches native).
+//   2. iconSlug — single-color mark from cdn.simpleicons.org, rendered on
+//      a white chip with a thin border (Apple Pay / Google Pay — matches
+//      native) so every tile shares the same frame.
 //   3. label — brand-color chip with a short monogram fallback when the
 //      image fails to load.
-// Plus two composite chips: `card` (navy card glyph) and `ewallet` (the
-// E-Wallet group chip shown before a specific wallet is picked).
+// Plus two composite chips: `card` and `ewallet` — a neutral card / wallet
+// glyph on the same white-with-border chip as the brand logos, so the
+// picker reads as one uniform set rather than mixed logos + tinted glyphs.
 
 type Brand = {
   bg: string;
@@ -27,7 +29,7 @@ type Brand = {
 };
 
 const BRANDS: Record<string, Brand> = {
-  apple_pay:  { bg: "#000000", fg: "#FFFFFF", label: "Pay",     iconSlug: "applepay",  iconFg: "FFFFFF" },
+  apple_pay:  { bg: "#FFFFFF", fg: "#3C4043", label: "Pay",     iconSlug: "applepay",  iconFg: "000000", border: "#E5E7EB" },
   google_pay: { bg: "#FFFFFF", fg: "#3C4043", label: "GPay",    iconSlug: "googlepay", border: "#E5E7EB" },
   fpx:        { bg: "#1B7A8F", fg: "#FFFFFF", label: "FPX",     iconSrc: "/payment-icons/fpx.png" },
   grabpay:    { bg: "#00B14F", fg: "#FFFFFF", label: "Grab",    iconSrc: "/payment-icons/grabpay.png" },
@@ -74,15 +76,15 @@ export function PaymentBrandIcon({ methodId, size = 36 }: { methodId: string; si
   // Composite chips — must come before the BRANDS lookup.
   if (methodId === "card") {
     return (
-      <Chip size={size} bg="#0B1A4A">
-        <CreditCard size={Math.round(size * 0.55)} color="#FFFFFF" strokeWidth={2} />
+      <Chip size={size} bg="#FFFFFF" border="#E5E7EB">
+        <CreditCard size={Math.round(size * 0.52)} color="#1A0200" strokeWidth={2} />
       </Chip>
     );
   }
   if (methodId === "ewallet") {
     return (
-      <Chip size={size} bg="#A2492C">
-        <Wallet size={Math.round(size * 0.55)} color="#FFFFFF" strokeWidth={2} />
+      <Chip size={size} bg="#FFFFFF" border="#E5E7EB">
+        <Wallet size={Math.round(size * 0.52)} color="#1A0200" strokeWidth={2} />
       </Chip>
     );
   }
