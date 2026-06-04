@@ -252,6 +252,8 @@ export default function SplashPostersPage() {
   // wasn't useful in practice once each placement got its own
   // bucket-scoped sort_order.
   const [tab, setTab] = useState<Placement>("home");
+  // POS-screen round sub-filter ("all" | "always" | round key) — view only.
+  const [roundFilter, setRoundFilter] = useState<string>("all");
   // Crop-flow source. When the user picks a file (or hits "Re-crop"
   // on an existing image), we put it here and open the cropper. The
   // cropped output flows back through handleUpload so the rest of the
@@ -619,12 +621,62 @@ export default function SplashPostersPage() {
         );
       })()}
 
+      {/* POS-screen round sub-filter — narrow the list to one day-part round
+          so it's easy to arrange that round's posters. View only. */}
+      {!loading && tab === "pos-display" && posters.some((p) => (p.placement ?? "home") === "pos-display") && (() => {
+        const pos = posters.filter((p) => (p.placement ?? "home") === "pos-display");
+        const opts: { id: string; label: string }[] = [
+          { id: "all", label: "All" },
+          { id: "always", label: "Always" },
+          { id: "breakfast", label: "Breakfast" },
+          { id: "brunch", label: "Brunch" },
+          { id: "lunch", label: "Lunch" },
+          { id: "midday", label: "Midday" },
+          { id: "evening", label: "Evening" },
+          { id: "dinner", label: "Dinner" },
+          { id: "supper", label: "Supper" },
+        ];
+        const countFor = (id: string) =>
+          id === "all" ? pos.length
+            : id === "always" ? pos.filter((p) => !p.round).length
+              : pos.filter((p) => p.round === id).length;
+        return (
+          <div className="mb-4 flex flex-wrap gap-1.5">
+            {opts.map((r) => {
+              const active = roundFilter === r.id;
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => setRoundFilter(r.id)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                    active ? "bg-terracotta text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {r.label}
+                  <span className={`ml-1 text-[10px] ${active ? "text-white/70" : "text-gray-400"}`}>
+                    {countFor(r.id)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       {(() => {
         // Filtering rule: 'splash' tab shows posters whose placement is
         // Filter by selected placement bucket. Splash and home are
         // exclusive — splash shows the most-recent active poster on
         // launch, home rotates active home posters in the carousel.
-        const filtered = posters.filter((p) => (p.placement ?? "home") === tab);
+        const filtered = posters
+          .filter((p) => (p.placement ?? "home") === tab)
+          .filter((p) =>
+            tab !== "pos-display" || roundFilter === "all"
+              ? true
+              : roundFilter === "always"
+                ? !p.round
+                : p.round === roundFilter,
+          );
 
         if (loading) {
           return (
