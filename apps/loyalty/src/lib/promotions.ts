@@ -24,6 +24,11 @@ export interface CartContext {
   promo_code?: string | null;
   // Reward redemptions resolved by the caller (issued_reward → promotion_id link).
   reward_promotion_ids?: string[];
+  // Ordering channel: 'qr_table' (dine-in via table QR), 'pickup',
+  // 'takeaway', or 'pos'. Null/unset → channel scope not applied (mirrors
+  // the outlet_id behaviour). A promo with `channels` set only applies when
+  // this channel is in its list.
+  channel?: string | null;
   now?: Date;
 }
 
@@ -51,6 +56,9 @@ export interface Promotion {
   // Empty = open to all. ANDed with tier_id when both are set.
   eligible_member_tags: string[];
   outlet_ids: string[];
+  // Channel scope (qr_table / pickup / takeaway / pos). Empty/null = all
+  // channels — every existing promo keeps applying everywhere.
+  channels: string[] | null;
   bogo_buy_qty: number | null;
   bogo_free_qty: number | null;
   free_product_ids: string[];
@@ -169,6 +177,12 @@ function isPromoEligible(promo: Promotion, ctx: CartContext, subtotal: number): 
 
   if (promo.outlet_ids.length > 0 && ctx.outlet_id && !promo.outlet_ids.includes(ctx.outlet_id)) {
     return { ok: false, reason: 'outlet_not_eligible' };
+  }
+
+  // Channel scope — empty/null channels = all channels. When set, the order's
+  // channel (qr_table / pickup / takeaway / pos) must be in the list.
+  if (promo.channels && promo.channels.length > 0 && ctx.channel && !promo.channels.includes(ctx.channel)) {
+    return { ok: false, reason: 'channel_not_eligible' };
   }
 
   if (promo.min_order_value != null && subtotal < promo.min_order_value) {

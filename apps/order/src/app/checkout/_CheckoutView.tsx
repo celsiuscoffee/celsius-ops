@@ -261,6 +261,9 @@ export function CheckoutView() {
         storeId: state?.outletId ?? null,
         loyaltyPhone: state?.phone ?? null,
         loyaltyId: state?.loyaltyId ?? null,
+        // Channel (dine_in → qr_table etc.) so channel-scoped promos preview
+        // the same way they'll apply at checkout.
+        orderType: state?.orderType ?? null,
         // Send the reward ids so the server resolves the discount
         // authoritatively (the client can't compute free_item/category
         // rewards — its cart lines have no category). rewardDiscountSen is a

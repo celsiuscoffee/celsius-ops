@@ -38,10 +38,25 @@ interface EvaluateInput {
   outlet_id?: string | null;
   member_tier_id?: string | null;
   reward_promotion_ids?: string[];
+  // Ordering channel ('qr_table' | 'pickup' | 'takeaway' | 'pos'). Passed
+  // through to the loyalty evaluator so channel-scoped promos only apply on
+  // their channel. Omitted = no channel filtering (back-compat).
+  channel?: string | null;
   // `promo_code` was a customer-entered string. We removed that entry
   // point everywhere (checkout UI + pickup lib). The discount engine
   // still picks up auto-promos, tier perks, and reward-linked
   // promotions on its own.
+}
+
+/** Map an order's type to the promotion CHANNEL the loyalty evaluator
+ *  filters on: dine_in = ordered via a table QR ("qr_table"); pickup and
+ *  takeaway map to themselves; anything else falls back to pickup. */
+export function channelForOrderType(
+  orderType: string | null | undefined,
+): "qr_table" | "pickup" | "takeaway" {
+  if (orderType === "dine_in") return "qr_table";
+  if (orderType === "takeaway") return "takeaway";
+  return "pickup";
 }
 
 /**

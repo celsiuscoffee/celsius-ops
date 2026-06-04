@@ -7,6 +7,7 @@ import { applyOrderV2Hooks } from "@/lib/loyalty/v2";
 import {
   evaluatePromotions,
   recordPromotionApplications,
+  channelForOrderType,
   type CartLine,
 } from "@/lib/loyalty/promotions";
 import type { OrderRow } from "@/lib/supabase/types";
@@ -358,6 +359,7 @@ export async function POST(request: NextRequest) {
       member_id: loyaltyId,
       outlet_id: selectedStore.id,
       member_tier_id: memberTierId,
+      channel: channelForOrderType(orderType),
     });
     const promoDiscountSen = Math.round(evaluated.total_discount * 100);
 

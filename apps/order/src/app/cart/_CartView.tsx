@@ -152,6 +152,19 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
       return;
     }
     let cancelled = false;
+    // Ordering channel (dine_in → qr_table etc.) so channel-scoped promos
+    // preview the same way they apply at checkout. Read inline — it's set on
+    // table entry and stable for the cart's lifetime.
+    let orderType: string | null = null;
+    try {
+      const raw = window.localStorage.getItem("celsius-pickup");
+      if (raw) {
+        orderType =
+          (JSON.parse(raw) as { state?: { orderType?: string | null } }).state?.orderType ?? null;
+      }
+    } catch {
+      /* ignore */
+    }
     fetch("/api/checkout/quote", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -160,6 +173,7 @@ export function CartView({ bestSellers = [] }: { bestSellers?: BestSeller[] }) {
         storeId: outletId,
         loyaltyPhone: phone,
         loyaltyId,
+        orderType,
         // Resolve the reward server-side — the client can't compute
         // free_item / category-filtered rewards (cart lines carry no category).
         rewardId: reward?.id ?? null,

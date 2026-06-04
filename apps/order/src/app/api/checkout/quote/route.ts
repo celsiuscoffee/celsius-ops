@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getTierMultiplier } from "@/lib/loyalty/points";
-import { evaluatePromotions, type CartLine } from "@/lib/loyalty/promotions";
+import { evaluatePromotions, channelForOrderType, type CartLine } from "@/lib/loyalty/promotions";
 import { getOutletSst } from "@/lib/outlet-sst";
 import { resolveOrderReward } from "@celsius/shared";
 
@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
       walletVoucherId = null,
       rewardDiscountSen = 0,
       voucherDiscountSen = 0,
+      orderType = null,
     } = body as {
       items?: Array<{ product?: { id?: string }; product_id?: string; quantity?: number }>;
       storeId?: string | null;
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest) {
       walletVoucherId?: string | null;
       rewardDiscountSen?: number;
       voucherDiscountSen?: number;
+      orderType?: string | null;
     };
 
     if (!items?.length) {
@@ -177,6 +179,7 @@ export async function POST(request: NextRequest) {
       member_id: loyaltyId ?? null,
       outlet_id: storeId ?? null,
       member_tier_id: memberTierId,
+      channel: channelForOrderType(orderType),
     });
     const promoDiscountSen = Math.round(evaluated.total_discount * 100);
     const promoLines = evaluated.discounts.map((d) => ({

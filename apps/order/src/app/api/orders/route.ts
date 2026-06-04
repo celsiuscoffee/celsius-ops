@@ -468,6 +468,8 @@ export async function POST(request: NextRequest) {
       member_id: loyaltyId,
       outlet_id: selectedStore.id,
       member_tier_id: memberTierId,
+      // This route is the native pickup checkout — always the pickup channel.
+      channel: "pickup",
     });
 
     // Non-stackable tier exclusivity (Staff, Black Card). The flat

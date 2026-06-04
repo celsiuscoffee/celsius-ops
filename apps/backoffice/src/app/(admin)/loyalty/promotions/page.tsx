@@ -13,6 +13,9 @@ interface Promotion {
   promo_code: string | null;
   tier_id: string | null;
   eligible_member_tags: string[];
+  /** Ordering channels this promo applies on (qr_table / pickup / takeaway /
+   *  pos). Null/empty = all channels. */
+  channels: string[] | null;
   discount_type:
     | "percentage_off"
     | "fixed_amount_off"
@@ -376,6 +379,17 @@ function PromoModal({
     setTagInput("");
   }
 
+  // Channel scope — empty = all channels. Mirrors the member-tag chips.
+  const selectedChannels = draft.channels ?? [];
+  function toggleChannel(ch: string) {
+    setDraft({
+      ...draft,
+      channels: selectedChannels.includes(ch)
+        ? selectedChannels.filter((c) => c !== ch)
+        : [...selectedChannels, ch],
+    });
+  }
+
   async function save() {
     setSaving(true);
     setError(null);
@@ -513,6 +527,37 @@ function PromoModal({
               </select>
             </Field>
           )}
+
+          <Field label="Channels (optional)">
+            <p className="mb-2 text-xs text-muted-foreground">
+              Leave empty to apply on every channel. Otherwise the promo only
+              applies on the selected channels (QR Table = dine-in via table QR).
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { id: "qr_table", label: "QR Table" },
+                { id: "pickup", label: "Pickup" },
+                { id: "takeaway", label: "Takeaway" },
+                { id: "pos", label: "POS" },
+              ].map((c) => {
+                const on = selectedChannels.includes(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => toggleChannel(c.id)}
+                    className={
+                      on
+                        ? "rounded-full bg-[#C2452D] px-2.5 py-1 text-xs text-white"
+                        : "rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-200 dark:bg-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-600"
+                    }
+                  >
+                    {c.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
 
           <Field label="Restrict to member tags (optional)">
             {selectedTags.length > 0 && (

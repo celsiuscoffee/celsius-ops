@@ -305,7 +305,9 @@ export async function POST(req: NextRequest) {
           // looks like there's no discount even when one applies.
           Origin: "https://celsiuscoffee.com",
         },
-        body: JSON.stringify({ brand_id: BRAND_ID, ...body }),
+        // channel:"pos" is authoritative here — this endpoint only ever
+        // serves the POS register, so channel-scoped promos gate correctly.
+        body: JSON.stringify({ brand_id: BRAND_ID, ...body, channel: "pos" }),
       });
       if (res.ok) {
         data = (await res.json()) as EvaluatedCart;

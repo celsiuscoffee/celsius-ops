@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
       member_tags: memberTags,
       promo_code: body.promo_code ?? null,
       reward_promotion_ids: body.reward_promotion_ids ?? [],
+      channel: body.channel ?? null,
     };
 
     const result = await evaluateCart(lines, ctx);
