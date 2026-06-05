@@ -18,6 +18,7 @@ import { getSetting } from "../lib/settings";
 import { supabase, type Outlet } from "../lib/supabase";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { ProductImage } from "../components/ProductImage";
+import { OrderTypeBar } from "@/components/OrderTypeBar";
 
 /**
  * Cart scroll topology — platform-split, same rationale as Home's hero.
@@ -68,6 +69,18 @@ export default function Cart() {
   const setAppliedReward = useApp((s) => s.setAppliedReward);
   const setReservedVoucher = useApp((s) => s.setReservedVoucher);
   const member = useApp((s) => s.member);
+  const orderType = useApp((s) => s.orderType);
+  const tableNumber = useApp((s) => s.tableNumber);
+  // Mode-aware header subtitle — the OrderTypeBar below shows the full
+  // context, but the header still reads right for dine-in (vs "Pickup from").
+  const isDineIn = orderType === "dine_in";
+  const headerSubtitle = isDineIn
+    ? tableNumber
+      ? `Dine-in · Table ${tableNumber}`
+      : "Dine-in"
+    : outletName
+      ? `Pickup from ${outletName}`
+      : undefined;
 
   // Re-poll the chosen outlet's open/busy state every 30s while this
   // screen is mounted. If they flipped to closed mid-cart, we surface
@@ -164,7 +177,7 @@ export default function Cart() {
         // them concrete tap targets — most empty-cart customers are
         // first-timers or returning after a flush.
         <ScrollView contentContainerClassName="pb-12">
-          <EspressoHeader title="Your cart" subtitle={outletName ? `Pickup from ${outletName}` : undefined} showBack showCart={false} />
+          <EspressoHeader title="Your cart" subtitle={headerSubtitle} showBack showCart={false} />
           <View
             className="mx-4 mt-4 bg-espresso rounded-2xl overflow-hidden"
             style={{
@@ -284,7 +297,10 @@ export default function Cart() {
       ) : (
         <>
           <CartScrollFrame>
-            <EspressoHeader title="Your cart" subtitle={outletName ? `Pickup from ${outletName}` : undefined} showBack showCart={false} />
+            <EspressoHeader title="Your cart" subtitle={headerSubtitle} showBack showCart={false} />
+            <View className="px-4 pt-3 pb-1">
+              <OrderTypeBar />
+            </View>
             <CartItemsScroll>
             <View className="px-4 py-4" style={{ gap: 12 }}>
             {cart.map((item) => (

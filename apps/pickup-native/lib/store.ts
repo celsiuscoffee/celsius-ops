@@ -53,6 +53,11 @@ export type AppliedReward = {
    *  semantics as applicable_categories. */
   applicable_products?: string[] | null;
   min_order_value?: number | null;
+  /** Channels the reward is valid for (pickup / dine_in / qr_table …). Empty
+   *  or null = no restriction (today every reward is unrestricted). Carried
+   *  on the applied reward so checkout can re-validate it against the current
+   *  order type and surface a "not valid for dine-in/takeaway" warning. */
+  fulfillment_type?: string[] | null;
   /** When set, this AppliedReward originated from a wallet voucher
    *  (issued_rewards row) rather than a points-shop redemption.
    *  Checkout uses this to mark the voucher redeemed instead of
@@ -116,12 +121,19 @@ type AppState = {
   seenOnboardings: string[];
 
   setOutlet: (id: string, name: string) => void;
-  /** Enter dine-in mode from a table-QR deep link: pin the outlet, flag
-   *  dine_in + table, and start a clean basket (mirrors the PWA's
-   *  _TableEntry — a fresh table session shouldn't inherit a stale cart). */
+  /** Enter dine-in mode from a table-QR scan / deep link: pin the outlet,
+   *  flag dine_in + table. Keeps the cart when it's the same outlet the
+   *  customer's already on; clears it (and the reward) only when the outlet
+   *  changes, since the menu/prices differ. */
   setDineIn: (outletId: string, outletName: string, tableNumber: string) => void;
   /** Drop back to pickup (clears the table context; leaves the cart). */
   clearDineIn: () => void;
+  /** Toggle the fulfilment context from the cart/checkout (the McD-style
+   *  Takeaway | Dine-In switch). Preserves the cart + applied reward — only
+   *  the channel changes; the reward's eligibility is re-checked in the UI.
+   *  Switching to dine_in needs a tableNumber (pass the scanned/typed one;
+   *  falls back to the current table if already set). */
+  setOrderType: (next: "pickup" | "dine_in", tableNumber?: string) => void;
   addToCart: (item: Omit<CartItem, "cartId">) => void;
   /** Replace an existing cart line in-place — preserves its position
    *  in the array (so the customer's edit doesn't reshuffle the cart)
@@ -163,15 +175,34 @@ export const useApp = create<AppState>()(
 
       setOutlet: (id, name) => set({ outletId: id, outletName: name }),
       setDineIn: (outletId, outletName, tableNumber) =>
-        set({
-          outletId,
-          outletName,
-          orderType: "dine_in",
-          tableNumber,
-          cart: [],
-          appliedReward: null,
+        set((s) => {
+          // Keep the basket when scanning a table at the SAME outlet the
+          // customer's already on (decision: an order-type change preserves
+          // the cart). A DIFFERENT outlet means a different menu / prices, so
+          // clear the cart + the now-moot reward — the standard outlet-change
+          // rule, and what keeps native/PWA/toggle paths consistent.
+          const outletChanged = s.outletId !== outletId;
+          return {
+            outletId,
+            // Scan / deep-link passes "" and backfills the name async; don't
+            // blank an already-correct name in the meantime.
+            outletName: outletName || s.outletName,
+            orderType: "dine_in",
+            tableNumber,
+            cart: outletChanged ? [] : s.cart,
+            appliedReward: outletChanged ? null : s.appliedReward,
+          };
         }),
       clearDineIn: () => set({ orderType: "pickup", tableNumber: null }),
+      setOrderType: (next, tableNumber) =>
+        set((s) => ({
+          orderType: next,
+          // dine_in needs a table — use the passed one, else keep the current
+          // (customer toggled to Takeaway and back). Takeaway drops it.
+          tableNumber: next === "dine_in" ? (tableNumber ?? s.tableNumber) : null,
+          // cart + appliedReward preserved; the validity panel re-checks the
+          // reward against the new channel and blocks checkout if ineligible.
+        })),
       addToCart: (item) =>
         set((s) => ({
           cart: [

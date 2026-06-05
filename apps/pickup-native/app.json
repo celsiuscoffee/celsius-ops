@@ -3,7 +3,7 @@
     "name": "Celsius Coffee",
     "slug": "celsius-pickup-native",
     "scheme": "celsiuscoffee",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
     "ios": {
       "bundleIdentifier": "com.celsiuscoffee.pickup.next",
       "supportsTablet": false,
-      "buildNumber": "11",
+      "buildNumber": "12",
       "entitlements": {
         "aps-environment": "production"
       },
@@ -26,7 +26,7 @@
         "UIBackgroundModes": [
           "remote-notification"
         ],
-        "NSCameraUsageDescription": "Celsius Coffee may use the camera if you scan your member QR at the counter or scan a card during checkout. The app does not use the camera otherwise.",
+        "NSCameraUsageDescription": "Celsius Coffee uses the camera to scan the QR code on your table so you can order from your seat, and may use it to scan a payment card at checkout. The app does not use the camera otherwise.",
         "NSPhotoLibraryUsageDescription": "Celsius Coffee may access your photo library if you save a payment card from Apple Pay or attach an image to a support request. The app does not read your photos otherwise.",
         "NSFaceIDUsageDescription": "Celsius Coffee uses Face ID to authorise Apple Pay payments at checkout — Apple handles this; we never see your biometric data.",
         "NSLocationWhenInUseUsageDescription": "Celsius Coffee uses your approximate location only to pick the nearest pickup outlet on the home screen. You can decline and pick an outlet manually."
@@ -34,7 +34,7 @@
     },
     "android": {
       "package": "com.celsiuscoffee.pickup.next",
-      "versionCode": 9,
+      "versionCode": 10,
       "googleServicesFile": "./google-services.json",
       "intentFilters": [
         {
@@ -84,6 +84,13 @@
         }
       ],
       "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
       [
         "@stripe/stripe-react-native",
         {

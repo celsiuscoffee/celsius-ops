@@ -105,6 +105,9 @@ export default function Menu() {
   const cart = useApp((s) => s.cart);
   const outletName = useApp((s) => s.outletName);
   const outletId = useApp((s) => s.outletId);
+  const orderType = useApp((s) => s.orderType);
+  const tableNumber = useApp((s) => s.tableNumber);
+  const isDineIn = orderType === "dine_in";
   // Menu is keyed by outlet so per-outlet OOS overrides land — switching
   // outlets (or signing in to an outlet for the first time) refetches
   // and applies that outlet's OOS list.
@@ -474,16 +477,38 @@ export default function Menu() {
       <Pressable
         onPress={() => {
           Haptics.selectionAsync();
-          router.push("/store");
+          // Dine-in's outlet + table are locked to the scanned QR — nothing
+          // to change here; only takeaway opens the outlet picker.
+          if (!isDineIn) router.push("/store");
         }}
         className={`bg-surface flex-row items-center gap-2 px-4 ${isWeb ? "py-2" : "py-3"} border-b border-border active:opacity-70`}
-        accessibilityLabel={`Pickup outlet: ${outletName ?? "not selected"}. Tap to change.`}
+        accessibilityLabel={
+          isDineIn
+            ? `Dine-in${tableNumber ? `, table ${tableNumber}` : ""} at ${outletName ?? "this outlet"}`
+            : `Pickup outlet: ${outletName ?? "not selected"}. Tap to change.`
+        }
       >
-        <MapPin size={14} color="#A2492C" />
+        {isDineIn ? (
+          <UtensilsCrossed size={14} color="#A2492C" />
+        ) : (
+          <MapPin size={14} color="#A2492C" />
+        )}
         <Text className="text-espresso font-bold text-sm flex-1" numberOfLines={1}>
-          {outletName ?? "Select outlet"}
+          {isDineIn
+            ? `${tableNumber ? `Table ${tableNumber} · ` : ""}${outletName ?? "Dine-in"}`
+            : outletName ?? "Select outlet"}
         </Text>
-        <ChevronDown size={14} color="#8E8E93" />
+        {isDineIn ? (
+          <View
+            style={{ backgroundColor: "#FBEBE8", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}
+          >
+            <Text style={{ color: "#A2492C", fontSize: 10, fontFamily: "Peachi-Bold" }}>
+              Dine-in
+            </Text>
+          </View>
+        ) : (
+          <ChevronDown size={14} color="#8E8E93" />
+        )}
       </Pressable>
 
         {/* Guest banner — gentle pull to sign in. Sits below the outlet

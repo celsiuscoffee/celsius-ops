@@ -22,6 +22,8 @@ import {
   CalendarClock,
   ChevronDown,
 } from "lucide-react-native";
+import { OrderTypeBar } from "@/components/OrderTypeBar";
+import { validateAppliedReward } from "@/lib/order-type";
 
 // Customer-facing labels for each payment method. No provider names — the
 // customer doesn't (and shouldn't) need to know whether their card runs
@@ -177,6 +179,7 @@ export default function Checkout() {
   const loyaltyId = useApp((s) => s.loyaltyId);
   const orderType = useApp((s) => s.orderType);
   const tableNumber = useApp((s) => s.tableNumber);
+  const isDineIn = orderType === "dine_in";
   const queryClient = useQueryClient();
 
   // SST is config-driven via /api/settings?key=sst — admin can toggle/adjust
@@ -300,6 +303,11 @@ export default function Checkout() {
 
   const subtotal = cartTotal(cart);
   const rewardDiscountRaw = calcRewardDiscount(appliedReward, cart, subtotal);
+  // Re-validate the applied reward against the current order type + cart, so a
+  // channel-restricted / under-minimum / missing-qualifier reward surfaces a
+  // clear reason and blocks checkout instead of silently failing server-side.
+  const rewardValidity = validateAppliedReward(appliedReward, cart, orderType);
+  const rewardInvalidReason = rewardValidity.valid ? null : rewardValidity.reason;
 
   // Non-stackable tier exclusivity (Staff, Black Card). Mirrors the
   // server-side auto-pick-larger so the cart, summary, and Place
@@ -1137,58 +1145,18 @@ export default function Checkout() {
 
         {step === "review" && (
           <>
-            <Pressable
-              onPress={() => router.push("/store")}
-              className="bg-surface rounded-2xl border border-border p-4 active:opacity-70"
-            >
-              <View className="flex-row items-center justify-between">
-                <Text className="text-muted-fg text-[10px] font-bold uppercase tracking-widest">
-                  Pickup at
-                </Text>
-                <Text
-                  className="text-primary text-[11px]"
-                  style={{ fontFamily: "Peachi-Bold" }}
-                >
-                  Change
-                </Text>
-              </View>
-              <View className="flex-row items-center gap-2 mt-1">
-                <MapPin size={14} color="#160800" />
-                <Text className="text-espresso font-bold text-[15px] flex-1" numberOfLines={1}>
-                  {outletName ?? "Select outlet"}
-                </Text>
-              </View>
-              {currentOutlet && (
-                <View className="flex-row items-center gap-1.5 mt-2">
-                  <View
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: 3,
-                      backgroundColor: !currentOutlet.is_open
-                        ? "#EF4444"
-                        : currentOutlet.is_busy
-                        ? "#F59E0B"
-                        : "#22C55E",
-                    }}
-                  />
-                  <Text
-                    className="text-muted-fg text-[12px]"
-                    style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
-                  >
-                    {!currentOutlet.is_open
-                      ? "Closed now"
-                      : currentOutlet.is_busy
-                      ? "Busy"
-                      : "Open"}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
+            {/* Order type — Takeaway | Dine-In toggle + outlet/table summary.
+                Replaces the old "Pickup at" card: takeaway shows the outlet +
+                Change; dine-in shows the locked table + outlet (and hides the
+                pickup-time card below). */}
+            <OrderTypeBar />
 
             {/* Pickup time — defaults to Now. Tap to open the
                 bottom-sheet picker and choose a delayed pickup so
-                the drink is freshest when the customer arrives. */}
+                the drink is freshest when the customer arrives.
+                Dine-in has no pickup time (served to the table), so the
+                whole card hides when the order type is dine-in. */}
+            {!isDineIn && (
             <Pressable
               onPress={() => {
                 Haptics.selectionAsync();
@@ -1256,6 +1224,7 @@ export default function Checkout() {
                   : `Brew starts ~${Math.max(0, pickupOffsetMin - (currentOutlet?.pickup_time_mins ?? 10))} min before pickup`}
               </Text>
             </Pressable>
+            )}
 
             {/* Payment Methods — grouped, ZUS-style. One row per category;
                 e-wallet and online-banking categories expand to a sub-picker
@@ -1578,7 +1547,7 @@ export default function Checkout() {
               </Text>
             </Pressable>
           )}
-          {outletClosed && pickupOffsetMin == null && (
+          {!isDineIn && outletClosed && pickupOffsetMin == null && (
             <View
               className="bg-amber-50 border border-amber-200 rounded-2xl px-3 py-2 mb-2 flex-row items-start gap-2"
             >
@@ -1591,11 +1560,44 @@ export default function Checkout() {
               </Text>
             </View>
           )}
+          {rewardInvalidReason && (
+            <View className="bg-red-50 border border-red-200 rounded-2xl px-3 py-2.5 mb-2 flex-row items-start gap-2">
+              <AlertCircle size={15} color="#B91C1C" />
+              <View className="flex-1">
+                <Text className="text-red-800 text-[12.5px]" style={{ fontFamily: "Peachi-Bold" }}>
+                  {appliedReward?.name
+                    ? `${appliedReward.name} — can't be used here`
+                    : "Reward can't be used here"}
+                </Text>
+                <Text
+                  className="text-red-700 text-[12px] mt-0.5"
+                  style={{ fontFamily: "SpaceGrotesk_500Medium" }}
+                >
+                  {rewardInvalidReason}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setAppliedReward(null);
+                  setReservedVoucher(null);
+                }}
+                hitSlop={8}
+                className="active:opacity-70"
+              >
+                <Text className="text-red-700 text-[12px]" style={{ fontFamily: "Peachi-Bold" }}>
+                  Remove
+                </Text>
+              </Pressable>
+            </View>
+          )}
           <PrimaryButton
             label={
-              !paymentsEnabled
+              rewardInvalidReason
+                ? "Remove reward to continue"
+                : !paymentsEnabled
                 ? "Online ordering paused"
-                : outletClosed && pickupOffsetMin == null
+                : !isDineIn && outletClosed && pickupOffsetMin == null
                   ? "Schedule a pickup time"
                   : selectedCategory === "ewallet" && !selectedWalletId
                     ? "Pick your wallet"
@@ -1610,9 +1612,10 @@ export default function Checkout() {
             loadingLabel={busyLabel}
             disabled={
               !paymentsEnabled ||
-              (outletClosed && pickupOffsetMin == null) ||
+              (!isDineIn && outletClosed && pickupOffsetMin == null) ||
               !selectedMethodId ||
-              (selectedMethodId === "fpx" && !fpxBankCode)
+              (selectedMethodId === "fpx" && !fpxBankCode) ||
+              !!rewardInvalidReason
             }
           />
         </View>
