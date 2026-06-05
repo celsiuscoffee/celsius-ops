@@ -709,6 +709,9 @@ export default function Register() {
     setDisplayStatus(lines.length > 0 ? "ordering" : "idle");
   }, [lines.length, paid]);
   useEffect(() => { useDisplay.getState().setOrderType(orderType); }, [orderType]);
+  // Mirror whether the cashier has actually PICKED dine-in/takeaway yet — the
+  // 2nd screen shouldn't show "Takeaway" just because that's the internal default.
+  useEffect(() => { useDisplay.getState().setOrderTypeChosen(coTouched); }, [coTouched]);
   // Mirror the chosen tender to the customer screen so card payments show a
   // "pay by card on the terminal" prompt instead of the QR.
   useEffect(() => { useDisplay.getState().setPayMethod(payMethod); }, [payMethod]);
@@ -3239,9 +3242,12 @@ function DiscToggle({ label, active, onPress }: { label: string; active: boolean
 }
 
 function ColorTab({ label, color, width, active, onPress }: { label: string; color: string; width: number; active: boolean; onPress: () => void }) {
+  // Single-word labels stay on ONE line (shrink to fit so "Sandwiches" never
+  // breaks to "Sandwiche / s"); genuine two-word labels may wrap to two lines.
+  const oneWord = !label.trim().includes(" ");
   return (
     <Pressable onPress={onPress} className="rounded-lg px-1.5 items-center justify-center active:opacity-90" style={{ width, height: 44, backgroundColor: color, opacity: active ? 1 : 0.6, borderWidth: 2, borderColor: active ? "rgba(255,255,255,0.85)" : "transparent" }}>
-      <Text className="text-white text-center" numberOfLines={2} style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12.5, lineHeight: 15 }}>{label}</Text>
+      <Text className="text-white text-center" numberOfLines={oneWord ? 1 : 2} adjustsFontSizeToFit minimumFontScale={0.6} style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12.5, lineHeight: 15 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -3272,7 +3278,9 @@ function ProductTile({ product, width, imageHeight = null, onPress, onLongPress 
         </View>
       )}
       <View className="px-2 py-2">
-        <Text className="text-cream" style={{ fontFamily: "Peachi-Medium", fontSize: compact ? 11 : 12, lineHeight: compact ? 13.5 : undefined, opacity: oos ? 0.5 : 1 }} numberOfLines={compact ? undefined : 2}>{product.name}{compact && oos ? "  · 86" : ""}</Text>
+        {/* Reserve 2 lines for the name (non-compact) so a 1-line name and a
+            2-line name leave the price at the same height across the row. */}
+        <Text className="text-cream" numberOfLines={compact ? undefined : 2} adjustsFontSizeToFit minimumFontScale={0.65} style={{ fontFamily: "Peachi-Medium", fontSize: compact ? 11 : 12, lineHeight: compact ? 13.5 : 15, minHeight: compact ? undefined : 30, opacity: oos ? 0.5 : 1 }}>{product.name}{compact && oos ? "  · 86" : ""}</Text>
         {!compact && (
           <Text className="text-amber-400 text-[12px] mt-0.5" style={{ fontFamily: "SpaceGrotesk_700Bold", opacity: oos ? 0.5 : 1 }}>{rm(product.price_sen)}</Text>
         )}

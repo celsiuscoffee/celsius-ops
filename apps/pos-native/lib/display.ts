@@ -51,6 +51,10 @@ type DisplayState = {
   orderId: string | null;
   // Order context mirrored to the customer screen.
   orderType: DisplayOrderType;
+  /** True once the cashier has explicitly picked dine-in / takeaway (at checkout).
+   *  Until then the display shouldn't show a type — `orderType` just defaults to
+   *  "takeaway" internally for pricing, which isn't a real choice yet. */
+  orderTypeChosen: boolean;
   tableNumber: string | null;
   reward: DisplayReward;
   extraDiscount: DisplayExtraDiscount;
@@ -72,6 +76,7 @@ type DisplayState = {
   setOrderNumber: (n: string | null) => void;
   setOrderId: (id: string | null) => void;
   setOrderType: (t: DisplayOrderType) => void;
+  setOrderTypeChosen: (v: boolean) => void;
   setTableNumber: (n: string | null) => void;
   setReward: (r: DisplayReward) => void;
   setExtraDiscount: (d: DisplayExtraDiscount) => void;
@@ -90,6 +95,7 @@ export const useDisplay = create<DisplayState>((set) => ({
   orderNumber: null,
   orderId: null,
   orderType: "takeaway",
+  orderTypeChosen: false,
   tableNumber: null,
   reward: null,
   extraDiscount: null,
@@ -104,6 +110,7 @@ export const useDisplay = create<DisplayState>((set) => ({
   setOrderNumber: (orderNumber) => set({ orderNumber }),
   setOrderId: (orderId) => set({ orderId }),
   setOrderType: (orderType) => set({ orderType }),
+  setOrderTypeChosen: (orderTypeChosen) => set({ orderTypeChosen }),
   setTableNumber: (tableNumber) => set({ tableNumber }),
   setReward: (reward) => set({ reward }),
   setExtraDiscount: (extraDiscount) => set({ extraDiscount }),
@@ -115,5 +122,5 @@ export const useDisplay = create<DisplayState>((set) => ({
   setRedeemError: (redeemError) => set({ redeemError }),
   // Keep member identified across orders (a returning regular stays
   // logged in for the next basket); only clear cart-scoped context.
-  reset: () => set({ status: "idle", orderNumber: null, orderId: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, payTotal: 0, payMethod: null, beansEarned: 0, redeemRequest: null, redeemError: null }),
+  reset: () => set({ status: "idle", orderNumber: null, orderId: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, orderTypeChosen: false, payTotal: 0, payMethod: null, beansEarned: 0, redeemRequest: null, redeemError: null }),
 }));

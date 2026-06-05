@@ -61,6 +61,7 @@ export default function CustomerDisplay() {
   const status = useDisplay((s) => s.status);
   const member = useDisplay((s) => s.member);
   const orderType = useDisplay((s) => s.orderType);
+  const orderTypeChosen = useDisplay((s) => s.orderTypeChosen);
   const tableNumber = useDisplay((s) => s.tableNumber);
   const reward = useDisplay((s) => s.reward);
   const extraDiscount = useDisplay((s) => s.extraDiscount);
@@ -550,9 +551,13 @@ export default function CustomerDisplay() {
         <View style={{ flex: 1 }} className="px-5 pt-4 pb-4">
           <View className="flex-row items-center justify-between mb-2">
             <Text style={{ fontFamily: "Peachi-Bold", fontSize: 16, color: CREAM }}>Your Order</Text>
-            <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 11, color: "rgba(245,243,240,0.6)" }}>
-              {orderType === "dine_in" ? (tableNumber ? `Dine-in · Stand #${tableNumber}` : "Dine-in") : "Takeaway"}
-            </Text>
+            {/* Only show the order type once the cashier has actually picked it at
+                checkout — not the silent "takeaway" default while still building. */}
+            {orderTypeChosen && (
+              <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 11, color: "rgba(245,243,240,0.6)" }}>
+                {orderType === "dine_in" ? (tableNumber ? `Dine-in · Stand #${tableNumber}` : "Dine-in") : "Takeaway"}
+              </Text>
+            )}
           </View>
           <FlatList
             data={lines}
@@ -566,9 +571,12 @@ export default function CustomerDisplay() {
               return (
                 <View className="py-1.5">
                   <View className="flex-row items-start justify-between">
-                    <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.85)", flex: 1, lineHeight: 16 }}>
-                      <Text style={{ color: "rgba(245,243,240,0.4)" }}>{item.qty}× </Text>{item.product.name}
-                    </Text>
+                    {/* qty in its own column so a wrapped name hangs under its first
+                        word (under "Nasi…"), not back under the "1x" prefix. */}
+                    <View className="flex-row items-start" style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.4)", lineHeight: 16 }}>{item.qty}× </Text>
+                      <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.85)", flex: 1, lineHeight: 16 }}>{item.product.name}</Text>
+                    </View>
                     <View className="items-end" style={{ marginLeft: 8 }}>
                       {lineDisc > 0 && (
                         <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10, color: "rgba(245,243,240,0.35)", textDecorationLine: "line-through" }}>{rm(gross)}</Text>
@@ -1246,16 +1254,17 @@ function PairCard({ pair }: { pair: SuggestedPair }) {
           </View>
         )}
       </View>
-      <View className="px-3 py-2.5" style={{ flex: 1 }}>
+      <View className="px-3 py-2.5">
         {/* Reserve a fixed 2-line height for the reason label so a 1-line reason
-            ("ON OFFER") and a 2-line one ("OFTEN PAIRED TOGETHER") both leave the
-            name starting at the same Y across the row. */}
+            ("ON OFFER") and a 2-line one ("OFTEN PAIRED TOGETHER") leave the name
+            starting at the same Y across the row. */}
         <Text numberOfLines={2} style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 2, lineHeight: 12, color: "rgba(251,191,36,0.75)", minHeight: 24, marginBottom: 3 }}>{pair.reason.toUpperCase()}</Text>
-        {/* FULL product name — never truncated. It shrinks to fit (down to 60%)
-            before it would ever clip, capped at 3 lines; cards stretch to equal
-            height and the price is pinned to the bottom, so alignment holds. */}
-        <Text numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.6} style={{ fontFamily: "Peachi-Bold", fontSize: 15, lineHeight: 18, color: CREAM }}>{pair.name}</Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 14, color: GOLD, marginTop: "auto", paddingTop: 4 }}>{rm(pair.price_sen)}</Text>
+        {/* FULL product name — shrinks to fit (down to 55%) inside a reserved
+            2-line block, so it never truncates AND every card is the same fixed
+            height (no flex collapse / clipping), keeping header / name / price
+            aligned across the row. */}
+        <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.55} style={{ fontFamily: "Peachi-Bold", fontSize: 15, lineHeight: 18, color: CREAM, minHeight: 36 }}>{pair.name}</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 14, color: GOLD, marginTop: 4 }}>{rm(pair.price_sen)}</Text>
       </View>
     </View>
   );
