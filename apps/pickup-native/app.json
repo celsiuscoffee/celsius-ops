@@ -17,7 +17,6 @@
       "bundleIdentifier": "com.celsiuscoffee.pickup.next",
       "supportsTablet": false,
       "buildNumber": "11",
-      "associatedDomains": ["applinks:order.celsiuscoffee.com"],
       "entitlements": {
         "aps-environment": "production"
       },
