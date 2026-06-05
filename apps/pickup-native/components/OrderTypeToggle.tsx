@@ -1,19 +1,14 @@
 import { View, Text, Pressable } from "react-native";
 import { ShoppingBag, UtensilsCrossed } from "lucide-react-native";
-import {
-  ORDER_TYPE_LABEL,
-  ORDER_TYPE_TAGLINE,
-  type OrderType,
-} from "@/lib/order-type";
+import { ORDER_TYPE_LABEL, type OrderType } from "@/lib/order-type";
 
 /**
  * The Dine-In | Pickup segmented control — shared by the home entry
  * (HomeOrderMode) and the cart/checkout summary (OrderTypeBar) so every
  * surface uses the exact same toggle. Dine-In sits first by product choice.
  *
- * Purely presentational: the parent owns what "select" does (scan to enter
- * dine-in vs setOrderType), so the same control drives both the entry and
- * the confirmation contexts.
+ * Compact single row (icon + label, no tagline) to keep the home light.
+ * Purely presentational: the parent owns what "select" does.
  */
 const SEGMENTS: OrderType[] = ["dine_in", "pickup"];
 
@@ -44,8 +39,11 @@ export function OrderTypeToggle({
             accessibilityState={{ selected: active }}
             style={{
               flex: 1,
+              flexDirection: "row",
               alignItems: "center",
-              paddingVertical: 9,
+              justifyContent: "center",
+              gap: 6,
+              paddingVertical: 11,
               borderRadius: 11,
               backgroundColor: active ? "#FFFFFF" : "transparent",
               shadowColor: "#000",
@@ -54,31 +52,19 @@ export function OrderTypeToggle({
               shadowOffset: { width: 0, height: 2 },
             }}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Icon
-                size={15}
-                color={active ? "#A2492C" : "#8E8E93"}
-                strokeWidth={2.2}
-              />
-              <Text
-                style={{
-                  fontFamily: "Peachi-Bold",
-                  fontSize: 14,
-                  color: active ? "#160800" : "#8E8E93",
-                }}
-              >
-                {ORDER_TYPE_LABEL[t]}
-              </Text>
-            </View>
+            <Icon
+              size={15}
+              color={active ? "#160800" : "#8E8E93"}
+              strokeWidth={2.2}
+            />
             <Text
               style={{
-                fontFamily: "SpaceGrotesk_500Medium",
-                fontSize: 10,
-                color: active ? "#A2492C" : "#B0AAA4",
-                marginTop: 2,
+                fontFamily: "Peachi-Bold",
+                fontSize: 14,
+                color: active ? "#160800" : "#8E8E93",
               }}
             >
-              {ORDER_TYPE_TAGLINE[t]}
+              {ORDER_TYPE_LABEL[t]}
             </Text>
           </Pressable>
         );

@@ -498,17 +498,7 @@ export default function Menu() {
             ? `${tableNumber ? `Table ${tableNumber} · ` : ""}${outletName ?? "Dine-in"}`
             : outletName ?? "Select outlet"}
         </Text>
-        {isDineIn ? (
-          <View
-            style={{ backgroundColor: "#FBEBE8", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}
-          >
-            <Text style={{ color: "#A2492C", fontSize: 10, fontFamily: "Peachi-Bold" }}>
-              Dine-in
-            </Text>
-          </View>
-        ) : (
-          <ChevronDown size={14} color="#8E8E93" />
-        )}
+        {!isDineIn && <ChevronDown size={14} color="#8E8E93" />}
       </Pressable>
 
         {/* Guest banner — gentle pull to sign in. Sits below the outlet

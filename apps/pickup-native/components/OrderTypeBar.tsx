@@ -50,14 +50,14 @@ export function OrderTypeBar() {
             paddingHorizontal: 14,
             paddingVertical: 11,
             borderRadius: 12,
-            backgroundColor: "#FBEBE8",
+            backgroundColor: "#F7F4F2",
             borderWidth: 1,
-            borderColor: "rgba(162,73,44,0.2)",
+            borderColor: "#ECE5E0",
           }}
         >
-          <UtensilsCrossed size={16} color="#A2492C" />
+          <UtensilsCrossed size={16} color="#8E8E93" />
           <Text
-            style={{ flex: 1, fontFamily: "Peachi-Bold", fontSize: 13.5, color: "#5A1F16" }}
+            style={{ flex: 1, fontFamily: "Peachi-Bold", fontSize: 13.5, color: "#160800" }}
             numberOfLines={1}
           >
             {tableNumber ? `Table ${tableNumber}` : "Dine-in"}

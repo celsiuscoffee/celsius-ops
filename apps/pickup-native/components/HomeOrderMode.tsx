@@ -9,13 +9,14 @@ import { OrderTypeToggle } from "./OrderTypeToggle";
 /**
  * Home order-mode entry — the single place a customer chooses HOW to order,
  * so the old confusion (a Pickup outlet + a separate "scan your table" button
- * sitting side by side, pointing at different outlets) goes away.
+ * pointing at different outlets) goes away.
  *
- *   Dine-In selected → scan a table → row shows "Table N · Outlet"
- *   Pickup  selected → pick an outlet (with open/busy + ETA) → "Change"
+ *   Dine-In selected → scan a table → "Table N · Outlet"
+ *   Pickup  selected → pick an outlet (with open/busy + ETA)
  *
- * Only ONE context shows at a time: scanning a table flips the whole card to
- * the dine-in row, so a Putrajaya pickup never sits next to a Shah Alam scan.
+ * Kept deliberately light: the toggle + ONE plain context line (no box, no
+ * alert-red), only one context at a time. Scanning a table flips the whole
+ * card to dine-in, so a Putrajaya pickup never sits next to a Shah Alam scan.
  */
 export function HomeOrderMode({
   outletStatus,
@@ -28,6 +29,7 @@ export function HomeOrderMode({
   const outletName = useApp((s) => s.outletName);
   const setOrderType = useApp((s) => s.setOrderType);
   const current = resolveOrderType(orderType);
+  const isDineIn = current === "dine_in";
 
   const select = (next: OrderType) => {
     if (next === current) return;
@@ -41,88 +43,69 @@ export function HomeOrderMode({
   };
 
   return (
-    <View style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 2, gap: 10 }}>
+    <View style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 2, gap: 9 }}>
       <OrderTypeToggle value={current} onSelect={select} />
 
-      {current === "dine_in" ? (
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync();
-            router.push("/menu");
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`Dine-in${tableNumber ? `, table ${tableNumber}` : ""}${
-            outletName ? ` at ${outletName}` : ""
-          }`}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-            paddingHorizontal: 14,
-            paddingVertical: 12,
-            borderRadius: 12,
-            backgroundColor: "#FBEBE8",
-            borderWidth: 1,
-            borderColor: "rgba(162,73,44,0.2)",
-          }}
+      {/* Plain context line — no box, neutral. Pickup → change outlet;
+          dine-in → straight to the menu for that table. */}
+      <Pressable
+        onPress={() => {
+          Haptics.selectionAsync();
+          router.push(isDineIn ? "/menu" : "/store");
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={
+          isDineIn
+            ? `Dine-in${tableNumber ? `, table ${tableNumber}` : ""}${
+                outletName ? ` at ${outletName}` : ""
+              }`
+            : `Pickup outlet: ${outletName ?? "not selected"}. Tap to change.`
+        }
+        className="active:opacity-70"
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          alignSelf: "flex-start",
+          gap: 7,
+          paddingHorizontal: 6,
+          paddingVertical: 2,
+        }}
+      >
+        {isDineIn ? (
+          <UtensilsCrossed size={15} color="#8E8E93" />
+        ) : (
+          <MapPin size={15} color="#8E8E93" />
+        )}
+        <Text
+          style={{ fontFamily: "Peachi-Bold", fontSize: 14, color: "#160800", flexShrink: 1 }}
+          numberOfLines={1}
         >
-          <UtensilsCrossed size={16} color="#A2492C" />
-          <Text
-            style={{ flex: 1, fontFamily: "Peachi-Bold", fontSize: 14, color: "#5A1F16" }}
-            numberOfLines={1}
-          >
-            {tableNumber ? `Table ${tableNumber}` : "Dine-in"}
-            {outletName ? ` · ${outletName}` : ""}
-          </Text>
-          <ChevronRight size={15} color="#A2492C" />
-        </Pressable>
-      ) : (
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync();
-            router.push("/store");
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`Pickup outlet: ${outletName ?? "not selected"}. Tap to change.`}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-            paddingHorizontal: 14,
-            paddingVertical: 12,
-            borderRadius: 12,
-            backgroundColor: "#F7F4F2",
-            borderWidth: 1,
-            borderColor: "#ECE5E0",
-          }}
-        >
-          <MapPin size={16} color="#8E8E93" />
-          <Text
-            style={{ flex: 1, fontFamily: "Peachi-Bold", fontSize: 14, color: "#160800" }}
-            numberOfLines={1}
-          >
-            {outletName ?? "Select pickup outlet"}
-          </Text>
-          {outletStatus && (
-            <>
-              <View
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: 3.5,
-                  backgroundColor: outletStatus.color,
-                }}
-              />
-              <Text
-                style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12, color: "#8E8E93" }}
-              >
-                {outletStatus.label}
-              </Text>
-            </>
-          )}
-          <ChevronRight size={15} color="#8E8E93" />
-        </Pressable>
-      )}
+          {isDineIn
+            ? `${tableNumber ? `Table ${tableNumber}` : "Dine-in"}${
+                outletName ? ` · ${outletName}` : ""
+              }`
+            : outletName ?? "Select pickup outlet"}
+        </Text>
+        {!isDineIn && outletStatus && (
+          <>
+            <View
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: outletStatus.color,
+                marginLeft: 2,
+              }}
+            />
+            <Text
+              style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12, color: "#8E8E93" }}
+            >
+              {outletStatus.label}
+            </Text>
+          </>
+        )}
+        <ChevronRight size={14} color="#8E8E93" />
+      </Pressable>
     </View>
   );
 }
