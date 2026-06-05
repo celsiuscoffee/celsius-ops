@@ -7,17 +7,22 @@ import { resolveOrderType, type OrderType } from "@/lib/order-type";
 import { OrderTypeToggle } from "./OrderTypeToggle";
 
 /**
- * Dine-In | Pickup selector + context summary — the McDonald's "Confirm
- * Order" header, shared by the cart and checkout screens.
+ * Home order-mode entry — the single place a customer chooses HOW to order,
+ * so the old confusion (a Pickup outlet + a separate "scan your table" button
+ * sitting side by side, pointing at different outlets) goes away.
  *
- *  - Pickup:  collect at the counter; pick/Change any outlet; no table.
- *  - Dine-In: outlet + table locked to the scanned QR; served to the table.
+ *   Dine-In selected → scan a table → row shows "Table N · Outlet"
+ *   Pickup  selected → pick an outlet (with open/busy + ETA) → "Change"
  *
- * Tapping Dine-In with no table yet opens the scanner. Switching never clears
- * the cart — store.setOrderType preserves it; the applied reward is
- * re-validated by the checkout validity panel.
+ * Only ONE context shows at a time: scanning a table flips the whole card to
+ * the dine-in row, so a Putrajaya pickup never sits next to a Shah Alam scan.
  */
-export function OrderTypeBar() {
+export function HomeOrderMode({
+  outletStatus,
+}: {
+  /** Pre-computed pickup-outlet status pill (open/busy + ETA). */
+  outletStatus?: { color: string; label: string } | null;
+}) {
   const orderType = useApp((s) => s.orderType);
   const tableNumber = useApp((s) => s.tableNumber);
   const outletName = useApp((s) => s.outletName);
@@ -28,8 +33,7 @@ export function OrderTypeBar() {
     if (next === current) return;
     Haptics.selectionAsync();
     if (next === "dine_in" && !tableNumber) {
-      // No table yet — send them to scan/enter one; the scanner calls
-      // setDineIn on a successful read, which flips us into dine-in.
+      // No table yet — scan one; the scanner flips us into dine-in on success.
       router.push("/scan" as never);
       return;
     }
@@ -37,18 +41,25 @@ export function OrderTypeBar() {
   };
 
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 2, gap: 10 }}>
       <OrderTypeToggle value={current} onSelect={select} />
 
-      {/* Context summary */}
       {current === "dine_in" ? (
-        <View
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync();
+            router.push("/menu");
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`Dine-in${tableNumber ? `, table ${tableNumber}` : ""}${
+            outletName ? ` at ${outletName}` : ""
+          }`}
           style={{
             flexDirection: "row",
             alignItems: "center",
             gap: 8,
             paddingHorizontal: 14,
-            paddingVertical: 11,
+            paddingVertical: 12,
             borderRadius: 12,
             backgroundColor: "#FBEBE8",
             borderWidth: 1,
@@ -57,13 +68,14 @@ export function OrderTypeBar() {
         >
           <UtensilsCrossed size={16} color="#A2492C" />
           <Text
-            style={{ flex: 1, fontFamily: "Peachi-Bold", fontSize: 13.5, color: "#5A1F16" }}
+            style={{ flex: 1, fontFamily: "Peachi-Bold", fontSize: 14, color: "#5A1F16" }}
             numberOfLines={1}
           >
             {tableNumber ? `Table ${tableNumber}` : "Dine-in"}
             {outletName ? ` · ${outletName}` : ""}
           </Text>
-        </View>
+          <ChevronRight size={15} color="#A2492C" />
+        </Pressable>
       ) : (
         <Pressable
           onPress={() => {
@@ -71,13 +83,13 @@ export function OrderTypeBar() {
             router.push("/store");
           }}
           accessibilityRole="button"
-          accessibilityLabel="Change pickup outlet"
+          accessibilityLabel={`Pickup outlet: ${outletName ?? "not selected"}. Tap to change.`}
           style={{
             flexDirection: "row",
             alignItems: "center",
             gap: 8,
             paddingHorizontal: 14,
-            paddingVertical: 11,
+            paddingVertical: 12,
             borderRadius: 12,
             backgroundColor: "#F7F4F2",
             borderWidth: 1,
@@ -86,15 +98,29 @@ export function OrderTypeBar() {
         >
           <MapPin size={16} color="#8E8E93" />
           <Text
-            style={{ flex: 1, fontFamily: "Peachi-Bold", fontSize: 13.5, color: "#160800" }}
+            style={{ flex: 1, fontFamily: "Peachi-Bold", fontSize: 14, color: "#160800" }}
             numberOfLines={1}
           >
-            {outletName ? `Pickup at ${outletName}` : "Select pickup outlet"}
+            {outletName ?? "Select pickup outlet"}
           </Text>
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, color: "#A2492C" }}>
-            Change
-          </Text>
-          <ChevronRight size={14} color="#A2492C" />
+          {outletStatus && (
+            <>
+              <View
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 3.5,
+                  backgroundColor: outletStatus.color,
+                }}
+              />
+              <Text
+                style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12, color: "#8E8E93" }}
+              >
+                {outletStatus.label}
+              </Text>
+            </>
+          )}
+          <ChevronRight size={15} color="#8E8E93" />
         </Pressable>
       )}
     </View>

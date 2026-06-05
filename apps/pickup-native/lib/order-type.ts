@@ -13,9 +13,11 @@ import { cartTotal } from "./store";
 
 export type OrderType = "pickup" | "dine_in";
 
-/** Customer-facing label for the toggle + summaries. */
+/** Customer-facing label for the toggle + summaries. The app's established
+ *  term is "Pickup" (the outlet picker, "Pickup from X"), so we use it over
+ *  "Takeaway" for consistency across home / cart / checkout. */
 export const ORDER_TYPE_LABEL: Record<OrderType, string> = {
-  pickup: "Takeaway",
+  pickup: "Pickup",
   dine_in: "Dine-In",
 };
 
