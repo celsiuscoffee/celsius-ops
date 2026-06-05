@@ -43,14 +43,16 @@ export async function GET(request: NextRequest) {
     .eq("outlet_id", outletId).maybeSingle();
   const layout = (settings as { table_layout?: unknown } | null)?.table_layout;
 
-  const tables: { label: string; floor: string }[] = [];
+  const tables: { label: string; floor: string; seats: number | null }[] = [];
   if (Array.isArray(layout)) {
     for (const f of layout as Array<{ name?: string; tables?: unknown }>) {
       const floor = (typeof f?.name === "string" && f.name.trim()) || "Floor";
       if (Array.isArray(f?.tables)) {
         for (const t of f.tables as Array<Record<string, unknown>>) {
           const label = String(t?.label ?? "").trim();
-          if (label) tables.push({ label, floor });
+          const sn = Number(t?.seats);
+          const seats = Number.isFinite(sn) && sn > 0 ? sn : null;
+          if (label) tables.push({ label, floor, seats });
         }
       }
     }
