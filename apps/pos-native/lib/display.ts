@@ -63,6 +63,10 @@ type DisplayState = {
   /** Beans the member earned on the just-completed order (thank-you summary). */
   beansEarned: number;
   redeemRequest: DisplayRedeemRequest;
+  /** Short, customer-facing reason a 2nd-screen redeem tap couldn't be applied
+   *  (e.g. "Spend RM1.30 more to use this reward"). Shown as a toast on the
+   *  display, then cleared; null when there's nothing to show. */
+  redeemError: string | null;
   setStatus: (s: DisplayStatus) => void;
   setMember: (m: DisplayMember) => void;
   setOrderNumber: (n: string | null) => void;
@@ -76,6 +80,7 @@ type DisplayState = {
   setPayMethod: (m: DisplayPayMethod) => void;
   setBeansEarned: (n: number) => void;
   setRedeemRequest: (r: DisplayRedeemRequest) => void;
+  setRedeemError: (m: string | null) => void;
   reset: () => void;
 };
 
@@ -93,6 +98,7 @@ export const useDisplay = create<DisplayState>((set) => ({
   payMethod: null,
   beansEarned: 0,
   redeemRequest: null,
+  redeemError: null,
   setStatus: (status) => set({ status }),
   setMember: (member) => set({ member }),
   setOrderNumber: (orderNumber) => set({ orderNumber }),
@@ -106,7 +112,8 @@ export const useDisplay = create<DisplayState>((set) => ({
   setPayMethod: (payMethod) => set({ payMethod }),
   setBeansEarned: (beansEarned) => set({ beansEarned }),
   setRedeemRequest: (redeemRequest) => set({ redeemRequest }),
+  setRedeemError: (redeemError) => set({ redeemError }),
   // Keep member identified across orders (a returning regular stays
   // logged in for the next basket); only clear cart-scoped context.
-  reset: () => set({ status: "idle", orderNumber: null, orderId: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, payTotal: 0, payMethod: null, beansEarned: 0, redeemRequest: null }),
+  reset: () => set({ status: "idle", orderNumber: null, orderId: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, payTotal: 0, payMethod: null, beansEarned: 0, redeemRequest: null, redeemError: null }),
 }));

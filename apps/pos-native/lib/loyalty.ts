@@ -170,6 +170,19 @@ function lineEligible(line: CartLine, d: RedeemDiscount): boolean {
   return false;
 }
 
+/** Why a reward yields no discount on the current cart — so the till can show a
+ *  precise reason ("spend RM40 to use this") instead of a silent no-op. */
+export function redeemBlockReason(
+  d: RedeemDiscount,
+  lines: CartLine[],
+): { block: "empty" | "min_order" | "needs_item" | "none"; min: number | null } {
+  if (lines.length === 0) return { block: "empty", min: null };
+  const cartSubtotal = lines.reduce((s, l) => s + l.unit_sen * l.qty, 0);
+  if (d.min_order != null && cartSubtotal < d.min_order) return { block: "min_order", min: d.min_order };
+  if (lines.filter((l) => lineEligible(l, d)).length === 0) return { block: "needs_item", min: null };
+  return { block: "none", min: null };
+}
+
 /** Discount in sen for a redeemed reward against the current cart. */
 export function computeRewardDiscount(d: RedeemDiscount, lines: CartLine[]): number {
   if (lines.length === 0 || !d.type) return 0;

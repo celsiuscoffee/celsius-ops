@@ -73,6 +73,14 @@ export default function CustomerDisplay() {
   const displayPayMethod = useDisplay((s) => s.payMethod);
   const beansEarned = useDisplay((s) => s.beansEarned);
   const orderId = useDisplay((s) => s.orderId);
+  // Reason a reward tap on THIS screen couldn't be applied (min spend not met,
+  // etc.), pushed back by the register. Shown as a toast, then auto-cleared.
+  const redeemError = useDisplay((s) => s.redeemError);
+  useEffect(() => {
+    if (!redeemError) return;
+    const t = setTimeout(() => useDisplay.getState().setRedeemError(null), 3500);
+    return () => clearTimeout(t);
+  }, [redeemError]);
   // Backoffice-managed Maybank QR (live via realtime on app_settings).
   // Returns { payload, image_url }: image_url is the uploaded Maybank
   // poster (preferred — actual pink poster customers know), payload is
@@ -557,8 +565,8 @@ export default function CustomerDisplay() {
               const net = Math.max(0, gross - lineDisc);
               return (
                 <View className="py-1.5">
-                  <View className="flex-row items-center justify-between">
-                    <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.85)", flex: 1 }} numberOfLines={1}>
+                  <View className="flex-row items-start justify-between">
+                    <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.85)", flex: 1, lineHeight: 16 }}>
                       <Text style={{ color: "rgba(245,243,240,0.4)" }}>{item.qty}× </Text>{item.product.name}
                     </Text>
                     <View className="items-end" style={{ marginLeft: 8 }}>
@@ -676,6 +684,18 @@ export default function CustomerDisplay() {
             </Pressable>
           </Pressable>
         </Pressable>
+      )}
+
+      {/* Redeem-error toast — when a reward tap on THIS screen can't be applied
+          (e.g. minimum spend not met). Framed warmly (how much more to add) and
+          auto-dismisses. pointerEvents=none so it never blocks the menu. */}
+      {redeemError && (
+        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 24, alignItems: "center" }}>
+          <View className="flex-row items-center rounded-2xl px-5 py-3.5" style={{ maxWidth: "82%", backgroundColor: "#3A1A10", borderWidth: 1, borderColor: "rgba(162,73,44,0.75)", gap: 11 }}>
+            <Gift size={20} color={GOLD} />
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 16.5, color: CREAM }}>{redeemError}</Text>
+          </View>
+        </View>
       )}
     </View>
   );
@@ -1082,7 +1102,6 @@ function PointsHero({
   const nextPerks = next
     ? [
         (next.discount_percent ?? 0) > (t?.discount_percent ?? 0) ? `${next.discount_percent}% off` : null,
-        (next.multiplier ?? 1) > (t?.multiplier ?? 1) ? `${next.multiplier}× Points` : null,
       ].filter(Boolean).join(" + ")
     : "";
   // Progress is in RM already (quarterly spend, same scale as the tier
@@ -1100,7 +1119,7 @@ function PointsHero({
       <View style={{ height: 4, backgroundColor: theme.accent }} />
       <View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12 }}>
         <View className="flex-row items-center justify-between">
-          {/* Identity: icon tile + greeting + tier name (+ multiplier badge). */}
+          {/* Identity: icon tile + greeting + tier name. */}
           <View className="flex-row items-center" style={{ flex: 1, paddingRight: 8 }}>
             <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: theme.accent + "22", borderWidth: 1, borderColor: theme.accent + "44", alignItems: "center", justifyContent: "center", marginRight: 11 }}>
               <Image source={require("@/assets/icon.png")} style={{ width: 24, height: 24, borderRadius: 6 }} resizeMode="contain" />
@@ -1110,11 +1129,6 @@ function PointsHero({
                 {memberName ? `HI, ${memberName.toUpperCase()}` : "YOUR TIER"}
               </Text>
               <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: theme.text, marginTop: 1 }} numberOfLines={1}>{t?.name ?? "Member"}</Text>
-              {(t?.multiplier ?? 1) > 1 && (
-                <View style={{ alignSelf: "flex-start", marginTop: 4, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2.5, backgroundColor: theme.accent }}>
-                  <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 0.5, color: theme.surface }}>{t?.multiplier}× POINTS</Text>
-                </View>
-              )}
             </View>
           </View>
           {/* Points, in the tier accent. */}
@@ -1162,7 +1176,7 @@ function UsualStripView({ usual }: { usual: LoyaltySnapshot["usual"] }) {
                 <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, color: GOLD }}>×{u.times_ordered}</Text>
               </View>
             </View>
-            <Text style={{ fontFamily: "Peachi-Medium", fontSize: 11, color: CREAM, marginTop: 6 }} numberOfLines={1}>{u.name}</Text>
+            <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7} style={{ fontFamily: "Peachi-Medium", fontSize: 11, color: CREAM, marginTop: 6, lineHeight: 14 }}>{u.name}</Text>
             <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 10, color: "rgba(245,243,240,0.55)" }}>{rm(u.price_sen)}</Text>
           </View>
         ))}
@@ -1217,23 +1231,31 @@ function MissionRow({ m }: { m: MissionCard }) {
 function PairCard({ pair }: { pair: SuggestedPair }) {
   return (
     <View className="rounded-2xl overflow-hidden" style={{ flex: 1, backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: pair.discount_label ? "rgba(251,191,36,0.5)" : "rgba(245,243,240,0.12)" }}>
-      {!!pair.discount_label && (
-        <View style={{ backgroundColor: GOLD, paddingVertical: 4, alignItems: "center" }}>
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, letterSpacing: 0.8, color: DARKFG }}>{pair.discount_label}</Text>
-        </View>
-      )}
-      {pair.image_url ? (
-        <Image source={{ uri: pair.image_url }} style={{ width: "100%", height: 124 }} resizeMode="cover" />
-      ) : (
-        <View style={{ width: "100%", height: 124, backgroundColor: SUB, alignItems: "center", justifyContent: "center" }}><Coffee size={38} color="rgba(245,243,240,0.3)" /></View>
-      )}
-      <View className="px-3 py-2.5">
-        <Eyebrow color="rgba(251,191,36,0.75)" style={{ fontSize: 9, marginBottom: 3 }}>{pair.reason.toUpperCase()}</Eyebrow>
-        {/* Wrap to 2 lines (minHeight reserves the 2nd line) so long names like
-            "Buttercream Chocolate" aren't cut off — and the price stays aligned
-            across the row whether a name is 1 or 2 lines. */}
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 15, lineHeight: 18, color: CREAM, minHeight: 36 }} numberOfLines={2}>{pair.name}</Text>
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 14, color: GOLD, marginTop: 2 }}>{rm(pair.price_sen)}</Text>
+      {/* Image with the discount as a small badge OVERLAID on the corner (not a
+          full-width banner above it) — so every card has the same image height
+          and the row stays aligned whether or not a card is on offer. */}
+      <View style={{ width: "100%", height: 124 }}>
+        {pair.image_url ? (
+          <Image source={{ uri: pair.image_url }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+        ) : (
+          <View style={{ width: "100%", height: "100%", backgroundColor: SUB, alignItems: "center", justifyContent: "center" }}><Coffee size={38} color="rgba(245,243,240,0.3)" /></View>
+        )}
+        {!!pair.discount_label && (
+          <View style={{ position: "absolute", top: 8, left: 8, backgroundColor: GOLD, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } }}>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 10, letterSpacing: 0.5, color: DARKFG }}>{pair.discount_label}</Text>
+          </View>
+        )}
+      </View>
+      <View className="px-3 py-2.5" style={{ flex: 1 }}>
+        {/* Reserve a fixed 2-line height for the reason label so a 1-line reason
+            ("ON OFFER") and a 2-line one ("OFTEN PAIRED TOGETHER") both leave the
+            name starting at the same Y across the row. */}
+        <Text numberOfLines={2} style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 9, letterSpacing: 2, lineHeight: 12, color: "rgba(251,191,36,0.75)", minHeight: 24, marginBottom: 3 }}>{pair.reason.toUpperCase()}</Text>
+        {/* FULL product name — never truncated. It shrinks to fit (down to 60%)
+            before it would ever clip, capped at 3 lines; cards stretch to equal
+            height and the price is pinned to the bottom, so alignment holds. */}
+        <Text numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.6} style={{ fontFamily: "Peachi-Bold", fontSize: 15, lineHeight: 18, color: CREAM }}>{pair.name}</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 14, color: GOLD, marginTop: "auto", paddingTop: 4 }}>{rm(pair.price_sen)}</Text>
       </View>
     </View>
   );
@@ -1261,20 +1283,39 @@ function AvailableRewardsRow({
   onPick: (r: { rewardId: string | null; issuedRewardId: string | null; name: string }) => void;
   onMore: () => void;
 }) {
-  const vchips: RewardChipData[] = snapshot.vouchers
-    .filter((v) => v.source_type !== "mission")
-    .map((v) => ({ kind: "voucher", id: v.id, name: v.title, source: v.source_type }));
-  const affChips: RewardChipData[] = snapshot.shop
+  // Built for VARIETY (feel-good) — never three of the same gift. Owned vouchers
+  // are grouped by source and interleaved (Mystery Bag, then Birthday, …), then we
+  // round-robin across three lanes so the row leads with something owned, something
+  // redeemable now, and something to aim for.
+  const bySource = new Map<string, RewardChipData[]>();
+  for (const v of snapshot.vouchers) {
+    if (v.source_type === "mission") continue;
+    const key = v.source_type ?? "reward";
+    const chip: RewardChipData = { kind: "voucher", id: v.id, name: v.title, source: v.source_type };
+    const arr = bySource.get(key);
+    if (arr) arr.push(chip);
+    else bySource.set(key, [chip]);
+  }
+  const srcLists = [...bySource.values()];
+  const voucherLane: RewardChipData[] = [];
+  for (let i = 0; srcLists.some((l) => i < l.length); i++) {
+    for (const l of srcLists) if (i < l.length) voucherLane.push(l[i]);
+  }
+  const affLane: RewardChipData[] = snapshot.shop
     .filter((s) => s.affordable)
     .map((s) => ({ kind: "shop", id: s.id, name: s.name, points: s.points_required, affordable: true }));
-  const goalChips: RewardChipData[] = [...snapshot.shop]
+  const goalLane: RewardChipData[] = [...snapshot.shop]
     .filter((s) => !s.affordable)
     .sort((a, b) => a.points_required - b.points_required)
     .map((s) => ({ kind: "shop", id: s.id, name: s.name, points: s.points_required, affordable: false }));
-  const chips = [...vchips, ...affChips, ...goalChips];
+  const lanes = [voucherLane, affLane, goalLane];
+  const chips: RewardChipData[] = [];
+  for (let i = 0; lanes.some((l) => i < l.length); i++) {
+    for (const l of lanes) if (i < l.length) chips.push(l[i]);
+  }
   if (chips.length === 0) return null;
   const top = chips.slice(0, 3);
-  const more = chips.length > 3 || snapshot.vouchers.length > 0;
+  const more = chips.length > 3 || voucherLane.length > 0;
   return (
     <View style={{ marginTop: 18 }}>
       <Eyebrow color="rgba(251,191,36,0.85)" style={{ marginBottom: 8, letterSpacing: 1.6 }}>REDEEM YOUR REWARDS</Eyebrow>
@@ -1287,7 +1328,7 @@ function AvailableRewardsRow({
             chip={c}
             onPick={() =>
               c.kind === "voucher"
-                ? onPick({ rewardId: null, issuedRewardId: c.id, name: c.name })
+                ? onPick({ rewardId: c.id, issuedRewardId: c.id, name: c.name })
                 : onPick({ rewardId: c.id, issuedRewardId: null, name: c.name })
             }
           />
@@ -1378,7 +1419,7 @@ function Suggestions({ bites, promos }: { bites: BiteItem[]; promos: LoyaltySnap
               <View style={{ aspectRatio: 16 / 10, borderRadius: 8, overflow: "hidden", backgroundColor: "rgba(245,243,240,0.06)" }}>
                 {b.image_url && <Image source={{ uri: b.image_url }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
               </View>
-              <Text style={{ fontFamily: "Peachi-Medium", fontSize: 10.5, color: CREAM, marginTop: 3 }} numberOfLines={1}>{b.name}</Text>
+              <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7} style={{ fontFamily: "Peachi-Medium", fontSize: 10.5, color: CREAM, marginTop: 3, lineHeight: 13 }}>{b.name}</Text>
               <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 9.5, color: "rgba(245,243,240,0.6)" }}>{rm(b.price_sen)}</Text>
             </View>
           ))}

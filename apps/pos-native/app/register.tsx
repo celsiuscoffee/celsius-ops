@@ -39,7 +39,7 @@ import { useShift, openShift, closeShift, reopenShift, findRecentClosedShift, sh
 import { printReceipt80mm, printKitchenDocket80mm } from "@/lib/printer";
 import { outletFull, outletShort } from "@/lib/outlets";
 import {
-  lookupMember, fetchRewards, fetchUsual, redeemReward, computeRewardDiscount,
+  lookupMember, fetchRewards, fetchUsual, redeemReward, computeRewardDiscount, redeemBlockReason,
   computeTierDiscount, evaluatePromotions,
   fetchSuggestedPairs, logPairAdd, fetchSnapshot, claimMystery,
   type Member, type RewardsResponse, type IssuedVoucher, type CatalogReward, type RedeemDiscount, type UsualItem, type AppliedPromo,
@@ -614,17 +614,36 @@ export default function Register() {
     return () => { cancelled = true; };
   }, [member?.id]);
 
-  // Curated "Redeem your rewards" — owned vouchers first (birthday, mystery-bag
-  // wins, promo gifts), then Points rewards the member can already afford, then
-  // the cheapest goals to fill the row. Mirrors the customer display's row.
+  // Curated "Redeem your rewards" — built for VARIETY (feel-good), not a wall of
+  // the same gift. We round-robin across three lanes so the row leads with
+  // something owned, something redeemable now, and something to aim for; and the
+  // owned-voucher lane itself round-robins across its sources (Mystery Bag,
+  // Birthday, …) so even back-to-back vouchers span types. Mirrors the display.
   const redeemChips = useMemo(() => {
-    const vchips = vouchers.map((v) => ({ kind: "voucher" as const, v }));
-    const affChips = shop.filter((s) => s.affordable).map((s) => ({ kind: "shop" as const, s }));
-    const goalChips = [...shop]
+    type Chip = { kind: "voucher"; v: VoucherCard } | { kind: "shop"; s: ShopCard };
+    const bySource = new Map<string, Chip[]>();
+    for (const v of vouchers) {
+      const key = v.source_type ?? "reward";
+      const arr = bySource.get(key);
+      if (arr) arr.push({ kind: "voucher", v });
+      else bySource.set(key, [{ kind: "voucher", v }]);
+    }
+    const srcLists = [...bySource.values()];
+    const voucherLane: Chip[] = [];
+    for (let i = 0; srcLists.some((l) => i < l.length); i++) {
+      for (const l of srcLists) if (i < l.length) voucherLane.push(l[i]);
+    }
+    const affLane: Chip[] = shop.filter((s) => s.affordable).map((s) => ({ kind: "shop", s }));
+    const goalLane: Chip[] = [...shop]
       .filter((s) => !s.affordable)
       .sort((a, b) => a.points_required - b.points_required)
-      .map((s) => ({ kind: "shop" as const, s }));
-    return [...vchips, ...affChips, ...goalChips];
+      .map((s) => ({ kind: "shop", s }));
+    const lanes = [voucherLane, affLane, goalLane];
+    const mixed: Chip[] = [];
+    for (let i = 0; lanes.some((l) => i < l.length); i++) {
+      for (const l of lanes) if (i < l.length) mixed.push(l[i]);
+    }
+    return mixed;
   }, [vouchers, shop]);
 
   // Resolve a suggested pair → its catalog Product, then route through onAdd
@@ -727,9 +746,17 @@ export default function Register() {
   // burst of taps on the 2nd screen can't redeem (and burn Beans) repeatedly.
   useEffect(() => {
     if (!redeemRequest) return;
+    const req = redeemRequest;
     useDisplay.getState().setRedeemRequest(null);
     if (reward) return;
-    applyRewardArgs(redeemRequest.rewardId, redeemRequest.issuedRewardId);
+    void (async () => {
+      const res = await applyRewardArgs(req.rewardId, req.issuedRewardId);
+      // The customer tapped on the 2nd screen and can't see the cashier's Alert,
+      // so mirror a short reason to the display when the reward can't be applied.
+      if (!res.ok && res.reason !== "busy") {
+        useDisplay.getState().setRedeemError(redeemErrorMessage(res.reason, res.min));
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [redeemRequest]);
 
@@ -889,8 +916,8 @@ export default function Register() {
   // 2nd-screen redeem (reverse channel). Returns { ok, reason } so callers can
   // show an accurate message (tier-bigger / needs-item / error) rather than a
   // misleading generic one.
-  type RedeemFail = "busy" | "needs_item" | "tier_bigger" | "error";
-  async function applyRewardArgs(rewardId: string | null, issuedRewardId: string | null): Promise<{ ok: boolean; reason?: RedeemFail }> {
+  type RedeemFail = "busy" | "needs_item" | "tier_bigger" | "error" | "min_order";
+  async function applyRewardArgs(rewardId: string | null, issuedRewardId: string | null): Promise<{ ok: boolean; reason?: RedeemFail; min?: number | null }> {
     if (!member || !outletId) return { ok: false, reason: "error" };
     // In-flight guard — strictly one redeem call at a time so a concurrent
     // double-tap can't reserve/commit twice. (The single-reward-per-order limit
@@ -904,8 +931,13 @@ export default function Register() {
       // it and commit immediately (they cost no points).
       const res = await redeemReward({ memberId: member.id, rewardId, outletId, issuedRewardId, preview: true });
       const disc = computeRewardDiscount(res.discount, lines);
-      if (disc <= 0 && (res.discount.type === "free_item" || res.discount.type === "free_upgrade")) {
+      // No discount on THIS cart → don't apply a dead reward. Surface the precise
+      // reason (minimum spend not met, or no qualifying item) instead of a silent
+      // no-op or a misleading "tier discount is bigger".
+      if (disc <= 0) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        const { block, min } = redeemBlockReason(res.discount, lines);
+        if (block === "min_order") return { ok: false, reason: "min_order", min };
         return { ok: false, reason: "needs_item" };
       }
       // Non-stackable tier (Black Card / Staff): only apply the voucher if it
@@ -944,24 +976,41 @@ export default function Register() {
 
   // Accurate redeem-failure alert (the old generic "add a qualifying item" was
   // shown even when the real reason was the non-stackable tier discount).
-  function showRedeemError(reason?: RedeemFail) {
+  function showRedeemError(reason?: RedeemFail, min?: number | null) {
     if (reason === "busy") return; // silent — another redeem is in flight
-    if (reason === "tier_bigger") {
+    if (reason === "min_order") {
+      Alert.alert("Spend a little more", `This reward needs a minimum spend of RM${((min ?? 0) / 100).toFixed(2)} before it can be applied.`);
+    } else if (reason === "tier_bigger") {
       Alert.alert(
         `${member?.tier?.name ?? "Tier"} discount is bigger`,
         "This reward is smaller than the discount already on the bill, so it wouldn't save more — the member keeps their points.",
       );
     } else if (reason === "needs_item") {
-      Alert.alert("Add an item first", "This is a free-item reward — add a qualifying item to the cart before redeeming it.");
+      Alert.alert("Add an item first", "This reward needs a qualifying item in the cart before it can be applied.");
     } else {
       Alert.alert("Couldn't redeem", "Something went wrong applying that reward. Please try again.");
     }
   }
 
+  // Customer-facing one-liner mirrored to the 2nd screen when a tap THERE can't be
+  // applied — the customer never sees the cashier's Alert, so they'd otherwise get
+  // no feedback. Frames the min-spend case as how much more to add.
+  function redeemErrorMessage(reason?: RedeemFail, min?: number | null): string {
+    if (reason === "min_order") {
+      const short = (min ?? 0) - subtotal;
+      return short > 0
+        ? `Spend RM${(short / 100).toFixed(2)} more to use this reward`
+        : `This reward needs a minimum spend of RM${((min ?? 0) / 100).toFixed(2)}`;
+    }
+    if (reason === "tier_bigger") return "Your tier discount already beats this reward";
+    if (reason === "needs_item") return "Add a qualifying item to use this reward";
+    return "This reward can't be applied to this order";
+  }
+
   async function applyReward(r: IssuedVoucher | CatalogReward, isCatalog: boolean) {
     const res = await applyRewardArgs(r.reward_id ?? r.id, isCatalog ? null : r.id);
     if (res.ok) setShowRewards(false);
-    else showRedeemError(res.reason);
+    else showRedeemError(res.reason, res.min);
   }
 
   // Redeem a points-shop reward on the member's behalf (cashier taps when the
@@ -981,7 +1030,7 @@ export default function Register() {
       return;
     }
     const res = await applyRewardArgs(s.id, null);
-    if (!res.ok) showRedeemError(res.reason);
+    if (!res.ok) showRedeemError(res.reason, res.min);
   }
 
   // Apply an owned voucher (birthday / mystery-bag win / promo gift) to the bill.
@@ -992,8 +1041,12 @@ export default function Register() {
       Alert.alert("Reward already applied", "Remove the current reward before applying a different one.");
       return;
     }
-    const res = await applyRewardArgs(null, v.id);
-    if (!res.ok) showRedeemError(res.reason);
+    // Pass the issued-reward id as BOTH reward_id (a non-null value the /redeem
+    // guard requires) and issued_reward_id (what it actually resolves the voucher
+    // by). Mirrors the Rewards modal's `reward_id ?? id` so mystery/owned vouchers
+    // with a null reward_id still redeem instead of 400-ing.
+    const res = await applyRewardArgs(v.id, v.id);
+    if (!res.ok) showRedeemError(res.reason, res.min);
   }
 
   function newOrder() {
@@ -1061,14 +1114,12 @@ export default function Register() {
         manualDiscount: effManualDiscount,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Beans this member earns — mirror the server formula in
-      // /api/pos/loyalty/complete (floor of the pre-SST net, tier-multiplied)
-      // so the thank-you summary + printed receipt match what's credited.
-      const tierMul = member?.tier?.multiplier ?? 1;
-      // Beans this order is worth. A member earns them now; a GUEST can claim
-      // the same amount by entering their phone on the thank-you screen — so we
-      // mirror the order's worth (not 0) to the display either way.
-      const orderBeans = Math.round(Math.floor((sale.total - sale.sst) / 100) * tierMul);
+      // Points this member earns — mirror the server formula in
+      // /api/pos/loyalty/complete (floor of the pre-SST net). Tiers no longer
+      // multiply points (fixed discounts only), so it's a straight 1 pt / RM.
+      // A GUEST can claim the same amount by entering their phone on the
+      // thank-you screen — so we mirror the order's worth (not 0) either way.
+      const orderBeans = Math.floor((sale.total - sale.sst) / 100);
       const beansEarned = member?.id ? orderBeans : 0; // only an identified member actually earned (register chip + receipt)
       // Points spent on a redeemed catalog reward burn at /complete (deferred), so
       // member.points_balance here is still pre-burn — subtract them for the true
@@ -1332,6 +1383,9 @@ export default function Register() {
                     <Sparkles size={12} color="#FBBF24" />
                     <Text className="text-cream/55 text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1.2 }}>REDEEM YOUR REWARDS</Text>
                   </View>
+                  {/* Single row, capped at 3 — the box keeps its original height so
+                      it never eats into the product grid above. The full catalogue
+                      stays reachable via the member card's "Redeem Rewards" button. */}
                   <View className="flex-row" style={{ gap: 8 }}>
                     {redeemChips.slice(0, 3).map((c) =>
                       c.kind === "voucher" ? (
@@ -1341,16 +1395,6 @@ export default function Register() {
                       ),
                     )}
                   </View>
-                  {(redeemChips.length > 3 || vouchers.length > 0) && (
-                    <Pressable
-                      onPress={openRewards}
-                      className="flex-row items-center justify-center rounded-xl active:opacity-80"
-                      style={{ marginTop: 8, paddingVertical: 8, backgroundColor: "rgba(251,191,36,0.10)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)", gap: 6 }}
-                    >
-                      <Gift size={13} color="#FBBF24" />
-                      <Text className="text-amber-400 text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.6 }}>MORE REWARDS</Text>
-                    </Pressable>
-                  )}
                 </View>
               )}
               {member && claimables.length > 0 && (
@@ -1507,7 +1551,7 @@ export default function Register() {
                   style={{ backgroundColor: "#1A0A02" }}
                 >
                   <View className="flex-1 pr-2">
-                    <Text className="text-cream text-[13px]" style={{ fontFamily: "Peachi-Medium" }} numberOfLines={1}>{item.product.name}</Text>
+                    <Text className="text-cream text-[13px]" numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7} style={{ fontFamily: "Peachi-Medium", lineHeight: 17 }}>{item.product.name}</Text>
                     {item.modifiers.length > 0 && (
                       <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_400Regular" }} numberOfLines={1}>{item.modifiers.map((m) => m.name).join(", ")}</Text>
                     )}
@@ -2426,7 +2470,7 @@ function PairChip({ pair, onAdd }: { pair: SuggestedPair; onAdd: () => void }) {
       )}
       <View className="px-2 py-2">
         <Text className="text-cream/40 text-[8px]" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 0.5 }} numberOfLines={1}>{pair.reason.toUpperCase()}</Text>
-        <Text className="text-cream text-[12px] mt-0.5" style={{ fontFamily: "Peachi-Medium" }} numberOfLines={1}>{pair.name}</Text>
+        <Text className="text-cream text-[12px] mt-0.5" numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7} style={{ fontFamily: "Peachi-Medium", lineHeight: 15 }}>{pair.name}</Text>
         <View className="flex-row items-center justify-between mt-1.5">
           <Text className="text-amber-400 text-[12px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(pair.price_sen)}</Text>
           <View className="h-6 w-6 items-center justify-center rounded-lg" style={{ backgroundColor: BRAND }}>
@@ -2949,7 +2993,7 @@ function LineEditorSheet({
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 14 }}>
         <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-3">
-            <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }} numberOfLines={1}>{line.product.name}</Text>
+            <Text className="text-cream text-xl" numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7} style={{ fontFamily: "Peachi-Bold", lineHeight: 26 }}>{line.product.name}</Text>
             {line.modifiers.length > 0 && (
               <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }} numberOfLines={2}>
                 {line.modifiers.map((m) => m.name).join(", ")}
