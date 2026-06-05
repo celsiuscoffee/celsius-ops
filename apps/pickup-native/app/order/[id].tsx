@@ -1126,7 +1126,7 @@ export default function OrderStatus() {
                   className="text-primary text-center text-[12px] mt-2"
                   style={{ fontFamily: "Peachi-Bold" }}
                 >
-                  No payment needed — enjoy! ☕
+                  No payment needed — enjoy!
                 </Text>
               ) : null}
             </View>

@@ -164,7 +164,7 @@ export function TierCard({ tier, onPress }: Props) {
           </View>
         ) : (
           <Text style={{ fontSize: 13, fontWeight: "700", color }}>
-            👑 You&apos;ve reached the top tier
+            You&apos;ve reached the top tier
           </Text>
         )}
       </View>

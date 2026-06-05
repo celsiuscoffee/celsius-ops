@@ -109,7 +109,6 @@ export class RootErrorBoundary extends React.Component<Props, State> {
           padding: 32,
         }}
       >
-        <Text style={{ fontSize: 36, marginBottom: 12 }}>☕</Text>
         <Text
           style={{
             color: "#FFFFFF",

@@ -23,6 +23,7 @@ import {
   X,
   MapPin,
   Coffee,
+  Gift,
   Leaf,
   Cake,
   Cookie,
@@ -515,7 +516,7 @@ export default function Menu() {
           >
             <View className="flex-row items-center justify-between px-4 py-2.5">
               <View className="flex-row items-center gap-2 flex-1">
-                <Text style={{ fontSize: 14 }}>🎁</Text>
+                <Gift size={14} color="#FBBF24" />
                 <Text
                   className="text-white text-[12px] flex-1"
                   style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}

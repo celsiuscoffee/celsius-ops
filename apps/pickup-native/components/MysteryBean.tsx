@@ -288,7 +288,7 @@ function MysteryReveal({
           className="text-muted-fg text-[13px] mt-1 text-center"
           style={{ fontFamily: "SpaceGrotesk_500Medium" }}
         >
-          Better luck on your next order ☕
+          Better luck on your next order
         </Text>
         <DismissPill onPress={handlePrimary} variant="quiet" label="Got it" />
       </Animated.View>

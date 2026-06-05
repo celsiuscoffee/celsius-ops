@@ -50,14 +50,14 @@ export default function CoffeeWrappedScreen() {
     if (!data) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const lines = [
-      `My Celsius Coffee Wrapped ${data.year} ☕`,
+      `My Celsius Coffee Wrapped ${data.year}`,
       `${data.summary.total_orders} cups · ${data.summary.distinct_outlets} outlets`,
     ];
     if (data.favorites.product_name) {
       lines.push(`Favourite: ${data.favorites.product_name}`);
     }
     if (data.summary.longest_streak_weeks > 0) {
-      lines.push(`Longest streak: ${data.summary.longest_streak_weeks} weeks 🔥`);
+      lines.push(`Longest streak: ${data.summary.longest_streak_weeks} weeks`);
     }
     lines.push("\nhttps://celsiuscoffee.com");
     try {
@@ -128,7 +128,7 @@ export default function CoffeeWrappedScreen() {
               lineHeight: 20,
             }}
           >
-            Place your first order to start brewing your {year} Wrapped story ☕
+            Place your first order to start brewing your {year} Wrapped story
           </Text>
         </View>
       ) : (
@@ -212,7 +212,7 @@ export default function CoffeeWrappedScreen() {
               <BigCard
                 eyebrow="Longest streak"
                 value={`${data.summary.longest_streak_weeks} wks`}
-                detail="Weekly visit chain 🔥"
+                detail="Weekly visit chain"
                 icon={Sparkles}
               />
             )}
