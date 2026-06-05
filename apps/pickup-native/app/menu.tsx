@@ -428,7 +428,7 @@ export default function Menu() {
         </View>
       ) : (
         <EspressoHeader
-          title="Pickup"
+          title="Menu"
           showCart={false}
           rightSlot={
             <View className="flex-row items-center gap-4">
