@@ -1,6 +1,19 @@
 import { View, Text, Pressable } from "react-native";
 import * as Haptics from "@/lib/haptics";
 import type { MemberTier } from "../lib/rewards";
+import { Coffee, Star, Award, Crown, Gem, Shield, type LucideIcon } from "lucide-react-native";
+
+/** Per-tier lucide icon — slugs mirror the loyalty DB (bronze/silver/gold/
+ *  elite + invite-only arba-staff/black-card). Replaces the old emoji
+ *  tier_icon so the membership card matches the app's lucide icon set. */
+const TIER_ICON: Record<string, LucideIcon> = {
+  bronze: Coffee,
+  silver: Star,
+  gold: Award,
+  elite: Crown,
+  "arba-staff": Shield,
+  "black-card": Gem,
+};
 
 type Props = {
   tier: MemberTier;
@@ -19,7 +32,7 @@ export function TierCard({ tier, onPress }: Props) {
   if (!tier || !tier.tier_name) return null;
 
   const color = tier.tier_color || "#92400e";
-  const icon = tier.tier_icon || "☕";
+  const TierIcon = TIER_ICON[tier.tier_slug ?? ""] ?? Coffee;
   const name = tier.tier_name || "Member";
   const mul = tier.tier_multiplier ?? 1;
 
@@ -74,7 +87,7 @@ export function TierCard({ tier, onPress }: Props) {
                 marginRight: 12,
               }}
             >
-              <Text style={{ fontSize: 26 }}>{icon}</Text>
+              <TierIcon size={26} color={color} strokeWidth={2} />
             </View>
             <View>
               <Text

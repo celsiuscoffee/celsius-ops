@@ -18,7 +18,6 @@ type Props = {
 export function TierBadge({ tier, onPress, tone = "dark" }: Props) {
   if (!tier || !tier.tier_name) return null;
   const color = tier.tier_color || "#92400e";
-  const icon = tier.tier_icon || "☕";
   const mul = tier.tier_multiplier ?? 1;
 
   const bg = tone === "dark" ? "rgba(255,255,255,0.10)" : hexWithAlpha(color, 0.12);
@@ -36,7 +35,6 @@ export function TierBadge({ tier, onPress, tone = "dark" }: Props) {
         borderRadius: 999,
       }}
     >
-      <Text style={{ fontSize: 14, marginRight: 6 }}>{icon}</Text>
       <Text
         style={{
           fontSize: 12,
