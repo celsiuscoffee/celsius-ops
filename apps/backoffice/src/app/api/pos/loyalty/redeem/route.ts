@@ -146,6 +146,31 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Issued voucher in preview: RESERVE only — DON'T burn it yet. The actual
+    // burn + redemption row happen at payment confirmation (/complete), exactly
+    // like catalog rewards. This prevents *losing* a voucher when it can't apply
+    // to the cart (below min-spend / no qualifying item), the order is voided, or
+    // it's swapped for a different reward — the bug where a tap consumed it but
+    // applied no discount.
+    if (preview && issued_reward_id) {
+      const { data: mbV } = await supabase
+        .from("member_brands")
+        .select("points_balance")
+        .eq("member_id", member_id)
+        .eq("brand_id", BRAND_ID)
+        .maybeSingle();
+      return NextResponse.json({
+        success: true,
+        redemption_id: null,                   // deferred — burned at /complete when paid
+        code: null,
+        new_balance: mbV?.points_balance ?? 0,  // vouchers cost no points
+        reward_name: reward.name,
+        discount: specToRegisterDescriptor(spec),
+        points_spent: 0,
+        preview: true,
+      });
+    }
+
     let newBalance: number;
     const code = generateCode();
 

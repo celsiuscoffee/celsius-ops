@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { markVoucherUsed } from "@celsius/shared";
 
 /**
  * POST /api/pos/loyalty/complete
@@ -79,7 +80,34 @@ async function commitReservedRedemption(
     .eq("is_active", true)
     .maybeSingle();
   const pointsCost = Number((reward as { points_cost?: number } | null)?.points_cost ?? 0);
-  if (!reward || pointsCost <= 0) return 0; // not a points-cost catalog reward → skip
+  if (!reward || pointsCost <= 0) {
+    // Not a points-cost catalog reward → it may be an ISSUED VOUCHER that the
+    // register RESERVED at apply time (rewardId carries the issued_reward id).
+    // Burn it now that payment is confirmed — costs no points. Idempotent:
+    // markVoucherUsed only flips an 'active' row, so a retry returns
+    // alreadyUsed and we skip the duplicate redemption row.
+    const { data: ir } = await supabase
+      .from("issued_rewards")
+      .select("id, title")
+      .eq("id", args.rewardId)
+      .eq("member_id", args.memberId)
+      .eq("brand_id", BRAND_ID)
+      .eq("status", "active")
+      .maybeSingle();
+    if (ir) {
+      const burn = await markVoucherUsed({ supabase, voucherId: (ir as { id: string }).id, memberId: args.memberId, brandId: BRAND_ID });
+      if (burn.ok && !burn.alreadyUsed) {
+        await supabase.from("redemptions").insert({
+          id: `rdm-pos-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`,
+          member_id: args.memberId, reward_id: (ir as { id: string }).id, brand_id: BRAND_ID,
+          outlet_id: args.outletId, points_spent: 0, status: "confirmed",
+          code: genCode(), redemption_type: "in_store", source: "pos",
+          confirmed_at: new Date().toISOString(),
+        });
+      }
+    }
+    return 0; // points-wise a no-op (vouchers cost no Beans)
+  }
 
   const { data: newBal, error: deductErr } = await supabase.rpc("deduct_points", {
     p_member_id: args.memberId, p_brand_id: BRAND_ID, p_points: pointsCost,
