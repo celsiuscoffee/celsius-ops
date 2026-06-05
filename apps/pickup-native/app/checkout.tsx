@@ -1514,7 +1514,7 @@ export default function Checkout() {
                     {tier && tier.tier_name && (
                       <View className="flex-row justify-between mt-2">
                         <Text className="text-muted-fg text-[13px]" numberOfLines={1}>
-                          {tier.tier_name} · earning {tier.tier_multiplier}×
+                          {tier.tier_name}{(tier.tier_multiplier ?? 1) > 1 ? ` · earning ${tier.tier_multiplier}×` : ""}
                         </Text>
                         <Text
                           className="text-[13px]"

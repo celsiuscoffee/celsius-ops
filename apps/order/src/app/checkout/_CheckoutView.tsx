@@ -696,7 +696,7 @@ export function CheckoutView() {
         {tier ? (
           <div className="mt-2 flex items-center justify-between">
             <span className="text-[12px] truncate" style={{ color: "#6B6B6B" }}>
-              {tier.tier_name} · earning {tier.tier_multiplier}×
+              {tier.tier_name}{(tier.tier_multiplier ?? 1) > 1 ? ` · earning ${tier.tier_multiplier}×` : ""}
             </span>
             <span
               className="text-[12px] font-bold"
