@@ -9,6 +9,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY = "pos.offline.sales.v1";
+// Dead-letter: sales the server keeps rejecting (not a network failure). Moved
+// here after a few attempts so a single bad sale can't jam the live queue. Kept
+// for inspection/manual recovery rather than dropped.
+const DEAD_KEY = "pos.offline.deadletter.v1";
 
 export type SalePayload = {
   order: Record<string, unknown>;
@@ -100,6 +104,37 @@ export async function bumpAttempts(orderId: string): Promise<void> {
     }
   }
   if (changed) await writeAll(list);
+}
+
+/** Move a sale the server keeps REJECTING (not a network failure) out of the
+ *  live queue into a dead-letter, so it can't block the sales behind it. The
+ *  payload is preserved for inspection/manual recovery — never silently dropped.
+ *  (With the hardened server RPC this should effectively never fire.) */
+export async function quarantine(orderId: string): Promise<void> {
+  const list = await readAll();
+  const entry = list.find((e) => orderIdOf(e) === orderId);
+  if (!entry) return;
+  try {
+    const raw = await AsyncStorage.getItem(DEAD_KEY);
+    const dead = raw ? (JSON.parse(raw) as PendingSale[]) : [];
+    if (!dead.some((e) => orderIdOf(e) === orderId)) {
+      dead.push(entry);
+      await AsyncStorage.setItem(DEAD_KEY, JSON.stringify(dead));
+    }
+  } catch {
+    /* if the dead-letter write fails we still unblock the queue below */
+  }
+  await removePending(orderId);
+}
+
+/** Dead-lettered sales (server-rejected, quarantined). For diagnostics/recovery. */
+export async function listDeadLetter(): Promise<PendingSale[]> {
+  try {
+    const raw = await AsyncStorage.getItem(DEAD_KEY);
+    return raw ? (JSON.parse(raw) as PendingSale[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function pendingCount(): Promise<number> {

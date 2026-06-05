@@ -70,17 +70,26 @@ async function ensureOpenShift(
 }
 
 async function nextOrderNumber(outletId: string): Promise<string> {
+  // Take the highest SEQUENTIAL number, ignoring offline time-coded numbers
+  // (CC-XX-<base36>, e.g. "0NOUN"/"A86RD"). Reading only the single newest row
+  // broke when that row was an offline order: parseInt("0NOUN") -> 0 reset the
+  // sequence to CC-XX-0001, which already exists -> UNIQUE collision -> the sale
+  // jammed the offline queue. Sequential numbers grow monotonically with time,
+  // so the newest row whose tail is all-digits carries the max. (The server
+  // also regenerates on any collision, so this is belt-and-suspenders.)
   const { data } = await supabase
     .from("pos_orders")
     .select("order_number")
     .eq("outlet_id", outletId)
     .order("created_at", { ascending: false })
-    .limit(1);
+    .limit(40);
   let seq = 0;
-  const last = data?.[0]?.order_number as string | undefined;
-  if (last) {
-    const n = parseInt(last.split("-").pop() ?? "", 10);
-    if (!isNaN(n)) seq = n;
+  for (const row of data ?? []) {
+    const tail = ((row.order_number as string | null) ?? "").split("-").pop() ?? "";
+    if (/^\d+$/.test(tail)) {
+      seq = parseInt(tail, 10);
+      break; // newest all-numeric number = current max sequence
+    }
   }
   const code = OUTLET_CODE[outletId] ?? "CC";
   return `CC-${code}-${String(seq + 1).padStart(4, "0")}`;

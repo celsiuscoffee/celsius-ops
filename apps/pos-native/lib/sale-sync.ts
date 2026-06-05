@@ -6,32 +6,50 @@
 import { AppState } from "react-native";
 import { supabase } from "./supabase";
 import { posOrderComplete } from "./loyalty";
-import { listPending, removePending, bumpAttempts, type PendingSale } from "./offline-queue";
+import { listPending, removePending, bumpAttempts, quarantine, type PendingSale } from "./offline-queue";
 import { markOnline, markOffline, withTimeout } from "./connectivity";
 
 let flushing = false;
 let started = false;
 
+// After this many SERVER rejections (not network failures), a sale is
+// dead-lettered so it can't keep the queue from draining. Network outages don't
+// count toward this — they retry indefinitely on reconnect.
+const MAX_SYNC_ATTEMPTS = 5;
+
 function orderIdOf(e: PendingSale): string | undefined {
   return (e.payload.order as { id?: string }).id;
 }
 
-/** Sync one buffered sale. Returns true if it's now in the cloud (or was
- *  already), false if the network failed (leave it buffered, retry later). */
-async function syncOne(entry: PendingSale): Promise<boolean> {
-  const orderId = orderIdOf(entry);
-  if (!orderId) return true; // malformed → drop it
+/** The outcome of trying to sync one buffered sale:
+ *  - "ok":       it's in the cloud now (or already was) → removed from the queue
+ *  - "network":  the call didn't reach the server → we're offline, retry later
+ *  - "rejected": the server reached us but rejected the payload → don't let it
+ *                block the rest of the queue. */
+type SyncResult = "ok" | "network" | "rejected";
 
+async function syncOne(entry: PendingSale): Promise<SyncResult> {
+  const orderId = orderIdOf(entry);
+  if (!orderId) return "ok"; // malformed → treat as done so it's skipped
+
+  let res: { error?: unknown };
   try {
-    const res = await withTimeout(
+    res = (await withTimeout(
       Promise.resolve(supabase.rpc("create_pos_sale", { p: entry.payload })),
       8000,
-    );
-    if ((res as { error?: unknown }).error) throw (res as { error: unknown }).error;
+    )) as { error?: unknown };
   } catch {
+    // Transport failure / timeout → the call never landed. We're offline; leave
+    // the sale buffered and stop the drain so it retries on the next tick.
     markOffline();
-    void bumpAttempts(orderId);
-    return false;
+    return "network";
+  }
+
+  // The RPC reached the server (so we're online). A populated .error means the
+  // DB rejected THIS payload specifically — a per-sale problem, not an outage.
+  if (res.error) {
+    markOnline();
+    return "rejected";
   }
 
   markOnline();
@@ -49,19 +67,32 @@ async function syncOne(entry: PendingSale): Promise<boolean> {
   }
 
   await removePending(orderId);
-  return true;
+  return "ok";
 }
 
-/** Drain the buffer. Stops at the first network failure (we're offline) and
- *  retries on the next tick. Re-entrancy-guarded. */
+/** Drain the buffer. Stops at the first NETWORK failure (we're offline) and
+ *  retries on the next tick. A server-REJECTED sale is skipped (and
+ *  dead-lettered after a few tries) so it can never jam the sales behind it.
+ *  Re-entrancy-guarded. */
 export async function flushPending(): Promise<void> {
   if (flushing) return;
   flushing = true;
   try {
     const list = await listPending();
     for (const entry of list) {
-      const ok = await syncOne(entry);
-      if (!ok) break;
+      const r = await syncOne(entry);
+      if (r === "network") break; // offline → stop; the rest will also fail
+      if (r === "rejected") {
+        const id = orderIdOf(entry);
+        if (id) {
+          await bumpAttempts(id);
+          if ((entry.attempts ?? 0) + 1 >= MAX_SYNC_ATTEMPTS) {
+            await quarantine(id); // dead-letter so it stops blocking the queue
+          }
+        }
+        continue; // keep draining the sales behind it
+      }
+      // "ok" → already removed from the queue; keep going
     }
   } finally {
     flushing = false;
