@@ -14,6 +14,7 @@ import type { OrderRow } from "@/lib/supabase/types";
 import { defaultMethodSets } from "@/lib/payments/gateway-methods";
 import { getOutletSst } from "@/lib/outlet-sst";
 import { resolveOrderReward } from "@celsius/shared";
+import { reconcileNonStackTier } from "@/lib/loyalty/non-stack-tier";
 
 function generateOrderNumber(): string {
   return `C-${Date.now().toString(36).slice(-4).toUpperCase()}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`;
@@ -321,14 +322,17 @@ export async function POST(request: NextRequest) {
 
     // ── Resolve member tier (used for promo eligibility and points) ───────
     let memberTierId: string | null = null;
+    let memberTierStackable = true;
     if (loyaltyId) {
       const { data: mb } = await supabase
         .from("member_brands")
-        .select("current_tier_id, tiers(multiplier)")
+        .select("current_tier_id, tiers(multiplier, stackable)")
         .eq("member_id", loyaltyId)
         .eq("brand_id", "brand-celsius")
         .single();
       memberTierId = (mb as { current_tier_id?: string | null } | null)?.current_tier_id ?? null;
+      const tierRow = (mb as { tiers?: { stackable?: boolean | null } | null } | null)?.tiers;
+      memberTierStackable = (tierRow?.stackable as boolean | null) ?? true;
     }
 
     // ── Evaluate promotion engine ─────────────────────────────────────────
@@ -367,7 +371,32 @@ export async function POST(request: NextRequest) {
       member_tier_id: memberTierId,
       channel: channelForOrderType(orderType),
     });
-    const promoDiscountSen = Math.round(evaluated.total_discount * 100);
+    let promoDiscountSen = Math.round(evaluated.total_discount * 100);
+
+    // ── Non-stackable tier exclusivity — best single offer wins ────────────
+    // Mirrors /api/orders, /api/checkout/quote, and the POS register. A
+    // non-stackable tier (Black Card 50% / Staff 30%) is EXCLUSIVE: the member
+    // gets the LARGER of the tier % vs everything else combined (reward + FOD +
+    // store auto-promos), never the sum. When the tier wins (dropReward) we also
+    // must NOT consume the member's reward/voucher — they keep it for later, so
+    // the reward legs below are nulled both on the order row (for the paid
+    // confirm paths) and in the RM0 free-order branch (which reads the locals).
+    // Stackable tiers (Member/Silver/Gold/Platinum) pass through unchanged.
+    const tierPerkSen = Math.round(
+      (evaluated.discounts.find((d) => d.reason === "tier_perk")?.discount_amount ?? 0) * 100,
+    );
+    const recv = reconcileNonStackTier({
+      stackable: memberTierStackable,
+      evaluatedTotalSen: promoDiscountSen,
+      tierPerkSen,
+      voucherSen: 0,
+      rewardSen: rewardDiscountSenAmt,
+      fodSen: fodDiscountSen,
+    });
+    promoDiscountSen     = recv.promoDiscountSen;
+    rewardDiscountSenAmt = recv.rewardSen;
+    fodDiscountSen       = recv.fodSen;
+    const dropReward     = recv.droppedWallet;
 
     // ── Compute totals server-side ─────────────────────────────────────────
     const orderNumber          = generateOrderNumber();
@@ -411,9 +440,12 @@ export async function POST(request: NextRequest) {
         // free-order branch below all run applyOrderV2Hooks(walletVoucherId) to
         // mark them used. Catalog / points-shop rewards keep reward_id so
         // deductLoyaltyPoints can burn the points. A reward is never both.
-        reward_id:              resolvedWalletVoucherId ? null : (rewardId ?? null),
-        wallet_voucher_id:      resolvedWalletVoucherId,
-        reward_name:            rewardName ?? null,
+        // dropReward (non-stackable tier won) → no reward applied/consumed:
+        // null every reward leg so the paid confirm paths (which read these
+        // order-row columns) don't burn the voucher/points.
+        reward_id:              dropReward ? null : (resolvedWalletVoucherId ? null : (rewardId ?? null)),
+        wallet_voucher_id:      dropReward ? null : resolvedWalletVoucherId,
+        reward_name:            dropReward ? null : (rewardName ?? null),
         sst_amount:             sstSen,
         first_order_discount_amount: fodDiscountSen,
         // Promotion-engine discounts persisted so the order detail
@@ -496,7 +528,7 @@ export async function POST(request: NextRequest) {
         if (pointsToEarn > 0) {
           earnLoyaltyPoints(loyaltyId, order.id, pointsToEarn, order.store_id);
         }
-        if (resolvedWalletVoucherId) {
+        if (resolvedWalletVoucherId && !dropReward) {
           // Wallet voucher fully covered the bill (e.g. a Free Drink). There's
           // no gateway webhook / confirm callback for a RM0 order, so consume
           // it here — the same applyOrderV2Hooks path the paid flows use (marks
@@ -513,7 +545,7 @@ export async function POST(request: NextRequest) {
           } catch (e) {
             console.error(`[checkout] free-order v2 hooks failed for order=${order.id}`, e);
           }
-        } else if (rewardId) {
+        } else if (rewardId && !dropReward) {
           deductLoyaltyPoints(loyaltyId, rewardId, order.store_id);
         }
       }
