@@ -107,13 +107,13 @@ export default function SalesScreen() {
           <View className="flex-1">
             {isAdmin ? (
               <Pressable onPress={() => setOutletSheet(true)} hitSlop={8} className="flex-row items-center gap-1.5 self-start">
-                <Text className="font-display text-lg text-[#F5F3F0]">{data?.outletName ?? "Sales"}</Text>
-                <ChevronDown color="#F5F3F08a" size={16} />
+                <Text className="font-display text-2xl text-[#F5F3F0]">{data?.outletName ?? "Sales"}</Text>
+                <ChevronDown color="#F5F3F08a" size={18} />
               </Pressable>
             ) : (
-              <Text className="font-display text-lg text-[#F5F3F0]">{data?.outletName ?? "Sales"}</Text>
+              <Text className="font-display text-2xl text-[#F5F3F0]">{data?.outletName ?? "Sales"}</Text>
             )}
-            <Text className="font-body text-[11px] text-[#F5F3F08a]">Live · POS + Pickup</Text>
+            <Text className="font-body text-sm text-[#F5F3F08a]">Live · POS + Pickup</Text>
           </View>
         </View>
 
