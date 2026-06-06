@@ -295,8 +295,8 @@ export default function CashflowPage() {
                       return (
                         <tr key={m.month} className={`hover:bg-gray-50 ${m.netGenerated < 0 ? "bg-red-50/30" : ""}`}>
                           <td className="px-4 py-2 text-xs font-medium text-gray-700">{m.month}</td>
-                          <td className="px-4 py-2 text-right font-mono text-xs text-green-700">+{fmtMYR(m.cashIn - m.interCoInflows)}</td>
-                          <td className="px-4 py-2 text-right font-mono text-xs text-red-700">−{fmtMYR(m.cashOut - m.interCoOutflows)}</td>
+                          <td className="px-4 py-2 text-right font-mono text-xs text-green-700">+{fmtMYR(m.cashIn)}</td>
+                          <td className="px-4 py-2 text-right font-mono text-xs text-red-700">−{fmtMYR(m.cashOut)}</td>
                           <td className={`px-4 py-2 text-right font-mono text-xs font-bold ${m.netGenerated >= 0 ? "text-green-700" : "text-red-700"}`}>
                             {m.netGenerated >= 0 ? "+" : ""}{fmtMYR(m.netGenerated)}
                           </td>
@@ -309,7 +309,7 @@ export default function CashflowPage() {
                           <td className="px-4 py-2 text-[11px]">
                             {incomplete
                               ? <span className="text-amber-600">{m.accountsReporting}/{expectedAccounts} accounts ⚠</span>
-                              : <span className="text-gray-500">{m.accountsReporting}/{expectedAccounts} accounts · {m.netSource === 'balance' ? 'balance roll-fwd' : 'period totals'}</span>}
+                              : <span className="text-gray-500">{m.accountsReporting}/{expectedAccounts} accounts</span>}
                           </td>
                         </tr>
                       );
@@ -318,7 +318,7 @@ export default function CashflowPage() {
                 </table>
               </div>
               <p className="border-t border-gray-100 px-4 py-2 text-[10px] text-gray-400">
-                Cash in, Cash out and Net generated all exclude inter-company transfers between Celsius entities, so every row reflects real external cash movement and reconciles (Cash in − Cash out = Net). Full-coverage months derive Net from the closing-balance roll-forward.
+                Net generated = Cash in − Cash out, including transfers between Celsius entities — matches the consolidated cash-tracking spreadsheet. Min balance is the lowest consolidated daily balance reached that month.
               </p>
             </div>
           )}
