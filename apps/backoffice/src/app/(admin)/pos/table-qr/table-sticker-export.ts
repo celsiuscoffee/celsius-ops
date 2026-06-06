@@ -11,12 +11,8 @@
  */
 import QRCode from "qrcode";
 
-const BG = "#15090A", CREAM = "#F5F1EA", MUTE = "#96867E", GOLD = "#D2965C", INK = "#160800";
+const BG = "#15090A", CREAM = "#F5F1EA", GOLD = "#D2965C", INK = "#160800";
 const CREAM_RGB = "245,241,234";
-const NOTE =
-  "A NOTE FROM OUR TABLE TO YOURS — THIS SPACE IS MADE TO BE SHARED. SOLO? GRAB ONE " +
-  "OF THE SMALLER TABLES. STAYING A WHILE? KEEP IT WARM WITH A DRINK (OR DRINKSSS) AND " +
-  "A BITE — OURS IS MADE TO BE CRAVED & DROOLED OVER. GLAD YOU'RE HERE.";
 
 const USERS_PATHS = [
   "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",
@@ -109,37 +105,23 @@ function drawCard(ctx: CanvasRenderingContext2D, ox: number, oy: number, trimW: 
   ctx.restore();
   ctx.letterSpacing = "0px"; ctx.textAlign = "left"; ctx.textBaseline = "top";
 
-  // ACHTUNG! + wrapped note
-  const ny0 = P(786) + P(792) + P(116);
-  ctx.fillStyle = GOLD; font(700, P(25)); ctx.letterSpacing = `${P(4)}px`;
-  ctx.fillText("ACHTUNG!", P(92), ny0);
-  ctx.letterSpacing = "0px";
-  ctx.fillStyle = MUTE; font(450, P(25));
-  let ny = ny0 + P(52); const maxw = trimW - 2 * P(92); let line = "";
-  for (const word of NOTE.split(" ")) {
-    const t = line ? line + " " + word : word;
-    if (ctx.measureText(t).width <= maxw) line = t;
-    else { ctx.fillText(line, P(92), ny); ny += P(40); line = word; }
-  }
-  if (line) ctx.fillText(line, P(92), ny);
-
-  // badges
-  const by = P(1964), bhh = P(104), gap = P(26), bwd = Math.floor((trimW - 2 * P(92) - gap) / 2);
+  // badges — stacked, large (note removed)
+  const bx = P(92), bwd = trimW - 2 * P(92), bH = P(168), bgap = P(28), by0 = P(1704);
   const seat = opts.seats ? `TABLE FOR ${opts.seats}` : "FIND A SEAT";
-  const badge = (x: number, paths: string[], circle: boolean, text: string) => {
-    ctx.strokeStyle = `rgba(${CREAM_RGB},0.37)`; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(x, by, bwd, bhh, P(16)); ctx.stroke();
-    const isz = P(52);
-    strokeIcon(ctx, paths, circle, x + P(22), by + (bhh - isz) / 2, isz);
-    const dvx = x + P(22) + isz + P(20);
+  const badge = (y: number, paths: string[], circle: boolean, text: string) => {
+    ctx.strokeStyle = `rgba(${CREAM_RGB},0.37)`; ctx.lineWidth = Math.max(2, P(2));
+    ctx.beginPath(); ctx.roundRect(bx, y, bwd, bH, P(20)); ctx.stroke();
+    const isz = P(80);
+    strokeIcon(ctx, paths, circle, bx + P(40), y + (bH - isz) / 2, isz);
+    const dvx = bx + P(40) + isz + P(36);
     ctx.strokeStyle = `rgba(${CREAM_RGB},0.22)`; ctx.beginPath();
-    ctx.moveTo(dvx, by + P(24)); ctx.lineTo(dvx, by + bhh - P(24)); ctx.stroke();
-    ctx.fillStyle = CREAM; font(600, P(26)); ctx.textBaseline = "middle"; ctx.letterSpacing = `${P(1)}px`;
-    ctx.fillText(text, dvx + P(20), by + bhh / 2 + P(1));
+    ctx.moveTo(dvx, y + P(34)); ctx.lineTo(dvx, y + bH - P(34)); ctx.stroke();
+    ctx.fillStyle = CREAM; font(600, P(46)); ctx.textBaseline = "middle"; ctx.letterSpacing = `${P(1)}px`;
+    ctx.fillText(text, dvx + P(36), y + bH / 2 + P(2));
     ctx.textBaseline = "top"; ctx.letterSpacing = "0px";
   };
-  badge(P(92), USERS_PATHS, true, seat);
-  badge(P(92) + bwd + gap, SANDWICH_PATHS, false, opts.foot);
+  badge(by0, USERS_PATHS, true, seat);
+  badge(by0 + bH + bgap, SANDWICH_PATHS, false, opts.foot);
 
   ctx.restore();
 }

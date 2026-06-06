@@ -35,15 +35,11 @@ const buildTableUrl = (storeId: string, label: string) =>
   `${BASE_URL}/table/${storeId}/${encodeURIComponent(label)}`;
 
 // ── Brand template (mirrors /Desktop/Celsius/Table Cards/_template_generate.py) ──
-const BG = "#15090A", CREAM = "#F5F1EA", MUTE = "#96867E", GOLD = "#D2965C", INK = "#160800";
+const BG = "#15090A", CREAM = "#F5F1EA", GOLD = "#D2965C", INK = "#160800";
 // The card is authored in the 1080×2160 PIL coordinate space; `U()` converts a
 // pixel value to container-query width units so the whole card scales with one
 // `--card-w` (300px on screen, 11cm in print) and stays pixel-faithful.
 const U = (px: number) => `${(px / 10.8).toFixed(3)}cqw`;
-const NOTE =
-  "A NOTE FROM OUR TABLE TO YOURS — THIS SPACE IS MADE TO BE SHARED. SOLO? GRAB ONE " +
-  "OF THE SMALLER TABLES. STAYING A WHILE? KEEP IT WARM WITH A DRINK (OR DRINKSSS) AND " +
-  "A BITE — OURS IS MADE TO BE CRAVED & DROOLED OVER. GLAD YOU'RE HERE.";
 
 type LayoutTable = { label: string; floor: string; seats: number | null };
 type View = "designed" | "plain";
@@ -55,14 +51,14 @@ function Badge({ icon, text }: { icon: ReactNode; text: string }) {
   return (
     <div
       style={{
-        flex: 1, height: U(104), border: "2px solid rgba(245,241,234,0.37)", borderRadius: U(16),
-        display: "flex", alignItems: "center", paddingLeft: U(22), paddingRight: U(14), gap: U(20),
+        width: "100%", height: U(168), border: "2px solid rgba(245,241,234,0.37)", borderRadius: U(20),
+        display: "flex", alignItems: "center", paddingLeft: U(40), paddingRight: U(36), gap: U(36),
         color: CREAM, minWidth: 0,
       }}
     >
       <span style={{ display: "flex", flexShrink: 0, color: CREAM }}>{icon}</span>
-      <span style={{ width: U(2), height: U(56), background: "rgba(245,241,234,0.22)", flexShrink: 0 }} />
-      <span style={{ fontSize: U(26), fontWeight: 600, lineHeight: 1.05, letterSpacing: U(1) }}>{text}</span>
+      <span style={{ width: U(2), height: U(100), background: "rgba(245,241,234,0.22)", flexShrink: 0 }} />
+      <span style={{ fontSize: U(46), fontWeight: 600, lineHeight: 1.05, letterSpacing: U(1) }}>{text}</span>
     </div>
   );
 }
@@ -106,15 +102,10 @@ function DesignedCard({
       <div style={{ position: "absolute", right: U(48), top: U(786 + 792 / 2), transform: "translateY(-50%) rotate(180deg)", writingMode: "vertical-rl", fontSize: U(30), fontWeight: 600, letterSpacing: U(3), whiteSpace: "nowrap" }}>
         {outletLine}
       </div>
-      {/* note */}
-      <div style={{ position: "absolute", left: U(92), top: U(1694), width: U(896) }}>
-        <div style={{ fontSize: U(25), fontWeight: 700, letterSpacing: U(4), color: GOLD, marginBottom: U(18) }}>ACHTUNG!</div>
-        <div style={{ fontSize: U(25), fontWeight: 450, lineHeight: 1.6, color: MUTE }}>{NOTE}</div>
-      </div>
-      {/* badges */}
-      <div style={{ position: "absolute", left: U(92), top: U(1964), width: U(896), display: "flex", gap: U(26) }}>
-        <Badge icon={<Users color={CREAM} strokeWidth={2} style={{ width: U(52), height: U(52) }} />} text={seatText} />
-        <Badge icon={<Sandwich color={CREAM} strokeWidth={2} style={{ width: U(52), height: U(52) }} />} text={foot} />
+      {/* badges — stacked, large (note removed) */}
+      <div style={{ position: "absolute", left: U(92), top: U(1704), width: U(896), display: "flex", flexDirection: "column", gap: U(28) }}>
+        <Badge icon={<Users color={CREAM} strokeWidth={2} style={{ width: U(80), height: U(80) }} />} text={seatText} />
+        <Badge icon={<Sandwich color={CREAM} strokeWidth={2} style={{ width: U(80), height: U(80) }} />} text={foot} />
       </div>
     </div>
   );
