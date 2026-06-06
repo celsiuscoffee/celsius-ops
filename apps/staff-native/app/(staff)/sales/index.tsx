@@ -95,7 +95,7 @@ export default function SalesScreen() {
       <ScrollView
         contentContainerClassName="px-4 pb-16"
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#FBBF24" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#FBBF24" colors={["#FBBF24"]} progressBackgroundColor="#2a1508" />}
       >
         {/* Header */}
         <View className="flex-row items-center gap-3 pb-4 pt-3">

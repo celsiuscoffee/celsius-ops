@@ -10,6 +10,7 @@ import {
   classifyPosChannel, classifyAppChannel, normalizePayment,
   isPosSale, isAppSale, rm, round2, pctChange,
 } from "../_lib/sales-helpers";
+import { fetchStorehubContributions } from "../_lib/storehub-bridge";
 
 // GET /api/sales/dashboard?mode=day|week|month|custom&from=&to=&outletId=
 // Consolidated native POS (pos_orders + pos_order_payments) + pickup (orders).
@@ -33,17 +34,19 @@ export async function GET(req: NextRequest) {
   let outletName = "";
   let scopeId = "";
   let availableOutlets: { id: string; name: string }[] = [];
+  let scopeOutlets: { id: string; storehubId: string | null }[] = [];
 
   if (isAdmin) {
     const all = await prisma.outlet.findMany({
       where: { status: "ACTIVE" },
-      select: { id: true, name: true, pickupStoreId: true },
+      select: { id: true, name: true, pickupStoreId: true, storehubId: true },
       orderBy: { name: "asc" },
     });
     availableOutlets = all.map((o) => ({ id: o.id, name: o.name }));
     if (scope === "all") {
       outletIds = all.map((o) => o.id);
       storeIds = all.map((o) => o.pickupStoreId).filter((s): s is string => !!s);
+      scopeOutlets = all.map((o) => ({ id: o.id, storehubId: o.storehubId }));
       outletName = "All outlets";
       scopeId = "all";
     } else {
@@ -51,17 +54,19 @@ export async function GET(req: NextRequest) {
       if (!o) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
       outletIds = [o.id];
       storeIds = o.pickupStoreId ? [o.pickupStoreId] : [];
+      scopeOutlets = [{ id: o.id, storehubId: o.storehubId }];
       outletName = o.name;
       scopeId = o.id;
     }
   } else {
     const o = await prisma.outlet.findUnique({
       where: { id: scope },
-      select: { id: true, name: true, pickupStoreId: true },
+      select: { id: true, name: true, pickupStoreId: true, storehubId: true },
     });
     if (!o) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
     outletIds = [o.id];
     storeIds = o.pickupStoreId ? [o.pickupStoreId] : [];
+    scopeOutlets = [{ id: o.id, storehubId: o.storehubId }];
     outletName = o.name;
     scopeId = o.id;
   }
@@ -78,7 +83,7 @@ export async function GET(req: NextRequest) {
   const [posRes, appRes, posPriorRes, appPriorRes] = await Promise.all([
     supabaseAdmin
       .from("pos_orders")
-      .select("id, created_at, subtotal, total, status, order_type, source, customer_phone, refund_of_order_id")
+      .select("id, outlet_id, created_at, subtotal, total, status, order_type, source, customer_phone, refund_of_order_id")
       .in("outlet_id", outletIds)
       .gte("created_at", winStart).lte("created_at", winEnd)
       .limit(20000),
@@ -133,6 +138,7 @@ export async function GET(req: NextRequest) {
   const curAppPhones = new Set<string>(), prevAppPhones = new Set<string>();
   let curAppOrd = 0, curPosOrd = 0, prevAppOrd = 0, prevPosOrd = 0;
   const curPosIds: string[] = [];
+  const nativeIds = new Set<string>(); // outlets with native pos sales this period
 
   const inCur = (d: string) => d >= cur.from && d <= cur.to;
   const inPrev = (d: string) => d >= prev.from && d <= prev.to;
@@ -143,6 +149,7 @@ export async function GET(req: NextRequest) {
     const net = r.subtotal || 0;
     if (inCur(d)) {
       curRev += net; curOrd++; curPosOrd++;
+      nativeIds.add(r.outlet_id);
       if (r.customer_phone) curPhones.add(r.customer_phone);
       curPosIds.push(r.id);
       curByDate[d] = (curByDate[d] || 0) + net;
@@ -189,6 +196,29 @@ export async function GET(req: NextRequest) {
       const pk = normalizePayment(p.payment_method);
       payAmt[pk] = (payAmt[pk] || 0) + ((p.amount || 0) - (p.refund_amount || 0));
     }
+  }
+
+  // ── StoreHub outlets (transition mode) — merge from the backoffice sales module ──
+  // An outlet is "native" if it rang sales on pos_orders this period; otherwise,
+  // if it still has a storehubId, pull its sales from the backoffice (live).
+  const shScope = scopeOutlets.filter((o) => o.storehubId && !nativeIds.has(o.id));
+  if (shScope.length) {
+    const sh = await fetchStorehubContributions({
+      baseUrl: process.env.BACKOFFICE_URL ?? "https://backoffice.celsiuscoffee.com",
+      authz: req.headers.get("authorization"),
+      outlets: shScope,
+      cur,
+      prev,
+      granularity,
+    });
+    curRev += sh.curRevSen; curOrd += sh.curOrd;
+    prevRev += sh.prevRevSen; prevOrd += sh.prevOrd;
+    for (let h = 0; h < 24; h++) { curHour[h] += sh.curHour[h]; prevHour[h] += sh.prevHour[h]; }
+    for (const dt in sh.curByDate) if (curByDate[dt] != null) curByDate[dt] += sh.curByDate[dt];
+    for (const dt in sh.prevByDate) if (prevByDate[dt] != null) prevByDate[dt] += sh.prevByDate[dt];
+    chanRev.dine_in += sh.chan.dine_in; chanRev.takeaway += sh.chan.takeaway; chanRev.delivery += sh.chan.delivery;
+    for (const k in sh.rounds) if (roundRev[k] != null) roundRev[k] += sh.rounds[k];
+    warn.push(...sh.warnings);
   }
 
   // ── Series (client makes it cumulative) ──
@@ -267,7 +297,7 @@ export async function GET(req: NextRequest) {
 }
 
 // ── local types + tiny helpers ──
-type PosRow = { id: string; created_at: string; subtotal: number | null; total: number | null; status: string | null; order_type: string | null; source: string | null; customer_phone: string | null; refund_of_order_id: string | null };
+type PosRow = { id: string; outlet_id: string; created_at: string; subtotal: number | null; total: number | null; status: string | null; order_type: string | null; source: string | null; customer_phone: string | null; refund_of_order_id: string | null };
 type AppRow = { id: string; created_at: string; subtotal: number | null; total: number | null; status: string | null; order_type: string | null; customer_phone: string | null; payment_method: string | null };
 type PayRow = { order_id: string; payment_method: string | null; amount: number | null; refund_amount: number | null };
 
