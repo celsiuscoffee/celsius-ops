@@ -51,7 +51,7 @@ export default function ScanScreen() {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const setDineIn = useApp((s) => s.setDineIn);
-  const setOutlet = useApp((s) => s.setOutlet);
+  const setOutletName = useApp((s) => s.setOutletName);
   const outletId = useApp((s) => s.outletId);
   const outletName = useApp((s) => s.outletName);
   // CameraView fires onBarcodeScanned many times a second; this ref makes the
@@ -89,18 +89,19 @@ export default function ScanScreen() {
       (async () => {
         try {
           const { data: row } = await supabase
-            .from("outlets")
+            .from("outlet_settings")
             .select("name")
             .eq("store_id", parsed.outletId)
             .maybeSingle();
           const name = (row as { name?: string } | null)?.name;
-          if (name) setOutlet(parsed.outletId, name);
+          // Name-only: don't hijack the customer's persisted pickup outlet.
+          if (name) setOutletName(name);
         } catch {
           // Name is cosmetic — the menu works with the id alone.
         }
       })();
     },
-    [enterDineIn, setOutlet],
+    [enterDineIn, setOutletName],
   );
 
   const canSubmitManual = !!manualTable.trim() && !!outletId;

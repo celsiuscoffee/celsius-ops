@@ -23,7 +23,7 @@ import { supabase } from "@/lib/supabase";
 export default function TableEntry() {
   const params = useLocalSearchParams<{ outletId?: string; tableId?: string }>();
   const setDineIn = useApp((s) => s.setDineIn);
-  const setOutlet = useApp((s) => s.setOutlet);
+  const setOutletName = useApp((s) => s.setOutletName);
   const handled = useRef(false);
 
   useEffect(() => {
@@ -44,23 +44,27 @@ export default function TableEntry() {
     setDineIn(outletId, "", tableId);
     router.replace("/menu");
 
-    // Best-effort: fill in the outlet name in the background. setOutlet only
-    // touches id + name, so it won't disturb a cart the customer starts
-    // building on the menu.
+    // Best-effort: fill in the DISPLAY name in the background. setOutletName
+    // touches only the active name — NOT the persisted pickup outlet — so
+    // scanning a table shows the right cafe without hijacking the customer's
+    // chosen pickup outlet (clearDineIn restores it on the way out).
+    // outlet_settings is the table that carries store_id (the same source the
+    // outlet picker reads); the `outlets` table is keyed by a different id, so
+    // querying it by store_id returned nothing and left the stale name.
     (async () => {
       try {
         const { data } = await supabase
-          .from("outlets")
+          .from("outlet_settings")
           .select("name")
           .eq("store_id", outletId)
           .maybeSingle();
         const name = (data as { name?: string } | null)?.name;
-        if (name) setOutlet(outletId, name);
+        if (name) setOutletName(name);
       } catch {
         // Name is cosmetic — the menu works with the id alone.
       }
     })();
-  }, [params.outletId, params.tableId, setDineIn, setOutlet]);
+  }, [params.outletId, params.tableId, setDineIn, setOutletName]);
 
   return (
     <View
