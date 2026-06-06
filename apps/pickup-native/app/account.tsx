@@ -835,7 +835,7 @@ function ProfileEditModal({
                 keyboardType="number-pad"
                 maxLength={2}
                 className="bg-surface border border-border rounded-2xl px-3 py-3 text-espresso text-base text-center"
-                style={{ fontFamily: "SpaceGrotesk_500Medium", width: 62 }}
+                style={{ fontFamily: "SpaceGrotesk_500Medium", flex: 2 }}
               />
               <Text className="text-muted-fg text-lg" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>/</Text>
               <TextInput
@@ -848,7 +848,7 @@ function ProfileEditModal({
                 keyboardType="number-pad"
                 maxLength={2}
                 className="bg-surface border border-border rounded-2xl px-3 py-3 text-espresso text-base text-center"
-                style={{ fontFamily: "SpaceGrotesk_500Medium", width: 62 }}
+                style={{ fontFamily: "SpaceGrotesk_500Medium", flex: 2 }}
               />
               <Text className="text-muted-fg text-lg" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>/</Text>
               <TextInput
@@ -861,7 +861,7 @@ function ProfileEditModal({
                 keyboardType="number-pad"
                 maxLength={4}
                 className="bg-surface border border-border rounded-2xl px-3 py-3 text-espresso text-base text-center"
-                style={{ fontFamily: "SpaceGrotesk_500Medium", width: 92 }}
+                style={{ fontFamily: "SpaceGrotesk_500Medium", flex: 3 }}
               />
             </View>
             <Text

@@ -854,7 +854,16 @@ export default function Checkout() {
             }),
           },
         );
-        const rmJson = (await rmRes.json()) as { paymentUrl?: string; error?: string };
+        const rmJson = (await rmRes.json()) as { paymentUrl?: string; error?: string; alreadyPaid?: boolean };
+        // Server blocked a second charge — this order is already paid/settled.
+        // Treat it as success and go to the order screen (its poll renders the
+        // real state) instead of a scary error. Prevents the double-charge
+        // confusion that made customers re-pay (the C-0937 incident).
+        if (rmRes.status === 409 && rmJson.alreadyPaid) {
+          trackEvent("payment_rm_already_paid", { orderId: res.orderId });
+          router.replace({ pathname: "/order/[id]", params: { id: res.orderId, justPaid: "1" } });
+          return;
+        }
         if (!rmRes.ok || !rmJson.paymentUrl) {
           throw new Error(`create-rm-payment HTTP ${rmRes.status}: ${rmJson.error || "no paymentUrl"}`);
         }

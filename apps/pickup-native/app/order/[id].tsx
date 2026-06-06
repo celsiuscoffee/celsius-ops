@@ -431,7 +431,15 @@ export default function OrderStatus() {
             }),
           },
         );
-        const rmJson = (await rmRes.json()) as { paymentUrl?: string; error?: string };
+        const rmJson = (await rmRes.json()) as { paymentUrl?: string; error?: string; alreadyPaid?: boolean };
+        // Already paid/settled — the server blocked a second charge. We're
+        // already on the order screen, so just close the picker and let the 5s
+        // poll render the real (paid) state instead of a "Couldn't retry" alert.
+        if (rmRes.status === 409 && rmJson.alreadyPaid) {
+          setMethodPickerOpen(false);
+          Alert.alert("Already paid", "This order is already paid — refreshing its status.");
+          return;
+        }
         if (!rmRes.ok || !rmJson.paymentUrl) {
           throw new Error(rmJson.error || "Couldn't start payment");
         }
