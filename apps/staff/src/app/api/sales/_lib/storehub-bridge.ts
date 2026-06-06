@@ -56,10 +56,12 @@ export async function fetchStorehubContributions(opts: {
       try {
         const url = `${opts.baseUrl}/api/sales/compare?periods=${periods}&outletId=${o.id}`;
         const res = await fetch(url, { headers: { authorization: opts.authz! } });
+        console.warn(`[sh-bridge] ${o.id} -> ${res.status}`);
         if (!res.ok) return { id: o.id, periods: null as ShPeriod[] | null };
         const j = (await res.json()) as { periods?: ShPeriod[] };
         return { id: o.id, periods: j.periods ?? null };
-      } catch {
+      } catch (e) {
+        console.error(`[sh-bridge] ${o.id} error`, e instanceof Error ? e.message : e);
         return { id: o.id, periods: null as ShPeriod[] | null };
       }
     }),

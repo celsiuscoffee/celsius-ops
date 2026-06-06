@@ -202,6 +202,7 @@ export async function GET(req: NextRequest) {
   // An outlet is "native" if it rang sales on pos_orders this period; otherwise,
   // if it still has a storehubId, pull its sales from the backoffice (live).
   const shScope = scopeOutlets.filter((o) => o.storehubId && !nativeIds.has(o.id));
+  console.warn(`[sales] scope=[${scopeOutlets.map((o) => o.id + (o.storehubId ? "#sh" : "")).join(",")}] native=[${[...nativeIds].join(",")}] shScope=[${shScope.map((o) => o.id).join(",")}] authz=${req.headers.get("authorization") ? "y" : "n"}`);
   if (shScope.length) {
     const sh = await fetchStorehubContributions({
       baseUrl: process.env.BACKOFFICE_URL ?? "https://backoffice.celsiuscoffee.com",
