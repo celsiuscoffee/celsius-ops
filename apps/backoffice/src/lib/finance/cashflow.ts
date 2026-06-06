@@ -760,12 +760,6 @@ export async function computeCashflow(opts: {
     (acc, b) => acc == null || b.closing < acc.closing ? { closing: b.closing, weekStart: b.weekStart, weekEnd: b.weekEnd } : acc,
     null,
   );
-  const unflaggedOutlier = monthlyHistory.find(
-    (m) => Math.abs(m.netGenerated) > 100000 && (m.interCoInflows ?? 0) === 0 && (m.interCoOutflows ?? 0) === 0,
-  );
-  if (unflaggedOutlier && !isFiltered) {
-    warnings.push(`${unflaggedOutlier.month} net was ${unflaggedOutlier.netGenerated >= 0 ? "+" : ""}RM ${Math.round(unflaggedOutlier.netGenerated).toLocaleString()} — likely an InterCo transfer. Edit that month's statement and fill in the InterCo offset to exclude it from cash generation.`);
-  }
   if (monthlyHistory.some((m) => m.accountsReporting < 3) && !isFiltered) {
     warnings.push("Some months have fewer than 3 reporting accounts — uploaded statement set is incomplete for those months.");
   }
@@ -858,15 +852,13 @@ async function loadMonthlyHistory(): Promise<CashflowResult["monthlyHistory"]> {
   return Array.from(byMonth.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([month, stmts]) => {
-      // Try balance roll-forward first
-      let balanceChange = 0;
+      // Data-completeness only: do all accounts this month have a prior
+      // month on record? Drives the coverage hint in the UI.
       let allHavePrior = true;
       for (const s of stmts) {
         const list = byAccount.get(s.account)!;
         const idx = list.findIndex((x) => x.month === month);
-        const prior = idx > 0 ? list[idx - 1] : null;
-        if (!prior) { allHavePrior = false; break; }
-        balanceChange += s.closing - prior.closing;
+        if (idx <= 0) { allHavePrior = false; break; }
       }
 
       const cashIn  = stmts.reduce((s, x) => s + x.totalIn,  0);
@@ -874,14 +866,11 @@ async function loadMonthlyHistory(): Promise<CashflowResult["monthlyHistory"]> {
       const icoIn   = stmts.reduce((s, x) => s + x.icoIn,    0);
       const icoOut  = stmts.reduce((s, x) => s + x.icoOut,   0);
 
-      // Net of InterCo: balance change + (icoOut - icoIn) — when InterCo
-      // moves money to an untracked 4th account, our 3-account view sees
-      // it as outflow but it's not real burn. Adding icoOut back removes
-      // that distortion. Symmetric on the inflow side.
-      const netFromBalance = balanceChange + (icoOut - icoIn);
-      const netFromTotals  = (cashIn - icoIn) - (cashOut - icoOut);
-
-      const netGenerated = allHavePrior ? netFromBalance : netFromTotals;
+      // Net = gross cash in - gross cash out, INCLUDING transfers between
+      // Celsius entities, to match Finance's consolidated cash-tracking
+      // spreadsheet exactly. (InterCo amounts are still captured above for
+      // reference but no longer netted out of the headline.)
+      const netGenerated = cashIn - cashOut;
       const netSource: 'balance' | 'periodTotals' = allHavePrior ? 'balance' : 'periodTotals';
 
       return {

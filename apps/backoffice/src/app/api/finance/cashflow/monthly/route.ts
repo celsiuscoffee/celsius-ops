@@ -70,8 +70,10 @@ export async function GET(req: NextRequest) {
   for (const s of kept) {
     const m = ym(s.statementDate);
     const row = months.get(m) ?? { inflow: 0, outflow: 0, closing: 0 };
-    const inflow = Number(s.totalInflows ?? 0) - Number(s.interCoInflows ?? 0);
-    const outflow = Number(s.totalOutflows ?? 0) - Number(s.interCoOutflows ?? 0);
+    // Gross — includes inter-company transfers, matching the finance team's
+    // consolidated cash-tracking spreadsheet (Net = Cash in − Cash out).
+    const inflow = Number(s.totalInflows ?? 0);
+    const outflow = Number(s.totalOutflows ?? 0);
     row.inflow += inflow;
     row.outflow += outflow;
     row.closing += Number(s.closingBalance); // group bank balance = Σ account closing balances
