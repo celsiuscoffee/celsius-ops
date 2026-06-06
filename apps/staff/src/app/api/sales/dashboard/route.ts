@@ -189,10 +189,11 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── StoreHub outlets (transition mode) — merge from the backoffice sales module ──
-  // An outlet is "native" if it rang sales on pos_orders this period; otherwise,
-  // if it still has a storehubId, pull its sales from the backoffice (live).
-  const shScope = scopeOutlets.filter((o) => o.storehubId && !(o.posCode != null && nativeCodes.has(o.posCode)));
+  // ── StoreHub (transition mode) — merge from the backoffice sales module ──
+  // Sum StoreHub + native for ANY outlet that still has a storehubId. A sale
+  // rings in exactly one system (StoreHub OR the new POS), so summing both is
+  // correct (no double-count) and captures both sides of a transitioning day.
+  const shScope = scopeOutlets.filter((o) => o.storehubId);
   console.warn(`[sales] codes=[${posCodes.join(",")}] native=[${[...nativeCodes].join(",")}] shScope=[${shScope.map((o) => o.id).join(",")}] authz=${req.headers.get("authorization") ? "y" : "n"}`);
   if (shScope.length) {
     const sh = await fetchStorehubContributions({
