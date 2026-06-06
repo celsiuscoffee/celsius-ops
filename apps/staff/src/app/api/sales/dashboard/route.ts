@@ -29,12 +29,12 @@ export async function GET(req: NextRequest) {
   const scope = isAdmin ? (reqOutlet || "all") : user.outletId;
   if (!scope) return NextResponse.json({ error: "No outlet" }, { status: 400 });
 
-  let outletIds: string[] = [];
+  let posCodes: string[] = [];
   let storeIds: string[] = [];
   let outletName = "";
   let scopeId = "";
   let availableOutlets: { id: string; name: string }[] = [];
-  let scopeOutlets: { id: string; storehubId: string | null }[] = [];
+  let scopeOutlets: { id: string; storehubId: string | null; posCode: string | null }[] = [];
 
   if (isAdmin) {
     const all = await prisma.outlet.findMany({
@@ -43,33 +43,24 @@ export async function GET(req: NextRequest) {
       orderBy: { name: "asc" },
     });
     availableOutlets = all.map((o) => ({ id: o.id, name: o.name }));
-    if (scope === "all") {
-      outletIds = all.map((o) => o.id);
-      storeIds = all.map((o) => o.pickupStoreId).filter((s): s is string => !!s);
-      scopeOutlets = all.map((o) => ({ id: o.id, storehubId: o.storehubId }));
-      outletName = "All outlets";
-      scopeId = "all";
-    } else {
-      const o = all.find((x) => x.id === scope);
-      if (!o) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
-      outletIds = [o.id];
-      storeIds = o.pickupStoreId ? [o.pickupStoreId] : [];
-      scopeOutlets = [{ id: o.id, storehubId: o.storehubId }];
-      outletName = o.name;
-      scopeId = o.id;
-    }
+    const pick = scope === "all" ? all : all.filter((x) => x.id === scope);
+    if (scope !== "all" && pick.length === 0) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
+    scopeOutlets = pick.map((o) => ({ id: o.id, storehubId: o.storehubId, posCode: posCodeFor(o) }));
+    storeIds = pick.map((o) => o.pickupStoreId).filter((s): s is string => !!s);
+    outletName = scope === "all" ? "All outlets" : pick[0].name;
+    scopeId = scope === "all" ? "all" : pick[0].id;
   } else {
     const o = await prisma.outlet.findUnique({
       where: { id: scope },
       select: { id: true, name: true, pickupStoreId: true, storehubId: true },
     });
     if (!o) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
-    outletIds = [o.id];
+    scopeOutlets = [{ id: o.id, storehubId: o.storehubId, posCode: posCodeFor(o) }];
     storeIds = o.pickupStoreId ? [o.pickupStoreId] : [];
-    scopeOutlets = [{ id: o.id, storehubId: o.storehubId }];
     outletName = o.name;
     scopeId = o.id;
   }
+  posCodes = scopeOutlets.map((o) => o.posCode).filter((c): c is string => !!c);
 
   const { cur, prev, granularity } = rangesForMode(mode, sp.get("from"), sp.get("to"));
   const today = getMYTToday();
@@ -84,7 +75,7 @@ export async function GET(req: NextRequest) {
     supabaseAdmin
       .from("pos_orders")
       .select("id, outlet_id, created_at, subtotal, total, status, order_type, source, customer_phone, refund_of_order_id")
-      .in("outlet_id", outletIds)
+      .in("outlet_id", posCodes)
       .gte("created_at", winStart).lte("created_at", winEnd)
       .limit(20000),
     storeIds.length
@@ -97,7 +88,7 @@ export async function GET(req: NextRequest) {
       : Promise.resolve({ data: [], error: null }),
     supabaseAdmin
       .from("pos_orders").select("customer_phone")
-      .in("outlet_id", outletIds).lt("created_at", priorCut)
+      .in("outlet_id", posCodes).lt("created_at", priorCut)
       .not("customer_phone", "is", null).limit(50000),
     storeIds.length
       ? supabaseAdmin
@@ -138,7 +129,7 @@ export async function GET(req: NextRequest) {
   const curAppPhones = new Set<string>(), prevAppPhones = new Set<string>();
   let curAppOrd = 0, curPosOrd = 0, prevAppOrd = 0, prevPosOrd = 0;
   const curPosIds: string[] = [];
-  const nativeIds = new Set<string>(); // outlets with native pos sales this period
+  const nativeCodes = new Set<string>(); // pos outlet-codes with native sales this period
 
   const inCur = (d: string) => d >= cur.from && d <= cur.to;
   const inPrev = (d: string) => d >= prev.from && d <= prev.to;
@@ -149,7 +140,7 @@ export async function GET(req: NextRequest) {
     const net = r.subtotal || 0;
     if (inCur(d)) {
       curRev += net; curOrd++; curPosOrd++;
-      nativeIds.add(r.outlet_id);
+      nativeCodes.add(r.outlet_id);
       if (r.customer_phone) curPhones.add(r.customer_phone);
       curPosIds.push(r.id);
       curByDate[d] = (curByDate[d] || 0) + net;
@@ -201,8 +192,8 @@ export async function GET(req: NextRequest) {
   // ── StoreHub outlets (transition mode) — merge from the backoffice sales module ──
   // An outlet is "native" if it rang sales on pos_orders this period; otherwise,
   // if it still has a storehubId, pull its sales from the backoffice (live).
-  const shScope = scopeOutlets.filter((o) => o.storehubId && !nativeIds.has(o.id));
-  console.warn(`[sales] scope=[${scopeOutlets.map((o) => o.id + (o.storehubId ? "#sh" : "")).join(",")}] native=[${[...nativeIds].join(",")}] shScope=[${shScope.map((o) => o.id).join(",")}] authz=${req.headers.get("authorization") ? "y" : "n"}`);
+  const shScope = scopeOutlets.filter((o) => o.storehubId && !(o.posCode != null && nativeCodes.has(o.posCode)));
+  console.warn(`[sales] codes=[${posCodes.join(",")}] native=[${[...nativeCodes].join(",")}] shScope=[${shScope.map((o) => o.id).join(",")}] authz=${req.headers.get("authorization") ? "y" : "n"}`);
   if (shScope.length) {
     const sh = await fetchStorehubContributions({
       baseUrl: process.env.BACKOFFICE_URL ?? "https://backoffice.celsiuscoffee.com",
@@ -326,4 +317,22 @@ function labelFor(mode: Mode, which: "cur" | "prev"): string {
     month: ["This month", "Last month"], custom: ["Selected", "Previous"],
   };
   return m[mode][which === "cur" ? 0 : 1];
+}
+
+// pos_orders.outlet_id holds a POS code (outlet-sa/con/tam/nilai), not the
+// Outlet UUID. Map an Outlet → its POS code via the store slug.
+const SLUG_TO_POS: Record<string, string> = {
+  "shah-alam": "outlet-sa", conezion: "outlet-con", tamarind: "outlet-tam", nilai: "outlet-nilai",
+};
+function posCodeFor(o: { pickupStoreId: string | null; name: string }): string | null {
+  let slug = o.pickupStoreId;
+  if (!slug) {
+    const n = (o.name || "").toLowerCase();
+    slug = n.includes("nilai") ? "nilai"
+      : n.includes("shah") ? "shah-alam"
+      : n.includes("putrajaya") || n.includes("conezion") ? "conezion"
+      : n.includes("tamarind") ? "tamarind"
+      : null;
+  }
+  return slug ? SLUG_TO_POS[slug] ?? null : null;
 }
