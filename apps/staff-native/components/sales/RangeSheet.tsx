@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
-import { ChevronLeft, ChevronRight } from "lucide-react-native";
+import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react-native";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const WK = ["S", "M", "T", "W", "T", "F", "S"];
@@ -30,6 +30,7 @@ export function RangeSheet({ visible, from, to, onApply, onClose }: Props) {
   const [dEnd, setDEnd] = useState<string | null>(to);
   const [calY, setCalY] = useState(2026);
   const [calM, setCalM] = useState(0);
+  const [pickMonth, setPickMonth] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -38,6 +39,7 @@ export function RangeSheet({ visible, from, to, onApply, onClose }: Props) {
       const e = new Date(`${to}T12:00:00+08:00`);
       setCalY(e.getFullYear());
       setCalM(e.getMonth());
+      setPickMonth(false);
     }
   }, [visible, from, to]);
 
@@ -85,35 +87,56 @@ export function RangeSheet({ visible, from, to, onApply, onClose }: Props) {
         </View>
 
         <View className="mb-2 flex-row items-center justify-between">
-          <Pressable hitSlop={10} onPress={() => { const m = calM - 1; if (m < 0) { setCalM(11); setCalY(calY - 1); } else setCalM(m); }} className="p-1">
+          <Pressable hitSlop={10} onPress={() => {
+            if (pickMonth) { setCalY(calY - 1); return; }
+            const m = calM - 1; if (m < 0) { setCalM(11); setCalY(calY - 1); } else setCalM(m);
+          }} className="p-1">
             <ChevronLeft color="#F5F3F0b3" size={18} />
           </Pressable>
-          <Text className="font-display text-sm text-[#F5F3F0]">{MON[calM]} {calY}</Text>
-          <Pressable hitSlop={10} onPress={() => { const m = calM + 1; if (m > 11) { setCalM(0); setCalY(calY + 1); } else setCalM(m); }} className="p-1">
+          <Pressable hitSlop={8} onPress={() => setPickMonth((v) => !v)} className="flex-row items-center gap-1 px-2 py-1">
+            <Text className="font-display text-sm text-[#F5F3F0]">{pickMonth ? `${calY}` : `${MON[calM]} ${calY}`}</Text>
+            <ChevronDown color="#F5F3F08a" size={14} />
+          </Pressable>
+          <Pressable hitSlop={10} onPress={() => {
+            if (pickMonth) { setCalY(calY + 1); return; }
+            const m = calM + 1; if (m > 11) { setCalM(0); setCalY(calY + 1); } else setCalM(m);
+          }} className="p-1">
             <ChevronRight color="#F5F3F0b3" size={18} />
           </Pressable>
         </View>
 
-        <View className="flex-row flex-wrap">
-          {WK.map((d, i) => (
-            <View key={`w${i}`} style={{ width: `${100 / 7}%` }} className="py-1">
-              <Text className="text-center text-[10px] font-body-semi text-[#F5F3F057]">{d}</Text>
-            </View>
-          ))}
-          {cells.map((d, i) => {
-            if (d == null) return <View key={`e${i}`} style={{ width: `${100 / 7}%` }} className="py-2.5" />;
-            const ds = ymd(calY, calM, d);
-            const inRange = !!(dStart && dEnd && ds >= dStart && ds <= dEnd);
-            const isEnd = ds === dStart || ds === dEnd;
-            return (
-              <Pressable key={`d${i}`} onPress={() => pick(ds)} style={{ width: `${100 / 7}%` }} className="items-center py-1">
-                <View className={`h-9 w-9 items-center justify-center rounded-xl ${isEnd ? "bg-[#A2492C]" : inRange ? "bg-[#A2492C40]" : ""}`}>
-                  <Text className={`text-[13px] ${isEnd ? "font-body-bold text-[#F5F3F0]" : "font-body text-[#F5F3F0]"}`}>{d}</Text>
+        {pickMonth ? (
+          <View className="flex-row flex-wrap py-1">
+            {MON.map((m, i) => (
+              <Pressable key={m} onPress={() => { setCalM(i); setPickMonth(false); }} style={{ width: `${100 / 3}%` }} className="px-1 py-1.5">
+                <View className={`items-center rounded-xl py-3 ${i === calM ? "bg-[#A2492C]" : "bg-[#160800]"}`}>
+                  <Text className={`text-[13px] ${i === calM ? "font-body-bold text-[#F5F3F0]" : "font-body text-[#F5F3F0]"}`}>{m}</Text>
                 </View>
               </Pressable>
-            );
-          })}
-        </View>
+            ))}
+          </View>
+        ) : (
+          <View className="flex-row flex-wrap">
+            {WK.map((d, i) => (
+              <View key={`w${i}`} style={{ width: `${100 / 7}%` }} className="py-1">
+                <Text className="text-center text-[10px] font-body-semi text-[#F5F3F057]">{d}</Text>
+              </View>
+            ))}
+            {cells.map((d, i) => {
+              if (d == null) return <View key={`e${i}`} style={{ width: `${100 / 7}%` }} className="py-2.5" />;
+              const ds = ymd(calY, calM, d);
+              const inRange = !!(dStart && dEnd && ds >= dStart && ds <= dEnd);
+              const isEnd = ds === dStart || ds === dEnd;
+              return (
+                <Pressable key={`d${i}`} onPress={() => pick(ds)} style={{ width: `${100 / 7}%` }} className="items-center py-1">
+                  <View className={`h-9 w-9 items-center justify-center rounded-xl ${isEnd ? "bg-[#A2492C]" : inRange ? "bg-[#A2492C40]" : ""}`}>
+                    <Text className={`text-[13px] ${isEnd ? "font-body-bold text-[#F5F3F0]" : "font-body text-[#F5F3F0]"}`}>{d}</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
         <Text className="mt-3 text-center text-xs font-body-semi text-[#F5F3F08a]">
           {dEnd ? `${fmtD(dStart)} – ${fmtD(dEnd)}` : dStart ? `${fmtD(dStart)} – tap end date…` : "Tap a start date…"}
