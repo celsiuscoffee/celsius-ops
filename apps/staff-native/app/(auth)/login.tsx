@@ -329,9 +329,14 @@ function OutletPicker({
   );
 }
 
-// POS-style 4x3 keypad. Bottom row is Clear (red tint) · 0 · Delete
-// (backspace icon). Clear wipes all 6 digits in one tap; Delete pops
-// the last digit. Auto-submit on 6 digits means no Sign in button.
+// 4x3 keypad — mirrors the POS lock-screen keypad (apps/pos-native):
+// fixed rounded-square keys on a raised surface, centered grid, with
+// Clear (red tint) · 0 · Delete (backspace icon) on the bottom row.
+// Clear wipes all 6 digits in one tap; Delete pops the last digit.
+// Auto-submit on 6 digits means no Sign in button. All styling is
+// inline (not className) so the keys always render regardless of the
+// NativeWind config — the bug this replaces was buttons rendering
+// invisibly, leaving bare digits scattered down the screen.
 function NumPad({
   onPress,
   disabled,
@@ -362,9 +367,9 @@ function NumPad({
     ],
   ];
   return (
-    <View style={{ gap: 12 }}>
+    <View style={{ gap: 14, alignSelf: "center", width: "100%", maxWidth: 320 }}>
       {rows.map((row, ri) => (
-        <View key={ri} style={{ flexDirection: "row", gap: 12 }}>
+        <View key={ri} style={{ flexDirection: "row", gap: 14 }}>
           {row.map((k) => {
             const isDanger = k.tone === "danger";
             const isIcon = k.tone === "icon";
@@ -373,14 +378,17 @@ function NumPad({
                 key={k.key}
                 onPress={() => onPress(k.key)}
                 disabled={disabled}
+                android_ripple={{ color: COLORS.surfaceHi, borderless: false }}
                 style={({ pressed }) => ({
                   flex: 1,
-                  height: 64,
-                  borderRadius: 16,
+                  height: 72,
+                  borderRadius: 20,
                   alignItems: "center",
                   justifyContent: "center",
                   backgroundColor: pressed
-                    ? COLORS.surfaceHi
+                    ? isDanger
+                      ? COLORS.danger + "33"
+                      : COLORS.surfaceHi
                     : isDanger
                       ? COLORS.danger + "22"
                       : COLORS.surface,
@@ -388,12 +396,12 @@ function NumPad({
                 })}
               >
                 {isIcon ? (
-                  <Delete color={COLORS.text} size={26} />
+                  <Delete color={COLORS.text} size={28} />
                 ) : (
                   <Text
                     style={{
                       color: isDanger ? COLORS.danger : COLORS.text,
-                      fontSize: isDanger ? 16 : 28,
+                      fontSize: isDanger ? 16 : 30,
                       fontWeight: isDanger ? "700" : "500",
                     }}
                   >
