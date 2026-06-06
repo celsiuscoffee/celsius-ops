@@ -2,14 +2,20 @@
 // payment types into our channel buckets, persists the raw blob to fin_documents,
 // then hands a structured EodSummary to the AR agent.
 //
-// Tender classification (StoreHub `payments[].type` → our channel):
+// Tender classification (StoreHub `payments[].paymentMethod` → our channel).
+// Labels are normalized (uppercase, strip non-alphanumerics) before matching,
+// so "QR Code" / "Touch'n Go eWallet" / "Card Payment (International)" resolve
+// cleanly. The value sets below are enumerated from the live StoreHub payload:
 //
-//  Cash, QR, TouchnGo, GrabPay, Boost, Maybank QR        → cashQr
-//  Card, Visa, Mastercard, Debit, AMEX                    → card
-//  Voucher, Mulah, Member, Freeflow, Redeem               → voucher
-//  GrabFood, FoodPanda, ShopeeFood                        → grabfood
-//  GastroHub, Vendor                                      → gastrohub
-//  Anything else                                          → other  (drops AR confidence)
+//  Cash, QR Code, Online Banking, Touch'n Go eWallet, GrabPay, Boost  → cashQr
+//  DebitCard, CreditCard, Card Payment, Apple Pay, Visa, Mastercard   → card
+//  Voucher, Mulah, Member, Freeflow, Redeem                           → voucher
+//  GrabFood, FoodPanda, ShopeeFood                                    → grabfood
+//  GastroHub, Vendor                                                  → gastrohub
+//  Anything unrecognized                                              → other  (drops AR confidence → exception)
+//
+// NOTE: StoreHub uses `paymentMethod`, not `type` — reading the wrong field
+// silently buckets every card/e-wallet sale to "other"/cash.
 //
 // `channel` field on the StoreHub transaction wins over tender mapping when
 // it indicates a delivery aggregator — e.g. a card-paid Grab order should
@@ -25,19 +31,37 @@ import type { StoreHubTransaction } from "@/lib/storehub";
 
 type ChannelKey = keyof EodChannelSplit;
 
-const CASH_QR_TYPES = new Set(["CASH", "QR", "TOUCHNGO", "TNG", "GRABPAY", "BOOST", "MAYBANK QR", "MAE", "DUITNOW"]);
-const CARD_TYPES = new Set(["CARD", "VISA", "MASTERCARD", "MASTER", "DEBIT", "DEBIT CARD", "CREDIT CARD", "AMEX"]);
-const VOUCHER_TYPES = new Set(["VOUCHER", "MULAH", "MEMBER", "FREEFLOW", "REDEEM", "GIFT CARD"]);
-const GRAB_TYPES = new Set(["GRABFOOD", "GRAB", "GRAB FOOD"]);
-const PANDA_TYPES = new Set(["FOODPANDA", "FOOD PANDA"]);
-const SHOPEE_TYPES = new Set(["SHOPEEFOOD", "SHOPEE FOOD"]);
+// Normalize a tender label for robust matching: uppercase, strip everything
+// that isn't A-Z/0-9 ("Touch'n Go eWallet" → "TOUCHNGOEWALLET").
+function normTender(s: string): string {
+  return s.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
 
-function classifyTender(type: string): ChannelKey {
-  const t = type.trim().toUpperCase();
-  if (CASH_QR_TYPES.has(t)) return "cashQr";
-  if (CARD_TYPES.has(t)) return "card";
-  if (VOUCHER_TYPES.has(t)) return "voucher";
-  if (GRAB_TYPES.has(t) || PANDA_TYPES.has(t) || SHOPEE_TYPES.has(t)) return "grabfood";
+const CASH_QR_TENDERS = new Set([
+  "CASH",
+  "QRCODE", "QR", "DUITNOW", "DUITNOWQR", "MAYBANKQR", "MAE",
+  "ONLINEBANKING", "FPX",
+  "TOUCHNGOEWALLET", "TOUCHNGOEWALLETMINIPROGRAM", "TNG", "TNGEWALLET",
+  "GRABPAY", "BOOST", "SHOPEEPAY",
+]);
+const CARD_TENDERS = new Set([
+  "DEBITCARD", "CREDITCARD", "CARD", "CARDPAYMENT", "CARDPAYMENTINTERNATIONAL",
+  "VISA", "MASTERCARD", "MASTER", "AMEX", "APPLEPAY", "GOOGLEPAY", "SAMSUNGPAY",
+]);
+const VOUCHER_TENDERS = new Set([
+  "VOUCHER", "MULAH", "MEMBER", "FREEFLOW", "REDEEM", "GIFTCARD", "STORECREDIT",
+]);
+// Delivery aggregators — paid out NET of commission. Distinct from GRABPAY,
+// which is Grab's in-store e-wallet and settles like cash/QR.
+const DELIVERY_TENDERS = new Set(["GRABFOOD", "FOODPANDA", "SHOPEEFOOD"]);
+
+function classifyTender(method: string): ChannelKey {
+  const t = normTender(method);
+  if (!t) return "other";
+  if (CASH_QR_TENDERS.has(t)) return "cashQr";
+  if (CARD_TENDERS.has(t)) return "card";
+  if (VOUCHER_TENDERS.has(t)) return "voucher";
+  if (DELIVERY_TENDERS.has(t)) return "grabfood";
   if (t.includes("GASTRO") || t.includes("VENDOR")) return "gastrohub";
   return "other";
 }
@@ -99,9 +123,10 @@ export function aggregateEod(
     const txnAggregator = classifyChannel((txn.channel as string | undefined) ?? undefined);
 
     const rawPayments = (txn as unknown as { payments?: unknown }).payments;
-    const payments: Array<{ type: string; amount: number }> = Array.isArray(rawPayments)
-      ? (rawPayments as Array<{ type: string; amount: number }>)
-      : [];
+    const payments: Array<{ paymentMethod?: string; type?: string; amount: number }> =
+      Array.isArray(rawPayments)
+        ? (rawPayments as Array<{ paymentMethod?: string; type?: string; amount: number }>)
+        : [];
 
     if (payments.length === 0) {
       // Fallback: assume cash/QR
@@ -120,7 +145,7 @@ export function aggregateEod(
       const amount = Number(p.amount ?? 0);
       if (amount === 0) continue;
       const netAmount = round2(amount * (1 - sstPortion));
-      const bucket: ChannelKey = txnAggregator ?? classifyTender(p.type ?? "");
+      const bucket: ChannelKey = txnAggregator ?? classifyTender(p.paymentMethod ?? p.type ?? "");
       channels[bucket] += netAmount;
       netSales += netAmount;
     }

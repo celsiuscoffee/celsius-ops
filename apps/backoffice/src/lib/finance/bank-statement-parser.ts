@@ -28,6 +28,7 @@ export type ParsedLine = {
   reference: string | null;
   amount: number;             // always positive
   direction: "CR" | "DR";
+  balance?: number;           // running statement balance, when the source provides it (PDF)
 };
 
 export type ParsedStatement = {

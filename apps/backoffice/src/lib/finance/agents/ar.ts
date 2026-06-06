@@ -8,10 +8,17 @@
 // returns transaction id. Does not fetch from StoreHub directly — that's the
 // ingestor's job.
 
+import { randomUUID } from "crypto";
 import { postJournal } from "../ledger";
+import { getFinanceClient } from "../supabase";
 import type { JournalLineInput, PostJournalResult } from "../types";
 
 export const AR_AGENT_VERSION = "ar-v1";
+
+// Spec threshold: ≥0.95 auto-posts; below it the journal is held as a draft AND
+// an exception is raised so a human classifies the unrecognized tender. Keeping
+// these in lock-step is the whole point — a draft with no exception is invisible.
+export const AR_CONFIDENCE_THRESHOLD = 0.95;
 
 // Tender → revenue/debtor account mapping. Keep this aligned with the COA seed.
 //
@@ -132,6 +139,7 @@ export async function postDailyAr(summary: EodSummary): Promise<ArAgentResult> {
   // Confidence: drop if any "other" bucket has material amount.
   const otherShare = channels.other / Math.max(summary.netSales, 1);
   const confidence = otherShare > 0.05 ? 0.6 : 0.95;
+  const lowConfidence = confidence < AR_CONFIDENCE_THRESHOLD;
 
   const result: PostJournalResult = await postJournal({
     companyId: summary.companyId,
@@ -144,8 +152,15 @@ export async function postDailyAr(summary: EodSummary): Promise<ArAgentResult> {
     agentVersion: AR_AGENT_VERSION,
     confidence,
     lines,
-    draft: confidence < 0.85,  // low-confidence days held for human review
+    draft: lowConfidence,  // low-confidence days held for human review
   });
+
+  // A low-confidence draft is invisible unless we also raise an exception —
+  // that's the only human surface. Without this, mis-classified days pile up
+  // as silent drafts that never post (the exact failure we just fixed).
+  if (lowConfidence) {
+    await raiseClassificationException(summary, result.transactionId);
+  }
 
   return {
     transactionId: result.transactionId,
@@ -153,6 +168,40 @@ export async function postDailyAr(summary: EodSummary): Promise<ArAgentResult> {
     outletId: summary.outletId,
     date: summary.date,
   };
+}
+
+// Surfaces an unclassified-tender day to the exception inbox. Idempotent in
+// practice because the ingestor's per-day guard means postDailyAr runs at most
+// once per outlet/day; we also de-dupe on the related transaction id.
+async function raiseClassificationException(
+  summary: EodSummary,
+  transactionId: string
+): Promise<void> {
+  const client = getFinanceClient();
+  const otherAmount = round2(summary.channels.other);
+
+  const { data: existing } = await client
+    .from("fin_exceptions")
+    .select("id")
+    .eq("related_type", "transaction")
+    .eq("related_id", transactionId)
+    .maybeSingle();
+  if (existing?.id) return;
+
+  await client.from("fin_exceptions").insert({
+    id: randomUUID(),
+    type: "categorization",
+    related_type: "transaction",
+    related_id: transactionId,
+    agent: "ar",
+    reason:
+      `Unrecognized tender on ${summary.outletName} ${summary.date}: ` +
+      `RM${otherAmount.toFixed(2)} of RM${summary.netSales.toFixed(2)} fell to "other". ` +
+      `Journal held as draft pending channel review.`,
+    proposed_action: { channels: summary.channels, netSales: summary.netSales },
+    priority: "high",
+    status: "open",
+  });
 }
 
 function round2(n: number): number {
