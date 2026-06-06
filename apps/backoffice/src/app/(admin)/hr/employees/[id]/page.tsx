@@ -359,6 +359,14 @@ export default function EmployeeDetailPage() {
       } else {
         delete nextModuleAccess.hr;
       }
+      // The staff apps (native + web) gate on moduleAccess, not appAccess[].
+      // Mirror the "sales" App-Access toggle into moduleAccess.sales so the
+      // Sales dashboard tab actually unlocks for the assigned user.
+      if (access.appAccessSet.has("sales")) {
+        nextModuleAccess.sales = true;
+      } else {
+        delete nextModuleAccess.sales;
+      }
 
       const payload: Record<string, unknown> = {
         role: access.role,

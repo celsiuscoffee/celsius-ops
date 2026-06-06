@@ -7,6 +7,7 @@ import {
   Clock,
   Home,
   Package,
+  TrendingUp,
 } from "lucide-react-native";
 import { useStaff } from "../../lib/store";
 import { hasAccess } from "../../lib/access";
@@ -14,6 +15,7 @@ import { refreshSession } from "../../lib/me";
 
 const TAB_DEFS = [
   { name: "home",        title: "Home",       icon: Home,           moduleKey: "ops" },
+  { name: "sales",       title: "Sales",      icon: TrendingUp,     moduleKey: "sales" },
   { name: "checklists",  title: "Checklists", icon: ClipboardCheck, moduleKey: "ops:checklists" },
   { name: "audit",       title: "Audit",      icon: ClipboardList,  moduleKey: "ops:audit" },
   { name: "hr",          title: "HR",         icon: Clock,          moduleKey: "hr" },
