@@ -90,6 +90,44 @@ async function issueVoucherFromTemplate(
   return data;
 }
 
+/** Credit bonus points to a member's ledger + balance — the POS twin of
+ *  apps/order's awardBonusBeans. Used for flat_beans / beans_multiplier mystery
+ *  outcomes so a bag claimed at the counter actually pays out its points, and
+ *  written in the same shape as the app-path "Mystery Bean flat bonus" rows. */
+async function creditBonusBeans(
+  supabase: ReturnType<typeof getAdmin>,
+  args: { memberId: string; amount: number; description: string; referenceId: string },
+): Promise<void> {
+  if (!args.amount || args.amount <= 0) return;
+  const { data: mb } = await supabase
+    .from("member_brands")
+    .select("id, points_balance, total_points_earned")
+    .eq("member_id", args.memberId)
+    .eq("brand_id", BRAND_ID)
+    .single();
+  if (!mb) return;
+  const newBalance = (mb.points_balance ?? 0) + args.amount;
+  await supabase
+    .from("member_brands")
+    .update({
+      points_balance: newBalance,
+      total_points_earned: (mb.total_points_earned ?? 0) + args.amount,
+    })
+    .eq("id", mb.id);
+  await supabase.from("point_transactions").insert({
+    id: `txn-earn-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    member_id: args.memberId,
+    brand_id: BRAND_ID,
+    outlet_id: null,
+    type: "earn",
+    points: args.amount,
+    balance_after: newBalance,
+    description: args.description,
+    reference_id: args.referenceId,
+    multiplier: 1,
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { member_id, claimable_id } = await req.json();
@@ -196,6 +234,37 @@ export async function POST(req: NextRequest) {
           sourceType: "mystery",
           sourceRefId: drop.id,
         });
+      } else if (drop.outcome_type === "flat_beans" && drop.beans_awarded) {
+        // Points-bonus prize ("+N Bonus Points"). The customer-display silently
+        // claims through this route, and the revealed_at set below blocks the
+        // app's revealMysteryDrop from ever crediting it — so we MUST pay out
+        // here, or the won points are lost. Mirrors apps/order revealMysteryDrop.
+        await creditBonusBeans(supabase, {
+          memberId: member_id,
+          amount: drop.beans_awarded,
+          description: "Mystery Bean flat bonus",
+          referenceId: drop.order_id ?? drop.id,
+        });
+      } else if (drop.outcome_type === "beans_multiplier" && drop.multiplier_applied && drop.order_id) {
+        // Multiplier bonus = the order's base points earned × (multiplier − 1).
+        const { data: baseTxn } = await supabase
+          .from("point_transactions")
+          .select("points")
+          .eq("member_id", member_id)
+          .eq("reference_id", drop.order_id)
+          .eq("type", "earn")
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        const bonus = Math.round((baseTxn?.points ?? 0) * (drop.multiplier_applied - 1));
+        if (bonus > 0) {
+          await creditBonusBeans(supabase, {
+            memberId: member_id,
+            amount: bonus,
+            description: `Mystery Bean ${drop.multiplier_applied}× multiplier`,
+            referenceId: drop.order_id,
+          });
+        }
       }
       await supabase
         .from("mystery_drops")
