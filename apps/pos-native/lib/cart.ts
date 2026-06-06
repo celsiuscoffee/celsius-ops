@@ -2,9 +2,12 @@ import { create } from "zustand";
 import type { Product, ModifierOption } from "./menu";
 
 /**
- * In-memory cart for the active sale. Deliberately NOT persisted — a
- * relaunch must never resurrect a stale basket. One line per
- * product+modifier combination; same combo bumps quantity.
+ * In-memory cart for the active sale. The store itself is NOT auto-persisted —
+ * a relaunch starts blank. Crash/hang recovery is handled separately by
+ * lib/draft-order.ts, which keeps a durable, time-boxed copy and lets the
+ * register OFFER to resume it (via replaceLines) — so a stale basket is never
+ * silently resurrected. One line per product+modifier combination; same combo
+ * bumps quantity.
  */
 export type CartLine = {
   key: string; // product id + sorted modifier ids
@@ -43,6 +46,9 @@ type CartState = {
   setLineNote: (key: string, note: string) => void;
   /** Flip a line's fulfilment override (true = pack to-go on a dine-in order). */
   setLineTakeaway: (key: string, takeaway: boolean) => void;
+  /** Replace the whole basket at once — used to restore a recovered draft order
+   *  on relaunch (lib/draft-order.ts). */
+  replaceLines: (lines: CartLine[]) => void;
   clear: () => void;
 };
 
@@ -88,6 +94,7 @@ export const useCart = create<CartState>((set) => ({
     })),
   setLineTakeaway: (key, takeaway) =>
     set((s) => ({ lines: s.lines.map((l) => (l.key === key ? { ...l, takeaway } : l)) })),
+  replaceLines: (lines) => set({ lines }),
   clear: () => set({ lines: [] }),
 }));
 

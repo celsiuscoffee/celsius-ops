@@ -12,7 +12,7 @@ import {
   Plus, Minus, LogOut, X, CheckCircle2,
   Settings as SettingsIcon, User, Gift, Trash2, Tag,
   Grid3x3, QrCode, CreditCard, ClipboardList, Bike, ShoppingBag, ChefHat, Coffee, Power, Sparkles,
-  AlertTriangle,
+  AlertTriangle, RotateCcw,
 } from "lucide-react-native";
 import { usePos, shiftSessionExpired } from "@/lib/store";
 import { apiPost } from "@/lib/api";
@@ -25,6 +25,7 @@ import { useCart, cartSubtotal, type CartLine } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
 import { createSale, getNextQueueNumber } from "@/lib/checkout";
 import { startSyncLoop } from "@/lib/sale-sync";
+import { saveDraft, loadDraft, clearDraft, type DraftOrder } from "@/lib/draft-order";
 import { getOnline, subscribeOnline } from "@/lib/connectivity";
 import { subscribePending, pendingCount } from "@/lib/offline-queue";
 import { useSettings, gridColumns, serviceChargeRate, receiptConfig, tableZones } from "@/lib/settings";
@@ -134,6 +135,10 @@ export default function Register() {
   // cashier tapped to inspect its order(s).
   const [activeFloor, setActiveFloor] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<TableSlot | null>(null);
+  // Floor-plan pager: the measured canvas box (so each floor fits one screen, no
+  // scroll) + a ref so tapping a floor chip and swiping stay in sync.
+  const [floorBox, setFloorBox] = useState({ w: 0, h: 0 });
+  const floorPagerRef = useRef<ScrollView>(null);
   // Channel filter for the History tab (all channels in one list).
   const [histFilter, setHistFilter] = useState<"all" | HistoryChannel>("all");
   // Which order's status update is in flight (uid) — disables its buttons.
@@ -191,6 +196,11 @@ export default function Register() {
   const [autoPromotions, setAutoPromotions] = useState<AppliedPromo[]>([]);
   const [rewards, setRewards] = useState<RewardsResponse | null>(null);
   const [rewardsLoading, setRewardsLoading] = useState(false);
+  // Crash/hang recovery: a recent, durable draft of the in-progress order
+  // (lib/draft-order) offered for resume on relaunch; draftChecked gates the
+  // auto-save until the initial load runs so it can't clobber the draft first.
+  const [recoverableDraft, setRecoverableDraft] = useState<DraftOrder | null>(null);
+  const [draftChecked, setDraftChecked] = useState(false);
   const [showRewards, setShowRewards] = useState(false);
   // ── Upsell mirror — the SAME 3 pairs + claimable rewards the customer
   //    sees on their display (shared scoring endpoint + snapshot), so the
@@ -520,6 +530,7 @@ export default function Register() {
   const setLineDiscount = useCart((s) => s.setLineDiscount);
   const setLineNote = useCart((s) => s.setLineNote);
   const setLineTakeaway = useCart((s) => s.setLineTakeaway);
+  const replaceLines = useCart((s) => s.replaceLines);
   const clear = useCart((s) => s.clear);
   // Cart line editor sheet — tap any line in the cart to open. From
   // here the cashier can adjust qty, apply a per-line discount, or
@@ -672,13 +683,19 @@ export default function Register() {
   // locally so it never double-counts with the server promos.
   const tierDisc = computeTierDiscount(member?.tier ?? null, subtotal, rewardDiscount);
   const apiPromoDisc = autoPromotions.reduce((s, p) => s + p.discountAmount, 0);
-  // Non-stackable tiers (Black Card / Staff) don't stack the tier % with a
-  // voucher — charge whichever is larger (mirrors the pickup app). Reactive, so
-  // it re-picks the winner if the cart changes.
+  // Non-stackable tiers (Black Card / Staff) are EXCLUSIVE: the member gets the
+  // single larger of the tier % vs EVERYTHING else combined (voucher + store
+  // auto-promos), never the sum — so a 50% Black Card doesn't also pile promos
+  // on top of the half-price bill. Stackable tiers (Bronze→Platinum) keep
+  // stacking tier + voucher + promos. Reactive — re-picks the winner as the cart
+  // changes.
   const nonStackTier = member?.tier?.stackable === false && (member?.tier?.discount_percent ?? 0) > 0;
-  const effRewardDiscount = nonStackTier && rewardDiscount < tierDisc ? 0 : rewardDiscount;
-  const effTierDisc = nonStackTier && rewardDiscount >= tierDisc ? 0 : tierDisc;
-  const promoDiscount = effTierDisc + apiPromoDisc;
+  const otherDisc = rewardDiscount + apiPromoDisc; // the "everything except the tier" side
+  const tierWins = nonStackTier && tierDisc >= otherDisc;
+  const effRewardDiscount = tierWins ? 0 : rewardDiscount;
+  const effTierDisc = nonStackTier && !tierWins ? 0 : tierDisc;
+  const effPromoDisc = tierWins ? 0 : apiPromoDisc;
+  const promoDiscount = effTierDisc + effPromoDisc;
   // Manual discount stacks last; clamp it to what's still owed so the
   // line we show (and the total) never goes negative if the cart shrank
   // after it was applied.
@@ -769,6 +786,52 @@ export default function Register() {
     useDisplay.getState().setReward(reward && effRewardDiscount > 0 ? { name: reward.name, discountSen: effRewardDiscount } : null);
   }, [reward, effRewardDiscount]);
 
+  // ── Crash/hang recovery: offer to resume an unfinished order on relaunch ──
+  // The cart is in-memory, so a restart (e.g. after a freeze) starts blank and
+  // the whole order had to be re-keyed. We keep a durable, time-boxed draft and,
+  // if a recent one exists, prompt to resume it. Checked once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const d = await loadDraft();
+      if (cancelled) return;
+      if (d) setRecoverableDraft(d);
+      setDraftChecked(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Auto-save the in-progress order (debounced). Gated until the initial draft
+  // check runs (so we never clobber a draft before offering it), paused while the
+  // resume prompt is open, and skipped on the thank-you screen. An empty cart
+  // clears the draft (handled inside saveDraft).
+  useEffect(() => {
+    if (!draftChecked || recoverableDraft || paid) return;
+    saveDraft({ lines, member, reward, manualDiscount, orderType, tableNumber, memberAsked });
+  }, [draftChecked, recoverableDraft, paid, lines, member, reward, manualDiscount, orderType, tableNumber, memberAsked]);
+
+  // Restore the saved order into the live cart + context. The existing
+  // member/reward/orderType/table mirror effects re-sync the 2nd screen.
+  function resumeDraft() {
+    const d = recoverableDraft;
+    if (!d) return;
+    Haptics.selectionAsync();
+    replaceLines(d.lines);
+    setMember(d.member);
+    setReward(d.reward);
+    setManualDiscount(d.manualDiscount);
+    setOrderType(d.orderType);
+    setTableNumber(d.tableNumber);
+    setMemberAsked(d.memberAsked || !!d.member);
+    setRecoverableDraft(null);
+  }
+
+  function discardDraft() {
+    Haptics.selectionAsync();
+    setRecoverableDraft(null);
+    void clearDraft();
+  }
+
   // Re-evaluate server auto-promotions whenever the cart / member / voucher
   // changes (tier % is computed locally above, not sent, to avoid double-count).
   useEffect(() => {
@@ -794,10 +857,10 @@ export default function Register() {
       effTierDisc > 0 && member?.tier && (member.tier.discount_percent ?? 0) > 0
         ? `${member.tier.name} ${member.tier.discount_percent}%`
         : null,
-      ...autoPromotions.map((p) => p.description),
+      ...(effPromoDisc > 0 ? autoPromotions.map((p) => p.description) : []),
     ].filter(Boolean) as string[];
     useDisplay.getState().setExtraDiscount(promoDiscount > 0 ? { label: parts.join(" · ") || "Discount", sen: promoDiscount } : null);
-  }, [promoDiscount, autoPromotions, effTierDisc, member?.tier?.discount_percent, member?.tier?.name]);
+  }, [promoDiscount, autoPromotions, effTierDisc, effPromoDisc, member?.tier?.discount_percent, member?.tier?.name]);
 
   // Mirror the cashier's manual discount to the customer screen so its
   // ordering-mode total matches what the cashier sees.
@@ -1090,8 +1153,8 @@ export default function Register() {
           : null;
       const tableNum = orderType === "dine_in" ? (tableNumber || null) : null;
       const promoName = [
-        member?.tier && (member.tier.discount_percent ?? 0) > 0 ? `${member.tier.name} ${member.tier.discount_percent}% off` : null,
-        ...autoPromotions.map((p) => p.description),
+        effTierDisc > 0 && member?.tier && (member.tier.discount_percent ?? 0) > 0 ? `${member.tier.name} ${member.tier.discount_percent}% off` : null,
+        ...(effPromoDisc > 0 ? autoPromotions.map((p) => p.description) : []),
       ].filter(Boolean).join(", ") || null;
       const sale = await createSale({
         outletId,
@@ -1116,6 +1179,10 @@ export default function Register() {
         promoName,
         manualDiscount: effManualDiscount,
       });
+      // The sale is now in the durable offline buffer → drop the recovery draft
+      // immediately, so a hang on the thank-you screen can't offer to "resume"
+      // an order that's already been paid (which would double-charge it).
+      void clearDraft();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Points this member earns — mirror the server formula in
       // /api/pos/loyalty/complete (floor of the pre-SST net). Tiers no longer
@@ -1629,7 +1696,7 @@ export default function Register() {
               <Text className="text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: OK }}>−{rm(effTierDisc)}</Text>
             </View>
           )}
-          {autoPromotions.map((p, i) => (
+          {effPromoDisc > 0 && autoPromotions.map((p, i) => (
             <View key={`promo-${i}`} className="flex-row justify-between mb-1">
               <Text className="text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium", color: OK }} numberOfLines={1}>{p.description}</Text>
               <Text className="text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: OK }}>−{rm(p.discountAmount)}</Text>
@@ -1771,7 +1838,7 @@ export default function Register() {
                 ));
               })()}
             </View>
-            <ScrollView style={{ maxHeight: 600 }} showsVerticalScrollIndicator={false}>
+            <View style={{ flex: 1 }}>
               {hub === "tables" && (() => {
                 // Group the flat slots into their zones (= floors). The data
                 // already carries the saved BackOffice template; we render ONE
@@ -1792,72 +1859,103 @@ export default function Register() {
                     </View>
                   );
                 }
-                const active = groups.find((g) => g.name === activeFloor) ?? groups[0];
+                const activeIdx = Math.max(0, groups.findIndex((g) => g.name === (activeFloor ?? groups[0].name)));
+                // One table tile, positioned at its normalised x/y on the canvas.
+                const renderTile = (slot: TableSlot) => {
+                  const has = slot.orders.length > 0;
+                  const sel = selectedTable?.label === slot.label && selectedTable?.zone === slot.zone;
+                  const dim = tableDims(slot.seats, slot.shape, slot.orientation);
+                  return (
+                    <Pressable
+                      key={slot.label}
+                      onPress={() => { Haptics.selectionAsync(); setSelectedTable(has ? slot : null); }}
+                      className="active:opacity-80 items-center justify-center"
+                      style={{
+                        position: "absolute",
+                        left: `${slot.x * 100}%`, top: `${slot.y * 100}%`,
+                        marginLeft: -dim.w / 2, marginTop: -dim.h / 2,
+                        width: dim.w, height: dim.h,
+                        borderRadius: slot.shape === "round" ? dim.h / 2 : 14, borderWidth: sel ? 2 : 1,
+                        backgroundColor: has ? "rgba(194,69,45,0.18)" : "rgba(245,243,240,0.06)",
+                        borderColor: sel ? "#FBBF24" : has ? "rgba(194,69,45,0.6)" : "rgba(245,243,240,0.14)",
+                      }}
+                    >
+                      {slot.shape !== "round" && dim.cells > 1 && Array.from({ length: dim.cells - 1 }).map((_, i) => (
+                        dim.vertical
+                          ? <View key={`d${i}`} style={{ position: "absolute", left: 8, right: 8, height: 1, top: `${((i + 1) / dim.cells) * 100}%`, backgroundColor: "rgba(245,243,240,0.18)" }} />
+                          : <View key={`d${i}`} style={{ position: "absolute", top: 8, bottom: 8, width: 1, left: `${((i + 1) / dim.cells) * 100}%`, backgroundColor: "rgba(245,243,240,0.18)" }} />
+                      ))}
+                      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 18, color: has ? "#F5F3F0" : "rgba(245,243,240,0.6)" }} numberOfLines={1}>{slot.label}</Text>
+                      {slot.seats != null && (
+                        <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 9, color: "rgba(245,243,240,0.4)" }}>{slot.seats}p</Text>
+                      )}
+                      {has && (
+                        <View style={{ position: "absolute", top: -7, right: -7, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: "#C2452D", alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
+                          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, color: "#F5F3F0" }}>{slot.orders.length}</Text>
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                };
                 return (
-                  <View style={{ width: "100%" }}>
-                    {/* Floor switcher — only when more than one floor/zone exists. */}
+                  <View style={{ flex: 1 }}>
+                    {/* Floor chips — show which floor + tap to jump; swipe also
+                        changes floor (kept in sync via the pager ref). */}
                     {groups.length > 1 && (
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 14 }}>
-                        {groups.map((g) => {
-                          const on = g.name === active.name;
-                          const cnt = g.slots.filter((s) => s.orders.length > 0).length;
-                          return (
-                            <Pressable key={g.name} onPress={() => { Haptics.selectionAsync(); setActiveFloor(g.name); setSelectedTable(null); }}
-                              className={`flex-row items-center gap-2 px-5 py-3 rounded-xl border active:opacity-70 ${on ? "border-primary bg-primary/15" : "border-cream/12"}`}>
-                              <Text className={on ? "text-cream text-sm" : "text-cream/60 text-sm"} style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{g.name}</Text>
-                              {cnt > 0 && (<View className="rounded-full px-2 min-w-[20px] items-center" style={{ backgroundColor: on ? "#C2452D" : "rgba(245,243,240,0.18)" }}><Text className="text-cream text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{cnt}</Text></View>)}
-                            </Pressable>
-                          );
-                        })}
-                      </ScrollView>
+                      <View className="flex-row items-center" style={{ gap: 10, marginBottom: 10 }}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ flexShrink: 1 }}>
+                          {groups.map((g, i) => {
+                            const on = i === activeIdx;
+                            const cnt = g.slots.filter((s) => s.orders.length > 0).length;
+                            return (
+                              <Pressable key={g.name} onPress={() => { Haptics.selectionAsync(); setActiveFloor(g.name); setSelectedTable(null); floorPagerRef.current?.scrollTo({ x: i * floorBox.w, animated: true }); }}
+                                className={`flex-row items-center gap-2 px-5 py-2.5 rounded-xl border active:opacity-70 ${on ? "border-primary bg-primary/15" : "border-cream/12"}`}>
+                                <Text className={on ? "text-cream text-sm" : "text-cream/60 text-sm"} style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{g.name}</Text>
+                                {cnt > 0 && (<View className="rounded-full px-2 min-w-[20px] items-center" style={{ backgroundColor: on ? "#C2452D" : "rgba(245,243,240,0.18)" }}><Text className="text-cream text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{cnt}</Text></View>)}
+                              </Pressable>
+                            );
+                          })}
+                        </ScrollView>
+                        <Text className="text-cream/35 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>swipe ↔</Text>
+                      </View>
                     )}
                     {/* Tapped-table detail — the consolidated QR self-order view. */}
                     {liveSelectedTable && liveSelectedTable.orders.length > 0 && (
                       <TableOrdersDetail slot={liveSelectedTable} busyId={bumpingUid} onDone={markTableOrderDone} onClose={() => setSelectedTable(null)} />
                     )}
-                    {/* Floor-plan canvas: the saved template (tables at their
-                        normalised positions). Tap a busy table for its order(s). */}
-                    <View style={{ position: "relative", width: "100%", height: 440, backgroundColor: "rgba(245,243,240,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(245,243,240,0.08)" }}>
-                      {active.slots.map((slot) => {
-                        const has = slot.orders.length > 0;
-                        const sel = selectedTable?.label === slot.label && selectedTable?.zone === slot.zone;
-                        const dim = tableDims(slot.seats, slot.shape, slot.orientation);
-                        return (
-                          <Pressable
-                            key={slot.label}
-                            onPress={() => { Haptics.selectionAsync(); setSelectedTable(has ? slot : null); }}
-                            className="active:opacity-80 items-center justify-center"
-                            style={{
-                              position: "absolute",
-                              left: `${slot.x * 100}%`, top: `${slot.y * 100}%`,
-                              marginLeft: -dim.w / 2, marginTop: -dim.h / 2,
-                              width: dim.w, height: dim.h,
-                              borderRadius: slot.shape === "round" ? dim.h / 2 : 14, borderWidth: sel ? 2 : 1,
-                              backgroundColor: has ? "rgba(194,69,45,0.18)" : "rgba(245,243,240,0.06)",
-                              borderColor: sel ? "#FBBF24" : has ? "rgba(194,69,45,0.6)" : "rgba(245,243,240,0.14)",
-                            }}
-                          >
-                            {slot.shape !== "round" && dim.cells > 1 && Array.from({ length: dim.cells - 1 }).map((_, i) => (
-                              dim.vertical
-                                ? <View key={`d${i}`} style={{ position: "absolute", left: 8, right: 8, height: 1, top: `${((i + 1) / dim.cells) * 100}%`, backgroundColor: "rgba(245,243,240,0.18)" }} />
-                                : <View key={`d${i}`} style={{ position: "absolute", top: 8, bottom: 8, width: 1, left: `${((i + 1) / dim.cells) * 100}%`, backgroundColor: "rgba(245,243,240,0.18)" }} />
-                            ))}
-                            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 18, color: has ? "#F5F3F0" : "rgba(245,243,240,0.6)" }} numberOfLines={1}>{slot.label}</Text>
-                            {slot.seats != null && (
-                              <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 9, color: "rgba(245,243,240,0.4)" }}>{slot.seats}p</Text>
-                            )}
-                            {has && (
-                              <View style={{ position: "absolute", top: -7, right: -7, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: "#C2452D", alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
-                                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, color: "#F5F3F0" }}>{slot.orders.length}</Text>
+                    {/* Floor-plan canvas — fills the rest of the panel so a floor
+                        fits on one screen (no scroll). Each floor is a full-width
+                        page; swipe to change floor. Sized from the measured box so
+                        the normalised table positions land correctly. */}
+                    <View style={{ flex: 1, minHeight: 0 }} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (Math.abs(width - floorBox.w) > 1 || Math.abs(height - floorBox.h) > 1) setFloorBox({ w: width, h: height }); }}>
+                      {floorBox.w > 0 && floorBox.h > 0 && (
+                        <ScrollView
+                          ref={floorPagerRef}
+                          horizontal
+                          pagingEnabled
+                          showsHorizontalScrollIndicator={false}
+                          scrollEnabled={groups.length > 1}
+                          onMomentumScrollEnd={(e) => {
+                            const i = Math.round(e.nativeEvent.contentOffset.x / floorBox.w);
+                            const g = groups[i];
+                            if (g && g.name !== (activeFloor ?? groups[0].name)) { setActiveFloor(g.name); setSelectedTable(null); }
+                          }}
+                        >
+                          {groups.map((g) => (
+                            <View key={g.name} style={{ width: floorBox.w, height: floorBox.h }}>
+                              <View style={{ flex: 1, position: "relative", backgroundColor: "rgba(245,243,240,0.03)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(245,243,240,0.08)", overflow: "hidden" }}>
+                                {g.slots.map(renderTile)}
                               </View>
-                            )}
-                          </Pressable>
-                        );
-                      })}
+                            </View>
+                          ))}
+                        </ScrollView>
+                      )}
                     </View>
                   </View>
                 );
               })()}
+              {hub !== "tables" && (
+              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
               {/* ── Pickup / Grab tabs — one dedicated on-register KDS per
                   channel (separate top-level tabs). Status writes go through
                   the service-role API (RLS blocks anon updates on printed rows). */}
@@ -1915,7 +2013,9 @@ export default function Register() {
                   </View>
                 );
               })()}
-            </ScrollView>
+              </ScrollView>
+              )}
+            </View>
           </View>
         </View>
       </Modal>
@@ -2395,6 +2495,41 @@ export default function Register() {
             <Pressable onPress={newOrder} className="h-13 px-8 py-3.5 rounded-2xl bg-primary active:opacity-80">
               <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>New Order</Text>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Resume unfinished order (crash/hang recovery, lib/draft-order) ── */}
+      <Modal visible={!!recoverableDraft} transparent animationType="fade" onRequestClose={discardDraft}>
+        <View className="flex-1 bg-black/70 items-center justify-center px-8">
+          <View className="w-[480px] rounded-3xl bg-surface border border-border p-8 items-center">
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: "rgba(251,191,36,0.14)", alignItems: "center", justifyContent: "center" }}>
+              <RotateCcw size={32} color="#FBBF24" />
+            </View>
+            <Text className="text-cream text-2xl mt-4" style={{ fontFamily: "Peachi-Bold" }}>Unfinished order</Text>
+            <Text className="text-cream/60 text-center mt-2" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 14, lineHeight: 20 }}>
+              The till restarted with an order in progress. Resume it, or start fresh.
+            </Text>
+            {!!recoverableDraft && (
+              <View className="mt-4 mb-6 w-full rounded-2xl px-4 py-3" style={{ backgroundColor: "rgba(245,243,240,0.05)", borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}>
+                <Text className="text-cream" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 15 }}>
+                  {recoverableDraft.lines.reduce((s, l) => s + l.qty, 0)} item{recoverableDraft.lines.reduce((s, l) => s + l.qty, 0) === 1 ? "" : "s"} · {rm(cartSubtotal(recoverableDraft.lines))}
+                </Text>
+                {!!recoverableDraft.member && (
+                  <Text className="text-cream/55 mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5 }}>
+                    {recoverableDraft.member.name} · {recoverableDraft.member.phone}
+                  </Text>
+                )}
+              </View>
+            )}
+            <View className="flex-row w-full" style={{ gap: 12 }}>
+              <Pressable onPress={discardDraft} className="flex-1 h-14 rounded-2xl items-center justify-center border active:opacity-70" style={{ borderColor: "rgba(245,243,240,0.2)", backgroundColor: "rgba(245,243,240,0.05)" }}>
+                <Text className="text-cream/80 text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Start fresh</Text>
+              </Pressable>
+              <Pressable onPress={resumeDraft} className="flex-1 h-14 rounded-2xl items-center justify-center bg-primary active:opacity-80">
+                <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Resume order</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
