@@ -2,9 +2,10 @@
 
 import { useState, useRef, useCallback, useEffect, type ReactNode, type CSSProperties } from "react";
 import QRCode from "qrcode";
-import { Printer, Download, Sparkles, LayoutGrid, ArrowRight, Users, Sandwich, IdCard } from "lucide-react";
+import { Printer, Download, Sparkles, LayoutGrid, ArrowRight, Users, Sandwich, IdCard, FileDown, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
+import { renderStickerBlob, prepareStickerAssets, makeZip, downloadBlob } from "./table-sticker-export";
 
 /**
  * Per-table QR generator. Each QR links the customer's phone to the dine-in
@@ -177,6 +178,7 @@ export default function POSTableQRPage() {
   const [view, setView] = useState<View>("designed");
   const [foot, setFoot] = useState("NO OUTSIDE FOOD");
   const [stickerW, setStickerW] = useState(10); // finished width in cm; height auto = 2×
+  const [zipBusy, setZipBusy] = useState<{ done: number; total: number } | null>(null);
   const [qrMap, setQrMap] = useState<Record<string, string>>({});
   const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
 
@@ -247,6 +249,33 @@ export default function POSTableQRPage() {
   }, [view, show, storeId, tablesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePrint = () => window.print();
+
+  // Render every sticker to a 300 DPI PNG and bundle into one ZIP for the printer.
+  const exportZip = async () => {
+    if (zipBusy) return;
+    setZipBusy({ done: 0, total: tables.length });
+    try {
+      const { degc, fam } = await prepareStickerAssets();
+      const files: { name: string; data: Uint8Array }[] = [];
+      for (let i = 0; i < tables.length; i++) {
+        const label = tables[i];
+        const blob = await renderStickerBlob(
+          { url: buildTableUrl(storeId, label), label, seats: seatsOf(label), outletLine: outlet.line, foot, stickerWcm: stickerW },
+          degc, fam,
+        );
+        const nn = /^\d+$/.test(label) ? label.padStart(2, "0") : label;
+        files.push({ name: `Table_${nn}.png`, data: new Uint8Array(await blob.arrayBuffer()) });
+        setZipBusy({ done: i + 1, total: tables.length });
+      }
+      const safe = outletName.replace(/[^\w]+/g, "-");
+      downloadBlob(makeZip(files), `Celsius-Stickers-${safe}-${stickerW}x${stickerW * 2}cm.zip`);
+    } catch (e) {
+      console.error("Sticker ZIP export failed", e);
+      alert("Sorry — the PNG export hit an error. Please try again.");
+    } finally {
+      setZipBusy(null);
+    }
+  };
   const downloadSingle = async (label: string) => {
     const dataUrl = await QRCode.toDataURL(buildTableUrl(storeId, label), {
       width: 400, margin: 2, color: { dark: "#160800", light: "#ffffff" },
@@ -402,6 +431,20 @@ export default function POSTableQRPage() {
             <Printer className="h-4 w-4" /> Print all
           </button>
         )}
+
+        {show && view === "designed" && (
+          <button
+            onClick={exportZip}
+            disabled={!!zipBusy}
+            className="flex items-center gap-2 bg-[#A2492C] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#8a3d24] transition-colors disabled:opacity-60"
+          >
+            {zipBusy ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Exporting {zipBusy.done}/{zipBusy.total}…</>
+            ) : (
+              <><FileDown className="h-4 w-4" /> Export PNG (ZIP)</>
+            )}
+          </button>
+        )}
       </div>
 
       {view === "designed" && show && (
@@ -410,7 +453,8 @@ export default function POSTableQRPage() {
           own page at <span className="font-semibold">{stickerW} × {stickerW * 2} cm</span> with 3 mm bleed, crop marks, a
           magenta die-cut line (rounded R8 mm) and a spec caption. In the print dialog set Margins = <span className="font-semibold">None</span>,
           Scale = <span className="font-semibold">100%</span>, and <span className="font-semibold">Background graphics = On</span> (under
-          “More settings”) so the dark fill prints. Capacity badge follows each table&rsquo;s seat count automatically.
+          “More settings”) so the dark fill prints. Or <span className="font-semibold">Export PNG (ZIP)</span> — all stickers as
+          300 DPI PNGs (bleed + crop marks + die-cut) in one zip to send the printer. Capacity badge follows each table&rsquo;s seat count automatically.
         </p>
       )}
 
