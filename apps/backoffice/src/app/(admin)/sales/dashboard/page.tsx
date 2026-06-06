@@ -16,16 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import { AccumulativeChart } from "./AccumulativeChart";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -101,15 +92,6 @@ type DashboardData = {
   deliveryTarget: DayTarget;
   deliveryQR?: { revenue: number; orders: number };
   channelBreakdown?: Record<string, { count: number; revenue: number }>;
-  accumulative?: {
-    currentHour: number;
-    truncateAtCurrentHour: boolean;
-    hourly: {
-      hour: number;
-      current: { revenue: number; orders: number };
-      previous: { revenue: number; orders: number };
-    }[];
-  };
   availableOutlets: OutletOption[];
   targetsMeta?: TargetsMeta;
   warnings?: string[];
@@ -154,19 +136,6 @@ const PERIOD_OPTIONS: { key: Period; label: string }[] = [
 
 function getPeriodLabel(p: Period): string {
   return PERIOD_OPTIONS.find((o) => o.key === p)?.label ?? p;
-}
-
-/** Legend labels for the accumulative chart's two lines (current vs previous) */
-function accumLabels(type: string, from: string, to: string): { current: string; previous: string } {
-  switch (type) {
-    case "daily": return { current: "Today", previous: "Yesterday" };
-    case "yesterday": return { current: "Yesterday", previous: "Day before" };
-    case "weekly": return { current: "This week", previous: "Last week" };
-    case "monthly": return { current: "This month", previous: "Last month" };
-    case "last7days": return { current: "Last 7 days", previous: "Prev 7 days" };
-    case "last30days": return { current: "Last 30 days", previous: "Prev 30 days" };
-    default: return { current: from === to ? from : `${from} – ${to}`, previous: "Previous" };
-  }
 }
 
 /** Color for % of target */
@@ -217,7 +186,6 @@ export default function SalesDashboard() {
 
   // Active metric tab for the grid
   const [activeMetric, setActiveMetric] = useState<"revenue" | "orders" | "aov">("revenue");
-  const [accumMetric, setAccumMetric] = useState<"revenue" | "orders">("revenue");
 
   // AI recommendations
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
@@ -483,90 +451,8 @@ export default function SalesDashboard() {
             })()}
           </div>
 
-          {/* ─── Accumulative Sales (current vs previous, by hour) ─── */}
-          {data.accumulative && (() => {
-            const a = data.accumulative;
-            const L = accumLabels(data.period.type, data.period.from, data.period.to);
-            const m = accumMetric;
-            // Build cumulative ("running total") series. The current line stops
-            // at the live hour when the period includes today (like the
-            // screenshot's Today line ending mid-day); the previous line spans
-            // the full 24h.
-            let curCum = 0;
-            let prevCum = 0;
-            const chartData = a.hourly.map((h) => {
-              prevCum += h.previous[m];
-              let cur: number | null = null;
-              if (!(a.truncateAtCurrentHour && h.hour > a.currentHour)) {
-                curCum += h.current[m];
-                cur = Math.round(curCum * 100) / 100;
-              }
-              return {
-                label: `${String(h.hour).padStart(2, "0")}:00`,
-                current: cur,
-                previous: Math.round(prevCum * 100) / 100,
-              };
-            });
-            return (
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4 sm:p-5">
-                <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
-                  <div className="min-w-0">
-                    <h2 className="text-sm font-semibold text-gray-900">
-                      Total Accumulative {m === "revenue" ? "Sales" : "Orders"}
-                      {m === "revenue" && <span className="font-normal text-gray-400"> (RM)</span>}
-                    </h2>
-                    <p className="mt-0.5 text-xs text-gray-500">
-                      {L.current} vs {L.previous} · running total by hour
-                    </p>
-                  </div>
-                  <div className="flex gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1 shrink-0">
-                    {([
-                      { key: "revenue" as const, label: "Revenue" },
-                      { key: "orders" as const, label: "Orders" },
-                    ]).map((mt) => (
-                      <button
-                        key={mt.key}
-                        onClick={() => setAccumMetric(mt.key)}
-                        className={cn(
-                          "px-3 py-1 rounded-md text-xs font-medium transition-colors",
-                          m === mt.key ? "bg-[#C2452D] text-white" : "text-gray-500 hover:text-gray-700",
-                        )}
-                      >
-                        {mt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={chartData} margin={{ top: 5, right: 12, left: -8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} interval={1} minTickGap={4} />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                      width={46}
-                      tickFormatter={(v) => (m === "revenue" ? formatRM(v as number) : `${v}`)}
-                    />
-                    <Tooltip
-                      formatter={(value, name) => [
-                        value == null
-                          ? "—"
-                          : m === "revenue"
-                            ? `RM ${(value as number).toLocaleString("en-MY", { minimumFractionDigits: 2 })}`
-                            : value,
-                        name,
-                      ]}
-                      contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                    <Line type="monotone" dataKey="previous" name={L.previous} stroke="#9CA3AF" strokeWidth={2} dot={false} connectNulls={false} />
-                    <Line type="monotone" dataKey="current" name={L.current} stroke="#C2452D" strokeWidth={2.5} dot={false} connectNulls={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            );
-          })()}
+          {/* ─── Accumulative Sales (Day / Week / Month, current vs previous) ─── */}
+          <AccumulativeChart outletId={outletId} />
 
           {/* ─── AI Sales Targets (progressive) ─── */}
           {(() => {
