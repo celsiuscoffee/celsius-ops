@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Plus, Trash2, X, Upload, FileDown, FileSpreadsheet, AlertTriangle, Pencil } from "lucide-react";
@@ -66,6 +67,7 @@ export default function BankStatementsPage() {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const items = data ?? [];
 
@@ -113,7 +115,35 @@ export default function BankStatementsPage() {
 
   const processFile = async (file: File) => {
     setError("");
+    setNotice("");
+    const isPdf = /\.pdf$/i.test(file.name);
     const isSheet = /\.(csv|xlsx|xls)$/i.test(file.name);
+
+    // Maybank PDF → server parses, classifies and persists the statement
+    // (auto-creates it, idempotent). No manual totals entry needed.
+    if (isPdf) {
+      setParsing(true);
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/finance/bank-statements/ingest", { method: "POST", body: fd });
+        const d = await res.json().catch(() => null);
+        if (!res.ok) {
+          setError(d?.error || "PDF ingest failed");
+        } else {
+          await mutate();
+          reset();
+          setNotice(
+            `✓ Ingested ${d.accountName} — ${d.statementDate}: ${d.linesCreated} lines` +
+              (d.reconciled ? ", reconciled." : " — ⚠️ did NOT reconcile, please review.")
+          );
+        }
+      } catch {
+        setError("PDF ingest failed");
+      }
+      setParsing(false);
+      return;
+    }
 
     if (isSheet) {
       setParsing(true);
@@ -219,11 +249,18 @@ export default function BankStatementsPage() {
           <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
             Upload weekly statement (CSV/Excel/PDF). The latest closing balance is the cashflow opening balance, and the period inflows/outflows feed the &ldquo;Other (from bank)&rdquo; column on the projection.
           </p>
+          <Link href="/finance/monthly-cashflow" className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-terracotta hover:underline">
+            View Monthly Cash Flow →
+          </Link>
         </div>
         <Button onClick={() => setAdding(true)} className="bg-terracotta hover:bg-terracotta-dark w-full sm:w-auto">
           <Plus className="mr-1.5 h-4 w-4" /> New Statement
         </Button>
       </div>
+
+      {notice && (
+        <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">{notice}</div>
+      )}
 
       {latest && (
         <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/50 px-4 py-3">
