@@ -427,7 +427,7 @@ export default function ScanScreen() {
               lineHeight: 18,
             }}
           >
-            {hint ?? "We'll bring up the menu for your table."}
+            {hint ?? "Order from your phone — we'll bring it to your table."}
           </Text>
         </View>
 
