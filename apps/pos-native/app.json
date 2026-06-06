@@ -59,7 +59,14 @@
           }
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "celsius-coffee-sdn-bhd",
+          "project": "celsius-pos-native"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

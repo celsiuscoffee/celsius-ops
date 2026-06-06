@@ -19,6 +19,29 @@ import {
   SpaceGrotesk_600SemiBold,
   SpaceGrotesk_700Bold,
 } from "@expo-google-fonts/space-grotesk";
+import * as Sentry from "@sentry/react-native";
+
+// Crash + error reporting for the till. Guarded on the DSN so it's a safe no-op
+// until EXPO_PUBLIC_SENTRY_DSN is set (Sentry project: celsius-pos-native) —
+// then crashes/errors from any outlet's register report to the dashboard with
+// the OTA channel tagged, so a regression from a specific update group is
+// traceable. Mirrors apps/pickup-native/app/_layout.tsx.
+const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN ?? "";
+if (SENTRY_DSN) {
+  Sentry.init({
+    dsn:                SENTRY_DSN,
+    environment:        __DEV__ ? "development" : "production",
+    enableNative:       true,
+    tracesSampleRate:   __DEV__ ? 1.0 : 0.1,
+    profilesSampleRate: 0,
+    initialScope: {
+      tags: {
+        app:     "pos-native",
+        channel: process.env.EXPO_PUBLIC_RELEASE_CHANNEL ?? "production",
+      },
+    },
+  });
+}
 
 SplashScreen.preventAutoHideAsync();
 SystemUI.setBackgroundColorAsync("#160800");
@@ -42,7 +65,7 @@ function applyDefaultFont() {
   InputAny.defaultProps.allowFontScaling = false;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   // Register hardware must never sleep mid-shift.
   useKeepAwake();
 
@@ -97,3 +120,7 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+// Sentry.wrap captures uncaught errors in the React tree + ties them to the
+// active session. No-op when no DSN is configured.
+export default Sentry.wrap(RootLayout);
