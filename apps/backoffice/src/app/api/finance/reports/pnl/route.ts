@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { buildPnl } from "@/lib/finance/reports/pnl";
+import { buildSourcedPnl } from "@/lib/finance/reports/pnl-sourced";
 import { getActiveCompanyId } from "@/lib/finance/companies";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "start, end (YYYY-MM-DD) required" }, { status: 400 });
   }
   try {
-    const report = await buildPnl({ companyId, start, end });
+    const report = await buildSourcedPnl({ companyId, start, end });
     return NextResponse.json({ report });
   } catch (err) {
     return NextResponse.json(
