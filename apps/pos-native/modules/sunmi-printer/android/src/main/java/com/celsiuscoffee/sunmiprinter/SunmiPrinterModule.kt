@@ -314,12 +314,12 @@ class SunmiPrinterModule : Module() {
       line.printDividingLine(DividingLine.DOTTED, 1)
 
       // 2. Order info
-      line.printText("Order #${o.orderNumber}", TextStyle.getStyle().setAlign(Align.CENTER).enableBold(true).setTextSize(32))
+      line.printText("Order #${o.orderNumber}", TextStyle.getStyle().setAlign(Align.CENTER).enableBold(true).setTextSize(36))
       var typeLine = o.orderType
       if (o.tableNumber.isNotEmpty()) typeLine += "  |  ${o.tableLabel} ${o.tableNumber}"
       else if (o.queueNumber.isNotEmpty()) typeLine += "  |  Q: ${o.queueNumber}"
-      line.printText(typeLine, TextStyle.getStyle().setAlign(Align.CENTER).enableBold(true).setTextSize(28))
-      if (o.time.isNotEmpty()) line.printText(o.time, TextStyle.getStyle().setAlign(Align.CENTER).setTextSize(24))
+      line.printText(typeLine, TextStyle.getStyle().setAlign(Align.CENTER).enableBold(true).setTextSize(32))
+      if (o.time.isNotEmpty()) line.printText(o.time, TextStyle.getStyle().setAlign(Align.CENTER).setTextSize(28))
 
       line.printDividingLine(DividingLine.DOTTED, 1)
       line.printText(" ", TextStyle.getStyle().setTextSize(8))
@@ -334,11 +334,11 @@ class SunmiPrinterModule : Module() {
               line.printText(" ", TextStyle.getStyle().setTextSize(8))
             }
             il.startsWith("   ** ") && il.trim().endsWith("**") ->
-              line.printText(il.trim().replace("**", "").trim(), TextStyle.getStyle().setAlign(Align.LEFT).enableBold(true).setTextSize(28))
+              line.printText(il.trim().replace("**", "").trim(), TextStyle.getStyle().setAlign(Align.LEFT).enableBold(true).setTextSize(32))
             il.startsWith("   ") ->
-              line.printText(il, TextStyle.getStyle().setAlign(Align.LEFT).setTextSize(26))
+              line.printText(il, TextStyle.getStyle().setAlign(Align.LEFT).setTextSize(30))
             il.isNotEmpty() ->
-              line.printText(il, TextStyle.getStyle().setAlign(Align.LEFT).enableBold(true).setTextSize(36))
+              line.printText(il, TextStyle.getStyle().setAlign(Align.LEFT).enableBold(true).setTextSize(42))
           }
         }
       }
