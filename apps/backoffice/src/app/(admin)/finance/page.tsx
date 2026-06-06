@@ -9,13 +9,10 @@ import { CompanySwitcher } from "@/components/finance/company-switcher";
 import { Button } from "@celsius/ui";
 import {
   Banknote,
-  Inbox,
   TrendingUp,
   ShieldCheck,
   Bot,
-  AlertTriangle,
   Loader2,
-  ArrowRight,
 } from "lucide-react";
 
 type HomeData = {
@@ -39,7 +36,6 @@ const RM = (n: number) =>
 
 const QUICK_LINKS = [
   { href: "/finance/transactions", icon: Banknote, label: "Ledger" },
-  { href: "/finance/inbox", icon: Inbox, label: "Inbox" },
   { href: "/finance/reports", icon: TrendingUp, label: "Reports" },
   { href: "/finance/compliance", icon: ShieldCheck, label: "Compliance" },
 ];
@@ -83,30 +79,6 @@ export default function FinanceHome() {
 
       {data && (
         <>
-          {/* Exception banner — only shown if there are open items */}
-          {data.exceptions.total > 0 && (
-            <Link
-              href="/finance/inbox"
-              className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 transition hover:bg-amber-500/10"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-                <div className="min-w-0">
-                  <div className="truncate font-medium">
-                    {data.exceptions.total} item{data.exceptions.total > 1 ? "s" : ""} need your review
-                  </div>
-                  {(data.exceptions.urgent > 0 || data.exceptions.high > 0) && (
-                    <div className="text-xs sm:text-sm text-muted-foreground">
-                      {data.exceptions.urgent > 0 && `${data.exceptions.urgent} urgent · `}
-                      {data.exceptions.high > 0 && `${data.exceptions.high} high priority`}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4 shrink-0" />
-            </Link>
-          )}
-
           {/* MTD + Cash position row */}
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-lg border bg-card p-4">

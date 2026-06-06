@@ -62,7 +62,6 @@ import {
   Flame,
   Banknote,
   TableProperties,
-  Inbox,
   Bot,
   Sun,
   Moon,
@@ -361,7 +360,6 @@ const NAV_SECTIONS: NavSection[] = [
       // in the rail for managers/staff.
       { label: "Home", href: "/finance", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "finance:home" },
       { label: "Ledger", href: "/finance/transactions", icon: <FileText className={ICON_SIZE} />, moduleKey: "finance:transactions" },
-      { label: "Inbox", href: "/finance/inbox", icon: <Inbox className={ICON_SIZE} />, moduleKey: "finance:inbox" },
       { label: "Reports", href: "/finance/reports", icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "finance:reports" },
       { label: "Compliance", href: "/finance/compliance", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "finance:compliance" },
       // Legacy (pre-agentic) views — kept until the new module reaches parity.
