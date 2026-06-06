@@ -6,7 +6,7 @@ import * as Haptics from "@/lib/haptics";
 import { useQuery } from "@tanstack/react-query";
 import { CelsiusCup } from "./brand/CelsiusCup";
 import { useApp } from "../lib/store";
-import { fetchMyVouchers } from "../lib/rewards-v2";
+import { fetchMyVouchers, fetchClaimableVouchers } from "../lib/rewards-v2";
 
 type Tab = {
   key: string;
@@ -34,15 +34,13 @@ export function BottomNav() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
 
-  // Live count of REWARDS THE CUSTOMER OWNS — drives the badge over the
-  // Gift icon. Counts active wallet vouchers only (bean-redemptions
-  // excluded — the exact set VoucherWallet lists), so it matches both the
-  // home-hero "Rewards" KPI and the wallet list the badge taps into.
-  // Claimables (unrevealed mystery / welcome / admin pushes) are NOT
-  // counted — they're surfaced by the dedicated "rewards waiting" banner
-  // on home; counting them here read higher than the visible wallet list
-  // (e.g. badge "9" vs wallet "7"). Reads through React Query (cached
-  // app-wide, shared with the home + rewards screens).
+  // Live count of REWARDS WAITING FOR THE CUSTOMER — drives the badge over
+  // the Gift icon. Sums earned wallet vouchers (active; bean-redemptions
+  // excluded, the exact set VoucherWallet lists) PLUS claimables (unrevealed
+  // mystery / admin pushes), so it matches the home-hero "Rewards" KPI and
+  // the /rewards screen — which lists owned + claimable in one continuous
+  // list. (Counting owned-only made the badge read LOWER than that list.)
+  // Reads through React Query (cached app-wide, shared with home + rewards).
   const phone = useApp((s) => s.phone);
   const walletQ = useQuery({
     queryKey: ["my-vouchers", phone ?? "anon"],
@@ -50,9 +48,16 @@ export function BottomNav() {
     enabled: !!phone,
     staleTime: 60_000,
   });
-  const rewardsCount = (walletQ.data ?? []).filter(
+  const claimableQ = useQuery({
+    queryKey: ["claimable-vouchers", phone ?? "anon"],
+    queryFn: fetchClaimableVouchers,
+    enabled: !!phone,
+    staleTime: 60_000,
+  });
+  const ownedCount = (walletQ.data ?? []).filter(
     (v) => v.status === "active" && v.source_type !== "points_redemption",
   ).length;
+  const rewardsCount = ownedCount + (claimableQ.data?.length ?? 0);
 
   // Web: nav pins to viewport bottom via position:fixed so it
   // follows the user as they scroll. Body owns the scroll (so iOS

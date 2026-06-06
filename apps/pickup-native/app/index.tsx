@@ -332,19 +332,17 @@ export default function Home() {
   const posters: HomePoster[] = postersQ.data ?? [];
 
   const heroBalance = rewardsQ.data?.pointsBalance ?? 0;
-  // Rewards KPI on the home hero — counts the vouchers the customer
-  // OWNS (active wallet vouchers; bean-redemptions excluded — the exact
-  // set VoucherWallet lists), so the number matches the wallet list it
-  // taps into ("/rewards?tab=vouchers").
-  //
-  // Claimables (unrevealed mystery / welcome / admin pushes) are NOT
-  // added here: they're surfaced by the dedicated "rewards waiting"
-  // banner below, so adding them too made the hero read higher than the
-  // wallet — e.g. 7 owned + 2 unrevealed mystery drops showed "9" while
-  // the wallet listed 7. Affordable points-shop catalog is likewise
-  // excluded (things you could buy, not things you have). Kept in sync
-  // with the bottom-nav badge (owned-only there too).
-  const voucherCount = walletVouchers.length;
+  // Rewards KPI on the home hero — counts everything the customer has
+  // waiting on the /rewards screen: earned wallet vouchers (active;
+  // bean-redemptions excluded, the exact set VoucherWallet lists) PLUS
+  // claimables (unrevealed mystery / admin pushes). The /rewards screen
+  // renders both in ONE continuous list, so the hero sums both to match
+  // what the customer sees when they tap through — owned-only made the
+  // hero read LOWER than the list (e.g. hero "7" while /rewards showed 9
+  // with 2 pending drops). Affordable points-shop catalog stays excluded
+  // (things you could buy, not things you have). Kept in sync with the
+  // bottom-nav badge (also owned + claimable).
+  const voucherCount = walletVouchers.length + claimables.length;
 
   // Shared scroll config handed to whichever wrapper owns the real
   // ScrollView on this platform (see HomeScrollFrame / HomeBodyScroll).

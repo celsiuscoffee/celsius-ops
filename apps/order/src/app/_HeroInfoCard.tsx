@@ -87,19 +87,28 @@ export function HeroInfoCard() {
         });
     }
 
-    // Active-rewards count — fetched from the SAME /api/loyalty/me/vouchers
-    // source the home VoucherRail renders, so the header "Rewards" counter
-    // matches the "Available rewards" rail. Was stuck at 0: the home page
-    // renders <HeroInfoCard /> with no voucherCount prop, so the default held.
+    // Rewards count — sums the customer's earned wallet vouchers
+    // (/api/loyalty/me/vouchers, the source the home VoucherRail renders)
+    // PLUS claimables (/api/loyalty/me/claimable: unrevealed mystery + admin
+    // pushes). The /rewards screen lists BOTH (the owned vouchers and the
+    // Claimables section), so the header "Rewards" counter sums both to match
+    // what the customer sees on tap-through — counting owned-only read lower
+    // than the screen. Was stuck at 0 before: home renders <HeroInfoCard />
+    // with no prop, so the default held.
     if (token) {
-      fetch("/api/loyalty/me/vouchers", { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => (r.ok ? r.json() : []))
-        .then((data) => {
+      const auth = { headers: { Authorization: `Bearer ${token}` } };
+      Promise.all([
+        fetch("/api/loyalty/me/vouchers", auth).then((r) => (r.ok ? r.json() : [])),
+        fetch("/api/loyalty/me/claimable", auth).then((r) => (r.ok ? r.json() : [])),
+      ])
+        .then(([vData, cData]) => {
           if (cancelled) return;
-          const list = (Array.isArray(data) ? data : (data?.vouchers ?? [])) as Array<{
+          const vouchers = (Array.isArray(vData) ? vData : (vData?.vouchers ?? [])) as Array<{
             status?: string | null;
           }>;
-          setVoucherCount(list.filter((v) => v.status === "active" || !v.status).length);
+          const owned = vouchers.filter((v) => v.status === "active" || !v.status).length;
+          const claimables = (Array.isArray(cData) ? cData : (cData?.claimables ?? [])) as unknown[];
+          setVoucherCount(owned + claimables.length);
         })
         .catch(() => {
           /* keep 0 */
