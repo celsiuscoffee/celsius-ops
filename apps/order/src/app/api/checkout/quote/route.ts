@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getTierMultiplier } from "@/lib/loyalty/points";
 import { evaluatePromotions, channelForOrderType, type CartLine } from "@/lib/loyalty/promotions";
+import { reconcileNonStackTier } from "@/lib/loyalty/non-stack-tier";
 import { getOutletSst } from "@/lib/outlet-sst";
 import { resolveOrderReward } from "@celsius/shared";
 
@@ -168,14 +169,17 @@ export async function POST(request: NextRequest) {
 
     // Member tier → promo eligibility + points multiplier.
     let memberTierId: string | null = null;
+    let memberTierStackable = true;
     if (loyaltyId) {
       const { data: mb } = await supabase
         .from("member_brands")
-        .select("current_tier_id")
+        .select("current_tier_id, tiers(stackable)")
         .eq("member_id", loyaltyId)
         .eq("brand_id", "brand-celsius")
         .maybeSingle();
       memberTierId = (mb as { current_tier_id?: string | null } | null)?.current_tier_id ?? null;
+      const tierRow = (mb as { tiers?: { stackable?: boolean | null } | null } | null)?.tiers;
+      memberTierStackable = (tierRow?.stackable as boolean | null) ?? true;
     }
 
     const evaluated = await evaluatePromotions({
@@ -185,19 +189,31 @@ export async function POST(request: NextRequest) {
       member_tier_id: memberTierId,
       channel: channelForOrderType(orderType),
     });
-    const promoDiscountSen = Math.round(evaluated.total_discount * 100);
-    const promoLines = evaluated.discounts.map((d) => ({
+    // Non-stackable tier exclusivity — best single offer wins (mirrors
+    // /api/orders + the POS register), so the quoted total matches what's
+    // charged for a Black Card / Staff member.
+    const recv = reconcileNonStackTier({
+      stackable: memberTierStackable,
+      evaluatedTotalSen: Math.round(evaluated.total_discount * 100),
+      tierPerkSen: Math.round((evaluated.discounts.find((d) => d.reason === "tier_perk")?.discount_amount ?? 0) * 100),
+      voucherSen: Math.round(voucherDiscountSen),
+      rewardSen: resolvedRewardDiscountSen,
+      fodSen: fodDiscountSen,
+    });
+    const promoDiscountSen = recv.promoDiscountSen;
+    const shownDiscounts = recv.droppedTierPerk
+      ? evaluated.discounts.filter((d) => d.reason !== "tier_perk")
+      : recv.droppedWallet
+        ? evaluated.discounts.filter((d) => d.reason === "tier_perk")
+        : evaluated.discounts;
+    const promoLines = shownDiscounts.map((d) => ({
       name: d.promotion_name,
       amountSen: Math.round(d.discount_amount * 100),
     }));
 
     const afterDiscount = Math.max(
       0,
-      subtotalSen -
-        Math.round(voucherDiscountSen) -
-        resolvedRewardDiscountSen -
-        fodDiscountSen -
-        promoDiscountSen,
+      subtotalSen - recv.voucherSen - recv.rewardSen - recv.fodSen - promoDiscountSen,
     );
     const sstSen = sstEnabled ? Math.round(afterDiscount * sstRate) : 0;
     const totalSen = afterDiscount + sstSen;
@@ -209,8 +225,8 @@ export async function POST(request: NextRequest) {
       subtotalSen,
       promoDiscountSen,
       promoLines,
-      rewardDiscountSen: resolvedRewardDiscountSen,
-      firstOrderDiscountSen: fodDiscountSen,
+      rewardDiscountSen: recv.rewardSen,
+      firstOrderDiscountSen: recv.fodSen,
       sstSen,
       sstRate,
       totalSen,

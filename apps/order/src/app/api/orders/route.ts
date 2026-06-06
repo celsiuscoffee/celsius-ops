@@ -8,6 +8,7 @@ import {
   resolveOrderReward,
 } from "@celsius/shared";
 import { getTierMultiplier } from "@/lib/loyalty/points";
+import { reconcileNonStackTier } from "@/lib/loyalty/non-stack-tier";
 import {
   evaluatePromotions,
   recordPromotionApplications,
@@ -501,50 +502,44 @@ export async function POST(request: NextRequest) {
       channel: orderChannel,
     });
 
-    // Non-stackable tier exclusivity (Staff, Black Card). The flat
-    // tier % trades stacking for a higher rate, so a wallet voucher
-    // and the tier perk shouldn't BOTH discount the same order. Pick
-    // whichever saves more:
-    //   • voucher wins → drop the tier perk from evaluated
-    //   • tier wins    → drop the voucher (don't burn it; null out
-    //                    walletVoucherId + zero the wallet voucher /
-    //                    reward / FOD legs so the order route doesn't
-    //                    mark the voucher consumed)
-    // Stackable tiers (Member / Silver / Gold / Platinum) skip this
-    // entirely and just layer both — same as before.
+    // Non-stackable tier exclusivity (Staff, Black Card) — best single offer
+    // wins: the larger of the tier % vs EVERYTHING else (wallet voucher +
+    // reward + first-order discount + store auto-promos), never the sum, so a
+    // 50% Black Card doesn't also pile store promos on top of the half-price
+    // bill. The promo engine bundles the tier perk + store promos in
+    // `evaluated`; we split via the tier_perk leg, reconcile, then mutate
+    // `evaluated` so the recorded total + applyOrderV2Hooks see the winner.
+    // Stackable tiers (Member / Silver / Gold / Platinum) pass through unchanged.
     const round2cents = (n: number) => Math.round(n * 100) / 100;
-    if (memberTierId && !memberTierStackable) {
-      const tierPerk = evaluated.discounts.find((d) => d.reason === "tier_perk");
-      const tierPerkSen = Math.round((tierPerk?.discount_amount ?? 0) * 100);
-      const externalSen = voucherDiscountSen + rewardDiscountSenAmt + fodDiscountSen;
-      if (externalSen >= tierPerkSen && tierPerk) {
-        // Voucher / reward / FOD beats the tier perk — drop the tier
-        // perk from the evaluated discount list.
-        evaluated.discounts = evaluated.discounts.filter(
-          (d) => d.reason !== "tier_perk",
-        );
-        evaluated.total_discount = round2cents(
-          evaluated.total_discount - (tierPerk.discount_amount ?? 0),
-        );
-        evaluated.total = round2cents(evaluated.subtotal - evaluated.total_discount);
-      } else if (tierPerkSen > 0 && externalSen > 0) {
-        // Tier perk wins — drop the voucher / reward / FOD so it stays
-        // available for a future order. walletVoucherId is nulled so
-        // applyOrderV2Hooks doesn't mark the voucher used; the
-        // rewardId / rewardName / voucherCode fields are nulled so
-        // the order row + receipt don't render a phantom "Reward · X"
-        // line for a discount that never actually applied.
-        voucherDiscountSen = 0;
-        rewardDiscountSenAmt = 0;
-        fodDiscountSen = 0;
-        walletVoucherId = null;
-        rewardId = null;
-        rewardName = null;
-        voucherCode = null;
-      }
+    const tierPerkAmt = evaluated.discounts.find((d) => d.reason === "tier_perk")?.discount_amount ?? 0;
+    const rec = reconcileNonStackTier({
+      stackable: memberTierStackable,
+      evaluatedTotalSen: Math.round(evaluated.total_discount * 100),
+      tierPerkSen: Math.round(tierPerkAmt * 100),
+      voucherSen: voucherDiscountSen,
+      rewardSen: rewardDiscountSenAmt,
+      fodSen: fodDiscountSen,
+    });
+    voucherDiscountSen = rec.voucherSen;
+    rewardDiscountSenAmt = rec.rewardSen;
+    fodDiscountSen = rec.fodSen;
+    if (rec.droppedTierPerk) {
+      // Everything else won — drop the tier perk leg from the evaluated total.
+      evaluated.discounts = evaluated.discounts.filter((d) => d.reason !== "tier_perk");
+    } else if (rec.droppedWallet) {
+      // Tier perk won — exclusive: keep only the tier perk in `evaluated` (drop
+      // store promos) and null the wallet refs so the voucher/reward isn't
+      // consumed and no phantom "Reward · X" line is recorded.
+      evaluated.discounts = evaluated.discounts.filter((d) => d.reason === "tier_perk");
+      walletVoucherId = null;
+      rewardId = null;
+      rewardName = null;
+      voucherCode = null;
     }
+    evaluated.total_discount = round2cents(rec.promoDiscountSen / 100);
+    evaluated.total = round2cents(evaluated.subtotal - evaluated.total_discount);
 
-    const promoDiscountSen = Math.round(evaluated.total_discount * 100);
+    const promoDiscountSen = rec.promoDiscountSen;
 
     const totalDiscountSen   = voucherDiscountSen + rewardDiscountSenAmt + fodDiscountSen + promoDiscountSen;
     const afterDiscount      = Math.max(0, subtotalSen - totalDiscountSen);
