@@ -10,14 +10,16 @@
 // apps/pickup-native/lib/rewards-v2.ts (tagged "Mirrors @celsius/shared
 // countRewardsWaiting") — keep the two in lockstep.
 //
-// Rule (decided): a "Reward you have" = any ACTIVE wallet voucher, REGARDLESS
-// of how it was obtained (earned, gifted, OR bought with points/beans), PLUS
-// every claimable offer (unrevealed mystery drop / admin push) waiting for
-// one-tap claim. The affordable points-shop catalogue is NOT counted (things
-// you could buy, not things you have).
+// Rule (decided): a "Reward you have" = an ACTIVE wallet voucher from a WALLET
+// source — mystery-bag win, manual admin grant, or birthday grant — PLUS every
+// claimable offer (unrevealed mystery drop / admin push) waiting for one-tap
+// claim. Bean-shop (points_redemption) + referral vouchers are NOT wallet items
+// (points are a balance you spend, not a stored voucher), and the affordable
+// points-shop catalogue is NOT counted either.
+const WALLET_COUNT_SOURCES = ["mystery", "manual", "birthday"];
 
 /** Minimal wallet-voucher shape the count needs. */
-export type CountableVoucher = { status?: string | null };
+export type CountableVoucher = { status?: string | null; source_type?: string | null };
 
 /**
  * @param vouchers   raw /api/loyalty/me/vouchers list (the wallet)
@@ -29,7 +31,9 @@ export function countRewardsWaiting(
   claimables: ReadonlyArray<unknown> | null | undefined,
 ): number {
   const owned = (vouchers ?? []).filter(
-    (v) => v.status === "active" || !v.status,
+    (v) =>
+      (v.status === "active" || !v.status) &&
+      WALLET_COUNT_SOURCES.includes(v.source_type ?? ""),
   ).length;
   return owned + (claimables?.length ?? 0);
 }

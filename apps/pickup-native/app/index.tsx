@@ -202,13 +202,14 @@ export default function Home() {
     staleTime: 60_000,
   });
 
-  // Home voucher rail — active wallet vouchers, INCLUDING bean-shop
-  // (points_redemption) purchases, so the rail, the /rewards "Yours"
-  // wallet, and the home Rewards tile all show/count the same vouchers.
-  // (The tile counts the raw list via countRewardsWaiting; this is the
-  // rail's display subset.)
+  // Home voucher rail — only WALLET-source vouchers (mystery-bag / manual /
+  // birthday grants), matching the /rewards "Yours" wallet and the count.
+  // Bean-shop (points_redemption) + referral are NOT wallet items. Keep in
+  // lockstep with rewards.tsx WALLET_SOURCES + @celsius/shared.
   const walletVouchers = (myVouchersQ.data ?? []).filter(
-    (v) => v.status === "active",
+    (v) =>
+      v.status === "active" &&
+      ["mystery", "manual", "birthday"].includes(v.source_type ?? ""),
   );
   const claimables     = claimableQ.data ?? [];
   // Home rail surfaces only IN-PROGRESS missions (status === 'active').

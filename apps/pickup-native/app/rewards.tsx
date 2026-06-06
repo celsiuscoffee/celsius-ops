@@ -45,17 +45,16 @@ import {
 } from "../components/TierCardCarousel";
 import { CelsiusGift } from "../components/brand/CelsiusGift";
 
-// Earned-source filter for the "Yours" wallet. Mission-source vouchers are
-// surfaced on their challenge card instead, so they stay excluded. Bean-shop
-// (points_redemption) vouchers ARE included: they're real redeemable vouchers
-// and count toward the home Rewards tile (countRewardsWaiting), so they must
-// be visible here too — keep this set in lockstep with that tally.
+// Source filter for the "Yours" wallet. ONLY mystery-bag wins, manual admin
+// grants, and birthday grants are wallet items. Mission vouchers live on their
+// challenge card; bean-shop (points_redemption) and referral vouchers are NOT
+// wallet items — points are a balance you spend, not a stored voucher. Keep in
+// lockstep with the home rail (index.tsx), the count (lib/rewards-v2.ts), and
+// @celsius/shared rewards-count.ts.
 const WALLET_SOURCES: ReadonlyArray<Voucher["source_type"]> = [
   "mystery",
-  "birthday",
   "manual",
-  "referral",
-  "points_redemption",
+  "birthday",
 ];
 
 function mapDiscountTypeForApply(

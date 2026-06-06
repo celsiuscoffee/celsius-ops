@@ -81,7 +81,15 @@ export function VoucherRail() {
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => {
         const list = (Array.isArray(data) ? data : (data?.vouchers ?? [])) as Voucher[];
-        setVouchers(list.filter((v) => v.status === "active" || !v.status));
+        // Wallet sources only — mystery-bag / manual / birthday. Matches the
+        // count + the native wallet; bean-shop + referral are not wallet items.
+        setVouchers(
+          list.filter(
+            (v) =>
+              (v.status === "active" || !v.status) &&
+              ["mystery", "manual", "birthday"].includes(v.source_type ?? ""),
+          ),
+        );
       })
       .catch(() => {
         /* ignore */
