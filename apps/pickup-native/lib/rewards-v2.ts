@@ -205,6 +205,21 @@ export async function fetchClaimableVouchers(): Promise<ClaimableVoucher[]> {
   }
 }
 
+// Canonical home-tile / nav-badge "Rewards" tally. Mirrors @celsius/shared
+// countRewardsWaiting (packages/shared/src/loyalty/rewards-count.ts) — native
+// can't depend on that server-leaning package, so the rule is hand-synced here.
+// Keep the two in lockstep: active wallet vouchers (incl bean-shop purchases)
+// PLUS claimables; the affordable points-shop catalogue is NOT counted.
+export function countRewardsWaiting(
+  vouchers: ReadonlyArray<{ status?: string | null }> | null | undefined,
+  claimables: ReadonlyArray<unknown> | null | undefined,
+): number {
+  const owned = (vouchers ?? []).filter(
+    (v) => v.status === "active" || !v.status,
+  ).length;
+  return owned + (claimables?.length ?? 0);
+}
+
 /** Convert a claimable offer into a real wallet voucher. Returns the new
  *  Voucher so callers can navigate to the detail view or animate it into
  *  the wallet section. */

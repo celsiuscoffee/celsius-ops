@@ -67,6 +67,8 @@ export type {
 } from "./loyalty/active-vouchers";
 export { fetchAffordableCatalogForMember } from "./loyalty/affordable-catalog";
 export type { AffordableCatalogReward } from "./loyalty/affordable-catalog";
+export { countRewardsWaiting } from "./loyalty/rewards-count";
+export type { CountableVoucher } from "./loyalty/rewards-count";
 export { markVoucherUsed } from "./loyalty/mark-voucher-used";
 export type { MarkVoucherUsedResult } from "./loyalty/mark-voucher-used";
 export { computeVoucherDiscount, legacyDescriptorToSpec } from "./loyalty/discount-engine";

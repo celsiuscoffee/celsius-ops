@@ -6,7 +6,7 @@ import * as Haptics from "@/lib/haptics";
 import { useQuery } from "@tanstack/react-query";
 import { CelsiusCup } from "./brand/CelsiusCup";
 import { useApp } from "../lib/store";
-import { fetchMyVouchers, fetchClaimableVouchers } from "../lib/rewards-v2";
+import { fetchMyVouchers, fetchClaimableVouchers, countRewardsWaiting } from "../lib/rewards-v2";
 
 type Tab = {
   key: string;
@@ -35,12 +35,11 @@ export function BottomNav() {
   const pathname = usePathname();
 
   // Live count of REWARDS WAITING FOR THE CUSTOMER — drives the badge over
-  // the Gift icon. Sums earned wallet vouchers (active; bean-redemptions
-  // excluded, the exact set VoucherWallet lists) PLUS claimables (unrevealed
-  // mystery / admin pushes), so it matches the home-hero "Rewards" KPI and
-  // the /rewards screen — which lists owned + claimable in one continuous
-  // list. (Counting owned-only made the badge read LOWER than that list.)
-  // Reads through React Query (cached app-wide, shared with home + rewards).
+  // the Gift icon. Uses the shared tally (countRewardsWaiting) so it matches
+  // the home-hero KPI and the web PWA exactly: every active wallet voucher
+  // (incl bean-shop purchases) + claimables (unrevealed mystery / admin
+  // pushes). Reads through React Query (cached app-wide, shared with the
+  // home + rewards screens).
   const phone = useApp((s) => s.phone);
   const walletQ = useQuery({
     queryKey: ["my-vouchers", phone ?? "anon"],
@@ -54,10 +53,7 @@ export function BottomNav() {
     enabled: !!phone,
     staleTime: 60_000,
   });
-  const ownedCount = (walletQ.data ?? []).filter(
-    (v) => v.status === "active" && v.source_type !== "points_redemption",
-  ).length;
-  const rewardsCount = ownedCount + (claimableQ.data?.length ?? 0);
+  const rewardsCount = countRewardsWaiting(walletQ.data, claimableQ.data);
 
   // Web: nav pins to viewport bottom via position:fixed so it
   // follows the user as they scroll. Body owns the scroll (so iOS

@@ -24,6 +24,7 @@ import {
   fetchClaimableVouchers,
   fetchActiveMissions,
   voucherUrgencyLabel,
+  countRewardsWaiting,
   type Voucher,
 } from "../lib/rewards-v2";
 import { CelsiusCup } from "../components/brand/CelsiusCup";
@@ -332,17 +333,15 @@ export default function Home() {
   const posters: HomePoster[] = postersQ.data ?? [];
 
   const heroBalance = rewardsQ.data?.pointsBalance ?? 0;
-  // Rewards KPI on the home hero — counts everything the customer has
-  // waiting on the /rewards screen: earned wallet vouchers (active;
-  // bean-redemptions excluded, the exact set VoucherWallet lists) PLUS
-  // claimables (unrevealed mystery / admin pushes). The /rewards screen
-  // renders both in ONE continuous list, so the hero sums both to match
-  // what the customer sees when they tap through — owned-only made the
-  // hero read LOWER than the list (e.g. hero "7" while /rewards showed 9
-  // with 2 pending drops). Affordable points-shop catalog stays excluded
-  // (things you could buy, not things you have). Kept in sync with the
-  // bottom-nav badge (also owned + claimable).
-  const voucherCount = walletVouchers.length + claimables.length;
+  // Rewards KPI on the home hero — counts everything waiting on the
+  // /rewards screen: every active wallet voucher (incl bean-shop purchases)
+  // PLUS claimables (unrevealed mystery / admin pushes). Uses the shared
+  // tally (countRewardsWaiting, hand-synced from @celsius/shared) so the
+  // hero, the nav badge, and the web PWA all agree. The /rewards screen
+  // lists owned + claimable in one continuous list, so the hero sums both —
+  // owned-only read LOWER than the list. Passes the RAW voucher list (not
+  // the rail's bean-shop-filtered `walletVouchers`) so those count too.
+  const voucherCount = countRewardsWaiting(myVouchersQ.data, claimables);
 
   // Shared scroll config handed to whichever wrapper owns the real
   // ScrollView on this platform (see HomeScrollFrame / HomeBodyScroll).

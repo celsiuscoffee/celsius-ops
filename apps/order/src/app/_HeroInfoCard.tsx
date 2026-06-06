@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { countRewardsWaiting } from "@celsius/shared";
 
 /**
  * The dark espresso info card that overlays the bottom of the hero
@@ -106,9 +107,8 @@ export function HeroInfoCard() {
           const vouchers = (Array.isArray(vData) ? vData : (vData?.vouchers ?? [])) as Array<{
             status?: string | null;
           }>;
-          const owned = vouchers.filter((v) => v.status === "active" || !v.status).length;
           const claimables = (Array.isArray(cData) ? cData : (cData?.claimables ?? [])) as unknown[];
-          setVoucherCount(owned + claimables.length);
+          setVoucherCount(countRewardsWaiting(vouchers, claimables));
         })
         .catch(() => {
           /* keep 0 */
