@@ -21,6 +21,15 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#160800"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "androidStatusBar": {
@@ -61,6 +70,13 @@
         "projectId": "3ea8d8f6-1552-408d-b9c8-5259b5e91542"
       }
     },
-    "owner": "celsiuscoffee"
+    "owner": "celsiuscoffee",
+    "updates": {
+      "url": "https://u.expo.dev/3ea8d8f6-1552-408d-b9c8-5259b5e91542"
+    },
+    "ios": {},
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
   }
 }
