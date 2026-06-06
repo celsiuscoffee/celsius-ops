@@ -87,8 +87,16 @@ export type MemberProfile = {
 };
 
 type AppState = {
+  /** The ACTIVE outlet — what the order is tagged with AND what the UI shows.
+   *  In dine-in mode a table scan repoints this to the scanned cafe; on return
+   *  to pickup it's restored from pickupOutlet* below. */
   outletId: string | null;
   outletName: string | null;
+  /** The customer's deliberate PICKUP outlet (set from the outlet picker).
+   *  Persisted separately so a transient dine-in table scan can't silently
+   *  leave Pickup pointed at the scanned outlet — clearDineIn restores from it. */
+  pickupOutletId: string | null;
+  pickupOutletName: string | null;
   /** Order fulfilment context. Set to "dine_in" + a tableNumber when the
    *  customer enters via a table-QR deep link (app/table/[outletId]/[tableId]);
    *  null/"pickup" otherwise. Deliberately NOT persisted (see partialize) —
@@ -121,6 +129,10 @@ type AppState = {
   seenOnboardings: string[];
 
   setOutlet: (id: string, name: string) => void;
+  /** Correct just the displayed outlet name to match outletId — used by the
+   *  home once the outlets list loads, so the UI can never show one outlet
+   *  while the order routes to another. */
+  setOutletName: (name: string) => void;
   /** Enter dine-in mode from a table-QR scan / deep link: pin the outlet,
    *  flag dine_in + table. Keeps the cart when it's the same outlet the
    *  customer's already on; clears it (and the reward) only when the outlet
@@ -162,6 +174,8 @@ export const useApp = create<AppState>()(
     (set) => ({
       outletId: null,
       outletName: null,
+      pickupOutletId: null,
+      pickupOutletName: null,
       orderType: null,
       tableNumber: null,
       cart: [],
@@ -173,7 +187,10 @@ export const useApp = create<AppState>()(
       reservedVoucher: null,
       seenOnboardings: [],
 
-      setOutlet: (id, name) => set({ outletId: id, outletName: name }),
+      // A deliberate pickup-outlet choice → set the active AND the persisted
+      // pickup outlet, so dine-in scans never overwrite the customer's pickup.
+      setOutlet: (id, name) => set({ outletId: id, outletName: name, pickupOutletId: id, pickupOutletName: name }),
+      setOutletName: (name) => set({ outletName: name }),
       setDineIn: (outletId, outletName, tableNumber) =>
         set((s) => {
           // Keep the basket when scanning a table at the SAME outlet the
@@ -193,7 +210,17 @@ export const useApp = create<AppState>()(
             appliedReward: outletChanged ? null : s.appliedReward,
           };
         }),
-      clearDineIn: () => set({ orderType: "pickup", tableNumber: null }),
+      clearDineIn: () =>
+        set((s) => ({
+          orderType: "pickup",
+          tableNumber: null,
+          // A table scan only BORROWS the active outlet for the dine-in visit —
+          // returning to pickup restores the customer's own pickup outlet so it
+          // never gets silently left on the scanned cafe. Falls back to the
+          // current outlet for customers who hadn't picked one before this build.
+          outletId: s.pickupOutletId ?? s.outletId,
+          outletName: s.pickupOutletName ?? s.outletName,
+        })),
       setOrderType: (next, tableNumber) =>
         set((s) => ({
           orderType: next,
@@ -279,6 +306,8 @@ export const useApp = create<AppState>()(
       partialize: (s) => ({
         outletId: s.outletId,
         outletName: s.outletName,
+        pickupOutletId: s.pickupOutletId,
+        pickupOutletName: s.pickupOutletName,
         // orderType / tableNumber are intentionally NOT persisted — dine-in
         // is a per-visit context re-established by the table-QR deep link on
         // each launch; persisting it would strand a customer in "dine-in

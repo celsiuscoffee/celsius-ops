@@ -101,6 +101,7 @@ export default function Home() {
   const queryClient = useQueryClient();
   const outlets = useQuery({ queryKey: ["outlets"], queryFn: fetchOutlets });
   const outletId = useApp((s) => s.outletId);
+  const outletName = useApp((s) => s.outletName);
   const menu = useQuery({
     queryKey: ["menu", outletId],
     queryFn: () => fetchMenu(outletId),
@@ -266,6 +267,17 @@ export default function Home() {
   // Resolve the live outlet record so the picker can show its open/busy
   // state and ETA (data we already pulled in fetchOutlets).
   const currentOutlet = (outlets.data ?? []).find((o) => o.store_id === outletId) ?? null;
+
+  // Keep the displayed outlet name truthful to outletId — what the ORDER is
+  // actually tagged with. The two can drift (e.g. a past table-QR scan left
+  // outletId on another cafe while the stored name lagged), and the home is the
+  // first place we have the outlets list to reconcile. Without this the app
+  // could show "Putrajaya" while every order routed to Shah Alam.
+  useEffect(() => {
+    if (currentOutlet && currentOutlet.name && currentOutlet.name !== outletName) {
+      useApp.getState().setOutletName(currentOutlet.name);
+    }
+  }, [currentOutlet, outletName]);
 
   const greeting = (() => {
     const h = new Date().getHours();
