@@ -145,7 +145,7 @@ function RewardTicket({ voucher }: { voucher: Voucher }) {
             paddingRight: 12,
             paddingTop: 12,
             paddingBottom: 14,
-            minHeight: 92,
+            height: 100,
           }}
         >
           <div className="flex items-center justify-between">
@@ -171,7 +171,7 @@ function RewardTicket({ voucher }: { voucher: Voucher }) {
               fontSize: 19,
               lineHeight: "21px",
               marginTop: 5,
-              paddingRight: 36,
+              paddingRight: 14,
             }}
           >
             {headline}
