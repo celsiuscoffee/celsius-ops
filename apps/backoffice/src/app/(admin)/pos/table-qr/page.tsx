@@ -258,7 +258,7 @@ export default function POSTableQRPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-6xl">
+    <div className="p-3 sm:p-6 space-y-5 max-w-6xl print:p-0 print:m-0 print:space-y-0 print:max-w-none">
       {/* Print rules. Designed view → one print-ready sticker per page (page sized
           to the chosen sticker + bleed + crop-mark slug). Plain view → A4 sheet. */}
       <style
@@ -269,6 +269,9 @@ export default function POSTableQRPage() {
 @media print {
   @page { size: ${stickerPage(stickerW).pageW.toFixed(2)}cm ${stickerPage(stickerW).pageH.toFixed(2)}cm; margin: 0; }
   body { background: #fff !important; }
+  /* Force the espresso fill + cream text to print even when the dialog's
+     "Background graphics" is OFF (its default). Without this the card prints blank. */
+  .sticker, .sticker * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   .sticker { page-break-after: always; break-after: page; box-shadow: none !important; }
   .sticker:last-child { page-break-after: auto; break-after: auto; }
 }`
@@ -405,8 +408,9 @@ export default function POSTableQRPage() {
         <p className="text-xs text-gray-500 print:hidden">
           <span className="font-semibold">Print all → Save as PDF</span> gives the print-company file: each sticker on its
           own page at <span className="font-semibold">{stickerW} × {stickerW * 2} cm</span> with 3 mm bleed, crop marks, a
-          magenta die-cut line (rounded R8 mm) and a spec caption. In the print dialog set Margins = <span className="font-semibold">None</span> and
-          Scale = <span className="font-semibold">100%</span>. Capacity badge follows each table&rsquo;s seat count automatically.
+          magenta die-cut line (rounded R8 mm) and a spec caption. In the print dialog set Margins = <span className="font-semibold">None</span>,
+          Scale = <span className="font-semibold">100%</span>, and <span className="font-semibold">Background graphics = On</span> (under
+          “More settings”) so the dark fill prints. Capacity badge follows each table&rsquo;s seat count automatically.
         </p>
       )}
 

@@ -1021,19 +1021,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!user) return null;
 
   return (
-    <SidebarProvider className="h-svh overflow-hidden">
-      <AppSidebar
-        user={user}
-        pathname={pathname}
-        openSection={openSection}
-        onSectionToggle={handleSectionToggle}
-        onLogout={handleLogout}
-      />
-      <SidebarInset className="min-w-0 bg-brand-offwhite">
+    <SidebarProvider className="h-svh overflow-hidden print:h-auto print:overflow-visible">
+      {/* Sidebar is app chrome — never printed (contents = transparent on screen). */}
+      <div className="contents print:hidden">
+        <AppSidebar
+          user={user}
+          pathname={pathname}
+          openSection={openSection}
+          onSectionToggle={handleSectionToggle}
+          onLogout={handleLogout}
+        />
+      </div>
+      <SidebarInset className="min-w-0 bg-brand-offwhite print:overflow-visible">
         {/* Mobile-only top bar — tap the trigger to open the sidebar sheet.
             Desktop has no top chrome: the toggle lives in the sidebar header,
             plus the drag rail and ⌘B. */}
-        <header className="flex items-center gap-3 border-b border-border bg-white px-4 py-3 dark:bg-card md:hidden">
+        <header className="flex items-center gap-3 border-b border-border bg-white px-4 py-3 dark:bg-card md:hidden print:hidden">
           <SidebarTrigger className="text-foreground" />
           <Image
             src="/images/celsius-logo-sm.jpg"
@@ -1048,7 +1051,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Page content */}
         <PullToRefresh
           onRefresh={async () => { window.location.reload(); }}
-          className="flex-1 overflow-y-auto overflow-x-hidden"
+          className="flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible print:h-auto"
         >
           {children}
         </PullToRefresh>
