@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -44,11 +44,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CelsiusLoader } from "../components/CelsiusLoader";
 import { TierCardSkeleton } from "../components/TierCardSkeleton";
 
-/** ISO YYYY-MM-DD → display DD/MM/YYYY. Empty/invalid in → empty out. */
-function isoToDMY(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+/** ISO YYYY-MM-DD → { dd, mm, yyyy } parts for the split birthday fields. */
+function isoToParts(iso: string | null | undefined): { dd: string; mm: string; yyyy: string } {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  return m ? { dd: m[3], mm: m[2], yyyy: m[1] } : { dd: "", mm: "", yyyy: "" };
 }
 
 /** Display DD/MM/YYYY → ISO YYYY-MM-DD. Returns null for empty or any
@@ -70,16 +69,6 @@ function dmyToIso(dmy: string): string | null {
   const daysInMonth = new Date(yyyy, mm, 0).getDate();
   if (dd < 1 || dd > daysInMonth) return null;
   return `${m[3]}-${m[2]}-${m[1]}`;
-}
-
-/** Live-format a DD/MM/YYYY input — strip non-digits, cap at 8, splice
- *  in slashes at positions 2 and 4. Lets the customer type 31011990
- *  and see 31/01/1990 emerge as they go without managing the cursor. */
-function formatDMYAsType(raw: string): string {
-  const d = raw.replace(/\D/g, "").slice(0, 8);
-  if (d.length <= 2) return d;
-  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
-  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
 }
 
 function normalisePhone(input: string): string {
@@ -719,16 +708,25 @@ function ProfileEditModal({
   const insets = useSafeAreaInsets();
   const [name, setName] = useState(member?.name ?? "");
   const [email, setEmail] = useState(member?.email ?? "");
-  // Birthday is shown to the customer as DD/MM/YYYY (MY convention) but
-  // persisted as ISO YYYY-MM-DD in member.birthday. Convert at the
-  // display boundary, auto-format the slashes as the user types.
-  const [birthday, setBirthday] = useState(isoToDMY(member?.birthday));
+  // Birthday: three digit fields (DD / MM / YYYY) with the "/" as static text,
+  // persisted as ISO YYYY-MM-DD. Separate fields — not one masked input — so the
+  // slash never depends on the Android keyboard. A number-pad IME (e.g. Gboard)
+  // drops a programmatically-inserted "/", which is why it showed on Samsung but
+  // vanished on other Androids.
+  const bdInit = isoToParts(member?.birthday);
+  const [bdDay, setBdDay] = useState(bdInit.dd);
+  const [bdMonth, setBdMonth] = useState(bdInit.mm);
+  const [bdYear, setBdYear] = useState(bdInit.yyyy);
+  const bdDayRef = useRef<TextInput>(null);
+  const bdMonthRef = useRef<TextInput>(null);
+  const bdYearRef = useRef<TextInput>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setName(member?.name ?? "");
     setEmail(member?.email ?? "");
-    setBirthday(isoToDMY(member?.birthday));
+    const bp = isoToParts(member?.birthday);
+    setBdDay(bp.dd); setBdMonth(bp.mm); setBdYear(bp.yyyy);
   }, [member, visible]);
 
   const save = async () => {
@@ -742,7 +740,7 @@ function ProfileEditModal({
     // wrong digit in birthday and gave up. A fully entered but
     // invalid date (e.g. 31/02/1990) becomes null too — server side
     // tolerates null.
-    const birthdayIso = dmyToIso(birthday);
+    const birthdayIso = dmyToIso(`${bdDay}/${bdMonth}/${bdYear}`);
     setSaving(true);
     try {
       await api.updateProfile({
@@ -825,18 +823,47 @@ function ProfileEditModal({
               className="text-muted-fg text-[11px] tracking-widest uppercase mb-1"
               style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}
             >
-              Birthday (DD/MM/YYYY)
+              Birthday
             </Text>
-            <TextInput
-              value={birthday}
-              onChangeText={(raw) => setBirthday(formatDMYAsType(raw))}
-              placeholder="31/01/1990"
-              placeholderTextColor="#8E8E93"
-              keyboardType="number-pad"
-              maxLength={10}
-              className="bg-surface border border-border rounded-2xl px-4 py-3 text-espresso text-base"
-              style={{ fontFamily: "SpaceGrotesk_500Medium" }}
-            />
+            <View className="flex-row items-center" style={{ gap: 8 }}>
+              <TextInput
+                ref={bdDayRef}
+                value={bdDay}
+                onChangeText={(t) => { const d = t.replace(/\D/g, "").slice(0, 2); setBdDay(d); if (d.length === 2) bdMonthRef.current?.focus(); }}
+                placeholder="DD"
+                placeholderTextColor="#8E8E93"
+                keyboardType="number-pad"
+                maxLength={2}
+                className="bg-surface border border-border rounded-2xl px-3 py-3 text-espresso text-base text-center"
+                style={{ fontFamily: "SpaceGrotesk_500Medium", width: 62 }}
+              />
+              <Text className="text-muted-fg text-lg" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>/</Text>
+              <TextInput
+                ref={bdMonthRef}
+                value={bdMonth}
+                onChangeText={(t) => { const d = t.replace(/\D/g, "").slice(0, 2); setBdMonth(d); if (d.length === 2) bdYearRef.current?.focus(); }}
+                onKeyPress={(e) => { if (e.nativeEvent.key === "Backspace" && bdMonth === "") bdDayRef.current?.focus(); }}
+                placeholder="MM"
+                placeholderTextColor="#8E8E93"
+                keyboardType="number-pad"
+                maxLength={2}
+                className="bg-surface border border-border rounded-2xl px-3 py-3 text-espresso text-base text-center"
+                style={{ fontFamily: "SpaceGrotesk_500Medium", width: 62 }}
+              />
+              <Text className="text-muted-fg text-lg" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>/</Text>
+              <TextInput
+                ref={bdYearRef}
+                value={bdYear}
+                onChangeText={(t) => setBdYear(t.replace(/\D/g, "").slice(0, 4))}
+                onKeyPress={(e) => { if (e.nativeEvent.key === "Backspace" && bdYear === "") bdMonthRef.current?.focus(); }}
+                placeholder="YYYY"
+                placeholderTextColor="#8E8E93"
+                keyboardType="number-pad"
+                maxLength={4}
+                className="bg-surface border border-border rounded-2xl px-3 py-3 text-espresso text-base text-center"
+                style={{ fontFamily: "SpaceGrotesk_500Medium", width: 92 }}
+              />
+            </View>
             <Text
               className="text-muted-fg text-[11px] mt-1"
               style={{ fontFamily: "SpaceGrotesk_400Regular" }}

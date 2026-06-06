@@ -495,7 +495,19 @@ function EditProfileRow({
         inputMode="numeric"
         placeholder="01/01/1990"
         value={birthday}
-        onChange={(e) => setBirthday(e.target.value)}
+        maxLength={10}
+        onChange={(e) => {
+          // Auto-insert the "/" as digits are typed — the Android numeric
+          // keypad has no "/" key, so the customer can't type it themselves.
+          const d = e.target.value.replace(/\D/g, "").slice(0, 8);
+          setBirthday(
+            d.length <= 2
+              ? d
+              : d.length <= 4
+                ? `${d.slice(0, 2)}/${d.slice(2)}`
+                : `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`,
+          );
+        }}
         className="w-full rounded-xl border border-[#EBE5DE] px-3 py-2 outline-none text-sm mb-3"
       />
       {error ? <p className="text-[12px] text-red-600 mb-2">{error}</p> : null}
