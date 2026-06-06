@@ -5,13 +5,14 @@ import { useFocusEffect } from "expo-router";
 import {
   Banknote, CreditCard, QrCode, Smartphone, Bike, ShoppingBag, Landmark, Wallet,
   Utensils, Package, Sunrise, Sunset, Sun, Moon, Coffee, Sandwich, UtensilsCrossed,
-  TrendingUp, TrendingDown, UserPlus, BarChart3,
+  TrendingUp, TrendingDown, UserPlus, BarChart3, ChevronDown,
 } from "lucide-react-native";
 import { useStaff } from "@/lib/store";
 import { hasAccess } from "@/lib/access";
 import { fetchSalesDashboard, type Mode, type SalesDashboard } from "@/lib/sales/dashboard";
 import { AccumChart } from "@/components/sales/AccumChart";
 import { RangeSheet } from "@/components/sales/RangeSheet";
+import { OutletSheet } from "@/components/sales/OutletSheet";
 
 const CREAM = "#F5F3F0";
 const ESPRESSO = "#160800";
@@ -53,6 +54,7 @@ export default function SalesScreen() {
   const isAdmin = session?.role === "OWNER" || session?.role === "ADMIN";
   const [outletId, setOutletId] = useState<string | undefined>(undefined);
   const selectedOutlet = isAdmin ? outletId ?? "all" : undefined;
+  const [outletSheet, setOutletSheet] = useState(false);
   const [data, setData] = useState<SalesDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -103,24 +105,17 @@ export default function SalesScreen() {
             <Text className="font-display text-sm text-[#F5F3F0]">°C</Text>
           </View>
           <View className="flex-1">
-            <Text className="font-display text-lg text-[#F5F3F0]">{data?.outletName ?? "Sales"}</Text>
+            {isAdmin ? (
+              <Pressable onPress={() => setOutletSheet(true)} hitSlop={8} className="flex-row items-center gap-1.5 self-start">
+                <Text className="font-display text-lg text-[#F5F3F0]">{data?.outletName ?? "Sales"}</Text>
+                <ChevronDown color="#F5F3F08a" size={16} />
+              </Pressable>
+            ) : (
+              <Text className="font-display text-lg text-[#F5F3F0]">{data?.outletName ?? "Sales"}</Text>
+            )}
             <Text className="font-body text-[11px] text-[#F5F3F08a]">Live · POS + Pickup</Text>
           </View>
         </View>
-
-        {/* Outlet selector — owners/admins only */}
-        {isAdmin && data?.availableOutlets && data.availableOutlets.length > 0 ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-4 mb-3" contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-            {[{ id: "all", name: "All outlets" }, ...data.availableOutlets].map((o) => {
-              const on = (outletId ?? "all") === o.id;
-              return (
-                <Pressable key={o.id} onPress={() => setOutletId(o.id)} className={`rounded-full border px-3.5 py-2 ${on ? "border-transparent bg-[#A2492C]" : "border-[#F5F3F01a] bg-[#2a1508]"}`}>
-                  <Text className={`text-xs ${on ? "font-body-bold text-[#F5F3F0]" : "font-body-semi text-[#F5F3F08a]"}`}>{o.name}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        ) : null}
 
         {/* Period tabs */}
         <View className="mb-4 flex-row gap-1.5 rounded-2xl border border-[#F5F3F01a] bg-[#2a1508] p-1.5">
@@ -215,6 +210,13 @@ export default function SalesScreen() {
       </ScrollView>
 
       <RangeSheet visible={sheet} from={cFrom} to={cTo} onApply={applyRange} onClose={() => setSheet(false)} />
+      <OutletSheet
+        visible={outletSheet}
+        outlets={[{ id: "all", name: "All outlets" }, ...(data?.availableOutlets ?? [])]}
+        selected={outletId ?? "all"}
+        onSelect={(id) => { setOutletId(id); setOutletSheet(false); }}
+        onClose={() => setOutletSheet(false)}
+      />
     </SafeAreaView>
   );
 }
