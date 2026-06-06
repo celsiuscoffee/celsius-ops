@@ -45,14 +45,17 @@ import {
 } from "../components/TierCardCarousel";
 import { CelsiusGift } from "../components/brand/CelsiusGift";
 
-// Earned-source filter — Bean-Points reservations and mission-source
-// vouchers are intentionally surfaced elsewhere (catalogue + challenge
-// card respectively), so they're excluded from the "Yours" wallet.
+// Earned-source filter for the "Yours" wallet. Mission-source vouchers are
+// surfaced on their challenge card instead, so they stay excluded. Bean-shop
+// (points_redemption) vouchers ARE included: they're real redeemable vouchers
+// and count toward the home Rewards tile (countRewardsWaiting), so they must
+// be visible here too — keep this set in lockstep with that tally.
 const WALLET_SOURCES: ReadonlyArray<Voucher["source_type"]> = [
   "mystery",
   "birthday",
   "manual",
   "referral",
+  "points_redemption",
 ];
 
 function mapDiscountTypeForApply(
@@ -194,7 +197,6 @@ export default function RewardsTab() {
         (v) =>
           v.status === "active" &&
           v.source_type !== "mission" &&
-          v.source_type !== "points_redemption" &&
           WALLET_SOURCES.includes(v.source_type as Voucher["source_type"]),
       ),
     [vouchers],

@@ -201,13 +201,13 @@ export default function Home() {
     staleTime: 60_000,
   });
 
-  // Bean-points redemptions are filtered out here so the home hero
-  // count, the home voucher rail, and the wallet on /rewards all
-  // converge on the same number. See VoucherWallet's `active` memo
-  // for the rationale: catalog purchases the customer just made
-  // belong to the points-shop flow, not the "rewards I earned" wallet.
+  // Home voucher rail — active wallet vouchers, INCLUDING bean-shop
+  // (points_redemption) purchases, so the rail, the /rewards "Yours"
+  // wallet, and the home Rewards tile all show/count the same vouchers.
+  // (The tile counts the raw list via countRewardsWaiting; this is the
+  // rail's display subset.)
   const walletVouchers = (myVouchersQ.data ?? []).filter(
-    (v) => v.status === "active" && v.source_type !== "points_redemption",
+    (v) => v.status === "active",
   );
   const claimables     = claimableQ.data ?? [];
   // Home rail surfaces only IN-PROGRESS missions (status === 'active').
