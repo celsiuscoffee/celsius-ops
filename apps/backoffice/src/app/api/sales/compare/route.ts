@@ -218,6 +218,17 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // Hourly buckets (for the accumulative overlay chart). For single-day
+      // periods the client renders these as a cumulative line by hour; for
+      // multi-day periods it falls back to a daily cumulative line.
+      const hourly = Array.from({ length: 24 }, () => ({ revenue: 0, orders: 0 }));
+      for (const txn of bucket.txns) {
+        if (txn.hour >= 0 && txn.hour <= 23) {
+          hourly[txn.hour].revenue += txn.total;
+          hourly[txn.hour].orders += 1;
+        }
+      }
+
       // Format label
       const label = formatPeriodLabel(bucket.from, bucket.to);
 
@@ -258,6 +269,11 @@ export async function GET(request: NextRequest) {
           };
         }),
         channels: roundChannelData(channels),
+        hourly: hourly.map((b, h) => ({
+          hour: h,
+          revenue: Math.round(b.revenue * 100) / 100,
+          orders: b.orders,
+        })),
         dailyTotals: dates.map((d) => ({
           date: d,
           revenue: Math.round((dailyMap[d]?.revenue || 0) * 100) / 100,

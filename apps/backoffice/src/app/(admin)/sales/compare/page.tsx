@@ -13,6 +13,16 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -46,6 +56,7 @@ type PeriodResult = {
     takeaway: { revenue: number; orders: number };
     delivery: { revenue: number; orders: number };
   };
+  hourly: { hour: number; revenue: number; orders: number }[];
   dailyTotals: { date: string; revenue: number; orders: number; rounds: { key: string; revenue: number; orders: number }[] }[];
   // Server-side DOW projection — only populated when today falls inside
   // the period. Uses 4 weeks of pre-period data + same-period last month.
@@ -738,6 +749,98 @@ export default function SalesComparePage() {
               </button>
             ))}
           </div>
+
+          {/* Accumulative Overlay Chart — the hero comparison graph */}
+          {data.periods[0]?.hourly && (() => {
+            const chartMetric: "revenue" | "orders" = metric === "orders" ? "orders" : "revenue";
+            const today = getMYTToday();
+            const nowHour = new Date(Date.now() + 8 * 60 * 60 * 1000).getUTCHours();
+            // Single-day periods → hourly cumulative (StoreHub-style). Any
+            // multi-day period → daily cumulative aligned by day index.
+            const allSingleDay = data.periods.every((p) => p.from === p.to);
+            let chartData: Record<string, number | string | null>[];
+            let xMode: "hour" | "day";
+            if (allSingleDay) {
+              xMode = "hour";
+              const cum = data.periods.map((p) => {
+                const isToday = p.to === today;
+                let c = 0;
+                return p.hourly.map((h) => {
+                  if (isToday && h.hour > nowHour) return null;
+                  c += chartMetric === "revenue" ? h.revenue : h.orders;
+                  return Math.round(c * 100) / 100;
+                });
+              });
+              chartData = Array.from({ length: 24 }, (_, hr) => {
+                const row: Record<string, number | string | null> = { label: `${String(hr).padStart(2, "0")}:00` };
+                data.periods.forEach((_, i) => { row[`p${i}`] = cum[i][hr]; });
+                return row;
+              });
+            } else {
+              xMode = "day";
+              const cum = data.periods.map((p) => {
+                let c = 0;
+                return p.dailyTotals.map((d) => {
+                  if (d.date > today) return null; // stop at today; future dates flatline otherwise
+                  c += chartMetric === "revenue" ? d.revenue : d.orders;
+                  return Math.round(c * 100) / 100;
+                });
+              });
+              const maxDays = Math.max(...data.periods.map((p) => p.dailyTotals.length));
+              chartData = Array.from({ length: maxDays }, (_, di) => {
+                const row: Record<string, number | string | null> = { label: `Day ${di + 1}` };
+                data.periods.forEach((_, i) => { row[`p${i}`] = di < cum[i].length ? cum[i][di] : null; });
+                return row;
+              });
+            }
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="mb-3">
+                  <h2 className="text-sm font-semibold text-gray-900">
+                    Accumulative {chartMetric === "revenue" ? "Revenue" : "Orders"}
+                    {chartMetric === "revenue" && <span className="font-normal text-gray-400"> (RM)</span>}
+                  </h2>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    Running total by {xMode === "hour" ? "hour" : "day"}
+                    {metric === "aov" && " · AOV isn't cumulative — showing revenue"}
+                  </p>
+                </div>
+                <ResponsiveContainer width="100%" height={320}>
+                  <LineChart data={chartData} margin={{ top: 5, right: 12, left: -8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={8} />
+                    <YAxis
+                      tick={{ fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                      width={46}
+                      tickFormatter={(v) => (chartMetric === "revenue" ? (Number(v) >= 1000 ? `${(Number(v) / 1000).toFixed(1)}K` : `${v}`) : `${v}`)}
+                    />
+                    <Tooltip
+                      formatter={(value, name) => [
+                        value == null ? "—" : chartMetric === "revenue" ? fmtRM(value as number) : value,
+                        name,
+                      ]}
+                      contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                    {data.periods.map((p, i) => (
+                      <Line
+                        key={i}
+                        type="monotone"
+                        dataKey={`p${i}`}
+                        name={p.label}
+                        stroke={PERIOD_COLORS[i % PERIOD_COLORS.length]}
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls={false}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            );
+          })()}
 
           {/* Summary Cards — scrollable on mobile */}
           <div className="overflow-x-auto scrollbar-thin -mx-4 px-4 sm:mx-0 sm:px-0">

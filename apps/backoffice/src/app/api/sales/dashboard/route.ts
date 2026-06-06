@@ -185,6 +185,36 @@ export async function GET(request: NextRequest) {
       prevChannels[ch].orders += 1;
     }
 
+    // ─── Accumulative hourly buckets (StoreHub-style comparison chart) ──────
+    // Bucket current-period (allTxns) and previous-period (prevTxns) revenue +
+    // orders into 24 hour-of-day slots. No extra StoreHub round-trip — these
+    // transactions are already in memory. The client renders them as two
+    // cumulative ("running total") lines: current vs previous.
+    const curHourly = Array.from({ length: 24 }, () => ({ revenue: 0, orders: 0 }));
+    const prevHourly = Array.from({ length: 24 }, () => ({ revenue: 0, orders: 0 }));
+    for (const { txn } of allTxns) {
+      const ts = txn.transactionTime || txn.completedAt || txn.createdAt;
+      if (!ts) continue;
+      const h = getMYTHour(ts);
+      if (h < 0 || h > 23) continue;
+      curHourly[h].revenue += txn.total;
+      curHourly[h].orders += 1;
+    }
+    for (const txn of prevTxns) {
+      const ts = txn.transactionTime || txn.completedAt || txn.createdAt;
+      if (!ts) continue;
+      const h = getMYTHour(ts);
+      if (h < 0 || h > 23) continue;
+      prevHourly[h].revenue += txn.total;
+      prevHourly[h].orders += 1;
+    }
+    // Truncate the "current" line at the live hour ONLY when the period is a
+    // single day that is today (the screenshot's Today line stopping mid-day).
+    // For multi-day periods the earlier days have full-day data, so the line
+    // must span all 24h — truncating would wrongly chop their afternoon/evening.
+    const truncateAtCurrentHour = fromDate === toDate && toDate === todayMYT;
+    const currentHourMYT = mytNow.getUTCHours();
+
     // Build date range
     const dates = getDateRange(fromDate, toDate);
 
@@ -378,6 +408,21 @@ export async function GET(request: NextRequest) {
         orders: deliveryQROrders,
       },
       channelBreakdown,
+      accumulative: {
+        currentHour: currentHourMYT,
+        truncateAtCurrentHour,
+        hourly: Array.from({ length: 24 }, (_, h) => ({
+          hour: h,
+          current: {
+            revenue: Math.round(curHourly[h].revenue * 100) / 100,
+            orders: curHourly[h].orders,
+          },
+          previous: {
+            revenue: Math.round(prevHourly[h].revenue * 100) / 100,
+            orders: prevHourly[h].orders,
+          },
+        })),
+      },
       availableOutlets: allOutlets,
       targetsMeta,
       ...(warnings.length > 0 ? { warnings } : {}),
