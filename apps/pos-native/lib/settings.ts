@@ -52,6 +52,10 @@ export type BranchSettings = {
   einvoice_tin: string | null;
   einvoice_brn: string | null;
   einvoice_sst_no: string | null;
+  // Outlet default for the consolidated "ORDER" master/expo docket the D3
+  // prints on checkout (BO POS Settings → Kitchen Dockets). A till can still
+  // override locally — see lib/print-prefs.ts. null/absent → on.
+  print_master_docket: boolean | null;
 };
 
 /** Outlet master data for the receipt header (name + address + phone +

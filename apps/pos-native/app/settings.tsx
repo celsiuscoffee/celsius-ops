@@ -29,6 +29,8 @@ export default function SettingsScreen() {
   const setAllImageHeight = useGridPrefs((s) => s.setImageHeight);
   const loadGridPrefs = useGridPrefs((s) => s.load);
   const printMaster = usePrintPrefs((s) => s.printMaster);
+  const printOverride = usePrintPrefs((s) => s.override);
+  const printOutletDefault = usePrintPrefs((s) => s.outletDefault);
   const setPrintMaster = usePrintPrefs((s) => s.setPrintMaster);
   const loadPrintPrefs = usePrintPrefs((s) => s.load);
 
@@ -115,7 +117,7 @@ export default function SettingsScreen() {
           {/* ── Kitchen docket routing (device-local) ── */}
           <Card title="Kitchen Dockets" Icon={FileText}>
             <Text className="text-cream/45 text-[11px] mb-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-              With LAN station printers set up (Bar / Kitchen), each prints its own items. This controls the consolidated copy on the D3. Saved on this terminal.
+              With LAN station printers set up (Bar / Kitchen), each prints its own items. This controls the consolidated copy on the D3. The default is set in Backoffice → POS Settings; toggle here to override on this till only.
             </Text>
             <ToggleRow
               label="Counter master docket"
@@ -125,6 +127,13 @@ export default function SettingsScreen() {
               value={printMaster}
               onToggle={() => { Haptics.selectionAsync(); setPrintMaster(!printMaster); }}
             />
+            {printOverride !== null && (
+              <Pressable onPress={() => { Haptics.selectionAsync(); setPrintMaster(null); }} className="mt-1 self-start">
+                <Text className="text-cream/70 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                  Overriding outlet default ({printOutletDefault ? "On" : "Off"}) · Tap to follow outlet
+                </Text>
+              </Pressable>
+            )}
           </Card>
 
           {/* ── All-tab menu layout (device-local, editable here) ── */}

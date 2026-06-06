@@ -308,6 +308,13 @@ export default function Register() {
     return () => { offOnline(); offPending(); };
   }, []);
 
+  // Feed the BO-managed outlet default for the counter master docket
+  // (pos_branch_settings.print_master_docket) into the per-till print prefs.
+  // A local override on this till still wins; reacts to backoffice edits live.
+  useEffect(() => {
+    usePrintPrefs.getState().setOutletDefault(settings?.print_master_docket !== false);
+  }, [settings?.print_master_docket]);
+
   // Drop any selected-table detail when the panel closes or switches tab.
   useEffect(() => { if (hub !== "tables") setSelectedTable(null); }, [hub]);
 

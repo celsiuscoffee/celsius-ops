@@ -51,6 +51,9 @@ type Settings = {
   // Visual floor-plan table layout: floors, each with positioned tables.
   // The POS register renders the same positions; see table-layout-editor.tsx.
   table_layout:            Floor[] | null;
+  // Outlet default for the consolidated "ORDER" master/expo docket the D3
+  // prints on checkout (a till may override locally). Default on.
+  print_master_docket:     boolean | null;
 };
 
 // Labels come from the shared registry so every app reads the same
@@ -367,6 +370,22 @@ export default function POSSettingsPage() {
               <p className="whitespace-pre-wrap text-xs font-semibold text-[#160800]">{editing.receipt_promo_text}</p>
             </div>
           )}
+        </Section>
+
+        {/* Kitchen dockets */}
+        <Section title="Kitchen Dockets" Icon={FileText}>
+          <Toggle
+            checked={editing.print_master_docket !== false}
+            onChange={(v) => update("print_master_docket", v)}
+            label="Counter master docket (full-order expo slip)"
+          />
+          <p className="text-[11px] text-gray-500 -mt-1">
+            When on, each till prints the whole order as a consolidated counter/expo
+            slip on its built-in printer, on top of the per-station kitchen dockets.
+            Turn off if the customer receipt + station dockets are enough. The
+            customer receipt and station dockets are unaffected either way. A till
+            can still override this locally in its own Settings.
+          </p>
         </Section>
 
         {/* Payment terminals — kept simple; full integrations live in Settings → Integrations */}

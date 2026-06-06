@@ -84,6 +84,9 @@ export async function PUT(request: NextRequest) {
     "grab_open_24h",
     // Table layout (named zones → table labels) for the register Tables panel.
     "table_layout",
+    // Kitchen dockets — outlet default for the consolidated "ORDER" master/expo
+    // slip the D3 prints (a till can still override locally).
+    "print_master_docket",
   ] as const;
   const updates: Record<string, unknown> = { outlet_id: body.outlet_id, updated_at: new Date().toISOString() };
   for (const k of allowed) if (k in body) updates[k] = body[k];
