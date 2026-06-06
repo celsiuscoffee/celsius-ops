@@ -52,6 +52,8 @@ function brandFontFamily(): string {
 export type StickerOpts = {
   url: string; label: string; seats: number | null; outletLine: string; foot: string;
   stickerWcm: number; // finished width in cm (height auto = 2×)
+  marks?: boolean;    // default true = production (bleed + crop marks + die-cut + caption);
+                      // false = design only at the actual finished size, no marks/wording
 };
 
 type Assets = { degc: HTMLImageElement; qr: HTMLImageElement; fam: string };
@@ -66,26 +68,14 @@ function strokeIcon(ctx: CanvasRenderingContext2D, paths: string[], circle: bool
   ctx.restore();
 }
 
-/** Pure draw — paints one full production sticker onto ctx sized to the page. */
-function drawSticker(ctx: CanvasRenderingContext2D, opts: StickerOpts, a: Assets) {
-  const DPI = 300;
-  const MM = (mm: number) => Math.round((mm / 25.4) * DPI);
-  const trimW = MM(opts.stickerWcm * 10), trimH = MM(opts.stickerWcm * 20);
-  const S = trimW / 1080;
-  const P = (v: number) => Math.round(v * S);
-  const BLEED = MM(3), SLUG = MM(10), SLUG_BOT = MM(22), RAD = MM(8);
-  const bw = trimW + 2 * BLEED, bh = trimH + 2 * BLEED;
-  const pageW = bw + 2 * SLUG, pageH = bh + SLUG + SLUG_BOT;
-  const tx = SLUG + BLEED, ty = SLUG + BLEED; // trim origin on the page
+/** Draw the card artwork (espresso-filled) at (ox,oy) in trim space. */
+function drawCard(ctx: CanvasRenderingContext2D, ox: number, oy: number, trimW: number, P: (v: number) => number, opts: StickerOpts, a: Assets) {
   const fam = a.fam;
   const font = (w: number, px: number) => { ctx.font = `${w} ${px}px ${fam}`; };
-
-  // page + bleed
-  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, pageW, pageH);
-  ctx.fillStyle = BG; ctx.fillRect(SLUG, SLUG, bw, bh);
+  ctx.fillStyle = BG; ctx.fillRect(ox, oy, trimW, trimW * 2);
 
   ctx.save();
-  ctx.translate(tx, ty); // now draw in trim space (0..trimW, 0..trimH)
+  ctx.translate(ox, oy);
   ctx.textBaseline = "top"; ctx.textAlign = "left";
 
   // °C mark (top-right)
@@ -151,7 +141,35 @@ function drawSticker(ctx: CanvasRenderingContext2D, opts: StickerOpts, a: Assets
   badge(P(92), USERS_PATHS, true, seat);
   badge(P(92) + bwd + gap, SANDWICH_PATHS, false, opts.foot);
 
-  ctx.restore(); // back to page space
+  ctx.restore();
+}
+
+/** Paints one sticker onto ctx. marks=false → design only at the actual finished
+ *  size (no bleed/crop/die-cut/caption); marks=true → full print-production page. */
+function drawSticker(ctx: CanvasRenderingContext2D, opts: StickerOpts, a: Assets) {
+  const DPI = 300;
+  const MM = (mm: number) => Math.round((mm / 25.4) * DPI);
+  const trimW = MM(opts.stickerWcm * 10), trimH = MM(opts.stickerWcm * 20);
+  const S = trimW / 1080;
+  const P = (v: number) => Math.round(v * S);
+  const fam = a.fam;
+  const font = (w: number, px: number) => { ctx.font = `${w} ${px}px ${fam}`; };
+
+  // Design only — just the artwork at the actual finished size.
+  if (opts.marks === false) {
+    drawCard(ctx, 0, 0, trimW, P, opts, a);
+    return { pageW: trimW, pageH: trimH };
+  }
+
+  // Print-production page: bleed + crop marks + die-cut + spec caption.
+  const BLEED = MM(3), SLUG = MM(10), SLUG_BOT = MM(22), RAD = MM(8);
+  const bw = trimW + 2 * BLEED, bh = trimH + 2 * BLEED;
+  const pageW = bw + 2 * SLUG, pageH = bh + SLUG + SLUG_BOT;
+  const tx = SLUG + BLEED, ty = SLUG + BLEED; // trim origin on the page
+
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, pageW, pageH);
+  ctx.fillStyle = BG; ctx.fillRect(SLUG, SLUG, bw, bh); // espresso bleed
+  drawCard(ctx, tx, ty, trimW, P, opts, a);
 
   // crop marks
   ctx.strokeStyle = "#000"; ctx.lineWidth = 2;

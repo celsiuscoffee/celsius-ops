@@ -133,12 +133,25 @@ const stickerPage = (trimW: number) => ({
   pageH: trimW * 2 + 2 * ORIGIN + CAP_CM,
 });
 
-/** One print-ready sticker: full-bleed art + crop marks + magenta die-cut line + spec. */
+/** One sticker page. marks=false → design only at the actual finished size
+ *  (no bleed/crop/die-cut/caption); marks=true → full print-production page. */
 function StickerPage({
-  qr, label, seats, outletLine, foot, trimW,
-}: { qr: string; label: string; seats: number | null; outletLine: string; foot: string; trimW: number }) {
+  qr, label, seats, outletLine, foot, trimW, marks,
+}: { qr: string; label: string; seats: number | null; outletLine: string; foot: string; trimW: number; marks: boolean }) {
   const trimH = trimW * 2;
   const o = ORIGIN;
+
+  if (!marks) {
+    // design only — page IS the trim; card fills it, no marks/wording
+    return (
+      <div className="sticker" style={{ width: cm(trimW), height: cm(trimH), background: BG, overflow: "hidden" }}>
+        <div style={{ ["--card-w" as string]: cm(trimW) } as CSSProperties}>
+          <DesignedCard qr={qr} label={label} seats={seats} outletLine={outletLine} foot={foot} radius={0} />
+        </div>
+      </div>
+    );
+  }
+
   const { pageW, pageH } = stickerPage(trimW);
   const mark = { position: "absolute" as const, background: "#000" };
   const h = (x: number, y: number) => ({ ...mark, left: cm(x), top: cm(y), width: cm(MARK_CM), height: "0.3mm" });
@@ -178,6 +191,7 @@ export default function POSTableQRPage() {
   const [view, setView] = useState<View>("designed");
   const [foot, setFoot] = useState("NO OUTSIDE FOOD");
   const [stickerW, setStickerW] = useState(10); // finished width in cm; height auto = 2×
+  const [marks, setMarks] = useState(true); // true = print-production; false = design only, actual size
   const [zipBusy, setZipBusy] = useState<{ done: number; total: number } | null>(null);
   const [qrMap, setQrMap] = useState<Record<string, string>>({});
   const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
@@ -260,7 +274,7 @@ export default function POSTableQRPage() {
       for (let i = 0; i < tables.length; i++) {
         const label = tables[i];
         const blob = await renderStickerBlob(
-          { url: buildTableUrl(storeId, label), label, seats: seatsOf(label), outletLine: outlet.line, foot, stickerWcm: stickerW },
+          { url: buildTableUrl(storeId, label), label, seats: seatsOf(label), outletLine: outlet.line, foot, stickerWcm: stickerW, marks },
           degc, fam,
         );
         const nn = /^\d+$/.test(label) ? label.padStart(2, "0") : label;
@@ -268,7 +282,8 @@ export default function POSTableQRPage() {
         setZipBusy({ done: i + 1, total: tables.length });
       }
       const safe = outletName.replace(/[^\w]+/g, "-");
-      downloadBlob(makeZip(files), `Celsius-Stickers-${safe}-${stickerW}x${stickerW * 2}cm.zip`);
+      const kind = marks ? "print" : "design";
+      downloadBlob(makeZip(files), `Celsius-Stickers-${safe}-${stickerW}x${stickerW * 2}cm-${kind}.zip`);
     } catch (e) {
       console.error("Sticker ZIP export failed", e);
       alert("Sorry — the PNG export hit an error. Please try again.");
@@ -296,7 +311,7 @@ export default function POSTableQRPage() {
             view === "designed"
               ? `
 @media print {
-  @page { size: ${stickerPage(stickerW).pageW.toFixed(2)}cm ${stickerPage(stickerW).pageH.toFixed(2)}cm; margin: 0; }
+  @page { size: ${(marks ? stickerPage(stickerW).pageW : stickerW).toFixed(2)}cm ${(marks ? stickerPage(stickerW).pageH : stickerW * 2).toFixed(2)}cm; margin: 0; }
   body { background: #fff !important; }
   /* Force the espresso fill + cream text to print even when the dialog's
      "Background graphics" is OFF (its default). Without this the card prints blank. */
@@ -388,6 +403,17 @@ export default function POSTableQRPage() {
           </div>
         )}
 
+        {/* Output type (designed only): production vs. design-only */}
+        {view === "designed" && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">Output</label>
+            <label className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm cursor-pointer select-none">
+              <input type="checkbox" checked={marks} onChange={(e) => setMarks(e.target.checked)} className="accent-[#A2492C]" />
+              <span className="whitespace-nowrap">Print marks <span className="text-gray-400">(bleed, crop, die-cut)</span></span>
+            </label>
+          </div>
+        )}
+
         {/* Source: floor plan (auto) vs. manual fallback */}
         {loadingLayout ? (
           <div className="text-sm text-gray-400">Loading floor plan…</div>
@@ -449,12 +475,23 @@ export default function POSTableQRPage() {
 
       {view === "designed" && show && (
         <p className="text-xs text-gray-500 print:hidden">
-          <span className="font-semibold">Print all → Save as PDF</span> gives the print-company file: each sticker on its
-          own page at <span className="font-semibold">{stickerW} × {stickerW * 2} cm</span> with 3 mm bleed, crop marks, a
-          magenta die-cut line (rounded R8 mm) and a spec caption. In the print dialog set Margins = <span className="font-semibold">None</span>,
-          Scale = <span className="font-semibold">100%</span>, and <span className="font-semibold">Background graphics = On</span> (under
-          “More settings”) so the dark fill prints. Or <span className="font-semibold">Export PNG (ZIP)</span> — all stickers as
-          300 DPI PNGs (bleed + crop marks + die-cut) in one zip to send the printer. Capacity badge follows each table&rsquo;s seat count automatically.
+          {marks ? (
+            <>
+              <span className="font-semibold">Export PNG (ZIP)</span> or <span className="font-semibold">Print → Save as PDF</span> give the
+              print-company file: each sticker at <span className="font-semibold">{stickerW} × {stickerW * 2} cm</span> with 3 mm bleed, crop marks,
+              a magenta die-cut line (R8 mm) and a spec caption. For Print, set Margins = <span className="font-semibold">None</span>,
+              Scale = <span className="font-semibold">100%</span>, <span className="font-semibold">Background graphics = On</span>. Untick
+              <span className="font-semibold"> Print marks</span> for design-only artwork at the exact finished size (no lines/wording).
+            </>
+          ) : (
+            <>
+              <span className="font-semibold">Design only.</span> Each sticker is the artwork at the exact{" "}
+              <span className="font-semibold">{stickerW} × {stickerW * 2} cm</span> finished size — no bleed, crop marks, die-cut line or caption.
+              <span className="font-semibold"> Export PNG (ZIP)</span> to send the printer (PNGs always carry the dark fill). Tick
+              <span className="font-semibold"> Print marks</span> to add bleed + crop marks + die-cut.
+            </>
+          )}{" "}
+          Capacity badge follows each table&rsquo;s seat count automatically.
         </p>
       )}
 
@@ -495,6 +532,7 @@ export default function POSTableQRPage() {
               outletLine={outlet.line}
               foot={foot}
               trimW={stickerW}
+              marks={marks}
             />
           ))}
         </div>
