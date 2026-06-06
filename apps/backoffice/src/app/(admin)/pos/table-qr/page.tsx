@@ -68,8 +68,8 @@ function Badge({ icon, text }: { icon: ReactNode; text: string }) {
 
 /** The brand "Scan & Order" table card — faithful HTML/CSS port of the PIL template. */
 function DesignedCard({
-  qr, label, seats, outletLine, foot,
-}: { qr: string; label: string; seats: number | null; outletLine: string; foot: string }) {
+  qr, label, seats, outletLine, foot, radius = 16,
+}: { qr: string; label: string; seats: number | null; outletLine: string; foot: string; radius?: number }) {
   const title = tableTitle(label);
   const seatText = seats ? `TABLE FOR ${seats}` : "FIND A SEAT";
   return (
@@ -77,7 +77,7 @@ function DesignedCard({
       className="tcard"
       style={{
         width: "var(--card-w)", height: "calc(var(--card-w) * 2)", containerType: "size",
-        position: "relative", background: BG, color: CREAM, overflow: "hidden", borderRadius: 16,
+        position: "relative", background: BG, color: CREAM, overflow: "hidden", borderRadius: radius,
         fontFamily: "var(--font-space-grotesk), system-ui, sans-serif", flexShrink: 0,
       }}
     >
@@ -119,6 +119,54 @@ function DesignedCard({
   );
 }
 
+// ── Print-production geometry (mm/cm), matches print_stickers.py ──
+const BLEED_CM = 0.3;   // 3 mm background bleed past the trim
+const SLUG_CM = 0.8;    // white margin holding the crop marks
+const MARK_CM = 0.5;    // crop-mark length
+const CAP_CM = 1.2;     // extra bottom room for the spec caption
+const ORIGIN = SLUG_CM + BLEED_CM; // trim origin from page edge
+const DIE_RADIUS = "8mm";
+const cm = (n: number) => `${+n.toFixed(3)}cm`;
+const stickerPage = (trimW: number) => ({
+  pageW: trimW + 2 * ORIGIN,
+  pageH: trimW * 2 + 2 * ORIGIN + CAP_CM,
+});
+
+/** One print-ready sticker: full-bleed art + crop marks + magenta die-cut line + spec. */
+function StickerPage({
+  qr, label, seats, outletLine, foot, trimW,
+}: { qr: string; label: string; seats: number | null; outletLine: string; foot: string; trimW: number }) {
+  const trimH = trimW * 2;
+  const o = ORIGIN;
+  const { pageW, pageH } = stickerPage(trimW);
+  const mark = { position: "absolute" as const, background: "#000" };
+  const h = (x: number, y: number) => ({ ...mark, left: cm(x), top: cm(y), width: cm(MARK_CM), height: "0.3mm" });
+  const v = (x: number, y: number) => ({ ...mark, left: cm(x), top: cm(y), width: "0.3mm", height: cm(MARK_CM) });
+  return (
+    <div className="sticker" style={{ position: "relative", width: cm(pageW), height: cm(pageH), background: "#fff" }}>
+      {/* espresso bleed */}
+      <div style={{ position: "absolute", left: cm(SLUG_CM), top: cm(SLUG_CM), width: cm(trimW + 2 * BLEED_CM), height: cm(trimH + 2 * BLEED_CM), background: BG }} />
+      {/* card art at trim */}
+      <div style={{ position: "absolute", left: cm(o), top: cm(o), ["--card-w" as string]: cm(trimW) } as CSSProperties}>
+        <DesignedCard qr={qr} label={label} seats={seats} outletLine={outletLine} foot={foot} radius={0} />
+      </div>
+      {/* die-cut path (magenta, rounded) */}
+      <div style={{ position: "absolute", left: cm(o), top: cm(o), width: cm(trimW), height: cm(trimH), border: "0.3mm solid #ff00ff", borderRadius: DIE_RADIUS, boxSizing: "border-box", pointerEvents: "none" }} />
+      {/* crop marks (start at bleed edge, extend into the slug) */}
+      <div style={h(o - BLEED_CM - MARK_CM, o)} /><div style={v(o, o - BLEED_CM - MARK_CM)} />
+      <div style={h(o + trimW + BLEED_CM, o)} /><div style={v(o + trimW, o - BLEED_CM - MARK_CM)} />
+      <div style={h(o - BLEED_CM - MARK_CM, o + trimH)} /><div style={v(o, o + trimH + BLEED_CM)} />
+      <div style={h(o + trimW + BLEED_CM, o + trimH)} /><div style={v(o + trimW, o + trimH + BLEED_CM)} />
+      {/* spec caption */}
+      <div style={{ position: "absolute", left: 0, top: cm(o + trimH + 0.4), width: "100%", textAlign: "center", fontFamily: "var(--font-space-grotesk)", lineHeight: 1.5 }}>
+        <div style={{ fontSize: "7pt", fontWeight: 600, color: "#555" }}>CELSIUS — SCAN &amp; ORDER TABLE STICKER · {outletLine} · {tableTitle(label)}</div>
+        <div style={{ fontSize: "6.5pt", color: "#888" }}>Finished {trimW} × {trimH} cm · Bleed 3 mm · Die-cut rounded corners R8 mm · 300 DPI</div>
+        <div style={{ fontSize: "6.5pt", color: "#c07ab0" }}>Magenta line = die-cut path (non-printing). Background is full-bleed — trim on crop marks.</div>
+      </div>
+    </div>
+  );
+}
+
 export default function POSTableQRPage() {
   const [selectedOutlet, setSelectedOutlet] = useState<string>(OUTLETS[0].id);
   const [storeId, setStoreId] = useState<string>("");
@@ -128,6 +176,7 @@ export default function POSTableQRPage() {
   const [generated, setGenerated] = useState(false);
   const [view, setView] = useState<View>("designed");
   const [foot, setFoot] = useState("NO OUTSIDE FOOD");
+  const [stickerW, setStickerW] = useState(10); // finished width in cm; height auto = 2×
   const [qrMap, setQrMap] = useState<Record<string, string>>({});
   const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
 
@@ -210,17 +259,23 @@ export default function POSTableQRPage() {
 
   return (
     <div className="p-3 sm:p-6 space-y-5 max-w-6xl">
-      {/* Print rules: one designed tent card per page; plain grid keeps its sheet. */}
+      {/* Print rules. Designed view → one print-ready sticker per page (page sized
+          to the chosen sticker + bleed + crop-mark slug). Plain view → A4 sheet. */}
       <style
         dangerouslySetInnerHTML={{
-          __html: `
+          __html:
+            view === "designed"
+              ? `
+@media print {
+  @page { size: ${stickerPage(stickerW).pageW.toFixed(2)}cm ${stickerPage(stickerW).pageH.toFixed(2)}cm; margin: 0; }
+  body { background: #fff !important; }
+  .sticker { page-break-after: always; break-after: page; box-shadow: none !important; }
+  .sticker:last-child { page-break-after: auto; break-after: auto; }
+}`
+              : `
 @media print {
   @page { size: A4 portrait; margin: 1cm; }
   body { background: #fff !important; }
-  .tqr-designed .tcard-page { display: flex !important; align-items: center; justify-content: center;
-    page-break-after: always; break-after: page; height: auto; }
-  .tqr-designed .tcard-page:last-child { page-break-after: auto; break-after: auto; }
-  .tqr-designed .tcard { --card-w: 11cm !important; border-radius: 0 !important; box-shadow: none !important; }
 }`,
         }}
       />
@@ -282,6 +337,25 @@ export default function POSTableQRPage() {
           </div>
         )}
 
+        {/* Sticker size (designed only) — drives the print-ready output */}
+        {view === "designed" && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">Sticker width (cm)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={5}
+                max={20}
+                step={0.5}
+                value={stickerW}
+                onChange={(e) => setStickerW(Math.max(5, Math.min(20, Number(e.target.value) || 10)))}
+                className="w-20 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none"
+              />
+              <span className="text-xs text-gray-500 whitespace-nowrap">= {stickerW} × {stickerW * 2} cm finished</span>
+            </div>
+          </div>
+        )}
+
         {/* Source: floor plan (auto) vs. manual fallback */}
         {loadingLayout ? (
           <div className="text-sm text-gray-400">Loading floor plan…</div>
@@ -329,8 +403,10 @@ export default function POSTableQRPage() {
 
       {view === "designed" && show && (
         <p className="text-xs text-gray-500 print:hidden">
-          Print all → in the print dialog choose <span className="font-semibold">Save as PDF</span> for a print-ready file
-          (one tent card per page). Cards size to the table&rsquo;s seat count automatically.
+          <span className="font-semibold">Print all → Save as PDF</span> gives the print-company file: each sticker on its
+          own page at <span className="font-semibold">{stickerW} × {stickerW * 2} cm</span> with 3 mm bleed, crop marks, a
+          magenta die-cut line (rounded R8 mm) and a spec caption. In the print dialog set Margins = <span className="font-semibold">None</span> and
+          Scale = <span className="font-semibold">100%</span>. Capacity badge follows each table&rsquo;s seat count automatically.
         </p>
       )}
 
@@ -342,9 +418,9 @@ export default function POSTableQRPage() {
         </p>
       )}
 
-      {/* Designed cards */}
+      {/* Designed cards — on-screen preview (hidden in print; the sticker block prints) */}
       {view === "designed" && show && (
-        <div className="tqr-designed flex flex-wrap gap-6" style={{ "--card-w": "300px" } as CSSProperties}>
+        <div className="tqr-designed flex flex-wrap gap-6 print:hidden" style={{ "--card-w": "300px" } as CSSProperties}>
           {tables.map((label) => (
             <div key={label} className="tcard-page">
               <DesignedCard
@@ -355,6 +431,23 @@ export default function POSTableQRPage() {
                 foot={foot}
               />
             </div>
+          ))}
+        </div>
+      )}
+
+      {/* Print-only: one print-ready sticker per page (bleed + crop marks + die-cut line) */}
+      {view === "designed" && show && (
+        <div className="hidden print:block">
+          {tables.map((label) => (
+            <StickerPage
+              key={label}
+              qr={qrMap[label] ?? ""}
+              label={label}
+              seats={seatsOf(label)}
+              outletLine={outlet.line}
+              foot={foot}
+              trimW={stickerW}
+            />
           ))}
         </div>
       )}
