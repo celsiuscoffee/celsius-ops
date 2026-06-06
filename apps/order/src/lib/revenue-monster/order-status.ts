@@ -92,7 +92,11 @@ export async function markRmOrderPaid(
       status: nextStatus,
       payment_provider_ref: transactionId,
     } as Record<string, unknown>)
-    .eq("status", "pending");
+    // A paid event must settle the order even if a stale/abandoned checkout
+    // — or the expire-orders cron — already flipped it to "failed". Money
+    // received always wins. Still a no-op for already-settled rows
+    // (preparing/paid), so duplicate deliveries don't re-earn points.
+    .in("status", ["pending", "failed"]);
   const filtered = orderNumberOrId.orderId
     ? base.eq("id", orderNumberOrId.orderId)
     : base.eq("order_number", orderNumberOrId.orderNumber!);
@@ -158,7 +162,11 @@ export async function markRmOrderFailed(
   const supabase = getSupabaseAdmin();
   const base = supabase
     .from("orders")
-    .update({ status: "failed" } as Record<string, unknown>);
+    .update({ status: "failed" } as Record<string, unknown>)
+    // Only a still-"pending" order may be failed. A stale/abandoned checkout
+    // or a late FAILED webhook must NEVER knock a paid/preparing order back to
+    // failed — that conflation was the double-charge / no-order root cause.
+    .eq("status", "pending");
   const filtered = orderNumberOrId.orderId
     ? base.eq("id", orderNumberOrId.orderId)
     : base.eq("order_number", orderNumberOrId.orderNumber!);

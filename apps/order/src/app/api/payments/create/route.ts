@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { createPayment } from "@/lib/revenue-monster/client";
+import { createPayment, queryCheckoutStatus } from "@/lib/revenue-monster/client";
+import { markRmOrderPaid } from "@/lib/revenue-monster/order-status";
 import type { OrderRow } from "@/lib/supabase/types";
 
 export async function POST(request: NextRequest) {
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("orders")
-      .select("id, order_number, store_id, total")
+      .select("id, order_number, store_id, total, status, payment_checkout_id")
       .eq("id", orderId)
       .single();
 
@@ -35,7 +36,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const order = data as Pick<OrderRow, "id" | "order_number" | "store_id" | "total">;
+    const order = data as Pick<OrderRow, "id" | "order_number" | "store_id" | "total"> & {
+      status: string;
+      payment_checkout_id: string | null;
+    };
+
+    // Double-payment guard. Never mint a second checkout for an order that is
+    // already settled — that's how C-0937 got charged on DuitNow *and* TNG.
+    if (order.status !== "pending" && order.status !== "failed") {
+      return NextResponse.json(
+        { error: "This order has already been paid.", alreadyPaid: true, status: order.status },
+        { status: 409 },
+      );
+    }
+    // Still pending/failed, but a prior checkout may have already succeeded at RM
+    // with its confirmation dropped. Ask RM before charging again.
+    if (order.payment_checkout_id) {
+      try {
+        const prev = await queryCheckoutStatus(order.payment_checkout_id);
+        if (prev.status === "SUCCESS") {
+          const settled = await markRmOrderPaid({ orderId: order.id }, prev.transactionId);
+          return NextResponse.json(
+            {
+              error: "This order has already been paid.",
+              alreadyPaid: true,
+              status: settled?.scheduled ? "paid" : "preparing",
+            },
+            { status: 409 },
+          );
+        }
+      } catch {
+        /* RM query failed — fall through and let the customer try a fresh checkout */
+      }
+    }
     // .trim() guards against accidental trailing newlines in the
     // Vercel env var textarea — without it the resulting notifyUrl
     // would contain a \n and RM rejects with "The notifyUrl format

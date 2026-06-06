@@ -54,6 +54,12 @@ if (SERVER_PUBLIC_KEY) {
 
 // ─── Token cache ──────────────────────────────────────────────────────────────
 
+// Every RM call is a bare fetch; a single hung request must never wedge a
+// caller. The expire cron loops over many queryCheckoutStatus calls and the
+// create-guard re-poll sits in the customer's checkout path, so abort any RM
+// request that stalls past RM_TIMEOUT_MS. 8s is generous for RM's API.
+const RM_TIMEOUT_MS = 8000;
+
 let _token: string | null = null;
 let _tokenExpiry = 0;
 
@@ -74,6 +80,7 @@ async function getToken(): Promise<string> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ grantType: "client_credentials" }),
+    signal: AbortSignal.timeout(RM_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -240,6 +247,7 @@ async function rmPost<T extends { code: string; item?: unknown }>(
       "X-Signature":  sig,
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(RM_TIMEOUT_MS),
   });
   return (await res.json()) as T;
 }
@@ -386,6 +394,7 @@ export async function queryCheckoutStatus(checkoutId: string): Promise<QueryChec
       "X-Timestamp":  timestamp,
       "X-Signature":  sig,
     },
+    signal: AbortSignal.timeout(RM_TIMEOUT_MS),
   });
   const data = (await res.json()) as {
     code:   string;
