@@ -11,6 +11,7 @@ export type Payment = { key: string; label: string; amount: number; pct: number 
 export type SalesDashboard = {
   outletId: string;
   outletName: string;
+  availableOutlets?: { id: string; name: string }[];
   mode: Mode;
   granularity: Granularity;
   cur: { from: string; to: string; label: string };

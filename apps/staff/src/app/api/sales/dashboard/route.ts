@@ -22,15 +22,49 @@ export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams;
   const mode = (sp.get("mode") || "day") as Mode;
   const isAdmin = user.role === "OWNER" || user.role === "ADMIN";
-  const outletId = (isAdmin && sp.get("outletId")) || user.outletId;
-  if (!outletId) return NextResponse.json({ error: "No outlet" }, { status: 400 });
+  const reqOutlet = sp.get("outletId");
+  // Admins default to "all" (overall) and may drill into one outlet; everyone
+  // else is locked to their assigned outlet (client param ignored).
+  const scope = isAdmin ? (reqOutlet || "all") : user.outletId;
+  if (!scope) return NextResponse.json({ error: "No outlet" }, { status: 400 });
 
-  const outlet = await prisma.outlet.findUnique({
-    where: { id: outletId },
-    select: { id: true, name: true, pickupStoreId: true },
-  });
-  if (!outlet) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
-  const storeId = outlet.pickupStoreId; // orders.store_id; may be null
+  let outletIds: string[] = [];
+  let storeIds: string[] = [];
+  let outletName = "";
+  let scopeId = "";
+  let availableOutlets: { id: string; name: string }[] = [];
+
+  if (isAdmin) {
+    const all = await prisma.outlet.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true, name: true, pickupStoreId: true },
+      orderBy: { name: "asc" },
+    });
+    availableOutlets = all.map((o) => ({ id: o.id, name: o.name }));
+    if (scope === "all") {
+      outletIds = all.map((o) => o.id);
+      storeIds = all.map((o) => o.pickupStoreId).filter((s): s is string => !!s);
+      outletName = "All outlets";
+      scopeId = "all";
+    } else {
+      const o = all.find((x) => x.id === scope);
+      if (!o) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
+      outletIds = [o.id];
+      storeIds = o.pickupStoreId ? [o.pickupStoreId] : [];
+      outletName = o.name;
+      scopeId = o.id;
+    }
+  } else {
+    const o = await prisma.outlet.findUnique({
+      where: { id: scope },
+      select: { id: true, name: true, pickupStoreId: true },
+    });
+    if (!o) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
+    outletIds = [o.id];
+    storeIds = o.pickupStoreId ? [o.pickupStoreId] : [];
+    outletName = o.name;
+    scopeId = o.id;
+  }
 
   const { cur, prev, granularity } = rangesForMode(mode, sp.get("from"), sp.get("to"));
   const today = getMYTToday();
@@ -45,25 +79,25 @@ export async function GET(req: NextRequest) {
     supabaseAdmin
       .from("pos_orders")
       .select("id, created_at, subtotal, total, status, order_type, source, customer_phone, refund_of_order_id")
-      .eq("outlet_id", outletId)
+      .in("outlet_id", outletIds)
       .gte("created_at", winStart).lte("created_at", winEnd)
       .limit(20000),
-    storeId
+    storeIds.length
       ? supabaseAdmin
           .from("orders")
           .select("id, created_at, subtotal, total, status, order_type, customer_phone, payment_method")
-          .eq("store_id", storeId)
+          .in("store_id", storeIds)
           .gte("created_at", winStart).lte("created_at", winEnd)
           .limit(20000)
       : Promise.resolve({ data: [], error: null }),
     supabaseAdmin
       .from("pos_orders").select("customer_phone")
-      .eq("outlet_id", outletId).lt("created_at", priorCut)
+      .in("outlet_id", outletIds).lt("created_at", priorCut)
       .not("customer_phone", "is", null).limit(50000),
-    storeId
+    storeIds.length
       ? supabaseAdmin
           .from("orders").select("customer_phone")
-          .eq("store_id", storeId).lt("created_at", priorCut)
+          .in("store_id", storeIds).lt("created_at", priorCut)
           .not("customer_phone", "is", null).limit(50000)
       : Promise.resolve({ data: [], error: null }),
   ]);
@@ -205,8 +239,9 @@ export async function GET(req: NextRequest) {
   const prevShare = prevOrd ? Math.round((prevAppOrd / prevOrd) * 100) : 0;
 
   return NextResponse.json({
-    outletId: outlet.id,
-    outletName: outlet.name,
+    outletId: scopeId,
+    outletName,
+    availableOutlets,
     mode,
     granularity,
     cur: { ...cur, label: labelFor(mode, "cur") },
