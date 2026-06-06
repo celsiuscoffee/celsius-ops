@@ -23,13 +23,13 @@ export async function GET(req: NextRequest) {
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
   const companyId = url.searchParams.get("companyId") ?? (await getActiveCompanyId());
-  const limit = Math.min(Number(url.searchParams.get("limit") ?? "100"), 500);
+  const limit = Math.min(Number(url.searchParams.get("limit") ?? "1000"), 5000);
 
   const client = getFinanceClient();
   let q = client
     .from("fin_transactions")
     .select(
-      "id, txn_date, description, outlet_id, amount, currency, txn_type, posted_by_agent, agent_version, confidence, status, posted_at, period, source_doc_id, company_id"
+      "id, txn_date, description, outlet_id, amount, currency, txn_type, posted_by_agent, agent_version, confidence, status, posted_at, period, source_doc_id, company_id, fin_journal_lines(account_code)"
     )
     .eq("company_id", companyId)
     .order("txn_date", { ascending: false })
@@ -45,7 +45,13 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Hydrate outlet names from Prisma (Supabase JS can't easily join Prisma-managed tables).
-  const outletIds = Array.from(new Set((data ?? []).map((r) => r.outlet_id).filter(Boolean))) as string[];
+  const rows = (data ?? []) as Array<
+    Record<string, unknown> & {
+      outlet_id: string | null;
+      fin_journal_lines?: Array<{ account_code: string }> | null;
+    }
+  >;
+  const outletIds = Array.from(new Set(rows.map((r) => r.outlet_id).filter(Boolean))) as string[];
   const outlets = outletIds.length
     ? await prisma.outlet.findMany({
         where: { id: { in: outletIds } },
@@ -55,9 +61,11 @@ export async function GET(req: NextRequest) {
   const outletMap = new Map(outlets.map((o) => [o.id, o]));
 
   return NextResponse.json({
-    transactions: (data ?? []).map((r) => ({
-      ...r,
-      outlet: r.outlet_id ? outletMap.get(r.outlet_id as string) ?? null : null,
+    transactions: rows.map(({ fin_journal_lines, ...rest }) => ({
+      ...rest,
+      // distinct account codes this journal touches — drives the category filter
+      accounts: Array.from(new Set((fin_journal_lines ?? []).map((l) => l.account_code))).sort(),
+      outlet: rest.outlet_id ? outletMap.get(rest.outlet_id) ?? null : null,
     })),
   });
 }

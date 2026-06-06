@@ -360,7 +360,7 @@ const NAV_SECTIONS: NavSection[] = [
       // OWNER/ADMIN regardless of moduleAccess, so the section won't render
       // in the rail for managers/staff.
       { label: "Home", href: "/finance", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "finance:home" },
-      { label: "Transactions", href: "/finance/transactions", icon: <FileText className={ICON_SIZE} />, moduleKey: "finance:transactions" },
+      { label: "Ledger", href: "/finance/transactions", icon: <FileText className={ICON_SIZE} />, moduleKey: "finance:transactions" },
       { label: "Inbox", href: "/finance/inbox", icon: <Inbox className={ICON_SIZE} />, moduleKey: "finance:inbox" },
       { label: "Reports", href: "/finance/reports", icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "finance:reports" },
       { label: "Compliance", href: "/finance/compliance", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "finance:compliance" },

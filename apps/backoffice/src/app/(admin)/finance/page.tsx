@@ -38,7 +38,7 @@ const RM = (n: number) =>
   new Intl.NumberFormat("en-MY", { style: "currency", currency: "MYR" }).format(n);
 
 const QUICK_LINKS = [
-  { href: "/finance/transactions", icon: Banknote, label: "Transactions" },
+  { href: "/finance/transactions", icon: Banknote, label: "Ledger" },
   { href: "/finance/inbox", icon: Inbox, label: "Inbox" },
   { href: "/finance/reports", icon: TrendingUp, label: "Reports" },
   { href: "/finance/compliance", icon: ShieldCheck, label: "Compliance" },
