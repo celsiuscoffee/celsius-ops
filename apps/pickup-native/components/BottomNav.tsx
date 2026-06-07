@@ -6,7 +6,8 @@ import * as Haptics from "@/lib/haptics";
 import { useQuery } from "@tanstack/react-query";
 import { CelsiusCup } from "./brand/CelsiusCup";
 import { useApp } from "../lib/store";
-import { fetchMyVouchers, fetchClaimableVouchers, countRewardsWaiting } from "../lib/rewards-v2";
+import { fetchMyVouchers, fetchClaimableVouchers, countRewardsWaiting, countAffordableRewards } from "../lib/rewards-v2";
+import { fetchRewards } from "../lib/rewards";
 
 type Tab = {
   key: string;
@@ -35,11 +36,10 @@ export function BottomNav() {
   const pathname = usePathname();
 
   // Live count of REWARDS WAITING FOR THE CUSTOMER — drives the badge over
-  // the Gift icon. Uses the shared tally (countRewardsWaiting) so it matches
-  // the home-hero KPI and the web PWA exactly: every active wallet voucher
-  // (incl bean-shop purchases) + claimables (unrevealed mystery / admin
-  // pushes). Reads through React Query (cached app-wide, shared with the
-  // home + rewards screens).
+  // the Gift icon. Matches the home-hero KPI + web PWA exactly: wallet vouchers
+  // (mystery-bag / manual / birthday) + claimables (unrevealed mystery / admin
+  // pushes) + affordable redeemable catalogue items. Reads through React Query
+  // (cached app-wide, shared with the home + rewards screens).
   const phone = useApp((s) => s.phone);
   const walletQ = useQuery({
     queryKey: ["my-vouchers", phone ?? "anon"],
@@ -53,7 +53,19 @@ export function BottomNav() {
     enabled: !!phone,
     staleTime: 60_000,
   });
-  const rewardsCount = countRewardsWaiting(walletQ.data, claimableQ.data);
+  // Affordable redeemable catalogue — same query key as the home hero
+  // ("rewards-home"), so this reads the cache the home already populated rather
+  // than refetching. Lets the badge count affordable points-shop rewards on top
+  // of wallet + claimables, matching the home-hero KPI exactly.
+  const rewardsQ = useQuery({
+    queryKey: ["rewards-home", phone],
+    queryFn: () => fetchRewards(phone ?? null),
+    enabled: !!phone,
+    staleTime: 60_000,
+  });
+  const rewardsCount =
+    countRewardsWaiting(walletQ.data, claimableQ.data) +
+    countAffordableRewards(rewardsQ.data?.rewards, rewardsQ.data?.pointsBalance ?? 0);
 
   // Web: nav pins to viewport bottom via position:fixed so it
   // follows the user as they scroll. Body owns the scroll (so iOS

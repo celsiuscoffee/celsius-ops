@@ -206,10 +206,12 @@ export async function fetchClaimableVouchers(): Promise<ClaimableVoucher[]> {
 }
 
 // Canonical home-tile / nav-badge "Rewards" tally. Mirrors @celsius/shared
-// countRewardsWaiting — native can't depend on that server-leaning package, so
-// the rule is hand-synced here. Keep in lockstep: active WALLET-source vouchers
-// (mystery-bag / manual / birthday) PLUS claimables. Bean-shop + referral are
-// NOT wallet items; the affordable points-shop catalogue is NOT counted.
+// countRewardsWaiting + countAffordableRewards — native can't depend on that
+// server-leaning package, so the rules are hand-synced here. Keep in lockstep:
+// active WALLET-source vouchers (mystery-bag / manual / birthday) PLUS
+// claimables. Bean-shop + referral are NOT wallet items. The home "Rewards"
+// KPI ALSO counts affordable redeemable catalogue items (countAffordableRewards
+// below); the UNaffordable catalogue is never counted.
 const WALLET_COUNT_SOURCES = ["mystery", "manual", "birthday"];
 export function countRewardsWaiting(
   vouchers: ReadonlyArray<{ status?: string | null; source_type?: string | null }> | null | undefined,
@@ -221,6 +223,46 @@ export function countRewardsWaiting(
       WALLET_COUNT_SOURCES.includes(v.source_type ?? ""),
   ).length;
   return owned + (claimables?.length ?? 0);
+}
+
+// Mirrors @celsius/shared countAffordableRewards (keep in lockstep). A
+// redeemable catalogue reward "you can claim now" = active + affordable +
+// inside its valid window + in stock + under the per-member redemption cap +
+// pickup-capable. Added on top of countRewardsWaiting for the home "Rewards"
+// KPI so the count = wallet vouchers + claimables + affordable catalogue.
+export function countAffordableRewards(
+  rewards:
+    | ReadonlyArray<{
+        is_active?: boolean | null;
+        points_required?: number | null;
+        valid_from?: string | null;
+        valid_until?: string | null;
+        stock?: number | null;
+        max_redemptions_per_member?: number | null;
+        redemption_count?: number | null;
+        fulfillment_type?: string[] | null;
+      }>
+    | null
+    | undefined,
+  points: number,
+): number {
+  const now = Date.now();
+  return (rewards ?? []).filter((r) => {
+    if (!r.is_active) return false;
+    if ((r.points_required ?? 0) > points) return false;
+    if (r.valid_from && new Date(r.valid_from).getTime() > now) return false;
+    if (r.valid_until && new Date(r.valid_until).getTime() < now) return false;
+    if (r.stock != null && r.stock <= 0) return false;
+    if (
+      r.max_redemptions_per_member != null &&
+      (r.redemption_count ?? 0) >= r.max_redemptions_per_member
+    ) {
+      return false;
+    }
+    const ft = r.fulfillment_type;
+    if (Array.isArray(ft) && ft.length > 0 && !ft.includes("pickup")) return false;
+    return true;
+  }).length;
 }
 
 /** Convert a claimable offer into a real wallet voucher. Returns the new

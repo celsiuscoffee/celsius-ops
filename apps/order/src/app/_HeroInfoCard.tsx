@@ -42,6 +42,7 @@ export function HeroInfoCard() {
   useEffect(() => {
     let memberId: string | null = null;
     let token: string | null = null;
+    let phone: string | null = null;
     try {
       const raw = window.localStorage.getItem("celsius-pickup");
       if (raw) {
@@ -50,6 +51,7 @@ export function HeroInfoCard() {
         setBeans(parsed.state?.member?.pointsBalance ?? null);
         memberId = parsed.state?.loyaltyId ?? null;
         token = parsed.state?.sessionToken ?? null;
+        phone = parsed.state?.phone ?? null;
       }
     } catch {
       /* ignore */
@@ -101,14 +103,25 @@ export function HeroInfoCard() {
       Promise.all([
         fetch("/api/loyalty/me/vouchers", auth).then((r) => (r.ok ? r.json() : [])),
         fetch("/api/loyalty/me/claimable", auth).then((r) => (r.ok ? r.json() : [])),
+        // Affordable redeemable catalogue — /api/loyalty/rewards already
+        // server-filters to what this member can afford + pickup-capable, so its
+        // length IS the affordable count. Summed in so the web "Rewards" KPI =
+        // wallet vouchers + claimables + affordable catalogue, matching native.
+        phone
+          ? fetch(`/api/loyalty/rewards?phone=${encodeURIComponent(phone)}`).then((r) =>
+              r.ok ? r.json() : null,
+            )
+          : Promise.resolve(null),
       ])
-        .then(([vData, cData]) => {
+        .then(([vData, cData, rData]) => {
           if (cancelled) return;
           const vouchers = (Array.isArray(vData) ? vData : (vData?.vouchers ?? [])) as Array<{
             status?: string | null;
+            source_type?: string | null;
           }>;
           const claimables = (Array.isArray(cData) ? cData : (cData?.claimables ?? [])) as unknown[];
-          setVoucherCount(countRewardsWaiting(vouchers, claimables));
+          const affordable = ((rData as { rewards?: unknown[] } | null)?.rewards ?? []).length;
+          setVoucherCount(countRewardsWaiting(vouchers, claimables) + affordable);
         })
         .catch(() => {
           /* keep 0 */

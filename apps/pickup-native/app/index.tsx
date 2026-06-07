@@ -25,6 +25,7 @@ import {
   fetchActiveMissions,
   voucherUrgencyLabel,
   countRewardsWaiting,
+  countAffordableRewards,
   type Voucher,
 } from "../lib/rewards-v2";
 import { CelsiusCup } from "../components/brand/CelsiusCup";
@@ -354,7 +355,12 @@ export default function Home() {
   // lists owned + claimable in one continuous list, so the hero sums both —
   // owned-only read LOWER than the list. Passes the RAW voucher list (not
   // the rail's bean-shop-filtered `walletVouchers`) so those count too.
-  const voucherCount = countRewardsWaiting(myVouchersQ.data, claimables);
+  // Home "Rewards" KPI = wallet vouchers (mystery/manual/birthday) + claimables
+  // + affordable redeemable catalogue items (points-shop rewards they can claim
+  // right now). The unaffordable catalogue stays out — see countAffordableRewards.
+  const voucherCount =
+    countRewardsWaiting(myVouchersQ.data, claimables) +
+    countAffordableRewards(rewardsQ.data?.rewards, points);
 
   // Shared scroll config handed to whichever wrapper owns the real
   // ScrollView on this platform (see HomeScrollFrame / HomeBodyScroll).
