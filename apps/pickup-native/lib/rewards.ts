@@ -275,9 +275,14 @@ export async function fetchOrderHistory(
 }
 
 export async function fetchRewards(phone?: string | null): Promise<RewardsResponse> {
+  // all=1 → FULL points-shop catalogue (affordable + unaffordable) so the
+  // rewards page shows locked "save up for it" cards and the home shows the
+  // "X pts to next reward" teaser. Affordability is computed client-side
+  // (points_required vs balance). The web count tile uses the default
+  // affordable-only response (no all param), so its tally stays correct.
   const path = phone
-    ? `/api/loyalty/rewards?phone=${encodeURIComponent(phone)}`
-    : `/api/loyalty/rewards`;
+    ? `/api/loyalty/rewards?phone=${encodeURIComponent(phone)}&all=1`
+    : `/api/loyalty/rewards?all=1`;
   return get<RewardsResponse>(path);
 }
 

@@ -1,6 +1,7 @@
 // GET /api/loyalty/rewards?phone=… — points-shop catalog rewards the
-// caller can afford. Thin wrapper around the canonical
-// fetchAffordableCatalogForMember helper in @celsius/shared.
+// caller can afford. Add &all=1 to return the FULL catalogue (incl. items the
+// member can't yet afford) for the rewards page + home "next reward" teaser.
+// Thin wrapper around the canonical fetchAffordableCatalogForMember helper.
 //
 // Was a 250-line proxy that hit loyalty.celsiuscoffee.com for the
 // catalog, joined reward_configs, applied heuristic discount-type
@@ -68,6 +69,10 @@ export async function GET(request: NextRequest) {
     void balanceRes;
     const pointsBalance = (balanceRow.data?.points_balance as number | null) ?? 0;
 
+    // all=1 → full points-shop catalogue (incl. unaffordable) for the rewards
+    // page + home "next reward" teaser. Default = affordable-only (the home
+    // count tile + web rail depend on that).
+    const includeUnaffordable = request.nextUrl.searchParams.get("all") === "1";
     const rewards = await fetchAffordableCatalogForMember({
       supabase,
       memberId: member.id,
@@ -76,6 +81,7 @@ export async function GET(request: NextRequest) {
       // Pickup app only shows rewards that are tagged pickup-capable
       // (in_store-only rewards stay off the customer's catalog).
       fulfillmentChannel: "pickup",
+      includeUnaffordable,
     });
 
     return NextResponse.json({

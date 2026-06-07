@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -32,7 +32,7 @@ import {
 import QRCode from "react-native-qrcode-svg";
 import * as Haptics from "@/lib/haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ScrollView } from "react-native";
+import { RefreshControl, ScrollView } from "react-native";
 import { EspressoHeader } from "../components/EspressoHeader";
 import { TierCardCarousel, type TierLite } from "../components/TierCardCarousel";
 import { useApp } from "../lib/store";
@@ -140,6 +140,7 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
   const setMember = useApp((s) => s.setMember);
   const loyaltyId = useApp((s) => s.loyaltyId);
   const [editing, setEditing] = useState(false);
+  const queryClient = useQueryClient();
 
   // Tier is read via React Query so the prefetch warm-up in _layout.tsx
   // (fired the moment we know loyaltyId) populates this view's cache —
@@ -162,6 +163,21 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
   // the account tab disagreed by an order or two. Same React Query
   // key the Rewards screen + Home use, so the three surfaces now read
   // from a single cached value.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    Haptics.selectionAsync();
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["rewards"] }),
+        queryClient.invalidateQueries({ queryKey: ["tier"] }),
+        queryClient.invalidateQueries({ queryKey: ["all-tiers"] }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [queryClient]);
+
   const rewardsQ = useQuery({
     queryKey: ["rewards", phone ?? "anonymous"],
     queryFn: () => fetchRewards(phone),
@@ -277,6 +293,14 @@ function SignedIn({ phone, onSignOut }: { phone: string; onSignOut: () => void }
 
       <ScrollView
         contentContainerStyle={{ paddingTop: 16, paddingBottom: 160 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#A2492C"
+            colors={["#A2492C"]}
+          />
+        }
       >
         {/* Membership tier carousel — same TierCardCarousel that powers
             the legacy /tier-benefits screen. The customer's current

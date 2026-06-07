@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { View, Text, ScrollView, Pressable, Image, Dimensions } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { View, Text, ScrollView, Pressable, Image, Dimensions, RefreshControl } from "react-native";
 import { Alert } from "@/lib/alert";
 import { Stack, router } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -146,6 +146,23 @@ export default function RewardsTab() {
   const setAppliedReward = useApp((s) => s.setAppliedReward);
   const qc = useQueryClient();
   const [claimedClaimableIds, setClaimedClaimableIds] = useState<Set<string>>(new Set());
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    Haptics.selectionAsync();
+    try {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["rewards"] }),
+        qc.invalidateQueries({ queryKey: ["tier"] }),
+        qc.invalidateQueries({ queryKey: ["my-vouchers"] }),
+        qc.invalidateQueries({ queryKey: ["claimable-vouchers"] }),
+        qc.invalidateQueries({ queryKey: ["active-missions"] }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [qc]);
 
   const rewardsQ = useQuery({
     queryKey: ["rewards", phone ?? "anonymous"],
@@ -382,6 +399,14 @@ export default function RewardsTab() {
         className="flex-1"
         contentContainerStyle={{ padding: 16, paddingBottom: 160, gap: 22 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#A2492C"
+            colors={["#A2492C"]}
+          />
+        }
       >
         <BeansHero
           balance={balance}
