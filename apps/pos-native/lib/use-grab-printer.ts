@@ -164,6 +164,7 @@ export function useGrabPrinter(
           table_number: null,
           queue_number: row.order_number,
           created_at: row.created_at,
+          notes: row.notes,                          // order note → docket (kitchen sees it)
           pos_order_items: docketItems,
         };
         const receiptOrder = {

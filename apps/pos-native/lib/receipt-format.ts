@@ -306,6 +306,10 @@ export type DocketOrder = {
   table_label?: string;
   queue_number?: string | null;
   created_at: string;
+  /** Order-level note (Grab delivery instruction / pickup order note). When
+   *  present it prints on the docket too — not just the customer receipt — so
+   *  the kitchen/line sees it. */
+  notes?: string | null;
   pos_order_items?: {
     product_name: string;
     variant_name?: string | null;
@@ -340,6 +344,14 @@ export function formatKitchenDocket(order: DocketOrder, station: string): Docket
       if (modNames.length > 0) itemLines.push(`   ${modNames.join(", ")}`);
     }
     if (item.notes) itemLines.push(`   ** ${item.notes} **`);
+    itemLines.push("---");
+  }
+
+  // Order-level note (Grab delivery instruction / pickup order note) — print
+  // it on the docket too so the line sees it, not just the customer receipt.
+  // Uses the native module's bold "** .. **" docket-note style.
+  if (order.notes && order.notes.trim()) {
+    itemLines.push(`   ** NOTE: ${order.notes.trim()} **`);
     itemLines.push("---");
   }
 

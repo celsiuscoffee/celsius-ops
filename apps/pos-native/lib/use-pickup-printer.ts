@@ -221,6 +221,7 @@ export function usePickupPrinter(
           table_number: isDineIn ? row.table_number ?? null : null,
           queue_number: row.order_number,
           created_at: row.created_at,
+          notes: row.notes,                          // order note → docket (kitchen sees it)
           pos_order_items: docketItems,
         };
         // Customer-facing receipt — same shape as the register's receipt.

@@ -110,23 +110,6 @@ export async function POST(request: NextRequest) {
     const { orderID, orderState, merchantID } = payload;
     const supabase = await createClient();
 
-    // TEMP DIAGNOSTIC: reveal WHERE a note lives in the Grab payload (field
-    // names + note-ish values across the order, receiver, and items) so we can
-    // confirm/extend capture. No full-PII dump. Remove once the field is known.
-    try {
-      const noteish: Record<string, unknown> = {};
-      const scan = (o: unknown, pre: string) => {
-        if (o && typeof o === "object") for (const [k, v] of Object.entries(o)) {
-          if (/comment|note|instruct|remark|special/i.test(k)) noteish[pre + k] = v;
-        }
-      };
-      scan(payload, "");
-      scan(payload.receiver, "receiver.");
-      scan(payload.receiver?.address, "receiver.address.");
-      (payload.items ?? []).forEach((it, i) => scan(it, `items[${i}].`));
-      console.log(`[grab:webhook] note-scan orderID=${orderID} topKeys=${JSON.stringify(Object.keys(payload))} noteish=${JSON.stringify(noteish)}`);
-    } catch { /* diagnostic only */ }
-
     // Trace every authenticated webhook hit (otherwise "skipped" looks
     // identical to "ok" in the Vercel log table).
     const itemCount = Array.isArray(payload.items) ? payload.items.length : 0;
