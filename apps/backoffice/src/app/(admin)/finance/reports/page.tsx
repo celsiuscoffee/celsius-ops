@@ -533,7 +533,7 @@ export default function FinanceReportsPage() {
       <header>
         <h1 className="text-xl sm:text-2xl font-semibold">Reports</h1>
         <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
-          P&L, Balance Sheet, and Cash Flow — generated live from the ledger.
+          P&L is source-driven (sales, procurement, ads, bank). Balance Sheet &amp; Cash Flow are ledger-based and fill in as journals post.
         </p>
       </header>
 
@@ -559,6 +559,13 @@ export default function FinanceReportsPage() {
           ))}
         </div>
       </nav>
+
+      {(tab === "bs" || tab === "cf") && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs sm:text-sm text-amber-700 dark:text-amber-400">
+          <span className="font-medium">Ledger-based — currently incomplete.</span>{" "}
+          This {tab === "bs" ? "Balance Sheet" : "Cash Flow"} is built from <em>posted</em> journals, but historical journals aren&rsquo;t fully posted yet (AR is still in draft). Treat it as indicative. For accurate figures use the <strong>P&amp;L</strong> (source-driven), the <strong>Cashflow</strong> page (bank actuals), and the <strong>Ledger</strong> (real bank lines).
+        </div>
+      )}
 
       {tab === "pnl" && <PnlTab />}
       {tab === "bs" && <BsTab />}
