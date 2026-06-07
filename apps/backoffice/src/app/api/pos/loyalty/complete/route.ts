@@ -229,7 +229,7 @@ export async function POST(req: NextRequest) {
     // Server-authoritative spend + outlet from the order row itself.
     const { data: order } = await supabase
       .from("pos_orders")
-      .select("id, total, sst_amount, outlet_id, status, reward_id")
+      .select("id, total, sst_amount, outlet_id, status, reward_id, loyalty_phone")
       .eq("id", order_id)
       .maybeSingle();
     if (!order) {
@@ -247,13 +247,27 @@ export async function POST(req: NextRequest) {
         .eq("member_id", member_id)
         .eq("brand_id", BRAND_ID)
         .maybeSingle(),
-      supabase.from("members").select("brand_data").eq("id", member_id).maybeSingle(),
+      supabase.from("members").select("phone, brand_data").eq("id", member_id).maybeSingle(),
     ]);
     const tier = (mb as { tiers?: { slug?: string | null; multiplier?: number | null } | null } | null)?.tiers ?? null;
     const tierSlug = tier?.slug ?? null;
     const tierMul = Number(tier?.multiplier ?? 1) || 1;
     const bdayIso = (memberRow?.brand_data as { birthday?: string | null } | null)?.birthday ?? null;
     const birthdayMonth = bdayIso ? new Date(bdayIso).getMonth() + 1 : null;
+
+    // ── Ownership gate ───────────────────────────────────────────────
+    // The member we're crediting MUST own this order. pos_orders.loyalty_phone
+    // is the phone captured at the till for the sale (register.tsx passes
+    // loyaltyPhone + memberId from the same member object), so it must match
+    // member_id's phone. Without this, anyone could POST a stranger's completed
+    // order_id + their own member_id to farm Beans / mystery drops / reward
+    // burns — the /api/pos transport is Origin-spoofable (task #186). Digits-only
+    // compare since both are stored E.164.
+    const orderPhoneDigits = String((order as { loyalty_phone?: string | null }).loyalty_phone ?? "").replace(/\D/g, "");
+    const memberPhoneDigits = String((memberRow as { phone?: string | null } | null)?.phone ?? "").replace(/\D/g, "");
+    if (!orderPhoneDigits || !memberPhoneDigits || orderPhoneDigits !== memberPhoneDigits) {
+      return NextResponse.json({ ok: false, reason: "order does not belong to this member" }, { status: 403 });
+    }
 
     let pointsAwarded = 0;
     let mysterySpawned = false;

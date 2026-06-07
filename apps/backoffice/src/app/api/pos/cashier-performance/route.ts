@@ -147,22 +147,44 @@ export async function GET(request: NextRequest) {
     (pairsByEmp[emp] ||= []).push({ ms: Date.parse(pe.created_at as string), product: prod });
   }
 
-  // Count DISTINCT completed orders that contain a reconciled upsold pair — one
-  // per order, however many pairs sold in it.
-  const upsellOrdersByEmp: Record<string, number> = {};
-  let totalUpsellOrders = 0;
+  // Bind each pair tap to at most ONE order — the earliest of the cashier's
+  // completed orders that (a) contains the tapped product and (b) falls in the
+  // tap's reconcile window — then count the DISTINCT orders that caught a tap.
+  // Binding (vs. a plain per-order .some()) stops one tap from marking several
+  // orders as upsells when the same product recurs in a busy window, which would
+  // inflate Upsell % optimistically. Multiple taps landing on the same order
+  // still collapse to one (Set of order ids).
+  const empOrdersAsc: Record<string, { id: string; ms: number; products: Set<string> }[]> = {};
   for (const o of rows) {
     const emp = (o.employee_id as string) || "unknown";
-    const pairs = pairsByEmp[emp];
-    if (!pairs || pairs.length === 0) continue;
-    const prods = orderProducts[o.id as string];
-    if (!prods || prods.size === 0) continue;
-    const oms = Date.parse(o.created_at as string);
-    const hasUpsell = pairs.some((p) => prods.has(p.product) && p.ms >= oms - RECONCILE_MS && p.ms <= oms + 60_000);
-    if (hasUpsell) {
-      upsellOrdersByEmp[emp] = (upsellOrdersByEmp[emp] || 0) + 1;
-      totalUpsellOrders++;
+    (empOrdersAsc[emp] ||= []).push({
+      id: o.id as string,
+      ms: Date.parse(o.created_at as string),
+      products: orderProducts[o.id as string] || new Set<string>(),
+    });
+  }
+  for (const list of Object.values(empOrdersAsc)) list.sort((a, b) => a.ms - b.ms);
+
+  const upsellOrderIds: Record<string, Set<string>> = {};
+  for (const [emp, taps] of Object.entries(pairsByEmp)) {
+    const ords = empOrdersAsc[emp] || [];
+    const hit = (upsellOrderIds[emp] ||= new Set<string>());
+    for (const tap of taps) {
+      for (const o of ords) {
+        if (o.ms < tap.ms - 60_000) continue; // order earlier than the tap window
+        if (o.ms > tap.ms + RECONCILE_MS) break; // sorted asc → past window, stop scanning
+        if (o.products.has(tap.product)) {
+          hit.add(o.id); // bind this tap to its earliest matching order, once
+          break;
+        }
+      }
     }
+  }
+  const upsellOrdersByEmp: Record<string, number> = {};
+  let totalUpsellOrders = 0;
+  for (const [emp, ids] of Object.entries(upsellOrderIds)) {
+    upsellOrdersByEmp[emp] = ids.size;
+    totalUpsellOrders += ids.size;
   }
 
   const cashiers = Object.entries(byStaff)
