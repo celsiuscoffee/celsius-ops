@@ -11,6 +11,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/sweep-stale-orders",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/hr/review-penalties/sync",
       "schedule": "0 2 * * *"
     },
@@ -45,6 +49,10 @@
     {
       "path": "/api/cron/finance-eod",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/music-alerts",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
