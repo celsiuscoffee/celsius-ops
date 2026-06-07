@@ -99,12 +99,16 @@ export async function GET(request: NextRequest) {
     for (const u of users ?? []) nameById[u.id as string] = (u.name as string) || "";
   }
 
-  // ── Upsell: per-cashier Pair-with-a-Bite conversion ─────────
-  // Adds = cashier-attributed pair taps (source=register, employee_id set). An
-  // add "converts" when the same cashier completed an order within 30 min whose
-  // items include that product. Time-reconciled — there's no order key at add
-  // time — so it's a coaching-grade signal, not payroll. We report conversion
-  // RATE, not raw adds, so spamming the button on non-converting orders lowers it.
+  // ── Upsell: per-cashier Pair-with-a-Bite penetration ────────
+  // Pair Adds = raw count of cashier-attributed pair taps (source=register,
+  //   employee_id set) — an effort/volume number.
+  // Upsell %  = share of the cashier's completed orders that ended up CONTAINING
+  //   an upsold pair = (orders with an upsell) ÷ (total orders), DEDUPED PER
+  //   ORDER — three pairs sold on one ticket still count as a single upsell
+  //   order. "Contains an upsell" is time-reconciled (there's no order key at add
+  //   time): a pair tap by the same cashier, for a product that is in the order,
+  //   within 30 min before it (+60s slack). Order-based + success-based, so
+  //   button-spam can't inflate it — a tap that never sells changes nothing.
   const RECONCILE_MS = 30 * 60 * 1000;
   const orderIds = rows.map((o) => o.id as string);
   const orderProducts: Record<string, Set<string>> = {};
@@ -118,14 +122,6 @@ export async function GET(request: NextRequest) {
       (orderProducts[oid] ||= new Set<string>()).add(pid);
     }
   }
-  const ordersByEmp: Record<string, { ms: number; products: Set<string> }[]> = {};
-  for (const o of rows) {
-    const emp = (o.employee_id as string) || "unknown";
-    (ordersByEmp[emp] ||= []).push({
-      ms: Date.parse(o.created_at as string),
-      products: orderProducts[o.id as string] || new Set<string>(),
-    });
-  }
 
   let pairQ = supabase
     .from("pos_pair_events")
@@ -136,23 +132,36 @@ export async function GET(request: NextRequest) {
     .limit(20000);
   if (outletId) pairQ = pairQ.eq("outlet_id", outletId);
   const { data: pairRows } = await pairQ;
-  const upsellByEmp: Record<string, { adds: number; converted: number }> = {};
+
+  // Raw pair taps per cashier (the "Pair Adds" number) + each cashier's taps
+  // {ms, product} for the order-penetration reconcile below.
+  const addsByEmp: Record<string, number> = {};
+  const pairsByEmp: Record<string, { ms: number; product: string }[]> = {};
   let totalAdds = 0;
-  let totalConverted = 0;
   for (const pe of pairRows ?? []) {
     const emp = pe.employee_id as string | null;
     const prod = pe.product_id as string | null;
     if (!emp || !prod) continue;
-    const t = Date.parse(pe.created_at as string);
-    const agg = (upsellByEmp[emp] ||= { adds: 0, converted: 0 });
-    agg.adds++;
+    addsByEmp[emp] = (addsByEmp[emp] || 0) + 1;
     totalAdds++;
-    const converted = (ordersByEmp[emp] || []).some(
-      (o) => o.ms >= t - 60_000 && o.ms <= t + RECONCILE_MS && o.products.has(prod),
-    );
-    if (converted) {
-      agg.converted++;
-      totalConverted++;
+    (pairsByEmp[emp] ||= []).push({ ms: Date.parse(pe.created_at as string), product: prod });
+  }
+
+  // Count DISTINCT completed orders that contain a reconciled upsold pair — one
+  // per order, however many pairs sold in it.
+  const upsellOrdersByEmp: Record<string, number> = {};
+  let totalUpsellOrders = 0;
+  for (const o of rows) {
+    const emp = (o.employee_id as string) || "unknown";
+    const pairs = pairsByEmp[emp];
+    if (!pairs || pairs.length === 0) continue;
+    const prods = orderProducts[o.id as string];
+    if (!prods || prods.size === 0) continue;
+    const oms = Date.parse(o.created_at as string);
+    const hasUpsell = pairs.some((p) => prods.has(p.product) && p.ms >= oms - RECONCILE_MS && p.ms <= oms + 60_000);
+    if (hasUpsell) {
+      upsellOrdersByEmp[emp] = (upsellOrdersByEmp[emp] || 0) + 1;
+      totalUpsellOrders++;
     }
   }
 
@@ -162,7 +171,8 @@ export async function GET(request: NextRequest) {
       // collected orders. A real regular recurs a little; a cashier's own number
       // on many tickets spikes. Flag = informational (owner reviews), not a block.
       const maxSamePhone = Object.values(a.phones).reduce((m, n) => Math.max(m, n), 0);
-      const up = upsellByEmp[id] || { adds: 0, converted: 0 };
+      const adds = addsByEmp[id] || 0;
+      const upsellOrders = upsellOrdersByEmp[id] || 0;
       return {
         id,
         name: nameById[id] || (id === "unknown" ? "Unassigned" : "Staff"),
@@ -173,10 +183,11 @@ export async function GET(request: NextRequest) {
         rate: a.orders > 0 ? Math.round((a.collected / a.orders) * 100) : 0,
         maxSamePhone,
         suspicious: maxSamePhone >= 5 && a.collected > 0 && maxSamePhone / a.collected >= 0.3,
-        // Upsell (coaching-only): pair-adds + their conversion rate.
-        pairAdds: up.adds,
-        pairConverted: up.converted,
-        upsellRate: up.adds > 0 ? Math.round((up.converted / up.adds) * 100) : null,
+        // Upsell (coaching-only): raw pair adds + the order-penetration rate
+        // (orders with an upsell ÷ total orders, deduped per order).
+        pairAdds: adds,
+        upsellOrders,
+        upsellRate: a.orders > 0 ? Math.round((upsellOrders / a.orders) * 100) : null,
       };
     })
     .sort((x, y) => y.rate - x.rate || y.orders - x.orders);
@@ -192,7 +203,8 @@ export async function GET(request: NextRequest) {
       repeatMembers: totalCollected - totalNew,
       rate: totalOrders > 0 ? Math.round((totalCollected / totalOrders) * 100) : 0,
       pairAdds: totalAdds,
-      upsellRate: totalAdds > 0 ? Math.round((totalConverted / totalAdds) * 100) : null,
+      upsellOrders: totalUpsellOrders,
+      upsellRate: totalOrders > 0 ? Math.round((totalUpsellOrders / totalOrders) * 100) : null,
     },
     cashiers,
   });
