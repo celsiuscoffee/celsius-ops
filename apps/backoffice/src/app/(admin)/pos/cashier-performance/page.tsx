@@ -21,7 +21,7 @@ type Cashier = {
   collectedRepeat: number;
   rate: number;
   pairAdds: number;
-  pairConverted: number;
+  upsellOrders: number;
   upsellRate: number | null;
   maxSamePhone: number;
   suspicious: boolean;
@@ -29,7 +29,7 @@ type Cashier = {
 type Data = {
   days: number;
   target: number;
-  overall: { orders: number; collected: number; newMembers: number; repeatMembers: number; rate: number; pairAdds: number; upsellRate: number | null };
+  overall: { orders: number; collected: number; newMembers: number; repeatMembers: number; rate: number; pairAdds: number; upsellOrders: number; upsellRate: number | null };
   cashiers: Cashier[];
 };
 
@@ -112,8 +112,8 @@ export default function CashierPerformancePage() {
               <th className="px-4 py-3 text-right">Collected</th>
               <th className="px-4 py-3 text-right">New</th>
               <th className="px-4 py-3 text-right w-40">Collection Rate</th>
-              <th className="px-4 py-3 text-right" title="Pair-with-a-Bite suggestions added by this cashier">Pair Adds</th>
-              <th className="px-4 py-3 text-right" title="% of pair-adds that reached a paid order (coaching-only)">Upsell %</th>
+              <th className="px-4 py-3 text-right" title="Pair-with-a-Bite suggestions added by this cashier (raw count)">Pair Adds</th>
+              <th className="px-4 py-3 text-right" title="Share of this cashier's orders that included an upsold pair — several pairs in one order count once (coaching-only)">Upsell %</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -150,7 +150,7 @@ export default function CashierPerformancePage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-right text-gray-600">{c.pairAdds.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-right font-medium text-[#160800]">{c.upsellRate == null ? "—" : `${c.upsellRate}%`}</td>
+                  <td className="px-4 py-3 text-sm text-right font-medium text-[#160800]" title={`${c.upsellOrders.toLocaleString()} of ${c.orders.toLocaleString()} orders had an upsold pair`}>{c.upsellRate == null ? "—" : `${c.upsellRate}%`}</td>
                 </tr>
               ))
             )}
@@ -159,9 +159,11 @@ export default function CashierPerformancePage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Collection rate + new/repeat (New = enrolled at/around the order). Upsell % = pair-adds that
-        converted (the suggested item reached the cashier's paid order within 30 min) — coaching-only,
-        conversion rate not raw count, so button-spam lowers it. Per-staff HR view is Phase B.
+        Collection rate + new/repeat (New = enrolled at/around the order). Pair Adds = how many
+        Pair-with-a-Bite suggestions the cashier added. Upsell % = share of the cashier's orders that
+        ended up including an upsold pair (orders with an upsell ÷ total orders; several pairs in one
+        order still count once) — order-based + success-based, so button-spam can&apos;t inflate it.
+        Per-staff HR view is Phase B.
         <AlertTriangle className="inline h-3 w-3 text-amber-500" />
         flags a cashier where one number recurs across many tickets (possible fake/own-number entry).
       </p>
