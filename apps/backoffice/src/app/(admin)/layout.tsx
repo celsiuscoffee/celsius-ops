@@ -195,6 +195,7 @@ const NAV_SECTIONS: NavSection[] = [
           // One "Reports" entry — Sales / Z-Report / Tax (SST) are tabs
           // within the page now (see pos/_ReportsTabs).
           { label: "Reports", href: "/pos/reports", icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+          { label: "Cashier Performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />, moduleKey: "pickup:settings" },
         ],
       },
     ],
