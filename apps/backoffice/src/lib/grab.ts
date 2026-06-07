@@ -375,6 +375,32 @@ export async function updateDeliveryHours(
   });
 }
 
+// ─── Self-Serve Onboarding (Activation Journey) ───────────────────────────────
+
+/**
+ * Create a Self-Serve Activation journey for a store and return the
+ * `activationUrl` the store owner opens to link their existing GrabFood store
+ * to THIS POS integration. After they complete it, Grab pushes the store's
+ * menu (→ /api/pos/grab/merchant/menu) and integration status (→
+ * /api/pos/grab/status) to our inbound webhooks — no manual merchant-ID entry.
+ *
+ * `merchantID` is OUR id for the store. We pass the outlet id (e.g. "outlet-sa")
+ * so the journey round-trips back to the right outlet: Grab later sends it as
+ * `partnerMerchantID`, and the order webhook already resolves outlet by
+ * "Partner store ID = POS outlet id".
+ *
+ * POST /partner/v1/self-serve/activation  { partner: { merchantID } }
+ *   -> { activationUrl }
+ */
+export async function createSelfServeJourney(
+  merchantID: string,
+): Promise<{ activationUrl: string }> {
+  return grabRequest<{ activationUrl: string }>("/partner/v1/self-serve/activation", {
+    method: "POST",
+    body: { partner: { merchantID } },
+  });
+}
+
 // ─── Webhook Signature Verification ──────────────────────────────────────────
 
 import { createHmac } from "crypto";

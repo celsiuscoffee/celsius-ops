@@ -24,6 +24,7 @@ import {
   Save,
   Store,
   Activity,
+  Rocket,
 } from "lucide-react";
 
 type Outlet = {
@@ -64,6 +65,11 @@ export default function GrabIntegrationPage() {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
+  // Self-serve activation: per-outlet generating flag, resulting URL, error, copy state.
+  const [ssBusy, setSsBusy] = useState<Record<string, boolean>>({});
+  const [ssUrl, setSsUrl] = useState<Record<string, string>>({});
+  const [ssErr, setSsErr] = useState<Record<string, string>>({});
+  const [copied, setCopied] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,6 +106,40 @@ export default function GrabIntegrationPage() {
       setError(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving((s) => ({ ...s, [outletId]: false }));
+    }
+  };
+
+  // Generate a Grab self-serve activation link for an outlet. We send the outlet
+  // id as the Partner store ID (matches the order webhook's resolution).
+  const generateSelfServe = async (outletId: string) => {
+    setSsBusy((s) => ({ ...s, [outletId]: true }));
+    setSsErr((s) => ({ ...s, [outletId]: "" }));
+    try {
+      const res = await fetch("/api/pos/grab/self-serve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ merchantID: outletId }),
+      });
+      const json = await res.json();
+      const url = json.activationUrl || json.activation_url;
+      if (!res.ok || !url) {
+        throw new Error(json.error_description || json.error || `HTTP ${res.status}`);
+      }
+      setSsUrl((s) => ({ ...s, [outletId]: url }));
+    } catch (e) {
+      setSsErr((s) => ({ ...s, [outletId]: e instanceof Error ? e.message : "Failed to generate link" }));
+    } finally {
+      setSsBusy((s) => ({ ...s, [outletId]: false }));
+    }
+  };
+
+  const copyUrl = async (outletId: string, url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(outletId);
+      setTimeout(() => setCopied((c) => (c === outletId ? null : c)), 1500);
+    } catch {
+      /* clipboard blocked — the URL is still visible to copy manually */
     }
   };
 
@@ -208,6 +248,64 @@ export default function GrabIntegrationPage() {
                   {saving[o.id] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                   Save
                 </button>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Self-serve store activation */}
+      <section className="rounded-lg border border-neutral-200 bg-white">
+        <header className="border-b border-neutral-200 px-5 py-3">
+          <h2 className="text-base font-medium text-neutral-900">Self-serve store activation</h2>
+          <p className="mt-0.5 text-sm text-neutral-600">
+            Generate a Grab activation link per outlet. The store owner opens it to link their existing
+            GrabFood store to this POS integration — Grab then pushes the store menu and integration status
+            to us automatically (no manual merchant-ID entry). The outlet id is sent as the Partner store ID.
+          </p>
+        </header>
+        <div className="divide-y divide-neutral-100">
+          {data.outlets.map((o) => {
+            const url = ssUrl[o.id];
+            const err = ssErr[o.id];
+            return (
+              <div key={o.id} className="px-5 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-neutral-900">{o.name}</div>
+                    <div className="text-xs text-neutral-500">
+                      Partner store ID: <code>{o.id}</code>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => generateSelfServe(o.id)}
+                    disabled={ssBusy[o.id]}
+                    className="inline-flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-2.5 py-1 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {ssBusy[o.id] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
+                    {url ? "Regenerate link" : "Generate activation link"}
+                  </button>
+                </div>
+                {url ? (
+                  <div className="mt-2 flex items-center gap-2 rounded border border-emerald-200 bg-emerald-50 px-3 py-2">
+                    <code className="min-w-0 flex-1 truncate text-xs text-emerald-900">{url}</code>
+                    <button
+                      onClick={() => copyUrl(o.id, url)}
+                      className="shrink-0 rounded border border-emerald-300 bg-white px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                    >
+                      {copied === o.id ? "Copied!" : "Copy"}
+                    </button>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex shrink-0 items-center gap-1 rounded border border-emerald-300 bg-white px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                    >
+                      Open <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                ) : null}
+                {err ? <div className="mt-2 text-xs text-red-600">{err}</div> : null}
               </div>
             );
           })}
