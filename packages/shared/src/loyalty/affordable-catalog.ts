@@ -100,7 +100,7 @@ type RawTemplate = {
  *    - brand_id = brandId
  *    - is_active = true
  *    - points_cost IS NOT NULL  (i.e. this template is a points-shop item)
- *    - points_cost <= balance
+ *    - points_cost <= balance (unless includeUnaffordable is set)
  *    - stock is null or > 0
  *    - valid_from is null or <= now()
  *    - valid_until is null or > now()
@@ -121,6 +121,11 @@ export async function fetchAffordableCatalogForMember(args: {
   brandId?: string;
   balance: number;
   fulfillmentChannel?: "pickup" | "in_store" | null;
+  /** When true, return the FULL points-shop catalogue — including items the
+   *  member can't yet afford (points_cost > balance) — so the rewards page can
+   *  show locked "save up for it" cards. Default false = affordable-only, which
+   *  the home count tile + web rail rely on. */
+  includeUnaffordable?: boolean;
 }): Promise<AffordableCatalogReward[]> {
   const brandId = args.brandId ?? "brand-celsius";
 
@@ -166,8 +171,12 @@ export async function fetchAffordableCatalogForMember(args: {
 
   const nowMs = Date.now();
   const eligible = templates.filter((t) => {
-    // Affordability
-    if (t.points_cost <= 0 || t.points_cost > args.balance) return false;
+    // Affordability — always drop non-points-shop rows (points_cost <= 0). By
+    // default also drop items the member can't afford; the rewards page opts in
+    // (includeUnaffordable) to show the full catalogue and marks unaffordable
+    // items "need X more points" client-side.
+    if (t.points_cost <= 0) return false;
+    if (!args.includeUnaffordable && t.points_cost > args.balance) return false;
     // Stock
     if (t.stock != null && t.stock <= 0) return false;
     // Validity window
