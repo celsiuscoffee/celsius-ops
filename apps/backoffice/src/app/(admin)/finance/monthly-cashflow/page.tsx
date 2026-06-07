@@ -90,7 +90,7 @@ export default function MonthlyCashflowPage() {
           </Link>
           <h2 className="mt-1 text-lg sm:text-xl font-semibold text-gray-900">Monthly Cash Flow</h2>
           <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
-            Consolidated net cash flow from Maybank statements, net of inter-company transfers. Group bank balance is the sum of each entity&rsquo;s month-end balance.
+            Consolidated net cash flow from Maybank statements (gross — includes inter-company transfers between entities, matching the cash-tracking spreadsheet). Group bank balance is the sum of each entity&rsquo;s month-end balance.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -204,7 +204,7 @@ export default function MonthlyCashflowPage() {
           </div>
 
           <p className="mt-2 text-[11px] text-gray-400">
-            Inflow/outflow are net of inter-company transfers. Where an account-month has both an early spreadsheet upload and the PDF import, the richer (PDF) statement is used so totals never double-count.
+            Inflow/outflow include inter-company transfers between entities (gross). Where an account-month has both an early spreadsheet upload and the PDF import, the richer (PDF) statement is used so totals never double-count.
           </p>
         </>
       )}
