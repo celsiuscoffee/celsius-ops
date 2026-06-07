@@ -61,16 +61,11 @@ type Rule = {
 
 // Inflow rules
 //
-// IMPORTANT InterCo philosophy: a transfer between Celsius entities is
-// only "InterCo" (and only nets to zero in consolidation) when the
-// underlying purpose is itself a wash — i.e., management fees, capital
-// injections, asset transfers between sister entities. When the purpose
-// is "Stat pay", "Digital Ads", "Inventory" etc., the transfer is just
-// the routing mechanism — the actual economic spend is real and should
-// be categorised by purpose, not flagged InterCo.
-//
-// Therefore: NO entity-name based InterCo rule. Only the explicit
-// purpose-based rules in the suffix-extraction pass below.
+// InterCo policy: a transfer whose COUNTERPARTY is another Celsius entity is
+// flagged InterCo — internal group movement, regardless of purpose (applied in
+// classifyBankLine via INTERCO_COUNTERPARTY). The purpose-based rules below
+// still set the category so the P&L can attribute the underlying spend; some
+// also pre-set isInterCo for classic management-fee / capital washes.
 
 const INFLOW_RULES: Rule[] = [
 
@@ -118,10 +113,9 @@ const INFLOW_RULES: Rule[] = [
 
 // Outflow rules
 //
-// As above — no entity-name InterCo rule. Real InterCo (management fee,
-// asset transfer, capital injection) is matched explicitly below by
-// the verb in the description, not by the counterparty being a
-// Celsius entity.
+// As above — counterparty-based InterCo is applied in classifyBankLine via
+// INTERCO_COUNTERPARTY. The purpose verbs below still drive the category and
+// pre-flag the classic management-fee / asset-transfer / capital washes.
 const OUTFLOW_RULES: Rule[] = [
   // True InterCo — management fees, asset transfers, capital injections
   // between Celsius entities. These genuinely net to zero across
@@ -233,9 +227,20 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "interco_celsius_entity_fallback", match: /\bCELSIUS\s*COFFEE\s+(SDN|CONEZION|TAMARIND|CONE|TAMA)\b/i, direction: "DR", category: "INTERCO_PEOPLE" as CashCategory, isInterCo: true },
 ];
 
+// InterCo override: any transfer whose COUNTERPARTY (the name right after
+// "TRANSFER TO/FR A/C") is another Celsius entity is internal movement within
+// the group — flag it InterCo regardless of the stated purpose. (Per the owner:
+// "anything transferred in and out within the Celsius Coffee company.") We still
+// keep the purpose-based category so the P&L can attribute the real spend, but
+// the flag lets the ledger exclude internal shuffling. Matched on the
+// counterparty position only, so a supplier payment that merely references
+// "Celsius Coffee" elsewhere in the line is NOT caught.
+const INTERCO_COUNTERPARTY = /TRANSFER (TO|FR) A\/C CELSIUS ?COFFEE (SDN|CONEZION|TAMARIND|CONE|TAMA)/;
+
 export function classifyBankLine(input: ClassifyInput): ClassifyResult {
   const desc = input.description ?? "";
   const norm = desc.toUpperCase().replace(/\s+/g, " ").trim();
+  const intercoCounterparty = INTERCO_COUNTERPARTY.test(norm);
 
   const rules = input.direction === "CR" ? INFLOW_RULES : OUTFLOW_RULES;
   for (const rule of rules) {
@@ -244,7 +249,7 @@ export function classifyBankLine(input: ClassifyInput): ClassifyResult {
       return {
         category: rule.category,
         outletCode: inferOutlet(desc),
-        isInterCo: rule.isInterCo ?? false,
+        isInterCo: (rule.isInterCo ?? false) || intercoCounterparty,
         ruleName: rule.name,
       };
     }
@@ -253,7 +258,7 @@ export function classifyBankLine(input: ClassifyInput): ClassifyResult {
   return {
     category: input.direction === "CR" ? ("OTHER_INFLOW" as CashCategory) : ("OTHER_OUTFLOW" as CashCategory),
     outletCode: inferOutlet(desc),
-    isInterCo: false,
+    isInterCo: intercoCounterparty,
     ruleName: "fallback_other",
   };
 }
