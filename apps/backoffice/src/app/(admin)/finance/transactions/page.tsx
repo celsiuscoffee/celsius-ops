@@ -9,7 +9,7 @@
 import { useState, useMemo } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, Badge, Button } from "@celsius/ui";
-import { Loader2, Search, X, ArrowUp, ArrowDown, ChevronsUpDown, Building2 } from "lucide-react";
+import { Loader2, Search, X, ArrowUp, ArrowDown, ChevronsUpDown, Building2, Download } from "lucide-react";
 
 type BankLine = {
   id: string;
@@ -233,6 +233,40 @@ export default function FinanceLedgerPage() {
     setSearch(""); setCatF(""); setDirF(""); setEntityF(""); setOutletF(""); setIntercoF(""); setAmountMin(""); setAmountMax("");
   }
 
+  // Export the full filtered set (not just the rendered 500) to CSV. Opens in
+  // Excel with one column per dimension — including Inter-company (Yes/No) — so
+  // every filter (Category, Direction, Company, Inter-company) works there too.
+  function exportCsv() {
+    const headers = [
+      "Date", "Description", "Reference", "Category", "Direction",
+      "Amount (RM)", "Company", "Outlet", "Inter-company",
+    ];
+    const esc = (v: string | number) => {
+      const s = String(v ?? "");
+      return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = filtered.map((l) => [
+      l.txnDate,
+      l.description,
+      l.reference ?? "",
+      humanCat(l.category),
+      l.direction === "CR" ? "In" : "Out",
+      (l.direction === "CR" ? l.amount : -l.amount).toFixed(2), // signed: +in / −out, sum-friendly
+      companyOf(l.account),
+      l.outlet ?? "",
+      l.isInterCo ? "Yes" : "No",
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map(esc).join(",")).join("\r\n");
+    // Prepend a UTF-8 BOM so Excel reads it as UTF-8 (correct RM/special chars).
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `celsius-ledger_${dateFrom || data?.from || "start"}_to_${dateTo || "latest"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-4 p-3 sm:p-6">
       <header className="min-w-0">
@@ -322,6 +356,9 @@ export default function FinanceLedgerPage() {
           <label className="flex items-center gap-1">Max RM
             <input type="number" inputMode="decimal" value={amountMax} onChange={(e) => setAmountMax(e.target.value)} className="h-8 w-24 rounded-md border bg-background px-2 text-xs tabular-nums" />
           </label>
+          <Button variant="outline" size="sm" className="h-8" onClick={exportCsv} disabled={filtered.length === 0} title="Export the filtered rows to CSV (opens in Excel)">
+            <Download className="mr-1 h-3 w-3" /> Export
+          </Button>
           {anyFilter && (
             <Button variant="outline" size="sm" className="h-8" onClick={clearFilters}>
               <X className="mr-1 h-3 w-3" /> Clear
