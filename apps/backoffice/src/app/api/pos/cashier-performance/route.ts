@@ -99,12 +99,70 @@ export async function GET(request: NextRequest) {
     for (const u of users ?? []) nameById[u.id as string] = (u.name as string) || "";
   }
 
+  // ── Upsell: per-cashier Pair-with-a-Bite conversion ─────────
+  // Adds = cashier-attributed pair taps (source=register, employee_id set). An
+  // add "converts" when the same cashier completed an order within 30 min whose
+  // items include that product. Time-reconciled — there's no order key at add
+  // time — so it's a coaching-grade signal, not payroll. We report conversion
+  // RATE, not raw adds, so spamming the button on non-converting orders lowers it.
+  const RECONCILE_MS = 30 * 60 * 1000;
+  const orderIds = rows.map((o) => o.id as string);
+  const orderProducts: Record<string, Set<string>> = {};
+  for (let i = 0; i < orderIds.length; i += 1000) {
+    const chunk = orderIds.slice(i, i + 1000);
+    const { data: items } = await supabase.from("pos_order_items").select("order_id, product_id").in("order_id", chunk);
+    for (const it of items ?? []) {
+      const oid = it.order_id as string;
+      const pid = it.product_id as string | null;
+      if (!oid || !pid) continue;
+      (orderProducts[oid] ||= new Set<string>()).add(pid);
+    }
+  }
+  const ordersByEmp: Record<string, { ms: number; products: Set<string> }[]> = {};
+  for (const o of rows) {
+    const emp = (o.employee_id as string) || "unknown";
+    (ordersByEmp[emp] ||= []).push({
+      ms: Date.parse(o.created_at as string),
+      products: orderProducts[o.id as string] || new Set<string>(),
+    });
+  }
+
+  let pairQ = supabase
+    .from("pos_pair_events")
+    .select("employee_id, product_id, created_at")
+    .eq("source", "register")
+    .not("employee_id", "is", null)
+    .gte("created_at", since)
+    .limit(20000);
+  if (outletId) pairQ = pairQ.eq("outlet_id", outletId);
+  const { data: pairRows } = await pairQ;
+  const upsellByEmp: Record<string, { adds: number; converted: number }> = {};
+  let totalAdds = 0;
+  let totalConverted = 0;
+  for (const pe of pairRows ?? []) {
+    const emp = pe.employee_id as string | null;
+    const prod = pe.product_id as string | null;
+    if (!emp || !prod) continue;
+    const t = Date.parse(pe.created_at as string);
+    const agg = (upsellByEmp[emp] ||= { adds: 0, converted: 0 });
+    agg.adds++;
+    totalAdds++;
+    const converted = (ordersByEmp[emp] || []).some(
+      (o) => o.ms >= t - 60_000 && o.ms <= t + RECONCILE_MS && o.products.has(prod),
+    );
+    if (converted) {
+      agg.converted++;
+      totalConverted++;
+    }
+  }
+
   const cashiers = Object.entries(byStaff)
     .map(([id, a]) => {
       // Anti-gaming: the most-repeated single phone among this cashier's
       // collected orders. A real regular recurs a little; a cashier's own number
       // on many tickets spikes. Flag = informational (owner reviews), not a block.
       const maxSamePhone = Object.values(a.phones).reduce((m, n) => Math.max(m, n), 0);
+      const up = upsellByEmp[id] || { adds: 0, converted: 0 };
       return {
         id,
         name: nameById[id] || (id === "unknown" ? "Unassigned" : "Staff"),
@@ -115,6 +173,10 @@ export async function GET(request: NextRequest) {
         rate: a.orders > 0 ? Math.round((a.collected / a.orders) * 100) : 0,
         maxSamePhone,
         suspicious: maxSamePhone >= 5 && a.collected > 0 && maxSamePhone / a.collected >= 0.3,
+        // Upsell (coaching-only): pair-adds + their conversion rate.
+        pairAdds: up.adds,
+        pairConverted: up.converted,
+        upsellRate: up.adds > 0 ? Math.round((up.converted / up.adds) * 100) : null,
       };
     })
     .sort((x, y) => y.rate - x.rate || y.orders - x.orders);
@@ -129,6 +191,8 @@ export async function GET(request: NextRequest) {
       newMembers: totalNew,
       repeatMembers: totalCollected - totalNew,
       rate: totalOrders > 0 ? Math.round((totalCollected / totalOrders) * 100) : 0,
+      pairAdds: totalAdds,
+      upsellRate: totalAdds > 0 ? Math.round((totalConverted / totalAdds) * 100) : null,
     },
     cashiers,
   });

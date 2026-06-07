@@ -477,6 +477,7 @@ export function logPairAdd(
   pair: SuggestedPair,
   rank: number,
   source: "register" | "display",
+  employeeId: string | null = null,
 ): void {
   apiPost("/api/pos/loyalty/pair-event", {
     outlet_id: outletId,
@@ -485,6 +486,9 @@ export function logPairAdd(
     reason: pair.reason,
     rank,
     source,
+    // employee_id attributes the upsell to a cashier (null = customer self-add
+    // on the display). Drives the per-cashier upsell conversion metric.
+    employee_id: employeeId,
   }).catch(() => {});
 }
 
