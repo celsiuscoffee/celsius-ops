@@ -42,6 +42,10 @@ export async function POST(req: NextRequest) {
       reason: body?.reason ?? null,
       rank: typeof body?.rank === "number" ? body.rank : null,
       source: body?.source === "display" ? "display" : "register",
+      // Upsell attribution: which cashier added it (null for customer self-add
+      // on the display). order_id reserved for a future order-exact reconcile.
+      employee_id: typeof body?.employee_id === "string" ? body.employee_id : null,
+      order_id: typeof body?.order_id === "string" ? body.order_id : null,
     });
 
     return NextResponse.json({ ok: true });

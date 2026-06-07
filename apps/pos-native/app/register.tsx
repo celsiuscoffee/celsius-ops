@@ -674,7 +674,7 @@ export default function Register() {
     // Upsell attribution — record that a suggested bite was added (with its 1..3
     // slot), so pair-adds ÷ orders is measurable. Best-effort; never blocks.
     const rank = pairs.findIndex((x) => x.product_id === pair.product_id) + 1;
-    logPairAdd(outletId, pair, rank, "register");
+    logPairAdd(outletId, pair, rank, "register", staff?.staffId ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productById, pairs, outletId]);
 
