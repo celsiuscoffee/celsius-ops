@@ -86,7 +86,13 @@ function isNetwork(p: PrinterConfig): boolean {
 // ─── ESC/POS byte builder ───────────────────────────────────
 // Minimal Epson-compatible command set; accumulates a number[] of 0-255
 // byte values that the native side writes straight to the socket.
-const DIV = "-".repeat(32);
+//
+// Kitchen/Bar dockets target an 80mm thermal head: Font A = 48 columns
+// (a 58mm head would be 32). DIV is the ONLY column-bound element — item
+// lines wrap at the head's own width and headers/items scale via size() —
+// so this width is what makes the docket fill the full 80mm page.
+const DOCKET_COLS = 48; // 80mm Font A
+const DIV = "-".repeat(DOCKET_COLS);
 
 class Esc {
   private b: number[] = [];
