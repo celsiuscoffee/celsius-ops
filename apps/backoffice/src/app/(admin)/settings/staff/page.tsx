@@ -133,7 +133,14 @@ export default function StaffPage() {
       password: "",
       pin: "",
       appAccess: s.appAccess || [],
-      moduleAccess: s.moduleAccess || {},
+      // Drop malformed (non-array) module values. Legacy/migrated rows can store
+      // a non-array here; the Access tab does `selected.includes(...)` on it,
+      // which throws ("includes is not a function") and white-screens the whole
+      // page. Treat a bad value as unset (no restriction); re-saving then
+      // persists clean data.
+      moduleAccess: Object.fromEntries(
+        Object.entries(s.moduleAccess ?? {}).filter(([, v]) => Array.isArray(v)),
+      ),
     });
     setEditingId(s.id);
     setEditingStaff(s);
@@ -552,7 +559,7 @@ export default function StaffPage() {
                       .filter((app) => APP_MODULES[app].some((m) => canGrantModule(app, m.key)))
                       .map((app) => {
                       const modules = APP_MODULES[app].filter((m) => canGrantModule(app, m.key));
-                      const selected = form.moduleAccess[app] || [];
+                      const selected = Array.isArray(form.moduleAccess[app]) ? form.moduleAccess[app] : [];
                       const allSelected = modules.every((m) => selected.includes(m.key));
                       const noneSelected = selected.length === 0;
                       const groups = MODULE_GROUPS[app];
