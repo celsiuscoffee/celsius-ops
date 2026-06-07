@@ -7,6 +7,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { getFinanceClient } from "@/lib/finance/supabase";
 import { getActiveCompanyId } from "@/lib/finance/companies";
+import { prisma } from "@/lib/prisma";
+
+// Each company's Maybank current account, identified by the 4-digit suffix in
+// BankStatement.accountName. Cash position reads the latest statement's closing
+// balance — the ledger's 1000-* balances are unreliable until journals post.
+const BANK_ACCOUNT_SUFFIX: Record<string, string> = {
+  celsius: "4384",
+  celsiusconezion: "2644",
+  celsiustamarind: "9345",
+};
 
 export const dynamic = "force-dynamic";
 
@@ -47,8 +57,8 @@ export async function GET(req: NextRequest) {
     .eq("company_id", companyId)
     .gte("txn_date", yesterday)
     .lte("txn_date", today)
-    .eq("status", "posted")
-    .order("posted_at", { ascending: false })
+    .in("status", ["posted", "draft"])
+    .order("txn_date", { ascending: false })
     .limit(20);
 
   // Open exceptions count by priority.
@@ -80,7 +90,7 @@ export async function GET(req: NextRequest) {
       .in("id", txnIds);
     const validTxnIds = new Set(
       (txns ?? [])
-        .filter((t) => t.status === "posted" && t.txn_date >= mtdStart && t.company_id === companyId)
+        .filter((t) => (t.status === "posted" || t.status === "draft") && t.txn_date >= mtdStart && t.company_id === companyId)
         .map((t) => t.id)
     );
     for (const l of mtdLines) {
@@ -89,37 +99,25 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Cash position per bank account: sum of (debit - credit) on 1000-* codes.
-  const { data: bankLines } = await client
-    .from("fin_journal_lines")
-    .select("account_code, debit, credit, transaction_id")
-    .like("account_code", "1000%");
-
-  const cashByAccount: Record<string, number> = {};
-  if (bankLines && bankLines.length) {
-    const txnIds = Array.from(new Set(bankLines.map((l) => l.transaction_id)));
-    const { data: txns } = await client
-      .from("fin_transactions")
-      .select("id, status, company_id")
-      .in("id", txnIds);
-    const valid = new Set(
-      (txns ?? [])
-        .filter((t) => t.status === "posted" && t.company_id === companyId)
-        .map((t) => t.id)
-    );
-    for (const l of bankLines) {
-      if (!valid.has(l.transaction_id)) continue;
-      const code = l.account_code as string;
-      cashByAccount[code] = (cashByAccount[code] ?? 0) + Number(l.debit) - Number(l.credit);
+  // Cash position — latest bank-statement closing balance for this company's
+  // account. (Reads the bank directly; the ledger's 1000-* balances are
+  // unreliable until journals actually post.)
+  const suffix = BANK_ACCOUNT_SUFFIX[companyId];
+  const cashPosition: { code: string; name: string; balance: number }[] = [];
+  if (suffix) {
+    const stmt = await prisma.bankStatement.findFirst({
+      where: { accountName: { contains: suffix } },
+      orderBy: { statementDate: "desc" },
+      select: { accountName: true, closingBalance: true, statementDate: true },
+    });
+    if (stmt) {
+      cashPosition.push({
+        code: suffix,
+        name: `${stmt.accountName ?? "Bank"} · as of ${stmt.statementDate.toISOString().slice(0, 10)}`,
+        balance: Number(stmt.closingBalance),
+      });
     }
   }
-
-  // Account names for cash card display.
-  const codes = Object.keys(cashByAccount);
-  const { data: accounts } = codes.length
-    ? await client.from("fin_accounts").select("code, name").in("code", codes)
-    : { data: [] as { code: string; name: string }[] };
-  const accountNames = new Map((accounts ?? []).map((a) => [a.code, a.name]));
 
   // Today's agent activity counts for the activity feed header.
   const { data: agentActivity } = await client
@@ -128,7 +126,7 @@ export async function GET(req: NextRequest) {
     .eq("company_id", companyId)
     .gte("txn_date", yesterday)
     .lte("txn_date", today)
-    .eq("status", "posted");
+    .in("status", ["posted", "draft"]);
 
   const activityByAgent: Record<string, { count: number; amount: number }> = {};
   for (const r of agentActivity ?? []) {
@@ -142,13 +140,7 @@ export async function GET(req: NextRequest) {
     asOf: new Date().toISOString(),
     mtd: { start: mtdStart, revenue: Math.round(mtdRevenue * 100) / 100 },
     exceptions: exceptionCount,
-    cashPosition: codes
-      .map((code) => ({
-        code,
-        name: accountNames.get(code) ?? code,
-        balance: Math.round(cashByAccount[code] * 100) / 100,
-      }))
-      .sort((a, b) => b.balance - a.balance),
+    cashPosition,
     agentActivity: Object.entries(activityByAgent).map(([agent, v]) => ({
       agent,
       count: v.count,
