@@ -34,14 +34,15 @@ function humanCat(c: string | null): string {
   return c.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-// Long bank account names → short entity label via the 4-digit suffix.
-function entityShort(account: string | null): string {
+// Bank account → the company (legal entity) that owns it. 3 entities, one
+// Maybank current account each, identified by name / 4-digit suffix.
+function companyOf(account: string | null): string {
   if (!account) return "—";
-  const m = account.match(/\((\d{3,4})\)/);
-  const suffix = m ? m[1] : "";
   const up = account.toUpperCase();
-  const base = up.includes("CONEZION") ? "Conezion" : up.includes("TAMARIND") ? "Tamarind" : "Celsius SB";
-  return suffix ? `${base} · ${suffix}` : base;
+  if (up.includes("CONEZION") || up.includes("2644")) return "Celsius Coffee Conezion";
+  if (up.includes("TAMARIND") || up.includes("9345")) return "Celsius Coffee Tamarind";
+  if (up.includes("4384") || up.includes("CELSIUS COFFEE SDN")) return "Celsius Coffee SB";
+  return account;
 }
 
 // ─── Date period helpers (quick ranges + month picker) ───────────────────────
@@ -154,7 +155,7 @@ export default function FinanceLedgerPage() {
     [lines]
   );
   const entityOptions = useMemo(
-    () => Array.from(new Set(lines.map((l) => entityShort(l.account)))).sort(),
+    () => Array.from(new Set(lines.map((l) => companyOf(l.account)))).sort(),
     [lines]
   );
   const outletOptions = useMemo(
@@ -180,14 +181,14 @@ export default function FinanceLedgerPage() {
     const max = parseFloat(amountMax);
     let rows = lines.filter((l) => {
       if (s) {
-        const hay = `${l.description} ${l.reference ?? ""} ${humanCat(l.category)} ${entityShort(l.account)} ${l.outlet ?? ""}`.toLowerCase();
+        const hay = `${l.description} ${l.reference ?? ""} ${humanCat(l.category)} ${companyOf(l.account)} ${l.outlet ?? ""}`.toLowerCase();
         if (!hay.includes(s)) return false;
       }
       if (catF) {
         if (catF === "__null__" ? l.category != null : l.category !== catF) return false;
       }
       if (dirF && l.direction !== dirF) return false;
-      if (entityF && entityShort(l.account) !== entityF) return false;
+      if (entityF && companyOf(l.account) !== entityF) return false;
       if (outletF) {
         if (outletF === "__none__" ? !!l.outlet : l.outlet !== outletF) return false;
       }
@@ -204,7 +205,7 @@ export default function FinanceLedgerPage() {
       switch (sortKey) {
         case "amount": av = signed(a); bv = signed(b); break;
         case "category": av = humanCat(a.category); bv = humanCat(b.category); break;
-        case "account": av = entityShort(a.account); bv = entityShort(b.account); break;
+        case "account": av = companyOf(a.account); bv = companyOf(b.account); break;
         case "txnDate": av = a.txnDate; bv = b.txnDate; break;
         default: av = a.description.toLowerCase(); bv = b.description.toLowerCase();
       }
@@ -265,8 +266,8 @@ export default function FinanceLedgerPage() {
             <option value="DR">Out (money paid)</option>
           </select>
 
-          <select value={entityF} onChange={(e) => setEntityF(e.target.value)} className={SELECT_CLASS} title="Entity (bank account)">
-            <option value="">All entities</option>
+          <select value={entityF} onChange={(e) => setEntityF(e.target.value)} className={SELECT_CLASS} title="Company">
+            <option value="">All companies</option>
             {entityOptions.map((e) => (
               <option key={e} value={e}>{e}</option>
             ))}
@@ -349,7 +350,7 @@ export default function FinanceLedgerPage() {
                 <SortTh label="Date" sortField="txnDate" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
                 <SortTh label="Description" sortField="description" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortTh label="Category" sortField="category" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap hidden sm:table-cell" />
-                <SortTh label="Entity" sortField="account" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap hidden md:table-cell" />
+                <SortTh label="Company" sortField="account" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap hidden md:table-cell" />
                 <SortTh label="Amount" sortField="amount" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap text-right" align="right" />
               </tr>
             </thead>
@@ -373,7 +374,7 @@ export default function FinanceLedgerPage() {
                     <Badge variant="outline" className="font-normal">{humanCat(l.category)}</Badge>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 hidden md:table-cell align-top text-xs text-muted-foreground">
-                    {entityShort(l.account)}
+                    {companyOf(l.account)}
                   </td>
                   <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums align-top font-medium ${l.direction === "CR" ? "text-green-700" : "text-red-700"}`}>
                     {l.direction === "CR" ? "+" : "−"}{RM(l.amount)}
@@ -429,8 +430,8 @@ export default function FinanceLedgerPage() {
                   <Badge variant="outline" className="font-normal">{humanCat(openLine.category)}</Badge>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Entity</div>
-                  <div className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5 shrink-0" />{entityShort(openLine.account)}</div>
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Company</div>
+                  <div className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5 shrink-0" />{companyOf(openLine.account)}</div>
                 </div>
                 {openLine.outlet && (
                   <div>
