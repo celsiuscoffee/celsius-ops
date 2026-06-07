@@ -65,13 +65,24 @@ export default function StaffPage() {
   const loadStaff = () => {
     fetch("/api/settings/staff")
       .then((res) => res.json())
-      .then((data) => { setStaff(data); setLoading(false); })
+      .then((data) => {
+        // Guard against non-array responses. A transient 401 (`{error:"Unauthorized"}`)
+        // or any JSON error body would otherwise make `staff` a non-array, and the
+        // next `staff.filter(...)`/`.map(...)` throws — collapsing the whole page into
+        // the error boundary. Keep the prior list on a bad response instead of crashing.
+        if (Array.isArray(data)) setStaff(data);
+        else console.error("Staff load: unexpected response", data);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   };
 
   useEffect(() => {
     loadStaff();
-    fetch("/api/settings/outlets").then((r) => r.json()).then(setOutlets);
+    fetch("/api/settings/outlets")
+      .then((r) => r.json())
+      .then((d) => setOutlets(Array.isArray(d) ? d : []))
+      .catch(() => {});
     fetch("/api/auth/me").then((r) => r.ok ? r.json() : null).then((d) => {
       if (d) setMe({ role: d.role, outletId: d.outletId ?? null, appAccess: d.appAccess ?? [], moduleAccess: d.moduleAccess ?? [] });
     });
@@ -90,7 +101,7 @@ export default function StaffPage() {
 
   const filtered = staff.filter((s) => {
     const matchStatus = filter === "all" || s.status === filter;
-    const matchSearch = !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.phone.includes(search);
+    const matchSearch = !search || (s.name ?? "").toLowerCase().includes(search.toLowerCase()) || (s.phone ?? "").includes(search);
     const matchRole = roleFilter === "all" || s.role === roleFilter;
     const matchOutlet = outletFilter === "all" || s.outletId === outletFilter || (s.outletIds || []).includes(outletFilter);
     return matchStatus && matchSearch && matchRole && matchOutlet;
@@ -333,7 +344,7 @@ export default function StaffPage() {
               <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-terracotta/10 text-xs font-bold text-terracotta-dark">{s.name.charAt(0)}</div>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-terracotta/10 text-xs font-bold text-terracotta-dark">{(s.name ?? "?").charAt(0)}</div>
                     <div>
                       <p className="font-medium text-gray-900">{s.name}</p>
                       {s.username && <p className="text-[10px] text-gray-400">@{s.username}</p>}
