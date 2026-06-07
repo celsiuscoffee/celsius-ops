@@ -230,9 +230,9 @@ export default function EmployeesPage() {
     const q = search.toLowerCase();
     const matchesSearch =
       !q ||
-      e.name.toLowerCase().includes(q) ||
+      (e.name ?? "").toLowerCase().includes(q) ||
       (e.fullName?.toLowerCase().includes(q) ?? false) ||
-      e.phone.toLowerCase().includes(q);
+      (e.phone ?? "").toLowerCase().includes(q);
     const matchesEmployment =
       filter === "all" || filter === "resigned" ||
       (filter === "no_profile" ? !e.hrProfile : e.hrProfile?.employment_type === filter);
