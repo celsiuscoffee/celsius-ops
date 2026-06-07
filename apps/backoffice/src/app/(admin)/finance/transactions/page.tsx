@@ -34,14 +34,57 @@ function humanCat(c: string | null): string {
   return c.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-// Long bank account names → short entity label via the 4-digit suffix.
-function entityShort(account: string | null): string {
+// Bank account → the company (legal entity) that owns it. 3 entities, one
+// Maybank current account each, identified by name / 4-digit suffix.
+function companyOf(account: string | null): string {
   if (!account) return "—";
-  const m = account.match(/\((\d{3,4})\)/);
-  const suffix = m ? m[1] : "";
   const up = account.toUpperCase();
-  const base = up.includes("CONEZION") ? "Conezion" : up.includes("TAMARIND") ? "Tamarind" : "Celsius SB";
-  return suffix ? `${base} · ${suffix}` : base;
+  if (up.includes("CONEZION") || up.includes("2644")) return "Celsius Coffee Conezion";
+  if (up.includes("TAMARIND") || up.includes("9345")) return "Celsius Coffee Tamarind";
+  if (up.includes("4384") || up.includes("CELSIUS COFFEE SDN")) return "Celsius Coffee SB";
+  return account;
+}
+
+// ─── Date period helpers (quick ranges + month picker) ───────────────────────
+const ymd = (d: Date) => d.toISOString().slice(0, 10);
+function monthRange(year: number, month0: number): { from: string; to: string } {
+  // month0 may be negative / >11 — Date.UTC normalizes across year boundaries.
+  return {
+    from: ymd(new Date(Date.UTC(year, month0, 1))),
+    to: ymd(new Date(Date.UTC(year, month0 + 1, 0))), // day 0 of next month = last day
+  };
+}
+function presetRange(key: string): { from: string; to: string } {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const thisMonthEnd = monthRange(y, m).to;
+  switch (key) {
+    case "thisMonth": return monthRange(y, m);
+    case "lastMonth": return monthRange(y, m - 1);
+    case "last3": return { from: monthRange(y, m - 2).from, to: thisMonthEnd };
+    case "last6": return { from: monthRange(y, m - 5).from, to: thisMonthEnd };
+    case "ytd": return { from: `${y}-01-01`, to: ymd(now) };
+    case "last12": return { from: monthRange(y, m - 11).from, to: thisMonthEnd };
+    default: return { from: monthRange(y, m - 2).from, to: thisMonthEnd };
+  }
+}
+function monthOptions(): { value: string; label: string; from: string; to: string }[] {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const out: { value: string; label: string; from: string; to: string }[] = [];
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(Date.UTC(y, m - i, 1));
+    const yy = d.getUTCFullYear();
+    const mm = d.getUTCMonth();
+    out.push({
+      value: `${yy}-${String(mm + 1).padStart(2, "0")}`,
+      label: d.toLocaleString("en-MY", { month: "short", year: "numeric", timeZone: "UTC" }),
+      ...monthRange(yy, mm),
+    });
+  }
+  return out;
 }
 
 type SortKey = "txnDate" | "description" | "category" | "account" | "amount";
@@ -76,9 +119,11 @@ function SortTh({
 export default function FinanceLedgerPage() {
   const [openLine, setOpenLine] = useState<BankLine | null>(null);
 
-  // Server-windowed date range (blank → API default = last 6 months).
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  // Server-windowed date range. Defaults to last 3 months; driven by the
+  // Period dropdown (quick ranges + month picker) or custom From/To.
+  const [periodSel, setPeriodSel] = useState("last3");
+  const [dateFrom, setDateFrom] = useState(() => presetRange("last3").from);
+  const [dateTo, setDateTo] = useState(() => presetRange("last3").to);
 
   // Client-side filters.
   const [search, setSearch] = useState("");
@@ -103,13 +148,14 @@ export default function FinanceLedgerPage() {
     `/api/finance/bank-ledger${qs ? `?${qs}` : ""}`
   );
   const lines = useMemo(() => data?.lines ?? [], [data]);
+  const MONTHS = useMemo(() => monthOptions(), []);
 
   const categoryOptions = useMemo(
     () => Array.from(new Set(lines.map((l) => l.category ?? "__null__"))).sort(),
     [lines]
   );
   const entityOptions = useMemo(
-    () => Array.from(new Set(lines.map((l) => entityShort(l.account)))).sort(),
+    () => Array.from(new Set(lines.map((l) => companyOf(l.account)))).sort(),
     [lines]
   );
   const outletOptions = useMemo(
@@ -122,20 +168,27 @@ export default function FinanceLedgerPage() {
     else { setSortKey(k); setSortDir(k === "amount" || k === "txnDate" ? "desc" : "asc"); }
   }
 
+  function applyPeriod(v: string) {
+    setPeriodSel(v);
+    if (v === "custom") return;
+    const r = v.startsWith("m:") ? MONTHS.find((mo) => mo.value === v.slice(2)) : presetRange(v);
+    if (r) { setDateFrom(r.from); setDateTo(r.to); }
+  }
+
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
     const min = parseFloat(amountMin);
     const max = parseFloat(amountMax);
     let rows = lines.filter((l) => {
       if (s) {
-        const hay = `${l.description} ${l.reference ?? ""} ${humanCat(l.category)} ${entityShort(l.account)} ${l.outlet ?? ""}`.toLowerCase();
+        const hay = `${l.description} ${l.reference ?? ""} ${humanCat(l.category)} ${companyOf(l.account)} ${l.outlet ?? ""}`.toLowerCase();
         if (!hay.includes(s)) return false;
       }
       if (catF) {
         if (catF === "__null__" ? l.category != null : l.category !== catF) return false;
       }
       if (dirF && l.direction !== dirF) return false;
-      if (entityF && entityShort(l.account) !== entityF) return false;
+      if (entityF && companyOf(l.account) !== entityF) return false;
       if (outletF) {
         if (outletF === "__none__" ? !!l.outlet : l.outlet !== outletF) return false;
       }
@@ -152,7 +205,7 @@ export default function FinanceLedgerPage() {
       switch (sortKey) {
         case "amount": av = signed(a); bv = signed(b); break;
         case "category": av = humanCat(a.category); bv = humanCat(b.category); break;
-        case "account": av = entityShort(a.account); bv = entityShort(b.account); break;
+        case "account": av = companyOf(a.account); bv = companyOf(b.account); break;
         case "txnDate": av = a.txnDate; bv = b.txnDate; break;
         default: av = a.description.toLowerCase(); bv = b.description.toLowerCase();
       }
@@ -213,8 +266,8 @@ export default function FinanceLedgerPage() {
             <option value="DR">Out (money paid)</option>
           </select>
 
-          <select value={entityF} onChange={(e) => setEntityF(e.target.value)} className={SELECT_CLASS} title="Entity (bank account)">
-            <option value="">All entities</option>
+          <select value={entityF} onChange={(e) => setEntityF(e.target.value)} className={SELECT_CLASS} title="Company">
+            <option value="">All companies</option>
             {entityOptions.map((e) => (
               <option key={e} value={e}>{e}</option>
             ))}
@@ -232,11 +285,27 @@ export default function FinanceLedgerPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <label className="flex items-center gap-1">Period
+            <select value={periodSel} onChange={(e) => applyPeriod(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-xs sm:text-sm" title="Period">
+              <optgroup label="Quick ranges">
+                <option value="thisMonth">This month</option>
+                <option value="lastMonth">Last month</option>
+                <option value="last3">Last 3 months</option>
+                <option value="last6">Last 6 months</option>
+                <option value="ytd">Year to date</option>
+                <option value="last12">Last 12 months</option>
+              </optgroup>
+              <optgroup label="By month">
+                {MONTHS.map((mo) => (<option key={mo.value} value={`m:${mo.value}`}>{mo.label}</option>))}
+              </optgroup>
+              <option value="custom">Custom range…</option>
+            </select>
+          </label>
           <label className="flex items-center gap-1">From
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-xs" />
+            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPeriodSel("custom"); }} className="h-8 rounded-md border bg-background px-2 text-xs" />
           </label>
           <label className="flex items-center gap-1">To
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-xs" />
+            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPeriodSel("custom"); }} className="h-8 rounded-md border bg-background px-2 text-xs" />
           </label>
           <label className="flex items-center gap-1">Min RM
             <input type="number" inputMode="decimal" value={amountMin} onChange={(e) => setAmountMin(e.target.value)} className="h-8 w-24 rounded-md border bg-background px-2 text-xs tabular-nums" />
@@ -281,7 +350,7 @@ export default function FinanceLedgerPage() {
                 <SortTh label="Date" sortField="txnDate" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
                 <SortTh label="Description" sortField="description" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortTh label="Category" sortField="category" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap hidden sm:table-cell" />
-                <SortTh label="Entity" sortField="account" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap hidden md:table-cell" />
+                <SortTh label="Company" sortField="account" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap hidden md:table-cell" />
                 <SortTh label="Amount" sortField="amount" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap text-right" align="right" />
               </tr>
             </thead>
@@ -305,7 +374,7 @@ export default function FinanceLedgerPage() {
                     <Badge variant="outline" className="font-normal">{humanCat(l.category)}</Badge>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 hidden md:table-cell align-top text-xs text-muted-foreground">
-                    {entityShort(l.account)}
+                    {companyOf(l.account)}
                   </td>
                   <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums align-top font-medium ${l.direction === "CR" ? "text-green-700" : "text-red-700"}`}>
                     {l.direction === "CR" ? "+" : "−"}{RM(l.amount)}
@@ -361,8 +430,8 @@ export default function FinanceLedgerPage() {
                   <Badge variant="outline" className="font-normal">{humanCat(openLine.category)}</Badge>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Entity</div>
-                  <div className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5 shrink-0" />{entityShort(openLine.account)}</div>
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Company</div>
+                  <div className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5 shrink-0" />{companyOf(openLine.account)}</div>
                 </div>
                 {openLine.outlet && (
                   <div>
