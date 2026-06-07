@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Loader2, Phone, Target, Users, AlertTriangle } from "lucide-react";
+import { Loader2, Target, Users, UserPlus, Repeat, AlertTriangle } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
 
@@ -17,6 +17,8 @@ type Cashier = {
   name: string;
   orders: number;
   collected: number;
+  collectedNew: number;
+  collectedRepeat: number;
   rate: number;
   maxSamePhone: number;
   suspicious: boolean;
@@ -24,7 +26,7 @@ type Cashier = {
 type Data = {
   days: number;
   target: number;
-  overall: { orders: number; collected: number; rate: number };
+  overall: { orders: number; collected: number; newMembers: number; repeatMembers: number; rate: number };
   cashiers: Cashier[];
 };
 
@@ -78,7 +80,7 @@ export default function CashierPerformancePage() {
       </div>
 
       {/* Headline KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="rounded-2xl bg-white p-4 border border-gray-100">
           <div className="flex items-center gap-2 mb-1.5">
             <Target className="h-4 w-4 text-[#A2492C]" />
@@ -91,8 +93,9 @@ export default function CashierPerformancePage() {
             {overall ? `${overall.collected.toLocaleString()} / ${overall.orders.toLocaleString()} orders · target ${target}%` : " "}
           </p>
         </div>
-        <KpiCard Icon={Phone} label="Numbers Collected" value={overall ? overall.collected.toLocaleString() : "—"} sub={`last ${days} days`} />
-        <KpiCard Icon={Users} label="Cashiers Tracked" value={String(cashiers.length)} sub="counter-rung orders" />
+        <KpiCard Icon={UserPlus} label="New Members" value={overall ? overall.newMembers.toLocaleString() : "—"} sub="fresh enrolments" />
+        <KpiCard Icon={Repeat} label="Returning" value={overall ? overall.repeatMembers.toLocaleString() : "—"} sub="existing members" />
+        <KpiCard Icon={Users} label="Cashiers Tracked" value={String(cashiers.length)} sub={`last ${days} days`} />
       </div>
 
       {/* Per-cashier leaderboard */}
@@ -104,7 +107,8 @@ export default function CashierPerformancePage() {
               <th className="px-4 py-3">Cashier</th>
               <th className="px-4 py-3 text-right">Orders</th>
               <th className="px-4 py-3 text-right">Collected</th>
-              <th className="px-4 py-3 text-right w-48">Collection Rate</th>
+              <th className="px-4 py-3 text-right">New</th>
+              <th className="px-4 py-3 text-right w-44">Collection Rate</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -131,6 +135,7 @@ export default function CashierPerformancePage() {
                   </td>
                   <td className="px-4 py-3 text-sm text-right text-gray-600">{c.orders.toLocaleString()}</td>
                   <td className="px-4 py-3 text-sm text-right font-medium text-[#160800]">{c.collected.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm text-right font-medium text-emerald-700" title="New members enrolled (fresh acquisitions)">{c.collectedNew.toLocaleString()}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <div className="h-1.5 w-24 rounded-full bg-gray-200 overflow-hidden">
@@ -147,8 +152,9 @@ export default function CashierPerformancePage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        v1 measures collection only. New-vs-repeat split, the upsell conversion metric, and
-        the per-staff view on the HR page are Phase B. <AlertTriangle className="inline h-3 w-3 text-amber-500" />
+        Collection rate + new/repeat split (New = a member enrolled at/around the order — the
+        high-value acquisition). The upsell conversion metric and the per-staff HR-page view are
+        Phase B. <AlertTriangle className="inline h-3 w-3 text-amber-500" />
         flags a cashier where one number recurs across many tickets (possible fake/own-number entry).
       </p>
     </div>

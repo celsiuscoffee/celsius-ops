@@ -49,20 +49,44 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const rows = orders ?? [];
 
+  // ── Member join dates → new vs repeat ──────────────────────
+  // A collected order is "new" if the member was created at/around this order
+  // (a fresh enrolment — the high-value acquisition), "repeat" if the member
+  // already existed. Phones are E.164 and join members.phone exactly; a member
+  // not found is counted as repeat (never inflate the new-acquisition number).
+  const phones = [...new Set(rows.map((o) => o.loyalty_phone as string | null).filter(Boolean))] as string[];
+  const memberCreatedMs: Record<string, number> = {};
+  for (let i = 0; i < phones.length; i += 1000) {
+    const chunk = phones.slice(i, i + 1000);
+    const { data: members } = await supabase.from("members").select("phone, created_at").in("phone", chunk);
+    for (const m of members ?? []) {
+      const c = m.created_at as string | null;
+      if (m.phone && c) memberCreatedMs[m.phone as string] = Date.parse(c);
+    }
+  }
+  const NEW_WINDOW_MS = 15 * 60 * 1000; // member born within 15 min of the order = a fresh enrolment
+
   // ── Aggregate per cashier ──────────────────────────────────
-  type Agg = { orders: number; collected: number; phones: Record<string, number> };
+  type Agg = { orders: number; collected: number; newC: number; phones: Record<string, number> };
   const byStaff: Record<string, Agg> = {};
   let totalOrders = 0;
   let totalCollected = 0;
+  let totalNew = 0;
   for (const o of rows) {
     const id = (o.employee_id as string) || "unknown";
     const phone = (o.loyalty_phone as string | null) || null;
-    if (!byStaff[id]) byStaff[id] = { orders: 0, collected: 0, phones: {} };
+    if (!byStaff[id]) byStaff[id] = { orders: 0, collected: 0, newC: 0, phones: {} };
     byStaff[id].orders++;
     totalOrders++;
     if (phone) {
       byStaff[id].collected++;
       totalCollected++;
+      const memMs = memberCreatedMs[phone];
+      const isNew = memMs != null && memMs >= Date.parse(o.created_at as string) - NEW_WINDOW_MS;
+      if (isNew) {
+        byStaff[id].newC++;
+        totalNew++;
+      }
       byStaff[id].phones[phone] = (byStaff[id].phones[phone] || 0) + 1;
     }
   }
@@ -86,6 +110,8 @@ export async function GET(request: NextRequest) {
         name: nameById[id] || (id === "unknown" ? "Unassigned" : "Staff"),
         orders: a.orders,
         collected: a.collected,
+        collectedNew: a.newC,
+        collectedRepeat: a.collected - a.newC,
         rate: a.orders > 0 ? Math.round((a.collected / a.orders) * 100) : 0,
         maxSamePhone,
         suspicious: maxSamePhone >= 5 && a.collected > 0 && maxSamePhone / a.collected >= 0.3,
@@ -100,6 +126,8 @@ export async function GET(request: NextRequest) {
     overall: {
       orders: totalOrders,
       collected: totalCollected,
+      newMembers: totalNew,
+      repeatMembers: totalCollected - totalNew,
       rate: totalOrders > 0 ? Math.round((totalCollected / totalOrders) * 100) : 0,
     },
     cashiers,
