@@ -212,6 +212,25 @@ const OUTFLOW_RULES: Rule[] = [
   { name: "raw_catelux",     match: /\bCATELUX\b/i,                direction: "DR", category: "RAW_MATERIALS" as CashCategory },
   { name: "raw_poket_capital",match: /\bPOKET\s*CAPITAL\b/i,       direction: "DR", category: "RAW_MATERIALS" as CashCategory },
 
+  // Additional named F&B / coffee / packaging suppliers (recurring vendors
+  // previously falling into OTHER_OUTFLOW; extend as new vendors appear).
+  { name: "raw_country_bread",  match: /\bCOUNTRY\s*BREAD\b/i,       direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_beard_brothers", match: /\bBEARD\s*BROTHERS\b/i,      direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_sri_ternak",     match: /\bSRI\s*TERNAK\b/i,          direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_rich_products",  match: /\bRICH\s*PRODUCTS\b/i,       direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_jg_pacific",     match: /\bJG\s*PACIFIC\b/i,          direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_eighty_eight",   match: /\bEIGHTY\s*EIGHT\s*FAHREN/i, direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_mikofee",        match: /\bMIKOFEE\b/i,               direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+  { name: "raw_unique_paper",   match: /\bUNIQUE\s*PAPER\b/i,        direction: "DR", category: "RAW_MATERIALS" as CashCategory },
+
+  // Staff weekly payroll — "SCC Week NN" transfers to named employees.
+  { name: "salary_scc_week",    match: /\bSCC\s*WE/i,                direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },
+
+  // Capex — fit-out / furniture / signage (excluded from operating P&L).
+  { name: "capex_bespoke_interior", match: /\bBESPOKE\s*INTERIOR\b/i, direction: "DR", category: "INVESTMENTS" as CashCategory },
+  { name: "capex_kian_contract",    match: /\bKIAN\s*CONTRACT\b/i,    direction: "DR", category: "EQUIPMENTS" as CashCategory },
+  { name: "capex_wison_signboard",  match: /\bWISON\s*SIGNBOARD\b/i,  direction: "DR", category: "EQUIPMENTS" as CashCategory },
+
   // Generic SDN BHD vendor (lowest priority — fires only after the named
   // vendor list above has missed). Marked OTHER_OUTFLOW so finance can
   // re-classify; safer than guessing RAW_MATERIALS.
