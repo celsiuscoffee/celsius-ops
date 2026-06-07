@@ -131,6 +131,7 @@ export default function FinanceLedgerPage() {
   const [dirF, setDirF] = useState("");
   const [entityF, setEntityF] = useState("");
   const [outletF, setOutletF] = useState("");
+  const [intercoF, setIntercoF] = useState(""); // "" all | "exclude" | "only"
   const [amountMin, setAmountMin] = useState("");
   const [amountMax, setAmountMax] = useState("");
 
@@ -192,6 +193,8 @@ export default function FinanceLedgerPage() {
       if (outletF) {
         if (outletF === "__none__" ? !!l.outlet : l.outlet !== outletF) return false;
       }
+      if (intercoF === "exclude" && l.isInterCo) return false;
+      if (intercoF === "only" && !l.isInterCo) return false;
       if (!isNaN(min) && l.amount < min) return false;
       if (!isNaN(max) && l.amount > max) return false;
       return true;
@@ -214,7 +217,7 @@ export default function FinanceLedgerPage() {
       return a.txnDate < b.txnDate ? 1 : a.txnDate > b.txnDate ? -1 : 0;
     });
     return rows;
-  }, [lines, search, catF, dirF, entityF, outletF, amountMin, amountMax, sortKey, sortDir]);
+  }, [lines, search, catF, dirF, entityF, outletF, intercoF, amountMin, amountMax, sortKey, sortDir]);
 
   const totals = useMemo(() => {
     let inn = 0, out = 0;
@@ -225,9 +228,9 @@ export default function FinanceLedgerPage() {
   const MAX_RENDER = 500;
   const rendered = filtered.slice(0, MAX_RENDER);
 
-  const anyFilter = !!(search || catF || dirF || entityF || outletF || amountMin || amountMax);
+  const anyFilter = !!(search || catF || dirF || entityF || outletF || intercoF || amountMin || amountMax);
   function clearFilters() {
-    setSearch(""); setCatF(""); setDirF(""); setEntityF(""); setOutletF(""); setAmountMin(""); setAmountMax("");
+    setSearch(""); setCatF(""); setDirF(""); setEntityF(""); setOutletF(""); setIntercoF(""); setAmountMin(""); setAmountMax("");
   }
 
   return (
@@ -264,6 +267,12 @@ export default function FinanceLedgerPage() {
             <option value="">In &amp; Out</option>
             <option value="CR">In (money received)</option>
             <option value="DR">Out (money paid)</option>
+          </select>
+
+          <select value={intercoF} onChange={(e) => setIntercoF(e.target.value)} className={SELECT_CLASS} title="Inter-company transfers">
+            <option value="">Incl. inter-company</option>
+            <option value="exclude">Exclude inter-company</option>
+            <option value="only">Only inter-company</option>
           </select>
 
           <select value={entityF} onChange={(e) => setEntityF(e.target.value)} className={SELECT_CLASS} title="Company">
