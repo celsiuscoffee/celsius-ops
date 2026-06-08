@@ -68,15 +68,19 @@ interface SavedSegment {
 
 const SAVED_SEGMENTS_KEY = "celsius-saved-segments";
 
-// Tier filter options — ids match the `tiers` table; label = display name.
-const TIER_OPTIONS: { id: string; label: string }[] = [
-  { id: "tier-celsius-bronze", label: "Member" },
-  { id: "tier-celsius-silver", label: "Silver" },
-  { id: "tier-celsius-gold", label: "Gold" },
-  { id: "tier-celsius-elite", label: "Platinum" },
-  { id: "tier-celsius-arba-staff", label: "Staff" },
-  { id: "tier-celsius-black-card", label: "Black Card" },
+// Tier metadata — ids match the `tiers` table. cls = badge colours.
+const TIER_OPTIONS: { id: string; label: string; cls: string }[] = [
+  { id: "tier-celsius-bronze", label: "Member", cls: "bg-gray-100 text-gray-600 dark:bg-neutral-700 dark:text-neutral-300" },
+  { id: "tier-celsius-silver", label: "Silver", cls: "bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-100" },
+  { id: "tier-celsius-gold", label: "Gold", cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300" },
+  { id: "tier-celsius-elite", label: "Platinum", cls: "bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900" },
+  { id: "tier-celsius-arba-staff", label: "Staff", cls: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" },
+  { id: "tier-celsius-black-card", label: "Black Card", cls: "bg-neutral-900 text-amber-300 dark:bg-black dark:text-amber-300" },
 ];
+// A null tier = effectively Member (the engine defaults null → bronze).
+const tierMeta = (id: string | null) => TIER_OPTIONS.find((t) => t.id === (id ?? "tier-celsius-bronze")) ?? TIER_OPTIONS[0];
+// Only invitation-only tiers can be granted by hand (earned tiers come from spend).
+const GRANTABLE_TIERS = TIER_OPTIONS.filter((t) => t.id === "tier-celsius-arba-staff" || t.id === "tier-celsius-black-card");
 
 type MappedMember = { id: string; phone: string; name: string | null; email: string | null; birthday: string | null; preferred_outlet_id: string | null; created_at: string; updated_at: string; points_balance: number; total_visits: number; total_spent: number; joined_at: string; last_visit_at: string | null; tags: string[]; current_tier_id: string | null };
 
@@ -183,6 +187,8 @@ export default function MembersPage() {
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkTagModal, setShowBulkTagModal] = useState(false);
+  const [bulkTierOpen, setBulkTierOpen] = useState(false);
+  const [bulkTierSaving, setBulkTierSaving] = useState(false);
   const [bulkTagInput, setBulkTagInput] = useState("");
   const [bulkTagging, setBulkTagging] = useState(false);
 
@@ -435,9 +441,9 @@ export default function MembersPage() {
         if (m.preferred_outlet_id !== outletFilter) return false;
       }
 
-      // tier filter
+      // tier filter (null tier counts as Member/bronze)
       if (tierFilter) {
-        if (m.current_tier_id !== tierFilter) return false;
+        if ((m.current_tier_id ?? "tier-celsius-bronze") !== tierFilter) return false;
       }
 
       return true;
@@ -690,6 +696,33 @@ export default function MembersPage() {
     setBulkTagging(false);
     setShowBulkTagModal(false);
     setBulkTagInput("");
+  }
+
+  // ─── Bulk tier grant ───────────────────────────────
+  // Only invitation-only tiers (Staff, Black Card) can be set by hand — earned
+  // tiers come from quarterly spend. tier_id:null resets a member to auto-eval.
+  async function handleBulkGrantTier(tierId: string | null) {
+    if (selectedRows.size === 0) return;
+    setBulkTierSaving(true);
+    const ids = Array.from(selectedRows);
+    let ok = 0;
+    for (const id of ids) {
+      try {
+        const res = await fetch(`/api/loyalty/members/${id}/grant-tier`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tier_id: tierId }),
+        });
+        if (res.ok) ok++;
+      } catch {}
+    }
+    const updater = (prev: MappedMember[]) =>
+      prev.map((m) => (selectedRows.has(m.id) ? { ...m, current_tier_id: tierId } : m));
+    setAllMembers(updater);
+    setServerMembers(updater);
+    setBulkTierSaving(false);
+    setBulkTierOpen(false);
+    toast.success(`Set ${ok} of ${ids.length} to ${tierId ? tierMeta(tierId).label : "auto (removed)"}`);
   }
 
   // ─── Segment tab config ─────────────────────────────
@@ -1247,6 +1280,18 @@ export default function MembersPage() {
             Tag
           </button>
           <button
+            onClick={() => setBulkTierOpen((v) => !v)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+              bulkTierOpen
+                ? "border-[#C2452D] bg-[#C2452D]/5 text-[#C2452D]"
+                : "border-gray-200 dark:border-neutral-600 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
+            )}
+          >
+            <Crown className="h-3.5 w-3.5" />
+            Set tier
+          </button>
+          <button
             onClick={() => setBulkDeleteConfirm(true)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 dark:border-red-900 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
           >
@@ -1260,6 +1305,30 @@ export default function MembersPage() {
             Clear selection
           </button>
           </div>
+          {bulkTierOpen && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 dark:border-neutral-700 pt-2">
+              <span className="text-xs text-gray-500 dark:text-neutral-400">Set {selectedRows.size} to:</span>
+              {GRANTABLE_TIERS.map((t) => (
+                <button
+                  key={t.id}
+                  disabled={bulkTierSaving}
+                  onClick={() => handleBulkGrantTier(t.id)}
+                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${t.cls}`}
+                >
+                  {t.label}
+                </button>
+              ))}
+              <button
+                disabled={bulkTierSaving}
+                onClick={() => handleBulkGrantTier(null)}
+                className="rounded-full border border-gray-200 dark:border-neutral-600 px-2.5 py-1 text-xs text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-700 disabled:opacity-50"
+              >
+                Remove tier (auto)
+              </button>
+              <span className="text-[11px] text-gray-400 dark:text-neutral-500">Earned tiers (Silver/Gold/Platinum) come from spend.</span>
+              {bulkTierSaving && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+            </div>
+          )}
         </div>
       )}
 
@@ -1285,6 +1354,9 @@ export default function MembersPage() {
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
                   Status
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                  Tier
                 </th>
                 <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:table-cell">
                   Outlet
@@ -1346,6 +1418,13 @@ export default function MembersPage() {
                         }`}
                       >
                         {returning ? "Returning" : "New"}
+                      </span>
+                    </td>
+
+                    {/* Tier badge */}
+                    <td className="px-4 py-3.5">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${tierMeta(member.current_tier_id).cls}`}>
+                        {tierMeta(member.current_tier_id).label}
                       </span>
                     </td>
 
@@ -1427,7 +1506,7 @@ export default function MembersPage() {
               {paginatedMembers.length === 0 && !loading && (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={11}
                     className="px-4 py-16 text-center text-gray-400 dark:text-neutral-500"
                   >
                     No members found
