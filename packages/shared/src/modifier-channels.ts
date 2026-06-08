@@ -75,25 +75,3 @@ export function filterModifiersForChannel<T extends ModifierGroupLike>(
         : g.options,
     }));
 }
-
-// Drop modifier groups / options whose id is in the soft-blacklist
-// (products.hidden_modifier_ids). Originally a StoreHub-sync compat layer —
-// hide noisy/undesirable synced modifiers without the next sync undoing it —
-// but it's the catalog's source of truth for "hidden", so EVERY customer
-// surface (web order app + pickup-native + Grab/FoodPanda sync) must apply it.
-// A group left with no visible options is dropped (an empty selector is a bug).
-export function filterHiddenModifiers<T extends ModifierGroupLike>(
-  groups: T[] | null | undefined,
-  hiddenIds: string[] | null | undefined,
-): T[] {
-  if (!Array.isArray(groups)) return [];
-  const hidden = new Set(Array.isArray(hiddenIds) ? hiddenIds : []);
-  if (hidden.size === 0) return groups;
-  return groups
-    .filter((g) => !(g.id && hidden.has(g.id)))
-    .map((g) => ({
-      ...g,
-      options: Array.isArray(g.options) ? g.options.filter((o) => !(o.id && hidden.has(o.id))) : g.options,
-    }))
-    .filter((g) => !Array.isArray(g.options) || g.options.length > 0);
-}

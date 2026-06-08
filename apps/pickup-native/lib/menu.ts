@@ -38,7 +38,7 @@ export type Product = {
   featured_position?: number;
 };
 
-type RawProduct = Product & { hidden_modifier_ids?: string[]; visible_channels?: string[] };
+type RawProduct = Product & { visible_channels?: string[] };
 
 /** "Show on" placement: empty/missing visible_channels = everywhere; otherwise
  *  the product must list "pickup" to appear in the customer pickup app. */
@@ -52,7 +52,7 @@ export async function fetchMenu(
 ): Promise<{ categories: Category[]; products: Product[] }> {
   const productsQuery = supabase
     .from("products")
-    .select("id,name,category,description,price,image_url,is_available,is_featured,modifiers,hidden_modifier_ids,visible_channels,featured_position")
+    .select("id,name,category,description,price,image_url,is_available,is_featured,modifiers,visible_channels,featured_position")
     .eq("brand_id", "brand-celsius")
     .order("position")
     .order("name");
@@ -85,30 +85,23 @@ export async function fetchMenu(
 
   return {
     categories: (cats ?? []) as Category[],
-    // Backoffice can soft-hide noisy modifier groups or specific options
-    // (think "ice level: cold", "cup type", etc) without losing the StoreHub
-    // source data. Customers shouldn't see them — strip both at read time.
+    // Per-channel modifier visibility is the single source of truth for what
+    // shows where. (The legacy hidden_modifier_ids soft-blacklist — a
+    // StoreHub-sync compat layer — has been retired now that channels express
+    // the same intent.)
     products: ((prods ?? []) as RawProduct[])
       .filter((p) => !oosAtOutlet.has(p.id) && visibleOnPickup(p.visible_channels))
       .map((p) => {
-        const hidden = new Set(Array.isArray(p.hidden_modifier_ids) ? p.hidden_modifier_ids : []);
         const modifiers = Array.isArray(p.modifiers) ? p.modifiers : [];
         return {
           ...p,
           modifiers: modifiers
-            // Honor per-channel modifier visibility: drop any group/option
-            // restricted to other channels — e.g. a Grab-only "Packaging
-            // +RM0.90" must not show or charge on pickup. Mirrors the web
-            // app's filterModifiersForChannel; the native reader had been
-            // missing this, leaking grab-only modifiers (and their default
-            // price deltas) into the pickup menu, product page, and the
-            // Pair-with-a-bite price.
-            .filter((g) => !hidden.has(g.id) && visibleOnPickup(g.channels))
+            // Drop any group/option restricted to other channels — e.g. a
+            // Grab-only "Packaging +RM0.90" must not show or charge on pickup.
+            .filter((g) => visibleOnPickup(g.channels))
             .map((g) => ({
               ...g,
-              options: g.options.filter(
-                (opt) => !hidden.has(opt.id) && visibleOnPickup(opt.channels),
-              ),
+              options: g.options.filter((opt) => visibleOnPickup(opt.channels)),
             }))
             // Drop a group entirely if every option got hidden — empty
             // selectors confuse the product detail screen.
