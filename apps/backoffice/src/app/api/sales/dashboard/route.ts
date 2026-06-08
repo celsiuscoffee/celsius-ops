@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
 
     const outlets = await prisma.outlet.findMany({
       where: outletWhere,
-      select: { id: true, name: true, storehubId: true, loyaltyOutletId: true, posNativeCutoverAt: true },
+      select: { id: true, name: true, storehubId: true, loyaltyOutletId: true, pickupStoreId: true, posNativeCutoverAt: true },
     });
 
     if (outlets.length === 0) {
@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
     const outletResults = await Promise.allSettled(
       outlets.map(async (outlet) => {
         const sales = await getUnifiedSalesForOutlet(
-          { outletId: outlet.id, storehubStoreId: outlet.storehubId, loyaltyOutletId: outlet.loyaltyOutletId, cutoverAt: outlet.posNativeCutoverAt },
+          { outletId: outlet.id, storehubStoreId: outlet.storehubId, loyaltyOutletId: outlet.loyaltyOutletId, pickupStoreId: outlet.pickupStoreId, cutoverAt: outlet.posNativeCutoverAt },
           from,
           to,
         );
