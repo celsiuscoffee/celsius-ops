@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
     const outletResults = await Promise.allSettled(
       outlets.map(async (outlet) => {
         const sales = await getUnifiedSalesForOutlet(
-          { outletId: outlet.id, loyaltyOutletId: outlet.loyaltyOutletId, cutoverAt: outlet.posNativeCutoverAt },
+          { outletId: outlet.id, storehubStoreId: outlet.storehubId, loyaltyOutletId: outlet.loyaltyOutletId, cutoverAt: outlet.posNativeCutoverAt },
           from,
           to,
         );

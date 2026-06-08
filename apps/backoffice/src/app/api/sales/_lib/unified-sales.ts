@@ -1,14 +1,17 @@
 // Unified sales source for the sales dashboard during/after the StoreHub →
-// POS-native migration. Per outlet, reads:
-//   • StoreHub archive (storehub_sales) for transactions BEFORE the outlet's
-//     posNativeCutoverAt (or ALL of them if the outlet hasn't cut over yet)
-//   • POS-native (pos_orders) for transactions AT/AFTER the cutover
-// so every sale is counted exactly once, from the authoritative source for its
-// own timestamp. No live StoreHub API calls — everything reads the local DB,
-// which is what lets StoreHub be cancelled once all outlets have cut over.
+// POS-native migration. Per outlet, merges:
+//   • StoreHub: the local archive (storehub_sales) for PAST days + a LIVE pull
+//     for TODAY (so today is real-time like the old dashboard, while history
+//     stays fast on the DB). Cutover-routed: pre-cutover all channels,
+//     post-cutover external/online only (Grab/Beep — still on StoreHub).
+//   • POS-native (pos_orders): real-time, for transactions AT/AFTER cutover.
+// Each sale is counted once from the authoritative source for its time. The
+// live today-pull falls back to the archive if StoreHub is unreachable, and
+// disappears per outlet as it cuts over — so StoreHub can still be cancelled
+// once it's fully off (all tills + Grab on POS-native).
 
 import { prisma } from "@/lib/prisma";
-import type { StoreHubTransaction } from "@/lib/storehub";
+import { getTransactions, type StoreHubTransaction } from "@/lib/storehub";
 import { classifyChannel, isDeliveryOrQR } from "./storehub-helpers";
 
 export type UnifiedSale = {
@@ -21,6 +24,7 @@ export type UnifiedSale = {
 
 export type OutletSource = {
   outletId: string; // Celsius Outlet.id → storehub_sales.outlet_id
+  storehubStoreId: string | null; // Outlet.storehubId → live StoreHub pull for today
   loyaltyOutletId: string | null; // → pos_orders.outlet_id (e.g. "outlet-con")
   cutoverAt: Date | null; // Outlet.posNativeCutoverAt
 };
@@ -61,12 +65,34 @@ export async function getUnifiedSalesForOutlet(
 ): Promise<UnifiedSale[]> {
   const sales: UnifiedSale[] = [];
 
-  // ── StoreHub archive ──
-  // Pre-cutover: keep everything. Post-cutover: keep only EXTERNAL/online orders
-  // (Grab, Beep, … — they carry a `channel`), because those still route through
-  // StoreHub until the POS-native Grab integration goes live. Drop post-cutover
-  // direct/till sales (no channel) — those are on POS-native now (counted below),
-  // so keeping them would double-count.
+  // Today 00:00 MYT as a UTC instant — the boundary between "archive" (past) and
+  // "live" (today). transaction_time / created_at are timestamptz (UTC).
+  const now = new Date();
+  const mytNow = new Date(now.getTime() + 8 * 3600 * 1000);
+  const todayStartMyt = new Date(
+    Date.UTC(mytNow.getUTCFullYear(), mytNow.getUTCMonth(), mytNow.getUTCDate()) - 8 * 3600 * 1000,
+  );
+
+  // Apply cutover routing to one StoreHub txn and push it. Pre-cutover: keep all.
+  // Post-cutover: keep only EXTERNAL/online orders (Grab, Beep — they carry a
+  // `channel`); drop post-cutover direct/till (no channel) — those are on
+  // POS-native now (counted below), so keeping them would double-count.
+  const pushStorehub = (ts: string, total: number, raw: StoreHubTransaction) => {
+    if (outlet.cutoverAt && new Date(ts).getTime() >= outlet.cutoverAt.getTime()) {
+      const hasChannel = typeof raw?.channel === "string" && raw.channel.trim() !== "";
+      if (!hasChannel) return;
+    }
+    sales.push({
+      ts,
+      total,
+      channel: classifyChannel(raw),
+      isDeliveryQR: isDeliveryOrQR(raw),
+      channelLabel: (raw?.channel ?? "(direct)") as string,
+    });
+  };
+
+  // ── StoreHub PAST — local archive, up to (not including) today 00:00 MYT ──
+  const archiveTo = to.getTime() < todayStartMyt.getTime() ? to : new Date(todayStartMyt.getTime() - 1);
   const shRows = await prisma.$queryRaw<Array<{ ts: Date; total: unknown; raw: StoreHubTransaction }>>`
     SELECT transaction_time AS ts, total, raw
     FROM storehub_sales
@@ -74,22 +100,36 @@ export async function getUnifiedSalesForOutlet(
       AND NOT is_cancelled
       AND transaction_time IS NOT NULL
       AND transaction_time >= ${from}
-      AND transaction_time <= ${to}
+      AND transaction_time <= ${archiveTo}
   `;
-  for (const r of shRows) {
-    const raw = r.raw;
-    const ts = toISO(r.ts);
-    if (outlet.cutoverAt && new Date(ts).getTime() >= outlet.cutoverAt.getTime()) {
-      const hasChannel = typeof raw?.channel === "string" && raw.channel.trim() !== "";
-      if (!hasChannel) continue; // post-cutover direct/till → now on POS-native
+  for (const r of shRows) pushStorehub(toISO(r.ts), Number(r.total) || 0, r.raw);
+
+  // ── StoreHub TODAY — LIVE pull so today is real-time (outlets still on
+  // StoreHub). Falls back to the archive if StoreHub is unreachable. ──
+  if (outlet.storehubStoreId && to.getTime() >= todayStartMyt.getTime()) {
+    try {
+      const liveTxns = await getTransactions(outlet.storehubStoreId, todayStartMyt, now);
+      for (const t of liveTxns) {
+        const ts = t.transactionTime ?? t.completedAt ?? t.createdAt;
+        if (!ts) continue;
+        pushStorehub(ts, typeof t.total === "number" ? t.total : 0, t);
+      }
+    } catch (e) {
+      console.warn(
+        `[unified-sales] live StoreHub today failed for ${outlet.outletId}; using archive:`,
+        e instanceof Error ? e.message : e,
+      );
+      const fb = await prisma.$queryRaw<Array<{ ts: Date; total: unknown; raw: StoreHubTransaction }>>`
+        SELECT transaction_time AS ts, total, raw
+        FROM storehub_sales
+        WHERE outlet_id = ${outlet.outletId}
+          AND NOT is_cancelled
+          AND transaction_time IS NOT NULL
+          AND transaction_time >= ${todayStartMyt}
+          AND transaction_time <= ${to}
+      `;
+      for (const r of fb) pushStorehub(toISO(r.ts), Number(r.total) || 0, r.raw);
     }
-    sales.push({
-      ts,
-      total: Number(r.total) || 0,
-      channel: classifyChannel(raw),
-      isDeliveryQR: isDeliveryOrQR(raw),
-      channelLabel: (raw?.channel ?? "(direct)") as string,
-    });
   }
 
   // ── POS-native — everything AT/AFTER cutover (only once the outlet cut over) ──
