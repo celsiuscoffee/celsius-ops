@@ -384,6 +384,103 @@ export default function Register() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shift, shiftLoading]);
 
+  // Reprint a past order's customer receipt from the History tab. The history
+  // row only carries a summary, so we re-fetch the full order + items (with
+  // prices) from the right source — pos_orders/pos_order_items (+ payments) for
+  // counter & Grab, orders/order_items for the QR-table / pickup app — rebuild
+  // the same ReceiptOrder shape checkout prints, and send it to the SUNMI head
+  // (or the LAN cashier printer, via printReceipt80mm's routing).
+  const [reprintingUid, setReprintingUid] = useState<string | null>(null);
+  const reprintHistoryReceipt = useCallback(async (o: HistoryOrder) => {
+    if (reprintingUid) return;
+    setReprintingUid(o.uid);
+    try {
+      const isApp = o.channel === "qr_table" || o.channel === "pickup";
+      let receiptOrder: any;
+      if (isApp) {
+        const [{ data: row }, { data: its }] = await Promise.all([
+          supabase.from("orders").select("order_number, order_type, table_number, notes, created_at, subtotal, sst_amount, discount_amount, total, payment_method").eq("id", o.id).maybeSingle(),
+          supabase.from("order_items").select("product_name, variant_name, quantity, unit_price, item_total, modifiers").eq("order_id", o.id),
+        ]);
+        if (!row) throw new Error("Order not found");
+        const isDineIn = (row as any).order_type === "dine_in";
+        receiptOrder = {
+          order_number: (row as any).order_number ?? o.orderNumber,
+          order_type: isDineIn ? "dine_in" : "takeaway",
+          table_number: isDineIn ? (row as any).table_number ?? null : null,
+          table_label: "Table",
+          created_at: (row as any).created_at ?? o.createdAt,
+          notes: (row as any).notes ?? null,
+          subtotal: (row as any).subtotal ?? 0,
+          service_charge: 0,
+          discount_amount: (row as any).discount_amount ?? 0,
+          sst_amount: (row as any).sst_amount ?? 0,
+          total: (row as any).total ?? (row as any).subtotal ?? 0,
+          pos_order_items: ((its as any[]) ?? []).map((r) => ({
+            product_name: r.product_name,
+            quantity: r.quantity,
+            unit_price: r.unit_price ?? 0,
+            modifier_total: 0,
+            item_total: r.item_total ?? (r.unit_price ?? 0) * (r.quantity ?? 1),
+            modifiers: Array.isArray(r.modifiers) ? r.modifiers.map((m: any) => ({ name: m?.name ?? String(m) })) : [],
+          })),
+          pos_order_payments: [{ payment_method: (row as any).payment_method || "qr", amount: (row as any).total ?? (row as any).subtotal ?? 0 }],
+        };
+      } else {
+        const [{ data: row }, { data: its }, { data: pays }] = await Promise.all([
+          supabase.from("pos_orders").select("order_number, order_type, table_number, queue_number, notes, created_at, subtotal, service_charge, discount_amount, sst_amount, total, loyalty_points_earned").eq("id", o.id).maybeSingle(),
+          supabase.from("pos_order_items").select("product_name, quantity, unit_price, modifier_total, discount_amount, item_total, modifiers, kitchen_station, notes").eq("order_id", o.id),
+          supabase.from("pos_order_payments").select("payment_method, amount").eq("order_id", o.id),
+        ]);
+        if (!row) throw new Error("Order not found");
+        receiptOrder = {
+          order_number: (row as any).order_number ?? o.orderNumber,
+          order_type: (row as any).order_type ?? (o.channel === "dine_in" ? "dine_in" : "takeaway"),
+          table_number: (row as any).table_number ?? null,
+          table_label: o.channel === "grab" ? "Order" : "Stand",
+          queue_number: (row as any).queue_number ?? null,
+          created_at: (row as any).created_at ?? o.createdAt,
+          notes: (row as any).notes ?? null,
+          subtotal: (row as any).subtotal ?? 0,
+          service_charge: (row as any).service_charge ?? 0,
+          discount_amount: (row as any).discount_amount ?? 0,
+          sst_amount: (row as any).sst_amount ?? 0,
+          total: (row as any).total ?? 0,
+          beans_earned: (row as any).loyalty_points_earned ?? null,
+          pos_order_items: ((its as any[]) ?? []).map((r) => ({
+            product_name: r.product_name,
+            quantity: r.quantity,
+            unit_price: r.unit_price ?? 0,
+            modifier_total: r.modifier_total ?? 0,
+            discount_amount: r.discount_amount ?? 0,
+            item_total: r.item_total ?? 0,
+            modifiers: Array.isArray(r.modifiers) ? r.modifiers.map((m: any) => ({ name: m?.name ?? String(m) })) : [],
+            kitchen_station: r.kitchen_station ?? null,
+            notes: r.notes ?? null,
+          })),
+          pos_order_payments: ((pays as any[]) ?? []).map((p) => ({ payment_method: p.payment_method, amount: p.amount })),
+        };
+      }
+      const outletInfo = {
+        name: settings?.receipt_header || outlet?.name || outletFull(outletId),
+        address: outlet?.address ?? null,
+        city: outlet?.city ?? null,
+        state: outlet?.state ?? null,
+        phone: outlet?.phone ?? null,
+        companyName: outlet?.company_name ?? null,
+        regNo: outlet?.reg_no ?? null,
+      };
+      await printReceipt80mm(receiptOrder, outletInfo, receiptConfig(settings), outletId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      alert(`Couldn't reprint ${o.orderNumber}.\n${e?.message ?? "Check the printer and try again."}`);
+    } finally {
+      setReprintingUid(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reprintingUid, settings, outlet, outletId]);
+
   // ── Open Store (cashier shift) open/close ──
   const openShiftModal = useCallback(() => {
     Haptics.selectionAsync();
@@ -2019,7 +2116,7 @@ export default function Register() {
                       ]}
                     />
                     <View style={{ gap: 8 }}>
-                      {shown.map((o) => <HistoryRow key={o.uid} order={o} />)}
+                      {shown.map((o) => <HistoryRow key={o.uid} order={o} onReprint={reprintHistoryReceipt} reprinting={reprintingUid === o.uid} />)}
                       {shown.length === 0 && (
                         <View className="py-16 items-center w-full">
                           <ClipboardList size={40} color="rgba(245,243,240,0.18)" />
@@ -3033,7 +3130,7 @@ const HIST_CHANNELS: { key: HistoryChannel; label: string; dot: string }[] = [
 
 /** One row in the History tab. Tap to expand the receipt's line items so the
  *  counter can double-check exactly what was rung up. */
-function HistoryRow({ order }: { order: HistoryOrder }) {
+function HistoryRow({ order, onReprint, reprinting }: { order: HistoryOrder; onReprint: (o: HistoryOrder) => void; reprinting: boolean }) {
   const [open, setOpen] = useState(false);
   const meta = HIST_CHANNELS.find((c) => c.key === order.channel);
   const dot = meta?.dot ?? "#FBBF24";
@@ -3056,13 +3153,27 @@ function HistoryRow({ order }: { order: HistoryOrder }) {
         )}
         <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(order.total)}</Text>
       </View>
-      {open && order.items.length > 0 && (
+      {open && (
         <View className="px-4 pb-3" style={{ gap: 4, borderTopWidth: 1, borderColor: "rgba(245,243,240,0.06)", paddingTop: 8 }}>
           {order.items.map((it, i) => (
             <Text key={i} className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_500Medium" }} numberOfLines={1}>
               {it.qty}× {it.name}{it.variant ? ` · ${it.variant}` : ""}
             </Text>
           ))}
+          {/* Reprint the customer receipt for this past order. Nested Pressable
+              so tapping it prints instead of collapsing the row. */}
+          <Pressable
+            onPress={() => onReprint(order)}
+            disabled={reprinting}
+            className="flex-row items-center justify-center rounded-xl mt-1 active:opacity-80"
+            style={{ paddingVertical: 9, gap: 7, backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)", opacity: reprinting ? 0.6 : 1 }}
+          >
+            {reprinting ? (
+              <ActivityIndicator size="small" color="#FBBF24" />
+            ) : (
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 0.4, color: "#FBBF24" }}>↻  Reprint receipt</Text>
+            )}
+          </Pressable>
         </View>
       )}
     </Pressable>
