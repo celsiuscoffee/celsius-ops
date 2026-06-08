@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
           let q = supabase
             .from("pos_orders")
             .select(
-              "id, order_number, outlet_id, source, order_type, status, customer_name, customer_phone, subtotal, discount_amount, sst_amount, service_charge, total, notes, created_at, pos_order_items(product_name, quantity, item_total)",
+              "id, order_number, outlet_id, source, order_type, table_number, status, customer_name, customer_phone, subtotal, discount_amount, sst_amount, service_charge, total, notes, created_at, pos_order_items(product_name, quantity, item_total)",
             )
             .order("created_at", { ascending: false })
             .limit(limit);
@@ -128,6 +128,8 @@ export async function GET(request: NextRequest) {
               order_number: o.order_number,
               store_id: OUTLET_ID_TO_SLUG[oid] ?? oid,
               status: o.status,
+              order_type: o.order_type ?? null,
+              table_number: o.table_number ?? null,
               payment_method: "",
               payment_provider_ref: null,
               subtotal: o.subtotal ?? 0,

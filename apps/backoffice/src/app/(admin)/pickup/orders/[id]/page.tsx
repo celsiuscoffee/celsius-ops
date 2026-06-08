@@ -149,6 +149,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       <div className="bg-white rounded-2xl p-4 space-y-2">
         <h2 className="font-bold text-sm mb-3">Pickup Details</h2>
         <Row label="Outlet"  value={order.store_id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} />
+        {order.order_type === "dine_in" ? (
+          <Row label="Table" value={order.table_number ? `Dine-in · Table ${order.table_number}` : "Dine-in"} />
+        ) : order.order_type ? (
+          <Row label="Type" value={order.order_type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} />
+        ) : null}
         <Row label="Payment" value={order.payment_method.replace(/_/g, " ").toUpperCase()} />
         {order.payment_provider_ref && (
           <Row label="Ref" value={order.payment_provider_ref} mono />

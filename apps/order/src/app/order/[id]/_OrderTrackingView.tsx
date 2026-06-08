@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ShoppingBag, Coffee, CheckCircle2, XCircle } from "lucide-react";
 import { MysteryReward } from "./_MysteryReward";
@@ -43,6 +43,11 @@ function rm(cents: number | null | undefined): string {
   return `RM${((cents ?? 0) / 100).toFixed(2)}`;
 }
 
+// RM Direct-mode payment methods whose confirmation rides on a best-effort
+// webhook. Kept in sync with the same set in /api/cron/reconcile-pending and
+// /api/payments/poll so the on-screen backstop covers exactly those methods.
+const RM_METHODS = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card"]);
+
 // Horizontal 3-step pipeline matching apps/pickup-native/components
 // /OrderStepper.tsx. The final step reads "Ready / Pick up now" for
 // pickup and "Served / Enjoy!" for dine-in (table orders).
@@ -67,25 +72,68 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchOrder = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/orders/${orderId}`);
+      const data = await r.json();
+      if (data?.order) setOrder(data.order as Order);
+      else if (data?.id) setOrder(data as Order);
+    } catch (err) {
+      setError(String(err));
+    }
+  }, [orderId]);
+
+  // DB status poll — reflects whatever flipped the order server-side.
   useEffect(() => {
     let cancelled = false;
-    const fetchOrder = () => {
-      fetch(`/api/orders/${orderId}`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (cancelled) return;
-          if (data?.order) setOrder(data.order as Order);
-          else if (data?.id) setOrder(data as Order);
-        })
-        .catch((err) => !cancelled && setError(String(err)));
-    };
-    fetchOrder();
-    const id = window.setInterval(fetchOrder, 5000);
+    const tick = () => { if (!cancelled) void fetchOrder(); };
+    tick();
+    const id = window.setInterval(tick, 5000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [orderId]);
+  }, [fetchOrder]);
+
+  // Active RM reconcile backstop. RM Direct-mode webhooks are best-effort
+  // (and signature validation has been bouncing valid callbacks), so a
+  // card / FPX / e-wallet order can sit `pending` until the 5-min
+  // reconcile-pending cron — the kitchen docket only prints once it flips
+  // to `preparing`. While the customer is on this screen with a pending RM
+  // order (they land here via the …?payment=done redirect right after
+  // paying), ask the server to query RM directly so it settles in seconds
+  // instead of minutes. Mirrors the native backstop in
+  // apps/pickup-native/app/order/[id].tsx. Keyed on status+method so it
+  // only runs while genuinely pending and tears down the moment it settles.
+  const status = order?.status;
+  const method = order?.payment_method;
+  useEffect(() => {
+    if (status !== "pending" || !method || !RM_METHODS.has(method)) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/payments/poll`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId }),
+        });
+        const json = (await res.json().catch(() => null)) as { status?: string } | null;
+        // Reflect a settled status immediately rather than waiting for the
+        // next 5s DB tick.
+        if (!cancelled && json && (json.status === "preparing" || json.status === "paid" || json.status === "failed")) {
+          void fetchOrder();
+        }
+      } catch {
+        // Network blip — the next tick retries.
+      }
+    };
+    void poll();
+    const id = window.setInterval(poll, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [status, method, orderId, fetchOrder]);
 
   if (!order) {
     return (

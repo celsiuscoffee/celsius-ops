@@ -42,6 +42,7 @@ export async function GET(
         .select("*")
         .eq("order_id", id);
       if (iErr) return NextResponse.json({ error: iErr.message }, { status: 500 });
+      // order is select("*") so order_type/table_number already ride along.
       return NextResponse.json({ order: { ...order, channel: "pickup" }, items: items ?? [] });
     }
 
@@ -49,7 +50,7 @@ export async function GET(
     const { data: pos, error: pErr } = await supabase
       .from("pos_orders")
       .select(
-        "id, order_number, outlet_id, source, order_type, status, customer_name, customer_phone, subtotal, discount_amount, sst_amount, service_charge, total, notes, created_at",
+        "id, order_number, outlet_id, source, order_type, table_number, status, customer_name, customer_phone, subtotal, discount_amount, sst_amount, service_charge, total, notes, created_at",
       )
       .eq("id", id)
       .maybeSingle();
@@ -68,6 +69,8 @@ export async function GET(
       order_number: pos.order_number,
       store_id: OUTLET_ID_TO_SLUG[pos.outlet_id as string] ?? pos.outlet_id,
       status: pos.status,
+      order_type: pos.order_type ?? null,
+      table_number: pos.table_number ?? null,
       payment_method: "",
       payment_provider_ref: null,
       subtotal: pos.subtotal ?? 0,
