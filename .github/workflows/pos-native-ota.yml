@@ -42,8 +42,15 @@ jobs:
       - name: Publish OTA update (production channel)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          # Pass the commit message through the environment, NOT inline in the
+          # run script: a multi-line message with backticks / * / newlines would
+          # otherwise be parsed by the shell (command substitution + word
+          # splitting) and feed garbage args to eas. We then take just the first
+          # line as the update message.
+          COMMIT_MSG: ${{ github.event.head_commit.message || github.sha }}
         run: |
+          MSG="$(printf '%s' "$COMMIT_MSG" | head -n 1)"
           npx eas-cli@latest update \
             --channel production \
-            --message "${{ github.event.head_commit.message || github.sha }}" \
+            --message "$MSG" \
             --non-interactive
