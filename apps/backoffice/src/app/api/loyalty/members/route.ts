@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       while (hasMore) {
         const { data, error } = await supabaseAdmin
           .from('members')
-          .select('id, phone, name, email, birthday, tags, created_at, updated_at, preferred_outlet_id, brand_data:member_brands!inner(points_balance, total_visits, total_spent, total_points_earned, joined_at, last_visit_at)')
+          .select('id, phone, name, email, birthday, tags, created_at, updated_at, preferred_outlet_id, brand_data:member_brands!inner(points_balance, total_visits, total_spent, total_points_earned, joined_at, last_visit_at, current_tier_id)')
           .eq('member_brands.brand_id', brandId)
           .order('created_at', { ascending: false })
           .range(offset, offset + PAGE - 1);
