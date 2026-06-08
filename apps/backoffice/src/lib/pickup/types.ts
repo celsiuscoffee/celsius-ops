@@ -26,6 +26,11 @@ export interface OrderRow {
   total: number;
   customer_name: string | null;
   customer_phone: string | null;
+  /** "dine_in" (QR table order) | "pickup" / "takeaway". Optional so older
+   *  reads stay valid; absence is treated as a non-dine-in order. */
+  order_type: string | null;
+  /** Set for dine_in orders — the table the QR was scanned at. */
+  table_number: string | null;
   loyalty_phone: string | null;
   loyalty_id: string | null;
   loyalty_points_earned: number;

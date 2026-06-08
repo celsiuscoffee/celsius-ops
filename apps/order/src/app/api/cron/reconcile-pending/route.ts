@@ -8,10 +8,13 @@ import { checkCronAuth } from "@celsius/shared";
 import { queryCheckoutStatus } from "@/lib/revenue-monster/client";
 import { markRmOrderPaid, markRmOrderFailed } from "@/lib/revenue-monster/order-status";
 
-// Runs every minute. Finds "pending" orders between 2 and 55 minutes old and
-// reconciles them against Stripe — covers wallet cancels where confirm-stripe
-// and the Stripe webhook both never fired. Older rows are left to
-// /api/cron/expire-orders, which fails them at the 60-minute mark.
+// Finds "pending" orders between 45s and 55 minutes old and reconciles them
+// against Stripe (and Revenue Monster) — covers wallet/card confirms where the
+// gateway webhook never fired. The 45s floor (was 2 min) is the safety net for
+// customers who close the app/browser before the on-screen poll
+// (_OrderTrackingView / pickup-native) settles the order; both the cron and the
+// poll are idempotent (gated on status=pending), so they can't double-process.
+// Older rows are left to /api/cron/expire-orders, which fails them at 60 min.
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY?.trim();
@@ -43,7 +46,7 @@ export async function GET(request: NextRequest) {
 
   const supabase = getSupabaseAdmin();
   const now      = Date.now();
-  const olderThan  = new Date(now - 2  * 60 * 1000).toISOString();
+  const olderThan  = new Date(now - 45 * 1000).toISOString();
   const youngerThan = new Date(now - 55 * 60 * 1000).toISOString();
 
   const { data: pending, error } = await supabase
