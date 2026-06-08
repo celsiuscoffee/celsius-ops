@@ -25,8 +25,7 @@ export type OutletSource = {
   cutoverAt: Date | null; // Outlet.posNativeCutoverAt
 };
 
-// Sentinel so "no cutover" means "all StoreHub counts" without branching SQL.
-const FAR_FUTURE = new Date("2999-01-01T00:00:00Z");
+// (cutover routing is applied per-row in getUnifiedSalesForOutlet, not in SQL)
 
 /** Map a POS-native order_type/source to the dashboard's 3 channels. */
 function posChannel(orderType: string | null, source: string | null): "dine_in" | "takeaway" | "delivery" {
@@ -62,8 +61,12 @@ export async function getUnifiedSalesForOutlet(
 ): Promise<UnifiedSale[]> {
   const sales: UnifiedSale[] = [];
 
-  // ── StoreHub archive — everything BEFORE cutover (or all, if not cut over) ──
-  const shCutoff = outlet.cutoverAt ?? FAR_FUTURE;
+  // ── StoreHub archive ──
+  // Pre-cutover: keep everything. Post-cutover: keep only EXTERNAL/online orders
+  // (Grab, Beep, … — they carry a `channel`), because those still route through
+  // StoreHub until the POS-native Grab integration goes live. Drop post-cutover
+  // direct/till sales (no channel) — those are on POS-native now (counted below),
+  // so keeping them would double-count.
   const shRows = await prisma.$queryRaw<Array<{ ts: Date; total: unknown; raw: StoreHubTransaction }>>`
     SELECT transaction_time AS ts, total, raw
     FROM storehub_sales
@@ -72,12 +75,16 @@ export async function getUnifiedSalesForOutlet(
       AND transaction_time IS NOT NULL
       AND transaction_time >= ${from}
       AND transaction_time <= ${to}
-      AND transaction_time < ${shCutoff}
   `;
   for (const r of shRows) {
     const raw = r.raw;
+    const ts = toISO(r.ts);
+    if (outlet.cutoverAt && new Date(ts).getTime() >= outlet.cutoverAt.getTime()) {
+      const hasChannel = typeof raw?.channel === "string" && raw.channel.trim() !== "";
+      if (!hasChannel) continue; // post-cutover direct/till → now on POS-native
+    }
     sales.push({
-      ts: toISO(r.ts),
+      ts,
       total: Number(r.total) || 0,
       channel: classifyChannel(raw),
       isDeliveryQR: isDeliveryOrQR(raw),

@@ -1,9 +1,9 @@
 // Daily cron — keeps the StoreHub sales archive (storehub_sales) fresh for outlets
 // still on StoreHub, so the repointed sales dashboard (which reads the archive,
-// not the live StoreHub API) stays current until every outlet has cut over to
-// POS-native. Pulls the last 3 days (idempotent upsert), runs at 4:30 AM MYT —
-// just after finance-eod (4 AM). Once all outlets are >7 days past cutover this
-// becomes a no-op, and StoreHub can be cancelled.
+// not the live StoreHub API) stays current. Pulls the last 3 days (idempotent
+// upsert), runs at 4:30 AM MYT — just after finance-eod (4 AM). Even cut-over
+// outlets keep receiving Grab/Beep via StoreHub, so this runs until StoreHub is
+// fully retired (Grab moved to POS-native), not just until the tills cut over.
 
 import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
