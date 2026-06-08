@@ -2977,7 +2977,7 @@ function HistoryRow({ order }: { order: HistoryOrder }) {
         <View className="flex-1">
           <Text className="text-cream text-sm" style={{ fontFamily: "Peachi-Bold" }} numberOfLines={1}>{order.orderNumber}</Text>
           <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-            {chan} · {new Date(order.createdAt).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })} · {order.items.length} item{order.items.length === 1 ? "" : "s"}
+            {chan}{order.tableNumber ? ` · Table ${order.tableNumber}` : ""} · {new Date(order.createdAt).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })} · {order.items.length} item{order.items.length === 1 ? "" : "s"}
           </Text>
         </View>
         {voided && (
