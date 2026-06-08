@@ -1485,8 +1485,8 @@ function MysteryPending() {
   return (
     <View className="rounded-3xl items-center" style={{ width: "100%", maxWidth: 340, paddingHorizontal: 28, paddingVertical: 34, backgroundColor: "#FBBF24", borderWidth: 1, borderColor: "rgba(26,2,0,0.25)" }}>
       <Gift size={54} color="#1A0200" strokeWidth={1.8} />
-      <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2.4, color: "rgba(26,2,0,0.7)", marginTop: 16 }}>A LITTLE EXTRA</Text>
-      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 36, color: "#1A0200", marginTop: 4 }}>Mystery Reward</Text>
+      <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2.4, color: "rgba(26,2,0,0.7)", marginTop: 16, textAlign: "center" }}>A LITTLE EXTRA</Text>
+      <Text style={{ fontFamily: "Peachi-Bold", fontSize: 36, color: "#1A0200", marginTop: 4, textAlign: "center" }}>Mystery Reward</Text>
       <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 16, color: "rgba(26,2,0,0.72)", marginTop: 6, textAlign: "center" }}>Wrapping up your reward…</Text>
       <View className="flex-row items-center" style={{ gap: 8, marginTop: 22, paddingHorizontal: 30, paddingVertical: 14, borderRadius: 999, backgroundColor: "#1A0200" }}>
         <ActivityIndicator size="small" color="#FBBF24" />
@@ -1518,8 +1518,8 @@ function MysteryBox({ memberId, claimable, basePoints }: { memberId: string; cla
     return (
       <Pressable onPress={reveal} disabled={busy} className="rounded-3xl items-center active:opacity-90" style={{ width: "100%", maxWidth: 340, paddingHorizontal: 28, paddingVertical: 34, backgroundColor: "#FBBF24", borderWidth: 1, borderColor: "rgba(26,2,0,0.25)" }}>
         <Gift size={54} color="#1A0200" strokeWidth={1.8} />
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2.4, color: "rgba(26,2,0,0.7)", marginTop: 16 }}>TAP TO REVEAL</Text>
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 36, color: "#1A0200", marginTop: 4 }}>Mystery Reward</Text>
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2.4, color: "rgba(26,2,0,0.7)", marginTop: 16, textAlign: "center" }}>TAP TO REVEAL</Text>
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 36, color: "#1A0200", marginTop: 4, textAlign: "center" }}>Mystery Reward</Text>
         <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 16, color: "rgba(26,2,0,0.72)", marginTop: 6, textAlign: "center" }}>You&apos;ve got something. One tap.</Text>
         <View className="flex-row items-center" style={{ gap: 8, marginTop: 22, paddingHorizontal: 30, paddingVertical: 14, borderRadius: 999, backgroundColor: "#1A0200" }}>
           {busy ? (
@@ -1543,7 +1543,7 @@ function MysteryBox({ memberId, claimable, basePoints }: { memberId: string; cla
     return (
       <View className="rounded-3xl items-center" style={{ width: "100%", maxWidth: 340, paddingHorizontal: 28, paddingVertical: 30, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "rgba(26,2,0,0.10)" }}>
         <Sparkles size={42} color="#6B6B6B" strokeWidth={1.6} />
-        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 26, color: "#1A0200", marginTop: 12 }}>No bonus this time</Text>
+        <Text style={{ fontFamily: "Peachi-Bold", fontSize: 26, color: "#1A0200", marginTop: 12, textAlign: "center" }}>No bonus this time</Text>
         <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(26,2,0,0.55)", marginTop: 6, textAlign: "center" }}>Better luck on your next order ☕</Text>
         <GotItPill variant="quiet" onPress={dismiss} />
       </View>
@@ -1561,17 +1561,17 @@ function MysteryBox({ memberId, claimable, basePoints }: { memberId: string; cla
       <Sparkles size={46} color={GOLD} strokeWidth={1.6} />
       {isMultiplier && (
         <>
-          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 66, lineHeight: 68, color: GOLD, marginTop: 10, letterSpacing: -2 }}>{mult}×</Text>
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2, color: "rgba(251,191,36,0.85)", marginTop: 6 }}>POINT MULTIPLIER</Text>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 66, lineHeight: 68, color: GOLD, marginTop: 10, letterSpacing: -2, textAlign: "center" }}>{mult}×</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2, color: "rgba(251,191,36,0.85)", marginTop: 6, textAlign: "center" }}>POINT MULTIPLIER</Text>
           <View style={{ height: 1, backgroundColor: "rgba(251,191,36,0.18)", alignSelf: "stretch", marginVertical: 18 }} />
           <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: "rgba(245,243,240,0.7)", textAlign: "center" }}>Your {basePoints} Points became</Text>
-          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: CREAM, marginTop: 2 }}>{Math.round(basePoints * mult)} Points</Text>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: CREAM, marginTop: 2, textAlign: "center" }}>{Math.round(basePoints * mult)} Points</Text>
         </>
       )}
       {isFlat && (
         <>
-          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 58, color: GOLD, marginTop: 10, letterSpacing: -2 }}>+{revealed.flat_beans_value}</Text>
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2, color: "rgba(251,191,36,0.85)", marginTop: 4 }}>BONUS POINTS</Text>
+          <Text style={{ fontFamily: "Peachi-Bold", fontSize: 58, color: GOLD, marginTop: 10, letterSpacing: -2, textAlign: "center" }}>+{revealed.flat_beans_value}</Text>
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 2, color: "rgba(251,191,36,0.85)", marginTop: 4, textAlign: "center" }}>BONUS POINTS</Text>
         </>
       )}
       {isVoucher && (
