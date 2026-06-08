@@ -56,6 +56,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid order data" }, { status: 400 });
     }
 
+    // Web/PWA is QR-table ONLY. Every order from this route must carry a
+    // dine-in table number. A missing/blank table means the table-QR context
+    // was lost (the old silent-pickup bug) or someone reached the web pickup
+    // flow — either way, fail LOUD instead of writing a pickup order the
+    // kitchen can't seat. Native pickup goes through /api/orders, which is
+    // unaffected by this guard. (See order_type/source below.)
+    const tableNo = typeof tableNumber === "string" ? tableNumber.trim() : "";
+    if (orderType !== "dine_in" || !tableNo) {
+      return NextResponse.json(
+        {
+          error:
+            "Please scan the QR code on your table to order. To order for pickup, use the Celsius app.",
+        },
+        { status: 400 },
+      );
+    }
+
     // Quantity bounds + cart-line cap (mirrors /api/orders).
     const MAX_QTY_PER_LINE = 50;
     const MAX_LINES        = 30;
@@ -459,8 +476,9 @@ export async function POST(request: NextRequest) {
         loyalty_id:             loyaltyId ?? null,
         loyalty_points_earned:  pointsToEarn,
         notes:                  notes ?? null,
-        order_type:             orderType ?? "pickup",
-        table_number:           tableNumber ?? null,
+        order_type:             "dine_in",          // guard above guarantees this
+        table_number:           tableNo,
+        source:                 "web_qr",            // origin attribution (see migration add_orders_source)
       })
       .select()
       .single();

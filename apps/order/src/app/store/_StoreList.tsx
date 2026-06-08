@@ -55,6 +55,10 @@ export function StoreList({ outlets }: { outlets: Outlet[] }) {
       state.outletIsBusy = o.is_busy;
       state.outletPickupTimeMins = o.pickup_time_mins;
       window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state }));
+      // Choosing an outlet from the picker is an explicit pickup action —
+      // drop any dine-in context from a prior table scan so the order isn't
+      // mistakenly treated as dine-in.
+      window.localStorage.removeItem("celsius-dinein");
     } catch {
       /* ignore */
     }
