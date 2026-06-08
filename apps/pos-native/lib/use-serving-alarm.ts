@@ -6,23 +6,23 @@ import { playAlarm, primeSounds } from "./chime";
  * offending orders so the caller can show a popup — when an order has been open
  * past the serving-time TARGET without being actioned:
  *
- *   - pickup order → "Ready" not pressed within 10 min
- *   - QR table     → "Done"  not pressed within 10 min
+ *   - pickup order → "Ready" not pressed within 15 min
+ *   - QR table     → "Done"  not pressed within 15 min
  *
  * The caller passes the currently-open serving items (already filtered to "not
  * yet ready / not yet done" upstream — see register.tsx). This hook owns the
  * time math, the sound, and the live overdue list it RETURNS for the UI.
  *
- * It re-evaluates both on a timer (an order crossing the 10-min mark while it
+ * It re-evaluates both on a timer (an order crossing the 15-min mark while it
  * just sits isn't a Realtime event) AND immediately whenever the list changes
  * (an order actioned, or a new already-late order appears). The alarm sounds
  * the moment an order FIRST goes overdue, then re-sounds on a cadence while
  * anything stays overdue, and the list/popup clears the instant it's actioned.
  */
 
-export const SERVING_TARGET_MS = 10 * 60 * 1000; // 10 min
+export const SERVING_TARGET_MS = 15 * 60 * 1000; // 15 min (was 10 — too early during peak, disturbed customers)
 const RECHECK_MS = 15 * 1000;                    // re-evaluate ages every 15s
-const REPEAT_MS = 45 * 1000;                     // re-sound at most every 45s while overdue
+const REPEAT_MS = 5 * 60 * 1000;                 // re-sound at most every 5 min while overdue (was 45s — too naggy at peak)
 
 export type ServingItem = {
   id: string;
