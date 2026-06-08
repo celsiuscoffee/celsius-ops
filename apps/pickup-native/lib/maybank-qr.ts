@@ -53,6 +53,15 @@ async function fetchMaybankQr(): Promise<MaybankQrConfig | null> {
 export function useMaybankQrConfig(): MaybankQrConfig | null {
   const [blob, setBlob] = useState<MaybankQrConfig | null>(null);
   const cancelledRef = useRef(false);
+  // Unique realtime topic PER hook instance. This hook is mounted by two
+  // screens that can be alive at once in the nav stack (checkout +
+  // order/[id]); a shared fixed topic made supabase-js attach the
+  // postgres_changes listener to an already-subscribed channel and throw
+  // "cannot add `postgres_changes` callbacks ... after `subscribe()`".
+  const topicRef = useRef<string>();
+  if (!topicRef.current) {
+    topicRef.current = `maybank-qr-customer-${Math.random().toString(36).slice(2, 10)}`;
+  }
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -60,7 +69,7 @@ export function useMaybankQrConfig(): MaybankQrConfig | null {
       if (!cancelledRef.current) setBlob(b);
     });
     const ch = supabase
-      .channel("maybank-qr-customer")
+      .channel(topicRef.current!)
       .on(
         "postgres_changes",
         {
