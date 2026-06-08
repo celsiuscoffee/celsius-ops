@@ -220,6 +220,9 @@ async function spawnMysteryDrop(
 export async function POST(req: NextRequest) {
   try {
     const { member_id, order_id } = await req.json();
+    // TEMP diagnostic (loyalty 403 hunt): if this line shows in the logs, CSRF
+    // middleware let the request through and any 403 is the gate below.
+    console.log(`[complete-diag] HIT member_id="${member_id}" order_id="${order_id}"`);
     if (!member_id || !order_id) {
       return NextResponse.json({ error: "member_id and order_id required" }, { status: 400 });
     }
@@ -281,6 +284,12 @@ export async function POST(req: NextRequest) {
     const orderPhoneNsn = phoneNsn((order as { loyalty_phone?: string | null }).loyalty_phone);
     const memberPhoneNsn = phoneNsn((memberRow as { phone?: string | null } | null)?.phone);
     if (!orderPhoneNsn || !memberPhoneNsn || orderPhoneNsn !== memberPhoneNsn) {
+      // TEMP diagnostic (loyalty 403 hunt): show why the gate rejected — null
+      // member row, empty order phone, or a genuine NSN mismatch.
+      console.warn(
+        `[complete-diag] GATE 403 member_id="${member_id}" memberRowFound=${!!memberRow} ` +
+        `orderNsn="${orderPhoneNsn}" memberNsn="${memberPhoneNsn}"`,
+      );
       return NextResponse.json({ ok: false, reason: "order does not belong to this member" }, { status: 403 });
     }
 
