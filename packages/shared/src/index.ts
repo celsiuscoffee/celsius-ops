@@ -47,7 +47,7 @@ export {
 } from "./format";
 export { sendSMS, getSMSProvider } from "./sms";
 export type { SMSProvider } from "./sms";
-export { filterModifiersForChannel } from "./modifier-channels";
+export { filterModifiersForChannel, filterHiddenModifiers } from "./modifier-channels";
 export type { ModifierChannel, ModifierGroupLike, ModifierOptionLike } from "./modifier-channels";
 // OTP is intentionally NOT re-exported here — it imports node:crypto,
 // which Turbopack pulls into every consumer of this barrel (including
