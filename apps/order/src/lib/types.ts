@@ -45,7 +45,7 @@ export interface Product {
   image: string;
   imageZoom?: number;   // 50–200, default 100
   variants: ProductVariant[]; // kept for backward compat — usually empty
-  modifierGroups: ModifierGroup[]; // pulled from StoreHub variantGroups
+  modifierGroups: ModifierGroup[]; // managed in the backoffice catalog editor
   isPopular?: boolean;
   isNew?: boolean;
   isAvailable: boolean;
