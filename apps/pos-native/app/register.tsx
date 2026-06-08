@@ -2906,12 +2906,51 @@ function ChannelFilter({
  *  show a static "Served" marker instead. */
 const TABLE_ORDER_DONE_RE = /done|complete|served|cancel|refund|void|fail/i;
 
+/** Batch-fetch the line items for a tapped table's order(s) so the cashier can
+ *  see WHAT was ordered without leaving the floor plan. QR self-orders keep
+ *  their lines in order_items; a mapped register order uses pos_order_items.
+ *  Keyed on the order-id set so it only refetches when the table's orders
+ *  change. */
+type TableItem = { name: string; qty: number; variant: string | null };
+function useTableOrderItems(orders: TableOrderRef[]): Map<string, TableItem[]> {
+  const [map, setMap] = useState<Map<string, TableItem[]>>(new Map());
+  const key = orders.map((o) => `${o.source}:${o.id}`).sort().join(",");
+  useEffect(() => {
+    let cancelled = false;
+    const qrIds = orders.filter((o) => o.source === "qr").map((o) => o.id);
+    const posIds = orders.filter((o) => o.source === "pos").map((o) => o.id);
+    if (qrIds.length === 0 && posIds.length === 0) { setMap(new Map()); return; }
+    (async () => {
+      const [qrRes, posRes] = await Promise.all([
+        qrIds.length
+          ? supabase.from("order_items").select("order_id, product_name, variant_name, quantity").in("order_id", qrIds)
+          : Promise.resolve({ data: [] as any[] }),
+        posIds.length
+          ? supabase.from("pos_order_items").select("order_id, product_name, variant_name, quantity").in("order_id", posIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+      if (cancelled) return;
+      const next = new Map<string, TableItem[]>();
+      for (const row of [...(((qrRes as any).data ?? [])), ...(((posRes as any).data ?? []))]) {
+        const arr = next.get(row.order_id) ?? [];
+        arr.push({ name: row.product_name ?? "Item", qty: Number(row.quantity ?? 1), variant: row.variant_name ?? null });
+        next.set(row.order_id, arr);
+      }
+      setMap(next);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return map;
+}
+
 /** Detail card for a tapped table — its live order(s). This is the
  *  consolidated QR self-order view: instead of a separate tab, you tap the
  *  table on the floor plan to see what guests self-ordered on it. Each live
  *  QR self-order gets a Done button to mark it served (status → completed,
  *  which also advances the guest's order-tracker to "Served"). */
 function TableOrdersDetail({ slot, busyId, onDone, onClose }: { slot: TableSlot; busyId: string | null; onDone: (order: TableOrderRef) => void; onClose: () => void }) {
+  const itemsByOrder = useTableOrderItems(slot.orders);
   return (
     <View className="rounded-2xl border p-4 mb-3" style={{ borderColor: "rgba(251,191,36,0.4)", backgroundColor: "rgba(251,191,36,0.08)" }}>
       <View className="flex-row items-center justify-between mb-2.5">
@@ -2922,8 +2961,10 @@ function TableOrdersDetail({ slot, busyId, onDone, onClose }: { slot: TableSlot;
         {slot.orders.map((o) => {
           const done = TABLE_ORDER_DONE_RE.test(o.status);
           const busy = busyId === `qr:${o.id}`;
+          const items = itemsByOrder.get(o.id) ?? [];
           return (
-            <View key={o.id} className="flex-row items-center rounded-xl px-3 py-2.5" style={{ gap: 8, backgroundColor: "rgba(245,243,240,0.05)" }}>
+            <View key={o.id} className="rounded-xl" style={{ backgroundColor: "rgba(245,243,240,0.05)" }}>
+              <View className="flex-row items-center px-3 py-2.5" style={{ gap: 8 }}>
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: o.source === "qr" ? "#3B82F6" : "#FBBF24" }} />
               <Text className="text-cream text-sm flex-1" style={{ fontFamily: "SpaceGrotesk_700Bold" }} numberOfLines={1}>{o.orderNumber}</Text>
               <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
@@ -2960,6 +3001,17 @@ function TableOrdersDetail({ slot, busyId, onDone, onClose }: { slot: TableSlot;
                 )
               ) : (
                 <View style={{ width: 104 }} />
+              )}
+              </View>
+              {items.length > 0 && (
+                <View className="px-3 pb-2.5" style={{ gap: 2, marginTop: -2 }}>
+                  {items.map((it, i) => (
+                    <View key={i} className="flex-row" style={{ gap: 6 }}>
+                      <Text className="text-cream/45" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11.5, minWidth: 20 }}>{it.qty}×</Text>
+                      <Text className="text-cream/80 flex-1" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 11.5 }} numberOfLines={1}>{it.name}{it.variant ? ` · ${it.variant}` : ""}</Text>
+                    </View>
+                  ))}
+                </View>
               )}
             </View>
           );
