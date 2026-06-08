@@ -53,6 +53,10 @@
     {
       "path": "/api/cron/music-alerts",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/pos-loyalty-reconcile",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
