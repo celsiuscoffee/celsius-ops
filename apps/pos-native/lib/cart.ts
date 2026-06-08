@@ -46,6 +46,11 @@ type CartState = {
   setLineNote: (key: string, note: string) => void;
   /** Flip a line's fulfilment override (true = pack to-go on a dine-in order). */
   setLineTakeaway: (key: string, takeaway: boolean) => void;
+  /** Change an existing line's modifier selection. Recomputes the line key +
+   *  unit price (product + new modifier prices) while keeping its qty,
+   *  discount, note and takeaway. If the new product+modifier combo already
+   *  exists as another line, the two merge (qty added), mirroring add(). */
+  setLineModifiers: (key: string, modifiers: ModifierOption[]) => void;
   /** Replace the whole basket at once — used to restore a recovered draft order
    *  on relaunch (lib/draft-order.ts). */
   replaceLines: (lines: CartLine[]) => void;
@@ -94,6 +99,25 @@ export const useCart = create<CartState>((set) => ({
     })),
   setLineTakeaway: (key, takeaway) =>
     set((s) => ({ lines: s.lines.map((l) => (l.key === key ? { ...l, takeaway } : l)) })),
+  setLineModifiers: (key, modifiers) =>
+    set((s) => {
+      const idx = s.lines.findIndex((l) => l.key === key);
+      if (idx < 0) return s;
+      const l = s.lines[idx];
+      const newKey = lineKey(l.product.id, modifiers);
+      if (newKey === key) return s; // nothing changed
+      const unit_sen = l.product.price_sen + modifiers.reduce((sum, m) => sum + m.price_sen, 0);
+      const dupIdx = s.lines.findIndex((x, i) => i !== idx && x.key === newKey);
+      const lines = s.lines.slice();
+      if (dupIdx >= 0) {
+        // The edited combo already exists → merge quantities, drop this line.
+        lines[dupIdx] = { ...lines[dupIdx], qty: lines[dupIdx].qty + l.qty };
+        lines.splice(idx, 1);
+      } else {
+        lines[idx] = { ...l, key: newKey, modifiers, unit_sen };
+      }
+      return { lines };
+    }),
   replaceLines: (lines) => set({ lines }),
   clear: () => set({ lines: [] }),
 }));
