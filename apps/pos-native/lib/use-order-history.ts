@@ -26,6 +26,7 @@ export type HistoryOrder = {
   status: string;
   total: number; // sen
   createdAt: string;
+  tableNumber: string | null; // set for dine-in / QR-table orders
   items: HistoryItem[];
 };
 
@@ -37,7 +38,7 @@ function mytMidnightIso(): string {
   return new Date(midnight).toISOString();
 }
 
-type OrderRow = { id: string; order_number: string | null; status: string; total: number | null; created_at: string; order_type: string | null };
+type OrderRow = { id: string; order_number: string | null; status: string; total: number | null; created_at: string; order_type: string | null; table_number: string | null };
 
 export function useOrderHistory(outletId: string | null | undefined) {
   const [storeId, setStoreId] = useState<string | null>(null);
@@ -68,7 +69,7 @@ export function useOrderHistory(outletId: string | null | undefined) {
       // takeaway by order_type, grab is source='grabfood'.
       supabase
         .from("pos_orders")
-        .select("id, order_number, status, total, created_at, source, order_type")
+        .select("id, order_number, status, total, created_at, source, order_type, table_number")
         .eq("outlet_id", outletId)
         .gte("created_at", since)
         .order("created_at", { ascending: false }),
@@ -78,7 +79,7 @@ export function useOrderHistory(outletId: string | null | undefined) {
       storeId
         ? supabase
             .from("orders")
-            .select("id, order_number, status, total, created_at, order_type")
+            .select("id, order_number, status, total, created_at, order_type, table_number")
             .eq("store_id", storeId)
             .gte("created_at", since)
             .order("created_at", { ascending: false })
@@ -120,6 +121,7 @@ export function useOrderHistory(outletId: string | null | undefined) {
       status: o.status,
       total: o.total ?? 0,
       createdAt: o.created_at,
+      tableNumber: o.table_number ?? null,
       items: items.get(o.id) ?? [],
     });
     const merged: HistoryOrder[] = [

@@ -1,0 +1,49 @@
+name: pos-native OTA
+
+# Ships JS-only changes in apps/pos-native to the SUNMI registers via EAS
+# Update (the `production` channel the production-apk build subscribes to).
+# No new APK needed — expo-updates pulls the bundle on next app launch,
+# as long as the change is JS/asset-only and the runtimeVersion (appVersion
+# 1.0.0) is unchanged. A native/dependency change still needs a fresh build.
+#
+# Triggers on a push to main that touches apps/pos-native, plus manual
+# dispatch so a release can be re-pushed on demand.
+#
+# Requires repo secret EXPO_TOKEN (Expo access token with update perms for
+# the celsiuscoffee org / project 3ea8d8f6-1552-408d-b9c8-5259b5e91542).
+# The EXPO_PUBLIC_* values mirror apps/pos-native/eas.json (public anon
+# key + API base — already committed there) so the OTA bundle has the same
+# runtime config the build profiles inject.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/pos-native/**"
+  workflow_dispatch: {}
+
+jobs:
+  ota:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/pos-native
+    env:
+      EXPO_PUBLIC_SUPABASE_URL: "https://kqdcdhpnyuwrxqhbuyfl.supabase.co"
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxZGNkaHBueXV3cnhxaGJ1eWZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2Nzc4MDAsImV4cCI6MjA5MDI1MzgwMH0.5_nnl-RLtSEVgHyT9Q9VMXVqx_cIOjGSySr2CTvL4W0"
+      EXPO_PUBLIC_API_BASE: "https://backoffice.celsiuscoffee.com"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Publish OTA update (production channel)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx eas-cli@latest update \
+            --channel production \
+            --message "${{ github.event.head_commit.message || github.sha }}" \
+            --non-interactive
