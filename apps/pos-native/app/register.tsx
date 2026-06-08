@@ -276,7 +276,7 @@ export default function Register() {
     );
     return [...pickup, ...tables];
   }, [kdsOrders, tableSlots]);
-  // Orders past the 10-min serving target → drives the alarm sound + the popup.
+  // Orders past the 15-min serving target → drives the alarm sound + the popup.
   const overdueOrders = useServingAlarm(servingAlarmItems);
   const [overdueAck, setOverdueAck] = useState(false);
   const prevOverdueCount = useRef(0);
@@ -2038,7 +2038,7 @@ export default function Register() {
             <View className="flex-row items-center gap-3 mb-1">
               <AlertTriangle size={30} color="#C2452D" />
               <Text className="text-cream text-2xl" style={{ fontFamily: "Peachi-Bold" }}>
-                {overdueOrders.length} order{overdueOrders.length === 1 ? "" : "s"} past 10 min
+                {overdueOrders.length} order{overdueOrders.length === 1 ? "" : "s"} past 15 min
               </Text>
             </View>
             <Text className="text-cream/60 text-sm mb-5" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
