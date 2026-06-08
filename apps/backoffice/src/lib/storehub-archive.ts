@@ -2,9 +2,10 @@
 // are still on StoreHub. The one-time historical backfill
 // (scripts/backfill-storehub-sales.ts) seeded the archive; this incremental sync
 // — run daily via /api/cron/storehub-sync — pulls the last few days so the
-// repointed sales dashboard stays current for outlets that haven't cut over to
-// POS-native yet. Idempotent (upsert on storehub_store_id+ref_id), so re-runs and
-// overlapping windows are safe.
+// repointed sales dashboard stays current for outlets still on StoreHub —
+// including cut-over outlets, whose Grab/Beep (online) orders still route through
+// StoreHub even after the till moves to POS-native. Idempotent (upsert on
+// storehub_store_id+ref_id), so re-runs and overlapping windows are safe.
 //
 // Scope note: this syncs storehub_sales (the dashboard's source — transaction-level
 // revenue/rounds/channels). It does NOT refresh storehub_sale_items (the menu-level
@@ -75,11 +76,10 @@ export async function syncRecentStorehubSales(days = 3): Promise<SyncResult[]> {
   const results: SyncResult[] = [];
 
   for (const o of outlets) {
-    // Skip outlets well past cutover — no more StoreHub sales there to chase.
-    if (o.posNativeCutoverAt && o.posNativeCutoverAt.getTime() < now.getTime() - 7 * ONE_DAY) {
-      results.push({ outlet: o.name, synced: 0, skipped: true });
-      continue;
-    }
+    // Do NOT skip cut-over outlets: Grab/Beep (online) orders still flow through
+    // StoreHub even after the till moves to POS-native, so the archive must keep
+    // ingesting until StoreHub is fully retired (Grab moved to POS-native too).
+    // A cancelled StoreHub account just errors per-outlet (caught below).
     try {
       const txns = await fetchWindow(o.storehubId!, from, now);
       if (txns.length >= MAX_TXN) {
