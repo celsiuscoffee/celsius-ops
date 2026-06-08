@@ -220,9 +220,6 @@ async function spawnMysteryDrop(
 export async function POST(req: NextRequest) {
   try {
     const { member_id, order_id } = await req.json();
-    // TEMP diagnostic (loyalty 403 hunt): if this line shows in the logs, CSRF
-    // middleware let the request through and any 403 is the gate below.
-    console.log(`[complete-diag] HIT member_id="${member_id}" order_id="${order_id}"`);
     if (!member_id || !order_id) {
       return NextResponse.json({ error: "member_id and order_id required" }, { status: 400 });
     }
@@ -250,12 +247,12 @@ export async function POST(req: NextRequest) {
         .eq("member_id", member_id)
         .eq("brand_id", BRAND_ID)
         .maybeSingle(),
-      supabase.from("members").select("phone, brand_data").eq("id", member_id).maybeSingle(),
+      supabase.from("members").select("phone, birthday").eq("id", member_id).maybeSingle(),
     ]);
     const tier = (mb as { tiers?: { slug?: string | null; multiplier?: number | null } | null } | null)?.tiers ?? null;
     const tierSlug = tier?.slug ?? null;
     const tierMul = Number(tier?.multiplier ?? 1) || 1;
-    const bdayIso = (memberRow?.brand_data as { birthday?: string | null } | null)?.birthday ?? null;
+    const bdayIso = (memberRow as { birthday?: string | null } | null)?.birthday ?? null;
     const birthdayMonth = bdayIso ? new Date(bdayIso).getMonth() + 1 : null;
 
     // ── Ownership gate ───────────────────────────────────────────────
@@ -284,12 +281,6 @@ export async function POST(req: NextRequest) {
     const orderPhoneNsn = phoneNsn((order as { loyalty_phone?: string | null }).loyalty_phone);
     const memberPhoneNsn = phoneNsn((memberRow as { phone?: string | null } | null)?.phone);
     if (!orderPhoneNsn || !memberPhoneNsn || orderPhoneNsn !== memberPhoneNsn) {
-      // TEMP diagnostic (loyalty 403 hunt): show why the gate rejected — null
-      // member row, empty order phone, or a genuine NSN mismatch.
-      console.warn(
-        `[complete-diag] GATE 403 member_id="${member_id}" memberRowFound=${!!memberRow} ` +
-        `orderNsn="${orderPhoneNsn}" memberNsn="${memberPhoneNsn}"`,
-      );
       return NextResponse.json({ ok: false, reason: "order does not belong to this member" }, { status: 403 });
     }
 

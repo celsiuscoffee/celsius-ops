@@ -40,15 +40,6 @@ export async function middleware(request: NextRequest) {
     ],
   });
   if (csrfFail) {
-    // TEMP diagnostic (loyalty 403 hunt): the native POS register hits
-    // /api/pos/* without a browser Origin. Log what we actually received so
-    // we can tell a CSRF block apart from the route's own ownership gate.
-    if (pathname.startsWith("/api/pos/")) {
-      console.warn(
-        `[csrf-diag] BLOCKED ${request.method} ${pathname} reason="${csrfFail.reason}" ` +
-        `origin="${request.headers.get("origin") ?? ""}" referer="${request.headers.get("referer") ?? ""}"`,
-      );
-    }
     return NextResponse.json(
       { error: `CSRF check failed: ${csrfFail.reason}` },
       { status: 403 },
