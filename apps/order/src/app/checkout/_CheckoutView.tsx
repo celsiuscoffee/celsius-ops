@@ -168,7 +168,27 @@ export function CheckoutView() {
   const [ewalletExpanded, setEwalletExpanded] = useState(false);
 
   useEffect(() => {
-    setState(readState() ?? null);
+    const s = readState() ?? {};
+    // Dine-in is sourced from its OWN key, not the shared "celsius-pickup"
+    // blob — the blob's orderType/tableNumber get stripped between the
+    // table-QR landing and here (multiple writers + the Expo store's
+    // partialize), which is why scanned table orders were arriving as
+    // pickup. Trust the dedicated key only when it's for THIS outlet and
+    // recent, so a stale scan can't force a later pickup into dine-in.
+    try {
+      const draw = window.localStorage.getItem("celsius-dinein");
+      if (draw) {
+        const d = JSON.parse(draw) as { outletId?: string; tableNumber?: string; ts?: number };
+        const fresh = typeof d.ts === "number" && Date.now() - d.ts < 6 * 60 * 60 * 1000;
+        if (fresh && d.tableNumber && d.outletId && d.outletId === s.outletId) {
+          s.orderType = "dine_in";
+          s.tableNumber = d.tableNumber;
+        }
+      }
+    } catch {
+      /* ignore — fall back to whatever the blob says */
+    }
+    setState(s);
   }, []);
 
   // Same earn-preview line as apps/pickup-native/app/checkout.tsx —
@@ -392,6 +412,9 @@ export function CheckoutView() {
         s.appliedReward = null;
         s.reservedVoucher = null;
         window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state: s }));
+        // The dine-in session ends with the order — clear its key so the
+        // customer's NEXT order defaults to pickup unless they scan again.
+        window.localStorage.removeItem("celsius-dinein");
       } catch {
         /* ignore */
       }

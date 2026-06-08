@@ -47,6 +47,19 @@ export function TableEntry({
       // re-validated server-side at checkout regardless.
       state.cart = [];
       window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state }));
+      // Authoritative dine-in context on its OWN key. The shared
+      // "celsius-pickup" blob above is rewritten by ~10 components AND by the
+      // Expo store, whose `partialize` deliberately drops orderType/tableNumber
+      // — so the dine_in flag set above gets stripped between here and
+      // checkout, and the table order silently becomes a pickup. This
+      // dedicated key is touched by nothing else, so checkout can trust it.
+      // Outlet-scoped + timestamped so it can never strand a later pickup
+      // customer in dine-in (checkout ignores it once the outlet differs or
+      // it ages out; the outlet picker and a completed order clear it).
+      window.localStorage.setItem(
+        "celsius-dinein",
+        JSON.stringify({ outletId, tableNumber: tableId, ts: Date.now() }),
+      );
     } catch {
       /* ignore */
     }
