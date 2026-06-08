@@ -26,6 +26,7 @@ export type OutletSource = {
   outletId: string; // Celsius Outlet.id → storehub_sales.outlet_id
   storehubStoreId: string | null; // Outlet.storehubId → live StoreHub pull for today
   loyaltyOutletId: string | null; // → pos_orders.outlet_id (e.g. "outlet-con")
+  pickupStoreId: string | null; // Outlet.pickupStoreId → orders.store_id (pickup app / QR-table)
   cutoverAt: Date | null; // Outlet.posNativeCutoverAt
 };
 
@@ -152,6 +153,33 @@ export async function getUnifiedSalesForOutlet(
         channel: posChannel(r.order_type, r.source),
         isDeliveryQR: posIsDeliveryQR(r.order_type, r.source),
         channelLabel: r.source && r.source !== "pos" ? r.source : (r.order_type ?? "pos"),
+      });
+    }
+  }
+
+  // ── Pickup app (orders table) — the customer ordering app + QR-table scan-&-
+  // order. Real-time (local DB). A DISTINCT stream from the till (pos_orders) and
+  // StoreHub — pickup orders never land in either, so no double-count. Only paid
+  // (status='completed'); all count toward Pickup & Delivery. ──
+  if (outlet.pickupStoreId) {
+    const pickupRows = await prisma.$queryRaw<
+      Array<{ ts: Date; total: unknown; source: string | null; order_type: string | null }>
+    >`
+      SELECT created_at AS ts, total, source, order_type
+      FROM orders
+      WHERE store_id = ${outlet.pickupStoreId}
+        AND status = 'completed'
+        AND created_at >= ${from}
+        AND created_at <= ${to}
+    `;
+    for (const r of pickupRows) {
+      const ot = (r.order_type ?? "").toLowerCase();
+      sales.push({
+        ts: toISO(r.ts),
+        total: (Number(r.total) || 0) / 100, // orders.total is in sen
+        channel: ot === "dine_in" ? "dine_in" : "takeaway",
+        isDeliveryQR: true, // pickup-app / QR-table → Pickup & Delivery bucket
+        channelLabel: r.source ?? "pickup",
       });
     }
   }

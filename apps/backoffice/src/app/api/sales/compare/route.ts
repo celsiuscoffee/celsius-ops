@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getTransactions } from "@/lib/storehub";
 import { computeProjection } from "@/lib/sales/projection";
 import {
   ROUNDS,
@@ -10,12 +9,12 @@ import {
   getMYTDateStr,
   getRound,
   getDateRange,
-  classifyChannel,
   emptyChannelData,
   addToChannel,
   roundChannel,
   roundChannelData,
 } from "../_lib/storehub-helpers";
+import { getUnifiedSalesForOutlet } from "../_lib/unified-sales";
 
 // ─── GET /api/sales/compare ──────────────────────────────────────────────
 // Compare multiple date ranges side by side.
@@ -63,7 +62,7 @@ export async function GET(request: NextRequest) {
 
     const outlets = await prisma.outlet.findMany({
       where: outletWhere,
-      select: { id: true, name: true, storehubId: true },
+      select: { id: true, name: true, storehubId: true, loyaltyOutletId: true, pickupStoreId: true, posNativeCutoverAt: true },
     });
 
     if (outlets.length === 0) {
@@ -78,52 +77,31 @@ export async function GET(request: NextRequest) {
       if (pp.to > globalTo) globalTo = pp.to;
     }
 
-    // Check if merging is efficient (gap < 30 days total range)
-    const gFromD = new Date(globalFrom + "T00:00:00+08:00");
-    const gToD = new Date(globalTo + "T23:59:59+08:00");
-    const totalDaysSpan = Math.ceil((gToD.getTime() - gFromD.getTime()) / (1000 * 60 * 60 * 24));
-
-    // Sum of actual requested days
-    const requestedDays = periodPairs.reduce((sum, pp) => {
-      const f = new Date(pp.from + "T00:00:00+08:00");
-      const t = new Date(pp.to + "T23:59:59+08:00");
-      return sum + Math.ceil((t.getTime() - f.getTime()) / (1000 * 60 * 60 * 24));
-    }, 0);
-
-    // If the total span is less than 2x the requested days, merge into one call per outlet
-    // Otherwise, make separate calls per period per outlet
-    const shouldMerge = totalDaysSpan < requestedDays * 2 + 14;
-
     const warnings: string[] = [];
 
-    // Collect all transactions per period
-    type TxnBucket = { from: string; to: string; txns: ReturnType<typeof classifyChannel> extends infer R ? { total: number; ts: string; channel: R }[] : never };
-
-    // Initialize period buckets
+    // Period buckets to fill.
     const periodBuckets: { from: string; to: string; txns: { total: number; hour: number; dateStr: string; channel: "dine_in" | "takeaway" | "delivery" }[] }[] =
       periodPairs.map((pp) => ({ from: pp.from, to: pp.to, txns: [] }));
 
-    // Fetch all outlets in parallel
+    // Fetch each outlet's sales once across the global span from the unified source
+    // (StoreHub archive + live-today, POS-native, pickup app), then bucket per period.
+    const globalFromDate = new Date(globalFrom + "T00:00:00+08:00");
+    const globalToDate = new Date(globalTo + "T23:59:59+08:00");
+
     const outletResults = await Promise.allSettled(
-      outlets
-        .filter((o) => o.storehubId)
-        .map(async (outlet) => {
-          if (shouldMerge) {
-            const from = new Date(globalFrom + "T00:00:00+08:00");
-            const to = new Date(globalTo + "T23:59:59+08:00");
-            const txns = await getTransactions(outlet.storehubId!, from, to);
-            return { outlet, txns, mode: "merge" as const };
-          } else {
-            const allTxns: { txn: any; bucket: (typeof periodBuckets)[number] }[] = [];
-            for (const bucket of periodBuckets) {
-              const from = new Date(bucket.from + "T00:00:00+08:00");
-              const to = new Date(bucket.to + "T23:59:59+08:00");
-              const txns = await getTransactions(outlet.storehubId!, from, to);
-              for (const txn of txns) allTxns.push({ txn, bucket });
-            }
-            return { outlet, txns: allTxns, mode: "split" as const };
-          }
-        }),
+      outlets.map((outlet) =>
+        getUnifiedSalesForOutlet(
+          {
+            outletId: outlet.id,
+            storehubStoreId: outlet.storehubId,
+            loyaltyOutletId: outlet.loyaltyOutletId,
+            pickupStoreId: outlet.pickupStoreId,
+            cutoverAt: outlet.posNativeCutoverAt,
+          },
+          globalFromDate,
+          globalToDate,
+        ),
+      ),
     );
 
     for (const result of outletResults) {
@@ -133,31 +111,13 @@ export async function GET(request: NextRequest) {
         warnings.push(msg);
         continue;
       }
-
-      const { txns, mode } = result.value;
-
-      if (mode === "merge") {
-        for (const txn of txns as any[]) {
-          const ts = txn.transactionTime || txn.completedAt || txn.createdAt;
-          if (!ts) continue;
-          const dateStr = getMYTDateStr(ts);
-          const hour = getMYTHour(ts);
-          const channel = classifyChannel(txn);
-
-          for (const bucket of periodBuckets) {
-            if (dateStr >= bucket.from && dateStr <= bucket.to) {
-              bucket.txns.push({ total: txn.total, hour, dateStr, channel });
-            }
+      for (const ev of result.value) {
+        const dateStr = getMYTDateStr(ev.ts);
+        const hour = getMYTHour(ev.ts);
+        for (const bucket of periodBuckets) {
+          if (dateStr >= bucket.from && dateStr <= bucket.to) {
+            bucket.txns.push({ total: ev.total, hour, dateStr, channel: ev.channel });
           }
-        }
-      } else {
-        for (const { txn, bucket } of txns as { txn: any; bucket: (typeof periodBuckets)[number] }[]) {
-          const ts = txn.transactionTime || txn.completedAt || txn.createdAt;
-          if (!ts) continue;
-          const dateStr = getMYTDateStr(ts);
-          const hour = getMYTHour(ts);
-          const channel = classifyChannel(txn);
-          bucket.txns.push({ total: txn.total, hour, dateStr, channel });
         }
       }
     }
