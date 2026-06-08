@@ -68,7 +68,17 @@ interface SavedSegment {
 
 const SAVED_SEGMENTS_KEY = "celsius-saved-segments";
 
-type MappedMember = { id: string; phone: string; name: string | null; email: string | null; birthday: string | null; preferred_outlet_id: string | null; created_at: string; updated_at: string; points_balance: number; total_visits: number; total_spent: number; joined_at: string; last_visit_at: string | null; tags: string[] };
+// Tier filter options — ids match the `tiers` table; label = display name.
+const TIER_OPTIONS: { id: string; label: string }[] = [
+  { id: "tier-celsius-bronze", label: "Member" },
+  { id: "tier-celsius-silver", label: "Silver" },
+  { id: "tier-celsius-gold", label: "Gold" },
+  { id: "tier-celsius-elite", label: "Platinum" },
+  { id: "tier-celsius-arba-staff", label: "Staff" },
+  { id: "tier-celsius-black-card", label: "Black Card" },
+];
+
+type MappedMember = { id: string; phone: string; name: string | null; email: string | null; birthday: string | null; preferred_outlet_id: string | null; created_at: string; updated_at: string; points_balance: number; total_visits: number; total_spent: number; joined_at: string; last_visit_at: string | null; tags: string[]; current_tier_id: string | null };
 
 function mapMember(m: MemberWithBrand): MappedMember {
   return {
@@ -86,6 +96,7 @@ function mapMember(m: MemberWithBrand): MappedMember {
     joined_at: m.brand_data?.joined_at ?? m.created_at,
     last_visit_at: m.brand_data?.last_visit_at ?? null,
     tags: ((m as unknown as Record<string, unknown>).tags as string[]) || [],
+    current_tier_id: (m.brand_data as unknown as { current_tier_id?: string | null })?.current_tier_id ?? null,
   };
 }
 
@@ -144,13 +155,14 @@ export default function MembersPage() {
   // Outlet filter
   const [outlets, setOutlets] = useState<{ id: string; name: string }[]>([]);
   const [outletFilter, setOutletFilter] = useState<string>("");
+  const [tierFilter, setTierFilter] = useState<string>("");
 
   // SMS filter
   const [smsMessages, setSmsMessages] = useState<{ message: string; display: string; sent_count: number; last_sent_at: string }[]>([]);
   const [smsRecipientPhones, setSmsRecipientPhones] = useState<Set<string>>(new Set());
 
   // Are we in client-side filter mode?
-  const useClientMode = allLoaded && (filters.length > 0 || tagFilter !== "" || segment !== "all" || outletFilter !== "");
+  const useClientMode = allLoaded && (filters.length > 0 || tagFilter !== "" || segment !== "all" || outletFilter !== "" || tierFilter !== "");
 
   // ─── Saved segments ────────────────────────────────
   const [savedSegments, setSavedSegments] = useState<SavedSegment[]>([]);
@@ -423,12 +435,17 @@ export default function MembersPage() {
         if (m.preferred_outlet_id !== outletFilter) return false;
       }
 
+      // tier filter
+      if (tierFilter) {
+        if (m.current_tier_id !== tierFilter) return false;
+      }
+
       return true;
     });
-  }, [segment, search, allMembers, lowestRewardPoints, filters, tagFilter, outletFilter, smsRecipientPhones]);
+  }, [segment, search, allMembers, lowestRewardPoints, filters, tagFilter, outletFilter, tierFilter, smsRecipientPhones]);
 
   // Reset page when filters change
-  useEffect(() => { setCurrentPage(0); }, [segment, search, filters, tagFilter, outletFilter, pageSize]);
+  useEffect(() => { setCurrentPage(0); }, [segment, search, filters, tagFilter, outletFilter, tierFilter, pageSize]);
 
   // In server mode: display serverMembers directly, use serverTotal for pagination
   // In client mode: display filtered slice, use filteredMembers.length for pagination
@@ -913,6 +930,34 @@ export default function MembersPage() {
               className="inline-flex items-center gap-1 rounded-full border border-[#C2452D]/30 bg-[#C2452D]/5 px-2.5 py-1.5 text-xs font-medium text-[#C2452D]"
             >
               Outlet: {outlets.find((o) => o.id === outletFilter)?.name || outletFilter}
+              <X className="h-3 w-3" />
+            </button>
+          )}
+          {/* Tier filter dropdown */}
+          <div className="relative">
+            <select
+              value={tierFilter}
+              onChange={(e) => { setTierFilter(e.target.value); if (e.target.value) ensureAllLoaded(); }}
+              className={cn(
+                "appearance-none rounded-full border pl-7 pr-6 py-1.5 text-xs font-medium transition-colors cursor-pointer",
+                tierFilter
+                  ? "border-[#C2452D] bg-[#C2452D]/5 text-[#C2452D]"
+                  : "border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-600 dark:text-neutral-300"
+              )}
+            >
+              <option value="">All tiers</option>
+              {TIER_OPTIONS.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+            <Crown className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
+          {tierFilter && (
+            <button
+              onClick={() => setTierFilter("")}
+              className="inline-flex items-center gap-1 rounded-full border border-[#C2452D]/30 bg-[#C2452D]/5 px-2.5 py-1.5 text-xs font-medium text-[#C2452D]"
+            >
+              Tier: {TIER_OPTIONS.find((t) => t.id === tierFilter)?.label || tierFilter}
               <X className="h-3 w-3" />
             </button>
           )}
