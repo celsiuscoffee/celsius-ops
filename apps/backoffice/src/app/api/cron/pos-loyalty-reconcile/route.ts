@@ -26,7 +26,10 @@ export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
-  const supabase = createSupabaseAdmin();
+  const supabase = createSupabaseAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
   const { data, error } = await supabase.rpc("reconcile_pos_loyalty", { p_since_hours: 6 });
   if (error) {
     console.error("[cron/pos-loyalty-reconcile]", error.message);
