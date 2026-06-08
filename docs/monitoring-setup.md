@@ -41,11 +41,9 @@ existing Sentry setup, no new account).
 | /api/cron/ads-daily | 3 AM MYT | backoffice |
 | /api/cron/ads-monthly | 4 AM 2nd of month | backoffice |
 | /api/cron/deactivate-resigned | Nightly | backoffice |
-| /api/cron/sync-products | Every 6h | loyalty |
 | /api/cron/expire-orders | Every 10 min | order |
 | /api/cron/reconcile-pending | Every 1 min | order |
 | /api/cron/auto-hours | Hourly | order |
-| /api/cron/sync-menu | Every 10 min | order |
 | /api/cron/reset-checklists | 12am MYT | staff |
 
 ## Recommended setup (free / low cost)
