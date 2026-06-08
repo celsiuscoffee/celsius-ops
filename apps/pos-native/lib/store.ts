@@ -50,9 +50,16 @@ type PosState = {
    *  null when the login wasn't schedule-bound (manager / override / no roster),
    *  in which case the 2h TTL applies instead. */
   shiftEndsAt: number | null;
+  /** "Sleep/lock" mode: the auto-logout timer locks the till behind a PIN
+   *  overlay INSTEAD of signing out + leaving the register, so the screen's
+   *  online-order auto-printers + chime keep running while the till is idle.
+   *  Not persisted — a relaunch goes through the normal login. */
+  locked: boolean;
   setOutlet: (id: string) => void;
   setStaff: (s: StaffSession, shiftEndsAt?: number | null) => void;
   signOut: () => void;
+  lock: () => void;
+  unlock: () => void;
 };
 
 export const usePos = create<PosState>()(
@@ -62,11 +69,15 @@ export const usePos = create<PosState>()(
       staff: null,
       loggedInAt: null,
       shiftEndsAt: null,
+      locked: false,
       setOutlet: (id) => set({ outletId: id }),
       // Stamp the sign-in time + (optional) rostered shift end so the session
       // can auto-expire at shift end, or after SESSION_TTL_MS as a fallback.
-      setStaff: (s, shiftEndsAt = null) => set({ staff: s, loggedInAt: Date.now(), shiftEndsAt }),
-      signOut: () => set({ staff: null, loggedInAt: null, shiftEndsAt: null }),
+      // A fresh sign-in always clears the lock.
+      setStaff: (s, shiftEndsAt = null) => set({ staff: s, loggedInAt: Date.now(), shiftEndsAt, locked: false }),
+      signOut: () => set({ staff: null, loggedInAt: null, shiftEndsAt: null, locked: false }),
+      lock: () => set({ locked: true }),
+      unlock: () => set({ locked: false }),
     }),
     {
       name: "celsius-pos-session",
