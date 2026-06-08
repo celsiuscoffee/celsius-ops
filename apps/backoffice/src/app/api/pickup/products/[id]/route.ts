@@ -30,13 +30,6 @@ export async function PATCH(
     update.featured_position = Math.round(body.featured_position);
   }
 
-  // Soft-blacklist of modifier group IDs / option IDs the merchant wants to
-  // hide from customers. Stored as jsonb array; sync from StoreHub leaves
-  // this field alone, so deletions persist across re-syncs.
-  if (Array.isArray(body.hidden_modifier_ids)) {
-    update.hidden_modifier_ids = body.hidden_modifier_ids.filter((x): x is string => typeof x === "string");
-  }
-
   // Modifier groups — backoffice-owned (we no longer pull these from StoreHub
   // sync, so the merchant manages them directly here). Stored as jsonb on
   // products.modifiers. Shape mirrors StoreHub: group { id, name, multiSelect,
