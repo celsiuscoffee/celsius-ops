@@ -17,15 +17,29 @@ import { OrderTypeToggle } from "./OrderTypeToggle";
  * the cart — store.setOrderType preserves it; the applied reward is
  * re-validated by the checkout validity panel.
  */
-export function OrderTypeBar() {
+export function OrderTypeBar({
+  // When seated for dine-in (a table was scanned), lock the order out of
+  // switching to Pickup *here*. Stops a customer placing a Pickup order while
+  // occupying a dine-in table; to do pickup they start over from Home. Opt-in
+  // (checkout only) so the cart + home toggles stay fully switchable.
+  lockPickupForDineIn = false,
+}: {
+  lockPickupForDineIn?: boolean;
+} = {}) {
   const orderType = useApp((s) => s.orderType);
   const tableNumber = useApp((s) => s.tableNumber);
   const outletName = useApp((s) => s.outletName);
   const setOrderType = useApp((s) => s.setOrderType);
   const current = resolveOrderType(orderType);
 
+  // Dine-in seats are a shared resource — once seated, Pickup is off the table
+  // at this step (see prop comment).
+  const pickupLocked = lockPickupForDineIn && current === "dine_in";
+  const disabledTypes: OrderType[] = pickupLocked ? ["pickup"] : [];
+
   const select = (next: OrderType) => {
     if (next === current) return;
+    if (disabledTypes.includes(next)) return;
     Haptics.selectionAsync();
     if (next === "dine_in" && !tableNumber) {
       // No table yet — send them to scan/enter one; the scanner calls
@@ -38,7 +52,24 @@ export function OrderTypeBar() {
 
   return (
     <View style={{ gap: 10 }}>
-      <OrderTypeToggle value={current} onSelect={select} />
+      <OrderTypeToggle value={current} onSelect={select} disabled={disabledTypes} />
+
+      {/* Explain the greyed-out Pickup so a seated customer isn't left
+          tapping a dead button — point them at the way to actually switch. */}
+      {pickupLocked && (
+        <Text
+          style={{
+            fontFamily: "SpaceGrotesk_400Regular",
+            fontSize: 11.5,
+            lineHeight: 16,
+            color: "#8E8E93",
+            paddingHorizontal: 2,
+          }}
+        >
+          You're seated for dine-in. To order for pickup instead, start a new
+          order from Home.
+        </Text>
+      )}
 
       {/* Context summary */}
       {current === "dine_in" ? (

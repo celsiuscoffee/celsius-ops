@@ -15,9 +15,14 @@ const SEGMENTS: OrderType[] = ["dine_in", "pickup"];
 export function OrderTypeToggle({
   value,
   onSelect,
+  disabled,
 }: {
   value: OrderType;
   onSelect: (next: OrderType) => void;
+  /** Segments that can't be picked here — rendered greyed + non-pressable.
+   *  Used at checkout to lock a seated dine-in order out of switching to
+   *  Pickup (which would occupy a table without a dine-in order). */
+  disabled?: OrderType[];
 }) {
   return (
     <View
@@ -30,13 +35,15 @@ export function OrderTypeToggle({
     >
       {SEGMENTS.map((t) => {
         const active = value === t;
+        const isDisabled = disabled?.includes(t) ?? false;
         const Icon = t === "pickup" ? ShoppingBag : UtensilsCrossed;
         return (
           <Pressable
             key={t}
-            onPress={() => onSelect(t)}
+            onPress={() => { if (!isDisabled) onSelect(t); }}
+            disabled={isDisabled}
             accessibilityRole="button"
-            accessibilityState={{ selected: active }}
+            accessibilityState={{ selected: active, disabled: isDisabled }}
             style={{
               flex: 1,
               flexDirection: "row",
@@ -46,6 +53,7 @@ export function OrderTypeToggle({
               paddingVertical: 11,
               borderRadius: 11,
               backgroundColor: active ? "#FFFFFF" : "transparent",
+              opacity: isDisabled ? 0.38 : 1,
               shadowColor: "#000",
               shadowOpacity: active ? 0.08 : 0,
               shadowRadius: 6,
