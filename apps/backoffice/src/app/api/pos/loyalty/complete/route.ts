@@ -261,11 +261,26 @@ export async function POST(req: NextRequest) {
     // loyaltyPhone + memberId from the same member object), so it must match
     // member_id's phone. Without this, anyone could POST a stranger's completed
     // order_id + their own member_id to farm Beans / mystery drops / reward
-    // burns — the /api/pos transport is Origin-spoofable (task #186). Digits-only
-    // compare since both are stored E.164.
-    const orderPhoneDigits = String((order as { loyalty_phone?: string | null }).loyalty_phone ?? "").replace(/\D/g, "");
-    const memberPhoneDigits = String((memberRow as { phone?: string | null } | null)?.phone ?? "").replace(/\D/g, "");
-    if (!orderPhoneDigits || !memberPhoneDigits || orderPhoneDigits !== memberPhoneDigits) {
+    // burns — the /api/pos transport is Origin-spoofable (task #186).
+    //
+    // Compare the national significant number, NOT raw digits: Malaysian phones
+    // are stored inconsistently (+60.., 60.., 0..), so "+60124013766" (order)
+    // and "0124013766" (member row) are the SAME number but differ as raw
+    // digits. The original digits-only compare 403'd every legitimate in-store
+    // completion (regression from the gate's introduction), silently killing
+    // Beans + mystery drops + the till reveal for all members. Reducing to the
+    // NSN (drop a leading 60 or 0) fixes the false reject while keeping the
+    // anti-farming guarantee (the credited member must still own the order's
+    // phone).
+    const phoneNsn = (p: string | null | undefined): string => {
+      let d = String(p ?? "").replace(/\D/g, "");
+      if (d.startsWith("60")) d = d.slice(2);
+      else if (d.startsWith("0")) d = d.slice(1);
+      return d;
+    };
+    const orderPhoneNsn = phoneNsn((order as { loyalty_phone?: string | null }).loyalty_phone);
+    const memberPhoneNsn = phoneNsn((memberRow as { phone?: string | null } | null)?.phone);
+    if (!orderPhoneNsn || !memberPhoneNsn || orderPhoneNsn !== memberPhoneNsn) {
       return NextResponse.json({ ok: false, reason: "order does not belong to this member" }, { status: 403 });
     }
 
