@@ -206,6 +206,20 @@ export default function CustomerDisplay() {
     return () => { cancelled = true; };
   }, [status, member?.id, snapshot]);
 
+  // Auto-clear the thank-you / "claim your points" screen back to idle when the
+  // customer walks off without doing anything — otherwise the previous order's
+  // prompt (esp. a guest's "don't miss your Points") stays up until staff start
+  // a new sale, greeting the next customer with the last one's screen. The
+  // window restarts if a guest signs in (member changes) so an active claimer
+  // gets a fresh minute to reveal; a member who taps reveal dismisses sooner
+  // via "Got it". The register's own New Order still resets everything; this is
+  // just a safety timeout on the customer-facing screen.
+  useEffect(() => {
+    if (status !== "complete") return;
+    const t = setTimeout(() => useDisplay.getState().setStatus("idle"), 60000);
+    return () => clearTimeout(t);
+  }, [status, member?.id]);
+
   function openRedeem() {
     if (!member) return;
     setRedeemOpen(true);
