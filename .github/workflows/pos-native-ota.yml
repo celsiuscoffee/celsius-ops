@@ -42,6 +42,10 @@ jobs:
       - name: Publish OTA update (production channel)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          # eas update shells out to `expo export`, whose interactive prompts
+          # must be suppressed via CI=1 (the --non-interactive flag is not
+          # honoured by the export sub-step).
+          CI: "1"
           # Pass the commit message through the environment, NOT inline in the
           # run script: a multi-line message with backticks / * / newlines would
           # otherwise be parsed by the shell (command substitution + word
@@ -50,7 +54,12 @@ jobs:
           COMMIT_MSG: ${{ github.event.head_commit.message || github.sha }}
         run: |
           MSG="$(printf '%s' "$COMMIT_MSG" | head -n 1)"
+          # --platform android: this is an Android-only SUNMI register app, and
+          # the default (all) makes expo export bundle web too, which fails
+          # (react-native-web isn't a dependency). app.json also pins
+          # platforms:["android"]; this keeps the intent explicit.
           npx eas-cli@latest update \
             --channel production \
+            --platform android \
             --message "$MSG" \
             --non-interactive
