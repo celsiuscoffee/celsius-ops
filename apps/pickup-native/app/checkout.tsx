@@ -1158,7 +1158,7 @@ export default function Checkout() {
                 Replaces the old "Pickup at" card: takeaway shows the outlet +
                 Change; dine-in shows the locked table + outlet (and hides the
                 pickup-time card below). */}
-            <OrderTypeBar />
+            <OrderTypeBar lockPickupForDineIn />
 
             {/* Pickup time — defaults to Now. Tap to open the
                 bottom-sheet picker and choose a delayed pickup so

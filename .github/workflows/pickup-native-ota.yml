@@ -1,0 +1,67 @@
+name: pickup-native OTA
+
+# Ships JS-only changes in apps/pickup-native to customers' installed apps via
+# EAS Update (the `production` channel the App Store / Play builds subscribe to).
+# No new binary needed — expo-updates pulls the bundle on next app launch, as
+# long as the change is JS/asset-only and the runtimeVersion (appVersion, today
+# 1.0.3) is unchanged. A native/dependency change still needs a fresh `eas build`
+# + store submission, and a version bump won't be picked up by OTA.
+#
+# Triggers on a push to main that touches apps/pickup-native, plus manual
+# dispatch so a release can be re-pushed on demand.
+#
+# Requires repo secret EXPO_TOKEN (Expo access token with update perms for the
+# celsiuscoffee org / project f22119f6-5337-49ea-a4b1-a12d5f811531).
+#
+# Runtime config (Supabase / Stripe / Sentry / Amplitude EXPO_PUBLIC_* values)
+# is deliberately NOT hardcoded here. `--environment production` makes eas
+# update load the same server-side EAS environment variables the production
+# build uses, so the OTA bundle's config always matches the installed app — no
+# risk of shipping a divergent Supabase URL/key to live customers.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/pickup-native/**"
+  workflow_dispatch: {}
+
+jobs:
+  ota:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/pickup-native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Publish OTA update (production channel)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          # eas update shells out to `expo export`, whose interactive prompts
+          # must be suppressed via CI=1 (the --non-interactive flag is not
+          # honoured by the export sub-step).
+          CI: "1"
+          # Pass the commit message through the environment, NOT inline in the
+          # run script: a multi-line message with backticks / * / newlines would
+          # otherwise be parsed by the shell (command substitution + word
+          # splitting) and feed garbage args to eas. We then take just the first
+          # line as the update message.
+          COMMIT_MSG: ${{ github.event.head_commit.message || github.sha }}
+        run: |
+          MSG="$(printf '%s' "$COMMIT_MSG" | head -n 1)"
+          # --platform all: ios + android (this is a consumer app on both).
+          # react-native-web + react-dom are deps, so the web export step the
+          # CLI runs under the hood succeeds (unlike pos-native, which had to
+          # pin android-only). --environment production injects the EAS
+          # server-side prod env vars so the bundle config matches the build.
+          npx eas-cli@latest update \
+            --channel production \
+            --platform all \
+            --environment production \
+            --message "$MSG" \
+            --non-interactive
