@@ -186,13 +186,13 @@ export default function SalesScreen() {
                 ))}
             </View>
 
-            {/* Channels / Dayparts */}
+            {/* Channels / Rounds */}
             <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
               <Text className="font-display text-sm text-[#F5F3F0]">Sales breakdown</Text>
               <View className="mb-1 mt-3 flex-row gap-1.5 rounded-xl border border-[#F5F3F01a] bg-[#160800] p-1">
                 {(["channel", "round"] as const).map((d) => (
                   <Pressable key={d} onPress={() => setDim(d)} className={`flex-1 items-center rounded-lg py-2 ${dim === d ? "bg-[#A2492C40]" : ""}`}>
-                    <Text className={`text-xs ${dim === d ? "font-body-bold text-[#F5F3F0]" : "font-body-semi text-[#F5F3F08a]"}`}>{d === "channel" ? "Channels" : "Dayparts"}</Text>
+                    <Text className={`text-xs ${dim === d ? "font-body-bold text-[#F5F3F0]" : "font-body-semi text-[#F5F3F08a]"}`}>{d === "channel" ? "Channels" : "Rounds"}</Text>
                   </Pressable>
                 ))}
               </View>
