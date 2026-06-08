@@ -189,6 +189,11 @@ export default function MembersPage() {
   const [showBulkTagModal, setShowBulkTagModal] = useState(false);
   const [bulkTierOpen, setBulkTierOpen] = useState(false);
   const [bulkTierSaving, setBulkTierSaving] = useState(false);
+  // Add-customer dialog
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addPhone, setAddPhone] = useState("");
+  const [addName, setAddName] = useState("");
+  const [addSaving, setAddSaving] = useState(false);
   const [bulkTagInput, setBulkTagInput] = useState("");
   const [bulkTagging, setBulkTagging] = useState(false);
 
@@ -725,6 +730,34 @@ export default function MembersPage() {
     toast.success(`Set ${ok} of ${ids.length} to ${tierId ? tierMeta(tierId).label : "auto (removed)"}`);
   }
 
+  // ─── Add customer ──────────────────────────────────
+  async function handleAddCustomer() {
+    const digits = addPhone.replace(/\D/g, "");
+    if (digits.length < 9) { toast.error("Enter a valid phone number"); return; }
+    const e164 = digits.startsWith("60") ? `+${digits}` : digits.startsWith("0") ? `+6${digits}` : `+60${digits}`;
+    setAddSaving(true);
+    try {
+      const res = await fetch("/api/loyalty/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: e164, name: addName.trim() || null, brand_id: "brand-celsius" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(data.error || "Failed to add customer"); setAddSaving(false); return; }
+      toast.success("Customer added");
+      setShowAddModal(false); setAddPhone(""); setAddName("");
+      // Refresh so the new member shows with its real id/data (newest → page 0).
+      fetchMembersPage("brand-celsius", 0, pageSize, debouncedSearch || undefined).then((r) => {
+        setServerMembers(r.members.map(mapMember)); setServerTotal(r.total); setServerTotalPages(r.total_pages);
+      });
+      fetchMembers("brand-celsius", { all: true }).then((ms) => setAllMembers(ms.map(mapMember)));
+      setCurrentPage(0);
+    } catch {
+      toast.error("Failed to add customer");
+    }
+    setAddSaving(false);
+  }
+
   // ─── Segment tab config ─────────────────────────────
   const tabs: { key: Segment; label: string; count: number }[] = [
     { key: "all", label: "All", count: segmentCounts.all },
@@ -1030,6 +1063,13 @@ export default function MembersPage() {
 
         {/* Search toggle + Export */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setShowAddModal(true); setAddPhone(""); setAddName(""); }}
+            className="rounded-lg bg-[#C2452D] px-3 py-2 text-sm font-medium text-white hover:bg-[#A33822] inline-flex items-center gap-1.5"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Add customer</span>
+          </button>
           <button
             onClick={() => {
               const today = new Date().toISOString().split("T")[0];
@@ -1769,6 +1809,42 @@ export default function MembersPage() {
       )}
 
       {/* Manual point-adjustment dialog */}
+      {/* Add customer modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => !addSaving && setShowAddModal(false)}>
+          <div className="w-full max-w-sm rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-lg p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center gap-2">
+              <Plus className="h-5 w-5 text-[#C2452D]" />
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Add customer</h3>
+            </div>
+            <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-neutral-400">Phone number</label>
+            <input
+              autoFocus
+              type="tel"
+              value={addPhone}
+              onChange={(e) => setAddPhone(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && addPhone.trim()) handleAddCustomer(); }}
+              placeholder="+60 12-345 6789"
+              className="mb-3 w-full rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm dark:text-neutral-200"
+            />
+            <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-neutral-400">Name (optional)</label>
+            <input
+              type="text"
+              value={addName}
+              onChange={(e) => setAddName(e.target.value)}
+              placeholder="Name"
+              className="mb-4 w-full rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm dark:text-neutral-200"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowAddModal(false)} disabled={addSaving} className="flex-1 rounded-lg bg-gray-100 dark:bg-neutral-700 px-3 py-2 text-sm font-medium text-gray-600 dark:text-neutral-300 disabled:opacity-50">Cancel</button>
+              <button onClick={handleAddCustomer} disabled={addSaving || !addPhone.trim()} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#C2452D] px-3 py-2 text-sm font-medium text-white hover:bg-[#A33822] disabled:opacity-50">
+                {addSaving && <Loader2 className="h-4 w-4 animate-spin" />} Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {adjustingMember && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
