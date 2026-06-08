@@ -168,6 +168,8 @@ export default function Register() {
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState<{ orderNumber: string; total: number; beansEarned: number; beansBalance: number } | null>(null);
   const [modProduct, setModProduct] = useState<Product | null>(null);
+  // Cart line whose modifiers are being edited (opens the picker pre-selected).
+  const [modEditKey, setModEditKey] = useState<string | null>(null);
 
   // Cashier-applied manual discount (sen) — stacks on top of loyalty/promo.
   const [manualDiscount, setManualDiscount] = useState(0);
@@ -633,6 +635,7 @@ export default function Register() {
   const dec = useCart((s) => s.dec);
   const remove = useCart((s) => s.remove);
   const setLineDiscount = useCart((s) => s.setLineDiscount);
+  const setLineModifiers = useCart((s) => s.setLineModifiers);
   const setLineNote = useCart((s) => s.setLineNote);
   const setLineTakeaway = useCart((s) => s.setLineTakeaway);
   const replaceLines = useCart((s) => s.replaceLines);
@@ -2562,6 +2565,23 @@ export default function Register() {
         )}
       </Modal>
 
+      {/* ── Edit a cart line's modifiers — same picker, pre-selected ── */}
+      <Modal visible={!!modEditKey} transparent animationType="fade" onRequestClose={() => setModEditKey(null)}>
+        {(() => {
+          const line = lines.find((l) => l.key === modEditKey);
+          if (!line) return null;
+          return (
+            <ModifierSheet
+              product={line.product}
+              initial={line.modifiers}
+              confirmVerb="Save"
+              onClose={() => setModEditKey(null)}
+              onConfirm={(opts) => { setLineModifiers(line.key, opts); Haptics.selectionAsync(); setModEditKey(null); }}
+            />
+          );
+        })()}
+      </Modal>
+
       {/* ── Manual discount ── */}
       <Modal visible={showDiscount} transparent animationType="fade" onRequestClose={() => setShowDiscount(false)}>
         <DiscountSheet
@@ -2587,6 +2607,7 @@ export default function Register() {
               onSetDiscount={(sen) => { setLineDiscount(line.key, sen); }}
               onSetNote={(note) => { setLineNote(line.key, note); }}
               onToggleTakeaway={(takeaway) => { setLineTakeaway(line.key, takeaway); }}
+              onEditOptions={line.product.modifiers.length > 0 ? () => { setEditLineKey(null); setModEditKey(line.key); } : undefined}
             />
           );
         })()}
@@ -2847,8 +2868,19 @@ function RegisterRedeemCard({ shop, onRedeem }: { shop: ShopCard; onRedeem: () =
   );
 }
 
-function ModifierSheet({ product, onClose, onConfirm }: { product: Product; onClose: () => void; onConfirm: (opts: ModifierOption[]) => void }) {
-  const [sel, setSel] = useState<Record<string, string[]>>({});
+function ModifierSheet({ product, onClose, onConfirm, initial, confirmVerb = "Add" }: { product: Product; onClose: () => void; onConfirm: (opts: ModifierOption[]) => void; initial?: ModifierOption[]; confirmVerb?: string }) {
+  // Seed the selection from `initial` (editing an existing cart line) so the
+  // picker opens pre-ticked; empty for a fresh add.
+  const [sel, setSel] = useState<Record<string, string[]>>(() => {
+    const seed: Record<string, string[]> = {};
+    if (initial?.length) {
+      for (const g of product.modifiers) {
+        const ids = g.options.filter((o) => initial.some((m) => m.id === o.id)).map((o) => o.id);
+        if (ids.length) seed[g.id] = ids;
+      }
+    }
+    return seed;
+  });
   function toggle(groupId: string, optId: string, multi: boolean) {
     Haptics.selectionAsync();
     setSel((cur) => {
@@ -2897,7 +2929,7 @@ function ModifierSheet({ product, onClose, onConfirm }: { product: Product; onCl
           ))}
         </ScrollView>
         <Pressable disabled={missingRequired} onPress={() => onConfirm(chosen)} className={`h-14 rounded-2xl items-center justify-center mt-3 ${missingRequired ? "bg-primary/30" : "bg-primary active:opacity-80"}`}>
-          <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{missingRequired ? "Select required options" : `Add — ${rm(product.price_sen + addOn)}`}</Text>
+          <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{missingRequired ? "Select required options" : `${confirmVerb} — ${rm(product.price_sen + addOn)}`}</Text>
         </Pressable>
       </View>
     </View>
@@ -3273,6 +3305,7 @@ function LineEditorSheet({
   onSetDiscount,
   onSetNote,
   onToggleTakeaway,
+  onEditOptions,
 }: {
   line: CartLine;
   onClose: () => void;
@@ -3282,6 +3315,8 @@ function LineEditorSheet({
   onSetDiscount: (sen: number) => void;
   onSetNote: (note: string) => void;
   onToggleTakeaway: (takeaway: boolean) => void;
+  /** Present only when the product has modifier groups — opens the picker. */
+  onEditOptions?: () => void;
 }) {
   const lineGross = line.unit_sen * line.qty;
   const currentDisc = line.line_discount_sen ?? 0;
@@ -3328,6 +3363,21 @@ function LineEditorSheet({
           </View>
           <Pressable onPress={onClose} className="active:opacity-60"><X size={22} color="rgba(245,243,240,0.7)" /></Pressable>
         </View>
+
+        {/* Edit options — reopen the modifier picker pre-selected (only when the
+            product actually has modifier groups). */}
+        {onEditOptions && (
+          <Pressable
+            onPress={() => { Haptics.selectionAsync(); onEditOptions(); }}
+            className="flex-row items-center justify-between rounded-2xl px-4 py-3 active:opacity-80"
+            style={{ backgroundColor: "rgba(251,191,36,0.10)", borderWidth: 1, borderColor: "rgba(251,191,36,0.40)" }}
+          >
+            <Text className="text-cream/60 text-xs uppercase tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Options</Text>
+            <Text className="text-amber-400 text-sm" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>
+              {line.modifiers.length > 0 ? "Change ›" : "Add ›"}
+            </Text>
+          </Pressable>
+        )}
 
         {/* Quantity stepper */}
         <View className="flex-row items-center justify-between rounded-2xl px-4 py-3" style={{ backgroundColor: "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: "rgba(245,243,240,0.10)" }}>
