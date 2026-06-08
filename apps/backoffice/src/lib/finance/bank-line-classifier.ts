@@ -243,7 +243,7 @@ const OUTFLOW_RULES: Rule[] = [
   // exists. These are bona-fide internal transfers and net to zero
   // across consolidation, so flagging isInterCo=true keeps them out
   // of cash-burn totals.
-  { name: "interco_celsius_entity_fallback", match: /\bCELSIUS\s*COFFEE\s+(SDN|CONEZION|TAMARIND|CONE|TAMA)\b/i, direction: "DR", category: "INTERCO_PEOPLE" as CashCategory, isInterCo: true },
+  { name: "interco_celsius_entity_fallback", match: /TRANSFER (TO|FR) A\/C CELSIUS\s?COFFEE\s+(SDN|CONEZION|TAMARIND|CONE|TAMA)/i, direction: "DR", category: "INTERCO_PEOPLE" as CashCategory, isInterCo: true },
 ];
 
 // InterCo override: any transfer whose COUNTERPARTY (the name right after
