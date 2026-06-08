@@ -8,7 +8,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { products as mockProducts, categories as mockCategories } from "@/data/mock";
 import type { Product, Category } from "@/lib/types";
-import { filterModifiersForChannel } from "@celsius/shared";
+import { filterModifiersForChannel, filterHiddenModifiers } from "@celsius/shared";
 
 export interface MenuData {
   products: Product[];
@@ -70,7 +70,7 @@ export async function getMenuData(): Promise<MenuData> {
     const [{ data: dbProducts, error: prodError }, { data: dbCategories, error: catError }] = await Promise.all([
       supabase
         .from("products")
-        .select("id, name, category, description, price, image_url, is_available, is_featured, modifiers, featured_position, schedule_start_date, schedule_end_date, schedule_days_of_week, schedule_time_from, schedule_time_to")
+        .select("id, name, category, description, price, image_url, is_available, is_featured, modifiers, hidden_modifier_ids, featured_position, schedule_start_date, schedule_end_date, schedule_days_of_week, schedule_time_from, schedule_time_to")
         .eq("brand_id", "brand-celsius")
         .order("position")
         .order("name"),
@@ -96,9 +96,17 @@ export async function getMenuData(): Promise<MenuData> {
         isPopular:      (p.is_featured as boolean) ?? false,
         isNew:          false,
         variants:       [],
-        modifierGroups: filterModifiersForChannel(
-          Array.isArray(p.modifiers) ? (p.modifiers as Product["modifierGroups"]) : [],
-          "pickup",
+        // Apply BOTH catalog filters the native app does: per-channel
+        // visibility AND the hidden_modifier_ids soft-blacklist. Web had been
+        // skipping the blacklist, so modifiers hidden in the catalog (e.g.
+        // "Extra Sambal") still showed — and were forced as a required pick —
+        // on the website while correctly absent in the native apps.
+        modifierGroups: filterHiddenModifiers(
+          filterModifiersForChannel(
+            Array.isArray(p.modifiers) ? (p.modifiers as Product["modifierGroups"]) : [],
+            "pickup",
+          ),
+          Array.isArray(p.hidden_modifier_ids) ? (p.hidden_modifier_ids as string[]) : [],
         ) as Product["modifierGroups"],
         featuredPosition: (p.featured_position as number) ?? 9999,
       }));
