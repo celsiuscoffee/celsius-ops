@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, category, price, image_url, is_available, is_featured, modifiers, hidden_modifier_ids, track_stock, synced_at, position, featured_position, print_additional_docket, kitchen_station, e_invoice_classification_code, schedule_start_date, schedule_end_date, schedule_days_of_week, schedule_time_from, schedule_time_to, price_pickup, price_grab, price_foodpanda, price_dinein, tax_rate, tax_inclusive")
+    .select("id, name, category, price, image_url, is_available, is_featured, modifiers, track_stock, synced_at, position, featured_position, print_additional_docket, kitchen_station, e_invoice_classification_code, schedule_start_date, schedule_end_date, schedule_days_of_week, schedule_time_from, schedule_time_to, price_pickup, price_grab, price_foodpanda, price_dinein, tax_rate, tax_inclusive")
     .eq("brand_id", "brand-celsius")
     .order("category")
     .order("position")
@@ -31,7 +31,6 @@ export async function GET(request: NextRequest) {
     is_new:       false,
     variants:     [],
     modifiers:    Array.isArray(p.modifiers) ? p.modifiers : [],
-    hidden_modifier_ids: Array.isArray(p.hidden_modifier_ids) ? p.hidden_modifier_ids : [],
     position:     (p.position as number) ?? 9999,
     featured_position: (p.featured_position as number) ?? 9999,
     // StoreHub-parity fields.

@@ -31,7 +31,7 @@ const CHANNELS: { value: ModifierChannel; label: string }[] = [
 
 // Local id generator — modifier groups/options live as jsonb on the product
 // row, so they don't have DB-generated ids. A short random suffix is enough
-// to keep React keys + hidden_modifier_ids stable across edits.
+// to keep React keys stable across edits.
 function uid(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 }

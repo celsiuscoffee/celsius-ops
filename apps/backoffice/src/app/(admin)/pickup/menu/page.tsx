@@ -31,7 +31,6 @@ interface DbProduct {
   is_new: boolean;
   variants: { id: string; name: string; price: number }[];
   modifiers: ModifierGroup[];
-  hidden_modifier_ids: string[];
   position: number;
   featured_position: number;
 }
