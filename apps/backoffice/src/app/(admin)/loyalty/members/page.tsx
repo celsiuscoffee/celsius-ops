@@ -82,6 +82,35 @@ const tierMeta = (id: string | null) => TIER_OPTIONS.find((t) => t.id === (id ??
 // Only invitation-only tiers can be granted by hand (earned tiers come from spend).
 const GRANTABLE_TIERS = TIER_OPTIONS.filter((t) => t.id === "tier-celsius-arba-staff" || t.id === "tier-celsius-black-card");
 
+// Customer-360 drawer payload (from /api/loyalty/members/[id]/detail).
+type DetailData = {
+  member: { id: string; phone: string; name: string | null; tags: string[] | null; created_at: string };
+  brand: { points_balance: number; total_spent: number; total_visits: number; current_tier_id: string | null; tier_evaluated_at: string | null; last_visit_at: string | null; joined_at: string | null } | null;
+  orders: { id: string; order_number: string; total: number; status: string; created_at: string; source: string }[];
+  ledger: { id: string; type: string; points: number; balance_after: number; description: string | null; created_at: string }[];
+  redemptions: { id: string; points_spent: number; status: string; code: string | null; created_at: string }[];
+};
+
+function DetailStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-gray-50 dark:bg-neutral-700/50 px-2 py-2 text-center">
+      <p className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-neutral-500">{label}</p>
+      <p className="text-sm font-bold text-gray-900 dark:text-white">{value}</p>
+    </div>
+  );
+}
+function DetailRow({ left, sub, right, rightCls, time }: { left: string; sub?: string; right: string; rightCls?: string; time: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-gray-100 dark:border-neutral-700/60 px-3 py-2">
+      <div className="min-w-0">
+        <p className="truncate text-sm text-gray-800 dark:text-neutral-200">{left}</p>
+        <p className="text-[11px] text-gray-400 dark:text-neutral-500">{sub ? `${sub} · ` : ""}{time}</p>
+      </div>
+      <span className={`shrink-0 text-sm font-medium tabular-nums ${rightCls || "text-gray-700 dark:text-neutral-300"}`}>{right}</span>
+    </div>
+  );
+}
+
 type MappedMember = { id: string; phone: string; name: string | null; email: string | null; birthday: string | null; preferred_outlet_id: string | null; created_at: string; updated_at: string; points_balance: number; total_visits: number; total_spent: number; joined_at: string; last_visit_at: string | null; tags: string[]; current_tier_id: string | null };
 
 function mapMember(m: MemberWithBrand): MappedMember {
@@ -194,6 +223,10 @@ export default function MembersPage() {
   const [addPhone, setAddPhone] = useState("");
   const [addName, setAddName] = useState("");
   const [addSaving, setAddSaving] = useState(false);
+  // Customer 360 drawer
+  const [detailMember, setDetailMember] = useState<MappedMember | null>(null);
+  const [detailData, setDetailData] = useState<DetailData | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [bulkTagInput, setBulkTagInput] = useState("");
   const [bulkTagging, setBulkTagging] = useState(false);
 
@@ -757,6 +790,19 @@ export default function MembersPage() {
     }
     setAddSaving(false);
   }
+
+  // ─── Customer 360 drawer ───────────────────────────
+  async function openDetail(m: MappedMember) {
+    setDetailMember(m);
+    setDetailData(null);
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/loyalty/members/${m.id}/detail`, { credentials: "include" });
+      if (res.ok) setDetailData(await res.json());
+    } catch { /* leave header-only */ }
+    setDetailLoading(false);
+  }
+  function closeDetail() { setDetailMember(null); setDetailData(null); }
 
   // ─── Segment tab config ─────────────────────────────
   const tabs: { key: Segment; label: string; count: number }[] = [
@@ -1438,7 +1484,7 @@ export default function MembersPage() {
 
                     {/* Phone */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <button className="font-sans text-sm text-blue-600 dark:text-blue-400 underline decoration-blue-300 dark:decoration-blue-600 underline-offset-2 hover:text-blue-800 dark:hover:text-blue-300 tabular-nums">
+                      <button onClick={() => openDetail(member)} className="font-sans text-sm text-blue-600 dark:text-blue-400 underline decoration-blue-300 dark:decoration-blue-600 underline-offset-2 hover:text-blue-800 dark:hover:text-blue-300 tabular-nums">
                         {formatPhone(member.phone)}
                       </button>
                     </td>
@@ -1809,6 +1855,72 @@ export default function MembersPage() {
       )}
 
       {/* Manual point-adjustment dialog */}
+      {/* Customer 360 drawer */}
+      {detailMember && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={closeDetail}>
+          <div className="h-full w-full max-w-md overflow-y-auto bg-white dark:bg-neutral-800 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 z-10 border-b border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-5 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-lg font-bold text-gray-900 dark:text-white">{detailMember.name || "No Name"}</h3>
+                  <p className="font-sans text-sm tabular-nums text-gray-500 dark:text-neutral-400">{formatPhone(detailMember.phone)}</p>
+                </div>
+                <button onClick={closeDetail} className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-700"><X className="h-5 w-5" /></button>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${tierMeta(detailMember.current_tier_id).cls}`}>{tierMeta(detailMember.current_tier_id).label}</span>
+                {(detailMember.tags || []).map((t) => <span key={t} className="rounded-full bg-gray-100 dark:bg-neutral-700 px-2 py-0.5 text-[10px] text-gray-600 dark:text-neutral-300">{t}</span>)}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 px-5 py-4">
+              <DetailStat label="Points" value={formatPoints(detailMember.points_balance)} />
+              <DetailStat label="Spent" value={formatCurrency(detailMember.total_spent)} />
+              <DetailStat label="Visits" value={String(detailMember.total_visits)} />
+            </div>
+
+            {detailLoading && (
+              <div className="px-5 py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-400" /></div>
+            )}
+
+            {detailData && (
+              <div className="space-y-6 px-5 pb-10">
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">Recent orders ({detailData.orders.length})</h4>
+                  <div className="space-y-1">
+                    {detailData.orders.length === 0
+                      ? <p className="text-xs text-gray-400 dark:text-neutral-500">No orders yet.</p>
+                      : detailData.orders.map((o) => (
+                        <DetailRow key={o.id} left={`#${o.order_number}`} sub={`${o.source} · ${o.status}`} right={`RM ${(o.total / 100).toFixed(2)}`} time={getTimeAgo(o.created_at)} />
+                      ))}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">Points ledger</h4>
+                  <div className="space-y-1">
+                    {detailData.ledger.length === 0
+                      ? <p className="text-xs text-gray-400 dark:text-neutral-500">No points activity.</p>
+                      : detailData.ledger.map((l) => (
+                        <DetailRow key={l.id} left={l.description || l.type} sub={`balance ${l.balance_after}`} right={`${l.points > 0 ? "+" : ""}${l.points}`} rightCls={l.points >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"} time={getTimeAgo(l.created_at)} />
+                      ))}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">Redemptions ({detailData.redemptions.length})</h4>
+                  <div className="space-y-1">
+                    {detailData.redemptions.length === 0
+                      ? <p className="text-xs text-gray-400 dark:text-neutral-500">No redemptions.</p>
+                      : detailData.redemptions.map((r) => (
+                        <DetailRow key={r.id} left={r.code || "Reward"} sub={r.status} right={`-${r.points_spent}`} time={getTimeAgo(r.created_at)} />
+                      ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Add customer modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => !addSaving && setShowAddModal(false)}>
