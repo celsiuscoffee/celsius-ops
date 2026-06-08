@@ -54,7 +54,9 @@ export async function fetchStorehubContributions(opts: {
   const results = await Promise.all(
     opts.outlets.map(async (o) => {
       try {
-        const url = `${opts.baseUrl}/api/sales/compare?periods=${periods}&outletId=${o.id}`;
+        // source=storehub → backoffice returns StoreHub-only (no pos+pickup), so
+        // we can add our own native pos+pickup totals without double-counting.
+        const url = `${opts.baseUrl}/api/sales/compare?periods=${periods}&outletId=${o.id}&source=storehub`;
         const res = await fetch(url, { headers: { authorization: opts.authz! } });
         console.warn(`[sh-bridge] ${o.id} -> ${res.status}`);
         if (!res.ok) return { id: o.id, periods: null as ShPeriod[] | null };

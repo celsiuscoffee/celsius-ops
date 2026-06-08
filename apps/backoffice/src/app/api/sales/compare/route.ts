@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, verifyToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeProjection } from "@/lib/sales/projection";
 import {
@@ -22,7 +22,15 @@ import { getUnifiedSalesForOutlet } from "../_lib/unified-sales";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getSession();
+    // Cookie session (backoffice web) OR Bearer. The staff app's StoreHub bridge
+    // forwards the caller's celsius-session JWT — same secret + format across apps,
+    // so verifyToken validates it here. /compare only needs a valid session for the
+    // gate (outletId comes from the query), so either auth path is equivalent.
+    let user = await getSession();
+    if (!user) {
+      const m = (request.headers.get("authorization") ?? "").match(/^Bearer\s+(.+)$/i);
+      if (m) user = await verifyToken(m[1]);
+    }
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -30,6 +38,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const outletId = searchParams.get("outletId") || null;
     const periodsParam = searchParams.get("periods") || "";
+    // The staff app's bridge passes source=storehub so it gets ONLY StoreHub sales
+    // (it adds its own native pos+pickup). The backoffice graph omits it = unified.
+    const storehubOnly = searchParams.get("source") === "storehub";
 
     // Parse periods: "from:to,from:to,..."
     const periodPairs = periodsParam
@@ -100,6 +111,7 @@ export async function GET(request: NextRequest) {
           },
           globalFromDate,
           globalToDate,
+          { storehubOnly },
         ),
       ),
     );
