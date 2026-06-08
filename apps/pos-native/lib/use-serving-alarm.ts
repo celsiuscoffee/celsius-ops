@@ -22,7 +22,7 @@ import { playAlarm, primeSounds } from "./chime";
 
 export const SERVING_TARGET_MS = 15 * 60 * 1000; // 15 min (was 10 — too early during peak, disturbed customers)
 const RECHECK_MS = 15 * 1000;                    // re-evaluate ages every 15s
-const REPEAT_MS = 45 * 1000;                     // re-sound at most every 45s while overdue
+const REPEAT_MS = 5 * 60 * 1000;                 // re-sound at most every 5 min while overdue (was 45s — too naggy at peak)
 
 export type ServingItem = {
   id: string;
