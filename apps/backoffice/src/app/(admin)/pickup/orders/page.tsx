@@ -235,7 +235,12 @@ export default function PickupOrders() {
                   "flex flex-col md:grid md:grid-cols-[1fr_1.1fr_0.9fr_0.7fr_0.9fr_0.7fr_0.8fr_40px] gap-1 md:gap-3 items-start md:items-center px-5 py-3.5 transition-colors hover:bg-muted/20";
                 const content = (
                   <>
-                    <span className="font-semibold text-sm">#{order.order_number}</span>
+                    <span className="font-semibold text-sm">
+                      #{order.order_number}
+                      {order.order_type === "dine_in" && order.table_number && (
+                        <span className="ml-2 text-[11px] font-medium text-teal-700">Table {order.table_number}</span>
+                      )}
+                    </span>
                     <span className="text-sm text-muted-foreground truncate">
                       {order.customer_name ?? "—"}{order.customer_phone ? ` · ${order.customer_phone}` : ""}
                     </span>
