@@ -58,6 +58,9 @@ model Outlet {
   // Cross-app references
   pickupStoreId   String?  @unique  // Supabase outlet_settings.store_id (e.g. "shah-alam")
   loyaltyOutletId String?
+  // POS-native cutover: sales dashboard reads pos_orders at/after this, the
+  // StoreHub archive before it. NULL = outlet still on StoreHub.
+  posNativeCutoverAt DateTime?
   staffPin        String?
 
   // Stripe Connect
