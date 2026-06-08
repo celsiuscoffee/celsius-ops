@@ -1,26 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { after } from "next/server";
 import { validateWebhookSignature } from "@/lib/revenue-monster/client";
-import { markRmOrderPaid, markRmOrderFailed } from "@/lib/revenue-monster/order-status";
-import { notifyOrderPreparing } from "@/lib/push/templates";
+import { reconcileRmOrder } from "@/lib/revenue-monster/reconcile";
 
 /**
  * Revenue Monster webhook (FPX, ewallet, card-via-RM).
  *
- * Mirrors the Stripe webhook at /api/payments/stripe/webhook. Both
- * endpoints land on confirmed-payment events and use the direct-
- * Supabase loyalty helpers in lib/loyalty/points.ts to:
- *   • earn points for the order (via earnLoyaltyPoints)
- *   • burn the redeemed reward, if any (via deductLoyaltyPoints)
+ * This handler treats the callback as a HINT, not as the source of truth.
+ * RM Direct-mode webhook delivery is best-effort and its signature has
+ * been bouncing legitimate callbacks — so trusting the payload's claimed
+ * `status` (and dropping the event when the signature won't verify) used
+ * to strand paid orders as `pending` until the 5-min reconcile cron.
  *
- * Idempotency: the orders update is gated on status="pending" so a
- * duplicate webhook delivery doesn't trigger the points calls again.
- *
- * Was: this file had a local fire-and-forget HTTP-fetch earnLoyalty
- * helper that POSTed to loyalty/api/transactions — an endpoint that
- * only accepts GET, so every RM-paid order was silently 405'ing the
- * earn call. No deduct call existed at all, so RM-paid reward
- * redemptions were never recorded.
+ * Instead we resolve the order and call reconcileRmOrder(), which asks
+ * RM's Query Payment Checkout endpoint directly and settles the order on
+ * RM's authoritative answer. Consequences:
+ *   • A dropped / signature-failed webhook no longer strands a payment —
+ *     any trigger (this, the ?payment=done redirect, the poll, the cron)
+ *     settles it from RM's truth.
+ *   • A spoofed webhook can't mark an order paid — RM still reports the
+ *     real status, so we never trust attacker-supplied "SUCCESS".
+ * Signature verification is kept for observability/anti-abuse only; it no
+ * longer gates settlement.
  */
 /** Map an RM callback's referenceId/additionalData to a markRm* target.
  *  additionalData is the order UUID we set in createPayment — unambiguous, so
@@ -51,50 +51,36 @@ export async function POST(request: NextRequest) {
     const signature = request.headers.get("x-signature")  || "";
     const url       = request.nextUrl.toString();
 
+    // Verify for observability/anti-abuse only — do NOT gate settlement on
+    // it. A bouncing signature must not strand a real payment; reconcile
+    // re-verifies against RM regardless, so an unverifiable (or spoofed)
+    // callback can never mark an unpaid order paid.
     const isValid = validateWebhookSignature("POST", url, nonce, timestamp, body, signature);
     if (!isValid) {
-      console.warn("Webhook signature mismatch");
-      return NextResponse.json({ code: "SIGNATURE_ERROR" });
+      console.warn("[rm webhook] signature did not verify — treating callback as a re-query trigger only");
     }
 
-    const { code, data } = body as {
+    const { data } = body as {
       code: string;
       data?: {
         referenceId: string;
-        transactionId: string;
-        status: string;
         additionalData?: string;
       };
     };
 
-    if (code !== "SUCCESS" || !data) {
+    if (!data?.referenceId && !data?.additionalData) {
       return NextResponse.json({ code: "OK" });
     }
 
     // Prefer the order UUID (additionalData) RM echoes back; fall back to a
     // suffix-safe order_number strip. Handles numeric AND alphanumeric order
     // numbers — see resolveOrderTarget.
-    const target = resolveOrderTarget(data.referenceId, data.additionalData);
+    const target = resolveOrderTarget(data.referenceId ?? "", data.additionalData);
 
-    if (data.status === "SUCCESS") {
-      const paid = await markRmOrderPaid(target, data.transactionId);
-      if (paid && !paid.scheduled) {
-        // Same "Brewing now" push the Stripe webhook fires. Suppressed
-        // when the order was held for scheduled pickup — promote-
-        // scheduled cron fires the push at brew-window-open time
-        // instead, so the customer doesn't get a "brewing now" ping
-        // 30 min before their drink is actually being made.
-        after(async () => {
-          await notifyOrderPreparing({
-            orderId:       paid.orderId,
-            orderNumber:   paid.orderNumber,
-            customerPhone: paid.customerPhone,
-          }).catch((e) => console.warn("[push] order_preparing rm webhook", e));
-        });
-      }
-    } else if (data.status === "FAILED") {
-      await markRmOrderFailed(target);
-    }
+    // Authoritative settle: ignore the payload's claimed status and ask RM
+    // directly. Awaited so the order flips (and the kitchen docket fires via
+    // Realtime) before we ack; the loyalty push is deferred inside reconcile.
+    await reconcileRmOrder(target);
 
     return NextResponse.json({ code: "SUCCESS" });
   } catch (err) {
