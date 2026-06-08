@@ -19,6 +19,7 @@ import { apiPost } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { usePickupPrinter } from "@/lib/use-pickup-printer";
 import { useGrabPrinter } from "@/lib/use-grab-printer";
+import LockScreen from "@/components/lock-screen";
 import { chargeMaybankCard, type MaybankTerminalResult } from "@/lib/maybank-terminal";
 import { fetchCategories, fetchProducts, type Product, type ModifierOption } from "@/lib/menu";
 import { useCart, cartSubtotal, type CartLine } from "@/lib/cart";
@@ -125,7 +126,7 @@ type AppliedReward = { redemptionId: string | null; rewardId: string | null; nam
 type Panel = "none" | "customer" | "table";
 
 export default function Register() {
-  const { staff, outletId, signOut, loggedInAt, shiftEndsAt } = usePos();
+  const { staff, outletId, signOut, loggedInAt, shiftEndsAt, locked, lock } = usePos();
   const [activeCat, setActiveCat] = useState<string>("all");
   // One "Orders" command center — four tabs: QR Tables (dine-in floor + QR
   // self-orders) · Pickup · Grab · History (today, all channels, filterable).
@@ -551,7 +552,7 @@ export default function Register() {
   // no checkout/paid screen). A rostered end also closes the store (Z-roll-up)
   // on the way out. Re-checked on every cart change plus a slow idle poll.
   useEffect(() => {
-    if (!staff) return;
+    if (!staff || locked) return; // already asleep → nothing to re-check
     const maybeLogout = () => {
       if (!shiftSessionExpired(loggedInAt, shiftEndsAt)) { setShiftEnded(false); return; }
       // The session's clock is up. Never yank the cashier mid-task: hold for an
@@ -559,17 +560,28 @@ export default function Register() {
       // are still waiting on those).
       if (lines.length > 0 || showCheckout || paid) return;
       if (openLiveCount > 0) { setShiftEnded(true); return; } // keep them in to finish + hand over
-      // Safe gap, nothing outstanding → close the rostered shift + sign out.
-      if (shiftEndsAt != null && shift) { void closeShift(shift, staff.staffId); }
       setShiftEnded(false);
-      signOut();
-      router.replace("/");
+      if (shiftEndsAt != null) {
+        // Rostered shift END = a real financial close → close the store
+        // (Z-roll-up) and fully sign out, exactly as before. The next rostered
+        // cashier logs in fresh and auto-opens; no shift-lifecycle ambiguity.
+        if (shift) void closeShift(shift, staff.staffId);
+        signOut();
+        router.replace("/");
+      } else {
+        // Off-schedule / manager session hit the 2h idle TTL → SLEEP/LOCK rather
+        // than sign out + leave the register. No shift is closed here, so the
+        // same (manually-opened) shift simply continues on resume. The register
+        // stays mounted, so its online-order auto-printers + chime keep firing
+        // while the till is asleep; a staff PIN on the overlay resumes it.
+        lock();
+      }
     };
     maybeLogout();
     const id = setInterval(maybeLogout, 20000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staff, loggedInAt, shiftEndsAt, lines.length, showCheckout, paid, shift, openLiveCount]);
+  }, [staff, locked, loggedInAt, shiftEndsAt, lines.length, showCheckout, paid, shift, openLiveCount]);
 
   // ── Open Store on scheduled login ────────────────────────────────────
   // A rostered session (shiftEndsAt set) auto-opens the store the first time
@@ -2540,6 +2552,11 @@ export default function Register() {
           </View>
         </View>
       </Modal>
+
+      {/* Sleep/lock overlay — covers the till behind a PIN when the shift/idle
+          timer fires, WITHOUT unmounting the register (so the online-order
+          auto-printers + chime above keep running while it's asleep). */}
+      {locked && <LockScreen />}
     </View>
   );
 }
