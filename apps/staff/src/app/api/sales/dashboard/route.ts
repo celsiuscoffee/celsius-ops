@@ -136,6 +136,10 @@ export async function GET(req: NextRequest) {
   const chanRev: Record<ChannelKey, number> = { dine_in: 0, takeaway: 0, pickup: 0, delivery: 0, qr_table: 0 };
   const roundRev: Record<string, number> = {};
   for (const r of ROUNDS) roundRev[r.key] = 0;
+  // order-count accumulators, mirroring the revenue ones above
+  const chanOrd: Record<ChannelKey, number> = { dine_in: 0, takeaway: 0, pickup: 0, delivery: 0, qr_table: 0 };
+  const roundOrd: Record<string, number> = {};
+  for (const r of ROUNDS) roundOrd[r.key] = 0;
   const payAmt: Record<string, number> = {};
   // growth phone sets
   const curPhones = new Set<string>(), prevPhones = new Set<string>();
@@ -158,8 +162,8 @@ export async function GET(req: NextRequest) {
       curPosIds.push(r.id);
       curByDate[d] = (curByDate[d] || 0) + net;
       curHour[getMYTHour(r.created_at)] += net;
-      chanRev[classifyPosChannel(r.order_type, r.source)] += net;
-      const rd = getRound(getMYTHour(r.created_at)); if (rd) roundRev[rd] += net;
+      const pch = classifyPosChannel(r.order_type, r.source); chanRev[pch] += net; chanOrd[pch]++;
+      const rd = getRound(getMYTHour(r.created_at)); if (rd) { roundRev[rd] += net; roundOrd[rd]++; }
     } else if (inPrev(d)) {
       if (Date.parse(r.created_at) <= prevCutoffMs) { prevRev += net; prevOrd++; prevPosOrd++; }
       if (r.customer_phone) prevPhones.add(r.customer_phone);
@@ -176,8 +180,8 @@ export async function GET(req: NextRequest) {
       if (r.customer_phone) { curPhones.add(r.customer_phone); curAppPhones.add(r.customer_phone); }
       curByDate[d] = (curByDate[d] || 0) + net;
       curHour[getMYTHour(r.created_at)] += net;
-      chanRev[classifyAppChannel(r.order_type, r.table_number, r.source)] += net;
-      const rd = getRound(getMYTHour(r.created_at)); if (rd) roundRev[rd] += net;
+      const ach = classifyAppChannel(r.order_type, r.table_number, r.source); chanRev[ach] += net; chanOrd[ach]++;
+      const rd = getRound(getMYTHour(r.created_at)); if (rd) { roundRev[rd] += net; roundOrd[rd]++; }
       const pk = normalizePayment(r.payment_method);
       payAmt[pk] = (payAmt[pk] || 0) + (r.total || 0);
     } else if (inPrev(d)) {
@@ -223,7 +227,9 @@ export async function GET(req: NextRequest) {
     for (const dt in sh.curByDate) if (curByDate[dt] != null) curByDate[dt] += sh.curByDate[dt];
     for (const dt in sh.prevByDate) if (prevByDate[dt] != null) prevByDate[dt] += sh.prevByDate[dt];
     chanRev.dine_in += sh.chan.dine_in; chanRev.takeaway += sh.chan.takeaway; chanRev.delivery += sh.chan.delivery;
+    chanOrd.dine_in += sh.chanOrders.dine_in; chanOrd.takeaway += sh.chanOrders.takeaway; chanOrd.delivery += sh.chanOrders.delivery;
     for (const k in sh.rounds) if (roundRev[k] != null) roundRev[k] += sh.rounds[k];
+    for (const k in sh.roundOrders) if (roundOrd[k] != null) roundOrd[k] += sh.roundOrders[k];
     warn.push(...sh.warnings);
   }
 
@@ -259,10 +265,10 @@ export async function GET(req: NextRequest) {
   // ── Channels / rounds / payments ──
   const totalChan = Object.values(chanRev).reduce((s, v) => s + v, 0) || 1;
   const channels = (Object.keys(chanRev) as ChannelKey[])
-    .map((k) => ({ key: k, label: CHANNEL_LABELS[k], revenue: rm(chanRev[k]), pct: Math.round((chanRev[k] / totalChan) * 100) }))
+    .map((k) => ({ key: k, label: CHANNEL_LABELS[k], revenue: rm(chanRev[k]), orders: chanOrd[k], pct: Math.round((chanRev[k] / totalChan) * 100) }))
     .filter((c) => c.revenue > 0)
     .sort((a, b) => b.revenue - a.revenue);
-  const rounds = ROUNDS.map((r) => ({ key: r.key, label: r.label, revenue: rm(roundRev[r.key] || 0) }));
+  const rounds = ROUNDS.map((r) => ({ key: r.key, label: r.label, revenue: rm(roundRev[r.key] || 0), orders: roundOrd[r.key] || 0 }));
   const totalPay = Object.values(payAmt).reduce((s, v) => s + v, 0) || 1;
   const payments = (Object.keys(payAmt) as PayKey[])
     .map((k) => ({ key: k, label: PAY_LABELS[k] ?? k, amount: rm(payAmt[k]), pct: Math.round((payAmt[k] / totalPay) * 100) }))
@@ -306,6 +312,7 @@ export async function GET(req: NextRequest) {
     growth: {
       newCustomers, newCustomersDelta: pctChange(newCustomers, prevNewCustomers),
       newAppCustomers, newAppDelta: pctChange(newAppCustomers, prevNewApp),
+      appOrders: curAppOrd, appOrdersDelta: pctChange(curAppOrd, prevAppOrd),
       appSharePct: curShare, appShareDeltaPts: curShare - prevShare,
     },
     ...(warn.length ? { warnings: warn } : {}),
