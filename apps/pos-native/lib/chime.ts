@@ -10,6 +10,7 @@
  * to break the order / print flow.
  */
 import { createAudioPlayer, type AudioPlayer } from "expo-audio";
+import DeviceAlarm from "device-alarm";
 
 type Sound = "chime" | "alarm";
 
@@ -35,6 +36,20 @@ function getPlayer(sound: Sound): AudioPlayer | null {
 }
 
 function play(sound: Sound): void {
+  // Prefer the native ALARM-class player: it keeps the alert on the SUNMI's
+  // built-in speaker even when a Bluetooth speaker is connected (so cafe music
+  // can play to BT while order alerts stay at the till). Falls through to the
+  // expo-audio media player below where the native module isn't present
+  // (Expo Go / an APK that predates it) — media routes to BT as before.
+  if (DeviceAlarm) {
+    try {
+      if (sound === "chime") DeviceAlarm.playChime();
+      else DeviceAlarm.playAlarm();
+      return;
+    } catch (e) {
+      console.warn(`[sound] native ${sound} failed, falling back`, e);
+    }
+  }
   const p = getPlayer(sound);
   if (!p) return;
   try {
