@@ -1,0 +1,33 @@
+name: pos-native build APK
+
+# Builds a fresh production APK for the SUNMI registers via EAS (cloud build).
+# Use this for NATIVE changes that can't ship over the OTA channel — e.g. the
+# device-alarm module (keeps the chime/alarm on the SUNMI speaker). Trigger it
+# manually from the Actions tab; the build runs on EAS and the installable APK
+# appears on expo.dev (project 3ea8d8f6-…) to download + `adb install -r`.
+#
+# Requires the EXPO_TOKEN repo secret (same one the OTA workflow uses).
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/pos-native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build production APK (EAS)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: "1"
+        # --no-wait: submit to EAS and return; the APK is produced on EAS
+        # servers and downloadable from expo.dev when the build finishes.
+        run: npx eas-cli@latest build --platform android --profile production-apk --non-interactive --no-wait
