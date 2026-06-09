@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import { isCleanCount } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { setStockBalance } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         select: {
           productId: true,
           productPackageId: true,
+          expectedQty: true,
           countedQty: true,
         },
       },
@@ -65,14 +67,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const now = new Date();
 
+  // Zero-variance counts auto-approve: there's nothing for a manager to action,
+  // so skip the review queue and stamp them REVIEWED on the spot. Only counts
+  // with a real discrepancy stay SUBMITTED (pending review).
+  const autoApprove = isCleanCount(count.items);
+
   // Flip status first so any concurrent finalize attempt sees the new state.
   const updated = await prisma.stockCount.updateMany({
     where: { id, status: "DRAFT" },
     data: {
-      status: "SUBMITTED",
+      status: autoApprove ? "REVIEWED" : "SUBMITTED",
       submittedAt: now,
       finalizedById: session.id,
       finalizedAt: now,
+      ...(autoApprove ? { reviewedAt: now } : {}),
     },
   });
   if (updated.count === 0) {
@@ -97,5 +105,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
-  return NextResponse.json({ ok: true, finalizedAt: now }, { status: 200 });
+  return NextResponse.json({ ok: true, finalizedAt: now, autoApproved: autoApprove }, { status: 200 });
 }

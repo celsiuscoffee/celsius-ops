@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import { isCleanCount } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { setStockBalance } from "@/lib/stock";
 import { getSession } from "@/lib/auth";
@@ -67,13 +68,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cannot submit stock count for another outlet" }, { status: 403 });
   }
 
+  // Zero-variance counts auto-approve straight to REVIEWED; only counts with a
+  // real discrepancy land in the manager's review queue (SUBMITTED).
+  const now = new Date();
+  const autoApprove = isCleanCount(
+    (items as Array<{ expectedQty?: number | null; countedQty?: number | null }>).map((i) => ({
+      expectedQty: i.expectedQty ?? null,
+      countedQty: i.countedQty ?? null,
+    })),
+  );
+
   const stockCount = await prisma.stockCount.create({
     data: {
       outletId,
       countedById: session.id,
       frequency,
-      status: "SUBMITTED",
-      submittedAt: new Date(),
+      status: autoApprove ? "REVIEWED" : "SUBMITTED",
+      submittedAt: now,
+      ...(autoApprove ? { reviewedAt: now } : {}),
       notes: notes || null,
       items: {
         create: items.map((i: { productId: string; productPackageId?: string; expectedQty?: number; countedQty?: number; isConfirmed?: boolean; varianceReason?: string }) => ({

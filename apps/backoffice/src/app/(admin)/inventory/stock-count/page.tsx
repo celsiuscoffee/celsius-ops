@@ -72,6 +72,15 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" });
 }
 
+// A count was auto-approved (no discrepancies) when it went straight to
+// REVIEWED at submit time — reviewedAt within a few seconds of submittedAt.
+// A manual review happens minutes/hours later, so the gap reliably tells
+// them apart without needing a dedicated DB column.
+function isAutoApproved(sc: { status: string; submittedAt: string | null; reviewedAt: string | null }) {
+  if (sc.status !== "REVIEWED" || !sc.submittedAt || !sc.reviewedAt) return false;
+  return Math.abs(new Date(sc.reviewedAt).getTime() - new Date(sc.submittedAt).getTime()) < 3000;
+}
+
 export default function StockCountPage() {
   const [data, setData] = useState<StockCount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,6 +90,8 @@ export default function StockCountPage() {
   const [reviewing, setReviewing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Review dialog defaults to discrepancies only; manager can expand to all items.
+  const [showAllItems, setShowAllItems] = useState(false);
 
   // Editable variance reasons (per item id)
   const [editReasons, setEditReasons] = useState<Record<string, string>>({});
@@ -101,6 +112,7 @@ export default function StockCountPage() {
         if (item.varianceReason) reasons[item.id] = item.varianceReason;
       });
       setEditReasons(reasons);
+      setShowAllItems(false);
     }
   }, [selected]);
 
@@ -295,10 +307,17 @@ export default function StockCountPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[sc.status] ?? ""}`}>
-                      <StatusIcon className="h-3 w-3 mr-1" />
-                      {sc.status === "SUBMITTED" ? "Pending" : sc.status.toLowerCase()}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[sc.status] ?? ""}`}>
+                        <StatusIcon className="h-3 w-3 mr-1" />
+                        {sc.status === "SUBMITTED" ? "Pending" : sc.status.toLowerCase()}
+                      </Badge>
+                      {isAutoApproved(sc) && (
+                        <span className="text-[9px] uppercase tracking-wide text-gray-400" title="Auto-approved — no discrepancies">
+                          auto
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSelected(sc)}>
@@ -334,6 +353,13 @@ export default function StockCountPage() {
               const v = getVariance(i);
               return v !== null && v !== 0 && !(editReasons[i.id] || i.varianceReason);
             }).length;
+            const discrepancyItems = itemsWithVariance.filter((i) => {
+              const v = getVariance(i);
+              return v !== null && v !== 0;
+            });
+            // Exception-only: show just the discrepancy rows unless the manager
+            // expands to the full list.
+            const visibleItems = showAllItems ? itemsWithVariance : discrepancyItems;
 
             return (
               <>
@@ -370,8 +396,37 @@ export default function StockCountPage() {
                   </div>
                 </div>
 
-                {/* Variance table */}
-                <div className="mt-3 rounded-lg border overflow-hidden overflow-x-auto">
+                {/* Exception-only review: discrepancies first, expandable to all */}
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <p className="text-xs text-gray-500">
+                    {discrepancyCount === 0
+                      ? "No discrepancies — nothing to review"
+                      : showAllItems
+                        ? `Showing all ${itemsWithVariance.length} items`
+                        : `Showing ${discrepancyCount} discrepanc${discrepancyCount === 1 ? "y" : "ies"} only`}
+                  </p>
+                  {itemsWithVariance.length > discrepancyItems.length && (
+                    <button
+                      onClick={() => setShowAllItems((v) => !v)}
+                      className="text-xs text-terracotta hover:underline whitespace-nowrap"
+                    >
+                      {showAllItems
+                        ? "Show discrepancies only"
+                        : `Show all ${itemsWithVariance.length} items`}
+                    </button>
+                  )}
+                </div>
+
+                {discrepancyCount === 0 && !showAllItems ? (
+                  <div className="mt-2 rounded-lg border border-green-200 bg-green-50 px-4 py-4 text-center">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 mx-auto" />
+                    <p className="mt-1.5 text-sm font-medium text-green-700">No discrepancies found</p>
+                    <p className="text-xs text-green-600/80">
+                      All {itemsWithVariance.length} counted items are in line — nothing to action.
+                    </p>
+                  </div>
+                ) : (
+                <div className="mt-2 rounded-lg border overflow-hidden overflow-x-auto">
                   <table className="w-full text-xs min-w-[720px]">
                     <thead>
                       <tr className="bg-gray-50 border-b">
@@ -383,7 +438,7 @@ export default function StockCountPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {itemsWithVariance.map((item) => {
+                      {visibleItems.map((item) => {
                         const variance = getVariance(item);
                         const hasVariance = variance !== null && variance !== 0;
                         const cf = item.packageConversion || 1;
@@ -436,6 +491,7 @@ export default function StockCountPage() {
                     </tbody>
                   </table>
                 </div>
+                )}
 
                 {/* Actions */}
                 {selected.status === "SUBMITTED" && (
@@ -471,7 +527,7 @@ export default function StockCountPage() {
 
                 {selected.status === "REVIEWED" && selected.reviewedAt && (
                   <p className="mt-3 text-xs text-gray-400 text-right">
-                    Reviewed on {formatDate(selected.reviewedAt)} at {formatTime(selected.reviewedAt)}
+                    {isAutoApproved(selected) ? "Auto-approved" : "Reviewed"} on {formatDate(selected.reviewedAt)} at {formatTime(selected.reviewedAt)}
                   </p>
                 )}
               </>
