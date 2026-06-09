@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
     storeIds.length
       ? supabaseAdmin
           .from("orders")
-          .select("id, created_at, subtotal, total, status, order_type, customer_phone, payment_method")
+          .select("id, created_at, subtotal, total, status, order_type, customer_phone, payment_method, table_number, source")
           .in("store_id", storeIds)
           .gte("created_at", winStart).lte("created_at", winEnd)
           .limit(20000)
@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
   // summary
   let curRev = 0, curOrd = 0, prevRev = 0, prevOrd = 0;
   // current-period breakdowns
-  const chanRev: Record<ChannelKey, number> = { dine_in: 0, takeaway: 0, pickup: 0, delivery: 0 };
+  const chanRev: Record<ChannelKey, number> = { dine_in: 0, takeaway: 0, pickup: 0, delivery: 0, qr_table: 0 };
   const roundRev: Record<string, number> = {};
   for (const r of ROUNDS) roundRev[r.key] = 0;
   const payAmt: Record<string, number> = {};
@@ -163,7 +163,7 @@ export async function GET(req: NextRequest) {
       if (r.customer_phone) { curPhones.add(r.customer_phone); curAppPhones.add(r.customer_phone); }
       curByDate[d] = (curByDate[d] || 0) + net;
       curHour[getMYTHour(r.created_at)] += net;
-      chanRev[classifyAppChannel(r.order_type)] += net;
+      chanRev[classifyAppChannel(r.order_type, r.table_number, r.source)] += net;
       const rd = getRound(getMYTHour(r.created_at)); if (rd) roundRev[rd] += net;
       const pk = normalizePayment(r.payment_method);
       payAmt[pk] = (payAmt[pk] || 0) + (r.total || 0);
@@ -291,7 +291,7 @@ export async function GET(req: NextRequest) {
 
 // ── local types + tiny helpers ──
 type PosRow = { id: string; outlet_id: string; created_at: string; subtotal: number | null; total: number | null; status: string | null; order_type: string | null; source: string | null; customer_phone: string | null; refund_of_order_id: string | null };
-type AppRow = { id: string; created_at: string; subtotal: number | null; total: number | null; status: string | null; order_type: string | null; customer_phone: string | null; payment_method: string | null };
+type AppRow = { id: string; created_at: string; subtotal: number | null; total: number | null; status: string | null; order_type: string | null; customer_phone: string | null; payment_method: string | null; table_number: string | null; source: string | null };
 type PayRow = { order_id: string; payment_method: string | null; amount: number | null; refund_amount: number | null };
 
 const WK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
