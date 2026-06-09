@@ -79,8 +79,23 @@ const TIER_OPTIONS: { id: string; label: string; cls: string }[] = [
 ];
 // A null tier = effectively Member (the engine defaults null → bronze).
 const tierMeta = (id: string | null) => TIER_OPTIONS.find((t) => t.id === (id ?? "tier-celsius-bronze")) ?? TIER_OPTIONS[0];
-// Only invitation-only tiers can be granted by hand (earned tiers come from spend).
-const GRANTABLE_TIERS = TIER_OPTIONS.filter((t) => t.id === "tier-celsius-arba-staff" || t.id === "tier-celsius-black-card");
+// Any tier can be granted by hand. Invitation tiers (Staff, Black Card)
+// stick until reset; earned tiers (Member/Silver/Gold/Platinum) are pinned
+// by the grant route until the quarter rolls over, then re-evaluate from spend.
+const GRANTABLE_TIERS = TIER_OPTIONS;
+// Short blurbs for the grant-tier dialog radio list.
+const TIER_GRANT_DESC: Record<string, string> = {
+  "tier-celsius-bronze": "Base tier · 0% off · earned from spend",
+  "tier-celsius-silver": "3% off · earned from spend",
+  "tier-celsius-gold": "5% off · earned from spend",
+  "tier-celsius-elite": "10% off · earned from spend",
+  "tier-celsius-arba-staff": "30% off · for Celsius staff",
+  "tier-celsius-black-card": "50% off · for investors / owners",
+};
+// Sentinel for the "Reset to auto" radio option. Kept distinct from "" (the
+// "nothing selected yet" state) so the Apply button can tell them apart —
+// otherwise picking Reset leaves Apply disabled and the tier can't be cleared.
+const RESET_TIER_OPTION = "__reset__";
 
 // Customer-360 drawer payload (from /api/loyalty/members/[id]/detail).
 type DetailData = {
@@ -1411,7 +1426,7 @@ export default function MembersPage() {
               >
                 Remove tier (auto)
               </button>
-              <span className="text-[11px] text-gray-400 dark:text-neutral-500">Earned tiers (Silver/Gold/Platinum) come from spend.</span>
+              <span className="text-[11px] text-gray-400 dark:text-neutral-500">Earned tiers (Silver/Gold/Platinum) hold until quarter-end, then re-evaluate from spend.</span>
               {bulkTierSaving && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
             </div>
           )}
@@ -1758,15 +1773,15 @@ export default function MembersPage() {
             </div>
 
             <p className="text-xs text-gray-500 dark:text-neutral-400 mb-3">
-              Only invitation-only tiers can be granted manually. Earned tiers
-              (Member/Silver/Gold/Platinum) come from quarterly spend.
+              Invitation tiers (Staff, Black Card) stay until you reset. Earned
+              tiers (Member/Silver/Gold/Platinum) hold until the quarter ends,
+              then re-evaluate from spend.
             </p>
 
             <div className="space-y-2 mb-4">
               {[
-                { id: "tier-celsius-arba-staff", name: "Staff",      desc: "30% off · for Celsius staff" },
-                { id: "tier-celsius-black-card", name: "Black Card", desc: "50% off · for investors / owners" },
-                { id: "",                          name: "Reset to auto", desc: "Re-evaluate from quarterly spend (clears any invitation grant)" },
+                ...TIER_OPTIONS.map((t) => ({ id: t.id, name: t.label, desc: TIER_GRANT_DESC[t.id] ?? "" })),
+                { id: RESET_TIER_OPTION, name: "Reset to auto", desc: "Re-evaluate from quarterly spend (clears any grant)" },
               ].map((opt) => {
                 const selected = grantTierId === opt.id;
                 return (
@@ -1814,6 +1829,7 @@ export default function MembersPage() {
                 disabled={grantSaving || grantTierId === ""}
                 onClick={async () => {
                   if (!grantingMember || grantTierId === "") return;
+                  // (grantTierId === "" means no radio is selected yet.)
                   setGrantSaving(true);
                   try {
                     const res = await fetch(
@@ -1822,8 +1838,8 @@ export default function MembersPage() {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                          // Empty string in UI → null in API = reset path.
-                          tier_id: grantTierId === "" ? null : grantTierId,
+                          // "Reset to auto" in UI → null in API = reset path.
+                          tier_id: grantTierId === RESET_TIER_OPTION ? null : grantTierId,
                         }),
                       },
                     );

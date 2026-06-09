@@ -8,19 +8,33 @@ const BRAND_ID = "brand-celsius";
  * POST /api/loyalty/members/[id]/grant-tier
  * Body: { tier_id: string | null }
  *
- * Grant a customer an invitation-only tier (Arba & Staff, Black Card),
- * or pass `tier_id: null` to revert them to auto-evaluation.
+ * Grant a customer any active tier, or pass `tier_id: null` to revert
+ * them to auto-evaluation.
  *
- * Earned tiers (Member / Silver / Gold / Platinum) are intentionally
- * NOT grantable here — those come from quarterly spend via the
- * evaluate_member_tier RPC. Forcing one would be a comp/perk override
- * better expressed by directly editing tier_locked_until via SQL.
+ * How the grant persists depends on the tier kind — driven by the
+ * evaluate_member_tier RPC that runs on every purchase:
  *
- * After grant: the RPC's first branch keeps invitation-only tiers
- * untouched on every subsequent evaluation, so the assignment sticks
- * until an admin explicitly revokes (tier_id: null) or grants a
- * different invitation tier.
+ *  • Invitation-only tiers (Staff, Black Card): the RPC's first branch
+ *    never auto-overwrites an invitation tier, so we leave
+ *    tier_locked_until null and the grant sticks until an admin
+ *    explicitly resets (tier_id: null) or grants a different tier.
+ *
+ *  • Earned tiers (Member / Silver / Gold / Platinum): the RPC
+ *    re-evaluates these from quarterly spend. We pin the grant by
+ *    setting tier_locked_until to the current quarter end — the RPC
+ *    honours an active lock and won't demote mid-quarter (only spend
+ *    upgrades land). When the quarter rolls over the lock expires and
+ *    the member re-evaluates from real spend, same as a naturally
+ *    earned tier.
  */
+
+/** First instant of the next calendar quarter (UTC), matching the
+ *  RPC's `date_trunc('quarter', now()) + interval '3 months'`. */
+function currentQuarterEndIso(): string {
+  const now = new Date();
+  const q = Math.floor(now.getUTCMonth() / 3); // 0..3
+  return new Date(Date.UTC(now.getUTCFullYear(), q * 3 + 3, 1)).toISOString();
+}
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -72,7 +86,7 @@ export async function POST(
     return NextResponse.json({ ok: true, action: "reset", granted_by: callerLabel });
   }
 
-  // Grant path — validate tier exists + is invitation-only.
+  // Grant path — validate the tier exists and is active.
   const { data: tier, error: tierErr } = await supabaseAdmin
     .from("tiers")
     .select("id, name, slug, is_active, invitation_only")
@@ -94,24 +108,16 @@ export async function POST(
       { status: 400 },
     );
   }
-  if (!tier.invitation_only) {
-    return NextResponse.json(
-      {
-        error:
-          "Only invitation-only tiers can be granted manually. Earned tiers (Member/Silver/Gold/Platinum) come from quarterly spend.",
-      },
-      { status: 400 },
-    );
-  }
 
-  // Apply the grant. Lock-until is cleared because the RPC's first
-  // branch always preserves invitation tiers — a lock would be
-  // redundant and confusing in the UI.
+  // Apply the grant. Invitation tiers need no lock (the RPC preserves
+  // them); earned tiers are pinned to the quarter end so the RPC's
+  // lock-honouring branch holds them until the quarter rolls over.
+  const lockedUntil = tier.invitation_only ? null : currentQuarterEndIso();
   const { error: updErr } = await supabaseAdmin
     .from("member_brands")
     .update({
       current_tier_id: tier.id,
-      tier_locked_until: null,
+      tier_locked_until: lockedUntil,
       tier_evaluated_at: nowIso,
     })
     .eq("member_id", memberId)
@@ -125,12 +131,13 @@ export async function POST(
   }
 
   console.warn(
-    `[tier-grant] member=${memberId} → tier=${tier.slug} by=${callerLabel}`,
+    `[tier-grant] member=${memberId} → tier=${tier.slug} lock=${lockedUntil ?? "none"} by=${callerLabel}`,
   );
 
   return NextResponse.json({
     ok: true,
     action: "granted",
+    locked_until: lockedUntil,
     tier_id: tier.id,
     tier_slug: tier.slug,
     tier_name: tier.name,
