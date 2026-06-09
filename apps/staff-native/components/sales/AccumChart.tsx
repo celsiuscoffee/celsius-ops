@@ -105,13 +105,13 @@ export function AccumChart({
               <Line key={`g${i}`} x1={padL} y1={padT + g * innerH} x2={w - padR} y2={padT + g * innerH} stroke={GRID} strokeWidth={1} />
             ))}
             {grid.map((g, i) => (
-              <SvgText key={`gl${i}`} x={padL - 6} y={padT + g * innerH + 3} fontSize={9} fill={AXIS} textAnchor="end">
+              <SvgText key={`gl${i}`} x={padL - 6} y={padT + g * innerH + 3} fontSize={10} fill={AXIS} textAnchor="end">
                 {kfmt(max * (1 - g))}
               </SvgText>
             ))}
             {series.map((s, i) =>
               i % step === 0 || i === n - 1 ? (
-                <SvgText key={`x${i}`} x={x(i)} y={height - 6} fontSize={9} fill={AXIS} textAnchor="middle">
+                <SvgText key={`x${i}`} x={x(i)} y={height - 6} fontSize={10} fill={AXIS} textAnchor="middle">
                   {s.label}
                 </SvgText>
               ) : null,
