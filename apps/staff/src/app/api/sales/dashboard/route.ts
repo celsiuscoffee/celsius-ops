@@ -230,11 +230,21 @@ export async function GET(req: NextRequest) {
   // ── Series (client makes it cumulative) ──
   let series: { label: string; cur: number | null; prev: number }[];
   if (granularity === "hour") {
-    series = Array.from({ length: 24 }, (_, h) => ({
-      label: fmtHour(h),
-      cur: curIncludesToday && h > nowHour ? null : rm(curHour[h]),
-      prev: rm(prevHour[h]),
-    }));
+    // Start the intraday chart at store open (the first daypart, 8AM) instead
+    // of 00:00 — the pre-open hours are dead space. Any sales before open are
+    // folded into the opening bucket so the running total stays accurate.
+    const openH = ROUNDS[0].startH;
+    const sumTo = (arr: number[], end: number) => arr.slice(0, end + 1).reduce((s, v) => s + v, 0);
+    series = Array.from({ length: 24 - openH }, (_, i) => {
+      const h = openH + i;
+      const curSen = i === 0 ? sumTo(curHour, h) : curHour[h];
+      const prevSen = i === 0 ? sumTo(prevHour, h) : prevHour[h];
+      return {
+        label: fmtHour(h),
+        cur: curIncludesToday && h > nowHour ? null : rm(curSen),
+        prev: rm(prevSen),
+      };
+    });
   } else {
     series = curDates.map((d, i) => {
       const pd = prevDates[i];
