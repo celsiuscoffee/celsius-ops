@@ -367,6 +367,7 @@ function NumPad({
       { key: "del", label: "del", tone: "icon" },
     ],
   ];
+  // Centered max-width grid of rounded, outlined keys (visible on espresso).
   return (
     <View style={{ gap: 14, alignSelf: "center", width: "100%", maxWidth: 320 }}>
       {rows.map((row, ri) => (
