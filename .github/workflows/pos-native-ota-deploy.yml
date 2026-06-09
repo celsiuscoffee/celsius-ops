@@ -35,13 +35,21 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Publish OTA update (production channel)
+      - name: Publish OTA update to all channels (production, preview, development)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: "1"
+        # Fan out the same current JS to every channel our build profiles use,
+        # so whichever channel an installed APK is tuned to (the recovered
+        # celsius-pos-latest build's channel is unknown) pulls the update.
+        # Runtime version is appVersion 1.0.0 for all of them. || true so one
+        # unlinked channel doesn't fail the whole deploy.
         run: |
-          npx eas-cli@latest update \
-            --channel production \
-            --platform android \
-            --message "Manual OTA deploy (QR-table order list + current features) from working branch" \
-            --non-interactive
+          for ch in production preview development; do
+            echo "=== publishing to channel: $ch ==="
+            npx eas-cli@latest update \
+              --channel "$ch" \
+              --platform android \
+              --message "OTA: QR-table item list + new chime + offline (current JS)" \
+              --non-interactive || echo "channel $ch publish failed (continuing)"
+          done
