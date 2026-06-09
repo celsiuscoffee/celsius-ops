@@ -10,6 +10,12 @@ name: pos-native build APK
 
 on:
   workflow_dispatch: {}
+  # Also kickable by pushing a `build-apk-*` git tag — lets the build be
+  # triggered without the Actions:write dispatch permission (a tag push is an
+  # ordinary push event).
+  push:
+    tags:
+      - "build-apk-*"
 
 jobs:
   build:
