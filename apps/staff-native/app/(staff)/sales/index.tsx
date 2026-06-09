@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
   Banknote, CreditCard, QrCode, Smartphone, Bike, ShoppingBag, Landmark, Wallet,
   Utensils, Package, Sunrise, Sunset, Sun, Moon, Coffee, Sandwich, UtensilsCrossed,
-  TrendingUp, TrendingDown, UserPlus, BarChart3, ChevronDown,
+  TrendingUp, TrendingDown, UserPlus, BarChart3, ChevronDown, Settings,
 } from "lucide-react-native";
 import { useStaff } from "@/lib/store";
 import { hasAccess } from "@/lib/access";
@@ -49,6 +49,7 @@ const TABS: { key: Mode; label: string }[] = [
 export default function SalesScreen() {
   const session = useStaff((s) => s.session);
   const canView = hasAccess(session?.role, session?.moduleAccess, "sales");
+  const router = useRouter();
 
   const [mode, setMode] = useState<Mode>("day");
   const [cTo, setCTo] = useState(mytToday());
@@ -115,6 +116,16 @@ export default function SalesScreen() {
             )}
             <Text className="font-body text-sm text-[#F5F3F08a]">Live · POS + Pickup</Text>
           </View>
+          {isAdmin ? (
+            <Pressable
+              onPress={() => router.push("/(staff)/profile")}
+              hitSlop={10}
+              accessibilityLabel="Settings"
+              className="h-9 w-9 items-center justify-center rounded-xl border border-[#F5F3F01a] bg-[#2a1508] active:opacity-80"
+            >
+              <Settings color="#F5F3F0" size={18} />
+            </Pressable>
+          ) : null}
         </View>
 
         {/* Period tabs */}
