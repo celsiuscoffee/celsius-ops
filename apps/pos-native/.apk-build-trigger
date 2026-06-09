@@ -1,1 +1,1 @@
-2026-06-09T08:38:47Z rebuild: root autolinking searchPaths fixes local-module linking
+2026-06-09T09:13:49Z diagnostic: build APK locally in CI to capture autolinking log
