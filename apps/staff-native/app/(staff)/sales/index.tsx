@@ -29,13 +29,17 @@ function rmF(n: number): string {
   return "RM " + i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + d;
 }
 function numF(n: number): string { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+function rmDeltaF(n: number): string {
+  const v = Math.round(Math.abs(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${n >= 0 ? "+" : "−"}RM ${v}`;
+}
 function deltaStr(d: number | null): string { return d == null ? "New" : `${d >= 0 ? "+" : ""}${d}%`; }
 function deltaUp(d: number | null): boolean { return d == null ? true : d >= 0; }
 
 const PAY_ICON: Record<string, any> = { cash: Banknote, card: CreditCard, duitnow_qr: QrCode, tng: Smartphone, grabpay: Bike, shopeepay: ShoppingBag, fpx: Landmark, wallet: Wallet };
 const PAY_COLOR: Record<string, string> = { cash: "#34d399", card: "#8FB3F0", duitnow_qr: "#FBBF24", tng: "#a78bfa", grabpay: "#34d399", shopeepay: "#fb923c", fpx: "#60a5fa", wallet: "#a78bfa" };
-const CHAN_ICON: Record<string, any> = { dine_in: Utensils, takeaway: ShoppingBag, pickup: Package, delivery: Bike };
-const CHAN_COLOR: Record<string, string> = { dine_in: "#E0875F", takeaway: "#FBBF24", pickup: "#a78bfa", delivery: "#34d399" };
+const CHAN_ICON: Record<string, any> = { dine_in: Utensils, takeaway: ShoppingBag, pickup: Package, delivery: Bike, qr_table: QrCode };
+const CHAN_COLOR: Record<string, string> = { dine_in: "#E0875F", takeaway: "#FBBF24", pickup: "#a78bfa", delivery: "#34d399", qr_table: "#2dd4bf" };
 const ROUND_ICON: Record<string, any> = { breakfast: Sunrise, brunch: Coffee, lunch: Sandwich, midday: Sun, evening: Sunset, dinner: UtensilsCrossed, supper: Moon };
 
 const TABS: { key: Mode; label: string }[] = [
@@ -142,6 +146,7 @@ export default function SalesScreen() {
               <View className={`mt-2 flex-row items-center gap-1 self-start rounded-full px-2.5 py-1 ${deltaUp(s.revenueDelta) ? "bg-[#34d39920]" : "bg-[#f8717120]"}`}>
                 {deltaUp(s.revenueDelta) ? <TrendingUp color="#34d399" size={13} /> : <TrendingDown color="#f87171" size={13} />}
                 <Text className={`font-body-bold text-xs ${deltaUp(s.revenueDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(s.revenueDelta)}</Text>
+                <Text className={`font-body-semi text-xs ${deltaUp(s.revenueDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>· {rmDeltaF(s.revenue - s.prevRevenue)}</Text>
                 <Text className="font-body text-xs text-[#F5F3F08a]"> vs {data.prev.label.toLowerCase()}</Text>
               </View>
               <View className="mt-4 flex-row gap-3 border-t border-[#F5F3F00f] pt-4">
@@ -155,7 +160,7 @@ export default function SalesScreen() {
             <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
               <Text className="font-display text-sm text-[#F5F3F0]">Total Accumulative Sales <Text className="font-body text-[#F5F3F057]">(RM)</Text></Text>
               <Text className="mb-2 mt-0.5 font-body text-[11px] text-[#F5F3F08a]">{data.cur.label} vs {data.prev.label} · running total</Text>
-              <AccumChart series={data.series} />
+              <AccumChart series={data.series} curLabel={data.cur.label} prevLabel={data.prev.label} />
               <View className="mt-3 flex-row justify-center gap-4">
                 <Legend color="#FBBF24" label={data.cur.label} />
                 <Legend color="#8FB3F0" label={data.prev.label} />

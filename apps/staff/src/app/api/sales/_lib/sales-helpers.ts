@@ -113,26 +113,37 @@ export function getRound(hour: number): RoundKey | null {
 }
 
 // ─── Channel classification ──────────────────────────────────────────────────
-export type ChannelKey = "dine_in" | "takeaway" | "pickup" | "delivery";
-/** Classify a POS counter order (pos_orders). */
+export type ChannelKey = "dine_in" | "takeaway" | "pickup" | "delivery" | "qr_table";
+/** Classify a POS counter order (pos_orders). Counter dine-in stays "dine_in";
+ *  the POS has no table/QR ordering, so qr_table never originates here. */
 export function classifyPosChannel(orderType?: string | null, source?: string | null): ChannelKey {
   const s = (source || "").toLowerCase();
   if (/grab|foodpanda|shopee|delivery/.test(s)) return "delivery";
   const t = (orderType || "").toLowerCase();
   if (/takeaway|take[\s-]?away|tapau|bungkus|ta\b/.test(t)) return "takeaway";
   if (/pickup/.test(t)) return "pickup";
-  return "dine_in"; // dine_in, qr_table, default
+  return "dine_in"; // counter dine_in / default
 }
-/** Classify an app order (orders). All app-originated; default pickup. */
-export function classifyAppChannel(orderType?: string | null): ChannelKey {
+/** Classify an app order (orders). App dine-in is always table-based ordering
+ *  — the customer scans a QR at the table, so every app dine_in row carries a
+ *  table_number (newer ones also source "web_qr"). It therefore maps to the
+ *  distinct "qr_table" channel instead of being merged into counter dine-in. */
+export function classifyAppChannel(
+  orderType?: string | null,
+  tableNumber?: string | null,
+  source?: string | null,
+): ChannelKey {
   const t = (orderType || "").toLowerCase();
-  if (/dine[\s-]?in|qr[\s-]?table|dinein/.test(t)) return "dine_in";
+  const s = (source || "").toLowerCase();
+  const hasTable = !!(tableNumber && tableNumber.trim());
+  if (s.includes("qr") || hasTable || /qr[\s-]?table/.test(t)) return "qr_table";
+  if (/dine[\s-]?in|dinein/.test(t)) return "qr_table";
   if (/takeaway|take[\s-]?away|tapau|bungkus/.test(t)) return "takeaway";
   if (/grab|delivery/.test(t)) return "delivery";
   return "pickup";
 }
 export const CHANNEL_LABELS: Record<ChannelKey, string> = {
-  dine_in: "Dine-in", takeaway: "Takeaway", pickup: "Pickup", delivery: "Grab",
+  dine_in: "Dine-in", takeaway: "Takeaway", pickup: "Pickup", delivery: "Grab", qr_table: "QR Table",
 };
 
 // ─── Payment-method normalisation ────────────────────────────────────────────
