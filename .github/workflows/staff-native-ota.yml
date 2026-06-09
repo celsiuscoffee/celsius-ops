@@ -53,14 +53,19 @@ jobs:
           COMMIT_MSG: ${{ github.event.head_commit.message || github.sha }}
         run: |
           MSG="$(printf '%s' "$COMMIT_MSG" | head -n 1)"
-          # --platform all: ios + android (staff app ships on both).
-          # react-native-web + react-dom are deps, so the web export step the
-          # CLI runs under the hood succeeds. --environment production injects
-          # the EAS server-side prod env vars so the bundle config matches the
-          # installed build.
-          npx eas-cli@latest update \
-            --channel production \
-            --platform all \
-            --environment production \
-            --message "$MSG" \
-            --non-interactive
+          # Publish to BOTH update channels:
+          #   production — App Store / Play Store builds (production profile)
+          #   preview    — internal / TestFlight test builds (preview & simulator
+          #                profiles map to the "preview" channel in eas.json)
+          # Testers run preview builds, so a production-only update never reached
+          # them — the app appeared "stuck" no matter how many OTAs we shipped.
+          # --platform all: ios + android. --environment production injects the
+          # EAS server-side prod env vars so the bundle config matches the build.
+          for CH in production preview; do
+            npx eas-cli@latest update \
+              --channel "$CH" \
+              --platform all \
+              --environment production \
+              --message "$MSG" \
+              --non-interactive
+          done
