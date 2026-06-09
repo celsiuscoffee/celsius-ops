@@ -29,6 +29,7 @@ import { listChecklists, type ChecklistSummary } from "../../lib/ops/checklists"
 import { getClockStatus, type ClockStatus } from "../../lib/hr/clock";
 import { useStaff } from "../../lib/store";
 import { ApiError } from "../../lib/api";
+import SalesScreen from "./sales";
 
 type TaskPriority = "overdue" | "due_soon" | "on_track" | "done";
 
@@ -58,6 +59,13 @@ const PRIORITY_COPY: Record<TaskPriority, string> = {
 };
 
 export default function Home() {
+  const role = useStaff((s) => s.session?.role);
+  // Owners/admins don't run floor ops — their Home IS the Sales dashboard.
+  if (role === "OWNER" || role === "ADMIN") return <SalesScreen />;
+  return <StaffHome />;
+}
+
+function StaffHome() {
   const router = useRouter();
   const session = useStaff((s) => s.session);
   const [checklists, setChecklists] = useState<ChecklistSummary[]>([]);
