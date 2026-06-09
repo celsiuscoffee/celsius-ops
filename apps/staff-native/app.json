@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Celsius Staff",
+    "name": "Celsius Manager",
     "slug": "celsius-staff-native",
     "scheme": "celsiuscoffeestaff",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -16,7 +16,7 @@
     "ios": {
       "bundleIdentifier": "com.celsiuscoffee.staff",
       "supportsTablet": false,
-      "buildNumber": "4",
+      "buildNumber": "8",
       "entitlements": {
         "aps-environment": "production"
       },
@@ -38,7 +38,7 @@
     },
     "android": {
       "package": "com.celsiuscoffee.staff",
-      "versionCode": 4,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#A2492C"
@@ -69,8 +69,8 @@
       "output": "single",
       "bundler": "metro",
       "favicon": "./assets/icon.png",
-      "name": "Celsius Staff",
-      "shortName": "Staff",
+      "name": "Celsius Manager",
+      "shortName": "Manager",
       "themeColor": "#1A0200",
       "backgroundColor": "#FFFFFF",
       "description": "Celsius Coffee staff app — clock in/out, shifts, payslips, leave, claims, checklists."

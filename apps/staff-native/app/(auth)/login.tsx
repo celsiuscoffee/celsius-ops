@@ -14,6 +14,7 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Check, ChevronDown, Delete } from "lucide-react-native";
+import * as Updates from "expo-updates";
 import { fetchOutlets, type Outlet } from "../../lib/outlets";
 import { loginWithPin } from "../../lib/auth";
 import { ApiError } from "../../lib/api";
@@ -116,6 +117,14 @@ export default function Login() {
     });
   }
 
+  const buildTag = `${Updates.runtimeVersion ?? "1.0.0"} · ${Updates.channel ?? "dev"} · ${
+    Updates.isEmbeddedLaunch
+      ? "embedded"
+      : Updates.updateId
+        ? Updates.updateId.slice(0, 8)
+        : "—"
+  }`;
+
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
@@ -123,9 +132,9 @@ export default function Login() {
         <View
           style={{
             flex: 1,
-            paddingHorizontal: 24,
+            paddingHorizontal: 22,
             justifyContent: "center",
-            gap: 24,
+            gap: 22,
           }}
         >
           {/* Brand mark — icon + role tag. The wordmark.png is black and
@@ -134,7 +143,7 @@ export default function Login() {
           <View style={{ alignItems: "center", gap: 14 }}>
             <Image
               source={require("../../assets/icon.png")}
-              style={{ width: 88, height: 88, borderRadius: 20 }}
+              style={{ width: 76, height: 76, borderRadius: 18 }}
               resizeMode="cover"
             />
             <Text
@@ -144,7 +153,7 @@ export default function Login() {
                 letterSpacing: 0.5,
               }}
             >
-              Staff Login
+              Manager Login
             </Text>
           </View>
 
@@ -197,6 +206,20 @@ export default function Login() {
           <NumPad onPress={press} disabled={busy} />
         </View>
       </SafeAreaView>
+      <Text
+        style={{
+          position: "absolute",
+          bottom: 12,
+          left: 0,
+          right: 0,
+          textAlign: "center",
+          color: "#FFFFFF33",
+          fontSize: 11,
+          letterSpacing: 0.3,
+        }}
+      >
+        {buildTag}
+      </Text>
     </View>
   );
 }
@@ -228,18 +251,19 @@ function OutletPicker({
   const selected = outlets.find((o) => o.id === selectedId) ?? null;
 
   return (
-    <View>
+    <View style={{ width: "100%", maxWidth: 300, alignSelf: "center" }}>
       <Pressable
         onPress={() => setOpen(true)}
-        style={({ pressed }) => ({
+        android_ripple={{ color: COLORS.surfaceHi }}
+        style={{
           height: 56,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
           paddingHorizontal: 18,
           borderRadius: 16,
-          backgroundColor: pressed ? COLORS.surfaceHi : COLORS.surface,
-        })}
+          backgroundColor: COLORS.surface,
+        }}
       >
         <Text
           style={{
@@ -296,21 +320,18 @@ function OutletPicker({
                     onSelect(o.id);
                     setOpen(false);
                   }}
-                  style={({ pressed }) => ({
+                  android_ripple={{ color: COLORS.surfaceHi }}
+                  style={{
                     height: 56,
                     flexDirection: "row",
                     alignItems: "center",
                     justifyContent: "space-between",
                     paddingHorizontal: 18,
                     borderRadius: 16,
-                    backgroundColor: pressed
-                      ? COLORS.surfaceHi
-                      : active
-                        ? COLORS.brand + "22"
-                        : COLORS.surface,
+                    backgroundColor: active ? COLORS.brand + "22" : COLORS.surface,
                     borderWidth: active ? 1 : 0,
                     borderColor: COLORS.brand,
-                  })}
+                  }}
                 >
                   <Text
                     style={{ flex: 1, color: COLORS.text, fontSize: 16 }}
@@ -367,7 +388,7 @@ function NumPad({
     ],
   ];
   return (
-    <View style={{ gap: 14, alignSelf: "center", width: "100%", maxWidth: 320 }}>
+    <View style={{ gap: 12, width: "100%", maxWidth: 300, alignSelf: "center" }}>
       {rows.map((row, ri) => (
         <View key={ri} style={{ flexDirection: "row", gap: 14 }}>
           {row.map((k) => {
@@ -379,29 +400,23 @@ function NumPad({
                 onPress={() => onPress(k.key)}
                 disabled={disabled}
                 android_ripple={{ color: COLORS.surfaceHi, borderless: false }}
-                style={({ pressed }) => ({
+                style={{
                   flex: 1,
-                  height: 72,
+                  height: 66,
                   borderRadius: 20,
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: pressed
-                    ? isDanger
-                      ? COLORS.danger + "33"
-                      : COLORS.surfaceHi
-                    : isDanger
-                      ? COLORS.danger + "22"
-                      : COLORS.surface,
+                  backgroundColor: isDanger ? COLORS.danger + "22" : COLORS.surface,
                   opacity: disabled ? 0.5 : 1,
-                })}
+                }}
               >
                 {isIcon ? (
-                  <Delete color={COLORS.text} size={28} />
+                  <Delete color={COLORS.text} size={24} />
                 ) : (
                   <Text
                     style={{
                       color: isDanger ? COLORS.danger : COLORS.text,
-                      fontSize: isDanger ? 16 : 30,
+                      fontSize: isDanger ? 15 : 28,
                       fontWeight: isDanger ? "700" : "500",
                     }}
                   >

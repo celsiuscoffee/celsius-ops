@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
@@ -784,6 +785,7 @@ function KeypadView({
   defaultPkg: (p: Product) => Package | null;
   uomLabel: (p: Product, pkgId?: string | null) => string;
 }) {
+  const insets = useSafeAreaInsets();
   const typed = parseFloat(value);
   const pkg = pkgId
     ? product.packages.find((p) => p.id === pkgId)
@@ -794,7 +796,10 @@ function KeypadView({
   return (
     <View className="flex-1 bg-background">
       {/* Header */}
-      <View className="border-b border-border px-5 pt-12 pb-4">
+      <View
+        className="border-b border-border px-5 pb-4"
+        style={{ paddingTop: insets.top + 12 }}
+      >
         <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-3">
             <Text

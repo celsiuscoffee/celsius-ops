@@ -94,13 +94,9 @@ export default function SalesScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-[#160800]" edges={["top", "left", "right"]}>
-      <ScrollView
-        contentContainerClassName="px-4 pb-16"
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#FBBF24" colors={["#FBBF24"]} progressBackgroundColor="#2a1508" />}
-      >
-        {/* Header */}
-        <View className="flex-row items-center gap-3 pb-4 pt-3">
+      {/* Fixed header — pinned at top while the content below scrolls */}
+      <View className="px-4 pt-3">
+        <View className="flex-row items-center gap-3 pb-4">
           <View className="h-9 w-9 items-center justify-center rounded-xl bg-[#A2492C]">
             <Text className="font-display text-sm text-[#F5F3F0]">°C</Text>
           </View>
@@ -128,7 +124,13 @@ export default function SalesScreen() {
             );
           })}
         </View>
+      </View>
 
+      <ScrollView
+        contentContainerClassName="px-4 pb-16"
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#FBBF24" colors={["#FBBF24"]} progressBackgroundColor="#2a1508" />}
+      >
         {loading && !data ? (
           <View className="items-center justify-center py-24"><ActivityIndicator color="#FBBF24" /></View>
         ) : error ? (

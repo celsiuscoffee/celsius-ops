@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import {
@@ -358,10 +359,12 @@ function ReceiveDetail({
   onRemovePhoto: (i: number) => void;
   onSubmit: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   const allFilled = useMemo(
     () => po.items.every((item) => (received[item.id]?.qty ?? "") !== ""),
     [po.items, received],
   );
+  const hasPhoto = photos.length > 0;
 
   return (
     <KeyboardAvoidingView
@@ -369,8 +372,12 @@ function ReceiveDetail({
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View className="flex-1 bg-background">
-        {/* Sticky PO header */}
-        <View className="flex-row items-center justify-between border-b border-border bg-background px-5 py-4">
+        {/* Sticky PO header — paddingTop clears the status bar / Dynamic
+            Island so the close button is always tappable. */}
+        <View
+          className="flex-row items-center justify-between border-b border-border bg-background px-5 pb-4"
+          style={{ paddingTop: insets.top + 12 }}
+        >
           <View className="flex-1">
             <Text className="text-base font-body-semi text-espresso">
               {po.supplier}
@@ -526,6 +533,15 @@ function ReceiveDetail({
 
         {/* Pinned bottom submit */}
         <View className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3 pb-8">
+          {!hasPhoto ? (
+            <View className="mb-2 flex-row items-center gap-2 rounded-xl bg-amber-50 px-3 py-2">
+              <AlertTriangle color="#B45309" size={16} />
+              <Text className="flex-1 text-xs font-body text-amber-700">
+                No photo attached. Add the invoice or delivery order so this
+                receiving can be verified.
+              </Text>
+            </View>
+          ) : null}
           <Pressable
             onPress={onSubmit}
             disabled={!allFilled || submitting}
@@ -537,7 +553,7 @@ function ReceiveDetail({
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <Text className="text-base font-body-bold text-white">
-                Confirm receiving
+                {hasPhoto ? "Confirm receiving" : "Confirm without photo"}
               </Text>
             )}
           </Pressable>
