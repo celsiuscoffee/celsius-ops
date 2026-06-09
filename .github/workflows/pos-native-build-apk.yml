@@ -16,6 +16,13 @@ on:
   push:
     tags:
       - "build-apk-*"
+    # …and by touching this marker file on the working branch (branch pushes
+    # ARE allowed here even when tag pushes / dispatch aren't). Path-scoped so
+    # only an intentional bump of the marker builds — ordinary commits don't.
+    branches:
+      - "claude/awesome-davinci-CvikE"
+    paths:
+      - "apps/pos-native/.apk-build-trigger"
 
 jobs:
   build:
