@@ -1,1 +1,1 @@
-2026-06-09T08:06:11Z rebuild: force app-dir install so local modules autolink on EAS
+2026-06-09T08:38:47Z rebuild: root autolinking searchPaths fixes local-module linking
