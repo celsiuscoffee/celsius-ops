@@ -31,8 +31,9 @@ const LAST_OUTLET_KEY = "celsius_staff_last_outlet_v1";
 // the dark background.
 const COLORS = {
   bg: "#1A0200", // espresso
-  surface: "#5C3A30", // keypad button + outlet picker bg (visible on espresso)
-  surfaceHi: "#7A4D40", // pressed/hover
+  surface: "#6E4434", // keypad button + outlet picker bg (visible on espresso)
+  surfaceHi: "#8A5544", // pressed/hover
+  keyBorder: "rgba(245,243,240,0.20)", // outline so keys read as distinct cards
   text: "#FAFAFA",
   textMuted: "#C8B8B3",
   brand: "#C2452D", // primary
@@ -385,6 +386,8 @@ function NumPad({
                   borderRadius: 20,
                   alignItems: "center",
                   justifyContent: "center",
+                  borderWidth: 1,
+                  borderColor: isDanger ? COLORS.danger + "55" : COLORS.keyBorder,
                   backgroundColor: pressed
                     ? isDanger
                       ? COLORS.danger + "33"
