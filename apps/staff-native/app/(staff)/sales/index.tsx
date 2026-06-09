@@ -188,8 +188,11 @@ export default function SalesScreen() {
                 <Tile icon={Smartphone} color="#8FB3F0" v={numF(g.newAppCustomers)} k="New app customers" delta={g.newAppDelta} />
               </View>
               <View className="mt-3.5 flex-row items-center justify-between border-t border-[#F5F3F00f] pt-3.5">
-                <Text className="font-body-semi text-xs text-[#F5F3F08a]">Orders via app · adoption</Text>
-                <Text className="font-display text-base text-[#F5F3F0]">{g.appSharePct}%<Text className="font-body-bold text-[13px] text-[#34d399]">  {g.appShareDeltaPts >= 0 ? "+" : ""}{g.appShareDeltaPts} pts</Text></Text>
+                <View>
+                  <Text className="font-body-semi text-xs text-[#F5F3F08a]">Orders via app</Text>
+                  <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.appOrders)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {g.appSharePct}% of all</Text></Text>
+                </View>
+                <Text className={`font-body-bold text-[13px] ${deltaUp(g.appOrdersDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.appOrdersDelta)}</Text>
               </View>
             </View>
 
@@ -215,8 +218,8 @@ export default function SalesScreen() {
               </View>
               {dim === "channel"
                 ? (data.channels.length === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No sales in this period.</Text> :
-                    data.channels.map((c) => <Row key={c.key} icon={CHAN_ICON[c.key] ?? Utensils} color={CHAN_COLOR[c.key] ?? "#E0875F"} name={c.label} pct={c.pct} amount={rmF(c.revenue)} />))
-                : data.rounds.map((r) => <Row key={r.key} icon={ROUND_ICON[r.key] ?? Coffee} color="#FBBF24" name={r.label} pct={Math.round((r.revenue / maxRound) * 100)} amount={rmF(r.revenue)} />)}
+                    data.channels.map((c) => <Row key={c.key} icon={CHAN_ICON[c.key] ?? Utensils} color={CHAN_COLOR[c.key] ?? "#E0875F"} name={c.label} pct={c.pct} amount={rmF(c.revenue)} orders={c.orders} />))
+                : data.rounds.map((r) => <Row key={r.key} icon={ROUND_ICON[r.key] ?? Coffee} color="#FBBF24" name={r.label} pct={Math.round((r.revenue / maxRound) * 100)} amount={rmF(r.revenue)} orders={r.orders} />)}
             </View>
 
             {data.warnings?.length ? (
@@ -264,12 +267,12 @@ function Tile({ icon: Icon, color, v, k, delta }: { icon: any; color: string; v:
     </View>
   );
 }
-function Row({ icon: Icon, color, name, pct, amount }: { icon: any; color: string; name: string; pct: number; amount: string }) {
+function Row({ icon: Icon, color, name, pct, amount, orders }: { icon: any; color: string; name: string; pct: number; amount: string; orders?: number }) {
   return (
     <View className="flex-row items-center gap-3 border-b border-[#F5F3F00f] py-3">
       <View className="h-9 w-9 items-center justify-center rounded-xl bg-[#F5F3F00f]"><Icon color={color} size={18} /></View>
       <View className="flex-1">
-        <Text className="font-body-semi text-[15px] text-[#F5F3F0]">{name}</Text>
+        <Text className="font-body-semi text-[15px] text-[#F5F3F0]">{name}{orders != null ? <Text className="font-body text-[13px] text-[#F5F3F057]">  ·  {numF(orders)} orders</Text> : null}</Text>
         <View className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#F5F3F014]">
           <View className="h-full rounded-full" style={{ width: `${Math.max(2, pct)}%`, backgroundColor: color }} />
         </View>
