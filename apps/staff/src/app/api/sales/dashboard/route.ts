@@ -110,6 +110,19 @@ export async function GET(req: NextRequest) {
   const prevDates = dateRange(prev.from, prev.to);
   const curIncludesToday = cur.to >= today;
 
+  // Like-for-like comparison: when the current period is still in progress
+  // (includes today), the previous period's *summary* total is counted only up
+  // to the same elapsed point — e.g. today-so-far vs yesterday up to the same
+  // time of day — so the headline delta isn't "partial day vs full day". For a
+  // fully past period the cutoff is open (full previous period). The comparison
+  // chart's previous line is intentionally left full (shows yesterday's finish
+  // as a target); only the summary deltas use this cutoff.
+  // NOTE: StoreHub-sourced previous totals (transitioning outlets) are not
+  // time-clipped — they still merge the full previous period below.
+  const prevCutoffMs = curIncludesToday
+    ? Date.parse(mytDayStartUTC(prev.from)) + (Date.now() - Date.parse(mytDayStartUTC(cur.from)))
+    : Number.POSITIVE_INFINITY;
+
   // ── Accumulators ──
   const acc = (n: number) => Array.from({ length: n }, () => 0);
   // series buckets (net sen)
@@ -148,7 +161,7 @@ export async function GET(req: NextRequest) {
       chanRev[classifyPosChannel(r.order_type, r.source)] += net;
       const rd = getRound(getMYTHour(r.created_at)); if (rd) roundRev[rd] += net;
     } else if (inPrev(d)) {
-      prevRev += net; prevOrd++; prevPosOrd++;
+      if (Date.parse(r.created_at) <= prevCutoffMs) { prevRev += net; prevOrd++; prevPosOrd++; }
       if (r.customer_phone) prevPhones.add(r.customer_phone);
       prevByDate[d] = (prevByDate[d] || 0) + net;
       prevHour[getMYTHour(r.created_at)] += net;
@@ -168,7 +181,7 @@ export async function GET(req: NextRequest) {
       const pk = normalizePayment(r.payment_method);
       payAmt[pk] = (payAmt[pk] || 0) + (r.total || 0);
     } else if (inPrev(d)) {
-      prevRev += net; prevOrd++; prevAppOrd++;
+      if (Date.parse(r.created_at) <= prevCutoffMs) { prevRev += net; prevOrd++; prevAppOrd++; }
       if (r.customer_phone) { prevPhones.add(r.customer_phone); prevAppPhones.add(r.customer_phone); }
       prevByDate[d] = (prevByDate[d] || 0) + net;
       prevHour[getMYTHour(r.created_at)] += net;
