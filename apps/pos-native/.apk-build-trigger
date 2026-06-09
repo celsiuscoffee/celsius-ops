@@ -1,1 +1,1 @@
-2026-06-09T05:55:51Z fix: drop phantom device-alarm module (restores sunmi-printer + customer-display autolink)
+2026-06-09T08:06:11Z rebuild: force app-dir install so local modules autolink on EAS

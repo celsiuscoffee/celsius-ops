@@ -9,7 +9,8 @@
     "prebuild": "expo prebuild --clean",
     "build:android": "eas build --platform android --profile preview",
     "build:apk": "eas build --platform android --profile production-apk",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "eas-build-post-install": "npm install --no-audit --no-fund"
   },
   "dependencies": {
     "@expo-google-fonts/space-grotesk": "^0.4.1",
