@@ -161,7 +161,7 @@ export default function SalesScreen() {
             <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
               <Text className="font-display text-sm text-[#F5F3F0]">Total Accumulative Sales <Text className="font-body text-[#F5F3F057]">(RM)</Text></Text>
               <Text className="mb-2 mt-0.5 font-body text-[11px] text-[#F5F3F08a]">{data.cur.label} vs {data.prev.label} · running total</Text>
-              <AccumChart series={data.series} />
+              <AccumChart series={data.series} curLabel={data.cur.label} prevLabel={data.prev.label} />
               <View className="mt-3 flex-row justify-center gap-4">
                 <Legend color="#FBBF24" label={data.cur.label} />
                 <Legend color="#8FB3F0" label={data.prev.label} />
