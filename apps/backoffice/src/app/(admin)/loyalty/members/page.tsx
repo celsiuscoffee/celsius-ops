@@ -81,6 +81,10 @@ const TIER_OPTIONS: { id: string; label: string; cls: string }[] = [
 const tierMeta = (id: string | null) => TIER_OPTIONS.find((t) => t.id === (id ?? "tier-celsius-bronze")) ?? TIER_OPTIONS[0];
 // Only invitation-only tiers can be granted by hand (earned tiers come from spend).
 const GRANTABLE_TIERS = TIER_OPTIONS.filter((t) => t.id === "tier-celsius-arba-staff" || t.id === "tier-celsius-black-card");
+// Sentinel for the "Reset to auto" radio option. Kept distinct from "" (the
+// "nothing selected yet" state) so the Apply button can tell them apart —
+// otherwise picking Reset leaves Apply disabled and the tier can't be cleared.
+const RESET_TIER_OPTION = "__reset__";
 
 // Customer-360 drawer payload (from /api/loyalty/members/[id]/detail).
 type DetailData = {
@@ -1766,7 +1770,7 @@ export default function MembersPage() {
               {[
                 { id: "tier-celsius-arba-staff", name: "Staff",      desc: "30% off · for Celsius staff" },
                 { id: "tier-celsius-black-card", name: "Black Card", desc: "50% off · for investors / owners" },
-                { id: "",                          name: "Reset to auto", desc: "Re-evaluate from quarterly spend (clears any invitation grant)" },
+                { id: RESET_TIER_OPTION,           name: "Reset to auto", desc: "Re-evaluate from quarterly spend (clears any invitation grant)" },
               ].map((opt) => {
                 const selected = grantTierId === opt.id;
                 return (
@@ -1814,6 +1818,7 @@ export default function MembersPage() {
                 disabled={grantSaving || grantTierId === ""}
                 onClick={async () => {
                   if (!grantingMember || grantTierId === "") return;
+                  // (grantTierId === "" means no radio is selected yet.)
                   setGrantSaving(true);
                   try {
                     const res = await fetch(
@@ -1822,8 +1827,8 @@ export default function MembersPage() {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                          // Empty string in UI → null in API = reset path.
-                          tier_id: grantTierId === "" ? null : grantTierId,
+                          // "Reset to auto" in UI → null in API = reset path.
+                          tier_id: grantTierId === RESET_TIER_OPTION ? null : grantTierId,
                         }),
                       },
                     );
