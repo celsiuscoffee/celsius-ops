@@ -5,20 +5,29 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: "#FFFFFF",
-        surface: "#FFFFFF",
-        espresso: "#1A0200",
+        // Themeable neutral / terracotta-tint tokens resolve against the CSS
+        // variables applied at the root in app/_layout.tsx (see lib/theme.ts
+        // for the light/dark values). Pure brand + accent colors stay static
+        // since they read well in both modes.
+        background: "var(--color-background)",
+        surface: "var(--color-surface)",
+        espresso: "var(--color-espresso)",
         primary: {
           DEFAULT: "#A2492C",
-          50: "#F6E8E2",
-          100: "#EBD0C2",
+          50: "var(--color-primary-50)",
+          100: "var(--color-primary-100)",
           900: "#4E1F12",
         },
         muted: {
-          DEFAULT: "#6B6B6B",
-          fg: "#4A4A4A",
+          DEFAULT: "var(--color-muted)",
+          fg: "var(--color-muted-fg)",
         },
-        border: "rgba(26, 2, 0, 0.10)",
+        border: "var(--color-border)",
+        gray: {
+          50: "var(--color-gray-50)",
+          100: "var(--color-gray-100)",
+          200: "var(--color-gray-200)",
+        },
         amber: {
           400: "#FBBF24",
           500: "#F59E0B",
