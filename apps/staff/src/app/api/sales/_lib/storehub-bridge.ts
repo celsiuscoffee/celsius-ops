@@ -57,7 +57,15 @@ export async function fetchStorehubContributions(opts: {
         // source=storehub → backoffice returns StoreHub-only (no pos+pickup), so
         // we can add our own native pos+pickup totals without double-counting.
         const url = `${opts.baseUrl}/api/sales/compare?periods=${periods}&outletId=${o.id}&source=storehub`;
-        const res = await fetch(url, { headers: { authorization: opts.authz! } });
+        // Backoffice /api/sales/compare authenticates via getSession(), which
+        // reads the `celsius-session` COOKIE — never the Authorization header.
+        // The staff bearer token is the SAME JWT (shared @celsius/auth +
+        // JWT_SECRET), so forward it as that cookie too. Without this the bridge
+        // 401s and StoreHub silently drops out of the consolidated sales totals.
+        const jwt = opts.authz!.replace(/^Bearer\s+/i, "");
+        const res = await fetch(url, {
+          headers: { cookie: `celsius-session=${jwt}`, authorization: opts.authz! },
+        });
         console.warn(`[sh-bridge] ${o.id} -> ${res.status}`);
         if (!res.ok) return { id: o.id, periods: null as ShPeriod[] | null };
         const j = (await res.json()) as { periods?: ShPeriod[] };
