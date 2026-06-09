@@ -91,7 +91,15 @@ export function AccumChart({
   // ── Tooltip geometry (when a point is selected) ──
   const selPrev = sel != null ? cumPrev[sel] : 0;
   const selCur = sel != null ? cumCur[sel] : null;
-  const boxW = 132, boxH = 58;
+  const titleLine = sel != null ? series[sel].label : "";
+  const curLine = `${curLabel}  ${selCur == null ? "—" : rmTip(selCur)}`;
+  const prevLine = `${prevLabel}  ${rmTip(selPrev)}`;
+  // SVG <Text> neither wraps nor clips, so a fixed width let longer strings
+  // (e.g. "Yesterday  RM 1,812", or "Last month …") spill past the card edge.
+  // Size the card to its widest line, capped to the chart's inner width.
+  const tipChars = Math.max(curLine.length, prevLine.length, titleLine.length);
+  const boxW = Math.min(w - padL - padR, Math.max(132, 30 + tipChars * 7));
+  const boxH = 58;
   const selX = sel != null ? x(sel) : 0;
   const bx = Math.max(padL, Math.min(w - padR - boxW, selX - boxW / 2));
   const by = padT + 2;
@@ -127,11 +135,11 @@ export function AccumChart({
               <Circle cx={selX} cy={y(selPrev)} r={4} fill={PREV} stroke="#160800" strokeWidth={1.5} />
               {selCur != null ? <Circle cx={selX} cy={y(selCur)} r={4} fill={CUR} stroke="#160800" strokeWidth={1.5} /> : null}
               <Rect x={bx} y={by} width={boxW} height={boxH} rx={8} fill="#160800" stroke="rgba(245,243,240,0.18)" strokeWidth={1} opacity={0.97} />
-              <SvgText x={bx + 9} y={by + 16} fontSize={10} fill={AXIS}>{series[sel].label}</SvgText>
+              <SvgText x={bx + 9} y={by + 16} fontSize={10} fill={AXIS}>{titleLine}</SvgText>
               <Circle cx={bx + 12} cy={by + 31} r={3} fill={CUR} />
-              <SvgText x={bx + 20} y={by + 34} fontSize={11} fontWeight="600" fill="#F5F3F0">{`${curLabel}  ${selCur == null ? "—" : rmTip(selCur)}`}</SvgText>
+              <SvgText x={bx + 20} y={by + 34} fontSize={11} fontWeight="600" fill="#F5F3F0">{curLine}</SvgText>
               <Circle cx={bx + 12} cy={by + 47} r={3} fill={PREV} />
-              <SvgText x={bx + 20} y={by + 50} fontSize={11} fontWeight="600" fill="#F5F3F0">{`${prevLabel}  ${rmTip(selPrev)}`}</SvgText>
+              <SvgText x={bx + 20} y={by + 50} fontSize={11} fontWeight="600" fill="#F5F3F0">{prevLine}</SvgText>
             </>
           ) : null}
         </Svg>
