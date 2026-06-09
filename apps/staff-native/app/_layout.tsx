@@ -27,6 +27,8 @@ import {
 import { API_BASE_URL } from "../lib/env";
 import { useStaff } from "../lib/store";
 import { registerForPush } from "../lib/push";
+import { useColorScheme } from "nativewind";
+import { themes, loadColorSchemePref } from "../lib/theme";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 initSentry();
@@ -67,6 +69,19 @@ function RootLayout() {
 
   const setSession = useStaff((s) => s.setSession);
   const [sessionHydrated, setSessionHydrated] = useState(false);
+
+  // Apply the saved appearance preference on launch. The theme vars
+  // (lib/theme.ts) are applied at the root via `<View style={themes[scheme]} />`
+  // below; without this the Profile toggle shows "Dark" but the chosen scheme
+  // is never applied, so every screen renders with the light variables.
+  const { colorScheme, setColorScheme } = useColorScheme();
+  useEffect(() => {
+    loadColorSchemePref()
+      .then((pref) => setColorScheme(pref))
+      .catch(() => {});
+  }, [setColorScheme]);
+  const scheme = colorScheme === "dark" ? "dark" : "light";
+  const themeBg = scheme === "dark" ? "#0A0A0A" : "#FFFFFF";
 
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
@@ -139,11 +154,12 @@ function RootLayout() {
   }, [setSession]);
 
   useEffect(() => {
-    if (loaded) {
-      applyDefaultFont();
-      SystemUI.setBackgroundColorAsync("#FFFFFF").catch(() => {});
-    }
+    if (loaded) applyDefaultFont();
   }, [loaded]);
+
+  useEffect(() => {
+    SystemUI.setBackgroundColorAsync(themeBg).catch(() => {});
+  }, [themeBg]);
 
   const sessionUserId = useStaff((s) => s.session?.userId ?? null);
   useEffect(() => {
@@ -178,18 +194,23 @@ function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <StatusBar style="dark" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: "#FFFFFF" },
-              animation: "slide_from_right",
-            }}
-          />
-        </QueryClientProvider>
-      </SafeAreaProvider>
+      {/* Root theme scope: applies the light/dark CSS variables so every
+          screen using var(--color-*) tokens resolves against the chosen
+          scheme. */}
+      <View style={[{ flex: 1 }, themes[scheme]]}>
+        <SafeAreaProvider>
+          <QueryClientProvider client={queryClient}>
+            <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: themeBg },
+                animation: "slide_from_right",
+              }}
+            />
+          </QueryClientProvider>
+        </SafeAreaProvider>
+      </View>
     </GestureHandlerRootView>
   );
 }
