@@ -5,12 +5,14 @@
  *   - alarm  → a more urgent warble when an order blows the serving-time target
  *              (pickup not marked ready / table not marked done within 10 min).
  *
- * Plays on the Android media stream, so the till's media volume must be up.
- * Every call is fire-and-forget + fully crash-safe — a sound must never be able
- * to break the order / print flow.
+ * Cues play on the SUNMI's BUILT-IN speaker via the native DeviceSpeaker
+ * module — so order alerts are heard at the till even when room music is on a
+ * paired Bluetooth speaker — falling back to expo-audio's media stream if the
+ * native module isn't compiled in. Every call is fire-and-forget + fully
+ * crash-safe — a sound must never be able to break the order / print flow.
  */
 import { createAudioPlayer, type AudioPlayer } from "expo-audio";
-import DeviceAlarm from "device-alarm";
+import DeviceSpeaker from "@/modules/device-speaker";
 
 type Sound = "chime" | "alarm";
 
@@ -35,21 +37,12 @@ function getPlayer(sound: Sound): AudioPlayer | null {
   return players[sound] ?? null;
 }
 
-function play(sound: Sound): void {
-  // Prefer the native ALARM-class player: it keeps the alert on the SUNMI's
-  // built-in speaker even when a Bluetooth speaker is connected (so cafe music
-  // can play to BT while order alerts stay at the till). Falls through to the
-  // expo-audio media player below where the native module isn't present
-  // (Expo Go / an APK that predates it) — media routes to BT as before.
-  if (DeviceAlarm) {
-    try {
-      if (sound === "chime") DeviceAlarm.playChime();
-      else DeviceAlarm.playAlarm();
-      return;
-    } catch (e) {
-      console.warn(`[sound] native ${sound} failed, falling back`, e);
-    }
-  }
+/**
+ * Fallback path — expo-audio on the media stream (which follows the active
+ * output, i.e. Bluetooth/A2DP when a speaker is paired). Used only when the
+ * native DeviceSpeaker module isn't compiled in.
+ */
+function playViaExpoAudio(sound: Sound): void {
   const p = getPlayer(sound);
   if (!p) return;
   try {
@@ -61,6 +54,25 @@ function play(sound: Sound): void {
   } catch (e) {
     console.warn(`[sound] play ${sound} failed`, e);
   }
+}
+
+function play(sound: Sound): void {
+  // Preferred: native DeviceSpeaker forces the cue onto the SUNMI's BUILT-IN
+  // speaker (USAGE_ALARM + setPreferredDevice), so it's heard at the till even
+  // while room music plays over a paired Bluetooth speaker. Falls back to
+  // expo-audio if the native module is missing — a cue can never go silent.
+  if (DeviceSpeaker) {
+    try {
+      DeviceSpeaker.play(sound).catch((e) => {
+        console.warn(`[sound] native play ${sound} failed → expo-audio`, e);
+        playViaExpoAudio(sound);
+      });
+      return;
+    } catch (e) {
+      console.warn(`[sound] native play ${sound} threw → expo-audio`, e);
+    }
+  }
+  playViaExpoAudio(sound);
 }
 
 /** Pre-create the players at mount so the first real sound has no decode lag. */

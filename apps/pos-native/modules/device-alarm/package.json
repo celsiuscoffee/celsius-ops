@@ -1,7 +1,0 @@
-{
-  "name": "device-alarm",
-  "version": "0.1.0",
-  "description": "Local Expo module — plays the POS chime/alarm as ALARM-class audio so they stay on the SUNMI's built-in speaker even when a Bluetooth (A2DP) speaker is connected for music.",
-  "main": "index.ts",
-  "private": true
-}

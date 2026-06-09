@@ -1,0 +1,6 @@
+{
+  "name": "device-speaker",
+  "version": "0.1.0",
+  "description": "Play order-alert cues on the SUNMI built-in speaker, bypassing any Bluetooth/A2DP media route.",
+  "main": "index.ts"
+}

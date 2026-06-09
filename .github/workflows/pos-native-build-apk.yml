@@ -1,21 +1,39 @@
-name: pos-native build APK
+name: Build POS-native APK
 
-# Builds a fresh production APK for the SUNMI registers via EAS (cloud build).
-# Use this for NATIVE changes that can't ship over the OTA channel — e.g. the
-# device-alarm module (keeps the chime/alarm on the SUNMI speaker). Trigger it
-# manually from the Actions tab; the build runs on EAS and the installable APK
-# appears on expo.dev (project 3ea8d8f6-…) to download + `adb install -r`.
+# Builds apps/pos-native the SAME way it is shipped locally:
+#   npm ci  ->  expo prebuild  ->  gradlew assembleRelease
 #
-# Requires the EXPO_TOKEN repo secret (same one the OTA workflow uses).
+# Why NOT `eas build`: the EAS *cloud* pipeline was silently dropping this app's
+# three LOCAL Expo native modules (sunmi-printer, customer-display,
+# device-speaker), producing an APK that crashes on the SUNMI with
+# "cannot find module (second display, printer)". A plain prebuild + gradle on a
+# clean Linux runner autolinks + compiles all three correctly — this workflow
+# reproduces that and FAILS the run if any module is missing, so a green run is
+# a trustworthy APK.
+#
+# Output: the signed APK is attached to the run as the `pos-native-apk`
+# artifact. Download it on the MacBook from the Actions run page, then:
+#   adb install -r app-release.apk
+# It is signed with the Expo debug keystore (same as local gradlew builds), so
+# it installs straight over the existing app and OTA resumes on the chosen
+# channel. No EXPO_TOKEN / secrets required.
 
 on:
-  workflow_dispatch: {}
-  # Also kickable by pushing a `build-apk-*` git tag — lets the build be
-  # triggered without the Actions:write dispatch permission (a tag push is an
-  # ordinary push event).
-  push:
-    tags:
-      - "build-apk-*"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "EAS Update channel to bake in (OTA target)"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - preview
+          - development
+
+concurrency:
+  group: pos-native-apk
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -25,15 +43,71 @@ jobs:
         working-directory: apps/pos-native
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      - name: Build production APK (EAS)
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Provides cmdline-tools + auto-accepts licenses so gradle/AGP can fetch
+      # any missing SDK platform / NDK on demand.
+      - uses: android-actions/setup-android@v3
+
+      - name: Pre-install SDK packages (match the local build)
+        run: |
+          yes | sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006" "cmake;3.22.1" >/dev/null || true
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Recreate .env (public EXPO_PUBLIC_* values, sourced from eas.json)
+        run: |
+          node -e "const e=require('./eas.json').build['production-apk'].env;const fs=require('fs');fs.writeFileSync('.env',Object.entries(e).filter(([k])=>k.startsWith('EXPO_PUBLIC_')).map(([k,v])=>k+'='+v).join('\n')+'\n')"
+          sed -E 's/(ANON_KEY=).*/\1<redacted>/' .env
+
+      - name: Expo prebuild (autolinks the local native modules)
         env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          CI: "1"
-        # --no-wait: submit to EAS and return; the APK is produced on EAS
-        # servers and downloadable from expo.dev when the build finishes.
-        run: npx eas-cli@latest build --platform android --profile production-apk --non-interactive --no-wait
+          EXPO_OTA_CHANNEL: ${{ inputs.channel }}
+        run: npx expo prebuild --clean --platform android --no-install
+
+      - name: Gradle assembleRelease
+        working-directory: apps/pos-native/android
+        env:
+          SENTRY_DISABLE_AUTO_UPLOAD: "true"
+          SENTRY_ALLOW_FAILURE: "true"
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Verify all 3 native modules are compiled into the APK
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK" || { echo "::error::APK not produced"; exit 1; }
+          echo "APK: $(du -h "$APK" | cut -f1)"
+          # sunmi-printer ships a verbatim asset that is never obfuscated.
+          unzip -l "$APK" | grep -q "assets/celsius-logo.png" \
+            || { echo "::error::sunmi-printer module missing (no celsius-logo.png)"; exit 1; }
+          rm -rf /tmp/dex && mkdir -p /tmp/dex
+          unzip -o -q "$APK" 'classes*.dex' -d /tmp/dex
+          fail=0
+          for n in SunmiPrinter DeviceSpeaker CustomerDisplay PrinterSdk; do
+            c=$(strings -a /tmp/dex/classes*.dex | grep -ic "$n")
+            echo "  $n: $c"
+            [ "$c" -gt 0 ] || { echo "::error::module marker '$n' missing from dex"; fail=1; }
+          done
+          # confirm the OTA channel got baked in
+          AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort | tail -1)
+          "$AAPT2" dump xmltree "$APK" --file AndroidManifest.xml | grep -q "expo-channel-name" \
+            && echo "  OTA channel header: present" \
+            || echo "::warning::no expo-channel-name baked — OTA may not reach this build"
+          [ "$fail" -eq 0 ] || exit 1
+          echo "All 3 local native modules verified present."
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pos-native-apk
+          path: apps/pos-native/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
