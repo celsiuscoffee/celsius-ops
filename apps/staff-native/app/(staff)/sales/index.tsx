@@ -31,6 +31,10 @@ function rmF(n: number): string {
 function numF(n: number): string { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 function deltaStr(d: number | null): string { return d == null ? "New" : `${d >= 0 ? "+" : ""}${d}%`; }
 function deltaUp(d: number | null): boolean { return d == null ? true : d >= 0; }
+function rmDeltaStr(cur: number, prev: number): string {
+  const d = cur - prev;
+  return `${d >= 0 ? "+" : "−"}RM ${numF(Math.abs(d))}`;
+}
 
 const PAY_ICON: Record<string, any> = { cash: Banknote, card: CreditCard, duitnow_qr: QrCode, tng: Smartphone, grabpay: Bike, shopeepay: ShoppingBag, fpx: Landmark, wallet: Wallet };
 const PAY_COLOR: Record<string, string> = { cash: "#34d399", card: "#8FB3F0", duitnow_qr: "#FBBF24", tng: "#a78bfa", grabpay: "#34d399", shopeepay: "#fb923c", fpx: "#60a5fa", wallet: "#a78bfa" };
@@ -143,7 +147,7 @@ export default function SalesScreen() {
               <Text className="mt-1 font-display text-4xl text-[#F5F3F0]">{rmF(s.revenue)}</Text>
               <View className={`mt-2 flex-row items-center gap-1 self-start rounded-full px-2.5 py-1 ${deltaUp(s.revenueDelta) ? "bg-[#34d39920]" : "bg-[#f8717120]"}`}>
                 {deltaUp(s.revenueDelta) ? <TrendingUp color="#34d399" size={13} /> : <TrendingDown color="#f87171" size={13} />}
-                <Text className={`font-body-bold text-xs ${deltaUp(s.revenueDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(s.revenueDelta)}</Text>
+                <Text className={`font-body-bold text-xs ${deltaUp(s.revenueDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{rmDeltaStr(s.revenue, s.prevRevenue)} · {deltaStr(s.revenueDelta)}</Text>
                 <Text className="font-body text-xs text-[#F5F3F08a]"> vs {data.prev.label.toLowerCase()}</Text>
               </View>
               <View className="mt-4 flex-row gap-3 border-t border-[#F5F3F00f] pt-4">
@@ -194,7 +198,7 @@ export default function SalesScreen() {
               <View className="mb-1 mt-3 flex-row gap-1.5 rounded-xl border border-[#F5F3F01a] bg-[#160800] p-1">
                 {(["channel", "round"] as const).map((d) => (
                   <Pressable key={d} onPress={() => setDim(d)} className={`flex-1 items-center rounded-lg py-2 ${dim === d ? "bg-[#A2492C40]" : ""}`}>
-                    <Text className={`text-xs ${dim === d ? "font-body-bold text-[#F5F3F0]" : "font-body-semi text-[#F5F3F08a]"}`}>{d === "channel" ? "Channels" : "Dayparts"}</Text>
+                    <Text className={`text-xs ${dim === d ? "font-body-bold text-[#F5F3F0]" : "font-body-semi text-[#F5F3F08a]"}`}>{d === "channel" ? "Channels" : "Rounds"}</Text>
                   </Pressable>
                 ))}
               </View>
