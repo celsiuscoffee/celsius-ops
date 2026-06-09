@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import { isCleanCount } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { setStockBalance } from "@/lib/stock";
 import { getUserFromHeaders } from "@/lib/auth";
@@ -81,13 +82,24 @@ export async function POST(req: NextRequest) {
     balanceMap[b.productId] = Number(b.quantity);
   }
 
+  // Zero-variance counts auto-approve straight to REVIEWED; only counts with a
+  // real discrepancy against the snapshotted balance need a manager's review.
+  const now = new Date();
+  const autoApprove = isCleanCount(
+    (items as Array<{ productId: string; countedQty?: number | null }>).map((i) => ({
+      expectedQty: balanceMap[i.productId] ?? null,
+      countedQty: i.countedQty ?? null,
+    })),
+  );
+
   const stockCount = await prisma.stockCount.create({
     data: {
       outletId,
       countedById,
       frequency,
-      status: "SUBMITTED",
-      submittedAt: new Date(),
+      status: autoApprove ? "REVIEWED" : "SUBMITTED",
+      submittedAt: now,
+      ...(autoApprove ? { reviewedAt: now } : {}),
       notes: notes || null,
       items: {
         create: items.map((i: { productId: string; productPackageId?: string; countedQty?: number; isConfirmed?: boolean }) => ({
