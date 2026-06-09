@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSupabaseClient } from "@/lib/supabase/client";
 
 /** The customer's selected pickup outlet (store slug), read from the persisted
- *  SPA store — the same key + shape OutletRow / OutletPickerRow read. */
+ *  store — the same key + shape OutletRow / OutletPickerRow / _TableEntry use.
+ *  In dine-in (table-QR) mode _TableEntry writes this to the scanned outlet. */
 function readOutletId(): string | null {
   try {
     const raw = window.localStorage.getItem("celsius-pickup");
@@ -18,17 +17,13 @@ function readOutletId(): string | null {
 }
 
 /**
- * Per-outlet out-of-stock product ids — the POS "86" overrides — kept live.
+ * Per-outlet out-of-stock product ids — the POS "86" overrides.
  *
- * Mirrors apps/pickup-native/lib/menu.ts: reads `outlet_product_availability`
- * for the customer's selected outlet (the SAME table + store-slug key the POS
- * register writes via /api/pos/availability and the backoffice Availability
- * matrix edits) and subscribes to realtime, so a counter 86 drops the item off
- * the website within seconds. The web menu had been ignoring this table
- * entirely, so a POS 86 never reached the site.
- *
- * Empty set when no outlet is selected — the menu then shows everything,
- * governed only by the product's global is_available.
+ * Fetches via the server /api/menu/availability route (service role), NOT a
+ * browser Supabase client: the order app provisions no anon browser client, so
+ * a client-side read silently returned nothing and a 86 never reached the web
+ * menu. Refetches on tab focus + every 30s so a counter 86 drops the item
+ * without a manual refresh. Empty set when no outlet is selected.
  */
 export function useOosProductIds(): Set<string> {
   const [oos, setOos] = useState<Set<string>>(() => new Set());
@@ -39,39 +34,33 @@ export function useOosProductIds(): Set<string> {
       setOos(new Set());
       return;
     }
-    // The browser client is typed to the generated Database, which doesn't
-    // include this sparse override table — use the untyped client for it.
-    const supabase = getSupabaseClient() as unknown as SupabaseClient;
     let cancelled = false;
 
     const load = async () => {
-      const { data } = await supabase
-        .from("outlet_product_availability")
-        .select("product_id")
-        .eq("outlet_id", outletId)
-        .eq("is_available", false);
-      if (cancelled) return;
-      setOos(new Set((data ?? []).map((r: { product_id: string }) => r.product_id)));
+      try {
+        const res = await fetch(
+          `/api/menu/availability?outlet=${encodeURIComponent(outletId)}`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) return;
+        const json = (await res.json()) as { oos?: string[] };
+        if (!cancelled) setOos(new Set(json.oos ?? []));
+      } catch {
+        /* keep the last good set */
+      }
     };
-    void load();
 
-    const channel = supabase
-      .channel(`web-oos-${outletId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "outlet_product_availability",
-          filter: `outlet_id=eq.${outletId}`,
-        },
-        () => void load(),
-      )
-      .subscribe();
+    void load();
+    const onFocus = () => void load();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    const interval = setInterval(() => void load(), 30_000);
 
     return () => {
       cancelled = true;
-      void supabase.removeChannel(channel);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+      clearInterval(interval);
     };
   }, []);
 
