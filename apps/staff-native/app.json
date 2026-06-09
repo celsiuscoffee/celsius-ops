@@ -16,7 +16,7 @@
     "ios": {
       "bundleIdentifier": "com.celsiuscoffee.staff",
       "supportsTablet": false,
-      "buildNumber": "8",
+      "buildNumber": "9",
       "entitlements": {
         "aps-environment": "production"
       },
