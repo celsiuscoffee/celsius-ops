@@ -45,6 +45,7 @@ import {
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fetchMenu, type Product } from "../lib/menu";
+import { supabase } from "../lib/supabase";
 import { useApp, cartCount, cartTotal } from "../lib/store";
 import { formatPrice } from "../lib/api";
 import { EspressoHeader } from "../components/EspressoHeader";
@@ -118,6 +119,32 @@ export default function Menu() {
   });
   const addToCart = useApp((s) => s.addToCart);
   const phone = useApp((s) => s.phone);
+
+  // Live OOS: a POS "86" (or un-86) at this outlet flips
+  // outlet_product_availability; refetch so the item drops/returns within
+  // seconds instead of waiting for a manual refresh. Mirrors the register's
+  // own availability channel (apps/pos-native/app/register.tsx).
+  useEffect(() => {
+    if (!outletId) return;
+    const channel = supabase
+      .channel(`menu-oos-${outletId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "outlet_product_availability",
+          filter: `outlet_id=eq.${outletId}`,
+        },
+        () => {
+          void refetchMenu();
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [outletId, refetchMenu]);
 
   // Force outlet pick before showing the menu. Without this, customers
   // could shop the whole menu, hit checkout, and only THEN learn they
