@@ -12,7 +12,7 @@ import {
   Plus, Minus, LogOut, X, CheckCircle2,
   Settings as SettingsIcon, User, Gift, Trash2, Tag,
   Grid3x3, QrCode, CreditCard, ClipboardList, Bike, ShoppingBag, ChefHat, Coffee, Power, Sparkles,
-  AlertTriangle, RotateCcw,
+  AlertTriangle, RotateCcw, TrendingUp, Target,
 } from "lucide-react-native";
 import { usePos, shiftSessionExpired } from "@/lib/store";
 import { apiPost } from "@/lib/api";
@@ -47,6 +47,7 @@ import {
   type Member, type RewardsResponse, type IssuedVoucher, type CatalogReward, type RedeemDiscount, type UsualItem, type AppliedPromo,
   type SuggestedPair, type ClaimableCard, type MysteryReveal, type ShopCard, type VoucherCard,
 } from "@/lib/loyalty";
+import { getScorecard, type Scorecard } from "@/lib/scorecard";
 
 const rm = (sen: number) => `RM ${(sen / 100).toFixed(2)}`;
 
@@ -166,6 +167,9 @@ export default function Register() {
   // terminal "approved" result no longer auto-commits.
   const [cardResult, setCardResult] = useState<Extract<MaybankTerminalResult, { status: "approved" }> | null>(null);
   const [paying, setPaying] = useState(false);
+  // Bumped after each paid sale / pair add so the cashier's self-scorecard chip
+  // refetches its today numbers (collection rate + pair adds).
+  const [scorecardRefresh, setScorecardRefresh] = useState(0);
   const [paid, setPaid] = useState<{ orderNumber: string; total: number; beansEarned: number; beansBalance: number; wasMember: boolean; claimablePoints: number } | null>(null);
   const [modProduct, setModProduct] = useState<Product | null>(null);
   // Cart line whose modifiers are being edited (opens the picker pre-selected).
@@ -790,6 +794,7 @@ export default function Register() {
     // slot), so pair-adds ÷ orders is measurable. Best-effort; never blocks.
     const rank = pairs.findIndex((x) => x.product_id === pair.product_id) + 1;
     logPairAdd(outletId, pair, rank, "register", staff?.staffId ?? null);
+    setScorecardRefresh((k) => k + 1); // reflect the pair add on the scorecard chip
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productById, pairs, outletId]);
 
@@ -1318,6 +1323,7 @@ export default function Register() {
       // reconnect, and the hook never runs before the order row exists.
       clear();
       setShowCheckout(false);
+      setScorecardRefresh((k) => k + 1); // refresh the cashier's self-scorecard
 
       // Receipt + kitchen dockets — fire-and-forget on the SUNMI head.
       const printOrder = {
@@ -1440,6 +1446,9 @@ export default function Register() {
                 );
               })()}
             </Pressable>
+            {staff?.staffId && (
+              <CashierScorecardChip outletId={outletId} employeeId={staff.staffId} refreshKey={scorecardRefresh} />
+            )}
             <Pressable onPress={() => { Haptics.selectionAsync(); router.push("/settings"); }} className="h-10 w-10 items-center justify-center rounded-xl border border-cream/15 active:opacity-60">
               <SettingsIcon size={18} color="rgba(245,243,240,0.7)" />
             </Pressable>
@@ -3707,6 +3716,95 @@ function Stepper({ icon, onPress }: { icon: React.ReactNode; onPress: () => void
     <Pressable onPress={onPress} className="h-7 w-7 rounded-full items-center justify-center active:opacity-60" style={{ backgroundColor: "rgba(245,243,240,0.08)" }}>
       {icon}
     </Pressable>
+  );
+}
+
+/** The logged-in cashier's own performance chip in the register header — a live
+ *  nudge on the two numbers they can move: today's phone-collection rate and
+ *  pair adds. Glanceable (colour vs the 70% target); tap to expand a card with
+ *  the detail + a short encouragement. Self-contained so its refetch only
+ *  re-renders the chip, not the register. Re-fetches whenever refreshKey bumps
+ *  (after a paid sale / pair add). */
+function CashierScorecardChip({
+  outletId, employeeId, refreshKey,
+}: { outletId: string | null; employeeId: string; refreshKey: number }) {
+  const [sc, setSc] = useState<Scorecard | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    getScorecard(employeeId, outletId).then((s) => { if (alive) setSc(s); });
+    return () => { alive = false; };
+  }, [employeeId, outletId, refreshKey]);
+
+  if (!sc) return null;
+
+  const hitTarget = sc.rate >= sc.target;
+  // Amber while below target, green once hit — a small "keep going / nice" cue.
+  const rateColor = hitTarget ? "#22C55E" : "#FBBF24";
+  const tint = hitTarget ? "rgba(34,197,94,0.12)" : "rgba(251,191,36,0.10)";
+  const border = hitTarget ? "rgba(34,197,94,0.45)" : "rgba(251,191,36,0.40)";
+
+  return (
+    <>
+      <Pressable
+        onPress={() => { Haptics.selectionAsync(); setOpen(true); }}
+        className="flex-row items-center gap-2 px-3 py-2 rounded-xl border active:opacity-70"
+        style={{ borderColor: border, backgroundColor: tint }}
+      >
+        <TrendingUp size={14} color={rateColor} />
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 13, color: rateColor }}>{sc.rate}%</Text>
+        <View className="flex-row items-center gap-1 ml-0.5 pl-2" style={{ borderLeftWidth: 1, borderLeftColor: "rgba(245,243,240,0.18)" }}>
+          <Sparkles size={13} color="rgba(245,243,240,0.7)" />
+          <Text className="text-cream/80 text-[12px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{sc.pairAdds}</Text>
+        </View>
+      </Pressable>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable onPress={() => setOpen(false)} className="flex-1 bg-black/70 items-center justify-center px-8">
+          <Pressable onPress={() => {}} className="w-[360px] rounded-3xl border border-border p-6" style={{ backgroundColor: "#1A0A02", gap: 16 }}>
+            <View className="flex-row items-center justify-between">
+              <Text className="text-cream text-lg" style={{ fontFamily: "Peachi-Bold" }}>Your scorecard · today</Text>
+              <Pressable onPress={() => setOpen(false)} className="active:opacity-60"><X size={20} color="rgba(245,243,240,0.6)" /></Pressable>
+            </View>
+
+            {/* Collection rate */}
+            <View style={{ gap: 6 }}>
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center gap-2">
+                  <Target size={15} color={rateColor} />
+                  <Text className="text-cream/80 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Phone collection</Text>
+                </View>
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 22, color: rateColor }}>{sc.rate}%</Text>
+              </View>
+              {/* progress vs target */}
+              <View className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(245,243,240,0.10)" }}>
+                <View style={{ width: `${Math.min(sc.rate, 100)}%`, height: "100%", backgroundColor: rateColor }} />
+              </View>
+              <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                {sc.collected} of {sc.orders} order{sc.orders === 1 ? "" : "s"} · target {sc.target}%
+              </Text>
+            </View>
+
+            {/* Pair adds */}
+            <View className="flex-row items-center justify-between pt-1">
+              <View className="flex-row items-center gap-2">
+                <Sparkles size={15} color="#FBBF24" />
+                <Text className="text-cream/80 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Pair-with-a-Bite adds</Text>
+              </View>
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 22, color: "#FBBF24" }}>{sc.pairAdds}</Text>
+            </View>
+
+            {/* Encouragement */}
+            <Text className="text-cream/55 text-[12px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+              {hitTarget
+                ? "You've hit the collection target — nice work. Keep asking for the phone number and offering a bite."
+                : `Ask every customer for their phone number — ${Math.max(sc.target - sc.rate, 1)}% to go to hit ${sc.target}%. A quick bite suggestion lifts the basket too.`}
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
