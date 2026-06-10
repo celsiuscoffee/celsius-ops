@@ -50,6 +50,6 @@ jobs:
             npx eas-cli@latest update \
               --channel "$ch" \
               --platform android \
-              --message "OTA: louder chime + alarm (+6 dB, soft-limited)" \
+              --message "OTA: mystery-bag reveal reminder (header pill + sheet)" \
               --non-interactive || echo "channel $ch publish failed (continuing)"
           done
