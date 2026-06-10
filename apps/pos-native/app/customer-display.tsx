@@ -501,7 +501,7 @@ export default function CustomerDisplay() {
           {member ? <PendingOrMemberHeader member={member} /> : (
             <>
               <Image source={require("@/assets/icon.png")} style={{ width: 72, height: 72, borderRadius: 18, marginBottom: 10 }} resizeMode="contain" />
-              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: CREAM }}>Check Your Rewards</Text>
+              <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: CREAM }}>Claim Your Points</Text>
               <Eyebrow color="rgba(245,243,240,0.55)" style={{ marginTop: 6 }}>ENTER YOUR PHONE NUMBER</Eyebrow>
               <Numpad outletId={outletId} />
             </>
@@ -645,7 +645,7 @@ export default function CustomerDisplay() {
       {signInOpen && (
         <Pressable onPress={() => setSignInOpen(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.78)", alignItems: "center", justifyContent: "center" }}>
           <Pressable onPress={() => {}} className="rounded-3xl px-7 py-6 items-center" style={{ backgroundColor: SUB, borderWidth: 1, borderColor: "rgba(245,243,240,0.12)" }}>
-            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: CREAM }}>Check Your Rewards</Text>
+            <Text style={{ fontFamily: "Peachi-Bold", fontSize: 20, color: CREAM }}>Claim Your Points</Text>
             <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12.5, color: "rgba(245,243,240,0.55)", marginTop: 2 }}>Enter your phone number</Text>
             <Numpad outletId={outletId} />
             <Pressable onPress={() => setSignInOpen(false)} className="mt-3 active:opacity-60">
