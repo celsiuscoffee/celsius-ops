@@ -117,7 +117,7 @@ export default function LockScreen() {
           <Image source={require("@/assets/icon.png")} style={{ width: 96, height: 96, borderRadius: 24, opacity: 0.92 }} resizeMode="contain" />
           <Text style={{ fontFamily: "Peachi-Bold", fontSize: 46, color: "rgba(245,243,240,0.92)", lineHeight: 50 }}>{clockLabel(now)}</Text>
           <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 15, color: override ? "#FBBF24" : "rgba(245,243,240,0.55)" }}>
-            {override ? "Manager PIN to authorise" : "Till asleep — enter PIN to resume"}
+            {override ? "Manager PIN to authorise" : "POS asleep — enter PIN to resume"}
           </Text>
 
           {/* PIN dots */}
