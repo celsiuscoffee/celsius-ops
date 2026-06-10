@@ -191,9 +191,9 @@ export default function Register() {
 
   // Loyalty.
   const [member, setMember] = useState<Member | null>(null);
-  const [phoneInput, setPhoneInput] = useState("");
-  const [lookingUp, setLookingUp] = useState(false);
-  const [lookupError, setLookupError] = useState<string | null>(null);
+  // Phone-entry state (phoneInput / lookingUp / lookupError) lives inside
+  // <CustomerLookupField> so typing a digit re-renders only the keypad, not
+  // this whole register (cart + product grid) — keeps numpad input snappy.
   const [usual, setUsual] = useState<UsualItem[]>([]);
   const [reward, setReward] = useState<AppliedReward>(null);
   const [autoPromotions, setAutoPromotions] = useState<AppliedPromo[]>([]);
@@ -1051,29 +1051,18 @@ export default function Register() {
   }
 
   // ── Loyalty: lookup / rewards ──
-  async function lookup() {
-    const phone = phoneInput.trim();
-    if (phone.length < 8) { setLookupError("Enter a phone number"); return; }
-    setLookingUp(true);
-    setLookupError(null);
-    try {
-      const m = await lookupMember(phone);
-      if (!m) { setLookupError("No member found"); return; }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  // Called by <CustomerLookupField> once it has resolved a member from the
+  // entered phone. The phone-entry/in-flight/error state stays inside that
+  // child so keystrokes don't re-render the register.
+  function onMemberResolved(m: Member) {
+    smoothNext();
+    setMember(m);
+    setPanel("none");
+    fetchUsual(m.id).then((u) => {
       smoothNext();
-      setMember(m);
-      setPhoneInput("");
-      setPanel("none");
-      fetchUsual(m.id).then((u) => {
-        smoothNext();
-        setUsual(u);
-        if (u.length > 0) setActiveCat("usual");
-      }).catch(() => {});
-    } catch {
-      setLookupError("Lookup failed");
-    } finally {
-      setLookingUp(false);
-    }
+      setUsual(u);
+      if (u.length > 0) setActiveCat("usual");
+    }).catch(() => {});
   }
 
   function removeMember() {
@@ -1634,29 +1623,7 @@ export default function Register() {
 
         {/* Inline panels */}
         {panel === "customer" && !member && (
-          <View className="px-4 pb-3">
-            {/* Pressing "Customer" pops the keypad straight away (autoOpen) and
-                Done looks the member up — no separate search bar / button. */}
-            <NumpadField
-              value={phoneInput}
-              onChangeText={(t) => { setPhoneInput(t); setLookupError(null); }}
-              placeholder="Tap to enter customer phone"
-              mode="integer"
-              title="Customer phone"
-              autoOpen
-              onDone={lookup}
-              onClose={() => setPanel("none")}
-              className="h-11 px-3 rounded-xl border border-cream/15"
-              style={{ backgroundColor: "rgba(245,243,240,0.06)" }}
-            />
-            {lookingUp && (
-              <View className="flex-row items-center gap-2 mt-1.5">
-                <ActivityIndicator color="#fff" size="small" />
-                <Text className="text-cream/50 text-xs" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Looking up…</Text>
-              </View>
-            )}
-            {!!lookupError && <Text className="text-[#E5484D] text-xs mt-1.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{lookupError}</Text>}
-          </View>
+          <CustomerLookupField onResolved={onMemberResolved} onClose={() => setPanel("none")} />
         )}
 
         {/* Member card */}
@@ -3740,6 +3707,60 @@ function Stepper({ icon, onPress }: { icon: React.ReactNode; onPress: () => void
     <Pressable onPress={onPress} className="h-7 w-7 rounded-full items-center justify-center active:opacity-60" style={{ backgroundColor: "rgba(245,243,240,0.08)" }}>
       {icon}
     </Pressable>
+  );
+}
+
+/** Customer phone-lookup field. Owns the phone-entry, in-flight and error
+ *  state LOCALLY so each keypad digit re-renders only this small component +
+ *  its numpad modal — not the whole register (cart FlatList + product grid),
+ *  which was the source of the per-keystroke input lag. Resolves the member on
+ *  Done and hands it up via onResolved. */
+function CustomerLookupField({ onResolved, onClose }: { onResolved: (m: Member) => void; onClose: () => void }) {
+  const [phoneInput, setPhoneInput] = useState("");
+  const [lookingUp, setLookingUp] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
+  async function lookup() {
+    const phone = phoneInput.trim();
+    if (phone.length < 8) { setLookupError("Enter a phone number"); return; }
+    setLookingUp(true);
+    setLookupError(null);
+    try {
+      const m = await lookupMember(phone);
+      if (!m) { setLookupError("No member found"); return; }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onResolved(m);
+    } catch {
+      setLookupError("Lookup failed");
+    } finally {
+      setLookingUp(false);
+    }
+  }
+
+  return (
+    <View className="px-4 pb-3">
+      {/* Pressing "Customer" pops the keypad straight away (autoOpen) and
+          Done looks the member up — no separate search bar / button. */}
+      <NumpadField
+        value={phoneInput}
+        onChangeText={(t) => { setPhoneInput(t); if (lookupError) setLookupError(null); }}
+        placeholder="Tap to enter customer phone"
+        mode="integer"
+        title="Customer phone"
+        autoOpen
+        onDone={lookup}
+        onClose={onClose}
+        className="h-11 px-3 rounded-xl border border-cream/15"
+        style={{ backgroundColor: "rgba(245,243,240,0.06)" }}
+      />
+      {lookingUp && (
+        <View className="flex-row items-center gap-2 mt-1.5">
+          <ActivityIndicator color="#fff" size="small" />
+          <Text className="text-cream/50 text-xs" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Looking up…</Text>
+        </View>
+      )}
+      {!!lookupError && <Text className="text-[#E5484D] text-xs mt-1.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{lookupError}</Text>}
+    </View>
   );
 }
 
