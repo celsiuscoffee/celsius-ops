@@ -37,21 +37,16 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Build production APK locally in CI (captures full build log)
+      - name: Build production APK (EAS)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: "1"
-        # --local runs the SAME build EAS runs (install + prebuild + Expo
-        # autolinking + gradle) right here in the runner instead of on EAS
-        # servers — so the COMPLETE build log, including which expo modules
-        # autolink, lands in this GitHub Actions log (readable) and the APK is
-        # produced locally as an artifact. Used to diagnose why sunmi-printer /
-        # customer-display weren't linking in the cloud builds.
-        run: npx eas-cli@latest build --platform android --profile production-apk --local --non-interactive --output "$GITHUB_WORKSPACE/celsius-pos.apk"
-      - name: Upload APK artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: celsius-pos-apk
-          path: ${{ github.workspace }}/celsius-pos.apk
-          if-no-files-found: ignore
+        # --no-wait: submit to EAS and return; the APK is produced on EAS
+        # servers and downloadable from expo.dev when the build finishes.
+        # (A --local in-runner variant was tried for diagnostics but hangs on
+        # the small GitHub runners — don't bring it back.)
+        # KNOWN ISSUE: cloud builds currently drop the local native modules
+        # (sunmi-printer / customer-display) — monorepo autolinking; verify any
+        # APK with `unzip -p app.apk 'classes*.dex' | grep -ai sunmiprinter`
+        # before installing. Local Mac builds link correctly (DEPLOY-LOCAL.md).
+        run: npx eas-cli@latest build --platform android --profile production-apk --non-interactive --no-wait
