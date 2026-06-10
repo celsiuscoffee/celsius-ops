@@ -1,23 +1,25 @@
 /**
- * Transition-mode bridge: pull StoreHub sales for StoreHub-sourced outlets
- * from the BACKOFFICE sales module (which already has the StoreHub client +
- * credentials), forwarding the caller's bearer token. Returns contributions
- * in SEN so the staff dashboard route can add them to native pos+app totals.
+ * StoreHub contributions for the staff Sales dashboard — read DIRECTLY from the
+ * shared `storehub_sales` archive (same DB the route already queries for
+ * pos_orders/orders). No cross-app bridge, no JWT — so it can't 401.
  *
- * StoreHub gives revenue / orders / channels / trend — NOT payment-method or
- * customer-level growth, so those stay native/app-only.
+ * Cutover-routed like the backoffice unified reader: pre-cutover keep ALL
+ * StoreHub; post-cutover keep ONLY external/online rows (Grab/Beep/offline —
+ * they carry a `channel`) and drop channel-less till rows, which are on
+ * pos_orders now (keeping them would double-count). Returns SEN so the dashboard
+ * route adds it straight onto the native pos+pickup totals.
+ *
+ * "Today" freshness depends on the storehub-sync cron (now hourly) populating
+ * the archive — the staff app has no live StoreHub client, so today can lag
+ * ≤1h vs the backoffice's live pull. StoreHub gives revenue/orders/channels/
+ * trend only — payment-method + customer growth stay native/app-only.
  */
+import { supabaseAdmin } from "@/lib/supabase";
+import {
+  getMYTDateStr, getMYTHour, getRound, ROUNDS, mytDayStartUTC, mytDayEndUTC,
+} from "./sales-helpers";
 
-type ShChannel = { revenue?: number; orders?: number };
-type ShPeriod = {
-  summary?: { revenue?: number; orders?: number };
-  hourly?: { hour: number; revenue: number }[];
-  dailyTotals?: { date: string; revenue: number }[];
-  channels?: { dineIn?: ShChannel; takeaway?: ShChannel; delivery?: ShChannel };
-  rounds?: { key: string; revenue: number; orders?: number }[];
-};
-
-const sen = (rm: number | undefined) => Math.round((rm || 0) * 100);
+const sen = (rm: number) => Math.round((rm || 0) * 100);
 
 export type ShContrib = {
   curRevSen: number; curOrd: number; prevRevSen: number; prevOrd: number;
@@ -30,10 +32,25 @@ export type ShContrib = {
   warnings: string[];
 };
 
-export async function fetchStorehubContributions(opts: {
-  baseUrl: string;
-  authz: string | null;
-  outlets: { id: string; storehubId: string | null }[];
+type ShRow = {
+  outlet_id: string;
+  transaction_time: string;
+  sub_total: number | null;
+  channel: string | null;
+  order_type: string | null;
+  is_cancelled: boolean | null;
+};
+
+/** StoreHub channel/order_type → the dashboard's 3 channels (Grab/Beep → delivery). */
+function classifyShChannel(channel: string | null, orderType: string | null): "dine_in" | "takeaway" | "delivery" {
+  const s = `${channel ?? ""} ${orderType ?? ""}`.toLowerCase();
+  if (/grab|foodpanda|shopee|deliveroo|beep|deliver/.test(s)) return "delivery";
+  if (/take|tapau|dabao|bungkus|pickup/.test(s)) return "takeaway";
+  return "dine_in";
+}
+
+export async function getStorehubFromDB(opts: {
+  outlets: { id: string; cutoverAt: Date | null }[];
   cur: { from: string; to: string };
   prev: { from: string; to: string };
   granularity: "hour" | "day";
@@ -49,64 +66,55 @@ export async function fetchStorehubContributions(opts: {
     roundOrders: {},
     warnings: [],
   };
-  if (!opts.authz || opts.outlets.length === 0) {
-    if (!opts.authz) out.warnings.push("StoreHub skipped (no bearer token)");
+  if (opts.outlets.length === 0) return out;
+
+  const ids = opts.outlets.map((o) => o.id);
+  const cutover = new Map(opts.outlets.map((o) => [o.id, o.cutoverAt] as const));
+  const winStart = mytDayStartUTC(opts.prev.from);
+  const winEnd = mytDayEndUTC(opts.cur.to);
+
+  const { data, error } = await supabaseAdmin
+    .from("storehub_sales")
+    .select("outlet_id, transaction_time, sub_total, channel, order_type, is_cancelled")
+    .in("outlet_id", ids)
+    .gte("transaction_time", winStart)
+    .lte("transaction_time", winEnd)
+    .limit(100000);
+
+  if (error) {
+    out.warnings.push(`storehub_sales: ${error.message}`);
     return out;
   }
 
-  const periods = `${opts.cur.from}:${opts.cur.to},${opts.prev.from}:${opts.prev.to}`;
-  const results = await Promise.all(
-    opts.outlets.map(async (o) => {
-      try {
-        // source=storehub → backoffice returns StoreHub-only (no pos+pickup), so
-        // we can add our own native pos+pickup totals without double-counting.
-        const url = `${opts.baseUrl}/api/sales/compare?periods=${periods}&outletId=${o.id}&source=storehub`;
-        // Backoffice /api/sales/compare authenticates via getSession(), which
-        // reads the `celsius-session` COOKIE — never the Authorization header.
-        // The staff bearer token is the SAME JWT (shared @celsius/auth +
-        // JWT_SECRET), so forward it as that cookie too. Without this the bridge
-        // 401s and StoreHub silently drops out of the consolidated sales totals.
-        const jwt = opts.authz!.replace(/^Bearer\s+/i, "");
-        const res = await fetch(url, {
-          headers: { cookie: `celsius-session=${jwt}`, authorization: opts.authz! },
-        });
-        console.warn(`[sh-bridge] ${o.id} -> ${res.status}`);
-        if (!res.ok) return { id: o.id, periods: null as ShPeriod[] | null };
-        const j = (await res.json()) as { periods?: ShPeriod[] };
-        return { id: o.id, periods: j.periods ?? null };
-      } catch (e) {
-        console.error(`[sh-bridge] ${o.id} error`, e instanceof Error ? e.message : e);
-        return { id: o.id, periods: null as ShPeriod[] | null };
-      }
-    }),
-  );
+  const inCur = (d: string) => d >= opts.cur.from && d <= opts.cur.to;
+  const inPrev = (d: string) => d >= opts.prev.from && d <= opts.prev.to;
 
-  for (const r of results) {
-    if (!r.periods || r.periods.length < 2) {
-      out.warnings.push(`StoreHub ${r.id}: unavailable`);
-      continue;
+  for (const r of (data || []) as ShRow[]) {
+    if (r.is_cancelled === true) continue;
+    // Cutover routing: after cutover keep only channel-carrying (external) rows;
+    // channel-less till rows are on pos_orders now → keeping them double-counts.
+    const co = cutover.get(r.outlet_id);
+    if (co && new Date(r.transaction_time).getTime() >= co.getTime()) {
+      if (!(r.channel && r.channel.trim() !== "")) continue;
     }
-    const [c, p] = r.periods;
-    out.curRevSen += sen(c.summary?.revenue); out.curOrd += c.summary?.orders || 0;
-    out.prevRevSen += sen(p.summary?.revenue); out.prevOrd += p.summary?.orders || 0;
-    if (opts.granularity === "hour") {
-      for (let h = 0; h < 24; h++) {
-        out.curHour[h] += sen(c.hourly?.find((x) => x.hour === h)?.revenue);
-        out.prevHour[h] += sen(p.hourly?.find((x) => x.hour === h)?.revenue);
+    const d = getMYTDateStr(r.transaction_time);
+    const h = getMYTHour(r.transaction_time);
+    const rev = sen(r.sub_total || 0);
+    const ch = classifyShChannel(r.channel, r.order_type);
+    if (inCur(d)) {
+      out.curRevSen += rev; out.curOrd++;
+      out.curByDate[d] = (out.curByDate[d] || 0) + rev;
+      out.curHour[h] += rev;
+      out.chan[ch] += rev; out.chanOrders[ch]++;
+      const rd = getRound(h);
+      if (rd) {
+        out.rounds[rd] = (out.rounds[rd] || 0) + rev;
+        out.roundOrders[rd] = (out.roundOrders[rd] || 0) + 1;
       }
-    } else {
-      for (const d of c.dailyTotals || []) out.curByDate[d.date] = (out.curByDate[d.date] || 0) + sen(d.revenue);
-      for (const d of p.dailyTotals || []) out.prevByDate[d.date] = (out.prevByDate[d.date] || 0) + sen(d.revenue);
-    }
-    out.chan.dine_in += sen(c.channels?.dineIn?.revenue);
-    out.chan.takeaway += sen(c.channels?.takeaway?.revenue);
-    out.chan.delivery += sen(c.channels?.delivery?.revenue);
-    out.chanOrders.dine_in += c.channels?.dineIn?.orders || 0;
-    out.chanOrders.takeaway += c.channels?.takeaway?.orders || 0;
-    out.chanOrders.delivery += c.channels?.delivery?.orders || 0;
-    for (const rd of c.rounds || []) {
-      out.rounds[rd.key] = (out.rounds[rd.key] || 0) + sen(rd.revenue);
-      out.roundOrders[rd.key] = (out.roundOrders[rd.key] || 0) + (rd.orders || 0);
+    } else if (inPrev(d)) {
+      out.prevRevSen += rev; out.prevOrd++;
+      out.prevByDate[d] = (out.prevByDate[d] || 0) + rev;
+      out.prevHour[h] += rev;
     }
   }
   return out;
