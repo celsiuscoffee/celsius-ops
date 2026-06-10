@@ -50,6 +50,6 @@ jobs:
             npx eas-cli@latest update \
               --channel "$ch" \
               --platform android \
-              --message "OTA: QR-table item list + new chime + offline (current JS)" \
+              --message "OTA: louder chime + alarm (+6 dB, soft-limited)" \
               --non-interactive || echo "channel $ch publish failed (continuing)"
           done
