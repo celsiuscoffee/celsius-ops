@@ -1,4 +1,5 @@
 import { api } from "../api";
+import { BACKOFFICE_URL } from "../env";
 
 export type Mode = "day" | "week" | "month" | "custom";
 export type Granularity = "hour" | "day";
@@ -44,5 +45,8 @@ export function fetchSalesDashboard(
   if (outletId) q.set("outletId", outletId);
   if (from) q.set("from", from);
   if (to) q.set("to", to);
-  return api<SalesDashboard>(`/api/sales/dashboard?${q.toString()}`);
+  // Bridge-free: the backoffice serves sales in-process (no staff /compare
+  // bridge, no 401). The token validates here once both Vercel projects share
+  // JWT_SECRET (migration Phase 0); until then this 401s (load error, no logout).
+  return api<SalesDashboard>(`/api/sales/native-dashboard?${q.toString()}`, { baseUrl: BACKOFFICE_URL });
 }
