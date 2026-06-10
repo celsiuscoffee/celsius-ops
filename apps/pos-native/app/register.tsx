@@ -2617,49 +2617,66 @@ export default function Register() {
       </Modal>
 
       {/* ── Paid confirmation ── */}
+      {/* When a mystery moment is live on the customer display, the modal goes
+          SPLIT (like the second screen's thank-you/mystery layout): left half
+          Paid + New Order, right half a full mystery card mirroring the
+          customer's reveal in the same saffron/espresso language. No mystery →
+          the familiar single centred card. */}
       <Modal visible={!!paid} transparent animationType="fade" onRequestClose={newOrder}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
           <Pressable onPress={newOrder} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-          <View className="w-[460px] rounded-3xl bg-surface border border-border p-8 items-center">
-            <CheckCircle2 size={64} color={OK} />
-            <Text className="text-cream text-2xl mt-4" style={{ fontFamily: "Peachi-Bold" }}>Paid</Text>
-            <Text className="text-cream/55 mt-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{paid?.orderNumber}</Text>
-            <Text className="text-amber-400 text-4xl mt-3 mb-4" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{paid ? rm(paid.total) : ""}</Text>
-            {!!paid && paid.beansEarned > 0 && (
-              <View className="flex-row items-center mb-4 px-4 py-2 rounded-full" style={{ gap: 8, backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.35)" }}>
-                <Sparkles size={16} color="#FBBF24" />
-                <Text className="text-amber-300" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 15 }}>+{paid.beansEarned} Points earned</Text>
-                <Text className="text-cream/45" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13 }}>· {paid.beansBalance} total</Text>
-              </View>
-            )}
-            {/* Live mirror of the customer display's mystery-bag moment —
-                display-only, so staff see whether the Reveal tile is still
-                sitting on the second screen and can remind the customer
-                before they walk off. Driven by useDisplay.mystery (shared
-                runtime with the customer display, zero extra queries). */}
+          <View
+            className="rounded-3xl bg-surface border border-border p-8"
+            style={{ width: mysteryMirror !== "none" ? 860 : 460, flexDirection: mysteryMirror !== "none" ? "row" : "column", alignItems: "center", gap: mysteryMirror !== "none" ? 28 : 0 }}
+          >
+            <View className="items-center" style={{ flex: mysteryMirror !== "none" ? 1 : undefined, alignSelf: "stretch", justifyContent: "center" }}>
+              <CheckCircle2 size={64} color={OK} />
+              <Text className="text-cream text-2xl mt-4" style={{ fontFamily: "Peachi-Bold" }}>Paid</Text>
+              <Text className="text-cream/55 mt-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{paid?.orderNumber}</Text>
+              <Text className="text-amber-400 text-4xl mt-3 mb-4" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{paid ? rm(paid.total) : ""}</Text>
+              {!!paid && paid.beansEarned > 0 && (
+                <View className="flex-row items-center mb-6 px-4 py-2 rounded-full" style={{ gap: 8, backgroundColor: "rgba(251,191,36,0.12)", borderWidth: 1, borderColor: "rgba(251,191,36,0.35)" }}>
+                  <Sparkles size={16} color="#FBBF24" />
+                  <Text className="text-amber-300" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 15 }}>+{paid.beansEarned} Points earned</Text>
+                  <Text className="text-cream/45" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13 }}>· {paid.beansBalance} total</Text>
+                </View>
+              )}
+              <Pressable onPress={newOrder} className="h-13 px-8 py-3.5 rounded-2xl bg-primary active:opacity-80">
+                <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>New Order</Text>
+              </Pressable>
+            </View>
+
+            {/* Right half — staff-side mirror of the customer display's mystery
+                card. Display-only; the actual Reveal tap stays with the
+                customer on the second screen. */}
             {mysteryMirror === "checking" && (
-              <View className="flex-row items-center mb-6 px-4 py-2 rounded-full" style={{ gap: 8, backgroundColor: "rgba(245,243,240,0.06)", borderWidth: 1, borderColor: "rgba(245,243,240,0.15)" }}>
-                <ActivityIndicator size="small" color="rgba(245,243,240,0.6)" />
-                <Text className="text-cream/55" style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 13 }}>Checking mystery bag…</Text>
+              <View className="rounded-3xl items-center justify-center" style={{ flex: 1, alignSelf: "stretch", paddingHorizontal: 24, paddingVertical: 30, backgroundColor: "rgba(251,191,36,0.08)", borderWidth: 1, borderColor: "rgba(251,191,36,0.25)", gap: 12 }}>
+                <Gift size={44} color="rgba(251,191,36,0.65)" strokeWidth={1.8} />
+                <Text className="text-cream" style={{ fontFamily: "Peachi-Bold", fontSize: 22, textAlign: "center" }}>Wrapping up…</Text>
+                <Text className="text-cream/55" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, textAlign: "center" }}>Checking this order for a mystery bag</Text>
+                <ActivityIndicator color="#FBBF24" />
               </View>
             )}
             {mysteryMirror === "ready" && (
-              <View className="flex-row items-center mb-6 px-4 py-2 rounded-full" style={{ gap: 8, backgroundColor: "rgba(251,191,36,0.14)", borderWidth: 1, borderColor: "rgba(251,191,36,0.5)" }}>
-                <Gift size={16} color="#FBBF24" />
-                <Text className="text-amber-300" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 14 }}>Mystery bag on customer screen</Text>
-                <Text className="text-cream/55" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12 }}>· remind them to tap Reveal</Text>
+              <View className="rounded-3xl items-center justify-center" style={{ flex: 1, alignSelf: "stretch", paddingHorizontal: 24, paddingVertical: 30, backgroundColor: "#FBBF24", borderWidth: 1, borderColor: "rgba(26,2,0,0.25)", gap: 8 }}>
+                <Gift size={50} color="#1A0200" strokeWidth={1.8} />
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, letterSpacing: 2.2, color: "rgba(26,2,0,0.7)", textAlign: "center" }}>ON CUSTOMER SCREEN</Text>
+                <Text style={{ fontFamily: "Peachi-Bold", fontSize: 28, color: "#1A0200", textAlign: "center" }}>Mystery Reward</Text>
+                <Text style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 14, color: "rgba(26,2,0,0.72)", textAlign: "center" }}>
+                  Remind the customer to tap{"\n"}Reveal before they leave
+                </Text>
               </View>
             )}
             {mysteryMirror === "revealed" && (
-              <View className="flex-row items-center mb-6 px-4 py-2 rounded-full" style={{ gap: 8, backgroundColor: "rgba(34,197,94,0.12)", borderWidth: 1, borderColor: "rgba(34,197,94,0.4)" }}>
-                <Gift size={16} color="#22C55E" />
-                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 14, color: "#86efac" }}>Mystery revealed</Text>
-                {!!mysteryPrize && <Text className="text-cream/55" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 12 }}>· {mysteryPrize}</Text>}
+              <View className="rounded-3xl items-center justify-center" style={{ flex: 1, alignSelf: "stretch", paddingHorizontal: 24, paddingVertical: 30, backgroundColor: "#160800", borderWidth: 1, borderColor: "rgba(251,191,36,0.3)", gap: 8 }}>
+                <Sparkles size={44} color="#FBBF24" strokeWidth={1.6} />
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, letterSpacing: 2.2, color: "rgba(34,197,94,0.9)", textAlign: "center" }}>REVEALED</Text>
+                {!!mysteryPrize && (
+                  <Text style={{ fontFamily: "Peachi-Bold", fontSize: 30, color: "#FBBF24", textAlign: "center" }}>{mysteryPrize}</Text>
+                )}
+                <Text className="text-cream/55" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, textAlign: "center" }}>The prize is in their Celsius wallet</Text>
               </View>
             )}
-            <Pressable onPress={newOrder} className="h-13 px-8 py-3.5 rounded-2xl bg-primary active:opacity-80">
-              <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>New Order</Text>
-            </Pressable>
           </View>
         </View>
       </Modal>

@@ -50,6 +50,6 @@ jobs:
             npx eas-cli@latest update \
               --channel "$ch" \
               --platform android \
-              --message "OTA: chime rings twice on new orders" \
+              --message "OTA: split paid screen — full mystery card mirror" \
               --non-interactive || echo "channel $ch publish failed (continuing)"
           done
