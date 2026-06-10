@@ -50,6 +50,6 @@ jobs:
             npx eas-cli@latest update \
               --channel "$ch" \
               --platform android \
-              --message "OTA: fix phone-numpad input lag on register" \
+              --message "OTA: pause-online-ordering switch in POS Settings" \
               --non-interactive || echo "channel $ch publish failed (continuing)"
           done
