@@ -81,8 +81,16 @@ export function primeSounds(): void {
   getPlayer("alarm");
 }
 
-/** Soft bell — a new external order arrived. */
-export function playChime(): void { play("chime"); }
+/** Soft bell — a new external order arrived. Rings TWICE: the cue plays, then
+ *  replays once the ~2.4s clip has finished so the two rings are distinct (a
+ *  single play() can't overlap — native DeviceSpeaker restarts the MediaPlayer
+ *  and the expo-audio path seeks to 0 — so we space them by the clip length).
+ *  Works on both playback paths and ships over OTA, no asset/rebuild needed. */
+const CHIME_REPEAT_MS = 2500; // chime clip is ~2.40s; small gap before ring #2
+export function playChime(): void {
+  play("chime");
+  setTimeout(() => play("chime"), CHIME_REPEAT_MS);
+}
 /** Urgent warble — an order is past the serving-time target. */
 export function playAlarm(): void { play("alarm"); }
 
