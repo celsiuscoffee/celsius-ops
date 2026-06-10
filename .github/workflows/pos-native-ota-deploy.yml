@@ -50,6 +50,6 @@ jobs:
             npx eas-cli@latest update \
               --channel "$ch" \
               --platform android \
-              --message "OTA: mystery-bag reveal reminder (header pill + sheet)" \
+              --message "OTA: paid-screen mystery reveal mirror for staff" \
               --non-interactive || echo "channel $ch publish failed (continuing)"
           done

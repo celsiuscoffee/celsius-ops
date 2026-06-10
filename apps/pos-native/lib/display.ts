@@ -71,6 +71,13 @@ type DisplayState = {
    *  (e.g. "Spend RM1.30 more to use this reward"). Shown as a toast on the
    *  display, then cleared; null when there's nothing to show. */
   redeemError: string | null;
+  /** Mirror of the customer display's mystery-bag moment, so the STAFF side
+   *  of the paid screen can see it live and remind a customer who walks off
+   *  without tapping Reveal. checking → post-payment drop poll in flight;
+   *  ready → the Reveal tile is on the customer screen; revealed → done
+   *  (mysteryPrize carries the human label, e.g. "2× points"). */
+  mystery: "none" | "checking" | "ready" | "revealed";
+  mysteryPrize: string | null;
   setStatus: (s: DisplayStatus) => void;
   setMember: (m: DisplayMember) => void;
   setOrderNumber: (n: string | null) => void;
@@ -86,6 +93,7 @@ type DisplayState = {
   setBeansEarned: (n: number) => void;
   setRedeemRequest: (r: DisplayRedeemRequest) => void;
   setRedeemError: (m: string | null) => void;
+  setMystery: (m: "none" | "checking" | "ready" | "revealed", prize?: string | null) => void;
   reset: () => void;
 };
 
@@ -105,6 +113,8 @@ export const useDisplay = create<DisplayState>((set) => ({
   beansEarned: 0,
   redeemRequest: null,
   redeemError: null,
+  mystery: "none",
+  mysteryPrize: null,
   setStatus: (status) => set({ status }),
   setMember: (member) => set({ member }),
   setOrderNumber: (orderNumber) => set({ orderNumber }),
@@ -120,7 +130,8 @@ export const useDisplay = create<DisplayState>((set) => ({
   setBeansEarned: (beansEarned) => set({ beansEarned }),
   setRedeemRequest: (redeemRequest) => set({ redeemRequest }),
   setRedeemError: (redeemError) => set({ redeemError }),
+  setMystery: (mystery, prize = null) => set({ mystery, mysteryPrize: prize }),
   // Keep member identified across orders (a returning regular stays
   // logged in for the next basket); only clear cart-scoped context.
-  reset: () => set({ status: "idle", orderNumber: null, orderId: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, orderTypeChosen: false, payTotal: 0, payMethod: null, beansEarned: 0, redeemRequest: null, redeemError: null }),
+  reset: () => set({ status: "idle", orderNumber: null, orderId: null, reward: null, extraDiscount: null, manualDiscount: null, tableNumber: null, orderTypeChosen: false, payTotal: 0, payMethod: null, beansEarned: 0, redeemRequest: null, redeemError: null, mystery: "none", mysteryPrize: null }),
 }));
