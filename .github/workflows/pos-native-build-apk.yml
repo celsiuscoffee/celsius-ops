@@ -16,6 +16,13 @@ on:
   push:
     tags:
       - "build-apk-*"
+    # …and by touching this marker file on the working branch (branch pushes
+    # ARE allowed here even when tag pushes / dispatch aren't). Path-scoped so
+    # only an intentional bump of the marker builds — ordinary commits don't.
+    branches:
+      - "claude/awesome-davinci-CvikE"
+    paths:
+      - "apps/pos-native/.apk-build-trigger"
 
 jobs:
   build:
@@ -36,4 +43,10 @@ jobs:
           CI: "1"
         # --no-wait: submit to EAS and return; the APK is produced on EAS
         # servers and downloadable from expo.dev when the build finishes.
+        # (A --local in-runner variant was tried for diagnostics but hangs on
+        # the small GitHub runners — don't bring it back.)
+        # KNOWN ISSUE: cloud builds currently drop the local native modules
+        # (sunmi-printer / customer-display) — monorepo autolinking; verify any
+        # APK with `unzip -p app.apk 'classes*.dex' | grep -ai sunmiprinter`
+        # before installing. Local Mac builds link correctly (DEPLOY-LOCAL.md).
         run: npx eas-cli@latest build --platform android --profile production-apk --non-interactive --no-wait

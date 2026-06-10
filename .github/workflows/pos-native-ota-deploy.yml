@@ -1,0 +1,55 @@
+name: pos-native OTA deploy (marker)
+
+# Manual OTA publish for the SUNMI registers, kickable WITHOUT the
+# Actions:write dispatch permission (which the integration lacks → 403) and
+# without pushing to main. Bumping the marker file on the working branch
+# publishes the CURRENT branch JS to the `production` EAS Update channel —
+# the same channel the production-apk builds subscribe to. JS/asset only;
+# a native/dependency change still needs a fresh APK.
+#
+# Path-scoped so only an intentional bump of the marker deploys — ordinary
+# commits to the branch don't. Requires the EXPO_TOKEN repo secret (same one
+# the push-to-main OTA workflow uses).
+
+on:
+  push:
+    branches:
+      - "claude/awesome-davinci-CvikE"
+    paths:
+      - "apps/pos-native/.ota-deploy-trigger"
+
+jobs:
+  ota:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/pos-native
+    env:
+      EXPO_PUBLIC_SUPABASE_URL: "https://kqdcdhpnyuwrxqhbuyfl.supabase.co"
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxZGNkaHBueXV3cnhxaGJ1eWZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2Nzc4MDAsImV4cCI6MjA5MDI1MzgwMH0.5_nnl-RLtSEVgHyT9Q9VMXVqx_cIOjGSySr2CTvL4W0"
+      EXPO_PUBLIC_API_BASE: "https://backoffice.celsiuscoffee.com"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Publish OTA update to all channels (production, preview, development)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: "1"
+        # Fan out the same current JS to every channel our build profiles use,
+        # so whichever channel an installed APK is tuned to (the recovered
+        # celsius-pos-latest build's channel is unknown) pulls the update.
+        # Runtime version is appVersion 1.0.0 for all of them. || true so one
+        # unlinked channel doesn't fail the whole deploy.
+        run: |
+          for ch in production preview development; do
+            echo "=== publishing to channel: $ch ==="
+            npx eas-cli@latest update \
+              --channel "$ch" \
+              --platform android \
+              --message "OTA: louder chime + alarm (+6 dB, soft-limited)" \
+              --non-interactive || echo "channel $ch publish failed (continuing)"
+          done

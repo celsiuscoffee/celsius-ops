@@ -34,5 +34,12 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3"
+  },
+  "expo": {
+    "autolinking": {
+      "searchPaths": [
+        "apps/pos-native/modules"
+      ]
+    }
   }
 }
