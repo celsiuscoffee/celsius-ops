@@ -40,5 +40,5 @@ jobs:
             --channel production \
             --platform all \
             --environment production \
-            --message "fix: unique menu-oos realtime topic — stops Reconnecting crash loop" \
+            --message "fix: menu-oos subscription churn — harden Reconnecting crash fix" \
             --non-interactive
