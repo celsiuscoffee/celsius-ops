@@ -1,1 +1,1 @@
-2026-06-10T11:38:38Z copy: staff "Ask Phone Number for Points" + customer "Claim Your Points"
+2026-06-10T12:05:00Z perf: fix phone-numpad input lag on register (isolate keypad re-renders)

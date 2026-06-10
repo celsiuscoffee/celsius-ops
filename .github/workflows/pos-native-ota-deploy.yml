@@ -50,6 +50,6 @@ jobs:
             npx eas-cli@latest update \
               --channel "$ch" \
               --platform android \
-              --message "OTA: points wording (staff Ask Phone Number / customer Claim Your Points)" \
+              --message "OTA: fix phone-numpad input lag on register" \
               --non-interactive || echo "channel $ch publish failed (continuing)"
           done
