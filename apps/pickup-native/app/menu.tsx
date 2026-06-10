@@ -125,11 +125,16 @@ export default function Menu() {
   // seconds instead of waiting for a manual refresh. Mirrors the register's
   // own availability channel (apps/pos-native/app/register.tsx).
   //
-  // The topic gets a fresh random suffix on EVERY effect run: with a fixed
-  // topic, a second mounted menu screen (or an outlet switch racing the async
-  // removeChannel) made supabase-js reuse the still-subscribed channel and
-  // throw "cannot add `postgres_changes` callbacks ... after `subscribe()`",
-  // crash-looping the app (same failure useMaybankQrConfig hit).
+  // The effect keys ONLY on outletId — refetchMenu is read through a ref so
+  // its changing identity (it changes on every menu refresh) no longer
+  // re-runs this effect. That churn was the trigger: a re-run created a new
+  // channel while removeChannel of the old one was still in flight, and the
+  // fixed topic made supabase-js hand back the still-subscribed channel, so
+  // .on("postgres_changes", …) threw "cannot add callbacks after subscribe()"
+  // and crash-looped the app (the "Reconnecting…" screen). Belt-and-braces, a
+  // fresh random topic suffix guarantees no reuse even under a fast switch.
+  const refetchMenuRef = useRef(refetchMenu);
+  useEffect(() => { refetchMenuRef.current = refetchMenu; }, [refetchMenu]);
   useEffect(() => {
     if (!outletId) return;
     const channel = supabase
@@ -143,14 +148,14 @@ export default function Menu() {
           filter: `outlet_id=eq.${outletId}`,
         },
         () => {
-          void refetchMenu();
+          void refetchMenuRef.current();
         },
       )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [outletId, refetchMenu]);
+  }, [outletId]);
 
   // Force outlet pick before showing the menu. Without this, customers
   // could shop the whole menu, hit checkout, and only THEN learn they
