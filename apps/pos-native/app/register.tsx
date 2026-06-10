@@ -173,6 +173,15 @@ export default function Register() {
   // Product ids the cashier pair-added for THIS cart — stamped with the real
   // order_id at checkout for exact upsell attribution (see stampPairOrder).
   const pairAddsRef = useRef<string[]>([]);
+  // The cashier's own today numbers (collection rate + pair adds) — shared by
+  // the header chip and the encouraging performance nudge.
+  const [scorecard, setScorecard] = useState<Scorecard | null>(null);
+  // Encouraging performance nudge — shown on the NEXT order after a run of
+  // phone-collection misses, or when sitting below target. Decided at checkout.
+  const [perfNudge, setPerfNudge] = useState<{ reason: "streak" | "below"; rate: number; target: number } | null>(null);
+  const missStreakRef = useRef(0);     // consecutive paid orders with no phone captured
+  const lastNudgeAtRef = useRef(0);    // cooldown so we never nag
+  const pendingNudgeRef = useRef<{ reason: "streak" | "below"; rate: number; target: number } | null>(null);
   const [paid, setPaid] = useState<{ orderNumber: string; total: number; beansEarned: number; beansBalance: number; wasMember: boolean; claimablePoints: number } | null>(null);
   const [modProduct, setModProduct] = useState<Product | null>(null);
   // Cart line whose modifiers are being edited (opens the picker pre-selected).
@@ -856,6 +865,15 @@ export default function Register() {
     if (paid) return;
     setDisplayStatus(lines.length > 0 ? "ordering" : "idle");
   }, [lines.length, paid]);
+  // Keep the cashier's scorecard fresh (mount, and after each sale / pair add).
+  useEffect(() => {
+    const eid = staff?.staffId;
+    if (!eid) { setScorecard(null); return; }
+    let alive = true;
+    getScorecard(eid, outletId).then((s) => { if (alive) setScorecard(s); });
+    return () => { alive = false; };
+  }, [staff?.staffId, outletId, scorecardRefresh]);
+
   useEffect(() => { useDisplay.getState().setOrderType(orderType); }, [orderType]);
   // Mirror whether the cashier has actually PICKED dine-in/takeaway yet — the
   // 2nd screen shouldn't show "Takeaway" just because that's the internal default.
@@ -1257,6 +1275,8 @@ export default function Register() {
     useDisplay.getState().setMember(null);
     useDisplay.getState().setExtraDiscount(null);
     useDisplay.getState().setManualDiscount(null);
+    // Surface any performance nudge queued at the last checkout.
+    if (pendingNudgeRef.current) { setPerfNudge(pendingNudgeRef.current); pendingNudgeRef.current = null; }
   }
 
   async function pay(method: string) {
@@ -1329,6 +1349,25 @@ export default function Register() {
       if (pairAddsRef.current.length > 0) {
         stampPairOrder(sale.id, staff.staffId, outletId, pairAddsRef.current);
         pairAddsRef.current = [];
+      }
+      // Encouraging performance nudge — decide here, surface on the next order
+      // (so it doesn't fight the thank-you screen). Two gentle triggers:
+      //  • a run of 3 orders with no phone captured, or
+      //  • sitting below target after a handful of orders (cooled down 15 min).
+      {
+        const collected = !!member?.phone;
+        missStreakRef.current = collected ? 0 : missStreakRef.current + 1;
+        const sc = scorecard;
+        const tgt = sc?.target ?? 70;
+        const now = Date.now();
+        if (missStreakRef.current >= 3) {
+          pendingNudgeRef.current = { reason: "streak", rate: sc?.rate ?? 0, target: tgt };
+          missStreakRef.current = 0;
+          lastNudgeAtRef.current = now;
+        } else if (sc && sc.orders >= 5 && sc.rate < tgt && now - lastNudgeAtRef.current > 15 * 60 * 1000) {
+          pendingNudgeRef.current = { reason: "below", rate: sc.rate, target: tgt };
+          lastNudgeAtRef.current = now;
+        }
       }
       clear();
       setShowCheckout(false);
@@ -1417,9 +1456,7 @@ export default function Register() {
               </Text>
             </View>
             {/* Small personal scorecard, right beside the brand. */}
-            {staff?.staffId && (
-              <CashierScorecardChip outletId={outletId} employeeId={staff.staffId} refreshKey={scorecardRefresh} />
-            )}
+            <CashierScorecardChip sc={scorecard} />
             {/* Order type is chosen at checkout now — no upfront toggle here. */}
           </View>
           <View className="flex-row items-center gap-2">
@@ -2608,6 +2645,9 @@ export default function Register() {
           Paid + New Order, right half a full mystery card mirroring the
           customer's reveal in the same saffron/espresso language. No mystery →
           the familiar single centred card. */}
+      {/* Encouraging performance nudge — shown between orders, never over a live sale. */}
+      <PerformanceNudge nudge={perfNudge} onClose={() => setPerfNudge(null)} />
+
       <Modal visible={!!paid} transparent animationType="fade" onRequestClose={newOrder}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
           <Pressable onPress={newOrder} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
@@ -3735,17 +3775,8 @@ function Stepper({ icon, onPress }: { icon: React.ReactNode; onPress: () => void
  *  the detail + a short encouragement. Self-contained so its refetch only
  *  re-renders the chip, not the register. Re-fetches whenever refreshKey bumps
  *  (after a paid sale / pair add). */
-function CashierScorecardChip({
-  outletId, employeeId, refreshKey,
-}: { outletId: string | null; employeeId: string; refreshKey: number }) {
-  const [sc, setSc] = useState<Scorecard | null>(null);
+function CashierScorecardChip({ sc }: { sc: Scorecard | null }) {
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    getScorecard(employeeId, outletId).then((s) => { if (alive) setSc(s); });
-    return () => { alive = false; };
-  }, [employeeId, outletId, refreshKey]);
 
   if (!sc) return null;
 
@@ -3815,6 +3846,36 @@ function CashierScorecardChip({
         </Pressable>
       </Modal>
     </>
+  );
+}
+
+/** Encouraging, between-orders performance nudge. Pops once (on the order after
+ *  the trigger) so it never interrupts a live sale, with positive framing — a
+ *  "run of misses" reminder to ask for the number, or a gentle "below target"
+ *  push. One button, easy to dismiss; the cooldown in the register keeps it
+ *  from nagging. */
+function PerformanceNudge({
+  nudge, onClose,
+}: { nudge: { reason: "streak" | "below"; rate: number; target: number } | null; onClose: () => void }) {
+  const headline = nudge?.reason === "streak" ? "Quick win 🎁" : "You're close 💪";
+  const body = nudge?.reason === "streak"
+    ? "A few orders went by without a phone number. Ask the next customer — “Can I get your number to add points?” — it earns them rewards and lifts your collection rate."
+    : `You're at ${nudge?.rate ?? 0}% today, target ${nudge?.target ?? 70}%. A friendly ask on every order gets you there — most customers say yes when offered points.`;
+  return (
+    <Modal visible={!!nudge} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable onPress={onClose} className="flex-1 bg-black/70 items-center justify-center px-8">
+        <Pressable onPress={() => {}} className="w-[360px] rounded-3xl border p-6 items-center" style={{ backgroundColor: "#1A0A02", borderColor: "rgba(251,191,36,0.45)", gap: 14 }}>
+          <View className="h-14 w-14 rounded-full items-center justify-center" style={{ backgroundColor: "rgba(251,191,36,0.16)" }}>
+            <Target size={26} color="#FBBF24" />
+          </View>
+          <Text className="text-cream text-lg text-center" style={{ fontFamily: "Peachi-Bold" }}>{headline}</Text>
+          <Text className="text-cream/70 text-sm text-center" style={{ fontFamily: "SpaceGrotesk_500Medium", lineHeight: 20 }}>{body}</Text>
+          <Pressable onPress={() => { Haptics.selectionAsync(); onClose(); }} className="h-12 w-full rounded-2xl items-center justify-center mt-1 active:opacity-80" style={{ backgroundColor: BRAND }}>
+            <Text className="text-white text-sm" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Got it</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
