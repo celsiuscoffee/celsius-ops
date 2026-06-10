@@ -124,10 +124,16 @@ export default function Menu() {
   // outlet_product_availability; refetch so the item drops/returns within
   // seconds instead of waiting for a manual refresh. Mirrors the register's
   // own availability channel (apps/pos-native/app/register.tsx).
+  //
+  // The topic gets a fresh random suffix on EVERY effect run: with a fixed
+  // topic, a second mounted menu screen (or an outlet switch racing the async
+  // removeChannel) made supabase-js reuse the still-subscribed channel and
+  // throw "cannot add `postgres_changes` callbacks ... after `subscribe()`",
+  // crash-looping the app (same failure useMaybankQrConfig hit).
   useEffect(() => {
     if (!outletId) return;
     const channel = supabase
-      .channel(`menu-oos-${outletId}`)
+      .channel(`menu-oos-${outletId}-${Math.random().toString(36).slice(2, 10)}`)
       .on(
         "postgres_changes",
         {

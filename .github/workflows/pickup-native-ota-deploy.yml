@@ -1,0 +1,44 @@
+name: pickup-native OTA deploy (marker)
+
+# Manual OTA publish for the customer pickup app, kickable WITHOUT the
+# Actions:write dispatch permission (403 for the integration) and without
+# pushing to main. Bumping the marker file on the working branch publishes the
+# CURRENT branch JS to the `production` EAS Update channel the store builds
+# subscribe to. JS/asset only — a native/dependency change still needs a fresh
+# build + store submission.
+#
+# Path-scoped so only an intentional bump of the marker deploys. Mirrors
+# pickup-native-ota.yml's publish step (--environment production loads the
+# server-side EAS env vars so the bundle config matches the installed app).
+
+on:
+  push:
+    branches:
+      - "claude/awesome-davinci-CvikE"
+    paths:
+      - "apps/pickup-native/.ota-deploy-trigger"
+
+jobs:
+  ota:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/pickup-native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Publish OTA update (production channel)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: "1"
+        run: |
+          npx eas-cli@latest update \
+            --channel production \
+            --platform all \
+            --environment production \
+            --message "fix: unique menu-oos realtime topic — stops Reconnecting crash loop" \
+            --non-interactive
