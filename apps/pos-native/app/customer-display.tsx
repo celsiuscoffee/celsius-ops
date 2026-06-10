@@ -180,6 +180,23 @@ export default function CustomerDisplay() {
     return () => { cancelled = true; };
   }, [status, member?.id]);
 
+  // Mirror the mystery moment into the shared display store so the STAFF side
+  // of the paid screen sees it live ("remind the customer to tap Reveal").
+  // "revealed" is written by MysteryBox at the reveal tap and deliberately
+  // survives the display going idle — it clears on the next order's reset().
+  useEffect(() => {
+    const st = useDisplay.getState();
+    if (status !== "complete") {
+      if (st.mystery !== "none" && st.mystery !== "revealed") st.setMystery("none");
+      return;
+    }
+    if (st.mystery === "revealed") return;
+    const hasDrop = !!member?.id && !!snapshot?.claimables?.some((c) => c.source_type === "mystery_pending");
+    if (hasDrop) st.setMystery("ready");
+    else if (member?.id && !mysteryPollDone) st.setMystery("checking");
+    else st.setMystery("none");
+  }, [status, member?.id, snapshot, mysteryPollDone]);
+
   // Silent auto-grant of a missed Mystery Bean. The reveal is a tappable moment
   // on the thank-you screen (status === "complete"); if the customer doesn't
   // open it there, we don't nag them with a claim button on the idle / ordering
@@ -1520,7 +1537,16 @@ function MysteryBox({ memberId, claimable, basePoints }: { memberId: string; cla
     if (busy || revealed) return;
     setBusy(true);
     const out = await claimMystery(memberId, claimable.id);
-    setRevealed(out ?? { outcome_type: "no_bonus", multiplier_value: null, flat_beans_value: null, label: "Reward unlocked", voucher_title: null, emoji: "🎁" });
+    const final = out ?? { outcome_type: "no_bonus", multiplier_value: null, flat_beans_value: null, label: "Reward unlocked", voucher_title: null, emoji: "🎁" };
+    setRevealed(final);
+    // Tell the staff side what the customer just won (paid-screen mirror).
+    const prize =
+      final.outcome_type === "beans_multiplier" && final.multiplier_value ? `${final.multiplier_value}× points`
+      : final.outcome_type === "flat_beans" && final.flat_beans_value ? `+${final.flat_beans_value} points`
+      : final.outcome_type === "voucher" ? (final.voucher_title ?? "Voucher won")
+      : final.outcome_type === "no_bonus" ? "No bonus this time"
+      : (final.label ?? "Revealed");
+    useDisplay.getState().setMystery("revealed", prize);
     setBusy(false);
   }
   // "Got it" → close the reveal and drop the 2nd screen back to idle, ready for
