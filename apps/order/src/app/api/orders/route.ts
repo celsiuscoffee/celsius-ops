@@ -261,7 +261,7 @@ export async function POST(request: NextRequest) {
       // backoffice flips from /pickup/settings. Separate from is_active.
       if (outletRow.is_open === false) {
         return NextResponse.json(
-          { error: "Outlet is currently closed for orders" },
+          { error: "Online ordering is temporarily paused — please order at the counter." },
           { status: 400 },
         );
       }

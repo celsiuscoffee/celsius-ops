@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Constants from "expo-constants";
 import {
-  ChevronLeft, Printer, LayoutGrid, Receipt, FileText, Store, RefreshCw, CheckCircle2, AlertCircle, ExternalLink, Minus, Plus,
+  ChevronLeft, Printer, LayoutGrid, Receipt, FileText, Store, RefreshCw, CheckCircle2, AlertCircle, ExternalLink, Minus, Plus, ShoppingBag,
 } from "lucide-react-native";
 import { usePos } from "@/lib/store";
 import { useSettings } from "@/lib/settings";
@@ -12,6 +12,7 @@ import { useGridPrefs, ALL_COLS_MIN, ALL_COLS_MAX, ALL_IMG_MIN, ALL_IMG_MAX, ALL
 import { usePrintPrefs } from "@/lib/print-prefs";
 import { outletShort, outletFull } from "@/lib/outlets";
 import { getPrinterStatus, reconnectPrinter, testPrint, printerAvailable } from "@/lib/printer";
+import { getOrderingOpen, setOrderingOpen } from "@/lib/ordering";
 
 const BRAND = "#A2492C";
 const OK = "#86efac";
@@ -37,13 +38,52 @@ export default function SettingsScreen() {
   const [printer, setPrinter] = useState<{ connected: boolean; status?: string; name?: string; paper?: string } | null>(null);
   const [printerBusy, setPrinterBusy] = useState(false);
 
+  // Online-ordering (QR table + pickup) open/closed for this outlet. null = not
+  // loaded yet. Lives on the cloud (outlet_settings.is_open) so it needs a
+  // working connection to read/flip.
+  const [orderingOpen, setOrderingOpenState] = useState<boolean | null>(null);
+  const [orderingBusy, setOrderingBusy] = useState(false);
+  const [orderingError, setOrderingError] = useState<string | null>(null);
+
   useEffect(() => {
-    if (outletId) loadSettings(outletId);
+    if (outletId) { loadSettings(outletId); void loadOrdering(outletId); }
     refreshPrinter();
     void loadGridPrefs();
     void loadPrintPrefs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outletId]);
+
+  async function loadOrdering(id: string) {
+    setOrderingError(null);
+    try {
+      setOrderingOpenState(await getOrderingOpen(id));
+    } catch {
+      setOrderingError("Couldn't load — check the connection.");
+    }
+  }
+
+  async function toggleOrdering() {
+    if (orderingBusy || orderingOpen === null || !outletId) return;
+    const next = !orderingOpen;
+    Haptics.selectionAsync();
+    setOrderingBusy(true);
+    setOrderingError(null);
+    setOrderingOpenState(next); // optimistic
+    try {
+      setOrderingOpenState(await setOrderingOpen(outletId, next));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      setOrderingOpenState(!next); // roll back to DB truth
+      setOrderingError("Couldn't update — need a working connection.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        "Couldn't change online ordering",
+        "This updates the cloud so customers stop or resume ordering, so it needs a working internet connection. Try again once you're back online.",
+      );
+    } finally {
+      setOrderingBusy(false);
+    }
+  }
 
   async function refreshPrinter() {
     setPrinter(await getPrinterStatus());
@@ -90,6 +130,46 @@ export default function SettingsScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 60, alignItems: "center" }}>
         <View style={{ width: "100%", maxWidth: 760, gap: 16 }}>
+
+          {/* ── Online ordering (QR table + pickup) open/close ── */}
+          <Card title="Online Ordering" Icon={ShoppingBag}>
+            <Text className="text-cream/45 text-[11px] mb-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+              Controls QR table orders and pickup orders for {outletShort(outletId) || "this outlet"}. Pause this if the internet is playing up and online orders aren't reaching the till — customers see "temporarily unavailable" and order at the counter instead. Counter sales are never affected.
+            </Text>
+            {orderingOpen === null ? (
+              orderingError ? (
+                <View className="flex-row items-center justify-between py-2">
+                  <Text className="text-[#E5484D] text-sm flex-1 pr-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{orderingError}</Text>
+                  <Pressable onPress={() => outletId && loadOrdering(outletId)} className="active:opacity-60">
+                    <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Retry</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <ActivityIndicator color={WARN} style={{ marginVertical: 12 }} />
+              )
+            ) : (
+              <>
+                <View className="flex-row items-center gap-2 mb-1">
+                  {orderingOpen ? <CheckCircle2 size={18} color={OK} /> : <AlertCircle size={18} color={WARN} />}
+                  <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                    {orderingOpen ? "Accepting online orders" : "Paused — counter only"}
+                  </Text>
+                  {orderingBusy && <ActivityIndicator color={WARN} style={{ marginLeft: 4 }} />}
+                </View>
+                <ToggleRow
+                  label="Accept online orders"
+                  hint={orderingOpen
+                    ? "QR table & pickup orders are open. Turn off to stop new online orders."
+                    : "QR table & pickup are paused. Turn on to resume normal ordering hours."}
+                  value={orderingOpen}
+                  onToggle={toggleOrdering}
+                />
+                {!!orderingError && (
+                  <Text className="text-[#E5484D] text-[11px] mt-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{orderingError}</Text>
+                )}
+              </>
+            )}
+          </Card>
 
           {/* ── Printer ── */}
           <Card title="Receipt Printer" Icon={Printer}>

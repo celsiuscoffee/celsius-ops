@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
       // without removing themselves from the system entirely.
       if (outletRow.is_open === false) {
         return NextResponse.json(
-          { error: "Outlet is currently closed for orders" },
+          { error: "Online ordering is temporarily paused — please order at the counter." },
           { status: 400 },
         );
       }
