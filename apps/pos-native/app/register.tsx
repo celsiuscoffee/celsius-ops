@@ -166,7 +166,7 @@ export default function Register() {
   // terminal "approved" result no longer auto-commits.
   const [cardResult, setCardResult] = useState<Extract<MaybankTerminalResult, { status: "approved" }> | null>(null);
   const [paying, setPaying] = useState(false);
-  const [paid, setPaid] = useState<{ orderNumber: string; total: number; beansEarned: number; beansBalance: number } | null>(null);
+  const [paid, setPaid] = useState<{ orderNumber: string; total: number; beansEarned: number; beansBalance: number; wasMember: boolean; claimablePoints: number } | null>(null);
   const [modProduct, setModProduct] = useState<Product | null>(null);
   // Cart line whose modifiers are being edited (opens the picker pre-selected).
   const [modEditKey, setModEditKey] = useState<string | null>(null);
@@ -1322,7 +1322,7 @@ export default function Register() {
       useDisplay.getState().setOrderId(sale.id);          // for the guest claim-Beans keypad
       useDisplay.getState().setBeansEarned(orderBeans);   // member's earned, or a guest's claimable potential
       setDisplayStatus("complete");
-      setPaid({ orderNumber: sale.orderNumber, total: sale.total, beansEarned, beansBalance });
+      setPaid({ orderNumber: sale.orderNumber, total: sale.total, beansEarned, beansBalance, wasMember: !!member?.id, claimablePoints: orderBeans });
       // Loyalty order-hooks (award points, re-eval tier, spawn Mystery Bean)
       // are fired by the sale-sync AFTER the order confirms to the cloud — see
       // lib/sale-sync.ts. Deferring there means an offline sale still earns on
@@ -2625,11 +2625,18 @@ export default function Register() {
       <Modal visible={!!paid} transparent animationType="fade" onRequestClose={newOrder}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
           <Pressable onPress={newOrder} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+          {(() => {
+          // Right-half states, in priority order: a live mystery moment (member
+          // with a drop) OR — for a guest who never gave a phone — a prompt to
+          // capture them so they don't lose the points this order would earn.
+          const showGuestClaim = !!paid && !paid.wasMember && mysteryMirror === "none";
+          const split = mysteryMirror !== "none" || showGuestClaim;
+          return (
           <View
             className="rounded-3xl bg-surface border border-border p-8"
-            style={{ width: mysteryMirror !== "none" ? 860 : 460, flexDirection: mysteryMirror !== "none" ? "row" : "column", alignItems: "center", gap: mysteryMirror !== "none" ? 28 : 0 }}
+            style={{ width: split ? 860 : 460, flexDirection: split ? "row" : "column", alignItems: "center", gap: split ? 28 : 0 }}
           >
-            <View className="items-center" style={{ flex: mysteryMirror !== "none" ? 1 : undefined, alignSelf: "stretch", justifyContent: "center" }}>
+            <View className="items-center" style={{ flex: split ? 1 : undefined, alignSelf: "stretch", justifyContent: "center" }}>
               <CheckCircle2 size={64} color={OK} />
               <Text className="text-cream text-2xl mt-4" style={{ fontFamily: "Peachi-Bold" }}>Paid</Text>
               <Text className="text-cream/55 mt-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{paid?.orderNumber}</Text>
@@ -2677,7 +2684,29 @@ export default function Register() {
                 <Text className="text-cream/55" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, textAlign: "center" }}>The prize is in their Celsius wallet</Text>
               </View>
             )}
+
+            {/* Guest (no phone given) — prompt staff to capture them so the
+                points this order earned aren't lost. */}
+            {showGuestClaim && (
+              <View className="rounded-3xl items-center justify-center" style={{ flex: 1, alignSelf: "stretch", paddingHorizontal: 24, paddingVertical: 30, backgroundColor: "rgba(251,191,36,0.10)", borderWidth: 1, borderColor: "rgba(251,191,36,0.4)", gap: 10 }}>
+                <Sparkles size={46} color="#FBBF24" strokeWidth={1.7} />
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 11, letterSpacing: 2.2, color: "rgba(251,191,36,0.85)", textAlign: "center" }}>POINTS UNCLAIMED</Text>
+                <Text className="text-cream" style={{ fontFamily: "Peachi-Bold", fontSize: 26, textAlign: "center" }}>
+                  Ask the customer to{"\n"}claim their points
+                </Text>
+                {!!paid && paid.claimablePoints > 0 && (
+                  <Text style={{ fontFamily: "Peachi-Bold", fontSize: 18, color: "#FBBF24", textAlign: "center" }}>
+                    {paid.claimablePoints} Points waiting
+                  </Text>
+                )}
+                <Text className="text-cream/55" style={{ fontFamily: "SpaceGrotesk_500Medium", fontSize: 13, textAlign: "center" }}>
+                  They enter their phone on the customer screen — free, takes 5 seconds.
+                </Text>
+              </View>
+            )}
           </View>
+          );
+          })()}
         </View>
       </Modal>
 
