@@ -50,6 +50,6 @@ jobs:
             npx eas-cli@latest update \
               --channel "$ch" \
               --platform android \
-              --message "OTA: cashier self-scorecard chip + upsell order stamping" \
+              --message "OTA: encouraging performance nudge popup" \
               --non-interactive || echo "channel $ch publish failed (continuing)"
           done
