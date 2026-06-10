@@ -5,11 +5,14 @@
  *   - alarm  → a more urgent warble when an order blows the serving-time target
  *              (pickup not marked ready / table not marked done within 10 min).
  *
- * Plays on the Android media stream, so the till's media volume must be up.
- * Every call is fire-and-forget + fully crash-safe — a sound must never be able
- * to break the order / print flow.
+ * Cues play on the SUNMI's BUILT-IN speaker via the native DeviceSpeaker
+ * module — so order alerts are heard at the till even when room music is on a
+ * paired Bluetooth speaker — falling back to expo-audio's media stream if the
+ * native module isn't compiled in. Every call is fire-and-forget + fully
+ * crash-safe — a sound must never be able to break the order / print flow.
  */
 import { createAudioPlayer, type AudioPlayer } from "expo-audio";
+import DeviceSpeaker from "@/modules/device-speaker";
 
 type Sound = "chime" | "alarm";
 
@@ -34,7 +37,12 @@ function getPlayer(sound: Sound): AudioPlayer | null {
   return players[sound] ?? null;
 }
 
-function play(sound: Sound): void {
+/**
+ * Fallback path — expo-audio on the media stream (which follows the active
+ * output, i.e. Bluetooth/A2DP when a speaker is paired). Used only when the
+ * native DeviceSpeaker module isn't compiled in.
+ */
+function playViaExpoAudio(sound: Sound): void {
   const p = getPlayer(sound);
   if (!p) return;
   try {
@@ -46,6 +54,25 @@ function play(sound: Sound): void {
   } catch (e) {
     console.warn(`[sound] play ${sound} failed`, e);
   }
+}
+
+function play(sound: Sound): void {
+  // Preferred: native DeviceSpeaker forces the cue onto the SUNMI's BUILT-IN
+  // speaker (USAGE_ALARM + setPreferredDevice), so it's heard at the till even
+  // while room music plays over a paired Bluetooth speaker. Falls back to
+  // expo-audio if the native module is missing — a cue can never go silent.
+  if (DeviceSpeaker) {
+    try {
+      DeviceSpeaker.play(sound).catch((e) => {
+        console.warn(`[sound] native play ${sound} failed → expo-audio`, e);
+        playViaExpoAudio(sound);
+      });
+      return;
+    } catch (e) {
+      console.warn(`[sound] native play ${sound} threw → expo-audio`, e);
+    }
+  }
+  playViaExpoAudio(sound);
 }
 
 /** Pre-create the players at mount so the first real sound has no decode lag. */

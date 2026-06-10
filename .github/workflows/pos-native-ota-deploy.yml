@@ -50,6 +50,6 @@ jobs:
             npx eas-cli@latest update \
               --channel "$ch" \
               --platform android \
-              --message "OTA: paid-screen mystery reveal mirror for staff" \
+              --message "OTA: device-speaker chime.ts — alarm/chime on SUNMI speaker" \
               --non-interactive || echo "channel $ch publish failed (continuing)"
           done

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DeviceSpeaker module — plays bundled order-alert cues on the device's
+  built-in speaker via the platform MediaPlayer + AudioManager.
+
+  No <uses-permission> and no <queries> needed: built-in-speaker playback
+  and AudioDeviceInfo enumeration require no special package visibility.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />
