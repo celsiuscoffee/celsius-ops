@@ -12,10 +12,10 @@ export class ApiError extends Error {
   }
 }
 
-type ApiOptions = RequestInit & { auth?: boolean; baseUrl?: string };
+type ApiOptions = RequestInit & { auth?: boolean };
 
 export async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
-  const { auth = true, baseUrl = API_BASE_URL, headers, ...rest } = opts;
+  const { auth = true, headers, ...rest } = opts;
   const finalHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -29,15 +29,12 @@ export async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
     }
   }
 
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
     ...rest,
     headers: finalHeaders,
   });
 
-  // A 401 from OUR primary backend means the staff session is dead → log out.
-  // A 401 from a cross-app base (e.g. the backoffice, before JWT_SECRET is
-  // aligned) just means the token isn't accepted there — don't nuke the session.
-  if (res.status === 401 && auth && baseUrl === API_BASE_URL) {
+  if (res.status === 401 && auth) {
     // Token expired or revoked — wipe BOTH the disk session AND the
     // in-memory Zustand store. Previously only AsyncStorage was
     // cleared, leaving the store with a dead session: UI kept
