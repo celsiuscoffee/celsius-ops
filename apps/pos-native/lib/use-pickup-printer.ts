@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AppState, Alert } from "react-native";
 import { supabase } from "./supabase";
-import { printKitchenDocket80mm, printReceipt80mm, isPrinterFault, shouldAlertPrinterFault } from "./printer";
+import { printKitchenDocket80mm, printReceipt80mm, isPrinterFault, shouldAlertPrinterFault, printerAvailable } from "./printer";
 
 /**
  * Pickup-order kitchen-docket auto-printer (native port of
@@ -139,6 +139,12 @@ export function usePickupPrinter(
 
     const tryPrintOrder = async (orderId: string) => {
       if (inFlightRef.current.has(orderId)) return;
+      // A device without the native printer module must NEVER claim a
+      // docket: printKitchenDocket80mm is a silent no-op there, so the
+      // claim write below would stamp kitchen_docket_printed_at with no
+      // paper anywhere — and the real register would skip the order as
+      // already printed (tickets "vanish" until a manual reprint).
+      if (!printerAvailable()) return;
       try {
         // Re-read so we have the latest status + don't fire if another
         // terminal already claimed the docket in the small Realtime →
@@ -336,6 +342,15 @@ export function usePickupPrinter(
       }
     });
 
+    // …and on a fixed interval. A register stays foregrounded all day, so
+    // the resume hook above never fires there — a silently dropped realtime
+    // socket (Wi-Fi blip / Supabase reconnect loses in-gap events) used to
+    // leave orders unprinted for arbitrarily long ("tickets came 20 minutes
+    // late"). The sweep is cheap (one indexed select, usually 0 rows) and
+    // idempotent via the atomic printed_at claim, so 90s caps the worst-case
+    // delay for ANY missed order at ~1.5 min.
+    const sweepTimer = setInterval(() => void runCatchUp(), 90_000);
+
     (async () => {
       // 0. Map POS outletId → pickup store_id via outlet_settings (the
       //    fix from PR #218 — without this every web order silently
@@ -409,6 +424,7 @@ export function usePickupPrinter(
     return () => {
       cancelled = true;
       appStateSub.remove();
+      clearInterval(sweepTimer);
       if (channel) void supabase.removeChannel(channel);
     };
   }, [outletId]);

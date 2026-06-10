@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AppState, Alert } from "react-native";
 import { supabase } from "./supabase";
-import { printKitchenDocket80mm, printReceipt80mm, isPrinterFault, shouldAlertPrinterFault } from "./printer";
+import { printKitchenDocket80mm, printReceipt80mm, isPrinterFault, shouldAlertPrinterFault, printerAvailable } from "./printer";
 
 /**
  * GrabFood-order kitchen-docket auto-printer.
@@ -93,6 +93,10 @@ export function useGrabPrinter(
 
     const tryPrintOrder = async (orderId: string) => {
       if (inFlightRef.current.has(orderId)) return;
+      // No native printer module on this device → never claim a docket here
+      // (printKitchenDocket80mm would no-op "successfully" and the claim
+      // would mark the order printed with no paper anywhere).
+      if (!printerAvailable()) return;
       try {
         const { data: order } = await supabase
           .from("pos_orders")
@@ -263,6 +267,11 @@ export function useGrabPrinter(
       }
     });
 
+    // …and on a fixed interval: a register never backgrounds, so the resume
+    // hook alone can't recover orders whose realtime event was lost to a
+    // dropped socket. 90s caps any missed Grab docket's delay at ~1.5 min.
+    const sweepTimer = setInterval(() => void runCatchUp(), 90_000);
+
     (async () => {
       // 1. Catch-up on mount.
       await runCatchUp();
@@ -314,6 +323,7 @@ export function useGrabPrinter(
     return () => {
       cancelled = true;
       appStateSub.remove();
+      clearInterval(sweepTimer);
       if (channel) void supabase.removeChannel(channel);
     };
   }, [outletId]);
