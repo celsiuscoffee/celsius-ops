@@ -8,6 +8,7 @@ import {
   Sparkles, Croissant, Wheat, UtensilsCrossed, Utensils, FlaskConical, Plus,
   Search, X, Heart, ArrowLeft, ShoppingCart,
 } from "lucide-react";
+import { useOosProductIds } from "./_useOosProductIds";
 
 /**
  * Two-column menu — sidebar pills (icon + label) on the left, product
@@ -102,12 +103,24 @@ export function MenuColumns({
       });
   }, [allProducts]);
 
-  // Prepend the Usual section above Best Sellers + categories when
-  // the customer has resolved recent items.
-  const sections: Section[] =
-    usual.length > 0
-      ? [{ id: USUAL_ID, label: "Your usual", products: usual, icon: "heart" }, ...baseSections]
-      : baseSections;
+  // Per-outlet out-of-stock (POS "86") product ids, kept live via realtime.
+  // The web menu had ignored these entirely — now it drops them like the
+  // native app does.
+  const oos = useOosProductIds();
+
+  // Prepend the Usual section above Best Sellers + categories when the customer
+  // has resolved recent items, and strip any item that's 86'd at their outlet
+  // (a category emptied by 86s disappears too).
+  const sections: Section[] = useMemo(() => {
+    const strip = (ps: Product[]) => (oos.size === 0 ? ps : ps.filter((p) => !oos.has(p.id)));
+    const base = baseSections
+      .map((s) => ({ ...s, products: strip(s.products) }))
+      .filter((s) => s.products.length > 0);
+    const u = strip(usual);
+    return u.length > 0
+      ? [{ id: USUAL_ID, label: "Your usual", products: u, icon: "heart" }, ...base]
+      : base;
+  }, [baseSections, usual, oos]);
 
   const [active, setActive] = useState(sections[0]?.id ?? "");
 

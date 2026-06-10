@@ -14,7 +14,7 @@ type ShPeriod = {
   hourly?: { hour: number; revenue: number }[];
   dailyTotals?: { date: string; revenue: number }[];
   channels?: { dineIn?: ShChannel; takeaway?: ShChannel; delivery?: ShChannel };
-  rounds?: { key: string; revenue: number }[];
+  rounds?: { key: string; revenue: number; orders?: number }[];
 };
 
 const sen = (rm: number | undefined) => Math.round((rm || 0) * 100);
@@ -24,7 +24,9 @@ export type ShContrib = {
   curHour: number[]; prevHour: number[];
   curByDate: Record<string, number>; prevByDate: Record<string, number>;
   chan: { dine_in: number; takeaway: number; delivery: number };
+  chanOrders: { dine_in: number; takeaway: number; delivery: number };
   rounds: Record<string, number>;
+  roundOrders: Record<string, number>;
   warnings: string[];
 };
 
@@ -42,7 +44,9 @@ export async function fetchStorehubContributions(opts: {
     prevHour: Array.from({ length: 24 }, () => 0),
     curByDate: {}, prevByDate: {},
     chan: { dine_in: 0, takeaway: 0, delivery: 0 },
+    chanOrders: { dine_in: 0, takeaway: 0, delivery: 0 },
     rounds: {},
+    roundOrders: {},
     warnings: [],
   };
   if (!opts.authz || opts.outlets.length === 0) {
@@ -57,7 +61,15 @@ export async function fetchStorehubContributions(opts: {
         // source=storehub → backoffice returns StoreHub-only (no pos+pickup), so
         // we can add our own native pos+pickup totals without double-counting.
         const url = `${opts.baseUrl}/api/sales/compare?periods=${periods}&outletId=${o.id}&source=storehub`;
-        const res = await fetch(url, { headers: { authorization: opts.authz! } });
+        // Backoffice /api/sales/compare authenticates via getSession(), which
+        // reads the `celsius-session` COOKIE — never the Authorization header.
+        // The staff bearer token is the SAME JWT (shared @celsius/auth +
+        // JWT_SECRET), so forward it as that cookie too. Without this the bridge
+        // 401s and StoreHub silently drops out of the consolidated sales totals.
+        const jwt = opts.authz!.replace(/^Bearer\s+/i, "");
+        const res = await fetch(url, {
+          headers: { cookie: `celsius-session=${jwt}`, authorization: opts.authz! },
+        });
         console.warn(`[sh-bridge] ${o.id} -> ${res.status}`);
         if (!res.ok) return { id: o.id, periods: null as ShPeriod[] | null };
         const j = (await res.json()) as { periods?: ShPeriod[] };
@@ -89,7 +101,13 @@ export async function fetchStorehubContributions(opts: {
     out.chan.dine_in += sen(c.channels?.dineIn?.revenue);
     out.chan.takeaway += sen(c.channels?.takeaway?.revenue);
     out.chan.delivery += sen(c.channels?.delivery?.revenue);
-    for (const rd of c.rounds || []) out.rounds[rd.key] = (out.rounds[rd.key] || 0) + sen(rd.revenue);
+    out.chanOrders.dine_in += c.channels?.dineIn?.orders || 0;
+    out.chanOrders.takeaway += c.channels?.takeaway?.orders || 0;
+    out.chanOrders.delivery += c.channels?.delivery?.orders || 0;
+    for (const rd of c.rounds || []) {
+      out.rounds[rd.key] = (out.rounds[rd.key] || 0) + sen(rd.revenue);
+      out.roundOrders[rd.key] = (out.roundOrders[rd.key] || 0) + (rd.orders || 0);
+    }
   }
   return out;
 }
