@@ -10,7 +10,7 @@ import {
   classifyPosChannel, classifyAppChannel, normalizePayment,
   isPosSale, isAppSale, rm, round2, pctChange,
 } from "../_lib/sales-helpers";
-import { fetchStorehubContributions } from "../_lib/storehub-bridge";
+import { getStorehubFromDB } from "../_lib/storehub-bridge";
 
 // GET /api/sales/dashboard?mode=day|week|month|custom&from=&to=&outletId=
 // Consolidated native POS (pos_orders + pos_order_payments) + pickup (orders).
@@ -34,28 +34,28 @@ export async function GET(req: NextRequest) {
   let outletName = "";
   let scopeId = "";
   let availableOutlets: { id: string; name: string }[] = [];
-  let scopeOutlets: { id: string; storehubId: string | null; posCode: string | null }[] = [];
+  let scopeOutlets: { id: string; storehubId: string | null; posCode: string | null; cutoverAt: Date | null }[] = [];
 
   if (isAdmin) {
     const all = await prisma.outlet.findMany({
       where: { status: "ACTIVE" },
-      select: { id: true, name: true, pickupStoreId: true, storehubId: true },
+      select: { id: true, name: true, pickupStoreId: true, storehubId: true, posNativeCutoverAt: true },
       orderBy: { name: "asc" },
     });
     availableOutlets = all.map((o) => ({ id: o.id, name: o.name }));
     const pick = scope === "all" ? all : all.filter((x) => x.id === scope);
     if (scope !== "all" && pick.length === 0) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
-    scopeOutlets = pick.map((o) => ({ id: o.id, storehubId: o.storehubId, posCode: posCodeFor(o) }));
+    scopeOutlets = pick.map((o) => ({ id: o.id, storehubId: o.storehubId, posCode: posCodeFor(o), cutoverAt: o.posNativeCutoverAt }));
     storeIds = pick.map((o) => o.pickupStoreId).filter((s): s is string => !!s);
     outletName = scope === "all" ? "All outlets" : pick[0].name;
     scopeId = scope === "all" ? "all" : pick[0].id;
   } else {
     const o = await prisma.outlet.findUnique({
       where: { id: scope },
-      select: { id: true, name: true, pickupStoreId: true, storehubId: true },
+      select: { id: true, name: true, pickupStoreId: true, storehubId: true, posNativeCutoverAt: true },
     });
     if (!o) return NextResponse.json({ error: "Outlet not found" }, { status: 404 });
-    scopeOutlets = [{ id: o.id, storehubId: o.storehubId, posCode: posCodeFor(o) }];
+    scopeOutlets = [{ id: o.id, storehubId: o.storehubId, posCode: posCodeFor(o), cutoverAt: o.posNativeCutoverAt }];
     storeIds = o.pickupStoreId ? [o.pickupStoreId] : [];
     outletName = o.name;
     scopeId = o.id;
@@ -213,9 +213,7 @@ export async function GET(req: NextRequest) {
   const shScope = scopeOutlets.filter((o) => o.storehubId);
   console.warn(`[sales] codes=[${posCodes.join(",")}] native=[${[...nativeCodes].join(",")}] shScope=[${shScope.map((o) => o.id).join(",")}] authz=${req.headers.get("authorization") ? "y" : "n"}`);
   if (shScope.length) {
-    const sh = await fetchStorehubContributions({
-      baseUrl: process.env.BACKOFFICE_URL ?? "https://backoffice.celsiuscoffee.com",
-      authz: req.headers.get("authorization"),
+    const sh = await getStorehubFromDB({
       outlets: shScope,
       cur,
       prev,
