@@ -30,6 +30,7 @@ import { saveDraft, loadDraft, clearDraft, type DraftOrder } from "@/lib/draft-o
 import { getOnline, subscribeOnline } from "@/lib/connectivity";
 import { subscribePending, pendingCount } from "@/lib/offline-queue";
 import { useSettings, gridColumns, serviceChargeRate, receiptConfig, tableZones } from "@/lib/settings";
+import { useUnrevealedDrops, maskPhone } from "@/lib/use-unrevealed-drops";
 import { useGridPrefs } from "@/lib/grid-prefs";
 import { usePrintPrefs } from "@/lib/print-prefs";
 import { useTablesPanel, type TableSlot, type TableOrderRef } from "@/lib/use-tables-panel";
@@ -132,6 +133,9 @@ export default function Register() {
   // self-orders) · Pickup · Grab · History (today, all channels, filterable).
   // `hub` is the active tab, or null when the panel is closed.
   const [hub, setHub] = useState<"tables" | "pickup" | "grab" | "history" | null>(null);
+  // Mystery-bag reminder: today's unrevealed drops for this outlet (header 🎁
+  // pill + sheet) so staff can prompt a customer who forgot to tap reveal.
+  const [mysteryOpen, setMysteryOpen] = useState(false);
   // QR Tables tab: which floor/zone is shown (null = first), and the table the
   // cashier tapped to inspect its order(s).
   const [activeFloor, setActiveFloor] = useState<string | null>(null);
@@ -242,6 +246,7 @@ export default function Register() {
   // of being torn down each time the modal closes.
   const tableZonesInput = useMemo(() => tableZones(settings), [settings]);
   const tableSlots = useTablesPanel(outletId, tableZonesInput);
+  const { drops: unrevealedDrops, count: unrevealedCount, reload: reloadDrops } = useUnrevealedDrops(outletId);
   // QR self-orders (guests who scanned the table QR) flattened off the table
   // map into a flat queue for the Orders hub's "QR self-orders" tab.
   const qrOrders = useMemo<TableOrderRef[]>(() => {
@@ -1448,6 +1453,23 @@ export default function Register() {
                 );
               })()}
             </Pressable>
+            {/* Mystery-bag reminder — shows only when today has unrevealed
+                drops at this outlet. Tap → sheet listing each (order # +
+                masked phone) so staff can remind the customer to reveal in
+                the Celsius app before they leave. */}
+            {unrevealedCount > 0 && (
+              <Pressable
+                onPress={() => { Haptics.selectionAsync(); void reloadDrops(); setMysteryOpen(true); }}
+                className="flex-row items-center gap-2 px-3 py-2 rounded-xl border active:opacity-60"
+                style={{ borderColor: "rgba(251,191,36,0.45)", backgroundColor: "rgba(251,191,36,0.10)" }}
+              >
+                <Gift size={16} color="#FBBF24" />
+                <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Mystery</Text>
+                <View className="rounded-full px-1.5" style={{ backgroundColor: "#FBBF24" }}>
+                  <Text className="text-espresso text-[10px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{unrevealedCount}</Text>
+                </View>
+              </Pressable>
+            )}
             <Pressable onPress={() => { Haptics.selectionAsync(); router.push("/settings"); }} className="h-10 w-10 items-center justify-center rounded-xl border border-cream/15 active:opacity-60">
               <SettingsIcon size={18} color="rgba(245,243,240,0.7)" />
             </Pressable>
@@ -1905,6 +1927,52 @@ export default function Register() {
           cashier taps a FREE tile in dine_in mode, we pre-fill the cart
           flow's tableNumber and close so the next checkout points to
           that table. */}
+      {/* Unrevealed mystery bags — reminder sheet for staff. Read-only:
+          the reveal itself stays with the customer (display / Celsius app);
+          staff just use this to say "you've got an unopened mystery bag". */}
+      <Modal visible={mysteryOpen} transparent animationType="fade" onRequestClose={() => setMysteryOpen(false)}>
+        <View className="flex-1 items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.6)" }}>
+          <Pressable onPress={() => setMysteryOpen(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+          <View className="rounded-3xl border border-border p-5" style={{ backgroundColor: "#1A0A02", width: 520, maxHeight: "75%" }}>
+            <View className="flex-row items-center gap-2 pb-3 mb-2 border-b border-border">
+              <Gift size={18} color="#FBBF24" />
+              <Text className="text-cream text-lg flex-1" style={{ fontFamily: "Peachi-Bold" }}>
+                Unrevealed mystery bags · today
+              </Text>
+              <Pressable onPress={() => setMysteryOpen(false)} className="active:opacity-60">
+                <X size={18} color="rgba(245,243,240,0.7)" />
+              </Pressable>
+            </View>
+            <Text className="text-cream/45 text-[11px] mb-3" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+              These customers earned a mystery bag but haven't revealed it. Remind them:
+              "open the Celsius app to reveal your mystery bag" — the prize is waiting in their wallet.
+            </Text>
+            <ScrollView style={{ maxHeight: 380 }}>
+              <View style={{ gap: 8 }}>
+                {unrevealedDrops.length === 0 ? (
+                  <Text className="text-cream/45 text-sm py-4 text-center" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                    All revealed — nothing outstanding. 🎉
+                  </Text>
+                ) : unrevealedDrops.map((d) => (
+                  <View key={d.id} className="flex-row items-center rounded-xl px-3 py-2.5" style={{ backgroundColor: "rgba(245,243,240,0.05)", gap: 10 }}>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: d.source === "pos" ? "#FBBF24" : "#3B82F6" }} />
+                    <Text className="text-cream text-sm flex-1" style={{ fontFamily: "SpaceGrotesk_700Bold" }} numberOfLines={1}>
+                      {d.orderNumber}
+                    </Text>
+                    <Text className="text-cream/55 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                      {maskPhone(d.phone)}
+                    </Text>
+                    <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                      {new Date(d.createdAt).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={hub !== null} transparent animationType="fade" onRequestClose={() => setHub(null)}>
         <View className="flex-1 bg-black/80 items-center justify-center px-6">
           {/* Tap the dark backdrop to close — same as pressing Orders again. */}
