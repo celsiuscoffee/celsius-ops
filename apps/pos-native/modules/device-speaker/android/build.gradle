@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.celsiuscoffee.devicespeaker'
+version = '0.1.0'
+
+android {
+  namespace "com.celsiuscoffee.devicespeaker"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+// No extra dependencies — uses the platform MediaPlayer / AudioManager only.
+repositories {
+  mavenCentral()
+}
