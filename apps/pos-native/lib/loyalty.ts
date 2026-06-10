@@ -492,6 +492,25 @@ export function logPairAdd(
   }).catch(() => {});
 }
 
+/** Exact upsell attribution — at checkout, stamp the new order_id onto the
+ *  pair-adds made for this cart (logged earlier without an order id). Lets the
+ *  cashier-performance dashboard count real "orders that contained an upsell"
+ *  instead of fuzzy time-matching. Fire-and-forget; never blocks the sale. */
+export function stampPairOrder(
+  orderId: string,
+  employeeId: string | null,
+  outletId: string | null,
+  productIds: string[],
+): void {
+  if (!orderId || !employeeId || productIds.length === 0) return;
+  apiPost("/api/pos/loyalty/pair-order", {
+    order_id: orderId,
+    employee_id: employeeId,
+    outlet_id: outletId,
+    product_ids: productIds,
+  }).catch(() => {});
+}
+
 /** Lightweight read of currently-active combo + category promos for the
  *  customer-display ordering screen. Snapshot-style `active_promos` is
  *  member-gated; this is the guest fallback so the "Pair with a bite"

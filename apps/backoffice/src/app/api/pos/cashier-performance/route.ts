@@ -104,28 +104,18 @@ export async function GET(request: NextRequest) {
   //   employee_id set) — an effort/volume number.
   // Upsell %  = share of the cashier's completed orders that ended up CONTAINING
   //   an upsold pair = (orders with an upsell) ÷ (total orders), DEDUPED PER
-  //   ORDER — three pairs sold on one ticket still count as a single upsell
-  //   order. "Contains an upsell" is time-reconciled (there's no order key at add
-  //   time): a pair tap by the same cashier, for a product that is in the order,
-  //   within 30 min before it (+60s slack). Order-based + success-based, so
-  //   button-spam can't inflate it — a tap that never sells changes nothing.
-  const RECONCILE_MS = 30 * 60 * 1000;
-  const orderIds = rows.map((o) => o.id as string);
-  const orderProducts: Record<string, Set<string>> = {};
-  for (let i = 0; i < orderIds.length; i += 1000) {
-    const chunk = orderIds.slice(i, i + 1000);
-    const { data: items } = await supabase.from("pos_order_items").select("order_id, product_id").in("order_id", chunk);
-    for (const it of items ?? []) {
-      const oid = it.order_id as string;
-      const pid = it.product_id as string | null;
-      if (!oid || !pid) continue;
-      (orderProducts[oid] ||= new Set<string>()).add(pid);
-    }
-  }
+  //   ORDER — three pairs on one ticket still count as a single upsell order.
+  //   Attribution is now EXACT: the register stamps the real order_id onto each
+  //   cart's pair-adds at checkout (/api/pos/loyalty/pair-order), so we just
+  //   count DISTINCT stamped order_ids that are completed cashier orders in
+  //   scope. (Replaces the old 30-min time-reconcile, which missed almost
+  //   everything because a tap carried no order key.) Order-based + success-
+  //   based: an unbound tap on an abandoned cart never counts.
+  const orderIdSet = new Set(rows.map((o) => o.id as string));
 
   let pairQ = supabase
     .from("pos_pair_events")
-    .select("employee_id, product_id, created_at")
+    .select("employee_id, order_id")
     .eq("source", "register")
     .not("employee_id", "is", null)
     .gte("created_at", since)
@@ -133,53 +123,20 @@ export async function GET(request: NextRequest) {
   if (outletId) pairQ = pairQ.eq("outlet_id", outletId);
   const { data: pairRows } = await pairQ;
 
-  // Raw pair taps per cashier (the "Pair Adds" number) + each cashier's taps
-  // {ms, product} for the order-penetration reconcile below.
+  // Raw pair taps per cashier (the "Pair Adds" number) + the DISTINCT in-scope
+  // orders each cashier's taps were stamped to (the upsell-penetration number).
   const addsByEmp: Record<string, number> = {};
-  const pairsByEmp: Record<string, { ms: number; product: string }[]> = {};
+  const upsellOrderIds: Record<string, Set<string>> = {};
   let totalAdds = 0;
   for (const pe of pairRows ?? []) {
     const emp = pe.employee_id as string | null;
-    const prod = pe.product_id as string | null;
-    if (!emp || !prod) continue;
+    if (!emp) continue;
     addsByEmp[emp] = (addsByEmp[emp] || 0) + 1;
     totalAdds++;
-    (pairsByEmp[emp] ||= []).push({ ms: Date.parse(pe.created_at as string), product: prod });
+    const oid = pe.order_id as string | null;
+    if (oid && orderIdSet.has(oid)) (upsellOrderIds[emp] ||= new Set<string>()).add(oid);
   }
 
-  // Bind each pair tap to at most ONE order — the earliest of the cashier's
-  // completed orders that (a) contains the tapped product and (b) falls in the
-  // tap's reconcile window — then count the DISTINCT orders that caught a tap.
-  // Binding (vs. a plain per-order .some()) stops one tap from marking several
-  // orders as upsells when the same product recurs in a busy window, which would
-  // inflate Upsell % optimistically. Multiple taps landing on the same order
-  // still collapse to one (Set of order ids).
-  const empOrdersAsc: Record<string, { id: string; ms: number; products: Set<string> }[]> = {};
-  for (const o of rows) {
-    const emp = (o.employee_id as string) || "unknown";
-    (empOrdersAsc[emp] ||= []).push({
-      id: o.id as string,
-      ms: Date.parse(o.created_at as string),
-      products: orderProducts[o.id as string] || new Set<string>(),
-    });
-  }
-  for (const list of Object.values(empOrdersAsc)) list.sort((a, b) => a.ms - b.ms);
-
-  const upsellOrderIds: Record<string, Set<string>> = {};
-  for (const [emp, taps] of Object.entries(pairsByEmp)) {
-    const ords = empOrdersAsc[emp] || [];
-    const hit = (upsellOrderIds[emp] ||= new Set<string>());
-    for (const tap of taps) {
-      for (const o of ords) {
-        if (o.ms < tap.ms - 60_000) continue; // order earlier than the tap window
-        if (o.ms > tap.ms + RECONCILE_MS) break; // sorted asc → past window, stop scanning
-        if (o.products.has(tap.product)) {
-          hit.add(o.id); // bind this tap to its earliest matching order, once
-          break;
-        }
-      }
-    }
-  }
   const upsellOrdersByEmp: Record<string, number> = {};
   let totalUpsellOrders = 0;
   for (const [emp, ids] of Object.entries(upsellOrderIds)) {

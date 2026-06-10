@@ -43,7 +43,7 @@ import { outletFull, outletShort } from "@/lib/outlets";
 import {
   lookupMember, fetchRewards, fetchUsual, redeemReward, computeRewardDiscount, redeemBlockReason,
   computeTierDiscount, evaluatePromotions,
-  fetchSuggestedPairs, logPairAdd, fetchSnapshot, claimMystery,
+  fetchSuggestedPairs, logPairAdd, stampPairOrder, fetchSnapshot, claimMystery,
   type Member, type RewardsResponse, type IssuedVoucher, type CatalogReward, type RedeemDiscount, type UsualItem, type AppliedPromo,
   type SuggestedPair, type ClaimableCard, type MysteryReveal, type ShopCard, type VoucherCard,
 } from "@/lib/loyalty";
@@ -170,6 +170,9 @@ export default function Register() {
   // Bumped after each paid sale / pair add so the cashier's self-scorecard chip
   // refetches its today numbers (collection rate + pair adds).
   const [scorecardRefresh, setScorecardRefresh] = useState(0);
+  // Product ids the cashier pair-added for THIS cart — stamped with the real
+  // order_id at checkout for exact upsell attribution (see stampPairOrder).
+  const pairAddsRef = useRef<string[]>([]);
   const [paid, setPaid] = useState<{ orderNumber: string; total: number; beansEarned: number; beansBalance: number; wasMember: boolean; claimablePoints: number } | null>(null);
   const [modProduct, setModProduct] = useState<Product | null>(null);
   // Cart line whose modifiers are being edited (opens the picker pre-selected).
@@ -794,6 +797,7 @@ export default function Register() {
     // slot), so pair-adds ÷ orders is measurable. Best-effort; never blocks.
     const rank = pairs.findIndex((x) => x.product_id === pair.product_id) + 1;
     logPairAdd(outletId, pair, rank, "register", staff?.staffId ?? null);
+    pairAddsRef.current.push(pair.product_id); // bind to the order_id at checkout
     setScorecardRefresh((k) => k + 1); // reflect the pair add on the scorecard chip
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productById, pairs, outletId]);
@@ -1321,6 +1325,11 @@ export default function Register() {
       // are fired by the sale-sync AFTER the order confirms to the cloud — see
       // lib/sale-sync.ts. Deferring there means an offline sale still earns on
       // reconnect, and the hook never runs before the order row exists.
+      // Exact upsell attribution: bind this cart's pair-adds to the real order.
+      if (pairAddsRef.current.length > 0) {
+        stampPairOrder(sale.id, staff.staffId, outletId, pairAddsRef.current);
+        pairAddsRef.current = [];
+      }
       clear();
       setShowCheckout(false);
       setScorecardRefresh((k) => k + 1); // refresh the cashier's self-scorecard
@@ -1407,6 +1416,10 @@ export default function Register() {
                 {outletShort(outletId)}
               </Text>
             </View>
+            {/* Small personal scorecard, right beside the brand. */}
+            {staff?.staffId && (
+              <CashierScorecardChip outletId={outletId} employeeId={staff.staffId} refreshKey={scorecardRefresh} />
+            )}
             {/* Order type is chosen at checkout now — no upfront toggle here. */}
           </View>
           <View className="flex-row items-center gap-2">
@@ -1446,9 +1459,6 @@ export default function Register() {
                 );
               })()}
             </Pressable>
-            {staff?.staffId && (
-              <CashierScorecardChip outletId={outletId} employeeId={staff.staffId} refreshKey={scorecardRefresh} />
-            )}
             <Pressable onPress={() => { Haptics.selectionAsync(); router.push("/settings"); }} className="h-10 w-10 items-center justify-center rounded-xl border border-cream/15 active:opacity-60">
               <SettingsIcon size={18} color="rgba(245,243,240,0.7)" />
             </Pressable>
@@ -1611,7 +1621,7 @@ export default function Register() {
           <View className="flex-row items-center justify-between">
             <Text className="text-cream text-lg" style={{ fontFamily: "Peachi-Bold" }}>Current Order</Text>
             {lines.length > 0 && (
-              <Pressable onPress={() => { Haptics.selectionAsync(); clear(); setReward(null); setManualDiscount(0); setMemberAsked(false); setOrderType("takeaway"); setTableNumber(""); setOrderConfirmed(false); setCoTouched(false); }} className="active:opacity-60">
+              <Pressable onPress={() => { Haptics.selectionAsync(); clear(); pairAddsRef.current = []; setReward(null); setManualDiscount(0); setMemberAsked(false); setOrderType("takeaway"); setTableNumber(""); setOrderConfirmed(false); setCoTouched(false); }} className="active:opacity-60">
                 <Text className="text-primary text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>CLEAR</Text>
               </Pressable>
             )}
@@ -3749,14 +3759,14 @@ function CashierScorecardChip({
     <>
       <Pressable
         onPress={() => { Haptics.selectionAsync(); setOpen(true); }}
-        className="flex-row items-center gap-2 px-3 py-2 rounded-xl border active:opacity-70"
+        className="flex-row items-center gap-1.5 px-2.5 py-1.5 rounded-lg border active:opacity-70"
         style={{ borderColor: border, backgroundColor: tint }}
       >
-        <TrendingUp size={14} color={rateColor} />
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 13, color: rateColor }}>{sc.rate}%</Text>
-        <View className="flex-row items-center gap-1 ml-0.5 pl-2" style={{ borderLeftWidth: 1, borderLeftColor: "rgba(245,243,240,0.18)" }}>
-          <Sparkles size={13} color="rgba(245,243,240,0.7)" />
-          <Text className="text-cream/80 text-[12px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{sc.pairAdds}</Text>
+        <TrendingUp size={12} color={rateColor} />
+        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, color: rateColor }}>{sc.rate}%</Text>
+        <View className="flex-row items-center gap-1 pl-1.5" style={{ borderLeftWidth: 1, borderLeftColor: "rgba(245,243,240,0.18)" }}>
+          <Sparkles size={11} color="rgba(245,243,240,0.7)" />
+          <Text className="text-cream/80 text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{sc.pairAdds}</Text>
         </View>
       </Pressable>
 
