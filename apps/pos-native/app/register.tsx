@@ -564,7 +564,10 @@ export default function Register() {
   useFocusEffect(
     useCallback(() => {
       if (outletId) refreshSettings(outletId);
-    }, [outletId, refreshSettings]),
+      // Re-check the shift on focus so an Open/Close done from Settings is
+      // reflected here the moment the cashier returns to the register.
+      void reloadShift();
+    }, [outletId, refreshSettings, reloadShift]),
   );
   // Live: a backoffice edit to this outlet's pos_branch_settings row pushes
   // straight to the running till via realtime. SST now lives on that row too
@@ -1466,25 +1469,23 @@ export default function Register() {
                 Compact (count as a tight suffix) so it doesn't overflow the
                 header alongside the other controls. */}
             {(!online || pendingSales > 0) && (
-              <View className="flex-row items-center gap-1.5 px-2.5 py-2 rounded-xl" style={{ backgroundColor: online ? "rgba(251,191,36,0.18)" : "rgba(239,68,68,0.20)" }}>
+              <View className="flex-row items-center gap-1.5 px-2.5 rounded-xl" style={{ height: 42, backgroundColor: online ? "rgba(251,191,36,0.18)" : "rgba(239,68,68,0.20)" }}>
                 <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: online ? "#FBBF24" : "#EF4444" }} />
                 <Text className="text-cream/90 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
                   {!online ? (pendingSales > 0 ? `Offline · ${pendingSales}` : "Offline") : `Syncing ${pendingSales}…`}
                 </Text>
               </View>
             )}
-            {/* Open Store — the cashier shift. Green dot = store open, amber =
-                closed. Scheduled staff auto-open on login; tap to open manually
-                (manager / off-schedule) or to close with an end-of-shift summary. */}
-            <Pressable onPress={openShiftModal} className="flex-row items-center gap-1.5 px-2.5 py-2 rounded-xl border border-cream/15 active:opacity-60">
-              <Power size={16} color={shift ? "#22C55E" : "#FBBF24"} />
-              <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{shift ? "Store Open" : "Open Store"}</Text>
-              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: shift ? "#22C55E" : "#FBBF24" }} />
-            </Pressable>
+            {/* Store open/closed — STATUS INDICATOR ONLY (green = open, amber =
+                closed). The open/close action lives in Settings now; this just
+                shows the current state and keeps the header compact. */}
+            <View className="items-center justify-center rounded-xl border border-cream/15" style={{ height: 42, width: 42, backgroundColor: shift ? "rgba(34,197,94,0.10)" : "rgba(251,191,36,0.10)" }}>
+              <Power size={18} color={shift ? "#22C55E" : "#FBBF24"} />
+            </View>
             {/* Orders command center — one button opens a tabbed panel for
                 every order channel: dine-in Tables, QR self-orders, and
                 Pickup + Grab. Badge = live incoming orders (QR + delivery). */}
-            <Pressable onPress={() => { Haptics.selectionAsync(); setHub((v) => (v ? null : "tables")); }} className={`flex-row items-center gap-1.5 px-2.5 py-2 rounded-xl border active:opacity-60 ${hub ? "border-primary bg-primary/10" : "border-cream/15"}`}>
+            <Pressable onPress={() => { Haptics.selectionAsync(); setHub((v) => (v ? null : "tables")); }} className={`flex-row items-center gap-1.5 px-3 rounded-xl border active:opacity-60 ${hub ? "border-primary bg-primary/10" : "border-cream/15"}`} style={{ height: 42 }}>
               <ClipboardList size={16} color="rgba(245,243,240,0.7)" />
               <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Live Orders</Text>
               {(() => {
@@ -1498,7 +1499,7 @@ export default function Register() {
                 );
               })()}
             </Pressable>
-            <Pressable onPress={() => { Haptics.selectionAsync(); router.push("/settings"); }} className="h-10 w-10 items-center justify-center rounded-xl border border-cream/15 active:opacity-60">
+            <Pressable onPress={() => { Haptics.selectionAsync(); router.push("/settings"); }} className="items-center justify-center rounded-xl border border-cream/15 active:opacity-60" style={{ height: 42, width: 42 }}>
               <SettingsIcon size={18} color="rgba(245,243,240,0.7)" />
             </Pressable>
             {/* Account chip — the cashier's name lives on the sign-out control

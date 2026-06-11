@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Constants from "expo-constants";
 import {
-  ChevronLeft, Printer, LayoutGrid, Receipt, FileText, Store, RefreshCw, CheckCircle2, AlertCircle, ExternalLink, Minus, Plus, ShoppingBag,
+  ChevronLeft, Printer, LayoutGrid, Receipt, FileText, Store, RefreshCw, CheckCircle2, AlertCircle, ExternalLink, Minus, Plus, ShoppingBag, Power,
 } from "lucide-react-native";
 import { usePos } from "@/lib/store";
 import { useSettings } from "@/lib/settings";
@@ -13,6 +13,7 @@ import { usePrintPrefs } from "@/lib/print-prefs";
 import { outletShort, outletFull } from "@/lib/outlets";
 import { getPrinterStatus, reconnectPrinter, testPrint, printerAvailable } from "@/lib/printer";
 import { getOrderingOpen, setOrderingOpen } from "@/lib/ordering";
+import { useShift, openShift, closeShift, type ShiftTotals } from "@/lib/shift";
 
 const BRAND = "#A2492C";
 const OK = "#86efac";
@@ -37,6 +38,53 @@ export default function SettingsScreen() {
 
   const [printer, setPrinter] = useState<{ connected: boolean; status?: string; name?: string; paper?: string } | null>(null);
   const [printerBusy, setPrinterBusy] = useState(false);
+
+  // Store shift (open/close) — moved here from the register header, which now
+  // shows a status-only indicator. Same primitives the register uses, so state
+  // stays consistent (the register re-checks the shift when it regains focus).
+  const { shift, loading: shiftLoading, reload: reloadShift } = useShift(outletId);
+  const [shiftBusy, setShiftBusy] = useState(false);
+  const [closedTotals, setClosedTotals] = useState<ShiftTotals | null>(null);
+
+  async function onOpenStore() {
+    if (!outletId || !staff?.staffId || shiftBusy) return;
+    Haptics.selectionAsync();
+    setShiftBusy(true);
+    setClosedTotals(null);
+    try {
+      await openShift(outletId, staff.staffId);
+      await reloadShift();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally {
+      setShiftBusy(false);
+    }
+  }
+
+  function onCloseStore() {
+    if (!shift || !staff?.staffId || shiftBusy) return;
+    Alert.alert(
+      "Close store?",
+      "This ends the current shift and rolls up its sales for the Z-report.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Close Store",
+          style: "destructive",
+          onPress: async () => {
+            setShiftBusy(true);
+            try {
+              const totals = await closeShift(shift, staff.staffId);
+              setClosedTotals(totals ?? { orders: 0, sales: 0 });
+              await reloadShift();
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } finally {
+              setShiftBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  }
 
   // Online-ordering (QR table + pickup) open/closed for this outlet. null = not
   // loaded yet. Lives on the cloud (outlet_settings.is_open) so it needs a
@@ -130,6 +178,43 @@ export default function SettingsScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 60, alignItems: "center" }}>
         <View style={{ width: "100%", maxWidth: 760, gap: 16 }}>
+
+          {/* ── Store (cashier shift) open/close ── */}
+          <Card title="Store" Icon={Power}>
+            <Text className="text-cream/45 text-[11px] mb-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+              Opens or closes the cashier shift for this till. The register header shows the status; closing rolls up the shift’s sales for the Z-report. Scheduled staff also auto-open on login.
+            </Text>
+            {shiftLoading ? (
+              <ActivityIndicator color={WARN} style={{ marginVertical: 12 }} />
+            ) : (
+              <>
+                <View className="flex-row items-center gap-2 mb-1">
+                  <Power size={18} color={shift ? "#22C55E" : WARN} />
+                  <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                    {shift ? "Store open" : "Store closed"}
+                  </Text>
+                  {shift?.opened_at ? (
+                    <Text className="text-cream/45 text-xs" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                      · since {new Date(shift.opened_at).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                    </Text>
+                  ) : null}
+                  {shiftBusy && <ActivityIndicator color={WARN} style={{ marginLeft: 4 }} />}
+                </View>
+                <View className="flex-row mt-2">
+                  {shift ? (
+                    <Btn label="Close Store" Icon={Power} onPress={onCloseStore} disabled={shiftBusy} />
+                  ) : (
+                    <Btn label="Open Store" Icon={Power} onPress={onOpenStore} disabled={shiftBusy || !staff?.staffId} primary />
+                  )}
+                </View>
+                {closedTotals ? (
+                  <Text className="text-cream/55 text-[12px] mt-2" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                    Shift closed — {closedTotals.orders} order{closedTotals.orders === 1 ? "" : "s"} · RM{(closedTotals.sales / 100).toFixed(2)}.
+                  </Text>
+                ) : null}
+              </>
+            )}
+          </Card>
 
           {/* ── Online ordering (QR table + pickup) open/close ── */}
           <Card title="Online Ordering" Icon={ShoppingBag}>
