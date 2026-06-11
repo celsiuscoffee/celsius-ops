@@ -120,13 +120,16 @@ export const MODULE_GROUPS: Record<string, { label: string; keys: string[] }[]> 
     { label: "History", keys: ["redemptions"] },
     { label: "Campaigns", keys: ["campaigns", "engage"] },
   ],
+  // Mirrors the BrioHR-style sidebar IA (see (admin)/layout.tsx HR section):
+  // module = subgroup; sub-pages are reached via the in-module tab strip.
   hr: [
     { label: "Overview", keys: ["dashboard"] },
-    { label: "People", keys: ["employees", "performance", "review-penalties"] },
+    { label: "People", keys: ["employees", "memos"] },
+    { label: "Leave", keys: ["leave"] },
+    { label: "Time & Attendance", keys: ["attendance", "overtime"] },
     { label: "Scheduling", keys: ["schedules"] },
-    { label: "Time & Attendance", keys: ["attendance", "overtime", "leave"] },
-    { label: "Payroll & Compensation", keys: ["payroll", "allowances"] },
-    { label: "Communication", keys: ["memos"] },
+    { label: "Payroll", keys: ["payroll", "allowances"] },
+    { label: "Performance", keys: ["performance", "review-penalties"] },
     { label: "Admin", keys: ["settings"] },
   ],
   settings: [

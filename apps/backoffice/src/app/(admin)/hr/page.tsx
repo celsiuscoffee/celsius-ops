@@ -1,9 +1,109 @@
 "use client";
 
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, CalendarOff, CalendarDays, Banknote, Bot, Loader2, ShieldAlert, ArrowLeftRight, BarChart3, Cake, PartyPopper, Award } from "lucide-react";
+import { Clock, CalendarOff, CalendarDays, Banknote, Bot, Loader2, BarChart3, Cake, PartyPopper, Users, TrendingUp, Settings } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+
+// Module hub cards — mirror the sidebar IA ((admin)/layout.tsx HR section) and
+// the in-module tab strips (components/hr/module-tabs.tsx) so all three
+// surfaces present the same BrioHR-style structure.
+const MODULES = [
+  {
+    label: "People",
+    description: "Profiles, documents, certifications",
+    href: "/hr/employees",
+    icon: Users,
+    color: "text-terracotta bg-orange-50",
+    links: [
+      { label: "Employees", href: "/hr/employees" },
+      { label: "Certifications", href: "/hr/certifications" },
+      { label: "Memos", href: "/hr/memos" },
+    ],
+  },
+  {
+    label: "Leave",
+    description: "Requests, balances, policies",
+    href: "/hr/leave",
+    icon: CalendarOff,
+    color: "text-amber-600 bg-amber-50",
+    links: [
+      { label: "Requests", href: "/hr/leave" },
+      { label: "Balances", href: "/hr/settings" },
+      { label: "Policies", href: "/hr/settings/leave-policies" },
+      { label: "Holidays", href: "/hr/settings/public-holidays" },
+    ],
+  },
+  {
+    label: "Time & Attendance",
+    description: "Clock-ins, overtime, swaps",
+    href: "/hr/attendance",
+    icon: Clock,
+    color: "text-blue-600 bg-blue-50",
+    links: [
+      { label: "Attendance", href: "/hr/attendance" },
+      { label: "Overtime", href: "/hr/overtime" },
+      { label: "Shift Swaps", href: "/hr/shift-swaps" },
+    ],
+  },
+  {
+    label: "Scheduling",
+    description: "Rosters, availability, coverage",
+    href: "/hr/schedules",
+    icon: CalendarDays,
+    color: "text-indigo-600 bg-indigo-50",
+    links: [
+      { label: "Schedules", href: "/hr/schedules" },
+      { label: "Availability", href: "/hr/availability" },
+      { label: "Coverage", href: "/hr/coverage" },
+    ],
+  },
+  {
+    label: "Payroll",
+    description: "Runs, allowances, statutory",
+    href: "/hr/payroll",
+    icon: Banknote,
+    color: "text-green-600 bg-green-50",
+    links: [
+      { label: "Monthly", href: "/hr/payroll" },
+      { label: "Weekly", href: "/hr/payroll/weekly" },
+      { label: "Allowances", href: "/hr/allowances" },
+      { label: "Statutory Calendar", href: "/hr/compliance" },
+    ],
+  },
+  {
+    label: "Performance",
+    description: "Scores, review penalties",
+    href: "/hr/performance",
+    icon: TrendingUp,
+    color: "text-purple-600 bg-purple-50",
+    links: [
+      { label: "Performance", href: "/hr/performance" },
+      { label: "Review Penalties", href: "/hr/review-penalties" },
+    ],
+  },
+  {
+    label: "Reports",
+    description: "Headcount, turnover, payroll trend",
+    href: "/hr/analytics",
+    icon: BarChart3,
+    color: "text-cyan-700 bg-cyan-50",
+    links: [{ label: "Analytics", href: "/hr/analytics" }],
+  },
+  {
+    label: "Settings",
+    description: "Policies, holidays, company",
+    href: "/hr/settings",
+    icon: Settings,
+    color: "text-gray-600 bg-gray-100",
+    links: [
+      { label: "Time Off", href: "/hr/settings" },
+      { label: "Shift Templates", href: "/hr/settings/shift-templates" },
+      { label: "Working Time", href: "/hr/settings/working-time" },
+      { label: "Company", href: "/hr/settings/company" },
+    ],
+  },
+];
 
 type DashboardData = {
   flaggedAttendance: number;
@@ -108,36 +208,36 @@ export default function HRDashboardPage() {
         })}
       </div>
 
-      {/* Quick links to new HR tools */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Link href="/hr/analytics" className="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md">
-          <BarChart3 className="h-5 w-5 text-terracotta" />
-          <div>
-            <p className="font-medium">HR Analytics</p>
-            <p className="text-xs text-muted-foreground">Headcount, turnover, payroll trend</p>
-          </div>
-        </Link>
-        <Link href="/hr/compliance" className="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md">
-          <ShieldAlert className="h-5 w-5 text-orange-600" />
-          <div>
-            <p className="font-medium">Compliance Calendar</p>
-            <p className="text-xs text-muted-foreground">LHDN / KWSP / PERKESO deadlines</p>
-          </div>
-        </Link>
-        <Link href="/hr/certifications" className="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md">
-          <Award className="h-5 w-5 text-amber-600" />
-          <div>
-            <p className="font-medium">Certifications</p>
-            <p className="text-xs text-muted-foreground">Food handler, halal, first aid — expiry tracking</p>
-          </div>
-        </Link>
-        <Link href="/hr/shift-swaps" className="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md">
-          <ArrowLeftRight className="h-5 w-5 text-blue-600" />
-          <div>
-            <p className="font-medium">Shift Swaps</p>
-            <p className="text-xs text-muted-foreground">Approve / reject swap requests</p>
-          </div>
-        </Link>
+      {/* Module hub — BrioHR-style: one card per module, sub-pages as inline
+          links (same groups as the sidebar + in-module tab strips). */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {MODULES.map((m) => {
+          const Icon = m.icon;
+          return (
+            <div key={m.label} className="rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md">
+              <Link href={m.href} className="flex items-center gap-3">
+                <div className={`rounded-lg p-2 ${m.color}`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-medium">{m.label}</p>
+                  <p className="text-xs text-muted-foreground">{m.description}</p>
+                </div>
+              </Link>
+              <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-2.5">
+                {m.links.map((l) => (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className="rounded-full border px-2.5 py-0.5 text-[11px] text-muted-foreground transition hover:border-terracotta hover:text-terracotta"
+                  >
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Celebrations widget — birthdays + anniversaries */}

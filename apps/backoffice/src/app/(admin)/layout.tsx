@@ -365,19 +365,42 @@ const NAV_SECTIONS: NavSection[] = [
     icon: <Bot className={ICON_SIZE} />,
     railIcon: <Bot className={RAIL_ICON_SIZE} />,
     dividerBefore: true,
+    // BrioHR-style module IA: the sidebar picks a module (People / Leave /
+    // Time / Scheduling / Payroll / Performance), the in-module tab strip
+    // (components/hr/module-tabs.tsx) switches between its sibling pages.
+    // Sub-pages of a module deliberately do NOT get their own sidebar entry —
+    // they're reachable from the module tabs, keeping the rail short. URLs
+    // are unchanged; orphan pages (analytics, compliance, certifications,
+    // shift-swaps) are now reachable and reuse their parent module's key so
+    // the access registry needs no new grants.
     subgroups: [
       {
         label: "Overview",
         items: [
           { label: "Dashboard", href: "/hr", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "hr:dashboard" },
+          { label: "Analytics", href: "/hr/analytics", icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "hr:dashboard" },
         ],
       },
       {
         label: "People",
         items: [
           { label: "Employees", href: "/hr/employees", icon: <UserCog className={ICON_SIZE} />, moduleKey: "hr:employees" },
-          { label: "Performance", href: "/hr/performance", icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "hr:performance" },
-          { label: "Review Penalties", href: "/hr/review-penalties", icon: <AlertTriangle className={ICON_SIZE} />, moduleKey: "hr:review-penalties" },
+          { label: "Certifications", href: "/hr/certifications", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "hr:employees" },
+          { label: "Memos", href: "/hr/memos", icon: <FileText className={ICON_SIZE} />, moduleKey: "hr:memos" },
+        ],
+      },
+      {
+        label: "Leave",
+        items: [
+          { label: "Requests", href: "/hr/leave", icon: <CalendarOff className={ICON_SIZE} />, moduleKey: "hr:leave" },
+        ],
+      },
+      {
+        label: "Time & Attendance",
+        items: [
+          { label: "Attendance", href: "/hr/attendance", icon: <Clock className={ICON_SIZE} />, moduleKey: "hr:attendance" },
+          { label: "Overtime", href: "/hr/overtime", icon: <Clock className={ICON_SIZE} />, moduleKey: "hr:overtime" },
+          { label: "Shift Swaps", href: "/hr/shift-swaps", icon: <ArrowLeftRight className={ICON_SIZE} />, moduleKey: "hr:schedules" },
         ],
       },
       {
@@ -389,24 +412,18 @@ const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        label: "Time & Attendance",
+        label: "Payroll",
         items: [
-          { label: "Attendance", href: "/hr/attendance", icon: <Clock className={ICON_SIZE} />, moduleKey: "hr:attendance" },
-          { label: "Overtime", href: "/hr/overtime", icon: <Clock className={ICON_SIZE} />, moduleKey: "hr:overtime" },
-          { label: "Leave", href: "/hr/leave", icon: <CalendarOff className={ICON_SIZE} />, moduleKey: "hr:leave" },
-        ],
-      },
-      {
-        label: "Payroll & Compensation",
-        items: [
-          { label: "Payroll", href: "/hr/payroll", icon: <Banknote className={ICON_SIZE} />, moduleKey: "hr:payroll" },
+          { label: "Payroll Runs", href: "/hr/payroll", icon: <Banknote className={ICON_SIZE} />, moduleKey: "hr:payroll" },
           { label: "Allowances", href: "/hr/allowances", icon: <Banknote className={ICON_SIZE} />, moduleKey: "hr:allowances" },
+          { label: "Statutory Calendar", href: "/hr/compliance", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "hr:payroll" },
         ],
       },
       {
-        label: "Communication",
+        label: "Performance",
         items: [
-          { label: "Memos", href: "/hr/memos", icon: <FileText className={ICON_SIZE} />, moduleKey: "hr:memos" },
+          { label: "Monthly Scores", href: "/hr/performance", icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "hr:performance" },
+          { label: "Review Penalties", href: "/hr/review-penalties", icon: <AlertTriangle className={ICON_SIZE} />, moduleKey: "hr:review-penalties" },
         ],
       },
     ],
