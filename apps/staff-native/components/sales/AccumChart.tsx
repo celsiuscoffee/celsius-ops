@@ -93,7 +93,7 @@ export function AccumChart({
 
   const curV = cumCur[idx];
   const prevV = cumPrev[idx] ?? 0;
-  const TW = 162;
+  const TW = 200; // wide enough for "Yesterday / Last month" + RM value on ONE line
   const tipLeft = x(idx) + 12 + TW <= w - 4 ? x(idx) + 12 : Math.max(4, x(idx) - 12 - TW);
 
   return (
@@ -158,8 +158,8 @@ function TipRow({ color, label, value }: { color: string; label: string; value: 
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
       <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }} />
-      <Text style={{ color: "#F5F3F0", fontSize: 12.5, fontFamily: "SpaceGrotesk_500Medium", flex: 1 }}>{label}</Text>
-      <Text style={{ color: "#F5F3F0", fontSize: 12.5, fontFamily: "SpaceGrotesk_700Bold" }}>{value}</Text>
+      <Text numberOfLines={1} style={{ color: "#F5F3F0", fontSize: 12.5, fontFamily: "SpaceGrotesk_500Medium", flex: 1 }}>{label}</Text>
+      <Text numberOfLines={1} style={{ color: "#F5F3F0", fontSize: 12.5, fontFamily: "SpaceGrotesk_700Bold" }}>{value}</Text>
     </View>
   );
 }
