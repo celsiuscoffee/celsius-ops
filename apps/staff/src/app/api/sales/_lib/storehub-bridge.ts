@@ -14,7 +14,8 @@
  * ≤1h vs the backoffice's live pull. StoreHub gives revenue/orders/channels/
  * trend only — payment-method + customer growth stay native/app-only.
  */
-import { supabaseAdmin } from "@/lib/supabase";
+import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import {
   getMYTDateStr, getMYTHour, getRound, ROUNDS, mytDayStartUTC, mytDayEndUTC,
 } from "./sales-helpers";
@@ -34,8 +35,8 @@ export type ShContrib = {
 
 type ShRow = {
   outlet_id: string;
-  transaction_time: string;
-  sub_total: number | null;
+  transaction_time: Date | string;
+  sub_total: number | string | null;
   channel: string | null;
   order_type: string | null;
   is_cancelled: boolean | null;
@@ -73,33 +74,40 @@ export async function getStorehubFromDB(opts: {
   const winStart = mytDayStartUTC(opts.prev.from);
   const winEnd = mytDayEndUTC(opts.cur.to);
 
-  const { data, error } = await supabaseAdmin
-    .from("storehub_sales")
-    .select("outlet_id, transaction_time, sub_total, channel, order_type, is_cancelled")
-    .in("outlet_id", ids)
-    .gte("transaction_time", winStart)
-    .lte("transaction_time", winEnd)
-    .limit(100000);
-
-  if (error) {
-    out.warnings.push(`storehub_sales: ${error.message}`);
+  // Pull via raw SQL (like the backoffice unified reader) — NOT the PostgREST
+  // client. supabaseAdmin.from().select() is silently capped at ~1000 rows, so a
+  // wide window (week/month/custom = 1000s of rows) was truncated to the OLDEST
+  // ~1000 and the current period lost its StoreHub entirely; Day only worked
+  // because its window fits in a single page. Raw SQL has no such cap.
+  let data: ShRow[] = [];
+  try {
+    data = await prisma.$queryRaw<ShRow[]>`
+      SELECT outlet_id, transaction_time, sub_total, channel, order_type, is_cancelled
+      FROM storehub_sales
+      WHERE outlet_id IN (${Prisma.join(ids)})
+        AND transaction_time >= ${new Date(winStart)}
+        AND transaction_time <= ${new Date(winEnd)}
+    `;
+  } catch (e) {
+    out.warnings.push(`storehub_sales: ${e instanceof Error ? e.message : "query failed"}`);
     return out;
   }
 
   const inCur = (d: string) => d >= opts.cur.from && d <= opts.cur.to;
   const inPrev = (d: string) => d >= opts.prev.from && d <= opts.prev.to;
 
-  for (const r of (data || []) as ShRow[]) {
+  for (const r of data) {
     if (r.is_cancelled === true) continue;
+    const ts = typeof r.transaction_time === "string" ? r.transaction_time : r.transaction_time.toISOString();
     // Cutover routing: after cutover keep only channel-carrying (external) rows;
     // channel-less till rows are on pos_orders now → keeping them double-counts.
     const co = cutover.get(r.outlet_id);
-    if (co && new Date(r.transaction_time).getTime() >= co.getTime()) {
+    if (co && new Date(ts).getTime() >= co.getTime()) {
       if (!(r.channel && r.channel.trim() !== "")) continue;
     }
-    const d = getMYTDateStr(r.transaction_time);
-    const h = getMYTHour(r.transaction_time);
-    const rev = sen(r.sub_total || 0);
+    const d = getMYTDateStr(ts);
+    const h = getMYTHour(ts);
+    const rev = sen(Number(r.sub_total ?? 0) || 0);
     const ch = classifyShChannel(r.channel, r.order_type);
     if (inCur(d)) {
       out.curRevSen += rev; out.curOrd++;
