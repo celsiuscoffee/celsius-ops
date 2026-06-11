@@ -163,41 +163,28 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Menu & BOM", href: "/inventory/menus", icon: <BookOpen className={ICON_SIZE} />, moduleKey: "inventory:menus" },
     ],
   },
-  // POS — every order channel in one section. The customer app (pickup /
-  // web / QR-table) and the in-store register + Grab/delivery used to be
-  // two separate sidebar sections ("Pickup App" + "POS"); they're folded
-  // into one here. Kept the name "POS" (not "Sales") — "Sales" still
-  // refers to the StoreHub sales source elsewhere. URLs unchanged.
+  // Sales — one rail tab for everything sales/POS. Used to be two sections
+  // ("Pickup App" + "POS") plus a standalone "Sales" analytics section;
+  // StoreHub is retired so "Sales" no longer names a separate source, and
+  // all the side tabs live here as a flat list:
+  //   Dashboard (period analytics) · Orders (live queue) · Customers ·
+  //   Compare · Reports (Sales/Z/Tax tabs) · Cashier Performance.
+  // The old thin /pickup "today" overview was dropped — Dashboard is now
+  // the /sales analytics page. Customers still points at /pickup/customers
+  // until the consolidated customer page (merged with Rewards → Members)
+  // ships, then it repoints. Settings surfaces stay under Settings. URLs
+  // otherwise unchanged.
   {
-    label: "POS",
-    icon: <CreditCard className={ICON_SIZE} />,
-    railIcon: <CreditCard className={RAIL_ICON_SIZE} />,
-    subgroups: [
-      {
-        label: "Overview",
-        items: [
-          // One dashboard across all channels (the /pickup dashboard now
-          // pulls orders + pos_orders). The thin /pos landing was dropped —
-          // its links live in this Sales section + Settings.
-          { label: "Dashboard", href: "/pickup", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "pickup:orders" },
-        ],
-      },
-      {
-        label: "Orders & Customers",
-        items: [
-          { label: "Orders",    href: "/pickup/orders",    icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
-          { label: "Customers", href: "/pickup/customers", icon: <Users className={ICON_SIZE} />,         moduleKey: "pickup:customers" },
-        ],
-      },
-      {
-        label: "Reports & cash-up",
-        items: [
-          // One "Reports" entry — Sales / Z-Report / Tax (SST) are tabs
-          // within the page now (see pos/_ReportsTabs).
-          { label: "Reports", href: "/pos/reports", icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "pickup:settings" },
-          { label: "Cashier Performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />, moduleKey: "pickup:settings" },
-        ],
-      },
+    label: "Sales",
+    icon: <BarChart3 className={ICON_SIZE} />,
+    railIcon: <BarChart3 className={RAIL_ICON_SIZE} />,
+    items: [
+      { label: "Dashboard",           href: "/sales/dashboard",         icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "sales:dashboard" },
+      { label: "Orders",              href: "/pickup/orders",           icon: <ClipboardList className={ICON_SIZE} />,   moduleKey: "pickup:orders" },
+      { label: "Customers",           href: "/loyalty/members",         icon: <Users className={ICON_SIZE} />,           moduleKey: "loyalty:members" },
+      { label: "Compare",             href: "/sales/compare",           icon: <Scale className={ICON_SIZE} />,           moduleKey: "sales:dashboard" },
+      { label: "Reports",             href: "/pos/reports",             icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "pickup:settings" },
+      { label: "Cashier Performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,           moduleKey: "pickup:settings" },
     ],
   },
   {
@@ -340,15 +327,6 @@ const NAV_SECTIONS: NavSection[] = [
           { label: "Invoices",  href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,          moduleKey: "ads:invoices" },
         ],
       },
-    ],
-  },
-  {
-    label: "Sales",
-    icon: <BarChart3 className={ICON_SIZE} />,
-    railIcon: <BarChart3 className={RAIL_ICON_SIZE} />,
-    items: [
-      { label: "Dashboard", href: "/sales/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "sales:dashboard" },
-      { label: "Compare", href: "/sales/compare", icon: <Scale className={ICON_SIZE} />, moduleKey: "sales:dashboard" },
     ],
   },
   {

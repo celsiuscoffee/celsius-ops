@@ -107,7 +107,16 @@ export async function POST(request: NextRequest) {
       pickupAt: pickupAtInput,
       orderType: orderTypeInput,
       tableNumber: tableNumberInput,
+      source: sourceInput,
     } = body;
+    // Origin attribution — the client sends where the order was placed,
+    // derived from Platform.OS (native iOS/Android app vs the web PWA). We
+    // allowlist server-side and default unknown/absent to "web" so the value
+    // is always one of the known channels. Powers the "ordered via app"
+    // customer segment in the backoffice. (Table-QR dine-in keeps its own
+    // "web_qr" tag set on the /api/checkout/initiate path.)
+    const orderSource: "app_ios" | "app_android" | "web" =
+      sourceInput === "app_ios" || sourceInput === "app_android" ? sourceInput : "web";
     // Fulfilment type — the native app sends "pickup" (default) or "dine_in"
     // (entered via a table-QR deep link). dine_in REQUIRES a table number;
     // pickup never carries one. The promo channel follows: dine_in resolves
@@ -604,6 +613,7 @@ export async function POST(request: NextRequest) {
         pickup_at:              pickupAt,
         order_type:             orderType,
         table_number:           tableNumber,
+        source:                 orderSource,    // origin attribution (app vs web)
       } as Record<string, unknown>)
       .select()
       .single();

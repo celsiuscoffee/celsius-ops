@@ -30,7 +30,7 @@ function isEligibleToRedeem(pointsBalance: number, lowestRewardPoints: number) {
 }
 
 // ─── Advanced filter types ──────────────────────────────
-type FilterField = "total_spent" | "last_visit" | "points_balance" | "total_visits" | "joined_date" | "tag" | "sms_received";
+type FilterField = "total_spent" | "last_visit" | "points_balance" | "total_visits" | "joined_date" | "tag" | "sms_received" | "purchased_product" | "order_channel";
 type FilterOp = ">" | "<" | "=" | ">=" | "<=" | "!=";
 
 interface MemberFilter {
@@ -47,7 +47,19 @@ const filterFieldLabels: Record<FilterField, string> = {
   joined_date: "Joined date",
   tag: "Tag",
   sms_received: "SMS received",
+  purchased_product: "Purchased product",
+  order_channel: "Order channel",
 };
+
+// Order channels — must match lib/loyalty/order-channel.ts and the values
+// attached to each member as `order_channels`.
+const ORDER_CHANNEL_OPTIONS: { value: string; label: string }[] = [
+  { value: "app", label: "Native app" },
+  { value: "web", label: "Website / PWA" },
+  { value: "qr", label: "Table QR" },
+  { value: "instore", label: "In-store counter" },
+];
+const channelLabel = (v: string) => ORDER_CHANNEL_OPTIONS.find((c) => c.value === v)?.label ?? v;
 
 const filterOpLabels: Record<FilterOp, string> = {
   ">": "greater than",
@@ -104,6 +116,11 @@ type DetailData = {
   orders: { id: string; order_number: string; total: number; status: string; created_at: string; source: string }[];
   ledger: { id: string; type: string; points: number; balance_after: number; description: string | null; created_at: string }[];
   redemptions: { id: string; points_spent: number; status: string; code: string | null; created_at: string }[];
+  purchaseHistory?: {
+    topProducts: { product_id: string | null; product_name: string; quantity: number; spend: number }[];
+    recentItems: { product_name: string; variant_name: string | null; quantity: number; item_total: number; created_at: string | null }[];
+    totalItems: number;
+  };
 };
 
 function DetailStat({ label, value }: { label: string; value: string }) {
@@ -126,7 +143,7 @@ function DetailRow({ left, sub, right, rightCls, time }: { left: string; sub?: s
   );
 }
 
-type MappedMember = { id: string; phone: string; name: string | null; email: string | null; birthday: string | null; preferred_outlet_id: string | null; created_at: string; updated_at: string; points_balance: number; total_visits: number; total_spent: number; joined_at: string; last_visit_at: string | null; tags: string[]; current_tier_id: string | null };
+type MappedMember = { id: string; phone: string; name: string | null; email: string | null; birthday: string | null; preferred_outlet_id: string | null; created_at: string; updated_at: string; points_balance: number; total_visits: number; total_spent: number; joined_at: string; last_visit_at: string | null; tags: string[]; current_tier_id: string | null; purchased_product_ids: string[]; order_channels: string[] };
 
 function mapMember(m: MemberWithBrand): MappedMember {
   return {
@@ -145,6 +162,10 @@ function mapMember(m: MemberWithBrand): MappedMember {
     last_visit_at: m.brand_data?.last_visit_at ?? null,
     tags: ((m as unknown as Record<string, unknown>).tags as string[]) || [],
     current_tier_id: (m.brand_data as unknown as { current_tier_id?: string | null })?.current_tier_id ?? null,
+    // Only the all=true load populates these; default to empty so paginated
+    // rows (which don't carry aggregates) simply don't match item/channel filters.
+    purchased_product_ids: m.purchased_product_ids ?? [],
+    order_channels: m.order_channels ?? [],
   };
 }
 
@@ -244,6 +265,9 @@ export default function MembersPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [bulkTagInput, setBulkTagInput] = useState("");
   const [bulkTagging, setBulkTagging] = useState(false);
+  // Products that have ever been purchased — fills the "Purchased product"
+  // filter dropdown. Loaded once, lazily.
+  const [purchasedProducts, setPurchasedProducts] = useState<{ id: string; name: string; units: number; orders: number }[]>([]);
 
   // ─── Debounce search for server-side queries ───────
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -259,6 +283,14 @@ export default function MembersPage() {
       const stored = localStorage.getItem(SAVED_SEGMENTS_KEY);
       if (stored) setSavedSegments(JSON.parse(stored));
     } catch {}
+  }, []);
+
+  // Load the purchased-products catalogue for the item filter dropdown.
+  useEffect(() => {
+    fetch("/api/loyalty/members/purchased-products", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : { products: [] }))
+      .then((d) => setPurchasedProducts(d.products ?? []))
+      .catch(() => setPurchasedProducts([]));
   }, []);
 
   // Persist saved segments
@@ -480,6 +512,18 @@ export default function MembersPage() {
             if (smsRecipientPhones.size > 0 && !smsRecipientPhones.has(m.phone)) return false;
             if (smsRecipientPhones.size === 0) return false;
           }
+        }
+        // Purchased a specific product (= has bought, != never bought).
+        if (f.field === "purchased_product" && f.value) {
+          const bought = m.purchased_product_ids.includes(f.value);
+          if (f.op === "!=" ? bought : !bought) return false;
+        }
+        // Ordered via a specific channel (= used it, != never used it).
+        // "app" is the lever for app-adoption marketing; "!= app" = the
+        // never-used-the-app push list.
+        if (f.field === "order_channel" && f.value) {
+          const used = m.order_channels.includes(f.value);
+          if (f.op === "!=" ? used : !used) return false;
         }
       }
 
@@ -876,6 +920,14 @@ export default function MembersPage() {
             const memberTags = m.tags || [];
             if (f.op === "=" && !memberTags.some((t) => t.toLowerCase() === f.value.toLowerCase())) return false;
           }
+          if (f.field === "purchased_product" && f.value) {
+            const bought = m.purchased_product_ids.includes(f.value);
+            if (f.op === "!=" ? bought : !bought) return false;
+          }
+          if (f.field === "order_channel" && f.value) {
+            const used = m.order_channels.includes(f.value);
+            if (f.op === "!=" ? used : !used) return false;
+          }
         }
         if (seg.tagFilter) {
           const memberTags = m.tags || [];
@@ -1108,7 +1160,7 @@ export default function MembersPage() {
               key={i}
               className="inline-flex items-center gap-1 rounded-full border border-[#C2452D]/30 bg-[#C2452D]/5 px-3 py-1.5 text-xs font-medium text-[#C2452D]"
             >
-              {filterFieldLabels[f.field]} {f.op} {f.field === "tag" ? `"${f.value}"` : f.field === "sms_received" ? `"${(smsMessages.find((s) => s.message === f.value)?.display || f.value).slice(0, 30)}..."` : f.value}
+              {filterFieldLabels[f.field]} {f.op === "!=" && (f.field === "purchased_product" || f.field === "order_channel") ? "not" : f.op} {f.field === "tag" ? `"${f.value}"` : f.field === "sms_received" ? `"${(smsMessages.find((s) => s.message === f.value)?.display || f.value).slice(0, 30)}..."` : f.field === "purchased_product" ? `"${purchasedProducts.find((p) => p.id === f.value)?.name || f.value}"` : f.field === "order_channel" ? `"${channelLabel(f.value)}"` : f.value}
               <button onClick={() => removeFilter(i)} className="ml-0.5 hover:text-red-700"><X className="h-3 w-3" /></button>
             </span>
           ))}
@@ -1228,7 +1280,7 @@ export default function MembersPage() {
                   onChange={(e) => updateFilter(idx, "op", e.target.value)}
                   className="rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200 w-20"
                 >
-                  {filter.field === "sms_received" ? (
+                  {filter.field === "sms_received" || filter.field === "purchased_product" || filter.field === "order_channel" ? (
                     <>
                       <option value="=">is</option>
                       <option value="!=">not</option>
@@ -1273,6 +1325,30 @@ export default function MembersPage() {
                     ))}
                     {suggestedTags.filter((t) => !allTags.includes(t)).map((t) => (
                       <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                ) : filter.field === "purchased_product" ? (
+                  <select
+                    value={filter.value}
+                    onChange={(e) => updateFilter(idx, "value", e.target.value)}
+                    className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
+                  >
+                    <option value="">Select product</option>
+                    {purchasedProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.units} sold)
+                      </option>
+                    ))}
+                  </select>
+                ) : filter.field === "order_channel" ? (
+                  <select
+                    value={filter.value}
+                    onChange={(e) => updateFilter(idx, "value", e.target.value)}
+                    className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
+                  >
+                    <option value="">Select channel</option>
+                    {ORDER_CHANNEL_OPTIONS.map((c) => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
                     ))}
                   </select>
                 ) : (
@@ -1910,6 +1986,44 @@ export default function MembersPage() {
                         <DetailRow key={o.id} left={`#${o.order_number}`} sub={`${o.source} · ${o.status}`} right={`RM ${(o.total / 100).toFixed(2)}`} time={getTimeAgo(o.created_at)} />
                       ))}
                   </div>
+                </div>
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                    Purchases{detailData.purchaseHistory ? ` (${detailData.purchaseHistory.totalItems} items)` : ""}
+                  </h4>
+                  {!detailData.purchaseHistory || detailData.purchaseHistory.totalItems === 0 ? (
+                    <p className="text-xs text-gray-400 dark:text-neutral-500">No item-level purchases recorded yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <p className="mb-1 text-[11px] font-medium text-gray-400 dark:text-neutral-500">Top products</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {detailData.purchaseHistory.topProducts.map((p, i) => (
+                            <span key={p.product_id ?? `${p.product_name}-${i}`} className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-neutral-700 px-2 py-0.5 text-[11px] text-gray-700 dark:text-neutral-300">
+                              {p.product_name}
+                              <span className="font-semibold tabular-nums text-gray-500 dark:text-neutral-400">×{p.quantity}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {detailData.purchaseHistory.recentItems.length > 0 && (
+                        <div>
+                          <p className="mb-1 text-[11px] font-medium text-gray-400 dark:text-neutral-500">Recent items</p>
+                          <div className="space-y-1">
+                            {detailData.purchaseHistory.recentItems.map((it, i) => (
+                              <DetailRow
+                                key={`${it.product_name}-${it.created_at}-${i}`}
+                                left={`${it.quantity}× ${it.product_name}`}
+                                sub={it.variant_name || undefined}
+                                right={`RM ${(it.item_total / 100).toFixed(2)}`}
+                                time={it.created_at ? getTimeAgo(it.created_at) : ""}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">Points ledger</h4>
