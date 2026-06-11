@@ -18,12 +18,18 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get("status") || "active";
   const type = searchParams.get("type");
 
+  // A MANAGER may only see memos addressed to someone in their subtree (or
+  // themselves) — not the whole company's memos (which include warnings).
+  // OWNER/ADMIN: no scope (resolveVisibleUserIds returns null).
+  const visible = await resolveVisibleUserIds(session);
+
   let q = hrSupabaseAdmin
     .from("hr_memos")
     .select("*")
     .order("issued_at", { ascending: false })
     .limit(200);
   if (userId) q = q.contains("user_ids", [userId]);
+  if (visible !== null) q = q.overlaps("user_ids", [session.id, ...visible]);
   if (status !== "all") q = q.eq("status", status);
   if (type) q = q.eq("type", type);
 

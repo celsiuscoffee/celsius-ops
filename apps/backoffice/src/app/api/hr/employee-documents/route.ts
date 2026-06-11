@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
-import { resolveVisibleUserIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -46,23 +45,17 @@ async function signRows(
 //   OWNER / ADMIN: any user. MANAGER: only their subtree. STAFF: themselves.
 export async function GET(req: NextRequest) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // OWNER/ADMIN only. The vault holds LOEs, contracts and confirmation letters
+  // that contain salary and statutory data — BrioHR gates these to HR admins,
+  // not line managers. The employee detail UI already only renders the
+  // Documents section for OWNER/ADMIN (canUploadDocs), so managers lose nothing.
+  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { searchParams } = new URL(req.url);
   const targetUserId = searchParams.get("userId") || session.id;
   const typeFilter = searchParams.get("type");
-
-  // Scope check
-  if (session.role === "STAFF" && targetUserId !== session.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-  if (session.role === "MANAGER") {
-    const allowed = await resolveVisibleUserIds(session);
-    const allowedSet = new Set([session.id, ...(allowed || [])]);
-    if (!allowedSet.has(targetUserId)) {
-      return NextResponse.json({ error: "Forbidden — outside your subtree" }, { status: 403 });
-    }
-  }
 
   let q = hrSupabaseAdmin
     .from("hr_employee_documents")

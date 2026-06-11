@@ -11,7 +11,12 @@ const supabaseKey = process.env.LOYALTY_SUPABASE_SERVICE_ROLE_KEY || "";
 
 export async function GET() {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // OWNER/ADMIN only — returns employer statutory IDs + a signed URL of the
+  // authorised-signatory signature image (forgery risk if wider). All callers
+  // are HR Settings pages, which are already OWNER/ADMIN.
+  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { data, error } = await hrSupabaseAdmin.from("hr_company_settings").select("*").limit(1).maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

@@ -49,12 +49,23 @@ export async function GET() {
   });
 
   const PII_PROFILE_FIELDS = [
+    // Compensation + banking
     "basic_salary", "hourly_rate",
     "attendance_allowance_amount", "performance_allowance_amount",
+    "overtime_flat_rate", "shift_flat_rate",
+    // Statutory / government identifiers
     "ic_number", "passport_number", "passport_expiry",
-    "epf_number", "socso_number", "eis_number", "tax_number", "pcb_number",
+    "epf_number", "socso_number", "eis_number", "tax_number", "pcb_number", "ssfw_number",
     "epf_employee_rate", "epf_employer_rate", "epf_category",
-    "overtime_flat_rate",
+    // PDPA-sensitive personal data — a line manager has no operational need for
+    // these and BrioHR gates them to HR admins. Emergency contact is kept
+    // (managers may need it on-shift).
+    "date_of_birth", "race", "religion", "marital_status",
+    "address_line1", "address_line2", "address_city", "address_state", "address_postcode",
+    "spouse_name", "spouse_working", "num_children", "children_count",
+    "personal_email", "secondary_phone",
+    "spouse_relief", "lifestyle_relief", "life_insurance_relief", "medical_relief", "education_relief",
+    "zakat_amount", "zakat_enabled", "prs_rate",
   ];
 
   const sanitizeProfile = (profile: Record<string, unknown> | undefined) => {

@@ -8,6 +8,17 @@ const SECRET = new TextEncoder().encode(
 
 const COOKIE_NAME = "celsius-session";
 
+// Audience claim binds a cookie session to THIS app. The staff app, POS-native
+// and loyalty all sign `celsius-session` with the same JWT_SECRET and (with
+// AUTH_COOKIE_DOMAIN=.celsiuscoffee.com) the cookie is sent cross-subdomain —
+// so without an audience check a STAFF-role staff-app token would satisfy
+// backoffice's cookie auth. Backoffice mints + verifies aud="backoffice" on the
+// cookie path. NOTE: the Bearer path (verifyToken, used by the native sales
+// dashboard) intentionally stays audience-agnostic — native staff tokens are
+// accepted there by design. Enforcing this rejects pre-existing cookie tokens
+// (they lack aud) → one forced re-login for backoffice users.
+const AUDIENCE = "backoffice";
+
 // NOTE on session revocation:
 //
 // User.tokenRevokedAt column exists on the schema but is unused.
@@ -47,6 +58,7 @@ export async function createSession(user: SessionUser) {
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt() // required for verifyTokenFresh to do revocation checks
+    .setAudience(AUDIENCE)
     .setExpirationTime("7d")
     .sign(SECRET);
 
@@ -68,7 +80,7 @@ export async function getSession(): Promise<SessionUser | null> {
   if (!token) return null;
 
   try {
-    const { payload } = await jwtVerify(token, SECRET);
+    const { payload } = await jwtVerify(token, SECRET, { audience: AUDIENCE });
     return payload as unknown as SessionUser;
   } catch {
     return null;
@@ -80,7 +92,12 @@ export async function clearSession() {
   cookieStore.delete(COOKIE_NAME);
 }
 
-// For Edge middleware (can't use cookies() helper)
+// Bearer-token verification (native sales dashboard, edge middleware).
+// Intentionally audience-agnostic: the native staff app presents its own
+// token as a Bearer here by design (see api/sales/native-dashboard). The
+// cross-app risk this function would otherwise carry is contained because it
+// is NOT used for cookie auth — cookie auth goes through getSession /
+// getUserFromHeaders, which DO enforce the backoffice audience.
 export async function verifyToken(token: string): Promise<SessionUser | null> {
   try {
     const { payload } = await jwtVerify(token, SECRET);
@@ -90,14 +107,15 @@ export async function verifyToken(token: string): Promise<SessionUser | null> {
   }
 }
 
-// Read user from JWT cookie only (for API routes).
+// Read user from JWT cookie only (for API routes). Enforces the backoffice
+// audience so a cross-subdomain staff/POS/loyalty cookie can't authenticate here.
 export async function getUserFromHeaders(headers: Headers): Promise<SessionUser | null> {
   // Never trust x-user-* headers — always validate JWT
   const cookieHeader = headers.get("cookie") || "";
   const match = cookieHeader.match(/celsius-session=([^;]+)/);
   if (!match) return null;
   try {
-    const { payload } = await jwtVerify(match[1], SECRET);
+    const { payload } = await jwtVerify(match[1], SECRET, { audience: AUDIENCE });
     return payload as unknown as SessionUser;
   } catch {
     return null;
@@ -169,7 +187,7 @@ export async function requireAuth(request: NextRequest): Promise<
     };
   }
   try {
-    const { payload } = await jwtVerify(token, SECRET);
+    const { payload } = await jwtVerify(token, SECRET, { audience: AUDIENCE });
     const user = payload as unknown as SessionUser;
     return { user, error: null };
   } catch {

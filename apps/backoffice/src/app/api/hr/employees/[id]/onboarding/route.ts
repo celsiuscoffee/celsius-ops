@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { resolveVisibleUserIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
+
+// A MANAGER may only act on employees in their own subtree. OWNER/ADMIN: any.
+async function assertCanSeeEmployee(
+  session: { role: string; id: string },
+  employeeId: string,
+): Promise<NextResponse | null> {
+  const visible = await resolveVisibleUserIds(session);
+  if (visible !== null && !visible.includes(employeeId)) {
+    return NextResponse.json({ error: "Forbidden — outside your subtree" }, { status: 403 });
+  }
+  return null;
+}
 
 // GET — onboarding checklist for one employee. Joins active templates with
 // the user's progress, returning each task with completed_at/by populated.
@@ -12,6 +25,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
+  const denied = await assertCanSeeEmployee(session, id);
+  if (denied) return denied;
 
   // Need profile for employment_type filter
   const { data: profile } = await hrSupabaseAdmin
@@ -53,6 +68,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
+  const denied = await assertCanSeeEmployee(session, id);
+  if (denied) return denied;
   const body = await req.json();
   const { template_id, completed, note } = body || {};
   if (!template_id) return NextResponse.json({ error: "template_id required" }, { status: 400 });

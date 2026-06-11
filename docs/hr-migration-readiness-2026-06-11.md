@@ -55,6 +55,36 @@
 - **Data completeness (48 active):** 24 missing IC, 12 FT missing EPF no., 13 FT missing SOCSO no., 15 missing bank account, 3 FT with RM0 basic salary (incl. Firdaus). `statutory_applicable` is dead schema — ignore the all-false values (monthly calc doesn't read it).
 - Apr + May runs stuck `ai_computed` — confirm or void before July so YTD chain is clean.
 
+## D2. Access control — Manager/Staff tier vs BrioHR (added 2026-06-11)
+
+BrioHR model = self-service Employee, **direct-reports-only** Line Manager with **no comp visibility**, HR/Payroll Admin with full data, Super Admin everything. Our OWNER/ADMIN (HR-admin) and Employee-self tiers **match or beat** BrioHR. The **Manager tier is where it breaks**, and there's a structural cross-app token issue.
+
+**Access matrix (data × role):**
+
+| Data | OWNER/ADMIN | MANAGER | STAFF (backoffice) | Staff app (self) |
+|---|---|---|---|---|
+| Salary / EPF rates / bank / IC / EPF-SOCSO-tax nums | Full | Stripped on `employees` GET — but **LEAKS via `performance-history`** (A1) | 401 | Own only |
+| Payroll runs/items/bank file/EA/submission files | Full | 401 | 401 | — |
+| Salary history / tax reliefs / disciplinary | Full | 401 | 401 | — |
+| Documents (LOE/contracts — contain salary) | Full | **Subtree, signed URLs** (A4) | Self | Self |
+| Allowance RM amounts | Full | **Subtree, full breakdown** (A5) | Self | Own |
+| Memos (incl. warnings) | Full | **ALL company-wide, GET unscoped** (A6) | 401 | Own |
+| PDPA fields: race/religion/DOB/address/spouse | Full | **Visible for subtree** (A7) | 401 | Own |
+| Staff directory (phones, appAccess, moduleAccess) | Full | Assigned outlets | **All users — no role gate** (A2) | — |
+| Celebrations / company-settings GET (signature img) | Any session | Any session | **Any session** (A3) | — |
+
+**A1 — BLOCKER (live in prod): salary leak to any Manager.** `api/hr/employees/[id]/performance-history/route.ts:15` allows `["OWNER","ADMIN","MANAGER"]` with **no subtree check**, and selects `basic_salary, total_gross, net_pay` for **any** employee id (incl. OWNER). A manager can read anyone's salary. Fix: OWNER/ADMIN-only, or `resolveVisibleUserIds` + strip comp.
+
+**A2 — HIGH: cross-app token reuse.** Backoffice + staff apps share the **identical** `JWT_SECRET` (sha `48d2e15c…`) and `celsius-session` cookie, no `aud`/issuer claim. Staff-app tokens (minted for OWNER/ADMIN or `appAccess:"ops"` users — shift leads) are accepted by backoffice `getSession`. Role-gated routes still reject `STAFF`, but **session-only** routes leak: `api/settings/staff` GET (full directory + appAccess/moduleAccess, **no role gate**, route.ts:26-41), `api/hr/celebrations` (all-staff birthdays), `api/hr/company-settings` GET (authorised-signatory signature image — forgery risk). Fix: per-app secret or `aud` claim; add role gate to those three routes.
+
+**A4–A7 — HIGH/MED: Manager comp-adjacent leaks.** Subtree docs (salary in LOE), allowance amounts, company-wide memos, and unstripped PDPA fields all exceed BrioHR's line-manager scope. Fix: OWNER/ADMIN-only docs+allowances, subtree-scope memos GET, extend `PII_PROFILE_FIELDS` strip list.
+
+**A8 — MED: zero HR audit trail.** No activity logging anywhere under `api/hr/**` — salary edits, payslip/bank-file downloads, document views are untraceable. BrioHR logs these. Fix: log payroll confirm + sensitive downloads + PII edits.
+
+**Also:** `probation-review`/`onboarding`/`certifications` GET allow MANAGER on any id without subtree check (MED); `whos-away` shows peers' `leave_type` incl. medical (LOW); no server-side page/middleware role check (data saved only by API gates — one forgotten check = silent exposure); module grants don't gate HR APIs except `schedules/*` (a Manager with no HR grants can still curl subtree data).
+
+**Verified solid (Manager/Staff):** all payroll/comp/salary-history/tax/disciplinary/bank-file/EA routes OWNER/ADMIN-only; `employees` GET strips 16 comp/statutory fields + bank for Manager; payslips self-only; documents vault private + 1h signed URLs + OWNER/ADMIN upload/delete; staff-app every route scoped to `session.id` with self-edit allowlist excluding salary; privilege-escalation guards (`clampGrantsToCaller`, last-OWNER lockout, managers create STAFF-only at own outlet); all crons require `CRON_SECRET`.
+
 ## E. Verified safe (don't re-litigate)
 
 EPF/SOCSO/EIS/PCB rate structures & 2026 brackets; OT floor policy (monthly path) + 1.5/2/3× mapping; prorate engine math (calendar-day, joiner/resigner/unpaid priority, variable pay not prorated); run locking (no recompute of confirmed/paid); RBAC on all 65 backoffice HR routes (payroll/salary = OWNER/ADMIN; MANAGER stripped of PII; fail-closed manager subtree scoping); staff object-level auth (no IDOR found); RLS deny-all backstop on all 49 hr_* tables; documents vault private + signed URLs; attendance auto-close cron fail-closed and midnight-safe; payroll item catalog parity with BrioHR.

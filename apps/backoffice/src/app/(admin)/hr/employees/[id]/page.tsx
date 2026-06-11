@@ -3180,9 +3180,10 @@ type PerfHistoryRow = {
   period_year: number;
   period_month: number;
   status: string;
-  basic_salary: number;
-  gross: number;
-  net: number;
+  // Comp fields are present only for OWNER/ADMIN (server strips them for MANAGER).
+  basic_salary?: number;
+  gross?: number;
+  net?: number;
   attendance_allowance: number;
   performance_allowance: number;
   review_penalty: number;
@@ -3193,10 +3194,11 @@ type PerfHistoryRow = {
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function MonthlyPerformanceHistory({ userId }: { userId: string }) {
-  const { data } = useFetch<{ history: PerfHistoryRow[] }>(
+  const { data } = useFetch<{ history: PerfHistoryRow[]; canSeeComp?: boolean }>(
     `/api/hr/employees/${userId}/performance-history?months=6`,
   );
   const history = data?.history ?? [];
+  const canSeeComp = data?.canSeeComp ?? false;
 
   if (history.length === 0) {
     return (
@@ -3224,7 +3226,7 @@ function MonthlyPerformanceHistory({ userId }: { userId: string }) {
               <th className="py-2 pr-3 text-right">Performance</th>
               <th className="py-2 pr-3 text-right">Review penalty</th>
               <th className="py-2 pr-3">Earned vs peak</th>
-              <th className="py-2 pr-3 text-right">Net pay</th>
+              {canSeeComp && <th className="py-2 pr-3 text-right">Net pay</th>}
             </tr>
           </thead>
           <tbody>
@@ -3251,7 +3253,9 @@ function MonthlyPerformanceHistory({ userId }: { userId: string }) {
                       />
                     </div>
                   </td>
-                  <td className="py-2 pr-3 text-right font-mono font-semibold">{formatRM(h.net)}</td>
+                  {canSeeComp && (
+                    <td className="py-2 pr-3 text-right font-mono font-semibold">{formatRM(h.net ?? 0)}</td>
+                  )}
                 </tr>
               );
             })}

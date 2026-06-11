@@ -9,7 +9,11 @@ export const dynamic = "force-dynamic";
 // Skips resigned staff. Returns per-user payload for an HR widget.
 export async function GET(req: NextRequest) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Management roles only — exposes the full staff roster's birthdays + tenure.
+  // Excludes STAFF (and STAFF-role tokens minted by the staff app).
+  if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const days = Number(new URL(req.url).searchParams.get("days") || 30);
   const today = new Date();

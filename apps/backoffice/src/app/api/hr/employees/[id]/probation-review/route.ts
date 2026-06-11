@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { resolveVisibleUserIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
+
+// A MANAGER may only act on employees in their own subtree. OWNER/ADMIN: any.
+async function assertCanSeeEmployee(
+  session: { role: string; id: string },
+  employeeId: string,
+): Promise<NextResponse | null> {
+  const visible = await resolveVisibleUserIds(session);
+  if (visible !== null && !visible.includes(employeeId)) {
+    return NextResponse.json({ error: "Forbidden — outside your subtree" }, { status: 403 });
+  }
+  return null;
+}
 
 // GET — return all probation reviews for the staff (most recent first).
 // Typical flow: there's only ever one "current" review; if extended, the
@@ -16,6 +29,8 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
+  const denied = await assertCanSeeEmployee(session, id);
+  if (denied) return denied;
   const { data, error } = await hrSupabaseAdmin
     .from("hr_probation_reviews")
     .select("*")
@@ -36,6 +51,8 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
+  const denied = await assertCanSeeEmployee(session, id);
+  if (denied) return denied;
   const body = await req.json();
   const {
     attendance_score, performance_score, attitude_score, learning_score, overall_score,
@@ -98,6 +115,8 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
+  const denied = await assertCanSeeEmployee(session, id);
+  if (denied) return denied;
   const body = await req.json();
   const { review_id, action, ...patchable } = body || {};
   if (!review_id) return NextResponse.json({ error: "review_id required" }, { status: 400 });

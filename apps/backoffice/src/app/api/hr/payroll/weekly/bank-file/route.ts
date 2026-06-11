@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
+import { logActivity } from "@/lib/activity-log";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,16 @@ export async function GET(req: NextRequest) {
     .eq("id", runId)
     .single();
   if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 });
+
+  await logActivity({
+    actorId: session.id,
+    action: "payroll.bank-file.download",
+    module: "hr",
+    targetId: runId,
+    targetName: run.cycle_name ? `weekly · ${run.cycle_name}` : `weekly run ${runId}`,
+    details: { run_id: runId },
+    request: req,
+  });
 
   const { data: items } = await hrSupabaseAdmin
     .from("hr_payroll_items")

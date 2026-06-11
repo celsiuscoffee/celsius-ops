@@ -25,6 +25,13 @@ async function checkDuplicatePin(pin: string, outletId: string | null, excludeUs
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Management roles only. Without this, a STAFF-role token (incl. one minted
+  // by the staff app under the shared JWT) fell through the MANAGER scoping
+  // below to `where: {}` and listed every user's contacts, appAccess and
+  // moduleAccess. STAFF/unknown roles are rejected here.
+  if (!["OWNER", "ADMIN", "MANAGER"].includes(caller.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   // Managers see staff across every outlet they're assigned to (primary +
   // outletIds). Match staff whose own outletId OR outletIds intersects the

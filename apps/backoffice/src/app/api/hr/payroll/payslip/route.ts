@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { generatePayslipPDF, generatePayslipBundlePDF, type PayslipData } from "@/lib/hr/statutory/payslip";
+import { logActivity } from "@/lib/activity-log";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -36,6 +37,21 @@ async function handle(req: NextRequest) {
   const targetUserId = canViewAll ? userId : session.id;
   if (!canViewAll && userId && userId !== session.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Audit payslip access. Self-views by staff are routine; admin access to
+  // another employee's (or the whole-run bundle's) payslip is the trail that
+  // matters for accountability.
+  if (canViewAll) {
+    await logActivity({
+      actorId: session.id,
+      action: "payroll.payslip.download",
+      module: "hr",
+      targetId: targetUserId ?? runId,
+      targetName: targetUserId ? null : "all-employee bundle",
+      details: { run_id: runId, user_id: targetUserId ?? "ALL" },
+      request: req,
+    });
   }
 
   const { data: run } = await hrSupabaseAdmin

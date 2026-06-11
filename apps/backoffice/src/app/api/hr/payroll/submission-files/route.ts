@@ -11,6 +11,7 @@ import {
   type EmployeeRow,
   type CompanySettings,
 } from "@/lib/hr/statutory/files";
+import { logActivity } from "@/lib/activity-log";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -45,6 +46,18 @@ export async function GET(req: NextRequest) {
       { status: 409 },
     );
   }
+
+  // Audit every bank/statutory file export — these carry every employee's
+  // bank account + statutory contributions.
+  await logActivity({
+    actorId: session.id,
+    action: "payroll.submission-file.download",
+    module: "hr",
+    targetId: runId,
+    targetName: `${type} · ${run.period_month}/${run.period_year}`,
+    details: { run_id: runId, file_type: type },
+    request: req,
+  });
 
   const { data: items } = await hrSupabaseAdmin
     .from("hr_payroll_items")

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { resolveVisibleUserIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const { id } = await params;
+
+  // Data-scope: a MANAGER may only see their own direct/indirect reports.
+  // Without this any manager could pull any employee's payroll history.
+  const visible = await resolveVisibleUserIds(session);
+  if (visible !== null && !visible.includes(id)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Comp figures (basic salary, gross, net) are OWNER/ADMIN only — a line
+  // manager sees the performance signals (allowances earned, review penalty)
+  // but not pay. Matches the field-stripping on the employees list endpoint.
+  const canSeeComp = session.role === "OWNER" || session.role === "ADMIN";
+
   const months = Math.min(24, Math.max(1, Number(new URL(req.url).searchParams.get("months") || 6)));
 
   const { data: items } = await hrSupabaseAdmin
@@ -56,9 +70,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       period_year: it.hr_payroll_runs.period_year,
       period_month: it.hr_payroll_runs.period_month,
       status: it.hr_payroll_runs.status,
-      basic_salary: Number(it.basic_salary),
-      gross: Number(it.total_gross),
-      net: Number(it.net_pay),
+      // Comp fields only for OWNER/ADMIN; omitted entirely for MANAGER.
+      ...(canSeeComp
+        ? { basic_salary: Number(it.basic_salary), gross: Number(it.total_gross), net: Number(it.net_pay) }
+        : {}),
       attendance_allowance: attendance,
       performance_allowance: performance,
       review_penalty: reviewPenalty,
@@ -67,5 +82,5 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     };
   });
 
-  return NextResponse.json({ history });
+  return NextResponse.json({ history, canSeeComp });
 }

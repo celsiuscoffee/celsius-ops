@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { calculatePayroll } from "@/lib/hr/agents/payroll-calculator";
 import { prisma } from "@/lib/prisma";
+import { logActivity } from "@/lib/activity-log";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // payroll compute can take 1-2 min for 40 staff
@@ -126,6 +127,16 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    await logActivity({
+      actorId: session.id,
+      action: "payroll.confirm",
+      module: "hr",
+      targetId: run_id,
+      targetName: data ? `${data.cycle_type} ${data.period_month}/${data.period_year}` : null,
+      details: { total_net: data?.total_net, total_gross: data?.total_gross },
+      request: req,
+    });
     return NextResponse.json({ run: data });
   }
 
