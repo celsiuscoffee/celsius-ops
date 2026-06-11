@@ -20,7 +20,7 @@ import { supabase } from "@/lib/supabase";
 import { usePickupPrinter } from "@/lib/use-pickup-printer";
 import { useGrabPrinter } from "@/lib/use-grab-printer";
 import LockScreen from "@/components/lock-screen";
-import { chargeMaybankCard, type MaybankTerminalResult } from "@/lib/maybank-terminal";
+import { chargeCard, hasIntegratedTerminal, type CardApproval, type CardBrand } from "@/lib/card-terminal";
 import { fetchCategories, fetchProducts, type Product, type ModifierOption } from "@/lib/menu";
 import { useCart, cartSubtotal, type CartLine } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
@@ -156,16 +156,27 @@ export default function Register() {
   const [showCheckout, setShowCheckout] = useState(false);
   // Which payment method the cashier has picked inside the checkout
   // modal. `null` = method picker; "qr" = show Maybank QR awaiting
-  // payment; "card" = drive the Maybank terminal flow.
+  // payment; "card" = drive the card terminal flow (lib/card-terminal).
   const [payMethod, setPayMethod] = useState<null | "qr" | "card">(null);
-  // Card terminal state — purely a UI proxy until the real Maybank
-  // terminal SDK is wired (see lib/maybank-terminal.ts).
-  const [cardStage, setCardStage] = useState<"idle" | "prompting" | "approved" | "declined">("idle");
+  // Card flow stage. "prompting" = integrated GHL terminal is being
+  // driven; "manual" = cashier charges the standalone terminal and keys
+  // the approval code off the slip (the default until GHL ECR is live);
+  // "unknown" = an integrated charge may have gone through but the till
+  // never saw the verdict — cashier must check the terminal first.
+  const [cardStage, setCardStage] = useState<"idle" | "prompting" | "manual" | "approved" | "declined" | "unknown">("idle");
+  // Generation token for in-flight integrated charges: bumped by every
+  // close/back/edit escape so a late chargeCard resolve from an abandoned
+  // attempt can't overwrite the current screen (or a newer attempt).
+  const chargeSeqRef = useRef(0);
   // The terminal's approval payload — held so the cashier-verification
   // screen can show the approval code + masked PAN before we record the
-  // sale. Card payments now require a manual confirm (mirrors QR), so the
-  // terminal "approved" result no longer auto-commits.
-  const [cardResult, setCardResult] = useState<Extract<MaybankTerminalResult, { status: "approved" }> | null>(null);
+  // sale. Card payments require a manual confirm (mirrors QR), so an
+  // integrated "approved" result never auto-commits.
+  const [cardResult, setCardResult] = useState<CardApproval | null>(null);
+  // Manual-entry fields (cardStage === "manual"): approval code from the
+  // standalone terminal's slip + which card brand was charged.
+  const [manualCode, setManualCode] = useState("");
+  const [manualBrand, setManualBrand] = useState<CardBrand | null>(null);
   const [paying, setPaying] = useState(false);
   // Bumped after each paid sale / pair add so the cashier's self-scorecard chip
   // refetches its today numbers (collection rate + pair adds).
@@ -1265,6 +1276,9 @@ export default function Register() {
     setPayMethod(null);
     setCardStage("idle");
     setCardResult(null);
+    setManualCode("");
+    setManualBrand(null);
+    chargeSeqRef.current++;
     setTableNumber("");
     setMember(null);
     setUsual([]);
@@ -1282,7 +1296,11 @@ export default function Register() {
     if (pendingNudgeRef.current) { setPerfNudge(pendingNudgeRef.current); pendingNudgeRef.current = null; }
   }
 
-  async function pay(method: string) {
+  // cardNote: audit trail for card sales — the approval code keyed off the
+  // terminal slip (manual) or the integrated terminal's approval + txnRef.
+  // Persists into pos_orders.notes via createSale so settlement
+  // reconciliation can match the acquirer batch.
+  async function pay(method: string, cardNote?: string | null) {
     if (!outletId || !staff || paying) return;
     setPaying(true);
     const printLines = [...lines];
@@ -1321,6 +1339,7 @@ export default function Register() {
         promoDiscount,
         promoName,
         manualDiscount: effManualDiscount,
+        notes: cardNote ?? null,
       });
       // The sale is now in the durable offline buffer → drop the recovery draft
       // immediately, so a hang on the thank-you screen can't offer to "resume"
@@ -2293,28 +2312,43 @@ export default function Register() {
         </View>
       </Modal>
 
-      <Modal visible={showCheckout} transparent animationType="fade" onRequestClose={() => { setShowCheckout(false); setPayMethod(null); setCardStage("idle"); setCardResult(null); if (!paying && !paid) setDisplayStatus(lines.length > 0 ? "ordering" : "idle"); }}>
+      <Modal visible={showCheckout} transparent animationType="fade" onRequestClose={() => { if (paying || cardStage === "prompting" || cardStage === "unknown") return; chargeSeqRef.current++; setShowCheckout(false); setPayMethod(null); setCardStage("idle"); setCardResult(null); setManualCode(""); setManualBrand(null); if (!paying && !paid) setDisplayStatus(lines.length > 0 ? "ordering" : "idle"); }}>
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
-          {/* Tap the dark backdrop to close — but not mid-payment. */}
-          <Pressable onPress={() => { if (paying || cardStage === "prompting") return; setShowCheckout(false); setPayMethod(null); setCardStage("idle"); setCardResult(null); if (!paid) setDisplayStatus(lines.length > 0 ? "ordering" : "idle"); }} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+          {/* Tap the dark backdrop to close — but not mid-payment or while a
+              charge outcome is unresolved. */}
+          <Pressable onPress={() => { if (paying || cardStage === "prompting" || cardStage === "unknown") return; chargeSeqRef.current++; setShowCheckout(false); setPayMethod(null); setCardStage("idle"); setCardResult(null); setManualCode(""); setManualBrand(null); if (!paid) setDisplayStatus(lines.length > 0 ? "ordering" : "idle"); }} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
           <View className="w-[560px] rounded-3xl bg-surface border border-border p-7">
             <View className="flex-row items-center justify-between mb-1">
               <Text className="text-cream text-xl" style={{ fontFamily: "Peachi-Bold" }}>
                 {!orderConfirmed ? "Order details" : payMethod === "qr" ? "Scan to Pay" : payMethod === "card" ? "Card Payment" : "Payment"}
               </Text>
               <Pressable
-                onPress={() => { setShowCheckout(false); setPayMethod(null); setCardStage("idle"); setCardResult(null); if (!paying && !paid) setDisplayStatus(lines.length > 0 ? "ordering" : "idle"); }}
+                onPress={() => { chargeSeqRef.current++; setShowCheckout(false); setPayMethod(null); setCardStage("idle"); setCardResult(null); setManualCode(""); setManualBrand(null); if (!paying && !paid) setDisplayStatus(lines.length > 0 ? "ordering" : "idle"); }}
                 className="active:opacity-60"
-                disabled={paying || cardStage === "prompting"}
+                disabled={paying || cardStage === "prompting" || cardStage === "unknown"}
               >
-                <X size={22} color={(paying || cardStage === "prompting") ? "rgba(245,243,240,0.3)" : "rgba(245,243,240,0.7)"} />
+                <X size={22} color={(paying || cardStage === "prompting" || cardStage === "unknown") ? "rgba(245,243,240,0.3)" : "rgba(245,243,240,0.7)"} />
               </Pressable>
             </View>
             <Text className="text-amber-400 text-5xl mb-4" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{rm(total)}</Text>
 
             {/* Confirmed order type + stand, with a tap back to change it. */}
             {orderConfirmed && (
-              <Pressable onPress={() => { Haptics.selectionAsync(); setOrderConfirmed(false); setPayMethod(null); setDisplayStatus("ordering"); }} className="flex-row items-center gap-2 -mt-2 mb-5 active:opacity-70">
+              <Pressable
+                onPress={() => {
+                  // No editing mid-payment or while a charge outcome is
+                  // unresolved — same lock as the X and backdrop.
+                  if (paying || cardStage === "prompting" || cardStage === "unknown") return;
+                  Haptics.selectionAsync();
+                  chargeSeqRef.current++;
+                  setOrderConfirmed(false);
+                  setPayMethod(null);
+                  setCardStage("idle");
+                  setCardResult(null);
+                  setDisplayStatus("ordering");
+                }}
+                style={{ opacity: (paying || cardStage === "prompting" || cardStage === "unknown") ? 0.35 : 1 }}
+                className="flex-row items-center gap-2 -mt-2 mb-5 active:opacity-70">
                 <Text className="text-cream/65 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
                   {orderType === "dine_in" ? `Dine-in · Stand #${tableNumber}` : "Takeaway"}
                 </Text>
@@ -2408,10 +2442,23 @@ export default function Register() {
                   onPress={async () => {
                     Haptics.selectionAsync();
                     setPayMethod("card");
-                    setCardStage("prompting");
                     setCardResult(null);
+                    setManualCode("");
+                    setManualBrand(null);
+                    // No integrated terminal bound to this outlet → straight
+                    // to manual approval-code entry (standalone terminal).
+                    if (!hasIntegratedTerminal(settings)) {
+                      setCardStage("manual");
+                      return;
+                    }
+                    setCardStage("prompting");
+                    const seq = ++chargeSeqRef.current;
                     try {
-                      const result = await chargeMaybankCard(total);
+                      const result = await chargeCard(total, settings, outletId);
+                      // The cashier escaped (close/EDIT/back) or re-fired while
+                      // we were waiting — this verdict belongs to a dead
+                      // attempt; never let it overwrite the current screen.
+                      if (seq !== chargeSeqRef.current) return;
                       if (result.status === "approved") {
                         // Don't auto-commit. Park on a verify screen so the
                         // cashier confirms the approval on the physical
@@ -2420,12 +2467,17 @@ export default function Register() {
                         setCardStage("approved");
                       } else if (result.status === "declined") {
                         setCardStage("declined");
+                      } else if (result.status === "unknown") {
+                        // Charge may have reached the terminal — make the
+                        // cashier check it before anything else happens.
+                        setCardStage("unknown");
                       } else {
-                        // Cancelled → return to method picker.
-                        setCardStage("idle");
-                        setPayMethod(null);
+                        // Provably no charge attempted (GHL not configured)
+                        // → fall through to manual entry.
+                        setCardStage("manual");
                       }
                     } catch (e) {
+                      if (seq !== chargeSeqRef.current) return;
                       console.error("[card]", e);
                       setCardStage("declined");
                     }
@@ -2438,7 +2490,7 @@ export default function Register() {
                   </View>
                   <View className="flex-1">
                     <Text className="text-cream text-base" style={{ fontFamily: "Peachi-Bold" }}>Card Payment</Text>
-                    <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Tap or insert on Maybank terminal</Text>
+                    <Text className="text-cream/55 text-xs mt-0.5" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>Charge on the card terminal</Text>
                   </View>
                 </Pressable>
               </View>
@@ -2480,6 +2532,100 @@ export default function Register() {
                     </Text>
                   </View>
                 )}
+                {cardStage === "manual" && (
+                  <View className="gap-3">
+                    <Text className="text-cream/55 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                      Charge {rm(total)} on the card terminal, then key in the approval code from the slip.
+                    </Text>
+                    {/* Custom keypad, not the system IME — RN keyboard
+                        avoidance is unreliable inside Android Modals (see
+                        LineEditor), and every other entry in this modal
+                        already uses NumpadField. Approval codes on MY
+                        terminal slips are numeric. */}
+                    <NumpadField
+                      value={manualCode}
+                      onChangeText={setManualCode}
+                      placeholder="Approval code"
+                      mode="integer"
+                      maxLength={12}
+                      title="Approval code"
+                      className="h-16 rounded-2xl px-5 justify-center"
+                      style={{ backgroundColor: "rgba(245,243,240,0.06)", borderWidth: 1, borderColor: "rgba(59,130,246,0.45)" }}
+                    />
+                    <View className="flex-row gap-2">
+                      {(["VISA", "MASTERCARD", "MYDEBIT", "AMEX"] as CardBrand[]).map((b) => (
+                        <Pressable
+                          key={b}
+                          onPress={() => { Haptics.selectionAsync(); setManualBrand(b); }}
+                          className="flex-1 h-12 rounded-xl items-center justify-center active:opacity-70"
+                          style={{
+                            backgroundColor: manualBrand === b ? "#3B82F6" : "rgba(245,243,240,0.06)",
+                            borderWidth: 1,
+                            borderColor: manualBrand === b ? "#3B82F6" : "rgba(245,243,240,0.18)",
+                          }}
+                        >
+                          <Text className="text-cream text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{b}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    <Pressable
+                      onPress={() => {
+                        // Stage stays "manual" so a failed createSale returns
+                        // the cashier here with the code intact (the paying
+                        // spinner hides this block while in flight).
+                        const note = `CARD APR ${manualCode.trim() || "NONE"}${manualBrand ? ` ${manualBrand}` : ""} · manual entry`;
+                        const record = () => { pay("card", note); };
+                        if (manualCode.trim().length < 4) {
+                          // Soft control — warn, but never block the till.
+                          Alert.alert(
+                            "No approval code",
+                            "Record this card sale without an approval code? The terminal slip will be the only proof.",
+                            [
+                              { text: "Back", style: "cancel" },
+                              { text: "Record anyway", style: "destructive", onPress: record },
+                            ],
+                          );
+                        } else {
+                          record();
+                        }
+                      }}
+                      className="h-16 rounded-2xl items-center justify-center flex-row gap-3 bg-primary active:opacity-80"
+                    >
+                      <CheckCircle2 size={24} color="#F5F3F0" />
+                      <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>RECORD CARD SALE</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => { setCardStage("idle"); setManualCode(""); setManualBrand(null); setPayMethod(null); }}
+                      className="h-11 rounded-xl items-center justify-center active:opacity-60"
+                    >
+                      <Text className="text-cream/55 text-xs tracking-widest" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>‹ Back to methods</Text>
+                    </Pressable>
+                  </View>
+                )}
+                {cardStage === "unknown" && (
+                  <View className="gap-3">
+                    <View className="rounded-2xl px-5 py-4" style={{ backgroundColor: "rgba(251,191,36,0.10)", borderWidth: 1, borderColor: "rgba(251,191,36,0.45)" }}>
+                      <Text className="text-base mb-1" style={{ fontFamily: "Peachi-Bold", color: "#FBBF24" }}>Payment outcome unknown</Text>
+                      <Text className="text-cream/70 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                        The terminal didn't answer in time. Check the card terminal NOW — do not charge the customer again.
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => { Haptics.selectionAsync(); setCardStage("manual"); }}
+                      className="h-16 rounded-2xl items-center justify-center flex-row gap-3 bg-primary active:opacity-80"
+                    >
+                      <CheckCircle2 size={24} color="#F5F3F0" />
+                      <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>IT CHARGED — KEY IN APPROVAL</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => { setCardStage("idle"); setPayMethod(null); }}
+                      className="h-12 rounded-xl items-center justify-center active:opacity-60"
+                      style={{ backgroundColor: "rgba(245,243,240,0.06)", borderWidth: 1, borderColor: "rgba(245,243,240,0.18)" }}
+                    >
+                      <Text className="text-cream/80 text-sm" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>NO CHARGE — BACK TO METHODS</Text>
+                    </Pressable>
+                  </View>
+                )}
                 {cardStage === "approved" && (
                   <View className="gap-3">
                     {/* Terminal said approved — cashier must eyeball the
@@ -2502,10 +2648,10 @@ export default function Register() {
                       )}
                     </View>
                     <Text className="text-cream/55 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
-                      Confirm the approval on the Maybank terminal, then record the sale to print the receipt + kitchen docket.
+                      Confirm the approval on the card terminal, then record the sale to print the receipt + kitchen docket.
                     </Text>
                     <Pressable
-                      onPress={() => pay("card")}
+                      onPress={() => pay("card", cardResult ? `CARD APR ${cardResult.approvalCode} ${cardResult.cardBrand} · ${cardResult.txnRef}` : null)}
                       className="h-16 rounded-2xl items-center justify-center flex-row gap-3 bg-primary active:opacity-80"
                     >
                       <CheckCircle2 size={24} color="#F5F3F0" />
