@@ -194,6 +194,13 @@ export default function SalesScreen() {
                 </View>
                 <Text className={`font-body-bold text-[13px] ${deltaUp(g.appOrdersDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.appOrdersDelta)}</Text>
               </View>
+              <View className="mt-3.5 flex-row items-center justify-between border-t border-[#F5F3F00f] pt-3.5">
+                <View>
+                  <Text className="font-body-semi text-xs text-[#F5F3F08a]">Collection rate</Text>
+                  <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{g.collectionRatePct}%<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {numF(g.capturedOrders)} with phone</Text></Text>
+                </View>
+                <Text className={`font-body-bold text-[13px] ${g.collectionDeltaPts >= 0 ? "text-[#34d399]" : "text-[#f87171]"}`}>{g.collectionDeltaPts >= 0 ? "+" : ""}{g.collectionDeltaPts}%</Text>
+              </View>
             </View>
 
             {/* Payment methods */}
