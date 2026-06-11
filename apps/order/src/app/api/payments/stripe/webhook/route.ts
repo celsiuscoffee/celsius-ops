@@ -140,9 +140,19 @@ export async function POST(request: NextRequest) {
     const intent  = event.data.object as Stripe.PaymentIntent;
     const orderId = intent.metadata?.orderId;
     if (orderId) {
+      // Capture WHY: Stripe's decline code/message on a failure, or the
+      // cancellation reason (often the customer dismissing the Apple/Google
+      // Pay sheet). Surfaced in the backoffice so a failure isn't a mystery.
+      const reason =
+        event.type === "payment_intent.canceled"
+          ? `cancelled${intent.cancellation_reason ? `: ${intent.cancellation_reason}` : ""}`
+          : (intent.last_payment_error?.code
+              ?? intent.last_payment_error?.decline_code
+              ?? intent.last_payment_error?.message
+              ?? "payment_failed");
       await supabase
         .from("orders")
-        .update({ status: "failed" } as Record<string, unknown>)
+        .update({ status: "failed", payment_failure_reason: reason } as Record<string, unknown>)
         .eq("id", orderId)
         .eq("status", "pending");
     }

@@ -89,7 +89,7 @@ export async function reconcileRmOrder(
     }
 
     if (rm.status === "FAILED" || rm.status === "CANCELLED" || rm.status === "EXPIRED") {
-      await markRmOrderFailed({ orderId: row.id });
+      await markRmOrderFailed({ orderId: row.id }, `rm_${rm.status.toLowerCase()}`);
       return { status: "failed", source: "rm", rmStatus: rm.status };
     }
 

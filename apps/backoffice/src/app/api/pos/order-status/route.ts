@@ -43,6 +43,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `status must be one of ${[...ALLOWED].join(", ")}` }, { status: 400 });
     }
 
+    // Payment guard: never advance an UNPAID online order (pickup / QR table).
+    // A real order is already "paid"/"preparing" by the time the cashier marks
+    // it ready/collected — a still-"pending" online order means payment was
+    // never confirmed, so refuse. This (with the register hiding pending QR
+    // orders) stops staff completing an order nobody paid for. Grab is prepaid
+    // on Grab's side, so it's exempt; free (total=0) orders pass.
+    if (source !== "grab") {
+      const { data: cur } = await supabase
+        .from("orders")
+        .select("status, payment_provider_ref, total")
+        .eq("id", id)
+        .maybeSingle();
+      const c = cur as { status?: string; payment_provider_ref?: string | null; total?: number | null } | null;
+      if (c && c.status === "pending" && c.payment_provider_ref == null && (c.total ?? 0) > 0) {
+        return NextResponse.json(
+          { error: "Order is not paid — an unpaid order can't be marked ready or collected." },
+          { status: 409 },
+        );
+      }
+    }
+
     // pickup + qr dine-in both live in `orders`; only grab is `pos_orders`.
     const table = source === "grab" ? "pos_orders" : "orders";
     const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() };

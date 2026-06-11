@@ -21,8 +21,9 @@ interface OrderWithItems extends OrderRow {
   order_items: OrderItemRow[];
 }
 
+// NOTE: no `pending` entry on purpose — an UNPAID order must not be advanceable.
+// It becomes "paid" (then "Start Preparing" appears) only once payment confirms.
 const NEXT_STATUS: Record<string, { label: string; status: string; colour: string } | undefined> = {
-  pending:   { label: "Start Preparing",  status: "preparing", colour: "bg-amber-500 hover:bg-amber-600" },
   paid:      { label: "Start Preparing",  status: "preparing", colour: "bg-amber-500 hover:bg-amber-600" },
   preparing: { label: "Mark as Ready",    status: "ready",     colour: "bg-green-600 hover:bg-green-700" },
   ready:     { label: "Mark as Completed", status: "completed", colour: "bg-gray-700  hover:bg-gray-800"  },
@@ -118,10 +119,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </span>
       </div>
 
+      {order.status === "pending" && (
+        <div className="bg-amber-50 rounded-xl px-4 py-3 flex items-center gap-2 text-amber-700 text-sm">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          Awaiting payment — this order is not paid yet, so it can&apos;t be prepared.
+        </div>
+      )}
+
       {order.status === "failed" && (
         <div className="bg-red-50 rounded-xl px-4 py-3 flex items-center gap-2 text-red-600 text-sm">
           <XCircle className="h-4 w-4 shrink-0" />
-          Payment failed — order was not charged
+          <span>
+            Payment failed — order was not charged
+            {(order as { payment_failure_reason?: string | null }).payment_failure_reason
+              ? ` · ${(order as { payment_failure_reason?: string | null }).payment_failure_reason}`
+              : ""}
+          </span>
         </div>
       )}
 

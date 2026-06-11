@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
           if (paid) result.advanced += 1;
           else      result.unresolved += 1;
         } else if (rm.status === "FAILED" || rm.status === "CANCELLED" || rm.status === "EXPIRED") {
-          await markRmOrderFailed({ orderId: order.id });
+          await markRmOrderFailed({ orderId: order.id }, `rm_${rm.status.toLowerCase()}`);
           result.failed += 1;
         } else {
           result.unresolved += 1;
@@ -127,9 +127,15 @@ export async function GET(request: NextRequest) {
       } else if (intent.status === "canceled" || intent.status === "requires_payment_method") {
         // requires_payment_method after a failed attempt means the wallet /
         // card rejected — treat as failed so the KDS stops seeing a ghost row.
+        const reason = intent.status === "canceled"
+          ? `cancelled${intent.cancellation_reason ? `: ${intent.cancellation_reason}` : ""}`
+          : (intent.last_payment_error?.code
+              ?? intent.last_payment_error?.decline_code
+              ?? intent.last_payment_error?.message
+              ?? "payment_failed");
         await supabase
           .from("orders")
-          .update({ status: "failed" } as Record<string, unknown>)
+          .update({ status: "failed", payment_failure_reason: reason } as Record<string, unknown>)
           .eq("id", order.id)
           .eq("status", "pending");
         result.failed += 1;

@@ -158,11 +158,14 @@ export async function markRmOrderPaid(
 
 export async function markRmOrderFailed(
   orderNumberOrId: { orderNumber?: string; orderId?: string },
+  reason?: string | null,
 ): Promise<void> {
   const supabase = getSupabaseAdmin();
   const base = supabase
     .from("orders")
-    .update({ status: "failed" } as Record<string, unknown>)
+    // Record WHY it failed (RM FAILED/CANCELLED/EXPIRED, or an abandon reason)
+    // so the backoffice/audit can show the real cause instead of a bare "failed".
+    .update({ status: "failed", payment_failure_reason: reason ?? null } as Record<string, unknown>)
     // Only a still-"pending" order may be failed. A stale/abandoned checkout
     // or a late FAILED webhook must NEVER knock a paid/preparing order back to
     // failed — that conflation was the double-charge / no-order root cause.

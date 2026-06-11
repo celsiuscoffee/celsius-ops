@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     async function reconcile(o: StaleOrder): Promise<"settled" | "failed" | "deferred"> {
       if (!o.payment_checkout_id) {
         // Never reached an RM checkout — abandoned before paying, safe to fail.
-        await markRmOrderFailed({ orderId: o.id });
+        await markRmOrderFailed({ orderId: o.id }, "abandoned_unpaid");
         return "failed";
       }
       try {
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
           return "settled";
         }
         if (r.status === "FAILED" || r.status === "EXPIRED" || r.status === "CANCELLED") {
-          await markRmOrderFailed({ orderId: o.id });
+          await markRmOrderFailed({ orderId: o.id }, `rm_${r.status.toLowerCase()}`);
           return "failed";
         }
         return "deferred"; // still pending/unknown at RM — retry next sweep
