@@ -3780,24 +3780,35 @@ function CashierScorecardChip({ sc }: { sc: Scorecard | null }) {
 
   if (!sc) return null;
 
+  // Traffic light. Collection rate vs target: green at/above target, yellow
+  // from half-target up, red below. Pair adds: green 3+, yellow 1–2, red 0.
+  const LIGHT = {
+    green:  { c: "#22C55E", tint: "rgba(34,197,94,0.14)",  border: "rgba(34,197,94,0.55)" },
+    yellow: { c: "#FBBF24", tint: "rgba(251,191,36,0.14)", border: "rgba(251,191,36,0.55)" },
+    red:    { c: "#EF4444", tint: "rgba(239,68,68,0.14)",  border: "rgba(239,68,68,0.55)" },
+  };
+  const rateLight = sc.rate >= sc.target ? LIGHT.green : sc.rate >= Math.round(sc.target / 2) ? LIGHT.yellow : LIGHT.red;
+  const pairLight = sc.pairAdds >= 3 ? LIGHT.green : sc.pairAdds >= 1 ? LIGHT.yellow : LIGHT.red;
   const hitTarget = sc.rate >= sc.target;
-  // Amber while below target, green once hit — a small "keep going / nice" cue.
-  const rateColor = hitTarget ? "#22C55E" : "#FBBF24";
-  const tint = hitTarget ? "rgba(34,197,94,0.12)" : "rgba(251,191,36,0.10)";
-  const border = hitTarget ? "rgba(34,197,94,0.45)" : "rgba(251,191,36,0.40)";
 
   return (
     <>
       <Pressable
         onPress={() => { Haptics.selectionAsync(); setOpen(true); }}
-        className="flex-row items-center gap-1.5 px-2.5 py-1.5 rounded-lg border active:opacity-70"
-        style={{ borderColor: border, backgroundColor: tint }}
+        className="flex-row items-center rounded-xl border active:opacity-70"
+        style={{ borderColor: rateLight.border, backgroundColor: rateLight.tint, paddingHorizontal: 14, paddingVertical: 9 }}
       >
-        <TrendingUp size={12} color={rateColor} />
-        <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, color: rateColor }}>{sc.rate}%</Text>
-        <View className="flex-row items-center gap-1 pl-1.5" style={{ borderLeftWidth: 1, borderLeftColor: "rgba(245,243,240,0.18)" }}>
-          <Sparkles size={11} color="rgba(245,243,240,0.7)" />
-          <Text className="text-cream/80 text-[11px]" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{sc.pairAdds}</Text>
+        {/* % half */}
+        <View className="flex-row items-center" style={{ gap: 7 }}>
+          <TrendingUp size={18} color={rateLight.c} />
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 18, color: rateLight.c }}>{sc.rate}%</Text>
+        </View>
+        {/* centered divider — equal margin both sides keeps the two halves symmetric */}
+        <View style={{ width: 1, height: 20, backgroundColor: "rgba(245,243,240,0.22)", marginHorizontal: 13 }} />
+        {/* pair half */}
+        <View className="flex-row items-center" style={{ gap: 7 }}>
+          <Sparkles size={18} color={pairLight.c} />
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 18, color: pairLight.c }}>{sc.pairAdds}</Text>
         </View>
       </Pressable>
 
@@ -3813,14 +3824,14 @@ function CashierScorecardChip({ sc }: { sc: Scorecard | null }) {
             <View style={{ gap: 6 }}>
               <View className="flex-row items-center justify-between">
                 <View className="flex-row items-center gap-2">
-                  <Target size={15} color={rateColor} />
+                  <Target size={15} color={rateLight.c} />
                   <Text className="text-cream/80 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Phone collection</Text>
                 </View>
-                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 22, color: rateColor }}>{sc.rate}%</Text>
+                <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 22, color: rateLight.c }}>{sc.rate}%</Text>
               </View>
               {/* progress vs target */}
               <View className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(245,243,240,0.10)" }}>
-                <View style={{ width: `${Math.min(sc.rate, 100)}%`, height: "100%", backgroundColor: rateColor }} />
+                <View style={{ width: `${Math.min(sc.rate, 100)}%`, height: "100%", backgroundColor: rateLight.c }} />
               </View>
               <Text className="text-cream/45 text-[11px]" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
                 {sc.collected} of {sc.orders} order{sc.orders === 1 ? "" : "s"} · target {sc.target}%
@@ -3830,10 +3841,10 @@ function CashierScorecardChip({ sc }: { sc: Scorecard | null }) {
             {/* Pair adds */}
             <View className="flex-row items-center justify-between pt-1">
               <View className="flex-row items-center gap-2">
-                <Sparkles size={15} color="#FBBF24" />
+                <Sparkles size={15} color={pairLight.c} />
                 <Text className="text-cream/80 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Pair-with-a-Bite adds</Text>
               </View>
-              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 22, color: "#FBBF24" }}>{sc.pairAdds}</Text>
+              <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 22, color: pairLight.c }}>{sc.pairAdds}</Text>
             </View>
 
             {/* Encouragement */}
