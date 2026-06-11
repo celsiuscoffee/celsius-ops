@@ -71,7 +71,12 @@ function mapSupabaseUser(row: any): AdminUser {
   };
 }
 
-const allOutlets = ["Shah Alam", "Putrajaya", "Tamarind Square"];
+// NOTE: these strings are STORED as each staff user's outlet-access list and
+// matched on save/selection — they are NOT just display labels. Existing user
+// records hold "Conezion", so this must stay "Conezion" (renaming it would
+// silently drop their access). The display rename to "Putrajaya" is applied to
+// pure-display surfaces only.
+const allOutlets = ["Shah Alam", "Conezion", "Tamarind Square"];
 
 const avatarColors: Record<string, string> = {
   A: "#C2452D",
@@ -739,5 +744,3 @@ export default function UsersPage() {
     </>
   );
 }
-
-// (deploy nudge: clean rebuild — prior loyalty build auto-canceled in a push burst)
