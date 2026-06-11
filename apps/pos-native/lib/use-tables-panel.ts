@@ -64,6 +64,14 @@ function toRefs(rows: Row[] | null, source: "qr" | "pos"): TableOrderRef[] {
   const out: TableOrderRef[] = [];
   for (const r of rows ?? []) {
     if (DEAD.has(r.status) || DONE.has(r.status)) continue;
+    // Pay-first, same rule as the pickup/Grab live queue: a QR table self-order
+    // stays hidden until payment is CONFIRMED. While it's still "pending"
+    // (unpaid) it must not surface on the Tables panel / QR self-orders queue —
+    // otherwise staff could make or manually complete an order that was never
+    // paid. It reappears the instant payment flips it to paid/preparing.
+    // (Register dine-in `pos` orders are rung up already paid, so this only
+    // applies to the qr source.)
+    if (source === "qr" && r.status === "pending") continue;
     const k = tableKey(r.table_number);
     if (!k) continue;
     out.push({
