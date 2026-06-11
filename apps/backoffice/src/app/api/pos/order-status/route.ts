@@ -109,3 +109,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+// (deploy nudge: force a clean backoffice production build — prior builds were auto-canceled mid-burst)
