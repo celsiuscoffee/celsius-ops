@@ -1458,33 +1458,26 @@ export default function Register() {
                 {outletShort(outletId)}
               </Text>
             </View>
-            {/* Small personal scorecard, right beside the brand. */}
-            <CashierScorecardChip sc={scorecard} />
-            {/* Order type is chosen at checkout now — no upfront toggle here. */}
           </View>
-          <View className="flex-row items-center gap-1.5" style={{ flexShrink: 1, minWidth: 0 }}>
-            {/* Offline / sync chip — only shows when disconnected or while a
-                buffered sale is still draining. Sales + dockets keep working
-                offline; this just tells staff their cloud sync is behind.
-                Compact (count as a tight suffix) so it doesn't overflow the
-                header alongside the other controls. */}
+          {/* Right cluster — one standardized row: every box is 42px tall,
+              rounded-xl, 1px-bordered. Status indicators (offline, store) +
+              actions (Live Orders, Settings) + the cashier's own performance,
+              which sits right next to their name. */}
+          <View className="flex-row items-center gap-2" style={{ flexShrink: 1, minWidth: 0 }}>
+            {/* Offline / sync — only when disconnected or draining a buffer. */}
             {(!online || pendingSales > 0) && (
-              <View className="flex-row items-center gap-1.5 px-2.5 rounded-xl" style={{ height: 42, backgroundColor: online ? "rgba(251,191,36,0.18)" : "rgba(239,68,68,0.20)" }}>
+              <View className="flex-row items-center gap-1.5 px-3 rounded-xl border" style={{ height: 42, borderColor: online ? "rgba(251,191,36,0.45)" : "rgba(239,68,68,0.5)", backgroundColor: online ? "rgba(251,191,36,0.14)" : "rgba(239,68,68,0.16)" }}>
                 <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: online ? "#FBBF24" : "#EF4444" }} />
                 <Text className="text-cream/90 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
                   {!online ? (pendingSales > 0 ? `Offline · ${pendingSales}` : "Offline") : `Syncing ${pendingSales}…`}
                 </Text>
               </View>
             )}
-            {/* Store open/closed — STATUS INDICATOR ONLY (green = open, amber =
-                closed). The open/close action lives in Settings now; this just
-                shows the current state and keeps the header compact. */}
+            {/* Store open/closed — STATUS INDICATOR ONLY (open/close is in Settings). */}
             <View className="items-center justify-center rounded-xl border border-cream/15" style={{ height: 42, width: 42, backgroundColor: shift ? "rgba(34,197,94,0.10)" : "rgba(251,191,36,0.10)" }}>
               <Power size={18} color={shift ? "#22C55E" : "#FBBF24"} />
             </View>
-            {/* Orders command center — one button opens a tabbed panel for
-                every order channel: dine-in Tables, QR self-orders, and
-                Pickup + Grab. Badge = live incoming orders (QR + delivery). */}
+            {/* Live Orders — tabbed panel for every order channel. Badge = live incoming. */}
             <Pressable onPress={() => { Haptics.selectionAsync(); setHub((v) => (v ? null : "tables")); }} className={`flex-row items-center gap-1.5 px-3 rounded-xl border active:opacity-60 ${hub ? "border-primary bg-primary/10" : "border-cream/15"}`} style={{ height: 42 }}>
               <ClipboardList size={16} color="rgba(245,243,240,0.7)" />
               <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Live Orders</Text>
@@ -1502,18 +1495,15 @@ export default function Register() {
             <Pressable onPress={() => { Haptics.selectionAsync(); router.push("/settings"); }} className="items-center justify-center rounded-xl border border-cream/15 active:opacity-60" style={{ height: 42, width: 42 }}>
               <SettingsIcon size={18} color="rgba(245,243,240,0.7)" />
             </Pressable>
-            {/* Account chip — the cashier's name lives on the sign-out control
-                itself (amber-tinted so it stands out) so on a shift change the
-                incoming cashier instantly sees whose account is open and taps to
-                switch. Tap = sign out → login. */}
-            <Pressable onPress={() => { Haptics.selectionAsync(); signOut(); router.replace("/"); }} className="flex-row items-center gap-2 px-2.5 py-2 rounded-xl border active:opacity-60" style={{ borderColor: "rgba(251,191,36,0.45)", backgroundColor: "rgba(251,191,36,0.10)", flexShrink: 1, minWidth: 0 }}>
+            {/* Cashier's own performance — sits next to their name (same cashier). */}
+            <CashierScorecardChip sc={scorecard} />
+            {/* Account chip — the cashier's name on the sign-out control (amber so a
+                shift change is obvious). Tap = sign out → login. Name truncates so
+                the header can't overflow under the cart. */}
+            <Pressable onPress={() => { Haptics.selectionAsync(); signOut(); router.replace("/"); }} className="flex-row items-center gap-2 px-3 rounded-xl border active:opacity-60" style={{ height: 42, borderColor: "rgba(251,191,36,0.45)", backgroundColor: "rgba(251,191,36,0.10)", flexShrink: 1, minWidth: 0 }}>
               <View className="h-6 w-6 rounded-full items-center justify-center" style={{ backgroundColor: "rgba(251,191,36,0.22)" }}>
                 <User size={14} color="#FBBF24" />
               </View>
-              {/* Name truncates instead of pushing the header past the catalog
-                  column (which used to spill under the cart when offline). The
-                  amber chip + logout icon already read as "sign out", so the
-                  word is dropped to save width. */}
               <Text className="text-cream text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold", flexShrink: 1, maxWidth: 130 }} numberOfLines={1}>{staff?.staffName ?? "Cashier"}</Text>
               <LogOut size={15} color="rgba(245,243,240,0.7)" />
             </Pressable>
@@ -3800,7 +3790,7 @@ function CashierScorecardChip({ sc }: { sc: Scorecard | null }) {
       <Pressable
         onPress={() => { Haptics.selectionAsync(); setOpen(true); }}
         className="flex-row items-center rounded-xl border active:opacity-70"
-        style={{ borderColor: rateLight.border, backgroundColor: rateLight.tint, paddingHorizontal: 14, height: 42 }}
+        style={{ borderColor: rateLight.border, backgroundColor: rateLight.tint, paddingHorizontal: 12, height: 42 }}
       >
         {/* % half */}
         <View className="flex-row items-center" style={{ gap: 7 }}>
