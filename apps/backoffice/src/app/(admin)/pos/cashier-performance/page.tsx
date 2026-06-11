@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Loader2, Target, Users, UserPlus, Repeat, AlertTriangle } from "lucide-react";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { Loader2, Target, Users, UserPlus, Repeat, AlertTriangle, Search, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
 
@@ -10,6 +10,9 @@ import { toast } from "@celsius/ui";
  * v1: collection rate (the ungameable loyalty-DB metric). new/repeat split +
  * upsell + per-staff HR view are Phase B (see docs/design/
  * cashier-performance-dashboard.md). Scope: cashier-rung (source=pos) orders.
+ *
+ * Filtering: outlet + period drive the server query (KPIs recompute for the
+ * selection); search / quick-filter / column sort refine the table client-side.
  */
 
 type Cashier = {
@@ -32,18 +35,40 @@ type Data = {
   overall: { orders: number; collected: number; newMembers: number; repeatMembers: number; rate: number; pairAdds: number; upsellOrders: number; upsellRate: number | null };
   cashiers: Cashier[];
 };
+type Outlet = { id: string; name: string };
 
 const DAYS_OPTIONS = [7, 30, 90];
+type QuickFilter = "all" | "below" | "flagged";
+type SortKey = "name" | "orders" | "collected" | "collectedNew" | "rate" | "pairAdds" | "upsellRate";
 
 export default function CashierPerformancePage() {
   const [days, setDays] = useState(30);
+  const [outletId, setOutletId] = useState("all");
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Client-side table refinements (don't hit the server / don't move the KPIs).
+  const [search, setSearch] = useState("");
+  const [quick, setQuick] = useState<QuickFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("rate");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  // Outlet list for the filter dropdown (loaded once).
+  useEffect(() => {
+    adminFetch("/api/settings/outlets")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Array<{ id: string; name: string }>) =>
+        setOutlets((rows ?? []).map((o) => ({ id: o.id, name: o.name }))))
+      .catch(() => setOutlets([]));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await adminFetch(`/api/pos/cashier-performance?days=${days}`);
+      const params = new URLSearchParams({ days: String(days) });
+      if (outletId !== "all") params.set("outletId", outletId);
+      const res = await adminFetch(`/api/pos/cashier-performance?${params.toString()}`);
       if (!res.ok) throw new Error("Load failed");
       setData((await res.json()) as Data);
     } catch (e) {
@@ -51,19 +76,49 @@ export default function CashierPerformancePage() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, outletId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const overall = data?.overall;
-  const cashiers = data?.cashiers ?? [];
+  const allCashiers = useMemo(() => data?.cashiers ?? [], [data]);
   const target = data?.target ?? 70;
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortKey(key);
+      // Text sorts ascending by default; numeric sorts descending (rank order).
+      setSortDir(key === "name" ? "asc" : "desc");
+    }
+  }
+
+  const cashiers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let rows = allCashiers.filter((c) => {
+      if (q && !c.name.toLowerCase().includes(q)) return false;
+      if (quick === "below" && c.rate >= target) return false;
+      if (quick === "flagged" && !c.suspicious) return false;
+      return true;
+    });
+    const dir = sortDir === "asc" ? 1 : -1;
+    rows = [...rows].sort((x, y) => {
+      if (sortKey === "name") return x.name.localeCompare(y.name) * dir;
+      const xv = (x[sortKey] ?? -1) as number;
+      const yv = (y[sortKey] ?? -1) as number;
+      return (xv - yv || y.orders - x.orders) * dir;
+    });
+    return rows;
+  }, [allCashiers, search, quick, sortKey, sortDir, target]);
+
+  const filtersActive = search.trim() !== "" || quick !== "all";
 
   return (
     <div className="p-3 sm:p-6 space-y-5 max-w-5xl">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#160800]">Cashier Performance</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -71,18 +126,30 @@ export default function CashierPerformancePage() {
             orders only (Grab / pickup / QR self-orders excluded). Target {target}%.
           </p>
         </div>
-        <select
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value))}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-[#160800]"
-        >
-          {DAYS_OPTIONS.map((d) => (
-            <option key={d} value={d}>Last {d} days</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={outletId}
+            onChange={(e) => setOutletId(e.target.value)}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-[#160800]"
+          >
+            <option value="all">All outlets</option>
+            {outlets.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+          <select
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-[#160800]"
+          >
+            {DAYS_OPTIONS.map((d) => (
+              <option key={d} value={d}>Last {d} days</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {/* Headline KPIs */}
+      {/* Headline KPIs — reflect the outlet + period selection (server totals). */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="rounded-2xl bg-white p-4 border border-gray-100">
           <div className="flex items-center gap-2 mb-1.5">
@@ -93,12 +160,42 @@ export default function CashierPerformancePage() {
             {overall ? `${overall.rate}%` : "—"}
           </p>
           <p className="mt-0.5 text-[11px] text-gray-500">
-            {overall ? `${overall.collected.toLocaleString()} / ${overall.orders.toLocaleString()} orders · target ${target}%` : " "}
+            {overall ? `${overall.collected.toLocaleString()} / ${overall.orders.toLocaleString()} orders · target ${target}%` : " "}
           </p>
         </div>
         <KpiCard Icon={UserPlus} label="New Members" value={overall ? overall.newMembers.toLocaleString() : "—"} sub="fresh enrolments" />
         <KpiCard Icon={Repeat} label="Returning" value={overall ? overall.repeatMembers.toLocaleString() : "—"} sub="existing members" />
-        <KpiCard Icon={Users} label="Cashiers Tracked" value={String(cashiers.length)} sub={`last ${days} days`} />
+        <KpiCard Icon={Users} label="Cashiers Tracked" value={String(allCashiers.length)} sub={`last ${days} days`} />
+      </div>
+
+      {/* Table toolbar: search + quick filters */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search cashier…"
+            className="w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 py-1.5 text-sm text-[#160800] placeholder:text-gray-400"
+          />
+        </div>
+        <div className="flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+          {([
+            { key: "all", label: "All" },
+            { key: "below", label: "Below target" },
+            { key: "flagged", label: "Flagged" },
+          ] as { key: QuickFilter; label: string }[]).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setQuick(t.key)}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                quick === t.key ? "bg-white text-[#160800] shadow-sm" : "text-gray-500 hover:text-[#160800]"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Per-cashier leaderboard */}
@@ -107,20 +204,22 @@ export default function CashierPerformancePage() {
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-700">
               <th className="px-4 py-3 w-10">#</th>
-              <th className="px-4 py-3">Cashier</th>
-              <th className="px-4 py-3 text-right">Orders</th>
-              <th className="px-4 py-3 text-right">Collected</th>
-              <th className="px-4 py-3 text-right">New</th>
-              <th className="px-4 py-3 text-right w-40">Collection Rate</th>
-              <th className="px-4 py-3 text-right" title="Pair-with-a-Bite suggestions added by this cashier (raw count)">Pair Adds</th>
-              <th className="px-4 py-3 text-right" title="Share of this cashier's orders that included an upsold pair — several pairs in one order count once (coaching-only)">Upsell %</th>
+              <SortableTh label="Cashier" col="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortableTh label="Orders" col="orders" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
+              <SortableTh label="Collected" col="collected" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
+              <SortableTh label="New" col="collectedNew" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
+              <SortableTh label="Collection Rate" col="rate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" className="w-40" />
+              <SortableTh label="Pair Adds" col="pairAdds" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" title="Pair-with-a-Bite suggestions added by this cashier (raw count)" />
+              <SortableTh label="Upsell %" col="upsellRate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" title="Share of this cashier's orders that included an upsold pair — several pairs in one order count once (coaching-only)" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr><td colSpan={8} className="px-4 py-12 text-center"><Loader2 className="inline h-5 w-5 animate-spin text-gray-400" /></td></tr>
             ) : cashiers.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-500">No counter-rung orders in this period yet.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-500">
+                {allCashiers.length === 0 ? "No counter-rung orders in this period yet." : "No cashiers match these filters."}
+              </td></tr>
             ) : (
               cashiers.map((c, i) => (
                 <tr key={c.id} className="hover:bg-gray-50">
@@ -156,6 +255,11 @@ export default function CashierPerformancePage() {
             )}
           </tbody>
         </table>
+        {!loading && filtersActive && allCashiers.length > 0 && (
+          <div className="border-t border-gray-100 px-4 py-2 text-[11px] text-gray-500">
+            Showing {cashiers.length} of {allCashiers.length} cashiers
+          </div>
+        )}
       </div>
 
       <p className="text-xs text-muted-foreground">
@@ -168,6 +272,30 @@ export default function CashierPerformancePage() {
         flags a cashier where one number recurs across many tickets (possible fake/own-number entry).
       </p>
     </div>
+  );
+}
+
+function SortableTh({
+  label, col, sortKey, sortDir, onSort, align = "left", className = "", title,
+}: {
+  label: string; col: SortKey; sortKey: SortKey; sortDir: "asc" | "desc";
+  onSort: (k: SortKey) => void; align?: "left" | "right"; className?: string; title?: string;
+}) {
+  const active = sortKey === col;
+  return (
+    <th className={`px-4 py-3 ${align === "right" ? "text-right" : "text-left"} ${className}`} title={title}>
+      <button
+        onClick={() => onSort(col)}
+        className={`inline-flex items-center gap-1 hover:text-[#160800] ${align === "right" ? "flex-row-reverse" : ""} ${active ? "text-[#160800]" : ""}`}
+      >
+        <span>{label}</span>
+        {active ? (
+          sortDir === "desc" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronsUpDown className="h-3.5 w-3.5 text-gray-300" />
+        )}
+      </button>
+    </th>
   );
 }
 
