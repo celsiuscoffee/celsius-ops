@@ -3793,16 +3793,16 @@ function CashierScorecardChip({ sc }: { sc: Scorecard | null }) {
         style={{ borderColor: rateLight.border, backgroundColor: rateLight.tint, paddingHorizontal: 12, height: 42 }}
       >
         {/* % half */}
-        <View className="flex-row items-center" style={{ gap: 7 }}>
-          <TrendingUp size={18} color={rateLight.c} />
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 18, color: rateLight.c }}>{sc.rate}%</Text>
+        <View className="flex-row items-center" style={{ gap: 6 }}>
+          <TrendingUp size={15} color={rateLight.c} />
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 15, color: rateLight.c }}>{sc.rate}%</Text>
         </View>
         {/* centered divider — equal margin both sides keeps the two halves symmetric */}
-        <View style={{ width: 1, height: 20, backgroundColor: "rgba(245,243,240,0.22)", marginHorizontal: 13 }} />
+        <View style={{ width: 1, height: 18, backgroundColor: "rgba(245,243,240,0.22)", marginHorizontal: 12 }} />
         {/* pair half */}
-        <View className="flex-row items-center" style={{ gap: 7 }}>
-          <Sparkles size={18} color={pairLight.c} />
-          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 18, color: pairLight.c }}>{sc.pairAdds}</Text>
+        <View className="flex-row items-center" style={{ gap: 6 }}>
+          <Sparkles size={15} color={pairLight.c} />
+          <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 15, color: pairLight.c }}>{sc.pairAdds}</Text>
         </View>
       </Pressable>
 
