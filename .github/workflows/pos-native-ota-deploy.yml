@@ -50,6 +50,6 @@ jobs:
             npx eas-cli@latest update \
               --channel "$ch" \
               --platform android \
-              --message "OTA: scorecard chip height matches sign-out box" \
+              --message "OTA: fix header overflow when offline (compact right cluster)" \
               --non-interactive || echo "channel $ch publish failed (continuing)"
           done
