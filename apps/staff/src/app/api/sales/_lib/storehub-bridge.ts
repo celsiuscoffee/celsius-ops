@@ -55,6 +55,10 @@ export async function getStorehubFromDB(opts: {
   cur: { from: string; to: string };
   prev: { from: string; to: string };
   granularity: "hour" | "day";
+  /** Like-for-like cutoff (ms): prev-period SUMMARY counts only rows at/before
+   *  this instant (today-so-far vs yesterday-to-same-time), mirroring the
+   *  route's native rows. Chart buckets (prevHour/prevByDate) stay full. */
+  prevCutoffMs?: number;
 }): Promise<ShContrib> {
   const out: ShContrib = {
     curRevSen: 0, curOrd: 0, prevRevSen: 0, prevOrd: 0,
@@ -120,7 +124,9 @@ export async function getStorehubFromDB(opts: {
         out.roundOrders[rd] = (out.roundOrders[rd] || 0) + 1;
       }
     } else if (inPrev(d)) {
-      out.prevRevSen += rev; out.prevOrd++;
+      if (new Date(ts).getTime() <= (opts.prevCutoffMs ?? Number.POSITIVE_INFINITY)) {
+        out.prevRevSen += rev; out.prevOrd++;
+      }
       out.prevByDate[d] = (out.prevByDate[d] || 0) + rev;
       out.prevHour[h] += rev;
     }

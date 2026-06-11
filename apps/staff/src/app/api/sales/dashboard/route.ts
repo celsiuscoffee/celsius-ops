@@ -116,9 +116,8 @@ export async function GET(req: NextRequest) {
   // time of day — so the headline delta isn't "partial day vs full day". For a
   // fully past period the cutoff is open (full previous period). The comparison
   // chart's previous line is intentionally left full (shows yesterday's finish
-  // as a target); only the summary deltas use this cutoff.
-  // NOTE: StoreHub-sourced previous totals (transitioning outlets) are not
-  // time-clipped — they still merge the full previous period below.
+  // as a target); only the summary deltas use this cutoff. StoreHub-sourced
+  // rows follow the same rule (prevCutoffMs is passed to getStorehubFromDB).
   const prevCutoffMs = curIncludesToday
     ? Date.parse(mytDayStartUTC(prev.from)) + (Date.now() - Date.parse(mytDayStartUTC(cur.from)))
     : Number.POSITIVE_INFINITY;
@@ -218,6 +217,7 @@ export async function GET(req: NextRequest) {
       cur,
       prev,
       granularity,
+      prevCutoffMs,
     });
     curRev += sh.curRevSen; curOrd += sh.curOrd;
     prevRev += sh.prevRevSen; prevOrd += sh.prevOrd;
