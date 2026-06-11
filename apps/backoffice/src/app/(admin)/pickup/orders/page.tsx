@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search, ChevronRight, RefreshCw, Download, X } from "lucide-react";
 import type { OrderRow } from "@/lib/pickup/types";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
+import { storeLabel } from "@/lib/pickup/store-label";
 
 const STATUS_COLOUR: Record<string, string> = {
   pending:   "bg-gray-100 text-gray-600",
@@ -244,7 +245,7 @@ export default function PickupOrders() {
                     <span className="text-sm text-muted-foreground truncate">
                       {order.customer_name ?? "—"}{order.customer_phone ? ` · ${order.customer_phone}` : ""}
                     </span>
-                    <span className="text-sm capitalize">{order.store_id.replace(/-/g, " ")}</span>
+                    <span className="text-sm">{storeLabel(order.store_id)}</span>
                     <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit ${CHANNEL_BADGE[ch] ?? "bg-gray-100 text-gray-600"}`}>
                       {CHANNEL_LABEL[ch] ?? ch}
                     </span>

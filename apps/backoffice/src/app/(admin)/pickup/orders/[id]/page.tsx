@@ -6,6 +6,7 @@ import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, XCircle, Loader2, ChevronRight } from "lucide-react";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
+import { storeLabel } from "@/lib/pickup/store-label";
 import type { OrderRow, OrderItemRow } from "@/lib/pickup/types";
 
 const STATUS_COLOUR: Record<string, string> = {
@@ -161,7 +162,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       {/* Outlet + pickup */}
       <div className="bg-white rounded-2xl p-4 space-y-2">
         <h2 className="font-bold text-sm mb-3">Pickup Details</h2>
-        <Row label="Outlet"  value={order.store_id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} />
+        <Row label="Outlet"  value={storeLabel(order.store_id)} />
         {order.order_type === "dine_in" ? (
           <Row label="Table" value={order.table_number ? `Dine-in · Table ${order.table_number}` : "Dine-in"} />
         ) : order.order_type ? (

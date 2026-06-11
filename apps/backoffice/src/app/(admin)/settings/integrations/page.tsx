@@ -48,7 +48,7 @@ type MaybankQrConfig = { enabled: boolean; outlets: Record<string, MaybankQrOutl
 
 const STORE_NAMES: Record<string, string> = {
   "shah-alam": "Shah Alam",
-  conezion: "Conezion",
+  conezion: "Putrajaya",
   tamarind: "Tamarind Square",
 };
 

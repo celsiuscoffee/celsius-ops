@@ -136,7 +136,7 @@ function firstName(name: string | null): string | null {
 
 const STORE_NAMES: Record<string, string> = {
   "shah-alam": "Shah Alam",
-  "conezion": "Conezion",
+  "conezion": "Putrajaya",
   "tamarind": "Tamarind Square",
   "putrajaya": "Celsius Coffee Putrajaya",
 };

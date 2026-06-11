@@ -71,7 +71,7 @@ function mapSupabaseUser(row: any): AdminUser {
   };
 }
 
-const allOutlets = ["Shah Alam", "Conezion", "Tamarind Square"];
+const allOutlets = ["Shah Alam", "Putrajaya", "Tamarind Square"];
 
 const avatarColors: Record<string, string> = {
   A: "#C2452D",

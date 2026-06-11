@@ -17,7 +17,7 @@ type OrderWithItems = OrderRow & { order_items: OrderItemRow[] };
 
 const STORE_NAMES: Record<string, string> = {
   "shah-alam": "Shah Alam",
-  "conezion":  "Conezion",
+  "conezion":  "Putrajaya",
   "tamarind":  "Tamarind Square",
 };
 

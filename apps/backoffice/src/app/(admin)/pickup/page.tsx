@@ -1,6 +1,7 @@
 "use client";
 
 import { formatRM } from "@celsius/shared";
+import { storeLabel } from "@/lib/pickup/store-label";
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
@@ -409,7 +410,7 @@ export default function PickupDashboard() {
                   <Link key={order.id} href={`/pickup/orders/${order.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors">
                     <div>
                       <p className="font-semibold text-sm">#{order.order_number}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{order.store_id.replace(/-/g, " ")}</p>
+                      <p className="text-xs text-muted-foreground">{storeLabel(order.store_id)}</p>
                     </div>
                     <div className="ml-auto text-right">
                       <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${STATUS_COLOUR[order.status]}`}>{order.status}</span>
@@ -435,7 +436,7 @@ export default function PickupDashboard() {
                     <p className="font-semibold text-sm">#{order.order_number}</p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(order.created_at).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}
-                      {" · "}{order.store_id.replace(/-/g, " ")}
+                      {" · "}{storeLabel(order.store_id)}
                     </p>
                   </div>
                   <div className="ml-auto text-right">

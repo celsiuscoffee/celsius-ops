@@ -13,7 +13,7 @@ export const stores: Store[] = [
   },
   {
     id: "conezion",
-    name: "Celsius Conezion",
+    name: "Celsius Putrajaya",
     address: "IOI Resort City, Conezion, 62502 Putrajaya",
     lat: 2.9375,
     lng: 101.7156,

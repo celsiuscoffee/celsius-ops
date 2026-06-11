@@ -19,7 +19,7 @@ interface Customer {
 
 const OUTLET_LABELS: Record<string, string> = {
   "outlet-sa":  "Shah Alam",
-  "outlet-con": "Conezion",
+  "outlet-con": "Putrajaya",
   "outlet-tam": "Tamarind",
 };
 
