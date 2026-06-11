@@ -16,7 +16,9 @@ export const APP_MODULES: Record<string, ModuleDef[]> = {
   pickup: [
     { label: "Orders", key: "orders" },
     { label: "Menu", key: "menu" },
-    { label: "Customers", key: "customers" },
+    // "Customers" was consolidated into the Rewards → Members page (gated by
+    // loyalty:members); the thin /pickup/customers page now redirects there.
+    // Grant customer access via loyalty:members instead.
     { label: "Settings (Pickup + POS)", key: "settings" },
   ],
   inventory: [

@@ -2,6 +2,62 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/loyalty/supabase';
 import { requireAuth } from '@/lib/auth';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/loyalty/rate-limit';
+import { classifyOrderChannel, posChannel, type OrderChannel } from '@/lib/loyalty/order-channel';
+
+/**
+ * Per-member purchase + channel aggregates, keyed by phone.
+ *
+ * Built from pickup `orders` + counter `pos_orders` and their line items.
+ * Joined by phone (orders.loyalty_phone / pos_orders.loyalty_phone =
+ * members.phone) since that's the one key both order tables share with the
+ * member record. Order/item volume is small (native POS history is young),
+ * so a full scan + in-memory build is cheap. Returns maps the list route
+ * attaches to each member so the client-side filters can run without N
+ * extra queries.
+ */
+async function buildPurchaseAggregates(): Promise<
+  Map<string, { productIds: string[]; channels: OrderChannel[] }>
+> {
+  const [ordersRes, posOrdersRes, itemsRes, posItemsRes] = await Promise.all([
+    supabaseAdmin.from('orders').select('id, loyalty_phone, source, order_type').not('loyalty_phone', 'is', null),
+    supabaseAdmin.from('pos_orders').select('id, loyalty_phone, order_type').not('loyalty_phone', 'is', null),
+    supabaseAdmin.from('order_items').select('order_id, product_id'),
+    supabaseAdmin.from('pos_order_items').select('order_id, product_id'),
+  ]);
+
+  // order_id → product_ids
+  const itemsByOrder = new Map<string, string[]>();
+  for (const it of [...(itemsRes.data ?? []), ...(posItemsRes.data ?? [])] as { order_id: string | null; product_id: string | null }[]) {
+    if (!it.order_id || !it.product_id) continue;
+    const arr = itemsByOrder.get(it.order_id) ?? [];
+    arr.push(it.product_id);
+    itemsByOrder.set(it.order_id, arr);
+  }
+
+  const byPhone = new Map<string, { productIds: Set<string>; channels: Set<OrderChannel> }>();
+  const bucket = (phone: string) => {
+    let b = byPhone.get(phone);
+    if (!b) { b = { productIds: new Set(), channels: new Set() }; byPhone.set(phone, b); }
+    return b;
+  };
+
+  for (const o of (ordersRes.data ?? []) as { id: string; loyalty_phone: string | null; source: string | null; order_type: string | null }[]) {
+    if (!o.loyalty_phone) continue;
+    const b = bucket(o.loyalty_phone);
+    b.channels.add(classifyOrderChannel(o.source, o.order_type));
+    for (const pid of itemsByOrder.get(o.id) ?? []) b.productIds.add(pid);
+  }
+  for (const o of (posOrdersRes.data ?? []) as { id: string; loyalty_phone: string | null }[]) {
+    if (!o.loyalty_phone) continue;
+    const b = bucket(o.loyalty_phone);
+    b.channels.add(posChannel());
+    for (const pid of itemsByOrder.get(o.id) ?? []) b.productIds.add(pid);
+  }
+
+  const out = new Map<string, { productIds: string[]; channels: OrderChannel[] }>();
+  for (const [phone, b] of byPhone) out.set(phone, { productIds: [...b.productIds], channels: [...b.channels] });
+  return out;
+}
 
 // GET /api/members?brand_id=brand-celsius&phone=+60123456789&page=0&limit=50&search=keyword
 // Fetch members with their brand data. Supports pagination and search.
@@ -66,12 +122,22 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const members = allMembers.map((member) => ({
-        ...member,
-        brand_data: Array.isArray(member.brand_data)
-          ? member.brand_data[0]
-          : member.brand_data,
-      }));
+      // Attach purchase + channel aggregates so the client-side item/channel
+      // filters work in the all=true ("load everything") mode. Empty arrays
+      // for the vast majority of members who have no linked native orders.
+      const aggregates = await buildPurchaseAggregates();
+
+      const members = allMembers.map((member) => {
+        const agg = aggregates.get(member.phone as string);
+        return {
+          ...member,
+          brand_data: Array.isArray(member.brand_data)
+            ? member.brand_data[0]
+            : member.brand_data,
+          purchased_product_ids: agg?.productIds ?? [],
+          order_channels: agg?.channels ?? [],
+        };
+      });
 
       return NextResponse.json(members);
     }

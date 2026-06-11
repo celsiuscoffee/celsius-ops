@@ -144,6 +144,9 @@ export const api = {
      *  surface on the POS register's "QR Tables" tab. */
     orderType?: "pickup" | "dine_in" | null;
     tableNumber?: string | null;
+    /** Origin attribution: "app_ios" | "app_android" (native binary) or
+     *  "web" (the PWA export). Server allowlists + defaults to "web". */
+    source?: "app_ios" | "app_android" | "web";
   }) =>
     post<{ orderId: string; orderNumber: string }>("/api/orders", {
       ...payload,
