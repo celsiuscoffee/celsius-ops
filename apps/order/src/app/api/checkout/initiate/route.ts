@@ -13,6 +13,7 @@ import {
 import type { OrderRow } from "@/lib/supabase/types";
 import { defaultMethodSets } from "@/lib/payments/gateway-methods";
 import { getOutletSst } from "@/lib/outlet-sst";
+import { fetchValidTableLabels } from "@/lib/table-layout";
 import { resolveOrderReward } from "@celsius/shared";
 import { reconcileNonStackTier } from "@/lib/loyalty/non-stack-tier";
 
@@ -134,6 +135,21 @@ export async function POST(request: NextRequest) {
       if (outletRow.is_open === false) {
         return NextResponse.json(
           { error: "Online ordering is temporarily paused — please order at the counter." },
+          { status: 400 },
+        );
+      }
+    }
+
+    // Table must exist in the outlet's floor plan. The QR URL is typeable
+    // (/table/{store}/{label}), so without this a customer could order against
+    // a table the kitchen can't seat (the Putrajaya "table 11" case). Only
+    // enforced when the outlet HAS a layout with tables — a missing layout
+    // returns null and must not block the whole outlet.
+    {
+      const validTables = await fetchValidTableLabels(supabase, storeId);
+      if (validTables && !validTables.has(tableNo)) {
+        return NextResponse.json(
+          { error: `Table ${tableNo} isn't recognised at this outlet — please scan the QR code on your table, or ask a barista for help.` },
           { status: 400 },
         );
       }

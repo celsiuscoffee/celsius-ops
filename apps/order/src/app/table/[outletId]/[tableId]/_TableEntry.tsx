@@ -74,8 +74,8 @@ export function TableEntry({
           Table not found
         </p>
         <p className="text-sm mt-2" style={{ color: "#6B6B6B" }}>
-          This QR code doesn&apos;t match an active outlet. Ask a barista for help, or browse the menu
-          for pickup.
+          This QR code doesn&apos;t match an active outlet or table. Please re-scan the QR code on
+          your table, ask a barista for help, or browse the menu for pickup.
         </p>
         <Link
           href="/"

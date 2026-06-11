@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { fetchValidTableLabels } from "@/lib/table-layout";
 import { TableEntry } from "./_TableEntry";
 
 /**
@@ -35,14 +36,30 @@ export default async function TablePage({
   params: Promise<{ outletId: string; tableId: string }>;
 }) {
   const { outletId, tableId } = await params;
+  const table = decodeURIComponent(tableId).trim();
   const outletName = await fetchOutletName(outletId);
+
+  // The URL is typeable, so also check the table exists in the outlet's floor
+  // plan (same source the QR codes are printed from). A null label set means
+  // the outlet has no layout configured — don't block in that case. Checkout
+  // re-validates server-side regardless, this just fails fast with a clear
+  // message instead of at payment.
+  let tableValid = true;
+  if (outletName) {
+    try {
+      const labels = await fetchValidTableLabels(getSupabaseAdmin(), outletId);
+      if (labels && !labels.has(table)) tableValid = false;
+    } catch {
+      /* never block on a lookup failure */
+    }
+  }
 
   return (
     <main className="bg-white text-[#160800] min-h-screen">
       <TableEntry
         outletId={outletId}
-        outletName={outletName}
-        tableId={decodeURIComponent(tableId)}
+        outletName={tableValid ? outletName : null}
+        tableId={table}
       />
     </main>
   );
