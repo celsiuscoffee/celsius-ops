@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ShoppingBag, Coffee, CheckCircle2, XCircle } from "lucide-react";
 import { MysteryReward } from "./_MysteryReward";
+import { clearDineInCart, getPendingOrder } from "@/lib/checkout-session";
 
 type OrderItem = {
   product_name: string;
@@ -134,6 +135,17 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
       window.clearInterval(id);
     };
   }, [status, method, orderId, fetchOrder]);
+
+  // Clear the cart ONLY once THIS just-placed order is confirmed paid. This is
+  // the single confirmed-payment clear point for the gateway-redirect methods
+  // (card / FPX / e-wallets land back here via ?payment=done). Guarded on the
+  // pending-order breadcrumb so viewing an old order from history never wipes a
+  // fresh in-progress cart.
+  useEffect(() => {
+    const st = String(status ?? "").toLowerCase();
+    if (!["preparing", "paid", "ready", "completed", "collected"].includes(st)) return;
+    if (getPendingOrder()?.orderId === orderId) clearDineInCart();
+  }, [status, orderId]);
 
   if (!order) {
     return (

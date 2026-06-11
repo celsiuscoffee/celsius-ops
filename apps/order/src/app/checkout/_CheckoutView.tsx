@@ -6,6 +6,9 @@ import { ArrowLeft, ChevronDown, Check, Gift } from "lucide-react";
 import { StripePaymentForm } from "@/components/stripe-payment-form";
 import { PaymentBrandIcon } from "./_PaymentBrandIcon";
 import { calcRewardDiscount, type AppliedReward } from "@/lib/reward-discount";
+import {
+  clearDineInCart, setPendingOrder, getPendingOrder, clearPendingOrder, getDineInContext,
+} from "@/lib/checkout-session";
 
 type CartItem = {
   cartId: string;
@@ -166,6 +169,20 @@ export function CheckoutView() {
   const [gateway, setGateway] = useState<GatewayConfig | null>(null);
   // Whether the E-Wallet category row is expanded into its sub-picker.
   const [ewalletExpanded, setEwalletExpanded] = useState(false);
+  // A still-`pending` order from a prior attempt → offer "Resume payment"
+  // instead of silently letting them re-submit (set by the reconcile effect).
+  const [resumeOrderId, setResumeOrderId] = useState<string | null>(null);
+
+  // Bring the inline payment sheet into view once it renders — the wallet/card
+  // form appears below the fold after "Place order", so without this it can
+  // look like nothing happened (the "press pay, nothing" confusion).
+  useEffect(() => {
+    if (!stripeContext) return;
+    const t = setTimeout(() => {
+      document.getElementById("stripe-pay-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+    return () => clearTimeout(t);
+  }, [stripeContext]);
 
   useEffect(() => {
     const s = readState() ?? {};
@@ -189,6 +206,35 @@ export function CheckoutView() {
       /* ignore — fall back to whatever the blob says */
     }
     setState(s);
+  }, []);
+
+  // Reconcile a leftover pending order on entry. If we came back to checkout
+  // with an order that ALREADY went through (paid on the gateway, then tapped
+  // back), clear the cart so the same basket can't be charged twice. A
+  // failed/cancelled one just frees the breadcrumb — the cart stays so "place
+  // again" works. A still-pending one surfaces a Resume link.
+  useEffect(() => {
+    const pending = getPendingOrder();
+    if (!pending) return;
+    if (Date.now() - pending.ts > 30 * 60 * 1000) { clearPendingOrder(); return; }
+    let cancelled = false;
+    fetch(`/api/orders/${pending.orderId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return;
+        const o = (d.order ?? d) as { status?: string } | null;
+        const st = String(o?.status ?? "").toLowerCase();
+        if (["preparing", "paid", "ready", "completed", "collected"].includes(st)) {
+          clearDineInCart();          // succeeded → don't re-order this basket
+          setState(readState() ?? {}); // reflect the now-empty cart
+        } else if (st === "failed" || st === "cancelled") {
+          clearPendingOrder();         // free it; keep the cart for a retry
+        } else {
+          setResumeOrderId(pending.orderId); // still pending → offer resume
+        }
+      })
+      .catch(() => { /* leave as-is; a stale breadcrumb is harmless */ });
+    return () => { cancelled = true; };
   }, []);
 
   // Same earn-preview line as apps/pickup-native/app/checkout.tsx —
@@ -349,6 +395,9 @@ export function CheckoutView() {
   const cart = state.cart ?? [];
   const isDineIn = state.orderType === "dine_in";
   if (cart.length === 0) {
+    // Keep a dine-in customer in their table session — /menu carries the
+    // dine-in context forward, so don't word it as "pickup".
+    const dineCtx = getDineInContext();
     return (
       <div className="p-8 text-center">
         <p className="text-sm text-[#8E8E93]">Your cart is empty.</p>
@@ -356,7 +405,7 @@ export function CheckoutView() {
           href="/menu"
           className="mt-4 inline-block rounded-full bg-[#A2492C] text-white px-5 py-3 font-bold active:opacity-80"
         >
-          Browse menu →
+          {dineCtx ? `Back to Table ${dineCtx.tableNumber} menu →` : "Browse menu →"}
         </Link>
       </div>
     );
@@ -400,39 +449,33 @@ export function CheckoutView() {
       if (!res.ok) {
         throw new Error(data.error ?? "Failed to start payment");
       }
-      // Order now exists server-side (pending). Clear the cart + applied
-      // reward so a back-nav or re-open of checkout can't re-submit the
-      // same basket — any retry happens from the order page via the
-      // existing orderId. Mirrors native's clearCart() after placeOrder.
-      try {
-        const raw = window.localStorage.getItem("celsius-pickup");
-        const parsed = raw ? JSON.parse(raw) : { state: {} };
-        const s = parsed.state ?? {};
-        s.cart = [];
-        s.appliedReward = null;
-        s.reservedVoucher = null;
-        window.localStorage.setItem("celsius-pickup", JSON.stringify({ ...parsed, state: s }));
-        // The dine-in session ends with the order — clear its key so the
-        // customer's NEXT order defaults to pickup unless they scan again.
-        window.localStorage.removeItem("celsius-dinein");
-      } catch {
-        /* ignore */
-      }
-      // Stripe path → confirm via PaymentIntent (TODO: integrate Stripe.js).
-      // RM path / hosted-page path → redirect.
+      // Order now exists server-side but is only `pending` — payment hasn't
+      // happened. DON'T clear the cart here: a customer who bails on the
+      // gateway page and taps back would otherwise land on an empty checkout
+      // and couldn't "place the order again" (the order page's retry path).
+      // Instead remember the order id; the cart is cleared only once payment is
+      // CONFIRMED (order page, inline-Stripe success, or free order). A
+      // duplicate submit is guarded on mount — a still-paid pending order
+      // clears the cart there.
+      setPendingOrder(data.orderId);
+      // RM / hosted-page path → full redirect to the gateway.
       if (data.paymentUrl) {
         window.location.href = data.paymentUrl;
         return;
       }
       if (data.clientSecret) {
-        // Stripe path — render Stripe Elements inline so the customer
-        // can confirm the payment without leaving the PWA. The form
-        // calls /api/orders/[id]/confirm-stripe on success and
-        // redirects to the order page.
+        // Stripe path — render Stripe Elements inline so the customer can
+        // confirm without leaving the PWA. The inline form calls
+        // /api/orders/[id]/confirm-stripe on success then redirects to the
+        // order page (where the cart is cleared). Reset `placing` so the UI
+        // isn't stuck on "Placing order…" behind the payment sheet.
+        setPlacing(false);
         setStripeContext({ orderId: data.orderId, clientSecret: data.clientSecret });
         return;
       }
       if (data.freeOrder) {
+        // RM0 order is already `preparing` (paid by reward) — safe to clear.
+        clearDineInCart();
         window.location.href = `/order/${data.orderId}`;
         return;
       }
@@ -464,6 +507,19 @@ export function CheckoutView() {
         </Link>
         <h1 className="font-peachi font-bold text-[22px]">Checkout</h1>
       </header>
+
+      {resumeOrderId ? (
+        <Link
+          href={`/order/${resumeOrderId}`}
+          className="mx-4 mt-3 flex items-center justify-between rounded-2xl px-4 py-3 active:opacity-80"
+          style={{ backgroundColor: "#FFF7ED", border: "1px solid rgba(162,73,44,0.30)" }}
+        >
+          <span className="text-[13px] font-semibold" style={{ color: "#A2492C" }}>
+            You have a payment in progress — finish it
+          </span>
+          <span className="text-[13px] font-bold" style={{ color: "#A2492C" }}>Resume →</span>
+        </Link>
+      ) : null}
 
       <section className="px-4 pt-4">
         <div
@@ -733,7 +789,7 @@ export function CheckoutView() {
       </section>
 
       {stripeContext ? (
-        <section className="mt-4 px-4">
+        <section id="stripe-pay-section" className="mt-4 px-4">
           <h2 className="font-peachi font-bold text-[16px] mb-3">Payment details</h2>
           <StripePaymentForm
             clientSecret={stripeContext.clientSecret}
@@ -763,6 +819,8 @@ export function CheckoutView() {
                 setConfirming(false);
                 return;
               }
+              // Payment confirmed → now it's safe to clear the cart.
+              clearDineInCart();
               window.location.href = `/order/${stripeContext.orderId}?payment=done`;
             }}
             className={`block w-full rounded-full text-white text-center py-4 font-bold active:opacity-80 ${
