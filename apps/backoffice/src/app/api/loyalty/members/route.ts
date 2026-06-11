@@ -16,46 +16,59 @@ import { classifyOrderChannel, posChannel, type OrderChannel } from '@/lib/loyal
  * extra queries.
  */
 async function buildPurchaseAggregates(): Promise<
-  Map<string, { productIds: string[]; channels: OrderChannel[] }>
+  Map<string, { productIds: string[]; productCounts: Record<string, number>; channels: OrderChannel[] }>
 > {
   const [ordersRes, posOrdersRes, itemsRes, posItemsRes] = await Promise.all([
     supabaseAdmin.from('orders').select('id, loyalty_phone, source, order_type').not('loyalty_phone', 'is', null),
     supabaseAdmin.from('pos_orders').select('id, loyalty_phone, order_type').not('loyalty_phone', 'is', null),
-    supabaseAdmin.from('order_items').select('order_id, product_id'),
-    supabaseAdmin.from('pos_order_items').select('order_id, product_id'),
+    supabaseAdmin.from('order_items').select('order_id, product_id, quantity'),
+    supabaseAdmin.from('pos_order_items').select('order_id, product_id, quantity'),
   ]);
 
-  // order_id → product_ids
-  const itemsByOrder = new Map<string, string[]>();
-  for (const it of [...(itemsRes.data ?? []), ...(posItemsRes.data ?? [])] as { order_id: string | null; product_id: string | null }[]) {
+  // order_id → [{ product_id, qty }]. qty carries the per-line quantity so we
+  // can sum total units per product per member (for the "bought ≥ N times"
+  // frequency filter), not just distinct products.
+  const itemsByOrder = new Map<string, { pid: string; qty: number }[]>();
+  for (const it of [...(itemsRes.data ?? []), ...(posItemsRes.data ?? [])] as { order_id: string | null; product_id: string | null; quantity: number | null }[]) {
     if (!it.order_id || !it.product_id) continue;
     const arr = itemsByOrder.get(it.order_id) ?? [];
-    arr.push(it.product_id);
+    arr.push({ pid: it.product_id, qty: it.quantity ?? 0 });
     itemsByOrder.set(it.order_id, arr);
   }
 
-  const byPhone = new Map<string, { productIds: Set<string>; channels: Set<OrderChannel> }>();
+  const byPhone = new Map<string, { productCounts: Map<string, number>; channels: Set<OrderChannel> }>();
   const bucket = (phone: string) => {
     let b = byPhone.get(phone);
-    if (!b) { b = { productIds: new Set(), channels: new Set() }; byPhone.set(phone, b); }
+    if (!b) { b = { productCounts: new Map(), channels: new Set() }; byPhone.set(phone, b); }
     return b;
+  };
+  const addItems = (b: { productCounts: Map<string, number> }, orderId: string) => {
+    for (const { pid, qty } of itemsByOrder.get(orderId) ?? []) {
+      b.productCounts.set(pid, (b.productCounts.get(pid) ?? 0) + qty);
+    }
   };
 
   for (const o of (ordersRes.data ?? []) as { id: string; loyalty_phone: string | null; source: string | null; order_type: string | null }[]) {
     if (!o.loyalty_phone) continue;
     const b = bucket(o.loyalty_phone);
     b.channels.add(classifyOrderChannel(o.source, o.order_type));
-    for (const pid of itemsByOrder.get(o.id) ?? []) b.productIds.add(pid);
+    addItems(b, o.id);
   }
   for (const o of (posOrdersRes.data ?? []) as { id: string; loyalty_phone: string | null }[]) {
     if (!o.loyalty_phone) continue;
     const b = bucket(o.loyalty_phone);
     b.channels.add(posChannel());
-    for (const pid of itemsByOrder.get(o.id) ?? []) b.productIds.add(pid);
+    addItems(b, o.id);
   }
 
-  const out = new Map<string, { productIds: string[]; channels: OrderChannel[] }>();
-  for (const [phone, b] of byPhone) out.set(phone, { productIds: [...b.productIds], channels: [...b.channels] });
+  const out = new Map<string, { productIds: string[]; productCounts: Record<string, number>; channels: OrderChannel[] }>();
+  for (const [phone, b] of byPhone) {
+    out.set(phone, {
+      productIds: [...b.productCounts.keys()],
+      productCounts: Object.fromEntries(b.productCounts),
+      channels: [...b.channels],
+    });
+  }
   return out;
 }
 
@@ -135,6 +148,7 @@ export async function GET(request: NextRequest) {
             ? member.brand_data[0]
             : member.brand_data,
           purchased_product_ids: agg?.productIds ?? [],
+          purchased_product_counts: agg?.productCounts ?? {},
           order_channels: agg?.channels ?? [],
         };
       });
