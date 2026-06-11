@@ -50,6 +50,6 @@ jobs:
             npx eas-cli@latest update \
               --channel "$ch" \
               --platform android \
-              --message "OTA: store open/close in Settings + header status indicator" \
+              --message "OTA: standardize header row + performance chip next to name" \
               --non-interactive || echo "channel $ch publish failed (continuing)"
           done
