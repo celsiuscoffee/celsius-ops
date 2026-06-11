@@ -30,7 +30,6 @@ import {
   TrendingUp,
   AlertTriangle,
   LineChart,
-  Heart,
   Star,
   Crown,
   TicketPercent,
@@ -276,9 +275,10 @@ const NAV_SECTIONS: NavSection[] = [
         // Members = day-to-day work on individual customers. Manual
         // Grant lives here (not under a separate Operations heading) —
         // it's a member-level action, not a system-level config.
+        // Customer List moved out — it's the consolidated customer page,
+        // reached via Sales → Customers (same /loyalty/members route).
         label: "Members",
         items: [
-          { label: "Customer List", href: "/loyalty/members",       icon: <Heart className={ICON_SIZE} />,     moduleKey: "loyalty:members" },
           { label: "Manual Grant",  href: "/loyalty/manual-grant",  icon: <HandCoins className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
         ],
       },
