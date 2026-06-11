@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type ComponentType } from "react";
 import Link from "next/link";
 import {
   Loader2, CheckCircle2, RefreshCw, QrCode,
   Wallet, Store, ChevronDown, ChevronRight,
   ShieldCheck, Eye, EyeOff, Save, Zap,
-  CreditCard, FileText, Link2, Info,
+  CreditCard, FileText, Link2, Info, Landmark, Smartphone, ShoppingBag,
   BookOpen, Receipt, UtensilsCrossed,
 } from "lucide-react";
 
@@ -59,10 +59,31 @@ const PROVIDERS: { id: Provider; label: string; dot: string }[] = [
   { id: "revenue_monster", label: "Revenue Monster", dot: "bg-blue-600" },
 ];
 
+/* Brand marks lucide-react doesn't ship (native wallet sheets). */
+function AppleMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M16.36 1.43c0 1.13-.41 2.2-1.12 3-.79.87-2.06 1.55-3.1 1.47-.13-1.05.42-2.17 1.1-2.92.76-.86 2.12-1.5 3.12-1.55zM20.5 17.04c-.55 1.27-.82 1.84-1.53 2.96-1 1.56-2.4 3.51-4.12 3.53-1.54.01-1.94-1-4.03-.99-2.08.01-2.52 1.01-4.06.99-1.72-.02-3.04-1.78-4.04-3.34-2.78-4.36-3.07-9.47-1.36-12.2.97-1.45 2.5-2.3 3.94-2.3 1.46 0 2.38 1.02 3.59 1.02 1.17 0 1.88-1.02 3.57-1.02 1.28 0 2.64.7 3.61 1.9-3.17 1.74-2.65 6.27.96 7.78z" />
+    </svg>
+  );
+}
+function GoogleMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path fill="#4285F4" d="M23.52 12.27c0-.82-.07-1.6-.21-2.36H12v4.46h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.57-5.17 3.57-8.73z" />
+      <path fill="#34A853" d="M12 24c3.24 0 5.96-1.08 7.95-2.91l-3.88-3a7.18 7.18 0 0 1-10.73-3.77H1.32v3.09A12 12 0 0 0 12 24z" />
+      <path fill="#FBBC05" d="M5.34 14.32a7.2 7.2 0 0 1 0-4.63V6.6H1.32a12 12 0 0 0 0 10.82l4.02-3.1z" />
+      <path fill="#EA4335" d="M12 4.77c1.77 0 3.35.61 4.6 1.8l3.45-3.44A11.5 11.5 0 0 0 12 0 12 12 0 0 0 1.32 6.6l4.02 3.1A7.18 7.18 0 0 1 12 4.77z" />
+    </svg>
+  );
+}
+
 interface MethodDef {
   id: string;
   name: string;
-  icon: string;
+  Icon: ComponentType<{ className?: string }>;
+  tint: string;
+  bg: string;
   providers: Provider[];
   defaultProvider: Provider;
 }
@@ -74,15 +95,15 @@ const METHOD_DEFS: MethodDef[] = [
   // platform wallet sheets). Keep this list in sync with apps/order's
   // /api/payments/gateway-config DEFAULT_METHODS + the pickup-native
   // checkout METHOD_LABELS.
-  { id: "card",       name: "Credit / Debit Card", icon: "💳", providers: ["revenue_monster", "stripe"], defaultProvider: "revenue_monster" },
-  { id: "fpx",        name: "FPX Online Banking",  icon: "🏦", providers: ["revenue_monster", "stripe"], defaultProvider: "revenue_monster" },
-  { id: "tng",        name: "TNG eWallet",         icon: "📱", providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
-  { id: "boost",      name: "Boost",               icon: "🔴", providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
-  { id: "shopeepay",  name: "ShopeePay",           icon: "🛒", providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
-  { id: "grabpay",    name: "GrabPay",             icon: "🟢", providers: ["stripe", "revenue_monster"], defaultProvider: "stripe" },
-  { id: "duitnow",    name: "DuitNow QR",          icon: "🇲🇾", providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
-  { id: "apple_pay",  name: "Apple Pay",           icon: "🍎", providers: ["stripe"],                     defaultProvider: "stripe" },
-  { id: "google_pay", name: "Google Pay",          icon: "🔵", providers: ["stripe"],                     defaultProvider: "stripe" },
+  { id: "card",       name: "Credit / Debit Card", Icon: CreditCard,  tint: "text-slate-600",   bg: "bg-slate-100",  providers: ["revenue_monster", "stripe"], defaultProvider: "revenue_monster" },
+  { id: "fpx",        name: "FPX Online Banking",  Icon: Landmark,    tint: "text-blue-700",    bg: "bg-blue-50",    providers: ["revenue_monster", "stripe"], defaultProvider: "revenue_monster" },
+  { id: "tng",        name: "TNG eWallet",         Icon: Smartphone,  tint: "text-sky-600",     bg: "bg-sky-50",     providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
+  { id: "boost",      name: "Boost",               Icon: Zap,         tint: "text-rose-500",    bg: "bg-rose-50",    providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
+  { id: "shopeepay",  name: "ShopeePay",           Icon: ShoppingBag, tint: "text-orange-600",  bg: "bg-orange-50",  providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
+  { id: "grabpay",    name: "GrabPay",             Icon: Wallet,      tint: "text-emerald-600", bg: "bg-emerald-50", providers: ["stripe", "revenue_monster"], defaultProvider: "stripe" },
+  { id: "duitnow",    name: "DuitNow QR",          Icon: QrCode,      tint: "text-red-600",     bg: "bg-red-50",     providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
+  { id: "apple_pay",  name: "Apple Pay",           Icon: AppleMark,   tint: "text-gray-900",    bg: "bg-gray-100",   providers: ["stripe"],                     defaultProvider: "stripe" },
+  { id: "google_pay", name: "Google Pay",          Icon: GoogleMark,  tint: "",                 bg: "bg-gray-100",   providers: ["stripe"],                     defaultProvider: "stripe" },
 ];
 
 /* ─── Helpers ───────────────────────────────────────────────────────────── */
@@ -599,7 +620,9 @@ export default function IntegrationsPage() {
                       onChange={(v) => toggleEnabled(method.id, v)}
                       disabled={saving}
                     />
-                    <span className="text-base mr-1">{method.icon}</span>
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${method.bg}`}>
+                      <method.Icon className={`h-4 w-4 ${method.tint}`} />
+                    </span>
                     <span className={`text-sm font-medium transition-colors ${cfg.enabled ? "text-gray-900" : "text-gray-400"}`}>{method.name}</span>
                   </div>
                   <div className="flex items-center gap-2">
