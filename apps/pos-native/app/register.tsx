@@ -3796,7 +3796,7 @@ function CashierScorecardChip({ sc }: { sc: Scorecard | null }) {
       <Pressable
         onPress={() => { Haptics.selectionAsync(); setOpen(true); }}
         className="flex-row items-center rounded-xl border active:opacity-70"
-        style={{ borderColor: rateLight.border, backgroundColor: rateLight.tint, paddingHorizontal: 14, height: 40 }}
+        style={{ borderColor: rateLight.border, backgroundColor: rateLight.tint, paddingHorizontal: 14, height: 42 }}
       >
         {/* % half */}
         <View className="flex-row items-center" style={{ gap: 7 }}>
