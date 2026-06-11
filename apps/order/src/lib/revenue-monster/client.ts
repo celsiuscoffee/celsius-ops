@@ -18,6 +18,38 @@ const CLIENT_ID     = (process.env.RM_CLIENT_ID     || "").trim();
 const CLIENT_SECRET = (process.env.RM_CLIENT_SECRET || "").trim();
 const STORE_ID      = (process.env.RM_STORE_ID      || "").trim();
 
+// Per-outlet RM store IDs. RM attributes every transaction to a store, and
+// each store routes its settlement to that outlet's operating company bank
+// account (Payment → Settlement Account in the merchant portal). Before this
+// map existed every payment fell through to RM_STORE_ID (the Shah Alam /
+// default store), so Conezion + Tamarind pickup sales settled into Celsius
+// Coffee Sdn Bhd's account — wrong entity, inter-co clean-up in finance.
+//
+// Keys are our orders.store_id slugs; values are RM production store IDs
+// from merchant.revenuemonster.my → Store Management. Sandbox has its own
+// store IDs, so the map only applies on the production host — sandbox keeps
+// falling back to RM_STORE_ID. RM_STORE_MAP (JSON, same shape) overrides
+// without a deploy if stores are ever recreated.
+const PROD_STORE_MAP: Record<string, string> = {
+  "shah-alam": "1774886810934903295", // CELSIUS COFFEE SDN. BHD.
+  "conezion":  "1779337255376003603", // CELSIUS COFFEE CONEZION SDN. BHD.
+  "tamarind":  "1779337134906228082", // CELSIUS COFFEE TAMARIND SDN. BHD.
+};
+
+function resolveRmStoreId(appStoreId: string): string {
+  if (process.env.RM_STORE_MAP) {
+    try {
+      const map = JSON.parse(process.env.RM_STORE_MAP) as Record<string, string>;
+      if (map[appStoreId]) return map[appStoreId];
+    } catch {
+      console.warn("[rm] RM_STORE_MAP is not valid JSON — ignoring");
+    }
+  }
+  const isProduction = BASE_URL.includes("open.revenuemonster.my") && !BASE_URL.includes("sb-");
+  if (isProduction && PROD_STORE_MAP[appStoreId]) return PROD_STORE_MAP[appStoreId];
+  return STORE_ID;
+}
+
 // RSA private key (PEM) used to sign /v3 payment requests. RM verifies
 // this with the client public key uploaded to the merchant portal. The
 // env var should contain the full -----BEGIN/END----- PEM including
@@ -217,6 +249,9 @@ export const PAYMENT_METHOD_MAP: Record<string, string[]> = {
 export interface CreatePaymentParams {
   orderId: string;
   orderNumber: string;
+  // Our orders.store_id slug ("shah-alam" | "conezion" | "tamarind") —
+  // resolved to the outlet's RM store ID so the payment settles to the
+  // right operating company's bank account.
   storeId: string;
   amountSen: number;          // integer sen
   paymentMethod: string;      // app payment method id
@@ -296,7 +331,7 @@ export async function createPayment(params: CreatePaymentParams): Promise<Create
     },
     method:        PAYMENT_METHOD_MAP[params.paymentMethod] || [],
     type:          "WEB_PAYMENT",
-    storeId:       STORE_ID,
+    storeId:       resolveRmStoreId(params.storeId),
     redirectUrl:   params.redirectUrl,
     notifyUrl:     params.notifyUrl,
     layoutVersion: "v4",
