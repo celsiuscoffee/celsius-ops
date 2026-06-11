@@ -770,6 +770,10 @@ export default function Checkout() {
         // the POS register's "QR Tables" tab. Defaults to pickup otherwise.
         orderType:        orderType ?? "pickup",
         tableNumber:      orderType === "dine_in" ? (tableNumber ?? null) : null,
+        // Origin attribution — native iOS/Android app vs the web PWA (this same
+        // codebase exports to order.celsiuscoffee.com, where Platform.OS is
+        // "web"). Lets the backoffice segment app users for app-adoption pushes.
+        source:           Platform.OS === "ios" ? "app_ios" : Platform.OS === "android" ? "app_android" : "web",
       });
       // Pin the summary BEFORE clearCart so the customer keeps seeing
       // their RM 4.45 (or whatever) behind the Stripe / Apple Pay

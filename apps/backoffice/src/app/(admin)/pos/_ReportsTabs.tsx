@@ -11,7 +11,7 @@ import { usePathname } from "next/navigation";
  */
 const TABS = [
   { href: "/pos/reports", label: "Sales" },
-  { href: "/pos/z-report", label: "Z-Report" },
+  { href: "/pos/z-report", label: "Daily Report" },
   { href: "/pos/tax-report", label: "Tax (SST)" },
 ];
 

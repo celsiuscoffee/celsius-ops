@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Search, ChevronRight, RefreshCw, Download, X } from "lucide-react";
 import type { OrderRow } from "@/lib/pickup/types";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
@@ -32,14 +33,22 @@ function todayString() {
 }
 
 export default function PickupOrders() {
+  // Filters are mirrored into the URL query string so they survive navigating
+  // into an order and back (the list unmounts on a Link navigation; without
+  // this, Back would remount it with default filters). Also makes a filtered
+  // view shareable/bookmarkable. Lazy initializers read the URL once on mount.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
   const [orders,      setOrders]      = useState<OrderRow[]>([]);
   const [loading,     setLoading]     = useState(true);
-  const [search,      setSearch]      = useState("");
-  const [store,       setStore]       = useState("all");
-  const [status,      setStatus]      = useState("all");
-  const [channel,     setChannel]     = useState("all");
-  const [dateFrom,    setDateFrom]    = useState("");
-  const [dateTo,      setDateTo]      = useState("");
+  const [search,      setSearch]      = useState(() => searchParams.get("q") ?? "");
+  const [store,       setStore]       = useState(() => searchParams.get("store") ?? "all");
+  const [status,      setStatus]      = useState(() => searchParams.get("status") ?? "all");
+  const [channel,     setChannel]     = useState(() => searchParams.get("channel") ?? "all");
+  const [dateFrom,    setDateFrom]    = useState(() => searchParams.get("from") ?? "");
+  const [dateTo,      setDateTo]      = useState(() => searchParams.get("to") ?? "");
   const [showExport,  setShowExport]  = useState(false);
   const [exportFrom,  setExportFrom]  = useState(todayString);
   const [exportTo,    setExportTo]    = useState(todayString);
@@ -68,6 +77,22 @@ export default function PickupOrders() {
   }, [store, status, channel, dateFrom, dateTo]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Mirror filters → URL (replace, no history spam, no scroll jump). Only
+  // non-default values are written so an unfiltered view keeps a clean URL.
+  // On Back-navigation the component remounts and the lazy initializers above
+  // read these back, restoring the filtered view.
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (search)            p.set("q",       search);
+    if (store    !== "all") p.set("store",   store);
+    if (status   !== "all") p.set("status",  status);
+    if (channel  !== "all") p.set("channel", channel);
+    if (dateFrom)          p.set("from",    dateFrom);
+    if (dateTo)            p.set("to",      dateTo);
+    const qs = p.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [search, store, status, channel, dateFrom, dateTo, pathname, router]);
 
   // Polling refresh — was a Supabase Realtime channel on the orders
   // table; switched to a 15s poll since anon SELECT (and therefore the
@@ -157,7 +182,7 @@ export default function PickupOrders() {
             className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
             {STORES.map((s) => (
-              <option key={s} value={s}>{s === "all" ? "All outlets" : s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</option>
+              <option key={s} value={s}>{s === "all" ? "All outlets" : storeLabel(s)}</option>
             ))}
           </select>
 
@@ -310,7 +335,7 @@ export default function PickupOrders() {
                 >
                   {STORES.map((s) => (
                     <option key={s} value={s}>
-                      {s === "all" ? "All outlets" : s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                      {s === "all" ? "All outlets" : storeLabel(s)}
                     </option>
                   ))}
                 </select>

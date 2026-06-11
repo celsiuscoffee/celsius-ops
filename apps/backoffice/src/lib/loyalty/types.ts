@@ -240,6 +240,14 @@ export interface IssuedReward {
 // Member with brand-specific data
 export interface MemberWithBrand extends Member {
   brand_data: MemberBrand;
+  // Purchase/channel aggregates — only populated by the `all=true` members
+  // load (used for the client-side item/channel segment filters). Optional
+  // because the paginated/phone-lookup responses don't compute them.
+  purchased_product_ids?: string[];
+  // product_id → total units purchased (across pickup + counter), for the
+  // "bought ≥ N times" frequency filter.
+  purchased_product_counts?: Record<string, number>;
+  order_channels?: string[];
 }
 
 // Reward with progress for a specific member
