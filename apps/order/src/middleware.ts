@@ -86,6 +86,7 @@ export async function middleware(request: NextRequest) {
     pathname === "/tier-benefits" ||
     pathname === "/wrapped" ||
     pathname === "/account-delete" ||
+    pathname === "/get-app" ||
     pathname.startsWith("/product/") ||
     pathname.startsWith("/order/") ||
     pathname.startsWith("/challenge/") ||
