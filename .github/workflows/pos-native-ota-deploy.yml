@@ -50,6 +50,6 @@ jobs:
             npx eas-cli@latest update \
               --channel "$ch" \
               --platform android \
-              --message "OTA: standardize header row + performance chip next to name" \
+              --message "OTA: hide unpaid pending QR table orders from register (pay-first)" \
               --non-interactive || echo "channel $ch publish failed (continuing)"
           done
