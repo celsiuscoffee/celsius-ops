@@ -739,3 +739,5 @@ export default function UsersPage() {
     </>
   );
 }
+
+// (deploy nudge: clean rebuild — prior loyalty build auto-canceled in a push burst)
