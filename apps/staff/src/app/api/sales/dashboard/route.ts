@@ -286,6 +286,26 @@ export async function GET(req: NextRequest) {
   const prevNewCustomers = [...prevPhones].filter((p) => !priorAll.has(p)).length;
   const newAppCustomers = [...curAppPhones].filter((p) => !priorApp.has(p) && !prevAppPhones.has(p)).length;
   const prevNewApp = [...prevAppPhones].filter((p) => !priorApp.has(p)).length;
+  // Pair adds (upsell): each pos_pair_events row = a suggested pair the cashier
+  // ADDED to the cart. Count-only queries (head:true) — immune to the PostgREST
+  // row cap. Prev clipped to the same elapsed time (like-for-like).
+  let curPair = 0, prevPair = 0;
+  if (posCodes.length) {
+    const prevPairEnd = Number.isFinite(prevCutoffMs)
+      ? new Date(Math.min(prevCutoffMs, Date.parse(mytDayEndUTC(prev.to)))).toISOString()
+      : mytDayEndUTC(prev.to);
+    const [pc, pp] = await Promise.all([
+      supabaseAdmin.from("pos_pair_events").select("id", { count: "exact", head: true })
+        .in("outlet_id", posCodes)
+        .gte("created_at", mytDayStartUTC(cur.from)).lte("created_at", mytDayEndUTC(cur.to)),
+      supabaseAdmin.from("pos_pair_events").select("id", { count: "exact", head: true })
+        .in("outlet_id", posCodes)
+        .gte("created_at", mytDayStartUTC(prev.from)).lte("created_at", prevPairEnd),
+    ]);
+    if (pc.error) warn.push(`pos_pair_events: ${pc.error.message}`); else curPair = pc.count || 0;
+    if (pp.error) warn.push(`pos_pair_events(prev): ${pp.error.message}`); else prevPair = pp.count || 0;
+  }
+
   const curShare = curOrd ? Math.round((curAppOrd / curOrd) * 100) : 0;
   const prevShare = prevOrd ? Math.round((prevAppOrd / prevOrd) * 100) : 0;
   // Collection rate = orders where a customer phone was captured / NATIVE orders
@@ -322,6 +342,7 @@ export async function GET(req: NextRequest) {
       appSharePct: curShare, appShareDeltaPts: curShare - prevShare,
       capturedOrders: curCapOrd, collectionRatePct: curCapRate,
       collectionDeltaPts: curCapRate - prevCapRate,
+      pairAdds: curPair, pairAddsDelta: pctChange(curPair, prevPair),
     },
     ...(warn.length ? { warnings: warn } : {}),
   });
