@@ -1459,22 +1459,24 @@ export default function Register() {
             <CashierScorecardChip sc={scorecard} />
             {/* Order type is chosen at checkout now — no upfront toggle here. */}
           </View>
-          <View className="flex-row items-center gap-2">
+          <View className="flex-row items-center gap-1.5" style={{ flexShrink: 1, minWidth: 0 }}>
             {/* Offline / sync chip — only shows when disconnected or while a
                 buffered sale is still draining. Sales + dockets keep working
-                offline; this just tells staff their cloud sync is behind. */}
+                offline; this just tells staff their cloud sync is behind.
+                Compact (count as a tight suffix) so it doesn't overflow the
+                header alongside the other controls. */}
             {(!online || pendingSales > 0) && (
-              <View className="flex-row items-center gap-2 px-3 py-2 rounded-xl" style={{ backgroundColor: online ? "rgba(251,191,36,0.18)" : "rgba(239,68,68,0.20)" }}>
+              <View className="flex-row items-center gap-1.5 px-2.5 py-2 rounded-xl" style={{ backgroundColor: online ? "rgba(251,191,36,0.18)" : "rgba(239,68,68,0.20)" }}>
                 <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: online ? "#FBBF24" : "#EF4444" }} />
                 <Text className="text-cream/90 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
-                  {!online ? (pendingSales > 0 ? `Offline · ${pendingSales} queued` : "Offline") : `Syncing ${pendingSales}…`}
+                  {!online ? (pendingSales > 0 ? `Offline · ${pendingSales}` : "Offline") : `Syncing ${pendingSales}…`}
                 </Text>
               </View>
             )}
             {/* Open Store — the cashier shift. Green dot = store open, amber =
                 closed. Scheduled staff auto-open on login; tap to open manually
                 (manager / off-schedule) or to close with an end-of-shift summary. */}
-            <Pressable onPress={openShiftModal} className="flex-row items-center gap-2 px-3 py-2 rounded-xl border border-cream/15 active:opacity-60">
+            <Pressable onPress={openShiftModal} className="flex-row items-center gap-1.5 px-2.5 py-2 rounded-xl border border-cream/15 active:opacity-60">
               <Power size={16} color={shift ? "#22C55E" : "#FBBF24"} />
               <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>{shift ? "Store Open" : "Open Store"}</Text>
               <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: shift ? "#22C55E" : "#FBBF24" }} />
@@ -1482,7 +1484,7 @@ export default function Register() {
             {/* Orders command center — one button opens a tabbed panel for
                 every order channel: dine-in Tables, QR self-orders, and
                 Pickup + Grab. Badge = live incoming orders (QR + delivery). */}
-            <Pressable onPress={() => { Haptics.selectionAsync(); setHub((v) => (v ? null : "tables")); }} className={`flex-row items-center gap-2 px-3 py-2 rounded-xl border active:opacity-60 ${hub ? "border-primary bg-primary/10" : "border-cream/15"}`}>
+            <Pressable onPress={() => { Haptics.selectionAsync(); setHub((v) => (v ? null : "tables")); }} className={`flex-row items-center gap-1.5 px-2.5 py-2 rounded-xl border active:opacity-60 ${hub ? "border-primary bg-primary/10" : "border-cream/15"}`}>
               <ClipboardList size={16} color="rgba(245,243,240,0.7)" />
               <Text className="text-cream/70 text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Live Orders</Text>
               {(() => {
@@ -1503,15 +1505,16 @@ export default function Register() {
                 itself (amber-tinted so it stands out) so on a shift change the
                 incoming cashier instantly sees whose account is open and taps to
                 switch. Tap = sign out → login. */}
-            <Pressable onPress={() => { Haptics.selectionAsync(); signOut(); router.replace("/"); }} className="flex-row items-center gap-2 px-3 py-2 rounded-xl border active:opacity-60" style={{ borderColor: "rgba(251,191,36,0.45)", backgroundColor: "rgba(251,191,36,0.10)" }}>
+            <Pressable onPress={() => { Haptics.selectionAsync(); signOut(); router.replace("/"); }} className="flex-row items-center gap-2 px-2.5 py-2 rounded-xl border active:opacity-60" style={{ borderColor: "rgba(251,191,36,0.45)", backgroundColor: "rgba(251,191,36,0.10)", flexShrink: 1, minWidth: 0 }}>
               <View className="h-6 w-6 rounded-full items-center justify-center" style={{ backgroundColor: "rgba(251,191,36,0.22)" }}>
                 <User size={14} color="#FBBF24" />
               </View>
-              <Text className="text-cream text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold" }} numberOfLines={1}>{staff?.staffName ?? "Cashier"}</Text>
-              <View className="flex-row items-center gap-1.5 ml-1 pl-2.5" style={{ borderLeftWidth: 1, borderLeftColor: "rgba(245,243,240,0.18)" }}>
-                <LogOut size={15} color="rgba(245,243,240,0.7)" />
-                <Text className="text-cream/60 text-[11px]" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Sign out</Text>
-              </View>
+              {/* Name truncates instead of pushing the header past the catalog
+                  column (which used to spill under the cart when offline). The
+                  amber chip + logout icon already read as "sign out", so the
+                  word is dropped to save width. */}
+              <Text className="text-cream text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold", flexShrink: 1, maxWidth: 130 }} numberOfLines={1}>{staff?.staffName ?? "Cashier"}</Text>
+              <LogOut size={15} color="rgba(245,243,240,0.7)" />
             </Pressable>
           </View>
         </View>
