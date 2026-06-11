@@ -144,6 +144,7 @@ export async function GET(req: NextRequest) {
   const curPhones = new Set<string>(), prevPhones = new Set<string>();
   const curAppPhones = new Set<string>(), prevAppPhones = new Set<string>();
   let curAppOrd = 0, curPosOrd = 0, prevAppOrd = 0, prevPosOrd = 0;
+  let curCapOrd = 0, prevCapOrd = 0; // orders with a customer phone (points captured)
   const curPosIds: string[] = [];
   const nativeCodes = new Set<string>(); // pos outlet-codes with native sales this period
 
@@ -157,14 +158,14 @@ export async function GET(req: NextRequest) {
     if (inCur(d)) {
       curRev += net; curOrd++; curPosOrd++;
       nativeCodes.add(r.outlet_id);
-      if (r.customer_phone) curPhones.add(r.customer_phone);
+      if (r.customer_phone) { curPhones.add(r.customer_phone); curCapOrd++; }
       curPosIds.push(r.id);
       curByDate[d] = (curByDate[d] || 0) + net;
       curHour[getMYTHour(r.created_at)] += net;
       const pch = classifyPosChannel(r.order_type, r.source); chanRev[pch] += net; chanOrd[pch]++;
       const rd = getRound(getMYTHour(r.created_at)); if (rd) { roundRev[rd] += net; roundOrd[rd]++; }
     } else if (inPrev(d)) {
-      if (Date.parse(r.created_at) <= prevCutoffMs) { prevRev += net; prevOrd++; prevPosOrd++; }
+      if (Date.parse(r.created_at) <= prevCutoffMs) { prevRev += net; prevOrd++; prevPosOrd++; if (r.customer_phone) prevCapOrd++; }
       if (r.customer_phone) prevPhones.add(r.customer_phone);
       prevByDate[d] = (prevByDate[d] || 0) + net;
       prevHour[getMYTHour(r.created_at)] += net;
@@ -176,7 +177,7 @@ export async function GET(req: NextRequest) {
     const net = r.subtotal || 0;
     if (inCur(d)) {
       curRev += net; curOrd++; curAppOrd++;
-      if (r.customer_phone) { curPhones.add(r.customer_phone); curAppPhones.add(r.customer_phone); }
+      if (r.customer_phone) { curPhones.add(r.customer_phone); curAppPhones.add(r.customer_phone); curCapOrd++; }
       curByDate[d] = (curByDate[d] || 0) + net;
       curHour[getMYTHour(r.created_at)] += net;
       const ach = classifyAppChannel(r.order_type, r.table_number, r.source); chanRev[ach] += net; chanOrd[ach]++;
@@ -184,7 +185,7 @@ export async function GET(req: NextRequest) {
       const pk = normalizePayment(r.payment_method);
       payAmt[pk] = (payAmt[pk] || 0) + (r.total || 0);
     } else if (inPrev(d)) {
-      if (Date.parse(r.created_at) <= prevCutoffMs) { prevRev += net; prevOrd++; prevAppOrd++; }
+      if (Date.parse(r.created_at) <= prevCutoffMs) { prevRev += net; prevOrd++; prevAppOrd++; if (r.customer_phone) prevCapOrd++; }
       if (r.customer_phone) { prevPhones.add(r.customer_phone); prevAppPhones.add(r.customer_phone); }
       prevByDate[d] = (prevByDate[d] || 0) + net;
       prevHour[getMYTHour(r.created_at)] += net;
@@ -287,6 +288,13 @@ export async function GET(req: NextRequest) {
   const prevNewApp = [...prevAppPhones].filter((p) => !priorApp.has(p)).length;
   const curShare = curOrd ? Math.round((curAppOrd / curOrd) * 100) : 0;
   const prevShare = prevOrd ? Math.round((prevAppOrd / prevOrd) * 100) : 0;
+  // Collection rate = orders where a customer phone was captured / NATIVE orders
+  // (pos + pickup). StoreHub rows have no customer data, so they're excluded
+  // from both sides — otherwise still-on-StoreHub outlets would read ~0%.
+  const curNativeOrd = curPosOrd + curAppOrd;
+  const prevNativeOrd = prevPosOrd + prevAppOrd;
+  const curCapRate = curNativeOrd ? Math.round((curCapOrd / curNativeOrd) * 100) : 0;
+  const prevCapRate = prevNativeOrd ? Math.round((prevCapOrd / prevNativeOrd) * 100) : 0;
 
   return NextResponse.json({
     outletId: scopeId,
@@ -312,6 +320,8 @@ export async function GET(req: NextRequest) {
       newAppCustomers, newAppDelta: pctChange(newAppCustomers, prevNewApp),
       appOrders: curAppOrd, appOrdersDelta: pctChange(curAppOrd, prevAppOrd),
       appSharePct: curShare, appShareDeltaPts: curShare - prevShare,
+      capturedOrders: curCapOrd, collectionRatePct: curCapRate,
+      collectionDeltaPts: curCapRate - prevCapRate,
     },
     ...(warn.length ? { warnings: warn } : {}),
   });
