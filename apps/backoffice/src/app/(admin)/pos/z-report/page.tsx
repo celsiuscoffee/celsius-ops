@@ -162,9 +162,9 @@ export default function ZReportPage() {
     <div className="p-3 sm:p-6 space-y-5 max-w-7xl">
       <ReportsTabs />
       <div>
-        <h1 className="text-2xl font-bold text-[#160800]">Z-Report (Shift Close)</h1>
+        <h1 className="text-2xl font-bold text-[#160800]">Daily Report (Shift Close)</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Per-shift sales totals. Click any row to view detail and print the Z-slip.
+          Per-shift sales totals. Click any row to view detail and print the daily slip.
         </p>
       </div>
 
@@ -335,7 +335,7 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
             <ChevronLeft className="h-4 w-4" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-[#160800]">Z-Report</h1>
+            <h1 className="text-2xl font-bold text-[#160800]">Daily Report</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
               {shift.outlet_name} · {shift.register_name} · Shift {shift.id.slice(0, 8)}
             </p>
@@ -346,7 +346,7 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
           className="inline-flex items-center gap-2 rounded-lg bg-[#160800] px-3 py-2 text-sm font-medium text-white hover:bg-black"
         >
           <Printer className="h-4 w-4" />
-          Print Z-Report
+          Print Daily Report
         </button>
       </div>
 
@@ -561,7 +561,7 @@ function buildZSlipHtml(d: ShiftDetail): string {
   return `
     ${center("CELSIUS COFFEE", true)}
     ${center(shift.outlet_name)}
-    ${center(`Z-REPORT · ${shift.register_name}`)}
+    ${center(`DAILY REPORT · ${shift.register_name}`)}
     ${hr}
     ${line("Shift", shift.id.slice(0, 8))}
     ${line("Cashier", shift.opened_by_name)}
@@ -582,7 +582,7 @@ function buildZSlipHtml(d: ShiftDetail): string {
     ${center("TOP PRODUCTS")}
     ${top_products.map((p) => line(`${p.name} x${p.qty}`, rm(p.revenue))).join("")}
     ${hr}
-    ${center("End of Z-Report")}
+    ${center("End of Daily Report")}
     <div style="height:8mm;"></div>
   `;
 }
