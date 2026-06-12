@@ -23,9 +23,9 @@
     "test:watch": "vitest",
     "typecheck": "turbo run typecheck --filter='./packages/*'",
     "typecheck:apps": "npm run typecheck -w apps/backoffice && npm run typecheck -w apps/loyalty && npm run typecheck -w apps/staff && npm run typecheck -w apps/order && npm run typecheck -w apps/pickup",
-    "build": "turbo run build",
     "lint": "turbo run lint",
-    "typecheck:all": "turbo run typecheck"
+    "typecheck:all": "turbo run typecheck",
+    "build:all": "turbo run build"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
