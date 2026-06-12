@@ -417,9 +417,10 @@ model Order {
   receivings Receiving[]
   invoices   Invoice[]
 
-  // Hot path: PO dashboards filter by outlet + status, newest first.
-  // Without this every list view full-scans as order volume grows.
-  @@index([outletId, status, createdAt(sort: Desc)])
+  // Both verified live (pg_indexes, 2026-06-12) — they predate this
+  // declaration (applied directly to the DB, previously unrecorded).
+  @@index([outletId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
 }
 
 enum OrderType {
@@ -543,10 +544,12 @@ model Invoice {
 
   @@unique([supplierId, invoiceNumber])
   @@index([aiPrefilledAt])
-  // Hot path: finance dashboards (paid / overdue / pending by outlet,
-  // newest first). The supplierId prefix of the @@unique above already
-  // covers supplier-scoped lookups.
-  @@index([outletId, status, createdAt(sort: Desc)])
+  // Both verified live (pg_indexes, 2026-06-12) — they predate this
+  // declaration (applied directly to the DB, previously unrecorded).
+  // Live also has a partial index Invoice_paidAt_idx (paidAt WHERE
+  // paidAt IS NOT NULL) that Prisma's schema language can't express.
+  @@index([outletId])
+  @@index([status, dueDate])
 }
 
 // Groups staff-claim invoices for single-transfer reimbursement.
