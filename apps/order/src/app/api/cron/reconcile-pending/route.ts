@@ -25,6 +25,7 @@ function getStripe() {
 type OrderLite = {
   id: string;
   order_number: string;
+  status: string;
   store_id: string;
   loyalty_id: string | null;
   loyalty_points_earned: number | null;
@@ -49,10 +50,16 @@ export async function GET(request: NextRequest) {
   const olderThan  = new Date(now - 45 * 1000).toISOString();
   const youngerThan = new Date(now - 55 * 60 * 1000).toISOString();
 
+  // "failed" rows are swept too: a customer can retry payment on the same
+  // order after a failed attempt, so money can land on an order already
+  // flipped to failed (the C-9782 card→FPX case). reconcileRmOrder re-asks
+  // RM and markRmOrderPaid accepts failed → paid; the Stripe branch below
+  // still only transitions pending rows, so failed non-RM orders are
+  // skipped in the loop.
   const { data: pending, error } = await supabase
     .from("orders")
-    .select("id, order_number, store_id, loyalty_id, loyalty_points_earned, reward_id, payment_method, payment_checkout_id")
-    .eq("status", "pending")
+    .select("id, order_number, status, store_id, loyalty_id, loyalty_points_earned, reward_id, payment_method, payment_checkout_id")
+    .in("status", ["pending", "failed"])
     .lt("created_at", olderThan)
     .gt("created_at", youngerThan);
 
@@ -81,13 +88,21 @@ export async function GET(request: NextRequest) {
           if (paid) result.advanced += 1;
           else      result.unresolved += 1;
         } else if (rm.status === "FAILED" || rm.status === "CANCELLED" || rm.status === "EXPIRED") {
-          await markRmOrderFailed({ orderId: order.id }, `rm_${rm.status.toLowerCase()}`);
-          result.failed += 1;
+          // No-op for rows already failed (markRmOrderFailed is gated on
+          // status='pending'); only counts a fresh pending → failed flip.
+          if (order.status === "pending") {
+            await markRmOrderFailed({ orderId: order.id }, `rm_${rm.status.toLowerCase()}`);
+            result.failed += 1;
+          }
         } else {
           result.unresolved += 1;
         }
         continue;
       }
+
+      // Failed non-RM (Stripe) orders aren't retryable on the same order —
+      // only pending rows are reconciled against Stripe.
+      if (order.status !== "pending") continue;
 
       // Stripe indexes metadata for search within a few seconds of intent creation.
       const search = await stripe.paymentIntents.search({

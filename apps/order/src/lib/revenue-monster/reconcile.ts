@@ -63,8 +63,18 @@ export async function reconcileRmOrder(
     } | null;
 
     if (!row) return { status: "pending", source: "not_found" };
-    // Already settled — nothing to do (idempotent fast path).
-    if (row.status !== "pending") return { status: row.status, source: "db" };
+    // Already settled — nothing to do (idempotent fast path). "failed" is
+    // NOT settled: the customer can retry payment on the same order after a
+    // failed attempt (/api/payments/create allows it), so money can land on
+    // an order we already flipped to failed. Treating failed as terminal
+    // here stranded C-9782: the card attempt expired → order failed → the
+    // FPX retry's SUCCESS webhook hit this early-return and the payment was
+    // never recorded. Fall through and re-ask RM — markRmOrderPaid accepts
+    // failed → paid (money received always wins) and markRmOrderFailed is a
+    // no-op on an already-failed row, so this stays idempotent.
+    if (row.status !== "pending" && row.status !== "failed") {
+      return { status: row.status, source: "db" };
+    }
     if (row.payment_method && !RM_METHODS.has(row.payment_method)) {
       return { status: row.status, source: "not_rm" };
     }
