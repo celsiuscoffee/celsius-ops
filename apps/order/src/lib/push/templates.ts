@@ -1,5 +1,5 @@
 import { sendExpoPush, type SendResult } from "./send";
-import { tokensForPhone, tokensForMember, tokensForOrder, tokensForBroadcast } from "./tokens";
+import { tokensForPhone, tokensForMember, tokensForBroadcast } from "./tokens";
 
 /**
  * Push notification templates — one function per customer-facing

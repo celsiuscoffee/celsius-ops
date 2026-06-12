@@ -358,7 +358,7 @@ export default function ClaimsPage() {
             Submit Claim
           </h1>
           <p className="text-sm text-gray-500">
-            Upload receipt, we'll extract the details
+            Upload receipt, we&apos;ll extract the details
           </p>
         </div>
 

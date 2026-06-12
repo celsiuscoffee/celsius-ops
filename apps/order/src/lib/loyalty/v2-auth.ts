@@ -47,7 +47,7 @@ export async function resolveMember(req: NextRequest): Promise<
       };
     }
     return { member: { memberId: member.id as string, phone: guard.session.phone }, error: null };
-  } catch (e) {
+  } catch {
     return {
       member: null,
       error: Response.json({ error: "Member lookup failed" }, { status: 502 }),

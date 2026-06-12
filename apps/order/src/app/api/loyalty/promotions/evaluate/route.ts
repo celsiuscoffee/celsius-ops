@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const idsNeedingCategory = lines
       .filter((l) => !l.category && l.product_id)
       .map((l) => l.product_id);
-    let categoryByProductId = new Map<string, string | null>();
+    const categoryByProductId = new Map<string, string | null>();
     if (idsNeedingCategory.length > 0) {
       const supabase = getSupabaseAdmin();
       const { data: rows } = await supabase

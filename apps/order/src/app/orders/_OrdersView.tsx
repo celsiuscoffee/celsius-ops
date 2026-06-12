@@ -182,7 +182,7 @@ export function OrdersView() {
       )}
 
       {error ? (
-        <p className="px-4 pb-4 text-[11px] text-red-600">Couldn't load orders: {error}</p>
+        <p className="px-4 pb-4 text-[11px] text-red-600">Couldn&apos;t load orders: {error}</p>
       ) : null}
     </>
   );

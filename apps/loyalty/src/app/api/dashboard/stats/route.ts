@@ -208,7 +208,7 @@ export async function GET(request: NextRequest) {
     );
 
     // Fetch redemption counts for top spenders
-    let redemptionCountsMap: Record<string, number> = {};
+    const redemptionCountsMap: Record<string, number> = {};
     if (topMemberIds.length > 0) {
       const { data: redemptionData } = await supabaseAdmin
         .from('redemptions')

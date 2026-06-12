@@ -156,7 +156,7 @@ export default function HRHomePage() {
               </p>
               <p className="mt-0.5 text-sm text-gray-600">
                 {ping.distance !== null && ping.zoneName ? (
-                  <>You're <strong>{ping.distance}m</strong> from {ping.zoneName} · out of zone for <strong>{ping.outOfZoneMinutes} min</strong></>
+                  <>You&apos;re <strong>{ping.distance}m</strong> from {ping.zoneName} · out of zone for <strong>{ping.outOfZoneMinutes} min</strong></>
                 ) : (
                   "Please confirm your location"
                 )}
