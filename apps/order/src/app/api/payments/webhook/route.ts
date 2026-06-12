@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
       data?: {
         referenceId: string;
         additionalData?: string;
+        transactionId?: string;
       };
     };
 
@@ -80,7 +81,14 @@ export async function POST(request: NextRequest) {
     // Authoritative settle: ignore the payload's claimed status and ask RM
     // directly. Awaited so the order flips (and the kitchen docket fires via
     // Realtime) before we ack; the loyalty push is deferred inside reconcile.
-    await reconcileRmOrder(target);
+    //
+    // The transactionId rides along as a HINT only: the stored checkout id
+    // is the latest attempt, but the paying attempt can be an earlier one
+    // (C-9782 — the FPX payment rode the first hosted session after a retry
+    // had overwritten payment_checkout_id). Reconcile re-verifies the
+    // transaction against RM and matches it to the order before settling,
+    // so a spoofed transactionId can't mark an unpaid order paid.
+    await reconcileRmOrder({ ...target, transactionId: data.transactionId });
 
     return NextResponse.json({ code: "SUCCESS" });
   } catch (err) {
