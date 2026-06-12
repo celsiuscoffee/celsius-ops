@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [backoffice, staff, order, loyalty]
+        app: [backoffice, staff, order, loyalty, pickup]
     env:
       DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
       DIRECT_URL: "postgresql://fake:fake@localhost:5432/fake"
@@ -56,6 +56,53 @@ jobs:
       # tsconfig.json paths resolve correctly.
       - run: cd apps/${{ matrix.app }} && npx tsc --noEmit
 
+  # Typecheck the Expo native apps. They live outside the npm
+  # workspaces (each has its own package-lock.json), so they need
+  # their own install step. The EAS/OTA workflows build these apps
+  # with no pre-build validation — this job is the only gate between
+  # a TS error and a broken till build.
+  typecheck-native:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [pos-native, staff-native, pickup-native]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/${{ matrix.app }}/package-lock.json
+      - run: cd apps/${{ matrix.app }} && npm ci
+      - run: cd apps/${{ matrix.app }} && npx tsc --noEmit
+
+  # Schema drift guard. packages/db/prisma/schema.prisma is the
+  # source of truth, but the database is changed via manually-applied
+  # SQL saved under packages/db/prisma/migrations/ (see
+  # docs/database-migrations.md). Fail any PR that edits the schema
+  # without committing a matching migration file, so the audit trail
+  # can't silently drift.
+  migration-guard:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require migration file alongside schema.prisma changes
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          CHANGED=$(git diff --name-only "$BASE"...HEAD)
+          if echo "$CHANGED" | grep -q '^packages/db/prisma/schema\.prisma$'; then
+            if ! echo "$CHANGED" | grep -q '^packages/db/prisma/migrations/'; then
+              echo "::error::schema.prisma changed but no migration file was added under packages/db/prisma/migrations/."
+              echo "See docs/database-migrations.md for the workflow (prisma migrate diff -> save SQL -> commit both)."
+              exit 1
+            fi
+          fi
+          echo "Migration guard passed."
+
   # Lint every app. Advisory only (continue-on-error) until the
   # backlog of pre-existing lint warnings is cleaned up. The
   # `--max-warnings 0` strict mode would block every PR right now
@@ -69,7 +116,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [backoffice, staff, order, loyalty]
+        app: [backoffice, staff, order, loyalty, pickup]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -89,7 +136,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [backoffice, staff, order, loyalty]
+        app: [backoffice, staff, order, loyalty, pickup]
     env:
       DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
       DIRECT_URL: "postgresql://fake:fake@localhost:5432/fake"

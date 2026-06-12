@@ -10,7 +10,9 @@
     "cap:open:ios": "npx cap open ios",
     "cap:open:android": "npx cap open android",
     "cap:build:ios": "npm run build && npx cap sync ios",
-    "cap:build:android": "npm run build && npx cap sync android"
+    "cap:build:android": "npm run build && npx cap sync android",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@capacitor/app": "^7.0.0",

@@ -15,17 +15,21 @@
     "dev:staff": "cd apps/staff && npm run dev",
     "dev:order": "cd apps/order && npm run dev",
     "db:generate": "cd packages/db && npx prisma generate",
-    "db:push": "cd packages/db && npx prisma db push",
+    "db:push": "npm run push -w packages/db",
     "db:studio": "cd packages/db && npx prisma studio",
     "db:seed": "cd packages/db && npx tsx seed.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b packages/db packages/auth packages/shared",
-    "typecheck:apps": "npm run typecheck -w apps/backoffice && npm run typecheck -w apps/loyalty && npm run typecheck -w apps/staff"
+    "typecheck": "turbo run typecheck --filter='./packages/*'",
+    "typecheck:apps": "npm run typecheck -w apps/backoffice && npm run typecheck -w apps/loyalty && npm run typecheck -w apps/staff && npm run typecheck -w apps/order && npm run typecheck -w apps/pickup",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck:all": "turbo run typecheck"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
     "prettier": "^3.4.0",
+    "turbo": "^2.9.18",
     "typescript": "^5.6.0",
     "vitest": "^4.1.2"
   },
@@ -41,5 +45,6 @@
         "apps/pos-native/modules"
       ]
     }
-  }
+  },
+  "packageManager": "npm@10.9.7"
 }
