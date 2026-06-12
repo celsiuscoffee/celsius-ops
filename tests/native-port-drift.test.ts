@@ -127,24 +127,41 @@ describe("POS port (computeRewardDiscount) vs canonical engine", () => {
     }
   });
 
-  it("DRIFT: free_upgrade on a cart with NO add-ons — engine gives 0, POS frees the whole drink", () => {
-    // Shared engine (modifier-aware caller): nothing to upgrade → 0.
+  it("PARITY (was DRIFT): free_upgrade on a cart with NO add-ons gives 0 in both", () => {
+    // The POS port used to fall back to free_item here and give the
+    // whole drink away — fixed to match the engine: nothing to
+    // upgrade → 0.
     const engine = computeVoucherDiscount({
       spec: engineSpec({ discount_type: "free_upgrade" }),
       cart: [
         { product_id: "p-kopi", quantity: 1, unit_price_sen: 900, modifier_total_sen: 0, category: "coffee", category_id: null, name: "Kopi" },
       ],
     });
-    expect(engine.discount_sen).toBe(0);
-
-    // POS port: no positive upcharge → falls back to free_item and gives
-    // the whole RM9 drink away. POS is client-authoritative, so this is
-    // a real over-discount relative to the canonical engine.
     const pos = computeRewardDiscount(
       posDiscount({ type: "free_upgrade" }),
       [posLine({ id: "p-kopi", name: "Kopi", base_sen: 900 })],
     );
-    expect(pos).toBe(900);
+    expect(engine.discount_sen).toBe(0);
+    expect(pos).toBe(0);
+  });
+
+  it("PARITY: free_upgrade with add-ons frees the cheapest positive upcharge in both", () => {
+    const engine = computeVoucherDiscount({
+      spec: engineSpec({ discount_type: "free_upgrade" }),
+      cart: [
+        { product_id: "p-latte", quantity: 1, unit_price_sen: 1700, modifier_total_sen: 200, category: "coffee", category_id: null, name: "Latte" },
+        { product_id: "p-mocha", quantity: 1, unit_price_sen: 2100, modifier_total_sen: 150, category: "coffee", category_id: null, name: "Mocha" },
+      ],
+    });
+    const pos = computeRewardDiscount(
+      posDiscount({ type: "free_upgrade" }),
+      [
+        posLine({ base_sen: 1500, mod_sen: 200 }),
+        posLine({ id: "p-mocha", name: "Mocha", base_sen: 1950, mod_sen: 150 }),
+      ],
+    );
+    expect(engine.discount_sen).toBe(150);
+    expect(pos).toBe(150);
   });
 
   it("DRIFT: category eligibility — engine matches slug OR category_id, POS matches slug only", () => {

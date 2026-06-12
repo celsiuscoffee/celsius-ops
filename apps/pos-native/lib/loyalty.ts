@@ -212,17 +212,14 @@ export function computeRewardDiscount(d: RedeemDiscount, lines: CartLine[]): num
     case "free_upgrade": {
       // Free the cheapest eligible line's MODIFIER upcharge (add-on), not
       // the whole line. unit_sen − product.price_sen = the modifier total.
-      // Falls back to free_item when no eligible line has modifiers
-      // (mirrors the shared engine's migration-safe fallback).
+      // No positive upcharge in the cart → nothing to upgrade → 0. The
+      // shared engine's free_item fallback is only for LEGACY callers
+      // that can't supply modifier data; the till always knows its
+      // modifiers, so falling back here gave the whole drink away.
       const upcharges = eligible
         .map((l) => l.unit_sen - l.product.price_sen)
         .filter((m) => m > 0);
-      if (upcharges.length) {
-        discount = Math.min(...upcharges);
-      } else {
-        const cheapest = Math.min(...eligible.map((l) => l.unit_sen));
-        discount = Number.isFinite(cheapest) ? cheapest : 0;
-      }
+      discount = upcharges.length ? Math.min(...upcharges) : 0;
       break;
     }
     case "bogo": {
