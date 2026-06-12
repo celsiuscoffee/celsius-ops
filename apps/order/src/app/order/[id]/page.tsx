@@ -25,7 +25,7 @@ export default async function OrderDetailPage({
   return (
     // No bottom tab bar — matches native (sub-screens opt out). Back via header.
     <main className="bg-white text-[#160800] min-h-screen pb-[calc(env(safe-area-inset-bottom,0px)+24px)]">
-      <OrderTrackingView orderId={id} />
+      <OrderTrackingView orderId={id} justPaid={payment === "done"} />
     </main>
   );
 }
