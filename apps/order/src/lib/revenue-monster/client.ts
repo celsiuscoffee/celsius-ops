@@ -446,6 +446,65 @@ export async function queryCheckoutStatus(checkoutId: string): Promise<QueryChec
   };
 }
 
+// ─── Query Payment Transaction ────────────────────────────────────────────────
+//
+// A checkout id identifies one ATTEMPT, but the money can ride a different
+// attempt than the one we stored (each retry overwrites payment_checkout_id,
+// and RM's hosted page keeps earlier sessions payable in other tabs — the
+// C-9782 case). RM's webhook carries the transactionId of the attempt that
+// actually settled, so this lets reconcile verify that exact transaction
+// against RM instead of trusting the payload or guessing the checkout.
+// Path per RM's own SDKs: GET /v3/payment/transaction/{transactionId}.
+
+export interface RmTransactionResult {
+  status:         string;        // SUCCESS | FAILED | ...
+  transactionId:  string | null;
+  /** RM-side order id — our `${orderNumber}-${base36 suffix}` */
+  rmOrderId:      string | null;
+  /** The order UUID we set as order.additionalData at checkout creation */
+  additionalData: string | null;
+  amountSen:      number | null;
+  raw:            unknown;
+}
+
+export async function queryTransaction(transactionId: string): Promise<RmTransactionResult> {
+  const token     = await getToken();
+  const url       = `${BASE_URL}/v3/payment/transaction/${encodeURIComponent(transactionId)}`;
+  const nonceStr  = nonce();
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const sig = buildSignature("GET", url, nonceStr, timestamp);
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization:  `Bearer ${token}`,
+      "X-Nonce-Str":  nonceStr,
+      "X-Timestamp":  timestamp,
+      "X-Signature":  sig,
+    },
+    signal: AbortSignal.timeout(RM_TIMEOUT_MS),
+  });
+  const data = (await res.json()) as {
+    code:  string;
+    item?: {
+      transactionId?: string;
+      status?: string;
+      order?: { id?: string; additionalData?: string; amount?: number };
+    };
+    error?: { code?: string; message?: string };
+  };
+  if (data.code !== "SUCCESS" || !data.item) {
+    throw new Error(`RM transaction query failed: ${JSON.stringify(data)}`);
+  }
+  return {
+    status:         data.item.status ?? "PENDING",
+    transactionId:  data.item.transactionId ?? null,
+    rmOrderId:      data.item.order?.id ?? null,
+    additionalData: data.item.order?.additionalData ?? null,
+    amountSen:      typeof data.item.order?.amount === "number" ? data.item.order.amount : null,
+    raw:            data,
+  };
+}
+
 // ─── Webhook validation ───────────────────────────────────────────────────────
 //
 // RM signs callback bodies with their server's private key. We verify

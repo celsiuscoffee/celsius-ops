@@ -105,11 +105,17 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
   // paying), ask the server to query RM directly so it settles in seconds
   // instead of minutes. Mirrors the native backstop in
   // apps/pickup-native/app/order/[id].tsx. Keyed on status+method so it
-  // only runs while genuinely pending and tears down the moment it settles.
+  // only runs while unsettled and tears down the moment it settles.
+  //
+  // "failed" keeps polling too: a customer can retry payment on the same
+  // order after a failed attempt (C-9782 — card expired, FPX retry paid a
+  // minute later), so RM can flip a failed checkout to SUCCESS. Server-side
+  // reconcile accepts failed → paid, and this poll is what lets the customer
+  // watch their "Payment failed" screen heal into "Brewing now".
   const status = order?.status;
   const method = order?.payment_method;
   useEffect(() => {
-    if (status !== "pending" || !method || !RM_METHODS.has(method)) return;
+    if ((status !== "pending" && status !== "failed") || !method || !RM_METHODS.has(method)) return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -119,9 +125,10 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
           body: JSON.stringify({ orderId }),
         });
         const json = (await res.json().catch(() => null)) as { status?: string } | null;
-        // Reflect a settled status immediately rather than waiting for the
-        // next 5s DB tick.
-        if (!cancelled && json && (json.status === "preparing" || json.status === "paid" || json.status === "failed")) {
+        // Reflect a status change immediately rather than waiting for the
+        // next 5s DB tick. Compared against the current status so a failed
+        // order that stays failed doesn't refetch on every 3s tick.
+        if (!cancelled && json?.status && json.status !== status) {
           void fetchOrder();
         }
       } catch {

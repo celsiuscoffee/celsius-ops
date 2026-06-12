@@ -91,6 +91,9 @@ export async function markRmOrderPaid(
     .update({
       status: nextStatus,
       payment_provider_ref: transactionId,
+      // A failed → paid rescue must clear the stale failure reason, or the
+      // backoffice shows "rm_expired" on an order that was actually paid.
+      payment_failure_reason: null,
     } as Record<string, unknown>)
     // A paid event must settle the order even if a stale/abandoned checkout
     // — or the expire-orders cron — already flipped it to "failed". Money
