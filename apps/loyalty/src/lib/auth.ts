@@ -7,15 +7,26 @@ import { SignJWT, jwtVerify } from 'jose';
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 
-if (!process.env.JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is not set');
+// Secret is resolved LAZILY (first use), not at module evaluation —
+// Next.js evaluates route modules during build-time page-data
+// collection, and a module-scope throw means the BUILD needs runtime
+// secrets (this exact guard broke Vercel preview builds, where
+// JWT_SECRET isn't configured). Runtime behavior is unchanged: a
+// missing secret in production still refuses to sign/verify, loudly.
+let cachedSecret: Uint8Array | null = null;
+function getJwtSecret(): Uint8Array {
+  if (cachedSecret) return cachedSecret;
+  if (!process.env.JWT_SECRET) {
+    console.error('FATAL: JWT_SECRET environment variable is not set');
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET must be set in production');
+    }
+  }
+  cachedSecret = new TextEncoder().encode(
+    process.env.JWT_SECRET || `dev-fallback-${Date.now()}-${Math.random()}`
+  );
+  return cachedSecret;
 }
-if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
-  throw new Error('JWT_SECRET must be set in production');
-}
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || `dev-fallback-${Date.now()}-${Math.random()}`
-);
 
 const COOKIE_NAME = 'celsius-admin-token';
 const ADMIN_TOKEN_EXPIRY = '7d';
@@ -35,7 +46,7 @@ export async function createToken(payload: {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(expiry)
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 }
 
 export async function verifyToken(token: string): Promise<{
@@ -45,7 +56,7 @@ export async function verifyToken(token: string): Promise<{
   role: string;
 } | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     return payload as { id: string; email: string; name: string; role: string };
   } catch {
     return null;
