@@ -29,7 +29,6 @@ export type VoucherDiscountType =
   | "flat"
   | "percent"
   | "free_item"
-  | "free_upgrade"
   | "bogo"
   | "combo"
   | "override_price"

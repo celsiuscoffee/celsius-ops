@@ -144,8 +144,8 @@ type RawOrderItem = {
 /** Build sen-based engine cart lines from incoming order items.
  *  unit_price_sen uses the BASE price (modifier upcharges stay paid —
  *  matches the established "free drink covers the base only" rule);
- *  modifier_total_sen carries the upcharge so free_upgrade can free the
- *  add-on. Resolves each line's category from the products table only
+ *  modifier_total_sen carries the upcharge (currently unused by any
+ *  discount rule — free_upgrade was removed). Resolves each line's category from the products table only
  *  when the spec filters by category (product filters match on id). */
 export async function buildEngineCart(
   supabase: SupabaseClient,

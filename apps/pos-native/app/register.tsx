@@ -2776,7 +2776,7 @@ export default function Register() {
 function discountSummary(v: { discount_type: string | null; discount_value: number | null; free_product_name: string | null }): string {
   if (v.discount_type === "percent") return `${v.discount_value ?? 0}% off`;
   if (v.discount_type === "flat") return `${rm(Math.round(v.discount_value ?? 0))} off`;
-  if (v.discount_type === "free_item" || v.discount_type === "free_upgrade") return v.free_product_name ? `Free ${v.free_product_name}` : "Free item";
+  if (v.discount_type === "free_item") return v.free_product_name ? `Free ${v.free_product_name}` : "Free item";
   return "Reward";
 }
 

@@ -263,33 +263,17 @@ describe("free_item", () => {
   });
 });
 
-describe("free_upgrade", () => {
-  it("modifier-aware: frees the cheapest POSITIVE upcharge, not the drink", () => {
+describe("free_upgrade (removed discount type)", () => {
+  it("legacy free_upgrade rows are unsupported → 0 discount, never a crash", () => {
+    // The type was removed 2026-06-12 (the chain sells no upgrades; the
+    // only template never issued a voucher). Any residual DB row must
+    // fall through the engine's default branch gracefully.
     const r = computeVoucherDiscount({
-      spec: spec({ discount_type: "free_upgrade" }),
-      cart: [
-        line({ unit_price_sen: 1700, modifier_total_sen: 200 }),
-        line({ product_id: "p-mocha", name: "Mocha", unit_price_sen: 1950, modifier_total_sen: 150 }),
-      ],
+      spec: spec({ discount_type: "free_upgrade" as never }),
+      cart: [line({ unit_price_sen: 1700, modifier_total_sen: 200 })],
     });
-    expect(r.discount_sen).toBe(150);
-  });
-
-  it("modifier-aware with zero upcharges everywhere → 0 (still 'applied')", () => {
-    const r = computeVoucherDiscount({
-      spec: spec({ discount_type: "free_upgrade" }),
-      cart: [line({ modifier_total_sen: 0 })],
-    });
-    expect(r.reason).toBe("applied");
+    expect(r.reason).toBe("unsupported_discount_type");
     expect(r.discount_sen).toBe(0);
-  });
-
-  it("LEGACY fallback: no modifier_total_sen supplied → behaves like free_item", () => {
-    const r = computeVoucherDiscount({
-      spec: spec({ discount_type: "free_upgrade" }),
-      cart: [line({ unit_price_sen: 1500, modifier_total_sen: undefined })],
-    });
-    expect(r.discount_sen).toBe(1500);
   });
 });
 
@@ -512,12 +496,15 @@ describe("legacyDescriptorToSpec (POS vocab translation)", () => {
     expect(s.discount_value).toBe(15);
   });
 
-  it("free_item / free_upgrade carry no discount_value", () => {
-    for (const t of ["free_item", "free_upgrade"] as const) {
-      const s = legacyDescriptorToSpec({ ...base, type: t, value: 7 });
-      expect(s.discount_type).toBe(t);
-      expect(s.discount_value).toBeNull();
-    }
+  it("free_item carries no discount_value", () => {
+    const s = legacyDescriptorToSpec({ ...base, type: "free_item", value: 7 });
+    expect(s.discount_type).toBe("free_item");
+    expect(s.discount_value).toBeNull();
+  });
+
+  it("legacy free_upgrade no longer maps to a discount type", () => {
+    const s = legacyDescriptorToSpec({ ...base, type: "free_upgrade", value: 7 });
+    expect(s.discount_type).toBeNull();
   });
 
   it("max_discount / min_order are RM → sen", () => {

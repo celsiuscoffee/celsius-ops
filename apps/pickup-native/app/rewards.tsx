@@ -62,7 +62,6 @@ function mapDiscountTypeForApply(
 ): AppliedReward["discount_type"] {
   switch (t) {
     case "free_item":          return "free_item";
-    case "free_upgrade":       return "free_item";
     case "flat":               return "flat";
     case "percent":            return "percent";
     case "beans_multiplier":   return "none";

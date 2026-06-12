@@ -50,14 +50,14 @@ export type DiscountCartLine = {
   name: string;
   /** The modifier-upcharge portion of unit_price_sen (oat milk, extra
    *  shot, large size, …) — i.e. unit_price_sen minus the base product
-   *  price. Used ONLY by `free_upgrade`, which frees the add-on, not the
-   *  whole drink. Optional: callers that don't supply it make
-   *  free_upgrade a no-op (returns 0) rather than over-discounting. */
+   *  price. Currently unused by any rule (free_upgrade was removed —
+   *  the chain sells no upgrades); kept because callers already supply
+   *  it and a future add-on rule would need it. */
   modifier_total_sen?: number | null;
 };
 
 /** Canonical v2 voucher spec — the engine's input. Always uses
- *  `flat` / `percent` / `free_item` / `free_upgrade` vocabulary.
+ *  `flat` / `percent` / `free_item` / … vocabulary.
  *  POS's apply-voucher route translates from the legacy
  *  `fixed_amount` / `percentage` vocab to this before calling the
  *  engine.
@@ -151,8 +151,8 @@ function isLineEligible(line: DiscountCartLine, spec: VoucherDiscountSpec): bool
  *      max_discount_value_sen when set.
  *    - For `flat`, the discount is capped at discount_value (sen)
  *      AND at eligible_subtotal_sen.
- *    - For `free_item` / `free_upgrade`, the discount is the cheapest
- *      eligible line's unit_price_sen.
+ *    - For `free_item`, the discount is the cheapest eligible line's
+ *      unit_price_sen.
  *
  *  Returns `reason` describing WHY the engine arrived at the result —
  *  the caller can surface that to the UI ("spend RM30+", "no eligible
@@ -210,31 +210,6 @@ export function computeVoucherDiscount(args: {
       // so the discount equals the line's real cost.
       const cheapest = Math.min(...eligible.map((l) => l.unit_price_sen));
       discountSen = Number.isFinite(cheapest) ? cheapest : 0;
-      break;
-    }
-    case "free_upgrade": {
-      // Free the cheapest eligible line's MODIFIER upcharge only (oat
-      // milk / extra shot / size bump) — NOT the whole drink. That's what
-      // distinguishes it from free_item.
-      //
-      // Migration-safe: a caller is "modifier-aware" only if at least one
-      // eligible line supplies a numeric modifier_total_sen. Modifier-aware
-      // callers get the correct add-on logic (free cheapest positive
-      // upcharge; 0 if the cart has no upcharges). LEGACY callers that
-      // don't pass modifier_total_sen fall back to free_item behaviour
-      // (cheapest whole line) so the one existing free_upgrade voucher
-      // never silently regresses to 0. Remove the fallback once POS +
-      // Pickup + server all pass modifier_total_sen.
-      const modifierAware = eligible.some((l) => typeof l.modifier_total_sen === "number");
-      if (modifierAware) {
-        const upcharges = eligible
-          .map((l) => l.modifier_total_sen ?? 0)
-          .filter((m) => m > 0);
-        discountSen = upcharges.length ? Math.min(...upcharges) : 0;
-      } else {
-        const cheapest = Math.min(...eligible.map((l) => l.unit_price_sen));
-        discountSen = Number.isFinite(cheapest) ? cheapest : 0;
-      }
       break;
     }
     case "bogo": {
@@ -370,7 +345,6 @@ export function legacyDescriptorToSpec(legacy: {
     legacy.type === "fixed_amount" ? "flat"
     : legacy.type === "percentage" ? "percent"
     : legacy.type === "free_item"  ? "free_item"
-    : legacy.type === "free_upgrade" ? "free_upgrade"
     : null;
 
   const discountValue: number | null =

@@ -26,7 +26,7 @@ export type Voucher = {
   stacks_with_beans: boolean;
   // Discount metadata — drives the client-side discount engine when the
   // customer reserves a wallet voucher and proceeds to checkout.
-  discount_type?: "flat" | "percent" | "free_item" | "free_upgrade" | "beans_multiplier" | "none" | null;
+  discount_type?: "flat" | "percent" | "free_item" | "beans_multiplier" | "none" | null;
   discount_value?: number | null;
   min_order_value?: number | null;
   applicable_categories?: string[] | null;

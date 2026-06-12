@@ -18,7 +18,6 @@ export type AppliedReward = {
     | "flat"
     | "percent"
     | "free_item"
-    | "free_upgrade"
     | "bogo"
     | "combo"
     | "override_price"
@@ -122,9 +121,6 @@ export function formatRewardValue(r: AppliedReward): string {
   }
   if (r.discount_type === "free_item") {
     return r.free_product_name ? `Free ${r.free_product_name}` : "Free item";
-  }
-  if (r.discount_type === "free_upgrade") {
-    return "Free upgrade";
   }
   if (r.discount_type === "bogo") {
     return `Buy ${r.bogo_buy_qty} get ${r.bogo_free_qty} free`;

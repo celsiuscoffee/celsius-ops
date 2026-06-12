@@ -23,7 +23,7 @@ import {
 const BRAND_ID = "brand-celsius";
 
 export type DiscountType =
-  | "flat" | "percent" | "free_item" | "free_upgrade"
+  | "flat" | "percent" | "free_item"
   | "bogo" | "combo" | "override_price"
   | "beans_multiplier" | "none";
 
@@ -334,7 +334,6 @@ export default function RewardForm({ mode, initial }: Props) {
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white"
           >
             <option value="free_item">Free item (cheapest eligible line)</option>
-            <option value="free_upgrade">Free upgrade (cheapest add-on)</option>
             <option value="flat">Flat — RM off</option>
             <option value="percent">Percent off</option>
             <option value="bogo">Buy X get Y free (BOGO)</option>

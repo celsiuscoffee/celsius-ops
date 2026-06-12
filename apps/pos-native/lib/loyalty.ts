@@ -63,7 +63,7 @@ export type UsualItem = {
 };
 
 export type RedeemDiscount = {
-  // flat | percent | free_item | free_upgrade | bogo | combo |
+  // flat | percent | free_item | bogo | combo |
   // override_price | beans_multiplier | none
   type: string | null;
   value: number | null;
@@ -207,19 +207,6 @@ export function computeRewardDiscount(d: RedeemDiscount, lines: CartLine[]): num
     case "free_item": {
       const cheapest = Math.min(...eligible.map((l) => l.unit_sen));
       discount = Number.isFinite(cheapest) ? cheapest : 0;
-      break;
-    }
-    case "free_upgrade": {
-      // Free the cheapest eligible line's MODIFIER upcharge (add-on), not
-      // the whole line. unit_sen − product.price_sen = the modifier total.
-      // No positive upcharge in the cart → nothing to upgrade → 0. The
-      // shared engine's free_item fallback is only for LEGACY callers
-      // that can't supply modifier data; the till always knows its
-      // modifiers, so falling back here gave the whole drink away.
-      const upcharges = eligible
-        .map((l) => l.unit_sen - l.product.price_sen)
-        .filter((m) => m > 0);
-      discount = upcharges.length ? Math.min(...upcharges) : 0;
       break;
     }
     case "bogo": {
