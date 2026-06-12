@@ -61,9 +61,16 @@ export async function POST(request: NextRequest) {
         .update({
           status:               nextStatus,
           payment_provider_ref: intent.id,
+          payment_failure_reason: null,
         } as Record<string, unknown>)
         .eq("id", orderId)
-        .eq("status", "pending")
+        // "failed" settles too: payment_failed fires on a declined FIRST
+        // attempt while the customer is still on the payment sheet, so a
+        // successful retry on the same intent lands after we've already
+        // flipped the order to failed. Money received always wins (same
+        // rule as markRmOrderPaid). Still a no-op for preparing/paid rows,
+        // so duplicate deliveries don't double-earn points.
+        .in("status", ["pending", "failed"])
         .select("loyalty_id, loyalty_points_earned, reward_id, wallet_voucher_id, store_id, order_number, customer_phone, created_at")
         .single();
 

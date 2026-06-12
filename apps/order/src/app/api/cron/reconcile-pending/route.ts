@@ -100,9 +100,10 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      // Failed non-RM (Stripe) orders aren't retryable on the same order —
-      // only pending rows are reconciled against Stripe.
-      if (order.status !== "pending") continue;
+      // Failed Stripe orders are swept too: payment_failed fires on a
+      // declined first attempt while the customer can still retry the same
+      // intent, so a late success can land on a row already flipped to
+      // failed. Only the succeeded branch below may touch them.
 
       // Stripe indexes metadata for search within a few seconds of intent creation.
       const search = await stripe.paymentIntents.search({
@@ -122,9 +123,12 @@ export async function GET(request: NextRequest) {
           .update({
             status: "preparing",
             payment_provider_ref: intent.id,
+            payment_failure_reason: null,
           } as Record<string, unknown>)
           .eq("id", order.id)
-          .eq("status", "pending")
+          // failed → preparing rescue: money received always wins. No-op
+          // for already-settled rows so points can't double-earn.
+          .in("status", ["pending", "failed"])
           .select("id")
           .maybeSingle();
 

@@ -82,9 +82,14 @@ export async function POST(
       .update({
         status:               nextStatus,
         payment_provider_ref: intent.id,
+        payment_failure_reason: null,
       } as Record<string, unknown>)
       .eq("id", orderId)
-      .eq("status", "pending") // idempotent — only acts if still pending
+      // Idempotent — no-op for already-settled rows. "failed" is rescued:
+      // a declined first attempt flips the order to failed (webhook/cron)
+      // while the customer can still retry the same intent, and Stripe has
+      // verified `succeeded` above. Money received always wins.
+      .in("status", ["pending", "failed"])
       .select("loyalty_id, loyalty_points_earned, reward_id, wallet_voucher_id, store_id, order_number, customer_phone, created_at")
       .single();
 

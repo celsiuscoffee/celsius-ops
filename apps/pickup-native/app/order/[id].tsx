@@ -216,8 +216,13 @@ export default function OrderStatus() {
   // on a pending RM-routed order, hit /api/payments/poll so the server
   // asks RM directly and reconciles. The /api/orders/[id] poll above
   // then sees the new status on the next 5s tick.
+  //
+  // "failed" polls too: the retry button below re-pays the SAME order, so
+  // money can land after the order was flipped to failed (C-9782). The
+  // server accepts failed → paid, and this poll is what lets the failed
+  // screen heal into preparing without the customer re-ordering.
   useEffect(() => {
-    if (!id || !data || data.status !== "pending") return;
+    if (!id || !data || (data.status !== "pending" && data.status !== "failed")) return;
     const rmMethods = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card"]);
     if (!data.payment_method || !rmMethods.has(data.payment_method)) return;
     let cancelled = false;
@@ -239,7 +244,7 @@ export default function OrderStatus() {
         const json = (await res.json().catch(() => null)) as
           | { status?: string; source?: string }
           | null;
-        if (json && (json.status === "preparing" || json.status === "failed")) {
+        if (json?.status && json.status !== data.status) {
           queryClient.invalidateQueries({ queryKey: ["order", id] });
         }
       } catch {
