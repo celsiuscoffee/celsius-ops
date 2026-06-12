@@ -36,7 +36,7 @@ export type ShContrib = {
 type ShRow = {
   outlet_id: string;
   transaction_time: Date | string;
-  sub_total: number | string | null;
+  total: number | string | null;
   channel: string | null;
   order_type: string | null;
   is_cancelled: boolean | null;
@@ -86,7 +86,7 @@ export async function getStorehubFromDB(opts: {
   let data: ShRow[] = [];
   try {
     data = await prisma.$queryRaw<ShRow[]>`
-      SELECT outlet_id, transaction_time, sub_total, channel, order_type, is_cancelled
+      SELECT outlet_id, transaction_time, total, channel, order_type, is_cancelled
       FROM storehub_sales
       WHERE outlet_id IN (${Prisma.join(ids)})
         AND transaction_time >= ${new Date(winStart)}
@@ -111,7 +111,10 @@ export async function getStorehubFromDB(opts: {
     }
     const d = getMYTDateStr(ts);
     const h = getMYTHour(ts);
-    const rev = sen(Number(r.sub_total ?? 0) || 0);
+    // Revenue = `total` (net of discounts), matching the backoffice unified
+    // reader. `sub_total` is the pre-discount gross and over-counts — the same
+    // basis fix applied to the native pos/orders loops in the route.
+    const rev = sen(Number(r.total ?? 0) || 0);
     const ch = classifyShChannel(r.channel, r.order_type);
     if (inCur(d)) {
       out.curRevSen += rev; out.curOrd++;
