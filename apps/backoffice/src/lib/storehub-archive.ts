@@ -14,6 +14,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@supabase/supabase-js";
+import { classifyChannel, isDeliveryOrQR } from "@/app/api/sales/_lib/storehub-helpers";
+import type { StoreHubTransaction } from "@/lib/storehub";
 
 const BASE_URL = "https://api.storehubhq.com";
 const MAX_TXN = 5000;
@@ -100,6 +102,14 @@ export async function syncRecentStorehubSales(days = 3): Promise<SyncResult[]> {
         status: t.status ?? null,
         is_cancelled: !!t.isCancelled,
         item_count: Array.isArray(t.items) ? t.items.length : null,
+        // Classified at WRITE time (the JS classifier stays canonical) so
+        // dashboard reads never ship/reclassify the raw JSONB again. The
+        // SQL twins classify_storehub_channel/is_storehub_delivery_qr
+        // exist for backfills — parity-verified against this classifier.
+        // ShTxn is a local trimmed view of the same payload; the classifier
+        // reads dynamic string fields, so the cast is shape-safe.
+        channel_class: classifyChannel(t as unknown as StoreHubTransaction),
+        is_delivery_qr: isDeliveryOrQR(t as unknown as StoreHubTransaction),
         raw: t,
       }));
       for (let i = 0; i < rows.length; i += 500) {

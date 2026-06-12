@@ -21,11 +21,9 @@ import { shouldHoldForScheduled } from "@/lib/revenue-monster/order-status";
  *
  * Auth: a short-lived scoped service token (Bearer) signed with the
  * JWT_SECRET both apps share — see @celsius/auth createServiceToken.
- * The legacy `x-service-key` (raw service-role key) is still accepted
- * during the deploy transition; remove that branch once both apps run
- * the token version. Accepting it grants nothing extra — anyone holding
- * the service-role key already owns the database — the point of the
- * migration is that backoffice stops SENDING it over the wire.
+ * (The legacy `x-service-key` raw service-role-key header was accepted
+ * during the 2026-06-12 deploy transition and removed once both apps
+ * were on the token flow.)
  */
 export async function POST(
   request: NextRequest,
@@ -41,13 +39,7 @@ export async function POST(
     ? await verifyServiceToken(bearer, "order.confirm-maybank-qr")
     : false;
   if (!tokenOk) {
-    // Legacy transition path — see route doc above. Remove after both
-    // apps are deployed on the token flow.
-    const expected = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-    const provided = request.headers.get("x-service-key")?.trim() ?? "";
-    if (!expected || !provided || expected !== provided) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
