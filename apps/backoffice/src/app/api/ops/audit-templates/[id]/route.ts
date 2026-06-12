@@ -90,6 +90,7 @@ export async function PATCH(
             sortOrder: si,
             items: sec.items?.length
               ? {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
                   create: sec.items.map((item: any, ii: number) => ({
                     title: item.title,
                     description: item.description || null,

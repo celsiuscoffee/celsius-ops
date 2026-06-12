@@ -426,8 +426,8 @@ export default function SplashPostersPage() {
         originalBgUrl: composerState ? f.originalBgUrl : json.url,
       }));
       toast.success("Image uploaded");
-    } catch (e: any) {
-      toast.error(e?.message ?? "Upload failed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setUploading(false);
     }
@@ -481,8 +481,8 @@ export default function SplashPostersPage() {
       toast.success(form.id ? "Poster updated" : "Poster created");
       setShowForm(false);
       load();
-    } catch (e: any) {
-      toast.error(e?.message ?? "Save failed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }

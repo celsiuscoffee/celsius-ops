@@ -1651,7 +1651,7 @@ function voucherSource(s: string | null): string {
 function voucherSummary(v: VoucherCard): string {
   if (v.discount_type === "percent") return `${v.discount_value ?? 0}% off`;
   if (v.discount_type === "flat") return `${rm(Math.round(v.discount_value ?? 0))} off`;
-  if (v.discount_type === "free_item" || v.discount_type === "free_upgrade") return v.free_product_name ? `Free ${v.free_product_name}` : "Free item";
+  if (v.discount_type === "free_item") return v.free_product_name ? `Free ${v.free_product_name}` : "Free item";
   return v.description ?? "Reward";
 }
 /** "RM2" → "RM2 OFF", "20%" → "20% OFF"; leaves labels that already say off/%. */

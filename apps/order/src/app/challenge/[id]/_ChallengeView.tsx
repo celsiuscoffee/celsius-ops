@@ -104,12 +104,16 @@ function howToWin(m: Mission): string[] {
   }
 }
 
-function rewardIcon(label?: string | null): typeof Gift {
+// Returns the rendered element (not the component) so render never
+// derives a component type from a function call — keeps the selection
+// among the static lucide imports visible to react-hooks lint.
+function rewardIcon(label?: string | null) {
   const s = (label ?? "").toLowerCase();
-  if (/free|drink|coffee|latte|brew/.test(s)) return Coffee;
-  if (/cookie|pastry|cake|food/.test(s)) return Cookie;
-  if (/rm|%|off|discount/.test(s)) return Tag;
-  return Gift;
+  const Ico = /free|drink|coffee|latte|brew/.test(s) ? Coffee
+    : /cookie|pastry|cake|food/.test(s) ? Cookie
+    : /rm|%|off|discount/.test(s) ? Tag
+    : Gift;
+  return <Ico size={32} color={THEME.iconColor} strokeWidth={2} />;
 }
 
 export function ChallengeView({ assignmentId }: { assignmentId: string }) {
@@ -147,7 +151,7 @@ export function ChallengeView({ assignmentId }: { assignmentId: string }) {
   const ratio = mission
     ? Math.min(1, (mission.progress_current ?? 0) / Math.max(1, mission.goal_threshold ?? 1))
     : 0;
-  const Icon = rewardIcon(mission?.reward_summary);
+  const rewardIconEl = rewardIcon(mission?.reward_summary);
   const expiry = expiryCopy(mission?.week_end_at ?? mission?.expires_at);
   const rules = mission ? howToWin(mission) : [];
 
@@ -199,7 +203,7 @@ export function ChallengeView({ assignmentId }: { assignmentId: string }) {
                 className="flex items-center justify-center flex-shrink-0"
                 style={{ width: 64, height: 64, borderRadius: 16, backgroundColor: THEME.iconBg }}
               >
-                <Icon size={32} color={THEME.iconColor} strokeWidth={2} />
+                {rewardIconEl}
               </span>
               <div className="flex-1 min-w-0">
                 <p

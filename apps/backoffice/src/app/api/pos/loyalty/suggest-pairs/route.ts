@@ -98,6 +98,7 @@ export async function POST(req: NextRequest) {
     }
 
     const cartSet = new Set(cartIds);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const products: Product[] = ((prodRows ?? []) as any[])
       .filter((p) => {
         const ch = (p.visible_channels ?? []) as string[];
@@ -140,6 +141,7 @@ export async function POST(req: NextRequest) {
       .eq("brand_id", BRAND_ID)
       .eq("is_active", true);
     type Combo = { id: string; name: string; discount_type: string | null; discount_value: number | null; combo_price: number | null; override_price: number | null; prodIds: string[]; catIds: string[]; outletIds: string[] };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const combos: Combo[] = ((promoRows ?? []) as any[])
       // Only combos that are LIVE right now — using the SAME canonical schedule
       // gate the rewards engine enforces (@celsius/shared isPromoLiveNow) so we

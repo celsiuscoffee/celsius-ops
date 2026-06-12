@@ -260,11 +260,11 @@ export default function SettingsHub() {
 
       {/* Footer help */}
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900">
-        <p className="font-semibold mb-1">Don't see what you need?</p>
+        <p className="font-semibold mb-1">Don&apos;t see what you need?</p>
         <p>
           Some settings live inside their feature module — e.g. POS register layout customization
           is under POS → Settings, splash poster scheduling under Catalog → Splash Posters.
-          The sidebar mirrors this structure when you'd rather drill in than scan tiles.
+          The sidebar mirrors this structure when you&apos;d rather drill in than scan tiles.
         </p>
       </div>
     </div>

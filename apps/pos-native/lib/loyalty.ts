@@ -63,7 +63,7 @@ export type UsualItem = {
 };
 
 export type RedeemDiscount = {
-  // flat | percent | free_item | free_upgrade | bogo | combo |
+  // flat | percent | free_item | bogo | combo |
   // override_price | beans_multiplier | none
   type: string | null;
   value: number | null;
@@ -207,22 +207,6 @@ export function computeRewardDiscount(d: RedeemDiscount, lines: CartLine[]): num
     case "free_item": {
       const cheapest = Math.min(...eligible.map((l) => l.unit_sen));
       discount = Number.isFinite(cheapest) ? cheapest : 0;
-      break;
-    }
-    case "free_upgrade": {
-      // Free the cheapest eligible line's MODIFIER upcharge (add-on), not
-      // the whole line. unit_sen − product.price_sen = the modifier total.
-      // Falls back to free_item when no eligible line has modifiers
-      // (mirrors the shared engine's migration-safe fallback).
-      const upcharges = eligible
-        .map((l) => l.unit_sen - l.product.price_sen)
-        .filter((m) => m > 0);
-      if (upcharges.length) {
-        discount = Math.min(...upcharges);
-      } else {
-        const cheapest = Math.min(...eligible.map((l) => l.unit_sen));
-        discount = Number.isFinite(cheapest) ? cheapest : 0;
-      }
       break;
     }
     case "bogo": {

@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
   const winEnd = mytDayEndUTC(cur.to);
   const priorCut = mytDayStartUTC(prev.from); // "before previous period" boundary
 
-  const [posRes, appRes, posPriorRes, appPriorRes] = await Promise.all([
+  const [posRes, appRes, priorRes] = await Promise.all([
     supabaseAdmin
       .from("pos_orders")
       .select("id, outlet_id, created_at, subtotal, total, status, order_type, source, customer_phone, refund_of_order_id")
@@ -86,16 +86,13 @@ export async function GET(req: NextRequest) {
           .gte("created_at", winStart).lte("created_at", winEnd)
           .limit(20000)
       : Promise.resolve({ data: [], error: null }),
-    supabaseAdmin
-      .from("pos_orders").select("customer_phone")
-      .in("outlet_id", posCodes).lt("created_at", priorCut)
-      .not("customer_phone", "is", null).limit(50000),
-    storeIds.length
-      ? supabaseAdmin
-          .from("orders").select("customer_phone")
-          .in("store_id", storeIds).lt("created_at", priorCut)
-          .not("customer_phone", "is", null).limit(50000)
-      : Promise.resolve({ data: [], error: null }),
+    // Distinct prior phones via RPC — replaces two raw 50k-row fetches
+    // that JS only ever collapsed into Sets. Dedup happens in SQL.
+    supabaseAdmin.rpc("prior_customer_phones", {
+      p_before: priorCut,
+      p_pos_codes: posCodes,
+      p_store_ids: storeIds,
+    }),
   ]);
 
   const warn: string[] = [];
@@ -304,11 +301,11 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.amount - a.amount);
 
   // ── Growth ──
-  const priorAll = new Set<string>();
-  for (const r of (posPriorRes.data || []) as { customer_phone: string | null }[]) if (r.customer_phone) priorAll.add(r.customer_phone);
-  for (const r of (appPriorRes.data || []) as { customer_phone: string | null }[]) if (r.customer_phone) priorAll.add(r.customer_phone);
-  const priorApp = new Set<string>();
-  for (const r of (appPriorRes.data || []) as { customer_phone: string | null }[]) if (r.customer_phone) priorApp.add(r.customer_phone);
+  const priorAll = new Set<string>(), priorApp = new Set<string>();
+  for (const r of (priorRes.data || []) as { phone: string; app_customer: boolean }[]) {
+    priorAll.add(r.phone);
+    if (r.app_customer) priorApp.add(r.phone);
+  }
 
   // new = first seen within the period (not before its start)
   const newCustomers = [...curPhones].filter((p) => !priorAll.has(p) && !prevPhones.has(p)).length;

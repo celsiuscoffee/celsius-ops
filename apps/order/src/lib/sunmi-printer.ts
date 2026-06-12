@@ -10,8 +10,6 @@
  * 3. Fallback: window.print() for non-Sunmi devices
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 declare global {
   interface Window {
     PrinterInterface?: SunmiPrinterInterface;

@@ -34,7 +34,7 @@ export type AppliedReward = {
   name: string;
   points_required: number;
   discount_type:
-    | "flat" | "percent" | "free_item" | "free_upgrade" | "fixed_amount"
+    | "flat" | "percent" | "free_item" | "fixed_amount"
     | "percentage" | "bogo" | "combo" | "override_price" | "none" | null;
   discount_value: number | null;
   bogo_buy_qty?: number;

@@ -4,7 +4,6 @@ import type {
   Brand,
   Outlet,
   Member,
-  MemberBrand,
   MemberWithBrand,
   Reward,
   PointTransaction,

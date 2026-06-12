@@ -2041,7 +2041,7 @@ function SalaryHistorySection({ userId }: { userId: string }) {
         )}
       </div>
       <p className="mb-3 text-xs text-muted-foreground">
-        Track increments, promotions, and restructures. Saving "base" or "hourly"
+        Track increments, promotions, and restructures. Saving &quot;base&quot; or &quot;hourly&quot;
         with effective date ≤ today also updates the live profile so payroll picks it up.
       </p>
 

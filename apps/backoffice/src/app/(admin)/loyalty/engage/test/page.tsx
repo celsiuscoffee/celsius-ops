@@ -65,11 +65,6 @@ export default function SmsTestPage() {
   const [sendResult, setSendResult] = useState<SendResult | null>(null);
   const [testLogs, setTestLogs] = useState<TestLog[]>([]);
 
-  // Load diagnostics on mount
-  useEffect(() => {
-    loadDiagnostics();
-  }, []);
-
   async function loadDiagnostics() {
     setDiagLoading(true);
     try {
@@ -84,6 +79,13 @@ export default function SmsTestPage() {
     }
     setDiagLoading(false);
   }
+
+  // Load diagnostics on mount (placed after the declaration so hooks
+  // lint can order-check it).
+  useEffect(() => {
+    loadDiagnostics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSend() {
     if (!phone.trim() || !message.trim()) return;

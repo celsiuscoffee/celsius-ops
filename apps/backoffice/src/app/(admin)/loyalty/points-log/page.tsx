@@ -44,16 +44,17 @@ export default function PointsLogPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
 
-  useEffect(() => {
-    loadTransactions();
-  }, []);
-
   const loadTransactions = async () => {
     setLoading(true);
     const data = await fetchPointsLog();
     setTransactions(data);
     setLoading(false);
   };
+
+  useEffect(() => {
+    loadTransactions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = transactions.filter((t) => {
     if (typeFilter !== "all" && t.type !== typeFilter) return false;

@@ -283,8 +283,8 @@ export async function POST(request: NextRequest) {
       .select("key, value")
       .in("key", ["points_per_rm", "min_order_value"]);
     const settingsMap = new Map((settingsRows ?? []).map((r) => [r.key, r.value]));
-    const pointsPerRm  = Number((settingsMap.get("points_per_rm") as any)?.rate ?? 1);
-    const minOrderRm   = Number((settingsMap.get("min_order_value") as any)?.rm ?? 0);
+    const pointsPerRm  = Number((settingsMap.get("points_per_rm") as { rate?: number } | undefined)?.rate ?? 1);
+    const minOrderRm   = Number((settingsMap.get("min_order_value") as { rm?: number } | undefined)?.rm ?? 0);
 
     // First-order discount — config moved into the Discount Engine
     // (promotions table) so all checkout discounts live in one place.

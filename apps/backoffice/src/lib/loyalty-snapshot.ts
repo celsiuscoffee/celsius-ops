@@ -515,6 +515,7 @@ export async function fetchLoyaltySnapshot(
       .order("created_at", { ascending: false })
       .limit(5);
     if (!assignments) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     return (assignments as any[]).map((a) => {
       // Spend-based goals (Big Bill, weekly spend, etc.) store
       // thresholds in sen on `reward_missions.goal.threshold` and
@@ -599,12 +600,14 @@ export async function fetchLoyaltySnapshot(
     // "Save with a combo" strip can still surface them as
     // "Available 8am-10am" intent for AOV. The empty-cart
     // "Current promotions" filters to live=true downstream.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const eligible = rows.filter((r: any) => {
       if (r.valid_from && new Date(r.valid_from as string) > now) return false;
       if (r.valid_until && new Date(r.valid_until as string) < now) return false;
       return true;
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     return eligible.map((r: any) => {
       // Determine "live now" status: passes day-of-week + time-of-day
       // gates. False means "exists but not claimable on this cart" —
@@ -844,11 +847,14 @@ export async function fetchLoyaltySnapshot(
   // duplicates the surface and inflates the rewards count.
   const now = Date.now();
   const vouchers: VoucherCard[] = (vouchersRes.data ?? [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     .filter((v: any) => !v.expires_at || new Date(v.expires_at).getTime() > now)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     .filter((v: any) => {
       const src = v.source_type ?? sourceFromId(v.id as string);
       return src !== "points_redemption";
     })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     .map((v: any) => ({
       id: v.id,
       title: v.title,
@@ -898,6 +904,7 @@ export async function fetchLoyaltySnapshot(
     };
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
   const adminCandidates = ((pushedRes.data ?? []) as any[]).filter((c) => {
     if (c.ends_at && new Date(c.ends_at).getTime() < now) return false;
     if (c.max_claims !== null && (c.total_claimed ?? 0) >= c.max_claims) return false;
@@ -914,6 +921,7 @@ export async function fetchLoyaltySnapshot(
       .select("claimable_id")
       .eq("member_id", memberId)
       .in("claimable_id", ids);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const alreadyIds = new Set((alreadyRows ?? []).map((r: any) => r.claimable_id));
 
     pushedClaimables = adminCandidates
@@ -936,6 +944,7 @@ export async function fetchLoyaltySnapshot(
   // display can broadcast a usable discount shape AT TAP time without
   // a round-trip. Without this, tapping Free Drink sends type=null →
   // register's free_item branch never fires → cart total unchanged.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
   const shop: ShopCard[] = ((shopRes.data ?? []) as any[])
     .filter((r) => r.stock === null || r.stock > 0)
     .map((r) => {

@@ -184,6 +184,9 @@ export function MenuColumns({
 
   const onPickPill = (id: string) => {
     setActive(id);
+    // Inside a click handler, not render — the compiler lint can't see
+    // through the closure to know this ref write/Date.now is event-time.
+    // eslint-disable-next-line react-hooks/purity
     userClickedAtRef.current = Date.now();
     const el = sectionRefs.current[id];
     if (!el) return;

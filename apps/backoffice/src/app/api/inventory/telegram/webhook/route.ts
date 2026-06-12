@@ -160,6 +160,7 @@ async function processMessage(message: TelegramMessage) {
       const popData: PopData = { documentType: "POP", ...payment };
       // Use per-page URL if available, otherwise fall back to full PDF
       let pageUrl = docUrl;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
       const pageNum = (payment as any).pageNumber;
       if (pageNum && pageUrls[pageNum - 1]) {
         pageUrl = pageUrls[pageNum - 1];
@@ -436,6 +437,7 @@ async function processCallback(cb: TelegramCallbackQuery) {
 
   // Run the single-match payment path — same logic as if amount-matching had
   // returned exactly one candidate.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
   await resolvePop(meta.chatId, meta.replyToMessageId, meta.photoUrl, meta.pop, meta.amount, [invoice as any]);
 
   // Clean up the meta blob so the bucket doesn't accumulate.
@@ -646,6 +648,7 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
     let narrowed = candidates;
     if (pop.recipientAccount) {
       const digits = pop.recipientAccount.replace(/\D/g, "");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
       const byAccount = candidates.filter((inv: any) => {
         const sup = inv.supplier?.bankAccountNumber?.replace(/\D/g, "");
         const staff = inv.order?.claimedBy?.bankAccountNumber?.replace(/\D/g, "");
@@ -655,6 +658,7 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
     }
     if (narrowed.length > 1 && pop.recipientName) {
       const needle = pop.recipientName.toLowerCase();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
       const byName = narrowed.filter((inv: any) => {
         return (
           inv.supplier?.name?.toLowerCase().includes(needle) ||
@@ -678,6 +682,7 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
       .join(" ")
       .toLowerCase();
     if (haystack) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
       const byInvNum = candidates.filter((inv: any) => {
         const n = inv.invoiceNumber?.toLowerCase();
         return n && haystack.includes(n);
@@ -691,6 +696,7 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
   // If the receipt mentions an outlet code or name, use it to disambiguate.
   if (candidates.length > 1 && pop.outletHint) {
     const hint = pop.outletHint.toLowerCase();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const byOutlet = candidates.filter((inv: any) => {
       const code = inv.outlet?.code?.toLowerCase();
       const name = inv.outlet?.name?.toLowerCase();
@@ -717,16 +723,21 @@ async function resolvePop(
     // all candidates are the same claimant's STAFF_CLAIM at the same outlet,
     // consume the oldest one instead of asking to disambiguate — next POP
     // picks up the next one.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const allStaffClaim = candidates.every((c: any) => c.paymentType === "STAFF_CLAIM");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const claimantIds = new Set(candidates.map((c: any) => c.order?.claimedBy?.id));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const outletIds = new Set(candidates.map((c: any) => c.outletId));
     if (allStaffClaim && claimantIds.size === 1 && !claimantIds.has(undefined) && outletIds.size === 1) {
       candidates = [...candidates].sort(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
         (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
       ).slice(0, 1);
     } else {
       // Cap at 8 buttons (Telegram's practical limit per message is generous
       // but huge keyboards are unreadable on mobile).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
       const offered = candidates.slice(0, 8) as any[];
       const token = randomBytes(6).toString("base64url"); // ~8 chars, callback_data-safe
       const metaPath = `pop/meta/${token}.json`;
@@ -772,6 +783,7 @@ async function resolvePop(
   // Single match — figure out if the POP matches the full amount or just the
   // deposit portion (supplier requires upfront deposit). If deposit, transition
   // to DEPOSIT_PAID and let finance submit the balance POP later for PAID.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
   const invoice = candidates[0] as any;
   const depositAmt = invoice.depositAmount != null ? Number(invoice.depositAmount) : null;
   const fullAmt = Number(invoice.amount);
@@ -811,6 +823,7 @@ async function resolvePop(
     const { popStoragePath, popDownloadName } = await import("@/lib/inventory/file-naming");
     const { moveInStorage } = await import("@/lib/inventory/pdf-splitter");
     const ext = /\.pdf(\?|$)/i.test(photoUrl) ? "pdf" : "jpg";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const invForNaming = { ...invoice, paidAt: new Date() } as any;
     const newPath = popStoragePath(invForNaming, ext);
     const moved = await moveInStorage(photoUrl, newPath);
@@ -1026,6 +1039,7 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
         invoiceNumber: inv.invoiceNumber || order.orderNumber,
         amount: effectiveAmount,
         supplier: order.supplier ?? null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
       } as any,
       ext,
     );

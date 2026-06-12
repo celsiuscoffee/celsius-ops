@@ -54,6 +54,50 @@ type DrillLine = {
   credit: number;
 };
 
+// Row components live at module scope (not inside PnlTab) so their
+// identity is stable across renders; ReportRow takes the drill-down
+// callback as a prop instead of closing over PnlTab state.
+function ReportRow({ line, onDrill }: { line: PnlLine; onDrill: (code: string) => void }) {
+  return (
+    <tr
+      className="cursor-pointer border-t transition hover:bg-muted/30"
+      onClick={() => onDrill(line.code)}
+    >
+      <td
+        className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground"
+        style={{ paddingLeft: line.parentCode ? 32 : 12 }}
+      >
+        {line.code}
+      </td>
+      <td className="px-3 py-1.5">{line.name}</td>
+      <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(line.amount)}</td>
+    </tr>
+  );
+}
+
+function TotalRow({ label, amount, bold = true }: { label: string; amount: number; bold?: boolean }) {
+  return (
+    <tr className="border-t bg-muted/30">
+      <td colSpan={2} className={`px-3 py-2 ${bold ? "font-semibold" : ""}`}>
+        {label}
+      </td>
+      <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${bold ? "font-semibold" : ""}`}>
+        {RM(amount)}
+      </td>
+    </tr>
+  );
+}
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <tr>
+      <td colSpan={3} className="bg-muted/50 px-3 py-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </td>
+    </tr>
+  );
+}
+
 function PnlTab() {
   const [start, setStart] = useState(thisMonthStart());
   const [end, setEnd] = useState(todayMyt());
@@ -62,47 +106,6 @@ function PnlTab() {
     `/api/finance/reports/pnl?${qs}`
   );
   const [drillCode, setDrillCode] = useState<string | null>(null);
-
-  function ReportRow({ line }: { line: PnlLine }) {
-    return (
-      <tr
-        className="cursor-pointer border-t transition hover:bg-muted/30"
-        onClick={() => setDrillCode(line.code)}
-      >
-        <td
-          className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground"
-          style={{ paddingLeft: line.parentCode ? 32 : 12 }}
-        >
-          {line.code}
-        </td>
-        <td className="px-3 py-1.5">{line.name}</td>
-        <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(line.amount)}</td>
-      </tr>
-    );
-  }
-
-  function TotalRow({ label, amount, bold = true }: { label: string; amount: number; bold?: boolean }) {
-    return (
-      <tr className="border-t bg-muted/30">
-        <td colSpan={2} className={`px-3 py-2 ${bold ? "font-semibold" : ""}`}>
-          {label}
-        </td>
-        <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${bold ? "font-semibold" : ""}`}>
-          {RM(amount)}
-        </td>
-      </tr>
-    );
-  }
-
-  function SectionHeader({ label }: { label: string }) {
-    return (
-      <tr>
-        <td colSpan={3} className="bg-muted/50 px-3 py-1.5 text-xs uppercase tracking-wide text-muted-foreground">
-          {label}
-        </td>
-      </tr>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -144,16 +147,16 @@ function PnlTab() {
             </thead>
             <tbody>
               <SectionHeader label="Income" />
-              {data.report.income.lines.map((l) => <ReportRow key={l.code} line={l} />)}
+              {data.report.income.lines.map((l) => <ReportRow key={l.code} line={l} onDrill={setDrillCode} />)}
               <TotalRow label="Total Income" amount={data.report.income.total} />
 
               <SectionHeader label="Cost of Sales" />
-              {data.report.cogs.lines.map((l) => <ReportRow key={l.code} line={l} />)}
+              {data.report.cogs.lines.map((l) => <ReportRow key={l.code} line={l} onDrill={setDrillCode} />)}
               <TotalRow label="Total COGS" amount={data.report.cogs.total} />
               <TotalRow label="Gross Profit" amount={data.report.grossProfit} />
 
               <SectionHeader label="Expenses" />
-              {data.report.expenses.lines.map((l) => <ReportRow key={l.code} line={l} />)}
+              {data.report.expenses.lines.map((l) => <ReportRow key={l.code} line={l} onDrill={setDrillCode} />)}
               <TotalRow label="Total Expenses" amount={data.report.expenses.total} />
 
               <TotalRow label="Net Income" amount={data.report.netIncome} />

@@ -385,7 +385,7 @@ function MysteryModal({
             </Field>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={birthdayBoost} onChange={(e) => setBirthdayBoost(e.target.checked)} />
-              <span className="text-sm">Double weight in customer's birthday month</span>
+              <span className="text-sm">Double weight in customer&apos;s birthday month</span>
             </label>
           </div>
 
@@ -423,7 +423,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <Sparkles className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
       <h3 className="font-medium mb-1">No outcomes yet</h3>
       <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
-        Add reveal outcomes to start showing Mystery Reward cards on order confirmation. We recommend at least one "no bonus" outcome at 50%+ weight to make wins feel like wins.
+        Add reveal outcomes to start showing Mystery Reward cards on order confirmation. We recommend at least one &quot;no bonus&quot; outcome at 50%+ weight to make wins feel like wins.
       </p>
       <button onClick={onCreate} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-foreground text-background text-sm font-medium">
         <Plus className="w-4 h-4" /> Add first outcome

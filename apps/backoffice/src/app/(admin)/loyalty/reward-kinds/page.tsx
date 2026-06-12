@@ -48,14 +48,14 @@ export default function RewardKindsPage() {
         </h1>
         <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
           The five fundamental reward shapes the engagement engine understands. Mystery Pool,
-          Challenges, Birthday Treats, and Admin Claimables all pull their "what kind of reward is
-          this?" dropdowns from this list. Set a colour + illustration here to override the default
+          Challenges, Birthday Treats, and Admin Claimables all pull their &quot;what kind of reward is
+          this?&quot; dropdowns from this list. Set a colour + illustration here to override the default
           card theme on the native rewards screen.
           <br />
           <span className="text-xs text-muted-foreground/80">
-            <strong>id</strong> values are referenced by the discount + reveal engines and aren't editable here.
+            <strong>id</strong> values are referenced by the discount + reveal engines and aren&apos;t editable here.
             Labels, descriptions, sort order, visuals, and active flag are safe to change without a deploy.
-            Adding a brand-new behaviour (e.g. "Time Travel Token") still needs a code change.
+            Adding a brand-new behaviour (e.g. &quot;Time Travel Token&quot;) still needs a code change.
           </span>
         </p>
       </div>

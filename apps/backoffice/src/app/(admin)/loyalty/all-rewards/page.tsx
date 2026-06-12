@@ -37,7 +37,6 @@ const DISCOUNT_META: Record<string, { label: string; className: string }> = {
   flat:              { label: "Flat — RM off",       className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   percent:           { label: "Percent",             className: "bg-orange-50  text-orange-700  border-orange-200" },
   free_item:         { label: "Free item",           className: "bg-amber-50   text-amber-800   border-amber-200" },
-  free_upgrade:      { label: "Free upgrade",        className: "bg-amber-50   text-amber-800   border-amber-200" },
   bogo:              { label: "BOGO",                className: "bg-yellow-50  text-yellow-700  border-yellow-200" },
   combo:             { label: "Combo",               className: "bg-yellow-50  text-yellow-700  border-yellow-200" },
   override_price:    { label: "Override price",      className: "bg-rose-50    text-rose-700    border-rose-200" },
@@ -49,7 +48,7 @@ const TRIGGER_ORDER: TriggerType[] = [
   "points_shop", "mission", "mystery", "birthday", "tier_upgrade", "admin_push", "manual_grant",
 ];
 const DISCOUNT_ORDER = [
-  "flat", "percent", "free_item", "free_upgrade", "bogo", "combo", "override_price", "beans_multiplier",
+  "flat", "percent", "free_item", "bogo", "combo", "override_price", "beans_multiplier",
 ];
 
 const STATUS_OPTIONS = [
@@ -79,7 +78,6 @@ function formatDiscount(r: RewardRow): string {
   if (dt === "flat" && v != null) bits.push(`flat · ${v}¢`);
   else if (dt === "percent" && v != null) bits.push(`percent · ${v}%`);
   else if (dt === "free_item")    bits.push("free_item");
-  else if (dt === "free_upgrade") bits.push("free_upgrade");
   else if (dt === "bogo")         bits.push(`bogo · ${r.bogo_buy_qty ?? 1}+${r.bogo_free_qty ?? 1}`);
   else if (dt === "combo")        bits.push("combo");
   else if (dt === "override_price") bits.push("override_price");

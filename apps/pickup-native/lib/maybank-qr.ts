@@ -58,7 +58,7 @@ export function useMaybankQrConfig(): MaybankQrConfig | null {
   // order/[id]); a shared fixed topic made supabase-js attach the
   // postgres_changes listener to an already-subscribed channel and throw
   // "cannot add `postgres_changes` callbacks ... after `subscribe()`".
-  const topicRef = useRef<string>();
+  const topicRef = useRef<string | undefined>(undefined);
   if (!topicRef.current) {
     topicRef.current = `maybank-qr-customer-${Math.random().toString(36).slice(2, 10)}`;
   }

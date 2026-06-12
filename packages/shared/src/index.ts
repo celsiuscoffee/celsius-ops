@@ -188,3 +188,9 @@ export function getStockUrgency(
   if (currentStock < reorderPoint) return "RESTOCK_SOON";
   return "OK";
 }
+
+// ─── Sentry secret scrubbing ─────────────────────────
+export { scrubSecrets, scrubSentryEvent } from "./sentry-scrub";
+
+// ─── Startup env validation ─────────────────────────
+export { validateEnv, formatEnvReport, checkEnvAtBoot, type EnvSpec, type EnvProblems } from "./env";

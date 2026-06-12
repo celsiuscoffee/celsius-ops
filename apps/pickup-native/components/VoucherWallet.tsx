@@ -60,7 +60,6 @@ function mapDiscountType(
 ): AppliedReward["discount_type"] {
   switch (t) {
     case "free_item":         return "free_item";
-    case "free_upgrade":      return "free_item";  // add-on = free pick
     case "flat":              return "flat";
     case "percent":           return "percent";
     case "beans_multiplier":  return "none";       // applied post-payment

@@ -416,6 +416,11 @@ model Order {
   items      OrderItem[]
   receivings Receiving[]
   invoices   Invoice[]
+
+  // Both verified live (pg_indexes, 2026-06-12) — they predate this
+  // declaration (applied directly to the DB, previously unrecorded).
+  @@index([outletId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
 }
 
 enum OrderType {
@@ -539,6 +544,12 @@ model Invoice {
 
   @@unique([supplierId, invoiceNumber])
   @@index([aiPrefilledAt])
+  // Both verified live (pg_indexes, 2026-06-12) — they predate this
+  // declaration (applied directly to the DB, previously unrecorded).
+  // Live also has a partial index Invoice_paidAt_idx (paidAt WHERE
+  // paidAt IS NOT NULL) that Prisma's schema language can't express.
+  @@index([outletId])
+  @@index([status, dueDate])
 }
 
 // Groups staff-claim invoices for single-transfer reimbursement.

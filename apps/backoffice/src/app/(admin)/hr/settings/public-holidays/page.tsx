@@ -122,7 +122,7 @@ export default function PublicHolidaysPage() {
       <p className="text-sm text-muted-foreground">
         Public holidays drive OT pay (3x rate on PH), leave calc (PH falling on
         weekday counts), and the schedule grid colouring. Add nationwide holidays
-        without a state; state-specific (e.g. Selangor's Sultan birthday) with the
+        without a state; state-specific (e.g. Selangor&apos;s Sultan birthday) with the
         state set.
       </p>
 
@@ -163,7 +163,7 @@ export default function PublicHolidaysPage() {
       {holidays.length === 0 ? (
         <p className="rounded-lg border bg-muted/10 p-12 text-center text-sm text-muted-foreground">
           No public holidays configured for {year}. Add the nationwide ones first
-          (Awal Tahun, Thaipusam, Labour Day, Wesak, Agong's Birthday, Hari Raya, Merdeka, Malaysia Day, Deepavali, Christmas).
+          (Awal Tahun, Thaipusam, Labour Day, Wesak, Agong&apos;s Birthday, Hari Raya, Merdeka, Malaysia Day, Deepavali, Christmas).
         </p>
       ) : (
         <div className="space-y-4">

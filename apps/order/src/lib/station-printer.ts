@@ -163,7 +163,7 @@ function formatDocket(order: OrderLite, station: string, items: OrderItemLite[])
     const mods = item.modifiers;
     if (Array.isArray(mods) && mods.length > 0) {
       const modNames = mods
-        .map((m: any) => m.option?.name ?? m.name ?? "")
+        .map((m: { option?: { name?: string }; name?: string }) => m.option?.name ?? m.name ?? "")
         .filter(Boolean);
       if (modNames.length > 0) lines.push(`   ${modNames.join(", ")}`);
     }
@@ -254,7 +254,6 @@ export async function printOrderToStationPrinters(
     const config = docketConfigs.find(
       (c) => (c.station ?? "").toLowerCase() === station.toLowerCase(),
     );
-    // eslint-disable-next-line no-await-in-loop
     const ok = await postToBridge(station, text, config?.ip_address ?? null, config?.port ?? null);
     if (ok) anySent = true;
   }

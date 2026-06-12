@@ -50,7 +50,7 @@ export default function BirthdayPage() {
           Birthday Treats
         </h1>
         <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-          Daily cron drops the selected voucher into a customer's wallet on their birthday.
+          Daily cron drops the selected voucher into a customer&apos;s wallet on their birthday.
           Idempotent — one voucher per year per member. Mystery Reward reveals also boost during
           birthday month if you set that flag on a mystery pool entry.
         </p>

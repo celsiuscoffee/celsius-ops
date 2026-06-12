@@ -10,7 +10,7 @@ async function fetchAllRows<T>(
   const PAGE_SIZE = 1000;
   const all: T[] = [];
   let offset = 0;
-  // eslint-disable-next-line no-constant-condition
+   
   while (true) {
     const { data, error } = await queryFn(offset, offset + PAGE_SIZE - 1);
     if (error || !data) break;

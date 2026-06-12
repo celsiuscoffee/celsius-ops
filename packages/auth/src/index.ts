@@ -18,6 +18,9 @@ export { COOKIE_NAME, SESSION_MAX_AGE } from "./constants";
 // JWT
 export { createToken, verifyToken, verifyTokenWithFreshness } from "./jwt";
 
+// Server-to-server tokens (scoped, short-lived)
+export { createServiceToken, verifyServiceToken } from "./service-token";
+
 // Session (requires next/headers — use in Server Components / Route Handlers)
 export { createSession, getSession, clearSession } from "./session";
 

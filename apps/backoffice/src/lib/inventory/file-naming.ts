@@ -39,7 +39,7 @@ function getPayee(inv: InvoiceForNaming): string {
 
 function getAmount(inv: InvoiceForNaming): string {
   const n = typeof inv.amount === "object" && inv.amount && "toFixed" in inv.amount
-    ? Number((inv.amount as any).toString())
+    ? Number(String(inv.amount))
     : Number(inv.amount);
   return n.toFixed(2);
 }

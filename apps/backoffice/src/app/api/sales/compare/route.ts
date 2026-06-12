@@ -3,17 +3,11 @@ import { getSession, verifyToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeProjection } from "@/lib/sales/projection";
 import {
-  ROUNDS,
-  type RoundKey,
-  getMYTHour,
-  getMYTDateStr,
-  getRound,
-  getDateRange,
-  emptyChannelData,
-  addToChannel,
-  roundChannel,
-  roundChannelData,
-} from "../_lib/storehub-helpers";
+  bucketEventsIntoPeriods,
+  aggregatePeriod,
+  formatPeriodLabel,
+  type CompareEvent,
+} from "../_lib/period-aggregation";
 import { getUnifiedSalesForOutlet } from "../_lib/unified-sales";
 
 // ─── GET /api/sales/compare ──────────────────────────────────────────────
@@ -90,10 +84,6 @@ export async function GET(request: NextRequest) {
 
     const warnings: string[] = [];
 
-    // Period buckets to fill.
-    const periodBuckets: { from: string; to: string; txns: { total: number; hour: number; dateStr: string; channel: "dine_in" | "takeaway" | "delivery" }[] }[] =
-      periodPairs.map((pp) => ({ from: pp.from, to: pp.to, txns: [] }));
-
     // Fetch each outlet's sales once across the global span from the unified source
     // (StoreHub archive + live-today, POS-native, pickup app), then bucket per period.
     const globalFromDate = new Date(globalFrom + "T00:00:00+08:00");
@@ -116,6 +106,7 @@ export async function GET(request: NextRequest) {
       ),
     );
 
+    const events: CompareEvent[] = [];
     for (const result of outletResults) {
       if (result.status === "rejected") {
         const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
@@ -123,87 +114,18 @@ export async function GET(request: NextRequest) {
         warnings.push(msg);
         continue;
       }
-      for (const ev of result.value) {
-        const dateStr = getMYTDateStr(ev.ts);
-        const hour = getMYTHour(ev.ts);
-        for (const bucket of periodBuckets) {
-          if (dateStr >= bucket.from && dateStr <= bucket.to) {
-            bucket.txns.push({ total: ev.total, hour, dateStr, channel: ev.channel });
-          }
-        }
-      }
+      for (const ev of result.value) events.push(ev);
     }
+
+    // Pure aggregation — see _lib/period-aggregation (characterized by
+    // its test suite; the SQL data-layer swap is gated on those tests).
+    const periodBuckets = bucketEventsIntoPeriods(events, periodPairs);
 
     // Outlets we actually have data for — projection lib takes the IDs.
     const outletIdsForProjection = outlets.map((o) => o.id);
 
     // Build response for each period (async because projection compute hits the DB)
     const periods = await Promise.all(periodBuckets.map(async (bucket) => {
-      const dates = getDateRange(bucket.from, bucket.to);
-
-      // Summary
-      let revenue = 0;
-      let orders = 0;
-
-      // Per-round data
-      const roundData: Record<RoundKey, { revenue: number; orders: number; channels: ReturnType<typeof emptyChannelData> }> = {} as any;
-      for (const r of ROUNDS) {
-        roundData[r.key] = { revenue: 0, orders: 0, channels: emptyChannelData() };
-      }
-
-      // Daily totals
-      const dailyMap: Record<string, { revenue: number; orders: number }> = {};
-      // Daily per-round totals
-      const dailyRoundMap: Record<string, Record<RoundKey, { revenue: number; orders: number }>> = {};
-      for (const d of dates) {
-        dailyMap[d] = { revenue: 0, orders: 0 };
-        dailyRoundMap[d] = {} as Record<RoundKey, { revenue: number; orders: number }>;
-        for (const r of ROUNDS) {
-          dailyRoundMap[d][r.key] = { revenue: 0, orders: 0 };
-        }
-      }
-
-      // Channel totals
-      const channels = emptyChannelData();
-
-      for (const txn of bucket.txns) {
-        revenue += txn.total;
-        orders += 1;
-
-        addToChannel(channels, txn.channel, txn.total);
-
-        if (dailyMap[txn.dateStr]) {
-          dailyMap[txn.dateStr].revenue += txn.total;
-          dailyMap[txn.dateStr].orders += 1;
-        }
-
-        const round = getRound(txn.hour);
-        if (round && roundData[round]) {
-          roundData[round].revenue += txn.total;
-          roundData[round].orders += 1;
-          addToChannel(roundData[round].channels, txn.channel, txn.total);
-
-          if (dailyRoundMap[txn.dateStr]?.[round]) {
-            dailyRoundMap[txn.dateStr][round].revenue += txn.total;
-            dailyRoundMap[txn.dateStr][round].orders += 1;
-          }
-        }
-      }
-
-      // Hourly buckets (for the accumulative overlay chart). For single-day
-      // periods the client renders these as a cumulative line by hour; for
-      // multi-day periods it falls back to a daily cumulative line.
-      const hourly = Array.from({ length: 24 }, () => ({ revenue: 0, orders: 0 }));
-      for (const txn of bucket.txns) {
-        if (txn.hour >= 0 && txn.hour <= 23) {
-          hourly[txn.hour].revenue += txn.total;
-          hourly[txn.hour].orders += 1;
-        }
-      }
-
-      // Format label
-      const label = formatPeriodLabel(bucket.from, bucket.to);
-
       // Projection — only computed when today falls inside the period.
       // Reads from local SalesTransaction (last 28 days + same-period
       // last month) so it's a fast addition, not a StoreHub round-trip.
@@ -221,41 +143,9 @@ export async function GET(request: NextRequest) {
       return {
         from: bucket.from,
         to: bucket.to,
-        label,
+        label: formatPeriodLabel(bucket.from, bucket.to),
         projection,
-        summary: {
-          revenue: Math.round(revenue * 100) / 100,
-          orders,
-          aov: orders > 0 ? Math.round((revenue / orders) * 100) / 100 : 0,
-        },
-        rounds: ROUNDS.map((r) => {
-          const rd = roundData[r.key];
-          const ch = roundChannelData(rd.channels);
-          return {
-            key: r.key,
-            label: r.label,
-            revenue: Math.round(rd.revenue * 100) / 100,
-            orders: rd.orders,
-            aov: rd.orders > 0 ? Math.round((rd.revenue / rd.orders) * 100) / 100 : 0,
-            channels: ch,
-          };
-        }),
-        channels: roundChannelData(channels),
-        hourly: hourly.map((b, h) => ({
-          hour: h,
-          revenue: Math.round(b.revenue * 100) / 100,
-          orders: b.orders,
-        })),
-        dailyTotals: dates.map((d) => ({
-          date: d,
-          revenue: Math.round((dailyMap[d]?.revenue || 0) * 100) / 100,
-          orders: dailyMap[d]?.orders || 0,
-          rounds: ROUNDS.map((r) => ({
-            key: r.key,
-            revenue: Math.round((dailyRoundMap[d]?.[r.key]?.revenue || 0) * 100) / 100,
-            orders: dailyRoundMap[d]?.[r.key]?.orders || 0,
-          })),
-        })),
+        ...aggregatePeriod(bucket),
       };
     }));
 
@@ -275,30 +165,4 @@ export async function GET(request: NextRequest) {
     console.error("[sales/compare] Error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-}
-
-function formatPeriodLabel(from: string, to: string): string {
-  const f = new Date(from + "T12:00:00+08:00");
-  const t = new Date(to + "T12:00:00+08:00");
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-  if (from === to) {
-    // Single day: "Mon 7 Apr"
-    return `${days[f.getDay()]} ${f.getDate()} ${months[f.getMonth()]}`;
-  }
-
-  // Check if it's a full month
-  const fDate = f.getDate();
-  const tDate = t.getDate();
-  const lastDay = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
-  if (fDate === 1 && tDate === lastDay && f.getMonth() === t.getMonth()) {
-    return `${months[f.getMonth()]} ${f.getFullYear()}`;
-  }
-
-  // Range: "7-13 Apr" or "28 Mar - 3 Apr"
-  if (f.getMonth() === t.getMonth()) {
-    return `${f.getDate()}-${t.getDate()} ${months[f.getMonth()]}`;
-  }
-  return `${f.getDate()} ${months[f.getMonth()]} - ${t.getDate()} ${months[t.getMonth()]}`;
 }

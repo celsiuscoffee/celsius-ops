@@ -27,7 +27,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [backoffice, staff, order, loyalty]
+        # staff-native is an Expo app but lives in the npm workspace, so
+        # the root npm ci covers it — no per-app install needed.
+        app: [backoffice, staff, order, loyalty, pickup, staff-native]
     env:
       DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
       DIRECT_URL: "postgresql://fake:fake@localhost:5432/fake"
@@ -56,20 +58,68 @@ jobs:
       # tsconfig.json paths resolve correctly.
       - run: cd apps/${{ matrix.app }} && npx tsc --noEmit
 
-  # Lint every app. Advisory only (continue-on-error) until the
-  # backlog of pre-existing lint warnings is cleaned up. The
-  # `--max-warnings 0` strict mode would block every PR right now
-  # because the order app has 30 pre-existing react-hooks /
-  # unescaped-entities errors; tracking that as separate cleanup
-  # work. `next lint` is deprecated in Next 16 so we use eslint
-  # directly.
-  lint:
+  # Typecheck the Expo apps still OUTSIDE the npm workspaces (each has
+  # its own package-lock.json), so they need their own install step.
+  # As apps migrate into the workspace (staff-native done — see
+  # docs/architecture-restructure-plan.md Phase 2) they move to the
+  # `typecheck` matrix above. The EAS/OTA workflows build these apps
+  # with no pre-build validation — this job is the only gate between
+  # a TS error and a broken till build.
+  typecheck-native:
     runs-on: ubuntu-latest
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
-        app: [backoffice, staff, order, loyalty]
+        app: [pos-native, pickup-native]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/${{ matrix.app }}/package-lock.json
+      - run: cd apps/${{ matrix.app }} && npm ci
+      - run: cd apps/${{ matrix.app }} && npx tsc --noEmit
+
+  # Schema drift guard. packages/db/prisma/schema.prisma is the
+  # source of truth, but the database is changed via manually-applied
+  # SQL saved under packages/db/prisma/migrations/ (see
+  # docs/database-migrations.md). Fail any PR that edits the schema
+  # without committing a matching migration file, so the audit trail
+  # can't silently drift.
+  migration-guard:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require migration file alongside schema.prisma changes
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          CHANGED=$(git diff --name-only "$BASE"...HEAD)
+          if echo "$CHANGED" | grep -q '^packages/db/prisma/schema\.prisma$'; then
+            if ! echo "$CHANGED" | grep -q '^packages/db/prisma/migrations/'; then
+              echo "::error::schema.prisma changed but no migration file was added under packages/db/prisma/migrations/."
+              echo "See docs/database-migrations.md for the workflow (prisma migrate diff -> save SQL -> commit both)."
+              exit 1
+            fi
+          fi
+          echo "Migration guard passed."
+
+  # Lint — BLOCKING for all four web apps (each at 0 errors).
+  # pickup is excluded — the Capacitor shell has no eslint deps.
+  # Errors block; warnings don't (set-state-in-effect / purity are
+  # deliberately warn-level — see the per-app eslint.config.mjs).
+  # Legacy `any` sites carry "ratchet" disable markers — reduce them,
+  # never add (grep for "ratchet: reduce, never add" for the count).
+  # `next lint` is deprecated in Next 16 so we use eslint directly.
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [order, loyalty, staff, backoffice]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -77,7 +127,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: cd apps/${{ matrix.app }} && npx eslint . || true
+      - run: cd apps/${{ matrix.app }} && npx eslint .
 
   # Production build for every Next.js app. Catches build-time
   # errors (server actions, route configs, missing env types) that
@@ -89,7 +139,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [backoffice, staff, order, loyalty]
+        app: [backoffice, staff, order, loyalty, pickup]
     env:
       DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
       DIRECT_URL: "postgresql://fake:fake@localhost:5432/fake"

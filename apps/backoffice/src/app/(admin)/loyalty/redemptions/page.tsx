@@ -26,16 +26,17 @@ export default function AdminRedemptionsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  useEffect(() => {
-    loadRedemptions();
-  }, []);
-
   const loadRedemptions = async () => {
     setLoading(true);
     const data = await fetchAllRedemptions();
     setRedemptions(data);
     setLoading(false);
   };
+
+  useEffect(() => {
+    loadRedemptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = redemptions.filter((r) => {
     // Status filter

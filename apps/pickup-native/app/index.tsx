@@ -1573,9 +1573,6 @@ function describeVoucherTicket(v: Voucher): TicketDescriptor {
   } else if (v.discount_type === "free_item") {
     if (v.source_type === "birthday") headline = "Free drink";
     else if (v.category === "free_item") headline = "Free drink";
-  } else if (v.discount_type === "free_upgrade") {
-    eyebrow = "Add-on";
-    headline = "Free add-on";
   } else if (v.discount_type === "beans_multiplier") {
     // "2× Points" rather than "2× Points Boost" — the second word wraps
     // a 144-wide top stub at 19pt Peachi and tips the card taller than

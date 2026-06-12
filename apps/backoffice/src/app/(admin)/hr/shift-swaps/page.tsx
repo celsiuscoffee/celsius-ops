@@ -126,13 +126,13 @@ export default function ShiftSwapsPage() {
 
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                 <div className="rounded border p-2">
-                  <div className="font-medium text-gray-600">{r.requester_name}'s shift</div>
+                  <div className="font-medium text-gray-600">{r.requester_name}&apos;s shift</div>
                   {r.requester_shift ? (
                     <div className="mt-1 font-mono">{r.requester_shift.shift_date} · {r.requester_shift.start_time}–{r.requester_shift.end_time}</div>
                   ) : <div className="mt-1 italic text-red-600">Shift no longer exists</div>}
                 </div>
                 <div className="rounded border p-2">
-                  <div className="font-medium text-gray-600">{r.target_name}'s shift</div>
+                  <div className="font-medium text-gray-600">{r.target_name}&apos;s shift</div>
                   {r.target_shift ? (
                     <div className="mt-1 font-mono">{r.target_shift.shift_date} · {r.target_shift.start_time}–{r.target_shift.end_time}</div>
                   ) : <div className="mt-1 italic text-red-600">Shift no longer exists</div>}

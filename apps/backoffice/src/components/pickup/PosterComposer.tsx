@@ -831,7 +831,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                 {generating ? "Generating…" : "Generate with AI"}
               </button>
               <p className="mt-1.5 text-[10px] text-gray-400">
-                AI promotes the strongest part of your objective (an offer like "10% off") to the headline, picks supporting subhead lines, and chooses tint + text colours that contrast with the image — while dodging the C-logo, cart and info-card zones.
+                AI promotes the strongest part of your objective (an offer like &quot;10% off&quot;) to the headline, picks supporting subhead lines, and chooses tint + text colours that contrast with the image — while dodging the C-logo, cart and info-card zones.
               </p>
             </div>
           </div>

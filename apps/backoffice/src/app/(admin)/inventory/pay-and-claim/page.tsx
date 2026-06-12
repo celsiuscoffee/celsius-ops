@@ -321,7 +321,7 @@ export default function PayAndClaimPage() {
 
     // Parse AI hints from notes if JSON
     let aiHints: Record<string, string> = {};
-    let aiFields: Record<string, boolean> = {};
+    const aiFields: Record<string, boolean> = {};
     let userNotes = claim.notes ?? "";
     try {
       const parsed = JSON.parse(claim.notes ?? "");

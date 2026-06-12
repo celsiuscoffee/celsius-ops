@@ -59,14 +59,14 @@ export default function SupportPage() {
           <Faq q="I didn't receive my OTP code">
             OTP codes are sent by SMS and usually arrive within 30 seconds. Check signal, wait a minute, then tap Resend code. If still nothing, email us with your phone number.
           </Faq>
-          <Faq q="My order didn't go through">
-            If your payment was charged but the order didn't appear, show your bank notification to a barista at the outlet — they can manually fulfil or refund. For failed payments, no money was taken; just try again.
+          <Faq q="My order didn&apos;t go through">
+            If your payment was charged but the order didn&apos;t appear, show your bank notification to a barista at the outlet — they can manually fulfil or refund. For failed payments, no money was taken; just try again.
           </Faq>
           <Faq q="My loyalty points are missing">
-            Points are awarded after the order is marked complete by outlet staff. If they don't show up after 24 hours, email us with your phone number and visit details and we'll credit them manually.
+            Points are awarded after the order is marked complete by outlet staff. If they don&apos;t show up after 24 hours, email us with your phone number and visit details and we&apos;ll credit them manually.
           </Faq>
           <Faq q="How do I redeem a reward?">
-            Go to the Rewards tab, tap Apply on the reward you want — it'll be applied at checkout. Show the barista the order on pickup; the discount is automatic.
+            Go to the Rewards tab, tap Apply on the reward you want — it&apos;ll be applied at checkout. Show the barista the order on pickup; the discount is automatic.
           </Faq>
           <Faq q="How do I update my profile?">
             Account → tap your profile to edit name, email, birthday. To change phone, email barista@celsiuscoffee.com from your registered email — phone changes need extra verification.

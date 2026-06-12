@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { createToken, verifyPin, hashPin, COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/pos-auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 
@@ -106,7 +107,7 @@ async function evaluateScheduleGate(userId: string, role: string, outletId: stri
  *  land in the PIN candidate set (without this, only null-outlet owners/managers
  *  matched and outlet baristas couldn't sign in). Returns null when the input is
  *  already a UUID / unmapped — the caller keeps the original value alongside. */
-async function resolveOutletUuid(prisma: any, outletId: string | null | undefined): Promise<string | null> {
+async function resolveOutletUuid(prisma: PrismaClient, outletId: string | null | undefined): Promise<string | null> {
   if (!outletId) return null;
   try {
     const rows = await prisma.$queryRaw<{ id: string }[]>`
@@ -128,12 +129,13 @@ async function resolveManagerOverride(
   try {
     const { prisma } = await import("@/lib/prisma");
     const outletUuid = await resolveOutletUuid(prisma, outletId);
-    const where: any = {
+    const where: Prisma.UserWhereInput = {
       pin: { not: null }, status: "ACTIVE", role: { in: ["OWNER", "ADMIN", "MANAGER"] },
     };
     if (outletId) {
-      where.OR = [{ outletId: null }, { outletId }];
-      if (outletUuid) where.OR.push({ outletId: outletUuid });
+      const or: Prisma.UserWhereInput[] = [{ outletId: null }, { outletId }];
+      if (outletUuid) or.push({ outletId: outletUuid });
+      where.OR = or;
     }
     candidates = await prisma.user.findMany({ where, select: { id: true, name: true, pin: true } });
   } catch {
@@ -181,6 +183,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Scope to outlet if provided — prevents cross-outlet PIN collisions
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     let candidates: any[] = [];
     try {
       const { prisma } = await import("@/lib/prisma");
@@ -191,10 +194,11 @@ export async function POST(req: NextRequest) {
       // Cross-outlet roles (outletId IS NULL) always match; the duplicate-PIN
       // guard below still catches collisions across the merged set.
       const outletUuid = await resolveOutletUuid(prisma, outletId);
-      const where: any = { pin: { not: null }, status: "ACTIVE" };
+      const where: Prisma.UserWhereInput = { pin: { not: null }, status: "ACTIVE" };
       if (outletId) {
-        where.OR = [{ outletId: null }, { outletId }];
-        if (outletUuid) where.OR.push({ outletId: outletUuid });
+        const or: Prisma.UserWhereInput[] = [{ outletId: null }, { outletId }];
+        if (outletUuid) or.push({ outletId: outletUuid });
+        where.OR = or;
       }
       candidates = await prisma.user.findMany({
         where,

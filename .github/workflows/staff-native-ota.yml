@@ -37,7 +37,11 @@ jobs:
         with:
           node-version: 20
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        # staff-native is an npm workspace now — install runs at the repo
+        # root so hoisting/symlinks match local dev and CI. eas update
+        # below still runs from apps/staff-native (working-directory).
+        working-directory: .
+        run: npm ci --no-audit --no-fund
       - name: Publish OTA update (production channel)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
