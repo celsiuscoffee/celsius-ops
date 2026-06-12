@@ -29,7 +29,7 @@ export default function StaffLoginPage() {
 
   useEffect(() => {
     if (getSession()) {
-      router.replace("/staff/kds");
+      router.replace("/staff/availability");
     } else {
       setChecking(false);
     }
@@ -77,7 +77,7 @@ export default function StaffLoginPage() {
         const store = stores.find((s) => s.id === storeId) ?? { name: storeId };
         const resolvedStoreName = data.storeName ?? store.name;
         saveSession(storeId, resolvedStoreName, data.staffName ?? null, data.staffId ?? null);
-        router.replace("/staff/kds");
+        router.replace("/staff/availability");
       } else {
         setError(data.error ?? "Incorrect PIN");
         setPin("");
