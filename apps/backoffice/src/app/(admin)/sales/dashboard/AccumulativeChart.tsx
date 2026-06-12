@@ -71,6 +71,11 @@ function round2(v: number): number {
 const CUR_COLOR = "#F97316"; // orange — current period
 const PREV_COLOR = "#3B82F6"; // blue — previous period
 
+// Day view starts at 7am — outlets open ~7am, so 00:00–06:00 is a flat dead
+// zone. Cumulative totals still accumulate from midnight; we just don't plot
+// the pre-open hours, so the 07:00 point includes anything booked before 7am.
+const DAY_START_HOUR = 7;
+
 const MODE_META: Record<Mode, { cur: string; prev: string }> = {
   day: { cur: "Today", prev: "Yesterday" },
   week: { cur: "This Week", prev: "Last Week" },
@@ -138,12 +143,14 @@ export function AccumulativeChart({ outletId }: { outletId: string }) {
     if (mode === "day") {
       const nowHour = mytHourNow();
       let cc = 0, pc = 0;
-      chartData = Array.from({ length: 24 }, (_, h) => {
+      const full = Array.from({ length: 24 }, (_, h) => {
         pc += pick(prev.hourly[h] ?? { revenue: 0, orders: 0 });
         let current: number | null = null;
         if (h <= nowHour) { cc += pick(cur.hourly[h] ?? { revenue: 0, orders: 0 }); current = round2(cc); }
         return { label: `${String(h).padStart(2, "0")}:00`, current, previous: round2(pc) };
       });
+      // Plot from 7am — cumulative carried over from the (≈0) pre-open hours.
+      chartData = full.slice(DAY_START_HOUR);
     } else {
       // Week/Month: cumulative by day, aligned by day index (weekday / day-of-month).
       let cc = 0, pc = 0;
