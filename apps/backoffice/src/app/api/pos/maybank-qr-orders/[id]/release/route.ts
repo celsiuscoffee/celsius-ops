@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createServiceToken } from "@celsius/auth";
 import { requireAuth } from "@/lib/auth";
 
 const ORDER_APP_BASE = (
@@ -17,8 +18,10 @@ const ORDER_APP_BASE = (
  * matching reference path.
  *
  * This route just authenticates the staff click in backoffice and
- * forwards to the order app with the shared service-role key (both
- * apps already have it as SUPABASE_SERVICE_ROLE_KEY).
+ * forwards to the order app with a short-lived scoped service token
+ * (signed with the JWT_SECRET both apps share). The service-role key
+ * must never transit in headers — one proxy log or Sentry breadcrumb
+ * away from a full database compromise.
  */
 export async function POST(
   request: NextRequest,
@@ -30,22 +33,15 @@ export async function POST(
   const { id } = await params;
   if (!id) return NextResponse.json({ error: "Missing order id" }, { status: 400 });
 
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!serviceKey) {
-    return NextResponse.json(
-      { error: "SUPABASE_SERVICE_ROLE_KEY not configured on backoffice" },
-      { status: 500 },
-    );
-  }
-
   try {
+    const serviceToken = await createServiceToken("order.confirm-maybank-qr");
     const res = await fetch(
       `${ORDER_APP_BASE}/api/orders/${encodeURIComponent(id)}/confirm-maybank-qr`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-service-key": serviceKey,
+          Authorization: `Bearer ${serviceToken}`,
           Origin: ORDER_APP_BASE,
           Referer: ORDER_APP_BASE + "/",
         },

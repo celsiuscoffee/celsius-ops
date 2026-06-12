@@ -233,10 +233,22 @@ export default function PickupDashboard() {
 
   useEffect(() => {
     const supabase = getSupabaseClient();
+    // HQ view — deliberately unfiltered (all outlets). But realtime fires
+    // once per ROW change (an order placement = insert + item rows +
+    // status flips) and each reload is three API calls, so collapse
+    // bursts into one trailing reload instead of reloading per event.
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleReload = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { timer = null; loadPickupToday(); }, 2000);
+    };
     const channel  = supabase.channel("dashboard-orders")
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => loadPickupToday())
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleReload)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (timer) clearTimeout(timer);
+      supabase.removeChannel(channel);
+    };
   }, [loadPickupToday]);
 
   useEffect(() => {

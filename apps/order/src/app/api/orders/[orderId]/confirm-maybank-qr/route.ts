@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
+import { verifyServiceToken } from "@celsius/auth";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
 import { applyOrderV2Hooks } from "@/lib/loyalty/v2";
@@ -18,9 +19,13 @@ import { shouldHoldForScheduled } from "@/lib/revenue-monster/order-status";
  * with gateway-paid customers — the only difference is the upstream
  * trust check (Stripe's PaymentIntent ↔ a staff member's eyes).
  *
- * Auth: requires the Supabase service-role key in `x-service-key` since
- * the backoffice route already has it, the customer never sees this
- * endpoint, and there's no other natural shared secret between the apps.
+ * Auth: a short-lived scoped service token (Bearer) signed with the
+ * JWT_SECRET both apps share — see @celsius/auth createServiceToken.
+ * The legacy `x-service-key` (raw service-role key) is still accepted
+ * during the deploy transition; remove that branch once both apps run
+ * the token version. Accepting it grants nothing extra — anyone holding
+ * the service-role key already owns the database — the point of the
+ * migration is that backoffice stops SENDING it over the wire.
  */
 export async function POST(
   request: NextRequest,
@@ -31,10 +36,18 @@ export async function POST(
     return NextResponse.json({ error: "Missing orderId" }, { status: 400 });
   }
 
-  const expected = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  const provided = request.headers.get("x-service-key")?.trim() ?? "";
-  if (!expected || !provided || expected !== provided) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const bearer = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
+  const tokenOk = bearer
+    ? await verifyServiceToken(bearer, "order.confirm-maybank-qr")
+    : false;
+  if (!tokenOk) {
+    // Legacy transition path — see route doc above. Remove after both
+    // apps are deployed on the token flow.
+    const expected = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+    const provided = request.headers.get("x-service-key")?.trim() ?? "";
+    if (!expected || !provided || expected !== provided) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   try {
