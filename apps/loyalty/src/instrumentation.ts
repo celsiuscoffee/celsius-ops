@@ -1,7 +1,24 @@
 import * as Sentry from "@sentry/nextjs";
-import { scrubSentryEvent } from "@celsius/shared";
+import { checkEnvAtBoot, scrubSentryEvent } from "@celsius/shared";
 
 export function register() {
+  // Env check first. Development: throws on missing REQUIRED vars
+  // (fail fast on a bad .env). Production: logs one loud block and the
+  // report is forwarded to Sentry below — never fatal at runtime.
+  const envReport = checkEnvAtBoot("loyalty", {
+    required: [
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "JWT_SECRET",
+    ],
+    recommended: [
+      "SENTRY_DSN",
+      "SMS123_EMAIL",
+      "SMS123_API_KEY",
+    ],
+  });
+
   const dsn = process.env.SENTRY_DSN;
   if (!dsn) {
     // Deliberately loud: a prod deploy without a DSN means errors are
@@ -24,6 +41,8 @@ export function register() {
     beforeSend: (event) => scrubSentryEvent(event),
     beforeBreadcrumb: (breadcrumb) => scrubSentryEvent(breadcrumb),
   });
+
+  if (envReport) Sentry.captureMessage(envReport, "error");
 }
 
 export const onRequestError = Sentry.captureRequestError;

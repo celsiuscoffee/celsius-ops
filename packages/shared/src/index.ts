@@ -191,3 +191,6 @@ export function getStockUrgency(
 
 // ─── Sentry secret scrubbing ─────────────────────────
 export { scrubSecrets, scrubSentryEvent } from "./sentry-scrub";
+
+// ─── Startup env validation ─────────────────────────
+export { validateEnv, formatEnvReport, checkEnvAtBoot, type EnvSpec, type EnvProblems } from "./env";
