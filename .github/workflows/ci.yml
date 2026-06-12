@@ -27,7 +27,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [backoffice, staff, order, loyalty, pickup]
+        # staff-native is an Expo app but lives in the npm workspace, so
+        # the root npm ci covers it — no per-app install needed.
+        app: [backoffice, staff, order, loyalty, pickup, staff-native]
     env:
       DATABASE_URL: "postgresql://fake:fake@localhost:5432/fake"
       DIRECT_URL: "postgresql://fake:fake@localhost:5432/fake"
@@ -56,9 +58,11 @@ jobs:
       # tsconfig.json paths resolve correctly.
       - run: cd apps/${{ matrix.app }} && npx tsc --noEmit
 
-  # Typecheck the Expo native apps. They live outside the npm
-  # workspaces (each has its own package-lock.json), so they need
-  # their own install step. The EAS/OTA workflows build these apps
+  # Typecheck the Expo apps still OUTSIDE the npm workspaces (each has
+  # its own package-lock.json), so they need their own install step.
+  # As apps migrate into the workspace (staff-native done — see
+  # docs/architecture-restructure-plan.md Phase 2) they move to the
+  # `typecheck` matrix above. The EAS/OTA workflows build these apps
   # with no pre-build validation — this job is the only gate between
   # a TS error and a broken till build.
   typecheck-native:
@@ -66,7 +70,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [pos-native, staff-native, pickup-native]
+        app: [pos-native, pickup-native]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

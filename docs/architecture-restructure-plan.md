@@ -63,6 +63,26 @@ Risk: none (additive). Effort: ~2-3 days.
 Order: `staff-native` → `pickup-native` → `pos-native` (the till is
 business-critical; it goes last, after the pattern is proven).
 
+**staff-native: ✅ DONE (pending device smoke test).** Findings that
+de-risk the remaining two apps:
+
+- Metro needed ZERO config changes — Expo SDK 54's `expo/metro-config`
+  auto-detects the workspace root (watchFolders + nodeModulesPaths).
+- npm resolved the React split correctly on its own: react 19.1.0 +
+  react-native 0.81.5 hoisted to the root for staff-native; the web
+  apps' pinned react 19.2.4 nests in their own node_modules. Each app
+  sees exactly one React.
+- Validated in CI-like conditions: `tsc --noEmit` + a full
+  `expo export --platform android` Hermes bundle (8.3 MB) built from
+  the workspace cleanly.
+- CI: staff-native moved from `typecheck-native` (per-app install) to
+  the workspace `typecheck` matrix; the OTA workflow now installs at
+  the repo root. The OTA `paths` trigger deliberately ignores root
+  lockfile changes — dependency changes need a new binary, not an OTA.
+- **Still required before trusting store builds: one EAS preview build
+  + device smoke test (login, clock-in, stock count).** Bundling is
+  proven; on-device runtime is not.
+
 Per app:
 
 1. Add the app to root `workspaces`; delete its local `package-lock.json`

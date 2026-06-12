@@ -7,6 +7,7 @@
     "apps/order",
     "apps/pickup",
     "apps/staff",
+    "apps/staff-native",
     "packages/*"
   ],
   "scripts": {
