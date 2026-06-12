@@ -560,7 +560,11 @@ export async function POST(request: NextRequest) {
 
       if (loyaltyId) {
         if (pointsToEarn > 0) {
-          earnLoyaltyPoints(loyaltyId, order.id, pointsToEarn, order.store_id);
+          try {
+            await earnLoyaltyPoints(loyaltyId, order.id, pointsToEarn, order.store_id);
+          } catch (e) {
+            console.error(`[checkout] free-order earn failed for order=${order.id}`, e);
+          }
         }
         if (resolvedWalletVoucherId && !dropReward) {
           // Wallet voucher fully covered the bill (e.g. a Free Drink). There's
@@ -580,7 +584,11 @@ export async function POST(request: NextRequest) {
             console.error(`[checkout] free-order v2 hooks failed for order=${order.id}`, e);
           }
         } else if (rewardId && !dropReward) {
-          deductLoyaltyPoints(loyaltyId, rewardId, order.store_id);
+          try {
+            await deductLoyaltyPoints(loyaltyId, rewardId, order.store_id);
+          } catch (e) {
+            console.error(`[checkout] free-order deduct failed for order=${order.id}`, e);
+          }
         }
       }
 

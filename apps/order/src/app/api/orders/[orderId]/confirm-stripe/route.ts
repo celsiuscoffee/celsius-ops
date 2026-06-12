@@ -95,21 +95,28 @@ export async function POST(
 
     if (updated?.loyalty_id) {
       const outletId = updated.store_id as string;
-      if ((updated.loyalty_points_earned as number) > 0) {
-        earnLoyaltyPoints(updated.loyalty_id as string, orderId, updated.loyalty_points_earned as number, outletId);
-      }
-      if (updated.reward_id) {
-        deductLoyaltyPoints(updated.loyalty_id as string, updated.reward_id as string, outletId);
-      }
-
-      // Rewards v2 hooks — wallet voucher redemption, mission progress,
-      // mystery drop, referral payoff. Shared with the Stripe webhook
-      // + zero-pay route. Wrapped in after() so the response isn't
-      // blocked on Supabase.
       const loyaltyId = updated.loyalty_id as string;
+      const pointsEarned = (updated.loyalty_points_earned as number) ?? 0;
+      const rewardId = (updated.reward_id as string | null) ?? null;
       const orderCreatedAt = (updated.created_at as string) ?? new Date().toISOString();
       const walletVoucherId = (updated.wallet_voucher_id as string | null) ?? null;
+
+      // Loyalty earn/deduct + v2 hooks — all post-response via after()
+      // so the customer isn't blocked, but AWAITED inside it: these were
+      // fire-and-forget promises before, so a rejection vanished and a
+      // serverless freeze could drop the write entirely (silent points
+      // loss the reconcile cron then had to repair).
       after(async () => {
+        try {
+          if (pointsEarned > 0) {
+            await earnLoyaltyPoints(loyaltyId, orderId, pointsEarned, outletId);
+          }
+          if (rewardId) {
+            await deductLoyaltyPoints(loyaltyId, rewardId, outletId);
+          }
+        } catch (e) {
+          console.error(`[confirm-stripe] loyalty earn/deduct failed for order=${orderId}`, e);
+        }
         await applyOrderV2Hooks({
           memberId: loyaltyId,
           orderId,

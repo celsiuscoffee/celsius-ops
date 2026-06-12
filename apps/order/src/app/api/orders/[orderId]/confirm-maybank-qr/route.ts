@@ -114,29 +114,27 @@ export async function POST(
     // ── Loyalty earn / deduct (parity with confirm-stripe) ────────
     if (updated.loyalty_id) {
       const outletId = updated.store_id as string;
-      const pointsEarned = (updated.loyalty_points_earned as number) ?? 0;
-      if (pointsEarned > 0) {
-        earnLoyaltyPoints(
-          updated.loyalty_id as string,
-          orderId,
-          pointsEarned,
-          outletId,
-        );
-      }
-      if (updated.reward_id) {
-        deductLoyaltyPoints(
-          updated.loyalty_id as string,
-          updated.reward_id as string,
-          outletId,
-        );
-      }
-
-      // V2 hooks (wallet voucher, missions, mystery, referral) — fire
-      // after the response so the staff release UI doesn't wait.
       const loyaltyId = updated.loyalty_id as string;
+      const pointsEarned = (updated.loyalty_points_earned as number) ?? 0;
+      const rewardId = (updated.reward_id as string | null) ?? null;
       const orderCreatedAt = (updated.created_at as string) ?? new Date().toISOString();
       const walletVoucherId = (updated.wallet_voucher_id as string | null) ?? null;
+
+      // Loyalty earn/deduct + v2 hooks — all post-response via after()
+      // so the staff release UI doesn't wait, but AWAITED inside it:
+      // these were fire-and-forget promises before (unobserved
+      // rejections; serverless freeze could drop the write).
       after(async () => {
+        try {
+          if (pointsEarned > 0) {
+            await earnLoyaltyPoints(loyaltyId, orderId, pointsEarned, outletId);
+          }
+          if (rewardId) {
+            await deductLoyaltyPoints(loyaltyId, rewardId, outletId);
+          }
+        } catch (e) {
+          console.error(`[confirm-maybank-qr] loyalty earn/deduct failed for order=${orderId}`, e);
+        }
         await applyOrderV2Hooks({
           memberId: loyaltyId,
           orderId,

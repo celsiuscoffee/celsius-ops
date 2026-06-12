@@ -134,11 +134,14 @@ export async function GET(request: NextRequest) {
 
         if (updated) {
           if (order.loyalty_id) {
+            // Awaited (was fire-and-forget): a cron has no response to
+            // hurry back to, and an unobserved rejection here meant the
+            // reconciler itself could silently fail to reconcile.
             if ((order.loyalty_points_earned ?? 0) > 0) {
-              earnLoyaltyPoints(order.loyalty_id, order.id, order.loyalty_points_earned ?? 0, order.store_id);
+              await earnLoyaltyPoints(order.loyalty_id, order.id, order.loyalty_points_earned ?? 0, order.store_id);
             }
             if (order.reward_id) {
-              deductLoyaltyPoints(order.loyalty_id, order.reward_id, order.store_id);
+              await deductLoyaltyPoints(order.loyalty_id, order.reward_id, order.store_id);
             }
           }
           result.advanced += 1;
