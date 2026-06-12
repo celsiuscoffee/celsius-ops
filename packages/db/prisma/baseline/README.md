@@ -5,6 +5,12 @@
 rebuilding the database meant reverse-engineering git history of
 `schema.prisma` plus 21 incremental migration files.
 
+`0001_live_indexes_snapshot.sql` is the index inventory captured FROM THE
+LIVE production database (818 definitions, 2026-06-12). It exists because
+an audit found many indexes applied directly to production with no
+committed migration file — the schema-derived baseline alone under-states
+reality. Restore order: tables (0000 + app migrations) → indexes (0001).
+
 **What it covers:** every model in `packages/db/prisma/schema.prisma`
 (core ops: outlets, users, inventory, orders, invoices, HR, finance, ads).
 

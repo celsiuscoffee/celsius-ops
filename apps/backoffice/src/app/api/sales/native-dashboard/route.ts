@@ -163,7 +163,7 @@ export async function GET(req: NextRequest) {
   const posCodes = pick.map((o) => posCodeFor(o)).filter((c): c is string => !!c);
   const storeIds = pick.map((o) => o.pickupStoreId).filter((s): s is string => !!s);
 
-  const [posRes, appRes, posPriorRes, appPriorRes] = await Promise.all([
+  const [posRes, appRes, priorRes] = await Promise.all([
     posCodes.length
       ? supabase.from("pos_orders").select("id, created_at, status, refund_of_order_id, customer_phone")
           .in("outlet_id", posCodes).gte("created_at", winStart).lte("created_at", winEnd).limit(20000)
@@ -172,13 +172,10 @@ export async function GET(req: NextRequest) {
       ? supabase.from("orders").select("id, created_at, status, total, customer_phone, payment_method")
           .in("store_id", storeIds).gte("created_at", winStart).lte("created_at", winEnd).limit(20000)
       : Promise.resolve({ data: [], error: null }),
-    posCodes.length
-      ? supabase.from("pos_orders").select("customer_phone")
-          .in("outlet_id", posCodes).lt("created_at", priorCut).not("customer_phone", "is", null).limit(50000)
-      : Promise.resolve({ data: [], error: null }),
-    storeIds.length
-      ? supabase.from("orders").select("customer_phone")
-          .in("store_id", storeIds).lt("created_at", priorCut).not("customer_phone", "is", null).limit(50000)
+    // Distinct prior phones via RPC — replaces two raw 50k-row fetches
+    // that JS only ever collapsed into Sets. Dedup happens in SQL.
+    posCodes.length || storeIds.length
+      ? supabase.rpc("prior_customer_phones", { p_before: priorCut, p_pos_codes: posCodes, p_store_ids: storeIds })
       : Promise.resolve({ data: [], error: null }),
   ]);
 
@@ -223,8 +220,10 @@ export async function GET(req: NextRequest) {
   }
 
   const priorAll = new Set<string>(), priorApp = new Set<string>();
-  for (const r of (posPriorRes.data || []) as { customer_phone: string | null }[]) if (r.customer_phone) priorAll.add(r.customer_phone);
-  for (const r of (appPriorRes.data || []) as { customer_phone: string | null }[]) if (r.customer_phone) { priorAll.add(r.customer_phone); priorApp.add(r.customer_phone); }
+  for (const r of (priorRes.data || []) as { phone: string; app_customer: boolean }[]) {
+    priorAll.add(r.phone);
+    if (r.app_customer) priorApp.add(r.phone);
+  }
 
   const newCustomers = [...curPhones].filter((p) => !priorAll.has(p) && !prevPhones.has(p)).length;
   const prevNewCustomers = [...prevPhones].filter((p) => !priorAll.has(p)).length;
