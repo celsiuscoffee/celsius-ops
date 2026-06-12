@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   markVoucherUsed,
   rowToDiscountSpec,
@@ -10,13 +10,23 @@ import {
   type VoucherDiscountSpec,
 } from "@celsius/shared";
 
-// Service-role required: member_brands writes + issued_rewards updates
-// are blocked under anon. Without this, the modal hand-off succeeds
-// but the actual deduction silently fails.
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-);
+// Service-role client, created LAZILY (first request) — a module-scope
+// createClient() runs during build-time page-data collection and dies
+// with "supabaseUrl is required" on any build without runtime env
+// (broke Vercel preview builds). Service-role required:
+// member_brands writes + issued_rewards updates are blocked under
+// anon — without it the modal hand-off succeeds but the deduction
+// silently fails.
+let cachedSupabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient {
+  if (!cachedSupabase) {
+    cachedSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+  }
+  return cachedSupabase;
+}
 
 const BRAND_ID = "brand-celsius";
 
@@ -39,6 +49,7 @@ function generateCode(): string {
  * consolidation) — the same spec native + QR-table resolve from.
  */
 export async function POST(req: NextRequest) {
+  const supabase = getSupabase();
   try {
     const { member_id, reward_id, outlet_id, issued_reward_id, preview } = await req.json();
 

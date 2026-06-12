@@ -1,18 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   fetchActiveVouchersForMember,
   fetchAffordableCatalogForMember,
 } from "@celsius/shared";
 
-// Service-role required: member_brands + issued_rewards are RLS-locked.
-// Anon reads return empty rowsets → balance=0 → every catalog reward
-// falls out of the affordability filter → register modal shows
-// "No rewards available" even for members with thousands of Beans.
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-);
+// Service-role client, created LAZILY (first request) — a module-scope
+// createClient() runs during build-time page-data collection and dies
+// with "supabaseUrl is required" on any build without runtime env
+// (broke Vercel preview builds). Service-role required:
+// member_brands + issued_rewards are RLS-locked; anon reads return
+// empty rowsets → balance=0 → register modal shows "No rewards
+// available" even for members with thousands of Beans.
+let cachedSupabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient {
+  if (!cachedSupabase) {
+    cachedSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+  }
+  return cachedSupabase;
+}
 
 const BRAND_ID = "brand-celsius";
 
@@ -35,6 +44,7 @@ const BRAND_ID = "brand-celsius";
  * endpoint too) so POS + Pickup never drift on filter logic or shape.
  */
 export async function GET(req: NextRequest) {
+  const supabase = getSupabase();
   try {
     const memberId = req.nextUrl.searchParams.get("member_id");
     if (!memberId) {
