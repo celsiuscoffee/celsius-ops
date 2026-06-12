@@ -143,9 +143,18 @@ export async function GET(request: NextRequest) {
           }
           result.advanced += 1;
         }
-      } else if (intent.status === "canceled" || intent.status === "requires_payment_method") {
-        // requires_payment_method after a failed attempt means the wallet /
-        // card rejected — treat as failed so the KDS stops seeing a ghost row.
+      } else if (
+        intent.status === "canceled" ||
+        (intent.status === "requires_payment_method" && intent.last_payment_error != null)
+      ) {
+        // requires_payment_method ALONE doesn't mean rejected — it's also the
+        // state of an intent the customer simply hasn't attempted yet (still
+        // typing card details on the sheet). This cron sweeps orders as young
+        // as 45s, so failing on bare requires_payment_method flipped live
+        // checkouts to "failed" mid-payment (the C-HDLZ57 / C-VNXC42 class —
+        // the success then landed on a failed row). Only treat it as failed
+        // when Stripe records an actual declined attempt; otherwise fall
+        // through to unresolved and let the next sweep look again.
         const reason = intent.status === "canceled"
           ? `cancelled${intent.cancellation_reason ? `: ${intent.cancellation_reason}` : ""}`
           : (intent.last_payment_error?.code
