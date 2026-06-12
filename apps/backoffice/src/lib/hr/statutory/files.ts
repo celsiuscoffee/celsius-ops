@@ -161,7 +161,7 @@ export function generatePerkesoLampiranA(
   ].join(","));
 
   let i = 1;
-  let totals = { socsoEe: 0, socsoEr: 0, eisEe: 0, eisEr: 0 };
+  const totals = { socsoEe: 0, socsoEr: 0, eisEe: 0, eisEr: 0 };
   for (const e of employees) {
     if (e.socsoEmployee + e.socsoEmployer + e.eisEmployee + e.eisEmployer === 0) continue;
     rows.push([

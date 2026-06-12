@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
-/* eslint-disable @next/next/no-img-element */
+ 
 
 type PerformanceData = {
   summary: {

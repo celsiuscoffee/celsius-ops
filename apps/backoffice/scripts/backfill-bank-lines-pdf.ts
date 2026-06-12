@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
+ 
 // Backfill BankStatementLine rows from Maybank PDF statements.
 //
 // Strategy: shell out to `pdftotext -layout`, then parse the columnar

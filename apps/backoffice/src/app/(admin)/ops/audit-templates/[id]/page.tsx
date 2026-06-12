@@ -123,9 +123,9 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
     setSections(sections.filter((_, i) => i !== idx));
   };
 
-  const updateSection = (idx: number, field: string, value: string) => {
+  const updateSection = <K extends keyof Section>(idx: number, field: K, value: Section[K]) => {
     const updated = [...sections];
-    (updated[idx] as any)[field] = value;
+    updated[idx] = { ...updated[idx], [field]: value };
     setSections(updated);
   };
 
@@ -141,9 +141,9 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
     setSections(updated);
   };
 
-  const updateItem = (secIdx: number, itemIdx: number, field: string, value: any) => {
+  const updateItem = <K extends keyof SectionItem>(secIdx: number, itemIdx: number, field: K, value: SectionItem[K]) => {
     const updated = [...sections];
-    (updated[secIdx].items[itemIdx] as any)[field] = value;
+    updated[secIdx].items[itemIdx] = { ...updated[secIdx].items[itemIdx], [field]: value };
     setSections(updated);
   };
 

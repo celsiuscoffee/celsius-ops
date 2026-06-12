@@ -107,24 +107,19 @@ jobs:
           fi
           echo "Migration guard passed."
 
-  # Lint. BLOCKING for the apps at 0 errors (order, loyalty, staff) so
-  # they stay clean; advisory for backoffice until its 98-error backlog
-  # (mostly no-explicit-any + unescaped entities) is burned down.
+  # Lint — BLOCKING for all four web apps (each at 0 errors).
   # pickup is excluded — the Capacitor shell has no eslint deps.
   # Errors block; warnings don't (set-state-in-effect / purity are
   # deliberately warn-level — see the per-app eslint.config.mjs).
+  # Legacy `any` sites carry "ratchet" disable markers — reduce them,
+  # never add (grep for "ratchet: reduce, never add" for the count).
   # `next lint` is deprecated in Next 16 so we use eslint directly.
   lint:
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.advisory }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { app: order,      advisory: false }
-          - { app: loyalty,    advisory: false }
-          - { app: staff,      advisory: false }
-          - { app: backoffice, advisory: true }
+        app: [order, loyalty, staff, backoffice]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

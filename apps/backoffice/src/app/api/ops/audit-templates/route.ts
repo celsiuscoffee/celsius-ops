@@ -59,11 +59,13 @@ export async function POST(req: NextRequest) {
       createdById: session.id,
       sections: sections?.length
         ? {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
             create: sections.map((sec: any, si: number) => ({
               name: sec.name,
               sortOrder: si,
               items: sec.items?.length
                 ? {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
                     create: sec.items.map((item: any, ii: number) => ({
                       title: item.title,
                       description: item.description || null,

@@ -365,7 +365,7 @@ function NewCampaignDialog({ onClose, onCreate }: { onClose: () => void; onCreat
           <Wand2 className="h-4 w-4 text-amber-600" />
           New custom campaign
         </h3>
-        <p className="text-xs text-gray-500 mt-1">Name it. You'll add the audience rule + copy in the editor next.</p>
+        <p className="text-xs text-gray-500 mt-1">Name it. You&apos;ll add the audience rule + copy in the editor next.</p>
         <input
           autoFocus
           value={name}

@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
     //  • Catalog / Bean-Shop reward: the canonical voucher_templates row, keyed
     //    by legacy_reward_id (name:title, points_required:points_cost aliases keep
     //    the downstream points math unchanged).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     let reward: Record<string, any> | null = null;
     // Canonical discount spec, resolved the SAME way every channel does
     // (apps/order's wallet + catalog paths) so POS never drifts. The

@@ -11,7 +11,7 @@ import type { Prisma } from "@prisma/client";
 /** Check if a plaintext PIN is already used by another active staff at the same outlet */
 async function checkDuplicatePin(pin: string, outletId: string | null, excludeUserId?: string): Promise<string | null> {
   if (!outletId) return null; // Can't check without outlet
-  const where: any = { pin: { not: null }, status: "ACTIVE", outletId };
+  const where: Prisma.UserWhereInput = { pin: { not: null }, status: "ACTIVE", outletId };
   if (excludeUserId) where.id = { not: excludeUserId };
   const others = await prisma.user.findMany({ where, select: { id: true, name: true, pin: true } });
   for (const u of others) {

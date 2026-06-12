@@ -147,7 +147,8 @@ export async function POST(req: NextRequest) {
     vendorBankAccountNumber,
     vendorBankAccountName,
   } = body;
-  let { supplierId, amount: bodyAmount } = body;
+  let { supplierId } = body;
+  const { amount: bodyAmount } = body;
 
   const isDraft = draft === true;
   const isQuickUpload = quickUpload === true;

@@ -397,7 +397,7 @@ function MissionModal({
           {goalType === "referrals_count" && (
             <div className="border rounded-lg p-3 space-y-3 bg-foreground/[0.02]">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Referee Reward (issued on new signup's first paid order)
+                Referee Reward (issued on new signup&apos;s first paid order)
               </div>
               <Field label="Vouchers granted to referee">
                 {templates.length === 0 ? (
@@ -424,8 +424,8 @@ function MissionModal({
               </Field>
               <div className="text-xs text-muted-foreground">
                 Referrals are paid per-successful-attribution. The referrer gets the vouchers from the
-                section above; the referee gets the vouchers here. Both fire when the referee's first
-                paid order lands. This mission is NOT shown to customers as a weekly challenge — it's
+                section above; the referee gets the vouchers here. Both fire when the referee&apos;s first
+                paid order lands. This mission is NOT shown to customers as a weekly challenge — it&apos;s
                 config for the referral mechanic.
               </div>
             </div>

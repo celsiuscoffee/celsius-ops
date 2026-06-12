@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
+ 
 // Walks every BankStatementLine and re-runs the classifier against the
 // current rule set. Updates category, isInterCo, ruleName in place.
 // Use after changing classifier rules.

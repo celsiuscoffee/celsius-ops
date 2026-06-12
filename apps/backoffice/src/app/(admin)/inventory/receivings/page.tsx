@@ -232,7 +232,7 @@ export default function ReceivingsPage() {
     if (!order) return;
 
     // Fetch previous receivings for this order to calculate remaining balance
-    let prevReceived: Record<string, number> = {};
+    const prevReceived: Record<string, number> = {};
     try {
       const res = await fetch(`/api/inventory/receivings?orderId=${orderId}`);
       if (res.ok) {

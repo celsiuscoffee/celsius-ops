@@ -59,6 +59,7 @@ export async function GET() {
       return NextResponse.json({ posters: [] });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
     const posters = (data ?? []).map((p: any) => ({
       id: p.id,
       imageUrl: p.image_url,

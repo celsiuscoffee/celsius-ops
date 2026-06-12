@@ -72,6 +72,9 @@ export default function CogsReportPage() {
 
   const { data, error, isLoading: loading } = useFetch<CogsData>(url);
 
+  // React Compiler can't preserve this manual useMemo (optional-chained
+  // dep) and skips the component — a perf note, not a correctness issue.
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const filteredItems = useMemo(() => {
     if (!data?.items) return [];
     if (!search.trim()) return data.items;

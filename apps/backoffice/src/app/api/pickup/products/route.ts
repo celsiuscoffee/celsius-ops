@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
   const mapped = (data ?? []).map((p: any) => ({
     id:           p.id,
     category_id:  p.category ?? "",

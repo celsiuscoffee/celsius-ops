@@ -339,7 +339,7 @@ export default function CompanySettingsPage() {
       <Section icon={<Banknote className="h-4 w-4" />} title="Bank File / Giro Config">
         <p className="mb-3 text-xs text-muted-foreground">
           Used to generate Maybank M2u corporate batch files for salary disbursement. Fill these once;
-          the payroll run pulls from here when you click "Maybank M2u".
+          the payroll run pulls from here when you click &quot;Maybank M2u&quot;.
         </p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <Field label="Bank Name">

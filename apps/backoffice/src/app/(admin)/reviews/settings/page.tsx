@@ -379,7 +379,7 @@ export default function ReviewSettingsPage() {
                     <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">2</div>
                     <div>
                       <p className="text-sm font-medium">Picks a star rating</p>
-                      <p className="text-xs text-muted-foreground">Selects how they'd rate their experience</p>
+                      <p className="text-xs text-muted-foreground">Selects how they&apos;d rate their experience</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">

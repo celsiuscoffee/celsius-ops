@@ -264,7 +264,7 @@ export default function CashierPerformancePage() {
 
       <p className="text-xs text-muted-foreground">
         Collection rate + new/repeat (New = enrolled at/around the order). Pair Adds = how many
-        Pair-with-a-Bite suggestions the cashier added. Upsell % = share of the cashier's orders that
+        Pair-with-a-Bite suggestions the cashier added. Upsell % = share of the cashier&apos;s orders that
         ended up including an upsold pair (orders with an upsell ÷ total orders; several pairs in one
         order still count once) — order-based + success-based, so button-spam can&apos;t inflate it.
         Per-staff HR view is Phase B.

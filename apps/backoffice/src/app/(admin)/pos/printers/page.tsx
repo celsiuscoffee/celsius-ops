@@ -273,11 +273,11 @@ export default function POSPrintersPage() {
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900">
         <p className="font-semibold mb-1">Setup checklist</p>
         <ul className="space-y-1 list-disc list-inside">
-          <li>Each station printer needs a static LAN IP. Use the printer's web UI or the manufacturer's app to assign one.</li>
+          <li>Each station printer needs a static LAN IP. Use the printer&apos;s web UI or the manufacturer&apos;s app to assign one.</li>
           <li>Port defaults to <code className="font-mono">9100</code> (raw ESC/POS). Most thermal printers use this.</li>
           <li>The POS device must be able to reach each printer on the LAN (same subnet, no firewall block).</li>
           <li>Once configured, the POS auto-routes each item to the matching station printer based on <code className="font-mono">products.kitchen_station</code>.</li>
-          <li>Without a printer row for a station, that station's docket falls back to the SUNMI built-in printer.</li>
+          <li>Without a printer row for a station, that station&apos;s docket falls back to the SUNMI built-in printer.</li>
         </ul>
       </div>
 

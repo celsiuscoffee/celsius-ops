@@ -82,8 +82,8 @@ export async function GET() {
       const refIdMap = new Map<string, number>();
       let totalSum = 0;
       let subTotalSum = 0;
-      let negativeTotal: { refId: string; total: number; channel?: string }[] = [];
-      let zeroTotal: { refId: string; channel?: string }[] = [];
+      const negativeTotal: { refId: string; total: number; channel?: string }[] = [];
+      const zeroTotal: { refId: string; channel?: string }[] = [];
       let totalVsSubTotalDiff = 0;
       for (const txn of txns) {
         const count = (refIdMap.get(txn.refId) || 0) + 1;

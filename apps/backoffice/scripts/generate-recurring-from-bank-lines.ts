@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
+ 
 // Generate per-outlet RecurringExpense entries from bank-line history.
 //
 // Why: the 4 manual HQ aggregates ("Rent (HQ aggregate) RM 15k") generalize

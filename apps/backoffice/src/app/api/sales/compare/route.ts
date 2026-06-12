@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
       let orders = 0;
 
       // Per-round data
-      const roundData: Record<RoundKey, { revenue: number; orders: number; channels: ReturnType<typeof emptyChannelData> }> = {} as any;
+      const roundData = {} as Record<RoundKey, { revenue: number; orders: number; channels: ReturnType<typeof emptyChannelData> }>;
       for (const r of ROUNDS) {
         roundData[r.key] = { revenue: 0, orders: 0, channels: emptyChannelData() };
       }

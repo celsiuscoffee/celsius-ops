@@ -2308,7 +2308,7 @@ export default function InvoicesPage() {
                     <div className="flex items-center gap-1.5">
                       <Landmark className="h-3.5 w-3.5 text-amber-600" />
                       <p className="text-xs font-medium text-amber-800">
-                        No bank details on file — check the invoice photos for the vendor's account info
+                        No bank details on file — check the invoice photos for the vendor&apos;s account info
                       </p>
                     </div>
                   </div>
@@ -2584,7 +2584,7 @@ export default function InvoicesPage() {
             </div>
 
             <div className="mt-4 flex flex-col gap-2 border-t pt-3 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between">
-              <span>"Accept" dismisses the flag — keep evidence in the invoice notes if needed.</span>
+              <span>&quot;Accept&quot; dismisses the flag — keep evidence in the invoice notes if needed.</span>
               <button onClick={() => setReviewingFlags(null)} className="shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100">
                 Close
               </button>
