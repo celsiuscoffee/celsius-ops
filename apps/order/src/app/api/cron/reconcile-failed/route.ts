@@ -132,10 +132,19 @@ export async function GET(request: NextRequest) {
     const search = await stripe.paymentIntents.search({
       query: `metadata['orderId']:'${order.id}'`,
       limit: 1,
+      expand: ["data.latest_charge"],
     });
     checked += 1;
     const intent = search.data[0];
     if (!intent || intent.status !== "succeeded") return;
+    // A refunded intent still reads "succeeded" — without this guard a
+    // paid-but-failed order we refunded out-of-band would be re-flagged on
+    // every sweep, and ?apply=true would settle (and earn points on) money
+    // we already gave back.
+    const charge = intent.latest_charge;
+    if (charge && typeof charge !== "string" && (charge.refunded || charge.amount_refunded > 0)) {
+      return;
+    }
     let applied = false;
     if (apply) {
       const { data: updated } = await supabase

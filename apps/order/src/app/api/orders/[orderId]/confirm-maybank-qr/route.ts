@@ -75,19 +75,24 @@ export async function POST(
 
     // Idempotent update: only flips if the order is still pending +
     // payment_method=maybank_qr. Same select shape confirm-stripe uses
-    // so the loyalty handoff below matches its parity.
-    const { data: updated } = await supabase
+    // so the loyalty handoff below matches its parity. orders has no
+    // paid_at column — writing one here used to make this update error
+    // silently and the route report alreadyReleased without releasing.
+    const { data: updated, error: updateError } = await supabase
       .from("orders")
-      .update({
-        status: nextStatus,
-        paid_at: new Date().toISOString(),
-      } as Record<string, unknown>)
+      .update({ status: nextStatus } as Record<string, unknown>)
       .eq("id", orderId)
       .eq("status", "pending")
       .eq("payment_method", "maybank_qr")
       .select("loyalty_id, loyalty_points_earned, reward_id, wallet_voucher_id, store_id, order_number, customer_phone, created_at")
       .maybeSingle();
 
+    if (updateError) {
+      // A DB error is NOT "already released" — surface it so the staff
+      // member retries instead of walking away from an unreleased order.
+      console.error("confirm-maybank-qr update failed:", updateError);
+      return NextResponse.json({ error: "Failed to release order" }, { status: 500 });
+    }
     if (!updated) {
       // Raced with another release; nothing to do.
       return NextResponse.json({ confirmed: true, alreadyReleased: true });
