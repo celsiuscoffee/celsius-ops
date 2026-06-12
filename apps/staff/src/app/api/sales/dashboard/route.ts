@@ -154,41 +154,70 @@ export async function GET(req: NextRequest) {
   for (const r of posRows) {
     if (!isPosSale(r.status, r.refund_of_order_id)) continue;
     const d = getMYTDateStr(r.created_at);
-    const net = r.subtotal || 0;
+    // Revenue basis = `total` (net of discounts — what was actually collected),
+    // matching the backoffice sales module. `subtotal` is the pre-discount
+    // gross and over-counts by the discount amount.
+    const net = r.total || 0;
+    // Headline revenue / orders / series / breakdowns count COMPLETED sales
+    // only, exactly like backoffice — so the totals reconcile across apps.
+    // Capture (phones), growth order-splits, payments and native-outlet
+    // detection keep the broader isPosSale base (live operational signal).
+    const counts = (r.status || "").toLowerCase() === "completed";
     if (inCur(d)) {
-      curRev += net; curOrd++; curPosOrd++;
       nativeCodes.add(r.outlet_id);
       if (r.customer_phone) { curPhones.add(r.customer_phone); curCapOrd++; }
+      curPosOrd++;
       curPosIds.push(r.id);
-      curByDate[d] = (curByDate[d] || 0) + net;
-      curHour[getMYTHour(r.created_at)] += net;
-      const pch = classifyPosChannel(r.order_type, r.source); chanRev[pch] += net; chanOrd[pch]++;
-      const rd = getRound(getMYTHour(r.created_at)); if (rd) { roundRev[rd] += net; roundOrd[rd]++; }
+      if (counts) {
+        curRev += net; curOrd++;
+        curByDate[d] = (curByDate[d] || 0) + net;
+        curHour[getMYTHour(r.created_at)] += net;
+        const pch = classifyPosChannel(r.order_type, r.source); chanRev[pch] += net; chanOrd[pch]++;
+        const rd = getRound(getMYTHour(r.created_at)); if (rd) { roundRev[rd] += net; roundOrd[rd]++; }
+      }
     } else if (inPrev(d)) {
-      if (Date.parse(r.created_at) <= prevCutoffMs) { prevRev += net; prevOrd++; prevPosOrd++; if (r.customer_phone) prevCapOrd++; }
       if (r.customer_phone) prevPhones.add(r.customer_phone);
-      prevByDate[d] = (prevByDate[d] || 0) + net;
-      prevHour[getMYTHour(r.created_at)] += net;
+      if (Date.parse(r.created_at) <= prevCutoffMs) {
+        prevPosOrd++; if (r.customer_phone) prevCapOrd++;
+        if (counts) { prevRev += net; prevOrd++; }
+      }
+      if (counts) {
+        prevByDate[d] = (prevByDate[d] || 0) + net;
+        prevHour[getMYTHour(r.created_at)] += net;
+      }
     }
   }
   for (const r of appRows) {
     if (!isAppSale(r.status)) continue;
     const d = getMYTDateStr(r.created_at);
-    const net = r.subtotal || 0;
+    // Same as the POS loop: net `total`, and only COMPLETED orders count toward
+    // revenue/series/breakdowns (pickup/app orders sit in paid/preparing/ready
+    // before completion — backoffice waits for completed, so we do too). Phone
+    // capture + growth splits keep the broader isAppSale base.
+    const net = r.total || 0;
+    const counts = (r.status || "").toLowerCase() === "completed";
     if (inCur(d)) {
-      curRev += net; curOrd++; curAppOrd++;
+      curAppOrd++;
       if (r.customer_phone) { curPhones.add(r.customer_phone); curAppPhones.add(r.customer_phone); curCapOrd++; }
-      curByDate[d] = (curByDate[d] || 0) + net;
-      curHour[getMYTHour(r.created_at)] += net;
-      const ach = classifyAppChannel(r.order_type, r.table_number, r.source); chanRev[ach] += net; chanOrd[ach]++;
-      const rd = getRound(getMYTHour(r.created_at)); if (rd) { roundRev[rd] += net; roundOrd[rd]++; }
-      const pk = normalizePayment(r.payment_method);
-      payAmt[pk] = (payAmt[pk] || 0) + (r.total || 0);
+      if (counts) {
+        curRev += net; curOrd++;
+        curByDate[d] = (curByDate[d] || 0) + net;
+        curHour[getMYTHour(r.created_at)] += net;
+        const ach = classifyAppChannel(r.order_type, r.table_number, r.source); chanRev[ach] += net; chanOrd[ach]++;
+        const rd = getRound(getMYTHour(r.created_at)); if (rd) { roundRev[rd] += net; roundOrd[rd]++; }
+        const pk = normalizePayment(r.payment_method);
+        payAmt[pk] = (payAmt[pk] || 0) + (r.total || 0);
+      }
     } else if (inPrev(d)) {
-      if (Date.parse(r.created_at) <= prevCutoffMs) { prevRev += net; prevOrd++; prevAppOrd++; if (r.customer_phone) prevCapOrd++; }
       if (r.customer_phone) { prevPhones.add(r.customer_phone); prevAppPhones.add(r.customer_phone); }
-      prevByDate[d] = (prevByDate[d] || 0) + net;
-      prevHour[getMYTHour(r.created_at)] += net;
+      if (Date.parse(r.created_at) <= prevCutoffMs) {
+        prevAppOrd++; if (r.customer_phone) prevCapOrd++;
+        if (counts) { prevRev += net; prevOrd++; }
+      }
+      if (counts) {
+        prevByDate[d] = (prevByDate[d] || 0) + net;
+        prevHour[getMYTHour(r.created_at)] += net;
+      }
     }
   }
 
