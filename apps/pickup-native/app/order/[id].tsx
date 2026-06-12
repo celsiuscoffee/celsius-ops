@@ -124,6 +124,14 @@ export default function OrderStatus() {
   // "failed" instead, the overlay dismisses without celebrating.
   const prevStatusRef = useRef<string | null>(null);
   const [overlay, setOverlay] = useState<null | "confirming" | "success">(null);
+  // Set when a retry launched FROM THIS SCREEN comes back from RM's page
+  // with the payment completed (or the server answers "already paid").
+  // The order row may still read pending OR failed at that moment — the
+  // failed case is the C-9782 flow: first attempt flipped the order to
+  // failed, the retry's money is in, and reconcile is about to heal it.
+  // Without this flag the customer stares at the red "Payment failed"
+  // card for the gap and then it "suddenly" turns into Brewing now.
+  const [retryConfirming, setRetryConfirming] = useState(false);
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const overlayScale   = useRef(new Animated.Value(0.7)).current;
 
@@ -133,11 +141,16 @@ export default function OrderStatus() {
   useEffect(() => {
     const cur = data?.status ?? null;
     const prev = prevStatusRef.current;
-    const isRmPendingNow =
-      cur === "pending" &&
+    const isRmUnsettledNow =
+      (cur === "pending" || cur === "failed") &&
       !!data?.payment_method &&
       new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card"]).has(data.payment_method);
-    const shouldShowConfirming = isRmPendingNow && justPaid === "1";
+    // justPaid covers arrivals from checkout; retryConfirming covers
+    // retries from this screen. Both can apply to a failed row — the
+    // order page poll re-checks RM for failed orders and the server
+    // accepts failed → paid, so "failed + payment just completed" is a
+    // confirming state, not a dead end.
+    const shouldShowConfirming = isRmUnsettledNow && (justPaid === "1" || retryConfirming);
 
     // First mount or pure confirming state → show confirming overlay.
     if (shouldShowConfirming && overlay !== "confirming" && overlay !== "success") {
@@ -161,22 +174,42 @@ export default function OrderStatus() {
     }
 
     // Transition into preparing/ready while the customer is here →
-    // morph to success.
+    // morph to success. "failed" is in the prev-list on purpose: a
+    // successful re-payment heals a failed order (failed → preparing),
+    // and that flip deserves the same acknowledgement moment instead
+    // of the screen silently swapping under the customer.
     if (prev && cur && prev !== cur) {
       const becamePreparingOrReady =
-        (prev === "pending" || prev === "paid") && (cur === "preparing" || cur === "ready");
+        (prev === "pending" || prev === "paid" || prev === "failed") &&
+        (cur === "preparing" || cur === "ready");
       if (becamePreparingOrReady) {
+        setRetryConfirming(false);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setOverlay("success");
       }
-      // Failed → dismiss overlay so the customer sees the retry UI
-      // underneath.
+      // Settled into failed (pending → failed: the retried attempt
+      // genuinely didn't go through) → drop the confirming state so
+      // the customer sees the retry UI underneath.
       if (cur === "failed") {
+        setRetryConfirming(false);
         setOverlay(null);
       }
     }
     prevStatusRef.current = cur;
-  }, [data?.status, data?.payment_method, justPaid, overlay]);
+  }, [data?.status, data?.payment_method, justPaid, retryConfirming, overlay]);
+
+  // Confirming is a promise that reconcile lands "in seconds" — don't
+  // hold the screen hostage if it doesn't (bank-side FPX can sit in
+  // limbo). After 90s fall back to the retry UI; the poll keeps running,
+  // so a late settle still flips the status and celebrates.
+  useEffect(() => {
+    if (!retryConfirming) return;
+    const t = setTimeout(() => {
+      setRetryConfirming(false);
+      setOverlay((o) => (o === "confirming" ? null : o));
+    }, 90_000);
+    return () => clearTimeout(t);
+  }, [retryConfirming]);
 
   // Fade + scale the circle whenever the overlay mode changes. On
   // "success" we also schedule the auto-dismiss after 1.4s.
@@ -437,12 +470,16 @@ export default function OrderStatus() {
           },
         );
         const rmJson = (await rmRes.json()) as { paymentUrl?: string; error?: string; alreadyPaid?: boolean };
-        // Already paid/settled — the server blocked a second charge. We're
-        // already on the order screen, so just close the picker and let the 5s
-        // poll render the real (paid) state instead of a "Couldn't retry" alert.
+        // Already paid/settled — the server blocked a second charge AND
+        // settled the order during the pre-check (this is C-5760: an
+        // earlier attempt's money was found the moment the customer
+        // tapped retry). Show the confirming → success overlay instead
+        // of an alert, so the flip to Brewing now reads as an
+        // acknowledgement rather than a surprise.
         if (rmRes.status === 409 && rmJson.alreadyPaid) {
           setMethodPickerOpen(false);
-          Alert.alert("Already paid", "This order is already paid — refreshing its status.");
+          setRetryConfirming(true);
+          queryClient.invalidateQueries({ queryKey: ["order", id] });
           return;
         }
         if (!rmRes.ok || !rmJson.paymentUrl) {
@@ -453,9 +490,16 @@ export default function OrderStatus() {
         // formatPrice (see the order-summary block below). Missed that
         // here originally — produced RM445.00 for a RM4.45 order.
         const amount = typeof data?.total === "number" ? formatPrice(data.total / 100) : "";
-        await openRmCheckout(rmJson.paymentUrl, label, amount, methodId);
-        // Webhook is authoritative for status — we don't mutate locally.
-        // The 5s React Query poll will pick up the new status.
+        const rmResult = await openRmCheckout(rmJson.paymentUrl, label, amount, methodId);
+        // Webhook/reconcile is authoritative for status — we don't mutate
+        // locally. But the RM page signalling success means the money is
+        // (very likely) in while the row still reads pending/failed, so
+        // bridge the gap with the confirming overlay and refetch now
+        // instead of waiting out the 5s poll tick.
+        if (rmResult === "success") {
+          setRetryConfirming(true);
+          queryClient.invalidateQueries({ queryKey: ["order", id] });
+        }
       } else {
         await reopenStripeInner(methodId);
       }
@@ -567,8 +611,11 @@ export default function OrderStatus() {
   // through to the existing retry UI so a genuinely stuck order can be
   // recovered.
   const rmConfirmMethods = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card"]);
-  const isRmPending =
-    data?.status === "pending" &&
+  // failed counts as confirmable too: a failed order re-paid from this
+  // screen heals into preparing (server accepts failed → paid), so while
+  // we KNOW a payment just completed the red failed card is misleading.
+  const isRmUnsettled =
+    (data?.status === "pending" || data?.status === "failed") &&
     !!data?.payment_method &&
     rmConfirmMethods.has(data.payment_method);
   // Maybank static QR: order sits as pending until staff release it.
@@ -581,11 +628,13 @@ export default function OrderStatus() {
   const maybankPayload = showMaybankWaiting
     ? maybankQrPayloadFor(maybankConfig, data?.store_id ?? null)
     : null;
-  // Only show "Confirming payment…" when the checkout screen explicitly
-  // signals a successful RM return via justPaid=1. The previous 90s
+  // Only show "Confirming payment…" when something explicitly signalled a
+  // completed payment: the checkout screen's justPaid=1 on arrival, or a
+  // retry from this screen coming back from RM with success / the server
+  // answering "already paid" (retryConfirming). The previous 90s
   // creation-time fallback ran for cancelled orders too, making the
   // customer think the payment went through when it didn't.
-  const confirmingPayment = isRmPending && justPaid === "1";
+  const confirmingPayment = isRmUnsettled && (justPaid === "1" || retryConfirming);
 
   return (
     <View className="flex-1 bg-background">

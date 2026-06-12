@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ShoppingBag, Coffee, CheckCircle2, XCircle } from "lucide-react";
 import { MysteryReward } from "./_MysteryReward";
@@ -69,16 +69,57 @@ function stepperIndex(status: string): number {
   return 0;
 }
 
-export function OrderTrackingView({ orderId }: { orderId: string }) {
+export function OrderTrackingView({
+  orderId,
+  justPaid = false,
+}: {
+  orderId: string;
+  /** True when the customer landed via the gateway's …?payment=done
+   *  redirect — i.e. they JUST completed payment, even if the order row
+   *  still reads pending or failed (FPX settlement lag, or a failed-then-
+   *  repaid order the reconcile is about to heal). Drives the amber
+   *  "Confirming payment" treatment instead of a red failed card. */
+  justPaid?: boolean;
+}) {
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Confirming window: opens when the customer arrives with payment=done
+  // and the order isn't settled yet; closes after 90s so a genuinely
+  // failed payment can't hide behind "confirming" forever. The RM poll
+  // below keeps running either way.
+  const [confirmWindow, setConfirmWindow] = useState(justPaid);
+  useEffect(() => {
+    if (!confirmWindow) return;
+    const t = window.setTimeout(() => setConfirmWindow(false), 90_000);
+    return () => window.clearTimeout(t);
+  }, [confirmWindow]);
+  // "Payment confirmed ✓" acknowledgement — shown briefly when we watch
+  // the order settle (pending/failed → preparing/paid/ready) so the flip
+  // to Brewing reads as a response to the customer's payment instead of
+  // the screen silently swapping (the C-5760 complaint). Transition
+  // detection lives in the fetch callback (where new server state lands),
+  // not an effect, so it can't cascade renders.
+  const prevStatusRef = useRef<string | null>(null);
+  const [showPaymentConfirmed, setShowPaymentConfirmed] = useState(false);
 
   const fetchOrder = useCallback(async () => {
     try {
       const r = await fetch(`/api/orders/${orderId}`);
       const data = await r.json();
-      if (data?.order) setOrder(data.order as Order);
-      else if (data?.id) setOrder(data as Order);
+      const next: Order | null = data?.order ?? (data?.id ? (data as Order) : null);
+      if (!next) return;
+      const cur = next.status?.toLowerCase() ?? null;
+      const prev = prevStatusRef.current;
+      if (
+        prev && cur && prev !== cur &&
+        (prev === "pending" || prev === "failed") &&
+        ["preparing", "paid", "ready"].includes(cur)
+      ) {
+        setShowPaymentConfirmed(true);
+        window.setTimeout(() => setShowPaymentConfirmed(false), 5000);
+      }
+      prevStatusRef.current = cur;
+      setOrder(next);
     } catch (err) {
       setError(String(err));
     }
@@ -196,7 +237,41 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
 
       <section className="px-4 pt-5">
         <h2 className="font-peachi font-bold text-[16px] mb-3">Status</h2>
-        {order.status.toLowerCase() === "failed" || order.status.toLowerCase() === "cancelled" ? (
+        {showPaymentConfirmed ? (
+          <div className="flex items-center gap-3 rounded-2xl bg-green-50 border border-green-200 p-3 mb-3">
+            <CheckCircle2 size={20} color="#15803D" />
+            <div>
+              <p className="font-peachi font-bold text-sm text-green-800">Payment confirmed</p>
+              <p className="text-[12px] text-green-700 mt-0.5">
+                We&rsquo;ve started on your order.
+              </p>
+            </div>
+          </div>
+        ) : null}
+        {(order.status.toLowerCase() === "failed" || order.status.toLowerCase() === "pending") &&
+        confirmWindow &&
+        RM_METHODS.has(order.payment_method) ? (
+          // The customer just came back from the gateway (?payment=done)
+          // but the row hasn't settled yet — FPX settlement lag, or a
+          // failed-then-repaid order reconcile is healing. Showing the
+          // red "Payment failed" card here right after their bank said
+          // "paid" is alarming and invites a double payment; show the
+          // checking state instead. The poll flips this the moment the
+          // server confirms (or the 90s window lapses back to truth).
+          <div className="flex items-center gap-3 rounded-2xl bg-amber-50 border border-amber-200 p-3">
+            <span
+              className="inline-block flex-shrink-0 rounded-full border-2 border-amber-600 border-t-transparent animate-spin"
+              style={{ width: 20, height: 20 }}
+            />
+            <div>
+              <p className="font-peachi font-bold text-sm text-amber-800">Confirming payment…</p>
+              <p className="text-[12px] text-amber-700 mt-0.5">
+                We&rsquo;re checking with your bank — usually a few seconds. Please
+                don&rsquo;t pay again; this page updates automatically.
+              </p>
+            </div>
+          </div>
+        ) : order.status.toLowerCase() === "failed" || order.status.toLowerCase() === "cancelled" ? (
           <div className="flex items-center gap-3 rounded-2xl bg-red-50 border border-red-200 p-3">
             <XCircle size={20} color="#B91C1C" />
             <div>
@@ -208,6 +283,12 @@ export function OrderTrackingView({ orderId }: { orderId: string }) {
                   ? "Place the order again to retry."
                   : "This order was cancelled."}
               </p>
+              {order.status === "failed" && RM_METHODS.has(order.payment_method) ? (
+                <p className="text-[12px] text-red-700 mt-1">
+                  Just paid? Hang tight — we re-check with the bank automatically
+                  and this page will update.
+                </p>
+              ) : null}
             </div>
           </div>
         ) : (
