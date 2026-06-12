@@ -94,6 +94,16 @@ export async function GET(request: NextRequest) {
     const prevFromDate = prevFromMYT.toISOString().split("T")[0];
     const prevToDate = prevToMYT.toISOString().split("T")[0];
 
+    // Like-for-like ("realtime") comparison: when the current period is still
+    // in progress (it runs up to today), the previous period must be measured
+    // to the SAME elapsed point — otherwise a partial day/week/month reads as a
+    // huge drop against the prior FULL one (e.g. today-so-far vs all of
+    // yesterday → "-70%"). Shifting `now` back exactly periodDays reproduces the
+    // same time-of-day / weekday offset the chart's running-total already uses,
+    // so the headline deltas match the Today-vs-Yesterday curve.
+    const inProgress = toDate === todayMYT;
+    const prevCutoffMs = now.getTime() - periodDays * 24 * 60 * 60 * 1000;
+
     // Fetch outlets
     const outletWhere = outletId
       ? { id: outletId, storehubId: { not: null } }
@@ -161,7 +171,12 @@ export async function GET(request: NextRequest) {
             deliveryQRRevenue += ev.total;
             deliveryQROrders++;
           }
-        } else if (dateStr >= prevFromDate && dateStr <= prevToDate) {
+        } else if (
+          dateStr >= prevFromDate && dateStr <= prevToDate &&
+          // Cap the previous period at the same elapsed point when the current
+          // one is still running, so the comparison is to-now vs to-now.
+          (!inProgress || new Date(ev.ts).getTime() <= prevCutoffMs)
+        ) {
           prevSales.push(ev);
           if (ev.isDeliveryQR) {
             prevDeliveryQRRevenue += ev.total;
@@ -354,6 +369,10 @@ export async function GET(request: NextRequest) {
         pickupDeliveryOrders: prevTakeawayOrd,
         periodFrom: prevFromDate,
         periodTo: prevToDate,
+        // true = previous period was capped to the same elapsed point (the
+        // current period is still running), so deltas are a like-for-like
+        // to-now comparison. The page labels it accordingly.
+        sameTime: inProgress,
       },
       rounds: roundsData,
       outsideRounds: {

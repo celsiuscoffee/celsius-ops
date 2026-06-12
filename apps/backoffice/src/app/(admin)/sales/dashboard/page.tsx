@@ -74,6 +74,9 @@ type PreviousPeriod = {
   pickupDeliveryOrders: number;
   periodFrom: string;
   periodTo: string;
+  // true when the previous period was capped to the same elapsed point (the
+  // current period is still running) — deltas are a like-for-like to-now read.
+  sameTime?: boolean;
 };
 
 type TargetsMeta = {
@@ -382,6 +385,9 @@ export default function SalesDashboard() {
               const revChange = pctChange(data.summary.revenue, prev.revenue);
               const ordChange = pctChange(data.summary.orders, prev.orders);
               const aovChange = pctChange(data.summary.aov, prev.aov);
+              // For an in-progress period the previous one is capped to the same
+              // elapsed point, so the delta is a like-for-like to-now read.
+              const vsLabel = prev.sameTime ? "vs same time, prev period" : "vs prev period";
               return (
                 <>
                   <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -399,7 +405,7 @@ export default function SalesDashboard() {
                     <div className="flex items-center gap-2 mt-1">
                       <span className={cn("text-xs font-semibold", revChange.color)}>{revChange.label}</span>
                       {revChange.diffLabel && <span className={cn("text-xs", revChange.color)}>{revChange.diffLabel}</span>}
-                      <span className="text-[10px] text-gray-400">vs prev period</span>
+                      <span className="text-[10px] text-gray-400">{vsLabel}</span>
                     </div>
                     {data.deliveryQR && data.deliveryQR.orders > 0 && (
                       <p className="text-[10px] text-gray-400 mt-1.5">
@@ -424,7 +430,7 @@ export default function SalesDashboard() {
                     <div className="flex items-center gap-2 mt-1">
                       <span className={cn("text-xs font-semibold", ordChange.color)}>{ordChange.label}</span>
                       {ordChange.diff !== 0 && <span className={cn("text-xs", ordChange.color)}>{ordChange.diff > 0 ? "+" : ""}{ordChange.diff}</span>}
-                      <span className="text-[10px] text-gray-400">vs prev period</span>
+                      <span className="text-[10px] text-gray-400">{vsLabel}</span>
                     </div>
                   </div>
 
@@ -443,7 +449,7 @@ export default function SalesDashboard() {
                     <div className="flex items-center gap-2 mt-1">
                       <span className={cn("text-xs font-semibold", aovChange.color)}>{aovChange.label}</span>
                       {aovChange.diffLabel && <span className={cn("text-xs", aovChange.color)}>{aovChange.diffLabel}</span>}
-                      <span className="text-[10px] text-gray-400">vs prev period</span>
+                      <span className="text-[10px] text-gray-400">{vsLabel}</span>
                     </div>
                   </div>
                 </>
