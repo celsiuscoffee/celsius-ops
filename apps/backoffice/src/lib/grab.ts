@@ -211,7 +211,7 @@ export async function batchUpdateMenu(
     availableStatus?: "AVAILABLE" | "UNAVAILABLE" | "HIDE";
   }>,
 ) {
-  return grabRequest("/partner/v1/menu/batch", {
+  return grabRequest("/partner/v1/batch/menu", {
     method: "PUT",
     body: { merchantID: merchantId, field, menuEntities },
   });
@@ -221,7 +221,7 @@ export async function batchUpdateMenu(
  * Notify GrabFood that the menu has been updated.
  */
 export async function notifyMenuUpdate(merchantId: string) {
-  return grabRequest("/partner/v1/menu/notification", {
+  return grabRequest("/partner/v1/merchant/menu/notification", {
     method: "POST",
     body: { merchantID: merchantId },
   });
@@ -231,7 +231,7 @@ export async function notifyMenuUpdate(merchantId: string) {
  * Check menu sync status.
  */
 export async function traceMenuSync(merchantId: string) {
-  return grabRequest("/partner/v1/menu/trace", {
+  return grabRequest("/partner/v1/merchant/menu/trace", {
     params: { merchantID: merchantId },
   });
 }
@@ -252,11 +252,13 @@ export type GrabOrderState =
 export async function acceptRejectOrder(
   orderID: string,
   state: "ACCEPTED" | "REJECTED",
-  rejectCode?: string,
+  _rejectCode?: string,
 ) {
-  return grabRequest("/partner/v1/order/accept", {
+  // GrabFood v1.1.3: POST /order/prepare with toState "Accepted" | "Rejected".
+  // (No reject-code field in the prepare payload; param kept for call-site compat.)
+  return grabRequest("/partner/v1/order/prepare", {
     method: "POST",
-    body: { orderID, state, ...(rejectCode ? { rejectCode } : {}) },
+    body: { orderID, toState: state === "ACCEPTED" ? "Accepted" : "Rejected" },
   });
 }
 
@@ -264,9 +266,10 @@ export async function acceptRejectOrder(
  * Mark an order as ready for pickup by the driver.
  */
 export async function markOrderReady(orderID: string) {
-  return grabRequest("/partner/v1/order/ready", {
+  // GrabFood v1.1.3: POST /orders/mark with markStatus 1 = ready (2 = completed/dine-in).
+  return grabRequest("/partner/v1/orders/mark", {
     method: "POST",
-    body: { orderID },
+    body: { orderID, markStatus: 1 },
   });
 }
 
@@ -352,14 +355,14 @@ export async function getStoreStatus(merchantID: string) {
     isActive: boolean;
     isPause: boolean;
     closedReason?: string;
-  }>(`/partner/v1/merchant/${merchantID}/store/status`);
+  }>(`/partner/v1/merchants/${merchantID}/store/status`);
 }
 
 /**
  * Get store operating hours.
  */
 export async function getStoreHours(merchantID: string) {
-  return grabRequest(`/partner/v1/merchant/${merchantID}/store/hour`);
+  return grabRequest(`/partner/v1/merchants/${merchantID}/store/opening-hours`);
 }
 
 /**
