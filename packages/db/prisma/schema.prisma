@@ -416,6 +416,10 @@ model Order {
   items      OrderItem[]
   receivings Receiving[]
   invoices   Invoice[]
+
+  // Hot path: PO dashboards filter by outlet + status, newest first.
+  // Without this every list view full-scans as order volume grows.
+  @@index([outletId, status, createdAt(sort: Desc)])
 }
 
 enum OrderType {
@@ -539,6 +543,10 @@ model Invoice {
 
   @@unique([supplierId, invoiceNumber])
   @@index([aiPrefilledAt])
+  // Hot path: finance dashboards (paid / overdue / pending by outlet,
+  // newest first). The supplierId prefix of the @@unique above already
+  // covers supplier-scoped lookups.
+  @@index([outletId, status, createdAt(sort: Desc)])
 }
 
 // Groups staff-claim invoices for single-transfer reimbursement.
