@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { isGrabConfigured, markOrderReady } from "@/lib/grab";
 
 /**
@@ -19,10 +19,19 @@ import { isGrabConfigured, markOrderReady } from "@/lib/grab";
  * server-validated path. CSRF is enforced by the shared POS middleware
  * (Origin/Referer must match) — same as the loyalty routes.
  */
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-);
+// Created LAZILY (first request): module-scope createClient runs during
+// build-time page-data collection and fails any build without runtime
+// env (Vercel previews). Same pattern as the pos/loyalty routes.
+let cachedSupabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient {
+  if (!cachedSupabase) {
+    cachedSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+  }
+  return cachedSupabase;
+}
 
 // Statuses the register is allowed to set. The on-register KDS only ever
 // sends "ready" (Mark Ready) or "completed" (Mark Collected) — "preparing"
@@ -31,6 +40,7 @@ const supabase = createClient(
 const ALLOWED = new Set(["ready", "completed"]);
 
 export async function POST(req: NextRequest) {
+  const supabase = getSupabase();
   try {
     const { source, id, status } = await req.json();
     if (source !== "pickup" && source !== "grab" && source !== "qr") {
