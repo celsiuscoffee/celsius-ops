@@ -97,10 +97,46 @@ export async function getUnifiedSalesForOutlet(
     });
   };
 
+  // Archive rows carry materialized channel_class/is_delivery_qr, so the
+  // cutover gate + label come from the `channel` COLUMN (identical to
+  // raw.channel — the importer writes it from the same field) and no
+  // classification runs per request. Unclassified rows (gap between
+  // backfill and importer deploy) fall back to the old raw path.
+  type ArchiveRow = {
+    ts: Date;
+    total: unknown;
+    channel: string | null;
+    channel_class: "dine_in" | "takeaway" | "delivery" | null;
+    is_delivery_qr: boolean | null;
+    raw: StoreHubTransaction | null;
+  };
+  const pushArchive = (r: ArchiveRow) => {
+    if (r.channel_class == null) {
+      if (r.raw) pushStorehub(toISO(r.ts), Number(r.total) || 0, r.raw);
+      return;
+    }
+    const ts = toISO(r.ts);
+    if (outlet.cutoverAt && new Date(ts).getTime() >= outlet.cutoverAt.getTime()) {
+      const hasChannel = typeof r.channel === "string" && r.channel.trim() !== "";
+      if (!hasChannel) return;
+    }
+    sales.push({
+      ts,
+      total: Number(r.total) || 0,
+      channel: r.channel_class,
+      isDeliveryQR: r.is_delivery_qr ?? false,
+      channelLabel: r.channel ?? "(direct)",
+    });
+  };
+
   // ── StoreHub PAST — local archive, up to (not including) today 00:00 MYT ──
   const archiveTo = to.getTime() < todayStartMyt.getTime() ? to : new Date(todayStartMyt.getTime() - 1);
-  const shRows = await prisma.$queryRaw<Array<{ ts: Date; total: unknown; raw: StoreHubTransaction }>>`
-    SELECT transaction_time AS ts, total, raw
+  // channel_class / is_delivery_qr are materialized at import (and
+  // backfilled) so this no longer ships the heavy `raw` JSONB — only
+  // rows that somehow missed classification fall back to it.
+  const shRows = await prisma.$queryRaw<Array<ArchiveRow>>`
+    SELECT transaction_time AS ts, total, channel, channel_class, is_delivery_qr,
+           CASE WHEN channel_class IS NULL THEN raw END AS raw
     FROM storehub_sales
     WHERE outlet_id = ${outlet.outletId}
       AND NOT is_cancelled
@@ -108,7 +144,7 @@ export async function getUnifiedSalesForOutlet(
       AND transaction_time >= ${from}
       AND transaction_time <= ${archiveTo}
   `;
-  for (const r of shRows) pushStorehub(toISO(r.ts), Number(r.total) || 0, r.raw);
+  for (const r of shRows) pushArchive(r);
 
   // ── StoreHub TODAY — LIVE pull so today is real-time (outlets still on
   // StoreHub). Falls back to the archive if StoreHub is unreachable. ──
@@ -125,8 +161,9 @@ export async function getUnifiedSalesForOutlet(
         `[unified-sales] live StoreHub today failed for ${outlet.outletId}; using archive:`,
         e instanceof Error ? e.message : e,
       );
-      const fb = await prisma.$queryRaw<Array<{ ts: Date; total: unknown; raw: StoreHubTransaction }>>`
-        SELECT transaction_time AS ts, total, raw
+      const fb = await prisma.$queryRaw<Array<ArchiveRow>>`
+        SELECT transaction_time AS ts, total, channel, channel_class, is_delivery_qr,
+               CASE WHEN channel_class IS NULL THEN raw END AS raw
         FROM storehub_sales
         WHERE outlet_id = ${outlet.outletId}
           AND NOT is_cancelled
@@ -134,7 +171,7 @@ export async function getUnifiedSalesForOutlet(
           AND transaction_time >= ${todayStartMyt}
           AND transaction_time <= ${to}
       `;
-      for (const r of fb) pushStorehub(toISO(r.ts), Number(r.total) || 0, r.raw);
+      for (const r of fb) pushArchive(r);
     }
   }
 

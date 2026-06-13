@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { RotateCcw, X as XIcon } from "lucide-react-native";
 
@@ -26,6 +27,7 @@ export function SelfieCapture({
   const [busy, setBusy] = useState(false);
   const [facing, setFacing] = useState<"front" | "back">("front");
   const cameraRef = useRef<CameraView | null>(null);
+  const insets = useSafeAreaInsets();
 
   if (!perm) return null;
   if (!perm.granted) {
@@ -95,7 +97,10 @@ export function SelfieCapture({
       </View>
 
       {/* Top bar — cancel + flip */}
-      <View className="absolute inset-x-0 top-12 flex-row items-center justify-between px-5">
+      <View
+        className="absolute inset-x-0 flex-row items-center justify-between px-5"
+        style={{ top: insets.top + 8 }}
+      >
         <Pressable
           onPress={onCancel}
           hitSlop={10}

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
   Banknote, CreditCard, QrCode, Smartphone, Bike, ShoppingBag, Landmark, Wallet,
   Utensils, Package, Sunrise, Sunset, Sun, Moon, Coffee, Sandwich, UtensilsCrossed,
-  TrendingUp, TrendingDown, UserPlus, BarChart3, ChevronDown,
+  TrendingUp, TrendingDown, UserPlus, BarChart3, ChevronDown, Settings,
 } from "lucide-react-native";
 import { useStaff } from "@/lib/store";
 import { hasAccess } from "@/lib/access";
@@ -29,17 +29,17 @@ function rmF(n: number): string {
   return "RM " + i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + d;
 }
 function numF(n: number): string { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
-function rmDeltaF(n: number): string {
-  const v = Math.round(Math.abs(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${n >= 0 ? "+" : "−"}RM ${v}`;
-}
 function deltaStr(d: number | null): string { return d == null ? "New" : `${d >= 0 ? "+" : ""}${d}%`; }
 function deltaUp(d: number | null): boolean { return d == null ? true : d >= 0; }
+function rmDeltaStr(cur: number, prev: number): string {
+  const d = cur - prev;
+  return `${d >= 0 ? "+" : "−"}RM ${numF(Math.abs(d))}`;
+}
 
 const PAY_ICON: Record<string, any> = { cash: Banknote, card: CreditCard, duitnow_qr: QrCode, tng: Smartphone, grabpay: Bike, shopeepay: ShoppingBag, fpx: Landmark, wallet: Wallet };
 const PAY_COLOR: Record<string, string> = { cash: "#34d399", card: "#8FB3F0", duitnow_qr: "#FBBF24", tng: "#a78bfa", grabpay: "#34d399", shopeepay: "#fb923c", fpx: "#60a5fa", wallet: "#a78bfa" };
-const CHAN_ICON: Record<string, any> = { dine_in: Utensils, takeaway: ShoppingBag, pickup: Package, delivery: Bike, qr_table: QrCode };
-const CHAN_COLOR: Record<string, string> = { dine_in: "#E0875F", takeaway: "#FBBF24", pickup: "#a78bfa", delivery: "#34d399", qr_table: "#2dd4bf" };
+const CHAN_ICON: Record<string, any> = { dine_in: Utensils, takeaway: ShoppingBag, pickup: Package, delivery: Bike };
+const CHAN_COLOR: Record<string, string> = { dine_in: "#E0875F", takeaway: "#FBBF24", pickup: "#a78bfa", delivery: "#34d399" };
 const ROUND_ICON: Record<string, any> = { breakfast: Sunrise, brunch: Coffee, lunch: Sandwich, midday: Sun, evening: Sunset, dinner: UtensilsCrossed, supper: Moon };
 
 const TABS: { key: Mode; label: string }[] = [
@@ -49,6 +49,7 @@ const TABS: { key: Mode; label: string }[] = [
 export default function SalesScreen() {
   const session = useStaff((s) => s.session);
   const canView = hasAccess(session?.role, session?.moduleAccess, "sales");
+  const router = useRouter();
 
   const [mode, setMode] = useState<Mode>("day");
   const [cTo, setCTo] = useState(mytToday());
@@ -98,15 +99,11 @@ export default function SalesScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-[#160800]" edges={["top", "left", "right"]}>
-      <ScrollView
-        contentContainerClassName="px-4 pb-16"
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#FBBF24" colors={["#FBBF24"]} progressBackgroundColor="#2a1508" />}
-      >
-        {/* Header */}
-        <View className="flex-row items-center gap-3 pb-4 pt-3">
+      {/* Fixed header — pinned at top while the content below scrolls */}
+      <View className="px-4 pt-3">
+        <View className="flex-row items-center gap-3 pb-4">
           <View className="h-9 w-9 items-center justify-center rounded-xl bg-[#A2492C]">
-            <Text className="font-display text-sm text-[#F5F3F0]">°C</Text>
+            <Text className="font-display text-base text-[#F5F3F0]">°C</Text>
           </View>
           <View className="flex-1">
             {isAdmin ? (
@@ -119,6 +116,16 @@ export default function SalesScreen() {
             )}
             <Text className="font-body text-sm text-[#F5F3F08a]">Live · POS + Pickup</Text>
           </View>
+          {isAdmin ? (
+            <Pressable
+              onPress={() => router.push("/(staff)/profile")}
+              hitSlop={10}
+              accessibilityLabel="Settings"
+              className="h-9 w-9 items-center justify-center rounded-xl border border-[#F5F3F01a] bg-[#2a1508] active:opacity-80"
+            >
+              <Settings color="#F5F3F0" size={18} />
+            </Pressable>
+          ) : null}
         </View>
 
         {/* Period tabs */}
@@ -132,7 +139,13 @@ export default function SalesScreen() {
             );
           })}
         </View>
+      </View>
 
+      <ScrollView
+        contentContainerClassName="px-4 pb-16"
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#FBBF24" colors={["#FBBF24"]} progressBackgroundColor="#2a1508" />}
+      >
         {loading && !data ? (
           <View className="items-center justify-center py-24"><ActivityIndicator color="#FBBF24" /></View>
         ) : error ? (
@@ -141,12 +154,11 @@ export default function SalesScreen() {
           <View className="gap-3.5">
             {/* Hero */}
             <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
-              <Text className="font-body text-xs text-[#F5F3F08a]">Net sales · {data.cur.label.toLowerCase()}</Text>
+              <Text className="font-body text-sm text-[#F5F3F08a]">Net sales · {data.cur.label.toLowerCase()}</Text>
               <Text className="mt-1 font-display text-4xl text-[#F5F3F0]">{rmF(s.revenue)}</Text>
               <View className={`mt-2 flex-row items-center gap-1 self-start rounded-full px-2.5 py-1 ${deltaUp(s.revenueDelta) ? "bg-[#34d39920]" : "bg-[#f8717120]"}`}>
                 {deltaUp(s.revenueDelta) ? <TrendingUp color="#34d399" size={13} /> : <TrendingDown color="#f87171" size={13} />}
-                <Text className={`font-body-bold text-xs ${deltaUp(s.revenueDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(s.revenueDelta)}</Text>
-                <Text className={`font-body-semi text-xs ${deltaUp(s.revenueDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>· {rmDeltaF(s.revenue - s.prevRevenue)}</Text>
+                <Text className={`font-body-bold text-xs ${deltaUp(s.revenueDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{rmDeltaStr(s.revenue, s.prevRevenue)} · {deltaStr(s.revenueDelta)}</Text>
                 <Text className="font-body text-xs text-[#F5F3F08a]"> vs {data.prev.label.toLowerCase()}</Text>
               </View>
               <View className="mt-4 flex-row gap-3 border-t border-[#F5F3F00f] pt-4">
@@ -158,8 +170,8 @@ export default function SalesScreen() {
 
             {/* Comparison chart */}
             <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
-              <Text className="font-display text-sm text-[#F5F3F0]">Total Accumulative Sales <Text className="font-body text-[#F5F3F057]">(RM)</Text></Text>
-              <Text className="mb-2 mt-0.5 font-body text-[11px] text-[#F5F3F08a]">{data.cur.label} vs {data.prev.label} · running total</Text>
+              <Text className="font-display text-base text-[#F5F3F0]">Total Accumulative Sales <Text className="font-body text-[#F5F3F057]">(RM)</Text></Text>
+              <Text className="mb-2 mt-0.5 font-body text-[13px] text-[#F5F3F08a]">{data.cur.label} vs {data.prev.label} · running total</Text>
               <AccumChart series={data.series} curLabel={data.cur.label} prevLabel={data.prev.label} />
               <View className="mt-3 flex-row justify-center gap-4">
                 <Legend color="#FBBF24" label={data.cur.label} />
@@ -169,31 +181,48 @@ export default function SalesScreen() {
 
             {/* Growth */}
             <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
-              <Text className="font-display text-sm text-[#F5F3F0]">Growth</Text>
-              <Text className="mt-0.5 font-body text-[11px] text-[#F5F3F08a]">New this period</Text>
+              <Text className="font-display text-base text-[#F5F3F0]">Growth</Text>
+              <Text className="mt-0.5 font-body text-[13px] text-[#F5F3F08a]">New this period</Text>
               <View className="mt-3 flex-row gap-3">
                 <Tile icon={UserPlus} color="#34d399" v={numF(g.newCustomers)} k="New customers" delta={g.newCustomersDelta} />
                 <Tile icon={Smartphone} color="#8FB3F0" v={numF(g.newAppCustomers)} k="New app customers" delta={g.newAppDelta} />
               </View>
               <View className="mt-3.5 flex-row items-center justify-between border-t border-[#F5F3F00f] pt-3.5">
-                <Text className="font-body-semi text-xs text-[#F5F3F08a]">Orders via app · adoption</Text>
-                <Text className="font-display text-sm text-[#F5F3F0]">{g.appSharePct}%<Text className="font-body-bold text-[11px] text-[#34d399]">  {g.appShareDeltaPts >= 0 ? "+" : ""}{g.appShareDeltaPts} pts</Text></Text>
+                <View>
+                  <Text className="font-body-semi text-xs text-[#F5F3F08a]">Orders via app</Text>
+                  <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.appOrders)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {g.appSharePct}% of all</Text></Text>
+                </View>
+                <Text className={`font-body-bold text-[13px] ${deltaUp(g.appOrdersDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.appOrdersDelta)}</Text>
+              </View>
+              <View className="mt-3.5 flex-row items-center justify-between border-t border-[#F5F3F00f] pt-3.5">
+                <View>
+                  <Text className="font-body-semi text-xs text-[#F5F3F08a]">Collection rate</Text>
+                  <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{g.collectionRatePct}%<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {numF(g.capturedOrders)} with phone</Text></Text>
+                </View>
+                <Text className={`font-body-bold text-[13px] ${g.collectionDeltaPts >= 0 ? "text-[#34d399]" : "text-[#f87171]"}`}>{g.collectionDeltaPts >= 0 ? "+" : ""}{g.collectionDeltaPts}%</Text>
+              </View>
+              <View className="mt-3.5 flex-row items-center justify-between border-t border-[#F5F3F00f] pt-3.5">
+                <View>
+                  <Text className="font-body-semi text-xs text-[#F5F3F08a]">Pair adds</Text>
+                  <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.pairAdds)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · upsell added to cart</Text></Text>
+                </View>
+                <Text className={`font-body-bold text-[13px] ${deltaUp(g.pairAddsDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.pairAddsDelta)}</Text>
               </View>
             </View>
 
             {/* Payment methods */}
             <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
-              <Text className="font-display text-sm text-[#F5F3F0]">Payment methods</Text>
-              <Text className="mb-1 mt-0.5 font-body text-[11px] text-[#F5F3F08a]">How customers paid</Text>
+              <Text className="font-display text-base text-[#F5F3F0]">Payment methods</Text>
+              <Text className="mb-1 mt-0.5 font-body text-[13px] text-[#F5F3F08a]">How customers paid</Text>
               {data.payments.length === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No payments in this period.</Text> :
                 data.payments.map((p) => (
                   <Row key={p.key} icon={PAY_ICON[p.key] ?? Wallet} color={PAY_COLOR[p.key] ?? "#a78bfa"} name={p.label} pct={p.pct} amount={rmF(p.amount)} />
                 ))}
             </View>
 
-            {/* Channels / Rounds */}
+            {/* Channels / Dayparts */}
             <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
-              <Text className="font-display text-sm text-[#F5F3F0]">Sales breakdown</Text>
+              <Text className="font-display text-base text-[#F5F3F0]">Sales breakdown</Text>
               <View className="mb-1 mt-3 flex-row gap-1.5 rounded-xl border border-[#F5F3F01a] bg-[#160800] p-1">
                 {(["channel", "round"] as const).map((d) => (
                   <Pressable key={d} onPress={() => setDim(d)} className={`flex-1 items-center rounded-lg py-2 ${dim === d ? "bg-[#A2492C40]" : ""}`}>
@@ -203,12 +232,12 @@ export default function SalesScreen() {
               </View>
               {dim === "channel"
                 ? (data.channels.length === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No sales in this period.</Text> :
-                    data.channels.map((c) => <Row key={c.key} icon={CHAN_ICON[c.key] ?? Utensils} color={CHAN_COLOR[c.key] ?? "#E0875F"} name={c.label} pct={c.pct} amount={rmF(c.revenue)} />))
-                : data.rounds.map((r) => <Row key={r.key} icon={ROUND_ICON[r.key] ?? Coffee} color="#FBBF24" name={r.label} pct={Math.round((r.revenue / maxRound) * 100)} amount={rmF(r.revenue)} />)}
+                    data.channels.map((c) => <Row key={c.key} icon={CHAN_ICON[c.key] ?? Utensils} color={CHAN_COLOR[c.key] ?? "#E0875F"} name={c.label} pct={c.pct} amount={rmF(c.revenue)} orders={c.orders} />))
+                : data.rounds.map((r) => <Row key={r.key} icon={ROUND_ICON[r.key] ?? Coffee} color="#FBBF24" name={r.label} pct={Math.round((r.revenue / maxRound) * 100)} amount={rmF(r.revenue)} orders={r.orders} />)}
             </View>
 
             {data.warnings?.length ? (
-              <Text className="px-1 font-body text-[10px] text-[#F5F3F040]">{data.warnings.join(" · ")}</Text>
+              <Text className="px-1 font-body text-[11px] text-[#F5F3F040]">{data.warnings.join(" · ")}</Text>
             ) : null}
           </View>
         ) : null}
@@ -230,7 +259,7 @@ function Stat({ v, k }: { v: string; k: string }) {
   return (
     <View className="flex-1">
       <Text className="font-display text-lg text-[#F5F3F0]">{v}</Text>
-      <Text className="mt-0.5 font-body-semi text-[10px] uppercase tracking-wide text-[#F5F3F08a]">{k}</Text>
+      <Text className="mt-0.5 font-body-semi text-[11px] uppercase tracking-wide text-[#F5F3F08a]">{k}</Text>
     </View>
   );
 }
@@ -238,7 +267,7 @@ function Legend({ color, label }: { color: string; label: string }) {
   return (
     <View className="flex-row items-center gap-1.5">
       <View className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
-      <Text className="font-body-semi text-[11px] text-[#F5F3F08a]">{label}</Text>
+      <Text className="font-body-semi text-[13px] text-[#F5F3F08a]">{label}</Text>
     </View>
   );
 }
@@ -247,24 +276,24 @@ function Tile({ icon: Icon, color, v, k, delta }: { icon: any; color: string; v:
     <View className="flex-1 rounded-2xl border border-[#F5F3F01a] bg-[#160800] p-3.5">
       <View className="mb-2.5 h-8 w-8 items-center justify-center rounded-xl bg-[#F5F3F00f]"><Icon color={color} size={17} /></View>
       <Text className="font-display text-2xl text-[#F5F3F0]">{v}</Text>
-      <Text className="mt-1 font-body text-[11px] text-[#F5F3F08a]">{k}</Text>
-      <Text className={`mt-1.5 font-body-bold text-[11px] ${deltaUp(delta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(delta)}</Text>
+      <Text className="mt-1 font-body text-[13px] text-[#F5F3F08a]">{k}</Text>
+      <Text className={`mt-1.5 font-body-bold text-[13px] ${deltaUp(delta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(delta)}</Text>
     </View>
   );
 }
-function Row({ icon: Icon, color, name, pct, amount }: { icon: any; color: string; name: string; pct: number; amount: string }) {
+function Row({ icon: Icon, color, name, pct, amount, orders }: { icon: any; color: string; name: string; pct: number; amount: string; orders?: number }) {
   return (
     <View className="flex-row items-center gap-3 border-b border-[#F5F3F00f] py-3">
       <View className="h-9 w-9 items-center justify-center rounded-xl bg-[#F5F3F00f]"><Icon color={color} size={18} /></View>
       <View className="flex-1">
-        <Text className="font-body-semi text-[13px] text-[#F5F3F0]">{name}</Text>
+        <Text className="font-body-semi text-[15px] text-[#F5F3F0]">{name}{orders != null ? <Text className="font-body text-[13px] text-[#F5F3F057]">  ·  {numF(orders)} orders</Text> : null}</Text>
         <View className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#F5F3F014]">
           <View className="h-full rounded-full" style={{ width: `${Math.max(2, pct)}%`, backgroundColor: color }} />
         </View>
       </View>
       <View className="items-end">
-        <Text className="font-display text-[13px] text-[#F5F3F0]">{amount}</Text>
-        <Text className="mt-0.5 font-body-semi text-[11px] text-[#F5F3F057]">{pct}%</Text>
+        <Text className="font-display text-[15px] text-[#F5F3F0]">{amount}</Text>
+        <Text className="mt-0.5 font-body-semi text-[13px] text-[#F5F3F057]">{pct}%</Text>
       </View>
     </View>
   );

@@ -5,20 +5,24 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: "#FFFFFF",
-        surface: "#FFFFFF",
-        espresso: "#1A0200",
+        // Themeable tokens resolve against CSS vars set by lib/theme.ts
+        // at the root. Fallback = the light value, so if the theme
+        // wrapper is ever missing the app still renders correctly (light).
+        background: "var(--color-background, #FFFFFF)",
+        surface: "var(--color-surface, #FFFFFF)",
+        espresso: "var(--color-espresso, #1A0200)",
         primary: {
-          DEFAULT: "#A2492C",
-          50: "#F6E8E2",
-          100: "#EBD0C2",
+          DEFAULT: "#A2492C", // brand — same in both modes
+          50: "var(--color-primary-50, #F6E8E2)",
+          100: "var(--color-primary-100, #EBD0C2)",
           900: "#4E1F12",
         },
         muted: {
-          DEFAULT: "#6B6B6B",
-          fg: "#4A4A4A",
+          DEFAULT: "var(--color-muted, #6B6B6B)",
+          fg: "var(--color-muted-fg, #4A4A4A)",
         },
-        border: "rgba(26, 2, 0, 0.10)",
+        border: "var(--color-border, rgba(26, 2, 0, 0.10))",
+        // Accents read well on both light & dark — kept constant.
         amber: {
           400: "#FBBF24",
           500: "#F59E0B",
