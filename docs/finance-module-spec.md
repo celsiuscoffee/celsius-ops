@@ -19,19 +19,32 @@ Seeded once from Bukku export 2026-05-02 (see `apps/backoffice/supabase/migratio
 ## Architecture
 
 ```
-SOURCES                AGENTS              LEDGER (us)         OUTBOUND
+SOURCES                          AGENTS           LEDGER (us)        OUTBOUND
 
-StoreHub ─┐                                                   ┌─→ MyInvois (LHDN)
-Maybank  ─┼─→ Ingestor ─→ Categorizer ─→ fin_transactions ───┼─→ SST-02 (Customs)
-Email    ─┤            ─→ Matcher        + fin_journal_lines  ├─→ Auditor pack
-WhatsApp ─┤            ─→ AP                                  ├─→ WhatsApp digest
-HR       ─┘            ─→ AR             ↓                    └─→ Bank payment files
-                       ─→ Close       Exception inbox
-                       ─→ Compliance  (only human surface)
-                       ─→ Anomaly
+INTERNAL (system of record)                                         ┌─→ MyInvois (LHDN)
+  pos_orders / pos_order_payments  EOD aggregator                   │
+  orders (online / pickup)     ─┐  Ingestor    ─→ fin_transactions ─┼─→ SST-02 (Customs)
+  hr_payroll_runs (journal)    ─┼─ Matcher      + fin_journal_lines ├─→ Auditor pack
+                                │  Categorizer        ↓             ├─→ WhatsApp digest
+EXTERNAL (ingest-only pipes)   ─┤  AP / AR        Exception inbox   └─→ Bank payment files
+  Bukku bank feed (Maybank /    │  Close          (only human
+    CIMB / RHB tx via API)     ─┘  Compliance      surface)
+  Card settlement report          Anomaly
+  Supplier docs (email inbox)
 ```
 
-We are a single-tier system. No external book of record. Bukku stays read-only for historical reference until decommission.
+We are a single-tier system. **We are the only book of record.** No external system holds Celsius accounting state after cutover.
+
+### Infra-only principle (revised 2026-06-13)
+
+Post-migration Celsius runs **StoreHub-free and Bukku-free as systems of record**. Two distinctions matter:
+
+- **Internal sources are the system of record.** Sales/AR come from our own POS (`pos_orders`, `pos_order_payments`) and online (`orders`) — not StoreHub EOD. The `storehub-eod` ingester is transitional and retired once the internal EOD aggregator is live (see Build phases). Note: `pos_orders.outlet_id` holds a POS code (`outlet-sa`, etc.), not the outlet UUID — finance maps this to `Outlet` as a first-class step.
+- **External data may enter; no external system of record may persist.** Bank transactions, card settlement reports, delivery-platform payouts, and supplier invoices are inherently external and flow *in* — but they post into `fin_*` only.
+
+**Bukku is demoted from book-of-record to bank-feed pipe.** Malaysian banks expose no SME transaction API; Bukku already holds direct bank-feed connections (Maybank / CIMB / RHB) that auto-flow transactions. We pull those lines via the Bukku API (`developers.bukku.my`, Bearer token) into `fin_bank_transactions` and keep a minimal Bukku subscription alive solely as that conduit. We do **not** keep Bukku's ledger. This is swappable: if a direct bank feed or an aggregator opens up, replace the pipe without touching the rest of the module.
+
+> ⚠️ **Open verification (blocks bank-feed ingest):** confirm on `developers.bukku.my` that the API exposes **bank-feed transaction lines for read/retrieval** — not merely statement import into Bukku's own reconciliation. The feeds exist; programmatic read-access to those lines is the make-or-break for this path.
 
 ## Data model
 
@@ -133,24 +146,31 @@ No invoice form. No bill form. No COA editor (settings page only for read + acti
 
 ## Build phases
 
-1. **Foundation (week 1-2)** — Schema migration `002_finance_module.sql` + COA seed `003_finance_coa_seed.sql` + RLS + scaffolded routes.
-2. **AR autopilot (week 2-3)** — StoreHub EOD ingest → AR agent → posts journals. Bank ingest (Maybank statement upload v1) + Matcher. `/finance/transactions` + `/finance` home live.
-3. **AP autopilot (week 3-4)** — Email/WhatsApp inbox for supplier docs → AP agent. Exception inbox UI live.
-4. **Compliance (week 4-6)** — MyInvois sandbox + SST-02 + period close.
-5. **Reporting + audit (week 6-7)** — P&L, BS, CF generators. Auditor pack export. Year-end checklist agent.
-6. **Polish** — WhatsApp digest, Ask box (NL queries on the ledger), Anomaly agent.
+**Status as of 2026-06-13:** Phases 1 + 5 done; Phase 2 done on StoreHub rails (to be repointed); Phase 3 partial (AP works from manual upload). The list below is **re-sequenced** for the infra-only, Bukku-bank-feed architecture. The current blocker order is: outlet-code mapping → internal EOD aggregator → Matcher (rules-first) → Bukku bank-feed ingest → exception resolvers (all types) → Anomaly → supplier email inbox.
 
-## Cutover from Bukku
+1. **Foundation** — ✅ done. Schema `002` + COA seed `003` + RLS + routes.
+2. **AR autopilot** — ✅ done on StoreHub EOD. **Re-point:** build the internal EOD aggregator (`pos_orders` + `pos_order_payments` + `orders` → source-neutral daily tender summary per outlet/channel) feeding the existing AR agent; first-class `pos_orders.outlet_id` → `Outlet` UUID mapping. Retire `storehub-eod` once parity holds.
+3. **Bank feed + Matcher** — pull bank lines from the Bukku API into `fin_bank_transactions`; Matcher reconciles POS/online tender ↔ bank line ↔ journal, **rules-first** (exact amount + date window + channel/reference) with an LLM pass only on the fuzzy residual. This is the cutover gate.
+4. **AP autopilot** — ✅ works from manual upload. Add supplier-doc **email inbox** ingestion (replaces manual courier step).
+5. **Exception resolvers (all types)** — `inbox.ts` currently resolves only AP/categorization. Implement match / anomaly / missing-doc / duplicate / out-of-balance resolvers so the human loop and the correction-as-training-signal close.
+6. **Compliance** — MyInvois sandbox + SST-02 + period close (mostly built; prod credentials + JKDM filing stay behind the human signature).
+7. **Reporting + audit** — ✅ done. P&L, BS, CF + auditor pack.
+8. **Anomaly + polish** — continuous Anomaly sweep, WhatsApp digest, Ask box (NL queries). The **Fable 5 nightly orchestrator** runs the whole sequence, investigates non-reconciling outlets, and writes the digest — it does not categorize individual lines (Haiku/Sonnet stay on per-line work).
 
-- Run new module in parallel for ≥1 full month.
-- AR: every StoreHub EOD posts to BOTH systems. Compare daily.
-- AP: every supplier bill entered manually in Bukku also runs through the AP agent for the parallel month. Compare end-of-month.
-- Bank recon: same statement uploaded to both. Compare match rates.
-- Pass criteria: P&L, BS, CF reconcile within RM 1 of Bukku for the parallel month, no missing transactions either side.
-- After pass: stop posting to Bukku. Bukku data exported and archived. Module becomes sole source.
+## Cutover (revised 2026-06-13 — bank feed is the validation harness)
+
+With Bukku demoted to a bank-feed pipe (not a parallel ledger), the **bank statement is the external ground truth**, and the **Matcher is the cutover gate**: the ledger is proven correct when, for a full month, internal POS/online tender totals reconcile to the bank-fed transactions and to the posted journals — daily, per outlet.
+
+- Run the module in report-only mode for ≥1 full month (post journals; do not yet drive outbound filings).
+- AR: internal EOD aggregator posts daily; reconcile posted revenue against the Bukku-fed bank lines via the Matcher.
+- AP: supplier docs run through the AP agent; spot-check coding against historical Bukku categorization for the same vendors (one-time export, read-only).
+- **Pass criteria:** for the parallel month — (a) every bank line is matched or sits in the exception inbox with a proposed action, (b) per-outlet daily tender-vs-bank variance is within RM 1, (c) no unexplained gaps either side. Bukku ledger parity is **no longer** a pass criterion (we are not keeping Bukku's books).
+- After pass: Bukku's ledger data is exported and archived; the Bukku subscription is downgraded to bank-feed only. The module is sole book of record.
 
 ## Open questions
 
-1. **MyInvois timeline** — Celsius is on the LHDN mandate. Confirm whether Phase 1 ships before or after the e-invoice deadline; if before, parallel filing via Bukku needs explicit plan.
-2. **Cutover date** — propose 2026-06-01 as parallel-run start, 2026-07-01 as Bukku decommission.
-3. **External auditor** — confirm auditor accepts our PDF/CSV pack. If they require Bukku/SQL/AutoCount format specifically, we add an export adapter.
+1. **Bukku bank-feed API read-access** *(blocks Phase 3)* — confirm `developers.bukku.my` exposes bank-feed transaction lines for retrieval, the endpoint shape, and pagination/incremental-pull semantics. If read-access is not available, fall back to Maybank scheduled-statement email → parser.
+2. **MyInvois timeline** — Celsius is on the LHDN mandate. Confirm whether the module's compliance phase ships before or after the e-invoice deadline.
+3. **Cutover date** — original 2026-06-01 parallel-run start has passed. Re-baseline: pick a realistic report-only month start now that the harness is the bank feed (not Bukku parity).
+4. **External auditor** — confirm auditor accepts our PDF/CSV pack. If they require AutoCount/SQL format specifically, add an export adapter.
+5. **Bukku subscription tier** — confirm the minimum Bukku plan that retains the Maybank/CIMB/RHB bank feed + API access, so the conduit cost is known.
