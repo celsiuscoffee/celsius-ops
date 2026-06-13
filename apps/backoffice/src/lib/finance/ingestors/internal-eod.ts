@@ -23,6 +23,7 @@ import type { IngestEodResult } from "./storehub-eod";
 import {
   aggregateInternalEod,
   posCodeForOutlet,
+  mytDateOf,
   type PosOrderRow,
   type PosPaymentRow,
   type AppOrderRow,
@@ -210,11 +211,6 @@ export async function ingestOutletEodInternal(outletId: string, date: string): P
       error: err instanceof Error ? err.message : String(err),
     };
   }
-}
-
-// MYT calendar date (YYYY-MM-DD) from a Date — used for cutover comparison.
-function mytDateOf(d: Date): string {
-  return new Date(d.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 // Ingest every outlet that has cut over to POS-native on/before `date`.

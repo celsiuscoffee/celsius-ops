@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   aggregateInternalEod,
+  eodSourceFor,
   type PosOrderRow,
   type PosPaymentRow,
   type AppOrderRow,
@@ -97,5 +98,31 @@ describe("aggregateInternalEod", () => {
     });
     expect(s.transactions).toBe(1);
     expect(s.netSales).toBe(10);
+  });
+});
+
+describe("eodSourceFor", () => {
+  const cut = (d: string) => new Date(`${d}T00:00:00+08:00`);
+
+  it("routes a cutover outlet to internal on and after the cutover day", () => {
+    const o = { storehubId: "sh1", posNativeCutoverAt: cut("2026-06-10") };
+    expect(eodSourceFor(o, "2026-06-09")).toBe("storehub"); // day before
+    expect(eodSourceFor(o, "2026-06-10")).toBe("internal"); // cutover day
+    expect(eodSourceFor(o, "2026-06-11")).toBe("internal"); // after
+  });
+
+  it("cutover wins even when a storehubId is still present", () => {
+    const o = { storehubId: "sh1", posNativeCutoverAt: cut("2026-06-01") };
+    expect(eodSourceFor(o, "2026-06-12")).toBe("internal");
+  });
+
+  it("falls back to storehub when not yet cut over", () => {
+    expect(eodSourceFor({ storehubId: "sh1", posNativeCutoverAt: null }, "2026-06-12")).toBe("storehub");
+  });
+
+  it("skips an outlet with neither source", () => {
+    expect(eodSourceFor({ storehubId: null, posNativeCutoverAt: null }, "2026-06-12")).toBe("skipped");
+    // cutover in the future, no storehub fallback for the historical date
+    expect(eodSourceFor({ storehubId: null, posNativeCutoverAt: cut("2026-07-01") }, "2026-06-12")).toBe("skipped");
   });
 });

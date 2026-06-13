@@ -102,6 +102,30 @@ function emptySplit(): EodChannelSplit {
   return { cashQr: 0, card: 0, voucher: 0, grabfood: 0, gastrohub: 0, other: 0 };
 }
 
+// ── EOD source routing (StoreHub vs internal) ───────────────────────────────
+// MYT calendar date (YYYY-MM-DD) from a Date.
+export function mytDateOf(d: Date): string {
+  return new Date(d.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+// Decide which ingester owns an outlet's EOD for a given date. Cutover is
+// day-grained: an outlet is "internal" on and after its cutover DAY. This
+// assumes outlets are cut over at a day boundary (posNativeCutoverAt = 00:00
+// MYT of the first full POS day); a mid-day cutover would split that day's
+// sales across StoreHub (morning) and POS (afternoon) and the day-grained
+// journal would only capture the POS side. Set cutover at midnight to avoid it.
+//
+// Routing is mutually exclusive, so StoreHub and internal can never both post
+// for the same outlet/date.
+export function eodSourceFor(
+  o: { storehubId: string | null; posNativeCutoverAt: Date | null },
+  date: string
+): "internal" | "storehub" | "skipped" {
+  if (o.posNativeCutoverAt && mytDateOf(o.posNativeCutoverAt) <= date) return "internal";
+  if (o.storehubId) return "storehub";
+  return "skipped";
+}
+
 // ── Pure aggregation: rows -> EodSummary (RM) ───────────────────────────────
 //
 // Net revenue per order is `total - sst` for BOTH sources (so discounts and

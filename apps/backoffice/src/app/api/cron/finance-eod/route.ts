@@ -1,11 +1,14 @@
-// Daily cron — runs at 4 AM MYT to ingest yesterday's StoreHub EOD across
-// all outlets and post AR journals via the AR agent.
+// Daily cron — runs at 4 AM MYT to ingest yesterday's EOD across all outlets
+// and post AR journals via the AR agent.
+//
+// Source-routed: each outlet is ingested from POS-native (cutover outlets) or
+// StoreHub (pre-cutover), never both — see ingestAllOutletsEodRouted.
 //
 // Idempotent: re-running for a date that's already been posted skips the
-// outlet (see ingestOutletEod's existing-txn guard).
+// outlet (see each ingester's existing-txn guard).
 
 import { NextRequest, NextResponse } from "next/server";
-import { ingestAllOutletsEod } from "@/lib/finance/ingestors/storehub-eod";
+import { ingestAllOutletsEodRouted } from "@/lib/finance/ingestors/eod-router";
 import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +26,7 @@ export async function GET(req: NextRequest) {
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   const date = yesterdayMyt();
-  const results = await ingestAllOutletsEod(date);
+  const results = await ingestAllOutletsEodRouted(date);
 
   const summary = {
     date,
@@ -31,6 +34,11 @@ export async function GET(req: NextRequest) {
     posted: results.filter((r) => r.posted).length,
     skipped: results.filter((r) => r.skipped).length,
     errors: results.filter((r) => r.error).length,
+    bySource: {
+      internal: results.filter((r) => r.source === "internal").length,
+      storehub: results.filter((r) => r.source === "storehub").length,
+      skipped: results.filter((r) => r.source === "skipped").length,
+    },
     totalAmount: results.reduce((s, r) => s + (r.posted?.amount ?? 0), 0),
   };
 
