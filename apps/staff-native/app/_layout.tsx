@@ -27,6 +27,8 @@ import {
 import { API_BASE_URL } from "../lib/env";
 import { useStaff } from "../lib/store";
 import { registerForPush } from "../lib/push";
+import { useColorScheme } from "nativewind";
+import { themes, loadColorSchemePref } from "../lib/theme";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 initSentry();
@@ -67,6 +69,16 @@ function RootLayout() {
 
   const setSession = useStaff((s) => s.setSession);
   const [sessionHydrated, setSessionHydrated] = useState(false);
+
+  // Restore the saved appearance preference (light/dark/system) on
+  // launch so the user's choice persists across app restarts.
+  const { colorScheme, setColorScheme } = useColorScheme();
+  useEffect(() => {
+    loadColorSchemePref()
+      .then((p) => setColorScheme(p))
+      .catch(() => {});
+  }, [setColorScheme]);
+  const scheme = colorScheme === "dark" ? "dark" : "light";
 
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
@@ -141,9 +153,11 @@ function RootLayout() {
   useEffect(() => {
     if (loaded) {
       applyDefaultFont();
-      SystemUI.setBackgroundColorAsync("#FFFFFF").catch(() => {});
+      SystemUI.setBackgroundColorAsync(
+        scheme === "dark" ? "#1A0200" : "#FFFFFF",
+      ).catch(() => {});
     }
-  }, [loaded]);
+  }, [loaded, scheme]);
 
   const sessionUserId = useStaff((s) => s.session?.userId ?? null);
   useEffect(() => {
@@ -177,14 +191,16 @@ function RootLayout() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={[{ flex: 1 }, themes[scheme]]}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <StatusBar style="dark" />
+          <StatusBar style={scheme === "dark" ? "light" : "dark"} />
           <Stack
             screenOptions={{
               headerShown: false,
-              contentStyle: { backgroundColor: "#FFFFFF" },
+              contentStyle: {
+                backgroundColor: scheme === "dark" ? "#1A0200" : "#FFFFFF",
+              },
               animation: "slide_from_right",
             }}
           />

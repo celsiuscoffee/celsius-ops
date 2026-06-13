@@ -4,8 +4,8 @@ export type Mode = "day" | "week" | "month" | "custom";
 export type Granularity = "hour" | "day";
 
 export type SeriesPoint = { label: string; cur: number | null; prev: number };
-export type Channel = { key: string; label: string; revenue: number; pct: number };
-export type Round = { key: string; label: string; revenue: number };
+export type Channel = { key: string; label: string; revenue: number; orders: number; pct: number };
+export type Round = { key: string; label: string; revenue: number; orders: number };
 export type Payment = { key: string; label: string; amount: number; pct: number };
 
 export type SalesDashboard = {
@@ -28,7 +28,10 @@ export type SalesDashboard = {
   growth: {
     newCustomers: number; newCustomersDelta: number | null;
     newAppCustomers: number; newAppDelta: number | null;
+    appOrders: number; appOrdersDelta: number | null;
     appSharePct: number; appShareDeltaPts: number;
+    capturedOrders: number; collectionRatePct: number; collectionDeltaPts: number;
+    pairAdds: number; pairAddsDelta: number | null;
   };
   warnings?: string[];
 };

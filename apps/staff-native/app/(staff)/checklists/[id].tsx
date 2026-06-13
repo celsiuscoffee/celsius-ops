@@ -529,7 +529,7 @@ export default function ChecklistDetail() {
           ) : null}
           <Pressable
             onPress={() => setPreviewUrl(null)}
-            className="absolute right-5 top-12 h-10 w-10 items-center justify-center rounded-full bg-white/20"
+            className="absolute right-5 top-16 h-10 w-10 items-center justify-center rounded-full bg-white/20"
           >
             <X color="#FFFFFF" size={20} />
           </Pressable>

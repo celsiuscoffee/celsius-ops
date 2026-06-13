@@ -24,6 +24,7 @@ const TAB_DEFS = [
 
 export default function StaffLayout() {
   const session = useStaff((s) => s.session);
+  const isAdmin = session?.role === "OWNER" || session?.role === "ADMIN";
 
   // Heal sessions saved before Phase 5b (no moduleAccess) — fetch fresh
   // from /api/auth/me and persist so the bottom bar gates correctly.
@@ -57,13 +58,16 @@ export default function StaffLayout() {
       }}
     >
       {TAB_DEFS.map((t) => {
-        const Icon = t.icon;
+        // Owners' Home tab IS the Sales dashboard → relabel it "Sales" and
+        // hide the now-duplicate standalone Sales tab.
+        const isHomeAsSales = isAdmin && t.name === "home";
+        const Icon = isHomeAsSales ? TrendingUp : t.icon;
         return (
           <Tabs.Screen
             key={t.name}
             name={t.name}
             options={{
-              title: t.title,
+              title: isHomeAsSales ? "Sales" : t.title,
               tabBarIcon: ({ color, size, focused }) => (
                 <View
                   style={{
@@ -80,7 +84,10 @@ export default function StaffLayout() {
                   <Icon color={color} size={size} />
                 </View>
               ),
-              href: allowed(t.moduleKey) ? undefined : null,
+              href:
+                (isAdmin && t.name === "sales") || !allowed(t.moduleKey)
+                  ? null
+                  : undefined,
             }}
           />
         );

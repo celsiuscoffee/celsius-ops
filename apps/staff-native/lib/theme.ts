@@ -9,32 +9,29 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 // Strategy: only theme the *neutral* and *terracotta-tint* surfaces
 // here. Pure brand color (`primary` itself) and the success/danger/
 // amber accents work in both modes (sufficient contrast either way).
+// Values MUST stay in sync with the token names in tailwind.config.js.
+// Light = the original hardcoded palette. Dark = brand espresso tones so
+// the whole app matches the login/sales aesthetic in dark mode.
 export const themes = {
   light: vars({
     "--color-background": "#FFFFFF",
     "--color-surface": "#FFFFFF",
-    "--color-espresso": "#160800",
-    "--color-border": "#E5E2DE",
-    "--color-muted": "#9CA3AF",
-    "--color-muted-fg": "#737373",
-    "--color-primary-50": "#FBE9E4",
-    "--color-primary-100": "#F4CFC4",
-    "--color-gray-50": "#F9FAFB",
-    "--color-gray-100": "#F3F4F6",
-    "--color-gray-200": "#E5E7EB",
+    "--color-espresso": "#1A0200",
+    "--color-border": "rgba(26, 2, 0, 0.10)",
+    "--color-muted": "#6B6B6B",
+    "--color-muted-fg": "#4A4A4A",
+    "--color-primary-50": "#F6E8E2",
+    "--color-primary-100": "#EBD0C2",
   }),
   dark: vars({
-    "--color-background": "#0A0A0A",
-    "--color-surface": "#18181B",
+    "--color-background": "#1A0200",
+    "--color-surface": "#2A1508",
     "--color-espresso": "#FAFAFA",
-    "--color-border": "#27272A",
-    "--color-muted": "#71717A",
-    "--color-muted-fg": "#A1A1AA",
-    "--color-primary-50": "#2A1612",
-    "--color-primary-100": "#3D211A",
-    "--color-gray-50": "#18181B",
-    "--color-gray-100": "#27272A",
-    "--color-gray-200": "#3F3F46",
+    "--color-border": "rgba(245, 243, 240, 0.12)",
+    "--color-muted": "#9A8A85",
+    "--color-muted-fg": "#C8B8B3",
+    "--color-primary-50": "#3D211A",
+    "--color-primary-100": "#4E2A1E",
   }),
 } as const;
 
