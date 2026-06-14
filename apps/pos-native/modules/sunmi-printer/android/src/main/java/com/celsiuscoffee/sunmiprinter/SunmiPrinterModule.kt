@@ -313,22 +313,23 @@ class SunmiPrinterModule : Module() {
       line.printText(o.station.uppercase(), TextStyle.getStyle().setAlign(Align.CENTER).enableBold(true).setTextSize(48))
       line.printDividingLine(DividingLine.DOTTED, 1)
 
-      // 2. Order info — table / queue number BIG (StoreHub-style: a small
-      // label over a huge number) so the line reads it across the pass; the
-      // order ref + time sit smaller beneath.
-      if (o.orderType.isNotEmpty()) line.printText(o.orderType, TextStyle.getStyle().setAlign(Align.CENTER).setTextSize(28))
+      // 2. Order info — DINE-IN / TAKEAWAY banner + a "TABLE #" style label
+      // over a huge number (StoreHub-style), all big + bold so the line can
+      // tell the fulfillment type and find the order across the pass at a
+      // glance. Order ref + time sit smaller beneath.
+      if (o.orderType.isNotEmpty()) line.printText(o.orderType, TextStyle.getStyle().setAlign(Align.CENTER).enableBold(true).setTextSize(48))
       val bigLabel = when {
-        o.tableNumber.isNotEmpty() -> if (o.tableLabel.isNotEmpty()) o.tableLabel else "Table"
-        o.queueNumber.isNotEmpty() -> "QUEUE"
-        else -> "ORDER"
+        o.tableNumber.isNotEmpty() -> (if (o.tableLabel.isNotEmpty()) o.tableLabel else "Table").uppercase() + " #"
+        o.queueNumber.isNotEmpty() -> "QUEUE #"
+        else -> "ORDER #"
       }
       val bigValue = when {
         o.tableNumber.isNotEmpty() -> o.tableNumber
         o.queueNumber.isNotEmpty() -> o.queueNumber
         else -> o.orderNumber
       }
-      line.printText(bigLabel, TextStyle.getStyle().setAlign(Align.CENTER).setTextSize(26))
-      line.printText(bigValue, TextStyle.getStyle().setAlign(Align.CENTER).enableBold(true).setTextSize(60))
+      line.printText(bigLabel, TextStyle.getStyle().setAlign(Align.CENTER).enableBold(true).setTextSize(34))
+      line.printText(bigValue, TextStyle.getStyle().setAlign(Align.CENTER).enableBold(true).setTextSize(72))
       // Order ref underneath only when it isn't already the big number.
       if (bigValue != o.orderNumber) {
         line.printText("Order #${o.orderNumber}", TextStyle.getStyle().setAlign(Align.CENTER).setTextSize(28))

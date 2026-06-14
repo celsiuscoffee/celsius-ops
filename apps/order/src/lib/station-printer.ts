@@ -191,6 +191,152 @@ function formatDocket(order: OrderLite, station: string, items: OrderItemLite[])
   return lines;
 }
 
+// ── Bitmap renderer ───────────────────────────────────────────
+// The printer's built-in font is a fixed dot-matrix face — ESC/POS has
+// no "use this typeface" command. To match a real font (Helvetica/Arial
+// look, like the StoreHub docket) we render the docket to a canvas with
+// a proper sans-serif, threshold it to 1-bit, and send it as an ESC/POS
+// raster image. `renderDocketRaster` turns the same DocketLine[] used by
+// the text path into that raster, so the styled `lines` payload stays the
+// safe fallback when canvas isn't available (SSR) or rendering throws.
+//
+// Font: real Arial, subset to the docket's glyphs and bundled at
+// /fonts/arial.ttf (+ arial-bold.ttf). Loaded via FontFace before the
+// first raster so the docket matches the StoreHub face exactly. If the
+// load fails (offline before cache, etc.) the canvas falls back to the
+// platform's own Arial/Helvetica/sans, which is visually near-identical.
+const RASTER_WIDTH = 576;          // 80mm printable area @ 203dpi (multiple of 8)
+const RASTER_FONT = '"ArialDocket", Arial, "Helvetica Neue", Helvetica, sans-serif';
+const LEFT_MARGIN = 12;
+const INDENT_PX = 28;
+const LINE_GAP = 1.35;             // line-height factor
+
+// Load the bundled Arial once. Resolves whether or not the load succeeds
+// (rendering just falls back to system fonts on failure).
+let docketFontPromise: Promise<void> | null = null;
+function ensureDocketFont(): Promise<void> {
+  if (typeof document === "undefined" || !("fonts" in document) || typeof FontFace === "undefined") {
+    return Promise.resolve();
+  }
+  if (docketFontPromise) return docketFontPromise;
+  docketFontPromise = (async () => {
+    try {
+      const faces = [
+        new FontFace("ArialDocket", "url(/fonts/arial.ttf)", { weight: "400", style: "normal" }),
+        new FontFace("ArialDocket", "url(/fonts/arial-bold.ttf)", { weight: "700", style: "normal" }),
+      ];
+      const loaded = await Promise.all(faces.map((f) => f.load()));
+      for (const f of loaded) document.fonts.add(f);
+    } catch {
+      /* fall back to platform Arial/Helvetica/sans-serif */
+    }
+  })();
+  return docketFontPromise;
+}
+
+// Point-ish docket size → canvas pixels. Keeps the same hierarchy as the
+// text path (24 base, 42 item names, 72 pickup number) but at a print
+// resolution that looks crisp: 24→34, 42→59, 72→101.
+function sizePx(size?: number): number {
+  return Math.round((size ?? 24) * 1.4);
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+
+type DocketRaster = { widthBytes: number; height: number; dataB64: string };
+
+async function renderDocketRaster(lines: DocketLine[]): Promise<DocketRaster | null> {
+  if (typeof document === "undefined") return null;
+  try {
+    await ensureDocketFont();
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    const fontFor = (px: number, bold: boolean) => `${bold ? "700" : "400"} ${px}px ${RASTER_FONT}`;
+
+    // Pass 1 — word-wrap each line to the paper width and collect the
+    // drawables so we know the total height before sizing the canvas.
+    type Draw = { text: string; px: number; bold: boolean; align: "left" | "center"; indent: boolean };
+    const draws: Draw[] = [];
+    for (const l of lines) {
+      const px = sizePx(l.size);
+      const bold = !!l.bold;
+      const align: "left" | "center" = l.align === "center" ? "center" : "left";
+      const indent = /^\s{2,}/.test(l.text);
+      const text = l.text.trim();
+      ctx.font = fontFor(px, bold);
+      const maxW = RASTER_WIDTH - LEFT_MARGIN * 2 - (indent ? INDENT_PX : 0);
+      const words = text.split(/\s+/).filter(Boolean);
+      if (words.length === 0) {
+        draws.push({ text: "", px, bold, align, indent });
+        continue;
+      }
+      let cur = "";
+      for (const w of words) {
+        const trial = cur ? `${cur} ${w}` : w;
+        if (!cur || ctx.measureText(trial).width <= maxW) {
+          cur = trial;
+        } else {
+          draws.push({ text: cur, px, bold, align, indent });
+          cur = w;
+        }
+      }
+      if (cur) draws.push({ text: cur, px, bold, align, indent });
+    }
+
+    // Lay out vertically.
+    let y = 0;
+    const placed = draws.map((d) => {
+      const lineH = Math.round(d.px * LINE_GAP);
+      const baseline = y + d.px; // glyph ascent < px, so this clears the top
+      y += lineH;
+      return { ...d, baseline };
+    });
+    const height = y + 8;
+
+    canvas.width = RASTER_WIDTH;
+    canvas.height = height;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, RASTER_WIDTH, height);
+    ctx.fillStyle = "#000";
+    ctx.textBaseline = "alphabetic";
+    for (const d of placed) {
+      if (!d.text) continue;
+      ctx.font = fontFor(d.px, d.bold);
+      let x = LEFT_MARGIN + (d.indent ? INDENT_PX : 0);
+      if (d.align === "center") {
+        x = Math.max(0, Math.round((RASTER_WIDTH - ctx.measureText(d.text).width) / 2));
+      }
+      ctx.fillText(d.text, x, d.baseline);
+    }
+
+    // Threshold to 1-bit, MSB-first, row-major (ESC/POS raster layout).
+    const img = ctx.getImageData(0, 0, RASTER_WIDTH, height).data;
+    const bytesPerRow = RASTER_WIDTH / 8;
+    const out = new Uint8Array(bytesPerRow * height);
+    for (let row = 0; row < height; row++) {
+      for (let col = 0; col < RASTER_WIDTH; col++) {
+        const i = (row * RASTER_WIDTH + col) * 4;
+        const lum = 0.299 * img[i] + 0.587 * img[i + 1] + 0.114 * img[i + 2];
+        if (img[i + 3] > 128 && lum < 160) {
+          out[row * bytesPerRow + (col >> 3)] |= 0x80 >> (col & 7);
+        }
+      }
+    }
+    return { widthBytes: bytesPerRow, height, dataB64: bytesToBase64(out) };
+  } catch {
+    return null; // caller falls back to the text `lines` payload
+  }
+}
+
 // ── Bridge POST ──────────────────────────────────────────────
 // Hits the same `localhost:8080/print` endpoint the POS uses.
 // Returns true when the bridge accepts the job (status 2xx); false
@@ -199,10 +345,12 @@ function formatDocket(order: OrderLite, station: string, items: OrderItemLite[])
 // "fell back to the existing per-app print path."
 
 async function postToBridge(station: string, lines: DocketLine[], ip: string | null, port: number | null): Promise<boolean> {
-  const payload: Record<string, unknown> = {
-    printer: station.toLowerCase(),
-    lines,
-  };
+  // Prefer a bitmap raster (real font); fall back to styled text `lines`
+  // when canvas isn't available or rendering fails, so a ticket always prints.
+  const raster = await renderDocketRaster(lines);
+  const payload: Record<string, unknown> = raster
+    ? { printer: station.toLowerCase(), raster }
+    : { printer: station.toLowerCase(), lines };
   if (ip) {
     payload.ip = ip;
     payload.port = port ?? 9100;

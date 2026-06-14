@@ -48,7 +48,7 @@ curl -X POST http://localhost:8080/print \
   -d '{"printer":"bar","ip":"192.168.1.100","port":9100,"data":"** TEST **\nHello\n** END **"}'
 ```
 
-A docket can be sent two ways:
+A docket can be sent three ways:
 
 - **`data`** — plain text, printed at the head's default cell. Simple,
   but everything comes out one small size (legacy path).
@@ -56,8 +56,15 @@ A docket can be sent two ways:
   (point-ish; 24 = base cell, 42-48 ≈ 2×, 72 ≈ 3×), `align`
   (`left`/`center`/`right`), and `bold`. The bridge renders these with
   real ESC/POS size/weight/alignment codes, so item names print big and
-  bold with a clear header hierarchy. This is what the pickup KDS sends
-  (see `apps/order/src/lib/station-printer.ts`).
+  bold with a clear header hierarchy. Uses the printer's built-in font.
+- **`raster`** — a 1-bit bitmap of the whole docket (`{ widthBytes,
+  height, dataB64 }`, MSB-first, row-major). The caller renders the
+  docket to a canvas with a real typeface (Helvetica/Arial look) and
+  sends the image; the bridge wraps it in an ESC/POS `GS v 0` raster
+  command. This is the only way to use a true font — the built-in
+  dot-matrix font can't be swapped. The pickup KDS sends `raster` and
+  falls back to `lines` when canvas isn't available (see
+  `apps/order/src/lib/station-printer.ts`).
 
 ```bash
 curl -X POST http://localhost:8080/print \
@@ -161,8 +168,9 @@ Drop the binary on the POS, copy `printers.json` next to it, run it.
   failure and falls back to the SUNMI built-in printer.
 - **ESC/POS prologue**: `ESC @` (init). The `data` path then left-aligns
   and prints at the default cell; the `lines` path emits per-line
-  `GS ! n` (size), `ESC E n` (bold) and `ESC a n` (align) so the docket
-  has a real font hierarchy. Epilogue: 3-line feed + full cut.
+  `GS ! n` (size), `ESC E n` (bold) and `ESC a n` (align); the `raster`
+  path centre-aligns and emits a `GS v 0` bit-image of the whole docket.
+  Epilogue: 6-line feed + full cut.
 - **Charset**: UTF-8. Most thermal printers default to CP437/Korean
   if you don't set a code page — if you see garbage on accented
   characters, add `ESC R 0 ESC t 0` to `INIT` in `server.js` to

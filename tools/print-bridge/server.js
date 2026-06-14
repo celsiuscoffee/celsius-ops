@@ -154,6 +154,32 @@ function buildEscPosFromLines(lines) {
   return Buffer.from(out);
 }
 
+// body.raster → an ESC/POS raster bit-image (GS v 0). The caller rendered
+// the docket to a 1-bit bitmap with a real font (see station-printer's
+// renderDocketRaster) so the slip can use a true typeface the built-in
+// dot-matrix font can't produce. Shape:
+//   { widthBytes, height, dataB64 }  — dataB64 is MSB-first, row-major,
+//   widthBytes bytes per row, `height` rows.
+// Returns null on a malformed payload so the handler can 400.
+function buildEscPosFromRaster(raster) {
+  if (!raster || typeof raster !== 'object') return null;
+  const widthBytes = raster.widthBytes | 0;
+  const height = raster.height | 0;
+  if (widthBytes <= 0 || widthBytes > 0xffff || height <= 0 || height > 0xffff) return null;
+  const data = Buffer.from(String(raster.dataB64 || ''), 'base64');
+  if (data.length < widthBytes * height) return null;
+  const header = [
+    GS, 0x76, 0x30, 0x00,          // GS v 0, mode 0 (normal)
+    widthBytes & 0xff, (widthBytes >> 8) & 0xff,
+    height & 0xff, (height >> 8) & 0xff,
+  ];
+  return Buffer.concat([
+    Buffer.from([...INIT, ...alignByte('center'), ...header]),
+    data,
+    Buffer.from([...ALIGN_L, ...FEED_CUT, ...CUT_FULL]),
+  ]);
+}
+
 // ── TCP send ──────────────────────────────────────────────────
 // Raw TCP to port 9100 (standard ESC/POS over LAN). Short
 // timeout because the bridge sits in the print path of an active
@@ -242,9 +268,15 @@ const server = http.createServer(async (req, res) => {
       return json(res, 404, { error: `No printer for station "${station}"` });
     }
 
-    const payload = Array.isArray(body.lines)
-      ? buildEscPosFromLines(body.lines)
-      : buildEscPos(body.data);
+    let payload;
+    if (body.raster) {
+      payload = buildEscPosFromRaster(body.raster);
+      if (!payload) return json(res, 400, { error: 'Malformed raster payload' });
+    } else if (Array.isArray(body.lines)) {
+      payload = buildEscPosFromLines(body.lines);
+    } else {
+      payload = buildEscPos(body.data);
+    }
     await sendToPrinter(target.ip, target.port, payload);
     return json(res, 200, { ok: true, sent_to: `${target.ip}:${target.port}` });
   } catch (err) {

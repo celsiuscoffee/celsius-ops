@@ -149,11 +149,15 @@ function buildDocketBytes(d: DocketData): number[] {
   // Order info — surface the table / queue number BIG (StoreHub-style: a
   // small label over a huge number) so the line can read it across the
   // pass, with the order ref + time smaller beneath.
-  if (d.orderType) e.line(d.orderType);
-  const bigLabel = d.tableNumber ? (d.tableLabel || "Table") : d.queueNumber ? "QUEUE" : "ORDER";
+  // DINE-IN / TAKEAWAY printed big + bold so the line can tell at a glance
+  // whether to plate or pack.
+  if (d.orderType) e.bold(true).size(2, 2).line(d.orderType).size(1, 1).bold(false);
+  const bigLabel = d.tableNumber
+    ? `${(d.tableLabel || "Table").toUpperCase()} #`
+    : d.queueNumber ? "QUEUE #" : "ORDER #";
   const bigValue = d.tableNumber || d.queueNumber || d.orderNumber;
-  e.line(bigLabel);
-  e.bold(true).size(3, 3).line(bigValue).size(1, 1).bold(false);
+  e.bold(true).size(1, 1).line(bigLabel);
+  e.size(3, 3).line(bigValue).size(1, 1).bold(false);
   // Order ref underneath only when it isn't already the big number.
   if (bigValue !== d.orderNumber) {
     e.bold(true).size(1, 1).line(`Order #${d.orderNumber}`).bold(false);
