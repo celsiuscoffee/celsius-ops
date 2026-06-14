@@ -127,9 +127,11 @@ class Esc {
   line(s = "") {
     return this.text(s).raw(0x0a);
   }
-  /** ESC d n — feed n lines, then partial cut. */
+  /** ESC d n — feed n lines, then partial cut. Feed 6: the cutter sits
+   *  ~1.5cm above the print line, so a smaller feed slices the last line
+   *  ("- END -") off. 6 clears the cutter and leaves a small tear margin. */
   cut() {
-    return this.raw(0x1b, 0x64, 3).raw(0x1d, 0x56, 0x01);
+    return this.raw(0x1b, 0x64, 6).raw(0x1d, 0x56, 0x01);
   }
   bytes() {
     return this.b;

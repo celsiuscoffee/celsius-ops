@@ -95,7 +95,10 @@ const ESC = 0x1B;
 const GS = 0x1D;
 const INIT     = [ESC, 0x40];       // ESC @  → reset
 const ALIGN_L  = [ESC, 0x61, 0x00];
-const FEED_3   = [ESC, 0x64, 0x03]; // ESC d 3 → feed 3 lines
+// ESC d 6 → feed 6 lines before the cut. The cutter sits ~1.5cm above
+// the print line, so too small a feed slices the last line off ("- END -"
+// getting cut). 6 lines clears the cutter and leaves a small tear margin.
+const FEED_CUT = [ESC, 0x64, 0x06];
 const CUT_FULL = [GS, 0x56, 0x00];  // GS V 0  → full cut
 
 // Thermal heads only render their built-in codepage. Let printable
@@ -132,7 +135,7 @@ function sizeMultFromPx(px) {
 
 function buildEscPos(plainText) {
   const normalised = (plainText || '').replace(/\r\n/g, '\n');
-  return Buffer.from([...INIT, ...ALIGN_L, ...asciiBytes(normalised), ...FEED_3, ...CUT_FULL]);
+  return Buffer.from([...INIT, ...ALIGN_L, ...asciiBytes(normalised), ...FEED_CUT, ...CUT_FULL]);
 }
 
 function buildEscPosFromLines(lines) {
@@ -147,7 +150,7 @@ function buildEscPosFromLines(lines) {
     out.push(...asciiBytes(String(text).replace(/\r\n/g, '\n')), 0x0a);
   }
   // Reset styling before the feed/cut so the next job starts clean.
-  out.push(...boldByte(false), ...sizeByte(1), ...ALIGN_L, ...FEED_3, ...CUT_FULL);
+  out.push(...boldByte(false), ...sizeByte(1), ...ALIGN_L, ...FEED_CUT, ...CUT_FULL);
   return Buffer.from(out);
 }
 
