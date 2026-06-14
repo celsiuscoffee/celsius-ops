@@ -13,10 +13,15 @@
  *   POST /print
  *   {
  *     "printer": "bar" | "counter" | "kitchen" | …   (station name, lowercased)
- *     "data":    "raw plain-text docket body",
+ *     "data":    "raw plain-text docket body",        (legacy — default font)
+ *     "lines":   [{ "text", "size"?, "align"?, "bold"? }],  (styled docket)
  *     "ip":      "192.168.1.100"  (optional — from pos_printer_config)
  *     "port":    9100             (optional, default 9100)
  *   }
+ *
+ * Provide EITHER `data` (plain text, printed at the default cell) OR
+ * `lines` (styled — each line carries its own size/align/bold and is
+ * rendered with real ESC/POS codes). `lines` wins when both are present.
  *
  * Resolution order for the target printer:
  *   1. `ip` from the request body (set by the BO Printers admin via
@@ -74,23 +79,76 @@ try {
 } catch { /* ignore */ }
 
 // ── ESC/POS encoding ──────────────────────────────────────────
-// Minimal control codes. The POS already formats the docket as
-// plain text with 32-col width — we just init the printer, write
-// the body, eject, and cut. No fancy fonts needed; the SUNMI/
-// Epson/Star thermal printers we target render plain ASCII
-// faithfully at the default 12x24 cell.
+// Two render paths share the same control codes:
+//
+//   • body.data  → legacy plain-text docket. Printed at the head's
+//     default cell, left-aligned. Untouched so older callers and the
+//     `test:bar` curl behave exactly as before.
+//
+//   • body.lines → structured docket: an array of styled lines
+//     ({ text, size?, align?, bold? }) rendered with real ESC/POS
+//     size / bold / alignment codes. This is what lets the kitchen
+//     docket print big, bold item names and a clear header hierarchy
+//     instead of one flat wall of default-size text (see the pickup
+//     KDS in apps/order/src/lib/station-printer.ts).
 const ESC = 0x1B;
 const GS = 0x1D;
-const INIT     = Buffer.from([ESC, 0x40]);       // ESC @  → reset
-const ALIGN_L  = Buffer.from([ESC, 0x61, 0x00]);
-const FEED_3   = Buffer.from([ESC, 0x64, 0x03]); // ESC d 3 → feed 3 lines
-const CUT_FULL = Buffer.from([GS, 0x56, 0x00]);  // GS V 0  → full cut
+const INIT     = [ESC, 0x40];       // ESC @  → reset
+const ALIGN_L  = [ESC, 0x61, 0x00];
+const FEED_3   = [ESC, 0x64, 0x03]; // ESC d 3 → feed 3 lines
+const CUT_FULL = [GS, 0x56, 0x00];  // GS V 0  → full cut
+
+// Thermal heads only render their built-in codepage. Let printable
+// ASCII + newline through; fold anything else (accents, smart quotes,
+// emoji) to '?' so the head never garbles a line.
+function asciiBytes(s) {
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    out.push(c === 0x0a ? 0x0a : c >= 0x20 && c <= 0x7e ? c : 0x3f);
+  }
+  return out;
+}
+
+function alignByte(a) {
+  const n = a === 'center' || a === 1 ? 1 : a === 'right' || a === 2 ? 2 : 0;
+  return [ESC, 0x61, n];
+}
+function boldByte(on) {
+  return [ESC, 0x45, on ? 1 : 0];
+}
+// GS ! n — equal width/height multipliers (1-8). Default cell is the
+// "size 24" base; we square-scale so headers and item names stand out.
+function sizeByte(mult) {
+  const m = Math.max(0, Math.min(7, mult - 1));
+  return [GS, 0x21, (m << 4) | m];
+}
+// Callers think in the same point-ish sizes the SUNMI bridge uses
+// (24 = base). Map to an integer cell multiplier: 24 → 1x, 42-48 → 2x,
+// 72 → 3x. Mirrors the hierarchy of the native docket renderer.
+function sizeMultFromPx(px) {
+  return Math.max(1, Math.min(4, Math.round((px || 24) / 24)));
+}
 
 function buildEscPos(plainText) {
-  const body = Buffer.from(plainText || '', 'utf8');
-  // Normalise newlines so a CRLF body doesn't double-feed
-  const normalised = Buffer.from(body.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
-  return Buffer.concat([INIT, ALIGN_L, normalised, FEED_3, CUT_FULL]);
+  const normalised = (plainText || '').replace(/\r\n/g, '\n');
+  return Buffer.from([...INIT, ...ALIGN_L, ...asciiBytes(normalised), ...FEED_3, ...CUT_FULL]);
+}
+
+function buildEscPosFromLines(lines) {
+  const out = [...INIT];
+  for (const line of (lines || [])) {
+    const isObj = line && typeof line === 'object';
+    const text = (isObj ? line.text : line) ?? '';
+    const align = isObj ? line.align : 'left';
+    const bold = isObj ? !!line.bold : false;
+    const mult = isObj ? sizeMultFromPx(line.size) : 1;
+    out.push(...alignByte(align), ...boldByte(bold), ...sizeByte(mult));
+    out.push(...asciiBytes(String(text).replace(/\r\n/g, '\n')), 0x0a);
+  }
+  // Reset styling before the feed/cut so the next job starts clean.
+  out.push(...boldByte(false), ...sizeByte(1), ...ALIGN_L, ...FEED_3, ...CUT_FULL);
+  return Buffer.from(out);
 }
 
 // ── TCP send ──────────────────────────────────────────────────
@@ -181,7 +239,9 @@ const server = http.createServer(async (req, res) => {
       return json(res, 404, { error: `No printer for station "${station}"` });
     }
 
-    const payload = buildEscPos(body.data);
+    const payload = Array.isArray(body.lines)
+      ? buildEscPosFromLines(body.lines)
+      : buildEscPos(body.data);
     await sendToPrinter(target.ip, target.port, payload);
     return json(res, 200, { ok: true, sent_to: `${target.ip}:${target.port}` });
   } catch (err) {
