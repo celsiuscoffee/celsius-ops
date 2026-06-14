@@ -353,7 +353,11 @@ class SunmiPrinterModule : Module() {
             il.startsWith("   ") ->
               line.printText(il, TextStyle.getStyle().setAlign(Align.LEFT).setTextSize(30))
             il.isNotEmpty() ->
-              line.printText(il, TextStyle.getStyle().setAlign(Align.LEFT).enableBold(true).setTextSize(42))
+              // Item names: 34pt reads naturally like the order/table line.
+              // At 42 the Sunmi font's bold letters bunched up and looked
+              // cramped; 34 keeps them prominent above the 30pt modifiers
+              // without crowding.
+              line.printText(il, TextStyle.getStyle().setAlign(Align.LEFT).enableBold(true).setTextSize(34))
           }
         }
       }
