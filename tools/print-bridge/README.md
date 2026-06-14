@@ -48,6 +48,31 @@ curl -X POST http://localhost:8080/print \
   -d '{"printer":"bar","ip":"192.168.1.100","port":9100,"data":"** TEST **\nHello\n** END **"}'
 ```
 
+A docket can be sent two ways:
+
+- **`data`** — plain text, printed at the head's default cell. Simple,
+  but everything comes out one small size (legacy path).
+- **`lines`** — a styled docket: each line carries its own `size`
+  (point-ish; 24 = base cell, 42-48 ≈ 2×, 72 ≈ 3×), `align`
+  (`left`/`center`/`right`), and `bold`. The bridge renders these with
+  real ESC/POS size/weight/alignment codes, so item names print big and
+  bold with a clear header hierarchy. This is what the pickup KDS sends
+  (see `apps/order/src/lib/station-printer.ts`).
+
+```bash
+curl -X POST http://localhost:8080/print \
+  -H 'Content-Type: application/json' \
+  -d '{"printer":"bar","ip":"192.168.1.100","lines":[
+        {"text":"BAR","size":36,"align":"center","bold":true},
+        {"text":"PICKUP NO.","size":24,"align":"center"},
+        {"text":"A17","size":72,"align":"center","bold":true},
+        {"text":"1x Iced Latte","size":42,"bold":true},
+        {"text":"   Oat milk, Less ice","size":30}
+      ]}'
+```
+
+`lines` wins when both `data` and `lines` are present.
+
 ## Config
 
 Two ways to resolve a printer:
@@ -134,9 +159,10 @@ Drop the binary on the POS, copy `printers.json` next to it, run it.
 - **Timeout**: 4 seconds per TCP send. A downed printer surfaces as a
   500 to the caller within that window; the POS treats it as a soft
   failure and falls back to the SUNMI built-in printer.
-- **ESC/POS prologue**: `ESC @` (init) + `ESC a 0` (left align). The
-  POS already pre-formats the docket as 32-col plain text, so we
-  don't apply fancy fonts here. Epilogue: 3-line feed + full cut.
+- **ESC/POS prologue**: `ESC @` (init). The `data` path then left-aligns
+  and prints at the default cell; the `lines` path emits per-line
+  `GS ! n` (size), `ESC E n` (bold) and `ESC a n` (align) so the docket
+  has a real font hierarchy. Epilogue: 3-line feed + full cut.
 - **Charset**: UTF-8. Most thermal printers default to CP437/Korean
   if you don't set a code page — if you see garbage on accented
   characters, add `ESC R 0 ESC t 0` to `INIT` in `server.js` to

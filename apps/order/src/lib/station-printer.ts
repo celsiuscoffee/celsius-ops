@@ -118,62 +118,77 @@ async function loadProductsMap(): Promise<Map<string, ProductLite>> {
 }
 
 // ── Docket formatter ──────────────────────────────────────────
-// Plain-text 80mm-width slip. Same column layout as the POS
-// printKitchenDocket so prep staff see identical formatting
-// regardless of channel (in-store vs pickup).
-const WIDTH = 32;
+// Builds a STYLED docket: an array of lines each carrying its own font
+// size / weight / alignment. The print bridge turns these into real
+// ESC/POS codes (GS ! size, ESC E bold, ESC a align) so the slip prints
+// with a clear hierarchy — a big pickup number, large bold item names,
+// readable modifiers underneath — instead of one flat wall of tiny
+// default-font text. This mirrors the native POS docket renderer
+// (apps/pos-native SunmiPrinterModule.printOrderDocket).
+//
+// `size` is point-ish (24 = the head's base cell); the bridge maps it to
+// an integer cell multiplier (24→1x, 42-48→2x, 72→3x).
+type DocketLine = {
+  text: string;
+  size?: number;
+  align?: "left" | "center";
+  bold?: boolean;
+};
 
-function center(s: string): string {
-  const pad = Math.max(0, Math.floor((WIDTH - s.length) / 2));
-  return " ".repeat(pad) + s;
-}
-function divider(ch: string): string {
-  return ch.repeat(WIDTH);
-}
-function twoCol(left: string, right: string): string {
-  const space = Math.max(1, WIDTH - left.length - right.length);
-  return left + " ".repeat(space) + right;
-}
+// 48 chars = a full 80mm Font-A line, so the rule fills the paper width
+// instead of stopping a third of the way across like the old 32-col one.
+const DOCKET_COLS = 48;
+const DIVIDER = "-".repeat(DOCKET_COLS);
 
-function formatDocket(order: OrderLite, station: string, items: OrderItemLite[]): string {
-  const lines: string[] = [];
+function formatDocket(order: OrderLite, station: string, items: OrderItemLite[]): DocketLine[] {
   const stationLabel = (station || "KITCHEN").toUpperCase();
   const date = new Date(order.created_at);
   const timeStr = date.toLocaleTimeString("en-MY", {
     hour: "2-digit", minute: "2-digit", hour12: true,
   });
 
-  lines.push(center(`** ${stationLabel} **`));
-  lines.push(divider("="));
-  lines.push(twoCol("Order:", order.order_number));
-  lines.push(twoCol("PICKUP", order.order_number));
+  const lines: DocketLine[] = [];
+
+  // Header — station + a big pickup number, the way StoreHub surfaces
+  // the table/queue number so the line can read it across the pass.
+  lines.push({ text: stationLabel, size: 36, align: "center", bold: true });
+  lines.push({ text: DIVIDER, align: "center" });
+  lines.push({ text: "PICKUP NO.", size: 24, align: "center" });
+  lines.push({ text: order.order_number, size: 72, align: "center", bold: true });
   if (order.pickup_at) {
     const pa = new Date(order.pickup_at);
-    lines.push(twoCol("Pickup:", pa.toLocaleTimeString("en-MY", {
-      hour: "2-digit", minute: "2-digit", hour12: true,
-    })));
+    const pickupStr = pa.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true });
+    lines.push({ text: `Pickup ${pickupStr}`, size: 26, align: "center" });
   }
-  lines.push(twoCol("Time:", timeStr));
-  if (order.customer_name) lines.push(twoCol("Name:", order.customer_name));
-  lines.push(divider("="));
+  lines.push({ text: timeStr, size: 26, align: "center" });
+  if (order.customer_name) {
+    lines.push({ text: order.customer_name, size: 28, align: "center", bold: true });
+  }
+  lines.push({ text: DIVIDER, align: "center" });
 
+  // Items — name large + bold, variant/modifiers/notes indented beneath.
   for (const item of items) {
-    lines.push(`${item.quantity}x ${item.product_name}`);
-    if (item.variant_name) lines.push(`   ${item.variant_name}`);
+    lines.push({ text: `${item.quantity}x ${item.product_name}`, size: 42, bold: true });
+    if (item.variant_name) lines.push({ text: `   ${item.variant_name}`, size: 30 });
     const mods = item.modifiers;
     if (Array.isArray(mods) && mods.length > 0) {
       const modNames = mods
         .map((m: { option?: { name?: string }; name?: string }) => m.option?.name ?? m.name ?? "")
         .filter(Boolean);
-      if (modNames.length > 0) lines.push(`   ${modNames.join(", ")}`);
+      if (modNames.length > 0) lines.push({ text: `   ${modNames.join(", ")}`, size: 30 });
     }
-    if (item.notes) lines.push(`   ** ${item.notes} **`);
-    lines.push(divider("-"));
+    if (item.notes) lines.push({ text: `   ** ${item.notes} **`, size: 32, bold: true });
+    lines.push({ text: DIVIDER, align: "center" });
   }
-  lines.push(center("-- END --"));
-  lines.push("");
-  lines.push("");
-  return lines.join("\n");
+
+  // Order-level note (kitchen sees it, not just the customer receipt).
+  if (order.notes && order.notes.trim()) {
+    lines.push({ text: `** NOTE: ${order.notes.trim()} **`, size: 32, bold: true });
+    lines.push({ text: DIVIDER, align: "center" });
+  }
+
+  lines.push({ text: "- END -", size: 24, align: "center" });
+  return lines;
 }
 
 // ── Bridge POST ──────────────────────────────────────────────
@@ -183,10 +198,10 @@ function formatDocket(order: OrderLite, station: string, items: OrderItemLite[])
 // the printer being unreachable. Callers should treat `false` as
 // "fell back to the existing per-app print path."
 
-async function postToBridge(station: string, text: string, ip: string | null, port: number | null): Promise<boolean> {
+async function postToBridge(station: string, lines: DocketLine[], ip: string | null, port: number | null): Promise<boolean> {
   const payload: Record<string, unknown> = {
     printer: station.toLowerCase(),
-    data: text,
+    lines,
   };
   if (ip) {
     payload.ip = ip;
@@ -250,11 +265,11 @@ export async function printOrderToStationPrinters(
   let anySent = false;
   for (const [station, items] of byStation.entries()) {
     if (items.length === 0) continue;
-    const text = formatDocket(order, station, items);
+    const lines = formatDocket(order, station, items);
     const config = docketConfigs.find(
       (c) => (c.station ?? "").toLowerCase() === station.toLowerCase(),
     );
-    const ok = await postToBridge(station, text, config?.ip_address ?? null, config?.port ?? null);
+    const ok = await postToBridge(station, lines, config?.ip_address ?? null, config?.port ?? null);
     if (ok) anySent = true;
   }
   return anySent;
