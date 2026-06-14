@@ -200,16 +200,39 @@ function formatDocket(order: OrderLite, station: string, items: OrderItemLite[])
 // the text path into that raster, so the styled `lines` payload stays the
 // safe fallback when canvas isn't available (SSR) or rendering throws.
 //
-// NOTE on "exact" font: the docket renders with `Arial, Helvetica,
-// sans-serif`. On the POS Android WebView that resolves to Roboto (no
-// Arial bundled) — visually near-identical at docket sizes. For a
-// pixel-exact Arial, bundle the .ttf and load it via FontFace before the
-// first print.
+// Font: real Arial, subset to the docket's glyphs and bundled at
+// /fonts/arial.ttf (+ arial-bold.ttf). Loaded via FontFace before the
+// first raster so the docket matches the StoreHub face exactly. If the
+// load fails (offline before cache, etc.) the canvas falls back to the
+// platform's own Arial/Helvetica/sans, which is visually near-identical.
 const RASTER_WIDTH = 576;          // 80mm printable area @ 203dpi (multiple of 8)
-const RASTER_FONT = 'Arial, "Helvetica Neue", Helvetica, sans-serif';
+const RASTER_FONT = '"ArialDocket", Arial, "Helvetica Neue", Helvetica, sans-serif';
 const LEFT_MARGIN = 12;
 const INDENT_PX = 28;
 const LINE_GAP = 1.35;             // line-height factor
+
+// Load the bundled Arial once. Resolves whether or not the load succeeds
+// (rendering just falls back to system fonts on failure).
+let docketFontPromise: Promise<void> | null = null;
+function ensureDocketFont(): Promise<void> {
+  if (typeof document === "undefined" || !("fonts" in document) || typeof FontFace === "undefined") {
+    return Promise.resolve();
+  }
+  if (docketFontPromise) return docketFontPromise;
+  docketFontPromise = (async () => {
+    try {
+      const faces = [
+        new FontFace("ArialDocket", "url(/fonts/arial.ttf)", { weight: "400", style: "normal" }),
+        new FontFace("ArialDocket", "url(/fonts/arial-bold.ttf)", { weight: "700", style: "normal" }),
+      ];
+      const loaded = await Promise.all(faces.map((f) => f.load()));
+      for (const f of loaded) document.fonts.add(f);
+    } catch {
+      /* fall back to platform Arial/Helvetica/sans-serif */
+    }
+  })();
+  return docketFontPromise;
+}
 
 // Point-ish docket size → canvas pixels. Keeps the same hierarchy as the
 // text path (24 base, 42 item names, 72 pickup number) but at a print
@@ -229,9 +252,10 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 type DocketRaster = { widthBytes: number; height: number; dataB64: string };
 
-function renderDocketRaster(lines: DocketLine[]): DocketRaster | null {
+async function renderDocketRaster(lines: DocketLine[]): Promise<DocketRaster | null> {
   if (typeof document === "undefined") return null;
   try {
+    await ensureDocketFont();
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
@@ -323,7 +347,7 @@ function renderDocketRaster(lines: DocketLine[]): DocketRaster | null {
 async function postToBridge(station: string, lines: DocketLine[], ip: string | null, port: number | null): Promise<boolean> {
   // Prefer a bitmap raster (real font); fall back to styled text `lines`
   // when canvas isn't available or rendering fails, so a ticket always prints.
-  const raster = renderDocketRaster(lines);
+  const raster = await renderDocketRaster(lines);
   const payload: Record<string, unknown> = raster
     ? { printer: station.toLowerCase(), raster }
     : { printer: station.toLowerCase(), lines };
