@@ -11,6 +11,7 @@
 import { randomUUID } from "crypto";
 import { postJournal } from "../ledger";
 import { getFinanceClient } from "../supabase";
+import { buildChannelInvoices } from "./ar-invoices";
 import type { JournalLineInput, PostJournalResult } from "../types";
 
 export const AR_AGENT_VERSION = "ar-v1";
@@ -160,6 +161,12 @@ export async function postDailyAr(summary: EodSummary): Promise<ArAgentResult> {
   // as silent drafts that never post (the exact failure we just fixed).
   if (lowConfidence) {
     await raiseClassificationException(summary, result.transactionId);
+  } else {
+    // Emit per-channel receivables so the Matcher has something of the right
+    // grain to reconcile each bank settlement against. Only on a confident
+    // post — a low-confidence day's channel split is uncertain, so its
+    // invoices wait until the exception is resolved.
+    await persistChannelInvoices(summary, result.transactionId);
   }
 
   return {
@@ -168,6 +175,18 @@ export async function postDailyAr(summary: EodSummary): Promise<ArAgentResult> {
     outletId: summary.outletId,
     date: summary.date,
   };
+}
+
+// Inserts the channel-tagged AR invoices. Idempotent on invoice_number
+// (deterministic per outlet/date/channel), so re-running the day is a no-op.
+async function persistChannelInvoices(summary: EodSummary, transactionId: string): Promise<void> {
+  const rows = buildChannelInvoices(summary, transactionId);
+  if (rows.length === 0) return;
+  const client = getFinanceClient();
+  const { error } = await client
+    .from("fin_invoices")
+    .upsert(rows, { onConflict: "invoice_number", ignoreDuplicates: true });
+  if (error) throw error;
 }
 
 // Surfaces an unclassified-tender day to the exception inbox. Idempotent in
