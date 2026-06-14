@@ -18,9 +18,60 @@
 
 import { randomUUID } from "crypto";
 import { getFinanceClient, setActor } from "../supabase";
-import { matchBankLine, type BankLine, type Candidate, type MatchDecision } from "./matcher-rules";
+import { matchBankLine, settlementStatus, type BankLine, type Candidate, type MatchDecision } from "./matcher-rules";
 
 export const MATCHER_VERSION = "matcher-v1";
+
+// Commit a single match to the ledger: write fin_matches, advance the target's
+// paid_amount / payment_status (invoice & bill only), and flip the bank line to
+// `matched`. Shared by the auto-Matcher and the inbox resolver so both apply a
+// match identically. Idempotency / double-match prevention is the caller's job
+// (the bank-line status guard + the engine's in-memory outstanding decrement).
+export async function commitMatch(
+  client: ReturnType<typeof getFinanceClient>,
+  m: {
+    bankTxnId: string;
+    candidateType: Candidate["type"];
+    candidateId: string;
+    amountMatched: number;
+    confidence: number;
+    agent: string; // "matcher" | "manual"
+  }
+): Promise<void> {
+  const { error: matchErr } = await client.from("fin_matches").insert({
+    id: randomUUID(),
+    bank_txn_id: m.bankTxnId,
+    matched_to_type: m.candidateType,
+    matched_to_id: m.candidateId,
+    amount_matched: m.amountMatched,
+    confidence: m.confidence,
+    agent: m.agent,
+  });
+  if (matchErr) throw matchErr;
+
+  if (m.candidateType === "invoice" || m.candidateType === "bill") {
+    const table = m.candidateType === "bill" ? "fin_bills" : "fin_invoices";
+    const { data: tgt, error: tErr } = await client
+      .from(table)
+      .select("total, paid_amount")
+      .eq("id", m.candidateId)
+      .single();
+    if (tErr) throw tErr;
+    const total = Number(tgt.total);
+    const newPaid = round2(Number(tgt.paid_amount ?? 0) + m.amountMatched);
+    const { error: uErr } = await client
+      .from(table)
+      .update({ paid_amount: newPaid, payment_status: settlementStatus(total, newPaid) })
+      .eq("id", m.candidateId);
+    if (uErr) throw uErr;
+  }
+
+  const { error: bErr } = await client
+    .from("fin_bank_transactions")
+    .update({ status: "matched" })
+    .eq("id", m.bankTxnId);
+  if (bErr) throw bErr;
+}
 
 function addDays(dateStr: string, n: number): string {
   const d = new Date(`${dateStr}T12:00:00+08:00`);
@@ -152,39 +203,23 @@ async function applyMatch(
   pool: Candidate[],
   targets: Map<string, Target>
 ): Promise<void> {
-  const { error: matchErr } = await client.from("fin_matches").insert({
-    id: randomUUID(),
-    bank_txn_id: line.id,
-    matched_to_type: decision.candidateType,
-    matched_to_id: decision.candidateId,
-    amount_matched: decision.amountMatched,
+  await commitMatch(client, {
+    bankTxnId: line.id,
+    candidateType: decision.candidateType,
+    candidateId: decision.candidateId,
+    amountMatched: decision.amountMatched,
     confidence: decision.confidence,
     agent: "matcher",
   });
-  if (matchErr) throw matchErr;
 
-  // Advance the target's paid_amount / payment_status.
+  // Keep the in-memory pool consistent so the engine can't re-propose this
+  // candidate (or over-apply it) to a later line in the same run.
   const t = targets.get(decision.candidateId);
   if (t) {
-    const newPaid = round2(t.paid + decision.amountMatched);
-    const status = newPaid >= t.total - 0.005 ? "paid" : "partial";
-    const table = decision.candidateType === "bill" ? "fin_bills" : "fin_invoices";
-    const { error: tErr } = await client
-      .from(table)
-      .update({ paid_amount: newPaid, payment_status: status })
-      .eq("id", decision.candidateId);
-    if (tErr) throw tErr;
-    t.paid = newPaid;
-    // Keep the in-memory pool consistent so a later line can't re-match this.
+    t.paid = round2(t.paid + decision.amountMatched);
     const c = pool.find((p) => p.id === decision.candidateId);
-    if (c) c.outstanding = round2(t.total - newPaid);
+    if (c) c.outstanding = round2(t.total - t.paid);
   }
-
-  const { error: bErr } = await client
-    .from("fin_bank_transactions")
-    .update({ status: "matched" })
-    .eq("id", line.id);
-  if (bErr) throw bErr;
 
   await logDecision(client, line, decision, true);
 }

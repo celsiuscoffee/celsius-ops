@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { matchBankLine, type BankLine, type Candidate } from "./matcher-rules";
+import { matchBankLine, settlementStatus, type BankLine, type Candidate } from "./matcher-rules";
 
 function line(amount: number, date: string, opts: Partial<BankLine> = {}): BankLine {
   return { id: "bt1", amount, date, description: "d", reference: null, bankAccountCode: "1000-01", ...opts };
@@ -114,5 +114,14 @@ describe("matchBankLine", () => {
     ]);
     expect(d.kind).toBe("exception");
     if (d.kind === "exception") expect(d.reason).toMatch(/zero-amount/);
+  });
+});
+
+describe("settlementStatus", () => {
+  it("is paid only once the cent gap closes, partial otherwise", () => {
+    expect(settlementStatus(100, 100)).toBe("paid");
+    expect(settlementStatus(100, 99.997)).toBe("paid"); // within the cent tolerance
+    expect(settlementStatus(100, 60)).toBe("partial");
+    expect(settlementStatus(100, 100.5)).toBe("paid"); // slight over-apply still paid
   });
 });

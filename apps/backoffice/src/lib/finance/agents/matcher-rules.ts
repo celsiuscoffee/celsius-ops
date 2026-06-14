@@ -62,6 +62,13 @@ export type MatchDecision =
 
 const DEFAULTS = { dateWindowDays: 3, amountTolerance: 0.05, autoThreshold: 0.9 };
 
+// The single paid/partial rule shared by the auto-Matcher (commitMatch) and the
+// human inbox resolver, so a receipt settles the same way no matter who applied
+// it. Fully paid once the cent gap closes.
+export function settlementStatus(total: number, newPaid: number): "paid" | "partial" {
+  return newPaid >= total - 0.005 ? "paid" : "partial";
+}
+
 function norm(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }

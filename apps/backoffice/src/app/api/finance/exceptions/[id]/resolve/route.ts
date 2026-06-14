@@ -1,7 +1,11 @@
 // POST /api/finance/exceptions/:id/resolve
-// Body: { action: "approve" } | { action: "correct", accountCode, outletId? } | { action: "dismiss", reason }
+// Body: { action: "approve" }
+//     | { action: "correct", accountCode, outletId? }                         // categorization
+//     | { action: "match", candidateId, candidateType: invoice|bill|transaction, amountMatched? } // reconciliation
+//     | { action: "dismiss", reason }
 //
-// Posts the bill journal (approve/correct) or just marks dismissed.
+// Posts the bill journal (approve/correct on a categorization exception),
+// commits a reconciliation (approve/match on a match exception), or dismisses.
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
@@ -36,6 +40,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       kind: "correct",
       accountCode: body.accountCode,
       outletId: typeof body.outletId === "string" ? body.outletId : null,
+    };
+  } else if (action === "match") {
+    const candidateType = body.candidateType;
+    if (typeof body.candidateId !== "string" || !body.candidateId) {
+      return NextResponse.json({ error: "candidateId required for match" }, { status: 400 });
+    }
+    if (candidateType !== "invoice" && candidateType !== "bill" && candidateType !== "transaction") {
+      return NextResponse.json({ error: "candidateType must be invoice|bill|transaction" }, { status: 400 });
+    }
+    parsed = {
+      kind: "match",
+      candidateId: body.candidateId,
+      candidateType,
+      amountMatched: typeof body.amountMatched === "number" ? body.amountMatched : undefined,
     };
   } else if (action === "dismiss") {
     parsed = { kind: "dismiss", reason: typeof body.reason === "string" ? body.reason : "no reason" };
