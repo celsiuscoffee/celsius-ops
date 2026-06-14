@@ -26,6 +26,16 @@ function twoColumn(left: string, right: string): string {
   const maxLeft = CHARS_PER_LINE - right.length - 1;
   return padRight(left, maxLeft) + " " + right;
 }
+/** 12-hour time, scrubbed to plain ASCII. Recent ICU inserts a narrow
+ *  no-break space (U+202F) before "am/pm", which the thermal head can't
+ *  render and prints as "?" (e.g. "10:13?pm"). Collapse any unicode
+ *  whitespace to a normal space so it prints clean ("10:13 pm"). */
+function asciiTime(date: Date): string {
+  return date
+    .toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })
+    .replace(/\s+/g, " ")
+    .trim();
+}
 /** Greedy word-wrap to a max width; hard-breaks any single token longer than
  *  the width so a long street name can never overflow the receipt line. */
 function wrapText(text: string, width: number): string[] {
@@ -175,9 +185,7 @@ export function formatReceipt(
   bodyLines.push(
     twoColumn("Date:", date.toLocaleDateString("en-MY", { day: "2-digit", month: "2-digit", year: "numeric" })),
   );
-  bodyLines.push(
-    twoColumn("Time:", date.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true })),
-  );
+  bodyLines.push(twoColumn("Time:", asciiTime(date)));
   bodyLines.push(twoColumn("Type:", order.order_type === "dine_in" ? "Dine-in" : "Takeaway"));
 
   if (order.queue_number) {
@@ -328,7 +336,7 @@ export function formatKitchenDocket(order: DocketOrder, station: string): Docket
   const date = new Date(order.created_at);
   const stationName = (station || "KITCHEN").toUpperCase();
   const orderType = order.order_type === "dine_in" ? "DINE-IN" : "TAKEAWAY";
-  const timeStr = date.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", hour12: true });
+  const timeStr = asciiTime(date);
 
   const itemLines: string[] = [];
   for (const item of items) {

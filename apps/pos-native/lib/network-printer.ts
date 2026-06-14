@@ -109,6 +109,13 @@ class Esc {
   bold(on: boolean) {
     return this.raw(0x1b, 0x45, on ? 1 : 0);
   }
+  /** ESC SP n — right-side character spacing in dots. Adds horizontal
+   *  breathing room between letters so they don't print edge-to-edge. The
+   *  gap scales with the width multiplier, so enlarged headers/numbers get
+   *  proportionally more space and stop looking cramped. */
+  charSpace(n: number) {
+    return this.raw(0x1b, 0x20, Math.max(0, Math.min(255, n)));
+  }
   /** GS ! n — width/height multipliers 1-8. */
   size(w: number, h: number) {
     const ww = Math.max(0, Math.min(7, w - 1));
