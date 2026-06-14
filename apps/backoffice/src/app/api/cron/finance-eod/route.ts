@@ -1,14 +1,12 @@
-// Daily cron — runs at 4 AM MYT to ingest yesterday's EOD across all outlets
-// and post AR journals via the AR agent.
+// Nightly finance close — runs at 4 AM MYT for yesterday. Chains the whole loop:
+//   1. EOD ingest  → AR journals + channel invoices (routed StoreHub vs internal)
+//   2. Matcher     → reconcile bank lines over a trailing window
+//   3. Anomaly     → surface integrity problems over the same window
 //
-// Source-routed: each outlet is ingested from POS-native (cutover outlets) or
-// StoreHub (pre-cutover), never both — see ingestAllOutletsEodRouted.
-//
-// Idempotent: re-running for a date that's already been posted skips the
-// outlet (see each ingester's existing-txn guard).
+// Each step is idempotent, so re-running the date is safe. See runNightlyClose.
 
 import { NextRequest, NextResponse } from "next/server";
-import { ingestAllOutletsEodRouted } from "@/lib/finance/ingestors/eod-router";
+import { runNightlyClose } from "@/lib/finance/orchestrator";
 import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
@@ -25,22 +23,6 @@ export async function GET(req: NextRequest) {
   const cronAuth = checkCronAuth(req.headers);
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
-  const date = yesterdayMyt();
-  const results = await ingestAllOutletsEodRouted(date);
-
-  const summary = {
-    date,
-    outlets: results.length,
-    posted: results.filter((r) => r.posted).length,
-    skipped: results.filter((r) => r.skipped).length,
-    errors: results.filter((r) => r.error).length,
-    bySource: {
-      internal: results.filter((r) => r.source === "internal").length,
-      storehub: results.filter((r) => r.source === "storehub").length,
-      skipped: results.filter((r) => r.source === "skipped").length,
-    },
-    totalAmount: results.reduce((s, r) => s + (r.posted?.amount ?? 0), 0),
-  };
-
-  return NextResponse.json({ summary, results });
+  const result = await runNightlyClose(yesterdayMyt());
+  return NextResponse.json(result);
 }
