@@ -144,12 +144,18 @@ function buildDocketBytes(d: DocketData): number[] {
   e.bold(true).size(2, 2).line(d.station || "KITCHEN").size(1, 1).bold(false);
   e.line(DIV);
 
-  // Order info.
-  e.bold(true).size(1, 2).line(`Order #${d.orderNumber}`).size(1, 1).bold(false);
-  let typeLine = d.orderType || "";
-  if (d.tableNumber) typeLine += `  |  ${d.tableLabel || "Table"} ${d.tableNumber}`;
-  else if (d.queueNumber) typeLine += `  |  Q: ${d.queueNumber}`;
-  if (typeLine.trim()) e.bold(true).line(typeLine).bold(false);
+  // Order info — surface the table / queue number BIG (StoreHub-style: a
+  // small label over a huge number) so the line can read it across the
+  // pass, with the order ref + time smaller beneath.
+  if (d.orderType) e.line(d.orderType);
+  const bigLabel = d.tableNumber ? (d.tableLabel || "Table") : d.queueNumber ? "QUEUE" : "ORDER";
+  const bigValue = d.tableNumber || d.queueNumber || d.orderNumber;
+  e.line(bigLabel);
+  e.bold(true).size(3, 3).line(bigValue).size(1, 1).bold(false);
+  // Order ref underneath only when it isn't already the big number.
+  if (bigValue !== d.orderNumber) {
+    e.bold(true).size(1, 1).line(`Order #${d.orderNumber}`).bold(false);
+  }
   if (d.time) e.line(d.time);
   e.line(DIV).line("");
 
