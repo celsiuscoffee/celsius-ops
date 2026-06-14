@@ -5,7 +5,7 @@ export function register() {
   // Env check first. Development: throws on missing REQUIRED vars
   // (fail fast on a bad .env). Production: logs one loud block and the
   // report is forwarded to Sentry below — never fatal at runtime.
-  const envReport = checkEnvAtBoot("staff", {
+  const envCheck = checkEnvAtBoot("staff", {
     required: [
       "DATABASE_URL",
       "JWT_SECRET",
@@ -43,7 +43,10 @@ export function register() {
     beforeBreadcrumb: (breadcrumb) => scrubSentryEvent(breadcrumb),
   });
 
-  if (envReport) Sentry.captureMessage(envReport, "error");
+  // Only escalate to Sentry when a REQUIRED var is missing. Recommended
+  // gaps are non-fatal and already logged to the runtime logs — paging
+  // them at error level on every cold start just buries real errors.
+  if (envCheck.hasRequiredProblems) Sentry.captureMessage(envCheck.report, "error");
 }
 
 export const onRequestError = Sentry.captureRequestError;

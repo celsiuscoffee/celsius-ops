@@ -53,26 +53,32 @@ describe("checkEnvAtBoot", () => {
     );
   });
 
-  it("logs but never throws in production", () => {
+  it("logs but never throws in production, and flags required problems", () => {
     process.env.NODE_ENV = "production";
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    const report = checkEnvAtBoot("order", { required: ["TEST_REQUIRED_A"] });
-    expect(report).toContain("TEST_REQUIRED_A");
+    const res = checkEnvAtBoot("order", { required: ["TEST_REQUIRED_A"] });
+    expect(res.report).toContain("TEST_REQUIRED_A");
+    expect(res.hasRequiredProblems).toBe(true);
     expect(err).toHaveBeenCalledOnce();
   });
 
-  it("recommended-only gaps warn without throwing, even in dev", () => {
+  it("recommended-only gaps warn without throwing and are NOT flagged as required", () => {
     process.env.NODE_ENV = "test";
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    const report = checkEnvAtBoot("order", { required: [], recommended: ["TEST_RECOMMENDED"] });
-    expect(report).toContain("TEST_RECOMMENDED");
+    const res = checkEnvAtBoot("order", { required: [], recommended: ["TEST_RECOMMENDED"] });
+    expect(res.report).toContain("TEST_RECOMMENDED");
+    // The whole point of the fix: a recommended-only gap must not be
+    // flagged as a required problem (so it never pages Sentry at error).
+    expect(res.hasRequiredProblems).toBe(false);
     expect(err).toHaveBeenCalledOnce();
   });
 
-  it("returns empty string and stays silent when clean", () => {
+  it("returns empty report and stays silent when clean", () => {
     process.env.TEST_REQUIRED_A = "set";
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(checkEnvAtBoot("order", { required: ["TEST_REQUIRED_A"] })).toBe("");
+    const res = checkEnvAtBoot("order", { required: ["TEST_REQUIRED_A"] });
+    expect(res.report).toBe("");
+    expect(res.hasRequiredProblems).toBe(false);
     expect(err).not.toHaveBeenCalled();
   });
 });

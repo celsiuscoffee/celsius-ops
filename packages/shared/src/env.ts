@@ -42,15 +42,30 @@ export function formatEnvReport(appName: string, p: EnvProblems): string {
   return lines.join("\n");
 }
 
-/** One-call helper for instrumentation.ts. Returns the report string
- *  ("" when clean) so the caller can also forward it to Sentry. */
-export function checkEnvAtBoot(appName: string, spec: EnvSpec): string {
+export type EnvCheckResult = {
+  /** Human-readable report; "" when nothing is missing. */
+  report: string;
+  /** True when at least one REQUIRED var is missing. This is the only
+   *  case that warrants a dev-boot throw or an error-level Sentry
+   *  capture — a missing *recommended* var is non-fatal (it just
+   *  disables a feature) and must NOT raise an error on every
+   *  serverless cold start, which only buries real errors. */
+  hasRequiredProblems: boolean;
+};
+
+/** One-call helper for instrumentation.ts. Returns the report ("" when
+ *  clean) plus whether any REQUIRED var is missing, so the caller can
+ *  forward only genuine problems to Sentry at error severity. */
+export function checkEnvAtBoot(appName: string, spec: EnvSpec): EnvCheckResult {
   const problems = validateEnv(spec);
   const report = formatEnvReport(appName, problems);
-  if (!report) return "";
-  if (process.env.NODE_ENV !== "production" && problems.missingRequired.length) {
+  const hasRequiredProblems = problems.missingRequired.length > 0;
+  if (!report) return { report: "", hasRequiredProblems: false };
+  if (process.env.NODE_ENV !== "production" && hasRequiredProblems) {
     throw new Error(report);
   }
+  // Always log the full block to the runtime logs (Vercel) — recommended
+  // gaps stay discoverable there without paging Sentry.
   console.error(report);
-  return report;
+  return { report, hasRequiredProblems };
 }
