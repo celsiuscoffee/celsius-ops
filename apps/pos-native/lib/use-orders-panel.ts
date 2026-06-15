@@ -26,6 +26,7 @@ import { supabase } from "./supabase";
 // cashier still needs to act on. completed / cancelled / failed drop off.
 const PICKUP_LIVE = ["paid", "sent_to_kitchen", "preparing", "ready"];
 const GRAB_LIVE = ["sent_to_kitchen", "preparing", "ready"];
+const SAFETY_REFRESH_MS = 60 * 1000; // backstop refetch if a Realtime event is dropped
 
 export type KdsSource = "pickup" | "grab";
 
@@ -174,9 +175,15 @@ export function useOrdersPanel(outletId: string | null | undefined) {
       .on("postgres_changes", { event: "*", schema: "public", table: "pos_orders", filter: `outlet_id=eq.${outletId}` }, scheduleReload)
       .subscribe();
 
+    // Safety-net refetch in case a Realtime event is dropped (flaky venue
+    // Wi-Fi): an order completed elsewhere would otherwise linger in this
+    // live list and keep the serving-time alarm sounding with no live orders.
+    const poll = setInterval(() => { if (!cancelled) void load(); }, SAFETY_REFRESH_MS);
+
     return () => {
       cancelled = true;
       if (reloadTimer.current) clearTimeout(reloadTimer.current);
+      clearInterval(poll);
       void supabase.removeChannel(ch);
     };
   }, [storeId, outletId, load]);
