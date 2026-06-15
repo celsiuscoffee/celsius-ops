@@ -16,6 +16,7 @@ import { supabase } from "./supabase";
  */
 
 const WINDOW_MS = 6 * 60 * 60 * 1000; // map the last 6h of table activity
+const SAFETY_REFRESH_MS = 60 * 1000;  // backstop refetch if a Realtime event is dropped
 // Drop dead orders so a cancelled/failed attempt doesn't linger on a table.
 const DEAD = new Set(["cancelled", "failed", "refunded", "voided"]);
 // Finished orders fall off the ACTIVE view too — once served/collected the
@@ -126,6 +127,11 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
   }, [storeId]);
 
   // 3. Initial load + keep live (any change to either feed → debounced refetch).
+  //    A periodic safety-net refetch backs up Realtime: if a websocket event is
+  //    dropped (flaky venue Wi-Fi), an order that was completed elsewhere — the
+  //    guest's app, another till, a server-side auto-close — would otherwise
+  //    linger here forever and keep the serving-time alarm sounding even though
+  //    there are no live orders. The poll heals that within one interval.
   useEffect(() => {
     if (!outletId) return;
     void reload();
@@ -136,13 +142,14 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
       ch.on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `store_id=eq.${storeId}` }, bump);
     }
     ch.subscribe();
-    return () => { if (t) clearTimeout(t); void supabase.removeChannel(ch); };
+    const poll = setInterval(() => void reload(), SAFETY_REFRESH_MS);
+    return () => { if (t) clearTimeout(t); clearInterval(poll); void supabase.removeChannel(ch); };
   }, [outletId, storeId, reload]);
 
   // 4. Compose flat slots from the configured zones (each slot tagged with its
   //    zone), orders matched by normalised table key. Any order whose table
   //    isn't in a zone is surfaced under "Other" so it's never lost.
-  return useMemo<TableSlot[]>(() => {
+  const slots = useMemo<TableSlot[]>(() => {
     const byKey = new Map<string, TableOrderRef[]>();
     for (const o of qr) {
       const arr = byKey.get(o.tableKey) ?? [];
@@ -172,4 +179,10 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
     });
     return slots;
   }, [qr, zones]);
+
+  // Expose `reload` so a write (e.g. marking a QR order Done) can force an
+  // immediate refetch instead of waiting on the Realtime round-trip — the
+  // serving-time alarm is derived from these slots, so an order that's been
+  // actioned must drop off locally at once even if Realtime is lagging/dropped.
+  return { slots, reload };
 }

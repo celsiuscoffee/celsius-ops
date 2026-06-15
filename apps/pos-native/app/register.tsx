@@ -257,7 +257,7 @@ export default function Register() {
   // hook is mounted persistently (catch-up + Realtime subscribe) instead
   // of being torn down each time the modal closes.
   const tableZonesInput = useMemo(() => tableZones(settings), [settings]);
-  const tableSlots = useTablesPanel(outletId, tableZonesInput);
+  const { slots: tableSlots, reload: reloadTables } = useTablesPanel(outletId, tableZonesInput);
   // Staff-side mirror of the customer display's mystery-bag moment (paid screen).
   const mysteryMirror = useDisplay((s) => s.mystery);
   const mysteryPrize = useDisplay((s) => s.mysteryPrize);
@@ -396,14 +396,19 @@ export default function Register() {
     try {
       await apiPost("/api/pos/order-status", { source: "qr", id: order.id, status: "completed" });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // useTablesPanel's Realtime sub re-buckets the slot automatically.
+      // Force an immediate refetch rather than waiting on the Realtime round-trip
+      // (same as the pickup/Grab path). The serving-time alarm is derived from
+      // these slots, so the done order must drop off locally at once — otherwise
+      // a lagging/dropped Realtime event leaves it lingering and the alarm keeps
+      // sounding even though the order is already completed.
+      await reloadTables();
     } catch (e) {
       alert(`Couldn't mark ${order.orderNumber} done.\n${e instanceof Error ? e.message : "Check the connection and try again."}`);
     } finally {
       setBumpingUid(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shift, shiftLoading]);
+  }, [reloadTables, shift, shiftLoading]);
 
   // Reprint a past order's customer receipt from the History tab. The history
   // row only carries a summary, so we re-fetch the full order + items (with
