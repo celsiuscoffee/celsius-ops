@@ -142,7 +142,7 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
   // 4. Compose flat slots from the configured zones (each slot tagged with its
   //    zone), orders matched by normalised table key. Any order whose table
   //    isn't in a zone is surfaced under "Other" so it's never lost.
-  return useMemo<TableSlot[]>(() => {
+  const slots = useMemo<TableSlot[]>(() => {
     const byKey = new Map<string, TableOrderRef[]>();
     for (const o of qr) {
       const arr = byKey.get(o.tableKey) ?? [];
@@ -172,4 +172,10 @@ export function useTablesPanel(outletId: string | null | undefined, zones: { nam
     });
     return slots;
   }, [qr, zones]);
+
+  // Expose `reload` so a write (e.g. marking a QR order Done) can force an
+  // immediate refetch instead of waiting on the Realtime round-trip — the
+  // serving-time alarm is derived from these slots, so an order that's been
+  // actioned must drop off locally at once even if Realtime is lagging/dropped.
+  return { slots, reload };
 }
