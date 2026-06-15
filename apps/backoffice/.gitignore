@@ -1,1 +1,4 @@
 .vercel
+
+# Grab production secrets (filled from .grab-prod.env.example)
+.grab-prod.env
