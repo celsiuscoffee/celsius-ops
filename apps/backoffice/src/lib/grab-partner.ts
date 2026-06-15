@@ -41,16 +41,29 @@ function signingKey(): Uint8Array {
  *  vars", with nothing to remove or flip. */
 function partnerPairs(): Array<{ id: string; secret: string }> {
   const pairs: Array<{ id: string; secret: string }> = [];
-  const add = (id?: string, secret?: string) => { if (id && secret) pairs.push({ id, secret }); };
+  // Trim so a stray space/newline pasted into a Vercel env var can't break the
+  // exact-match compare in partnerCredsMatch.
+  const add = (id?: string, secret?: string) => {
+    const i = (id ?? "").trim();
+    const s = (secret ?? "").trim();
+    if (i && s) pairs.push({ id: i, secret: s });
+  };
   add(process.env.GRAB_PARTNER_CLIENT_ID, process.env.GRAB_PARTNER_CLIENT_SECRET);
   add(process.env.GRAB_PARTNER_CLIENT_ID_PROD, process.env.GRAB_PARTNER_CLIENT_SECRET_PROD);
+  // GrabFood's POS API uses ONE OAuth client credential in BOTH directions: Grab
+  // presents our outbound Client ID/secret (GRAB_CLIENT_ID/SECRET) on its inbound
+  // calls to this token endpoint. Accept it so inbound auth works off the already-
+  // verified outbound creds — no separate partner pair to configure or match.
+  add(process.env.GRAB_CLIENT_ID, process.env.GRAB_CLIENT_SECRET);
   return pairs;
 }
 
 /** True if the supplied client credentials match ANY configured partner pair. */
 export function partnerCredsMatch(clientId: unknown, clientSecret: unknown): boolean {
   if (typeof clientId !== "string" || typeof clientSecret !== "string") return false;
-  return partnerPairs().some((p) => p.id === clientId && p.secret === clientSecret);
+  const id = clientId.trim();
+  const secret = clientSecret.trim();
+  return partnerPairs().some((p) => p.id === id && p.secret === secret);
 }
 
 export function partnerConfigured(): boolean {

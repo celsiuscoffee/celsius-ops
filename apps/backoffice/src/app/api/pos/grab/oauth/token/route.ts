@@ -50,6 +50,12 @@ export async function POST(req: NextRequest) {
     );
   }
   if (!partnerCredsMatch(clientId, clientSecret)) {
+    // Diagnostic (no secrets): surfaces what Grab actually sends so an inbound 401
+    // can be pinned to a specific client_id / secret length in the runtime logs.
+    console.warn(
+      `[grab/oauth/token] invalid_client — incoming client_id="${String(clientId).slice(0, 12)}" ` +
+        `secret_len=${String(clientSecret).length}`,
+    );
     return NextResponse.json({ error: "invalid_client" }, { status: 401 });
   }
 
